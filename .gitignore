@@ -1,0 +1,6 @@
+node_modules/
+*.sqlite
+*.sqlite-journal
+var/
+.env
+.claude/worktrees/
