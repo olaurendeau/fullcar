@@ -13,7 +13,8 @@ est lu par trente personnes pendant trois jours, puis purgé.
 |---|---|
 | framework | Next.js, App Router, TypeScript strict |
 | composants | shadcn/ui (Tailwind, Radix), copiés dans le dépôt ; Drawer pour les feuilles mobiles |
-| base | Postgres : Docker en local, Neon en production |
+| outillage local | Docker uniquement, piloté par `make` ; rien d'installé sur l'hôte |
+| base | Postgres : conteneur par slot en local, Neon en production |
 | accès aux données | Kysely (query builder typé, pas d'ORM) et le driver `pg` |
 | migrations | le migrateur de Kysely, chaque migration a un `up` et un `down` |
 | i18n | next-intl, **sans préfixe de langue** dans l'URL |
@@ -26,15 +27,42 @@ vers un tiers.
 
 ## Environnements et base de données
 
-- **Local** : un conteneur Postgres décrit dans `compose.yaml`. Chaque slot a ses propres
-  bases, `fullcar_slot{slot}` pour le serveur de dev et les tests de bout en bout,
-  `fullcar_slot{slot}_test` pour Vitest. Deux développeurs en parallèle ne se marchent pas
-  dessus.
-- **Production** : Neon, région Europe, fonctions Vercel dans la même région. Connexion par
-  l'URL **poolée** de Neon, puisque chaque invocation serverless ouvre sa connexion.
+### Tout passe par Docker
+
+Rien n'est installé sur le poste : ni Node, ni npm, ni Postgres, ni navigateur de test. Node,
+la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, et le
+`Makefile` est la seule porte d'entrée. Une commande lancée à nu sur l'hôte (`npm …`,
+`npx …`) est un défaut : elle ne marche que sur la machine de celui qui l'a écrite.
+
+| commande | effet |
+|---|---|
+| `make check` | tout ce que la CI exécute : lint, typecheck, tests, clés i18n |
+| `make up` / `make down` | démarre / arrête et efface l'environnement du slot |
+| `make e2e` | tests de bout en bout Playwright contre l'environnement du slot |
+| `make shot` | captures d'écran (360 px par défaut) |
+| `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple |
+
+Le dépôt est monté dans le conteneur, `node_modules` compris : installés par le conteneur
+Linux, ils restent lisibles par l'éditeur de l'hôte pour les types.
+
+La CI exécute le même `make check` : ce qui passe en local passe en CI.
+
+### Slots
+
+Chaque slot est un **projet Compose distinct** (`fullcar-slot{slot}`) : son conteneur Node,
+son conteneur Postgres, ses volumes. Rien n'est partagé, donc deux développeurs en parallèle
+ne se marchent pas dessus, et `make down SLOT={slot}` efface tout ce que le slot a créé.
+L'application du slot écoute sur le port `30{slot}0` de l'hôte ; Postgres n'est pas exposé,
+il n'est joignable que par le nom `db` dans le réseau du slot. Dans ce conteneur, la base
+`fullcar` sert au serveur de dev et aux tests de bout en bout, `fullcar_test` à Vitest.
+
+### Production
+
+- Neon, région Europe, fonctions Vercel dans la même région. Connexion par l'URL **poolée**
+  de Neon, puisque chaque invocation serverless ouvre sa connexion.
 - L'URL de la base vient de `DATABASE_URL`, jamais écrite en dur. Une session de
-  développement ne se connecte qu'à `localhost` : la base Neon n'est jamais accessible
-  depuis un poste de dev ou un agent.
+  développement ne se connecte qu'à la base de son slot : la base Neon n'est jamais
+  accessible depuis un poste de dev ou un agent.
 - Neon met la base en veille quand elle ne sert pas : la première requête après une pause
   coûte un peu moins d'une seconde. C'est accepté.
 

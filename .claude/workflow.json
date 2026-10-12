@@ -7,9 +7,9 @@
   },
   "base_branch": "main",
   "check": {
-    "full": "npm run check",
-    "affected": "npm run check",
-    "cleanup": "docker compose exec -T postgres sh -c 'dropdb -U fullcar --if-exists --force fullcar_slot{slot} && dropdb -U fullcar --if-exists --force fullcar_slot{slot}_test'"
+    "full": "make check",
+    "affected": "make check SLOT={slot}",
+    "cleanup": "make down SLOT={slot}"
   },
   "slots": {
     "var": "SLOT",
@@ -43,7 +43,10 @@
       "vercel.json",
       "next.config.*",
       "middleware.ts",
-      "src/middleware.ts"
+      "src/middleware.ts",
+      "Makefile",
+      "Dockerfile*",
+      ".dockerignore"
     ],
     "sensitive_patterns": [
       {
@@ -77,6 +80,11 @@
       "reason": "publication and version bumps are the human's"
     },
     {
+      "cmd": "docker",
+      "deny_args": "\\b(prune|push|login)\\b",
+      "reason": "pruning wipes other slots' and projects' data; registries are the human's"
+    },
+    {
       "cmd": "vercel",
       "allow_args": "^(ls|list|inspect|logs|whoami|project ls)\\b",
       "reason": "read-only: deploys, env and domains are the human's"
@@ -98,6 +106,7 @@
     }
   ],
   "db_hosts_allowed": [
+    "db",
     "localhost",
     "127.0.0.1"
   ],
@@ -109,10 +118,10 @@
   },
   "verify_ui": {
     "kind": "playwright",
-    "up": "npm run dev -- --port 30{slot}0",
-    "test": "npm run e2e -- --base-url http://localhost:30{slot}0",
-    "shot": "npm run shot -- --width 360 --base-url http://localhost:30{slot}0",
-    "down": "npm run dev:stop -- --port 30{slot}0"
+    "up": "make up SLOT={slot}",
+    "test": "make e2e SLOT={slot}",
+    "shot": "make shot SLOT={slot} WIDTH=360",
+    "down": "make down SLOT={slot}"
   },
   "escalation_extra": [
     "ajouter un compte, une adresse e-mail obligatoire, de la publicité ou du tracking",
