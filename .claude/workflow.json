@@ -9,43 +9,97 @@
   "check": {
     "full": "npm run check",
     "affected": "npm run check",
-    "cleanup": "rm -f var/slot-{slot}.sqlite"
+    "cleanup": "docker compose exec -T postgres sh -c 'dropdb -U fullcar --if-exists --force fullcar_slot{slot} && dropdb -U fullcar --if-exists --force fullcar_slot{slot}_test'"
   },
   "slots": {
     "var": "SLOT",
-    "developers": [1, 2, 3],
+    "developers": [
+      1,
+      2,
+      3
+    ],
     "reviewer": 9
   },
   "pr": {
     "max_lines": 1000,
-    "exclude": ["package-lock.json"],
+    "exclude": [
+      "package-lock.json"
+    ],
     "title": "conventional"
   },
   "merge": {
-    "required_checks": ["checks"],
+    "required_checks": [
+      "checks"
+    ],
     "review_status": "agent-review",
     "sensitive_paths": [
       ".github/**",
       ".claude/**",
       "docs/agents/**",
-      "migrations/**",
+      "**/migrations/**",
       "package.json",
       "package-lock.json",
-      "Dockerfile",
-      "compose.yaml"
+      "compose.yaml",
+      "vercel.json",
+      "next.config.*",
+      "middleware.ts",
+      "src/middleware.ts"
     ],
     "sensitive_patterns": [
-      { "regex": "randomBytes|randomUUID|Math\\.random|createHash|timingSafeEqual" },
-      { "regex": "admin_token|owner_token|Referrer-Policy" },
-      { "regex": "\\bphone\\b" },
-      { "regex": "purge|DROP TABLE|DELETE FROM" },
-      { "file": "package.json", "regex": "\"(dependencies|scripts)\"" }
+      {
+        "regex": "randomBytes|randomUUID|getRandomValues|Math\\.random|createHash|timingSafeEqual"
+      },
+      {
+        "regex": "admin_token|owner_token|Referrer-Policy|location\\.hash"
+      },
+      {
+        "regex": "\\bphone\\b"
+      },
+      {
+        "regex": "purge|CRON_SECRET|deleteFrom|dropTable|DROP TABLE|DELETE FROM|ON DELETE"
+      },
+      {
+        "regex": "DATABASE_URL"
+      },
+      {
+        "regex": "@vercel/analytics|@vercel/speed-insights"
+      },
+      {
+        "file": "package.json",
+        "regex": "\"(dependencies|devDependencies|scripts)\""
+      }
     ]
   },
   "commands": [
-    { "cmd": "npm", "deny_args": "^(publish|version)\\b", "reason": "publication and version bumps are the human's" },
-    { "cmd": "clever", "allow_args": "^(logs|status|activity|env list)\\b", "reason": "read-only: deploys are the human's" },
-    { "cmd": "scalingo", "allow_args": "^(logs|ps|deployments|env)\\b", "reason": "read-only: deploys are the human's" }
+    {
+      "cmd": "npm",
+      "deny_args": "^(publish|version)\\b",
+      "reason": "publication and version bumps are the human's"
+    },
+    {
+      "cmd": "vercel",
+      "allow_args": "^(ls|list|inspect|logs|whoami|project ls)\\b",
+      "reason": "read-only: deploys, env and domains are the human's"
+    },
+    {
+      "cmd": "vc",
+      "allow_args": "^(ls|list|inspect|logs|whoami|project ls)\\b",
+      "reason": "read-only: deploys, env and domains are the human's"
+    },
+    {
+      "cmd": "neonctl",
+      "allow_args": "^(me|projects list|branches list)\\b",
+      "reason": "read-only, and never a connection string: the production database is the human's"
+    },
+    {
+      "cmd": "neon",
+      "allow_args": "^(me|projects list|branches list)\\b",
+      "reason": "read-only, and never a connection string: the production database is the human's"
+    }
+  ],
+  "db_hosts_allowed": [
+    "localhost",
+    "127.0.0.1"
   ],
   "context": {
     "product": "docs/agents/product.md",
@@ -64,7 +118,7 @@
     "ajouter un compte, une adresse e-mail obligatoire, de la publicité ou du tracking",
     "changer ce qui est stocké, ou qui peut voir un numéro de téléphone",
     "toucher à la génération, au stockage ou à la journalisation d'un jeton",
-    "l'hébergement et le nom de domaine",
+    "l'hébergement (Vercel, Neon), leur plan et le nom de domaine",
     "sortir un sujet du hors-périmètre V1 (carte, notifications, appariement, paiement, messagerie)"
   ]
 }

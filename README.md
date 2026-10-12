@@ -20,6 +20,12 @@ l'aller mais pas au retour — y est pénible à exprimer.
 - **i18n dès le départ** : français et anglais.
 - **Sans pub ni tracking**, purge automatique des données 30 jours après l'événement.
 
+## Stack
+
+Next.js (App Router) en TypeScript, shadcn/ui, Postgres via Kysely, next-intl. Postgres en
+Docker pour le développement, Neon en production, hébergement sur Vercel. Le détail et les
+raisons sont dans [`docs/agents/architecture.md`](docs/agents/architecture.md).
+
 ## État
 
 Projet neuf. Rien n'est encore écrit : la première tâche est de monter la boucle de

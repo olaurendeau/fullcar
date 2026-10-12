@@ -27,6 +27,31 @@ reproduire, dans cet ordre.
 - **Aller et retour indépendants**, dans le même événement, sous deux onglets.
 - **Rien à nettoyer.** Les données disparaissent 30 jours après l'événement.
 
+## Règles d'interaction
+
+- **Prendre une place.** Un tap sur une place libre place directement la personne de
+  l'appareil si elle est la seule « sans voiture » sur ce leg. Sinon une feuille s'ouvre avec
+  les personnes de l'appareil qui ne sont pas dans une voiture : celles « sans voiture »
+  précochées, celles « pas concernées » décochées. On ajuste, on valide. Une personne peut
+  ainsi placer plusieurs personnes d'un coup, dans la limite des places libres. Sans aucune
+  personne sur l'appareil, le tap ouvre la première inscription (prénom, téléphone
+  facultatif), qui place directement.
+- **Ajouter une personne** : la case « aller et retour » (cochée) la déclare sans voiture sur
+  les deux legs ; décochée, seulement sur l'onglet en cours. Chaque leg se bascule ensuite
+  séparément entre dans une voiture, sans voiture et pas concernée.
+- **Rehausseurs** (option) : une personne qui a besoin d'un rehausseur peut prendre une place
+  dans une voiture qui n'en a plus de libre. On l'avertit (« plus de rehausseur dans cette
+  voiture ») sans bloquer : le parent peut fournir le sien.
+- **Arrêts** (option points de RDV) : le tap sur une place libre place la personne au lieu du
+  Ride ; elle choisit ensuite son arrêt sur la carte de la voiture. Le geste reste unique.
+- **Le conducteur retire sa voiture** : ses passagers repassent « sans voiture » sur ce leg,
+  et le bandeau de couverture le reflète.
+- **Le conducteur réduit ses places** sous le nombre d'occupants : il choisit qui sort ; les
+  sortants repassent « sans voiture ».
+- **Fraîcheur** : la page se recharge quand elle revient au premier plan, et interroge le
+  serveur toutes les 15 s environ tant qu'elle est visible. Pas de websocket.
+- **Lien court** : `/e/{id}` doit se dicter et tenir dans un SMS.
+
 ## Ce qui compte comme fait
 
 Un critère n'est tenu que s'il est **prouvé par un test**, pas constaté à l'œil :
