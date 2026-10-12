@@ -44,19 +44,26 @@
       "next.config.*",
       "middleware.ts",
       "src/middleware.ts",
+      "proxy.ts",
+      "src/proxy.ts",
       "Makefile",
       "Dockerfile*",
-      ".dockerignore"
+      ".dockerignore",
+      "docker/**",
+      "tsconfig.json",
+      "eslint.config.*",
+      "vitest.config.*",
+      "playwright.config.*"
     ],
     "sensitive_patterns": [
       {
         "regex": "randomBytes|randomUUID|getRandomValues|Math\\.random|createHash|timingSafeEqual"
       },
       {
-        "regex": "admin_token|owner_token|Referrer-Policy|location\\.hash"
+        "regex": "(?i)token|localStorage|sessionStorage|location\\.hash|\\.hash\\b|Referrer-Policy"
       },
       {
-        "regex": "\\bphone\\b"
+        "regex": "(?i)phone"
       },
       {
         "regex": "purge|CRON_SECRET|deleteFrom|dropTable|DROP TABLE|DELETE FROM|ON DELETE"
@@ -76,13 +83,18 @@
   "commands": [
     {
       "cmd": "npm",
-      "deny_args": "^(publish|version)\\b",
+      "deny_args": "\\b(publish|unpublish|version|dist-tag|deprecate)\\b",
       "reason": "publication and version bumps are the human's"
     },
     {
+      "cmd": "make",
+      "deny_args": "\\b(publish|unpublish|version|dist-tag|deprecate)\\b",
+      "reason": "publication and version bumps are the human's, including through make npm ARGS=\"…\""
+    },
+    {
       "cmd": "docker",
-      "deny_args": "\\b(prune|push|login)\\b",
-      "reason": "pruning wipes other slots' and projects' data; registries are the human's"
+      "deny_args": "\\b(prune|push|login)\\b|(^|\\s)rm\\b|\\bdown\\b.*\\s(-[A-Za-z]*v[A-Za-z]*|--volumes)\\b|\\bcompose\\b.*\\s(-p|--project-name\\b)|\\bnpm\\b.*\\b(publish|unpublish|version|dist-tag|deprecate)\\b",
+      "reason": "removing volumes or containers, or naming another Compose project, wipes other slots' data (make down SLOT={slot} is the way); registries and npm publication are the human's"
     },
     {
       "cmd": "vercel",
@@ -106,9 +118,7 @@
     }
   ],
   "db_hosts_allowed": [
-    "db",
-    "localhost",
-    "127.0.0.1"
+    "db"
   ],
   "context": {
     "product": "docs/agents/product.md",
