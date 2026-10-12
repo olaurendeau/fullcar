@@ -4,6 +4,8 @@
 SLOT ?= 0
 WIDTH ?= 360
 export SLOT
+export HOST_UID := $(shell id -u)
+export HOST_GID := $(shell id -g)
 
 COMPOSE := docker compose
 RUN := $(COMPOSE) run --rm

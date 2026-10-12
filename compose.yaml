@@ -2,8 +2,10 @@
 # Nothing runs on the host; the Makefile is the entry point.
 name: fullcar-slot${SLOT:-0}
 
+# Containers run as the host user, so files they write in the repo stay the host's.
 x-node: &node
   image: node:24.21.0-bookworm-slim
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   working_dir: /app
   volumes:
     - .:/app
@@ -11,6 +13,7 @@ x-node: &node
     DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar
     TEST_DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar_test
     NEXT_TELEMETRY_DISABLED: "1"
+    HOME: /tmp
 
 services:
   web:
@@ -45,11 +48,13 @@ services:
 
   e2e:
     image: mcr.microsoft.com/playwright:v1.64.0-noble
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     working_dir: /app
     volumes:
       - .:/app
     environment:
       BASE_URL: http://web:3000
+      HOME: /tmp
     ipc: host
     profiles: [tools]
 
