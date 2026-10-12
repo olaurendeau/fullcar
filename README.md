@@ -27,10 +27,17 @@ production, hébergement sur Vercel. En local, **tout passe par Docker** : il su
 et de `make`, rien d'autre à installer. Le détail et les
 raisons sont dans [`docs/agents/architecture.md`](docs/agents/architecture.md).
 
-## État
+## Démarrer
 
-Projet neuf. Rien n'est encore écrit : la première tâche est de monter la boucle de
-vérification (`make check`), que le profil du workflow déclare déjà comme contrat.
+Il suffit de Docker et de `make` :
+
+```bash
+make up      # app sur http://localhost:3000, avec sa base Postgres
+make check   # lint, typecheck, clés i18n, tests : ce que la CI exécute
+make e2e     # tests de bout en bout (Playwright, 360 px)
+make down    # arrête tout et efface les données locales
+make help    # le reste
+```
 
 Le développement suit le plugin [ola-workflow](https://github.com/olaurendeau/ola-workflow) :
 les documents que lisent les agents sont dans [`docs/agents/`](docs/agents/), et le profil

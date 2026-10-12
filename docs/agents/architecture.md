@@ -11,8 +11,8 @@ est lu par trente personnes pendant trois jours, puis purgé.
 
 | besoin | choix |
 |---|---|
-| framework | Next.js, App Router, TypeScript strict |
-| composants | shadcn/ui (Tailwind, Radix), copiés dans le dépôt ; Drawer pour les feuilles mobiles |
+| framework | Next.js 16, App Router, TypeScript strict ; Cache Components désactivé (tout est personnel et par requête) |
+| composants | shadcn/ui (Tailwind v4, Radix, preset Nova), copiés dans `src/components/ui` ; Drawer pour les feuilles mobiles |
 | outillage local | Docker uniquement, piloté par `make` ; rien d'installé sur l'hôte |
 | base | Postgres : conteneur par slot en local, Neon en production |
 | accès aux données | Kysely (query builder typé, pas d'ORM) et le driver `pg` |
@@ -47,9 +47,12 @@ Linux, ils restent lisibles par l'éditeur de l'hôte pour les types.
 
 La CI exécute le même `make check` : ce qui passe en local passe en CI.
 
+Le service Node s'appelle `web`, pas `app` : Chromium précharge HSTS pour tout le TLD `.app`
+et force alors HTTPS sur `http://app:3000`, ce qui casse les tests de bout en bout.
+
 ### Slots
 
-Chaque slot est un **projet Compose distinct** (`fullcar-slot{slot}`) : son conteneur Node,
+Chaque slot est un **projet Compose distinct** (`fullcar-slot{slot}`) : son conteneur Node (`web`),
 son conteneur Postgres, ses volumes. Rien n'est partagé, donc deux développeurs en parallèle
 ne se marchent pas dessus, et `make down SLOT={slot}` efface tout ce que le slot a créé.
 L'application du slot écoute sur le port `30{slot}0` de l'hôte ; Postgres n'est pas exposé,
