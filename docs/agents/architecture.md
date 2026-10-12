@@ -69,10 +69,15 @@ il n'est joignable que par le nom `db` dans le réseau du slot. Dans ce conteneu
 ## Concurrence
 
 Contrairement à SQLite, Postgres accepte des écritures simultanées. Deux personnes peuvent
-taper la même dernière place au même moment : l'occupation d'une place est donc une
-**écriture conditionnelle dans une transaction** (verrou sur le Ride, ou insertion qui
-vérifie la capacité restante), et le perdant reçoit un message clair, pas une voiture
-surchargée.
+taper la même dernière place au même moment. Prendre une place se fait donc dans une
+transaction qui **verrouille d'abord la ligne du Ride** (`SELECT … FROM ride … FOR UPDATE`),
+puis compte les places restantes, puis écrit le Placement. Les deux taps sont ainsi
+sérialisés sur le Ride : le second voit la place prise et reçoit un message clair, pas une
+voiture surchargée.
+
+Une insertion conditionnelle sans verrou (`INSERT … SELECT … WHERE` comptage `< places`)
+ne suffit pas : sous `READ COMMITTED`, le niveau par défaut de Postgres, deux transactions
+simultanées voient la même place libre et insèrent toutes les deux.
 
 ## Jetons, et pourquoi ils sont la pièce critique
 
@@ -102,9 +107,17 @@ L'identifiant de `/e/{id}` est aléatoire et non devinable : on ne doit pas pouv
 les événements pour récolter des prénoms. Ce n'est pas un jeton (il ne donne aucun droit
 d'écriture), mais il n'est jamais séquentiel.
 
-Il doit aussi être **court** : 8 caractères tirés d'un générateur cryptographique, dans un
-alphabet sans caractères ambigus (ni `0/O`, ni `1/l/I`), soit environ 46 bits. Avec une
-limite de débit sur les lectures, c'est hors de portée d'une énumération.
+Il doit aussi être **court** : 8 caractères tirés d'un générateur cryptographique, sensibles
+à la casse, dans un alphabet de **57 symboles** sans caractères ambigus (ni `0`, ni `O`, ni
+`1`, ni `l`, ni `I`) :
+
+```
+23456789 ABCDEFGHJKLMNPQRSTUVWXYZ abcdefghijkmnopqrstuvwxyz
+```
+
+soit `^[2-9A-HJ-NP-Za-km-z]{8}$`, 57⁸ ≈ 1,1·10¹⁴ valeurs, environ 46,7 bits. C'est assez pour
+que l'énumération reste hors de portée **sans limite de débit** : même à mille requêtes par
+seconde, tomber sur un événement parmi mille en cours prend plus de trois ans.
 
 ## Visibilité du téléphone : une règle, un seul endroit
 
@@ -143,7 +156,10 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 - **Options** : désactivée, une option est **absente** de l'UI, pas grisée. Le code ne doit
   pas supposer qu'une option est active.
 - **Purge** : toute nouvelle table se rattache à un événement par une clé étrangère en
-  `ON DELETE CASCADE`, sinon elle survivra à la purge.
+  `ON DELETE CASCADE`, sinon elle survivra à la purge. C'est la **seule** clé en cascade.
+  En particulier, `placement.ride_id` ne supprime pas le Placement : il est en
+  `ON DELETE SET NULL`, et quand un Ride est supprimé ses passagers repassent « sans
+  voiture » sur ce leg, au lieu de devenir « pas concernés ».
 - **Zéro tracking** : Vercel Web Analytics et Speed Insights restent désactivés.
 
 ## Décisions à remonter à l'humain

@@ -39,14 +39,18 @@ celui qui écrit le code.
 
 - 360 px sans débordement horizontal.
 - Les places libres sont des cibles tactiles d'au moins 44 px.
-- Le parcours « rejoindre une voiture » reste à un seul tap.
+- Le parcours « rejoindre une voiture » reste à un seul tap quand l'appareil a exactement une
+  personne « sans voiture » sur ce leg. Sinon le tap ouvre la feuille : ce n'est pas un défaut.
 
 ## Vie privée et purge
 
 - Aucune donnée nouvelle sans nécessité : prénom et téléphone optionnel suffisent à la V1.
 - Toute nouvelle table se rattache à un événement par une clé étrangère en
-  `ON DELETE CASCADE`, sinon elle échappe à la purge.
-- La purge est testée : une donnée créée pour un événement passé disparaît.
+  `ON DELETE CASCADE`, sinon elle échappe à la purge. C'est la seule clé en cascade : une
+  cascade sur `placement.ride_id` est bloquante, car supprimer un Ride doit renvoyer ses
+  passagers « sans voiture » sur ce leg, pas effacer leurs Placements.
+- La purge est testée : une donnée créée pour un événement passé disparaît 30 jours après
+  son dernier leg, avec et sans retour.
 - Aucun tracking, aucune requête vers un tiers, aucune police ni script distant. Vercel Web
   Analytics et Speed Insights restent désactivés.
 - La route de purge refuse tout appel sans le bon `CRON_SECRET`.
@@ -55,8 +59,9 @@ celui qui écrit le code.
 
 - Les migrations ont une descente, et elle est testée.
 - L'URL de la base vient de `DATABASE_URL`, jamais écrite en dur.
-- Occuper une place est une écriture conditionnelle dans une transaction : deux taps
-  simultanés sur la dernière place ne surchargent pas la voiture.
+- Occuper une place verrouille la ligne du Ride (`SELECT … FOR UPDATE`) dans la transaction,
+  avant de compter les places restantes. Une insertion conditionnelle sans ce verrou est
+  bloquante : deux taps simultanés sur la dernière place surchargeraient la voiture.
 - Aucune transaction longue autour d'une purge ou d'un import.
 - Les requêtes passent par Kysely avec des paramètres liés : aucune concaténation de SQL.
 

@@ -23,7 +23,9 @@ reproduire, dans cet ordre.
   lien et un jeton dans le navigateur.
 - **Un seul écran.** Tout l'événement tient sur une page : voitures, places libres,
   personnes sans voiture. Pas de navigation à apprendre.
-- **Un geste.** Après la première inscription, rejoindre une voiture est un seul tap.
+- **Un geste.** Après la première inscription, rejoindre une voiture est un seul tap quand
+  l'appareil a exactement une personne « sans voiture » sur ce leg ; sinon le tap ouvre la
+  feuille pour choisir qui monte.
 - **Aller et retour indépendants**, dans le même événement, sous deux onglets.
 - **Rien à nettoyer.** Les données disparaissent 30 jours après l'événement.
 
@@ -43,14 +45,14 @@ reproduire, dans cet ordre.
   dans une voiture qui n'en a plus de libre. On l'avertit (« plus de rehausseur dans cette
   voiture ») sans bloquer : le parent peut fournir le sien.
 - **Arrêts** (option points de RDV) : le tap sur une place libre place la personne au lieu du
-  Ride ; elle choisit ensuite son arrêt sur la carte de la voiture. Le geste reste unique.
+  Ride ; elle choisit ensuite son arrêt sur la fiche de la voiture. Le geste reste unique.
 - **Le conducteur retire sa voiture** : ses passagers repassent « sans voiture » sur ce leg,
   et le bandeau de couverture le reflète.
 - **Le conducteur réduit ses places** sous le nombre d'occupants : il choisit qui sort ; les
   sortants repassent « sans voiture ».
 - **Fraîcheur** : la page se recharge quand elle revient au premier plan, et interroge le
   serveur toutes les 15 s environ tant qu'elle est visible. Pas de websocket.
-- **Lien court** : `/e/{id}` doit se dicter et tenir dans un SMS.
+- **Lien court** : `/e/{id}` doit rester court et tenir dans un SMS.
 
 ## Ce qui compte comme fait
 
@@ -59,7 +61,7 @@ Un critère n'est tenu que s'il est **prouvé par un test**, pas constaté à l'
 | critère | preuve attendue |
 |---|---|
 | créer un événement en moins de 30 s | test de bout en bout, chemin le plus court compté |
-| rejoindre une voiture en 1 tap après la 1re inscription | test de bout en bout, un seul clic sur la place libre |
+| rejoindre une voiture en 1 tap après la 1re inscription, quand l'appareil a exactement une personne « sans voiture » sur ce leg | test de bout en bout, un seul clic sur la place libre ; avec deux personnes « sans voiture », le clic ouvre la feuille |
 | un appareil gère plusieurs personnes | test : deux personnes créées avec le même jeton, les deux modifiables |
 | aller et retour indépendants | test : placer quelqu'un à l'aller ne le place pas au retour |
 | utilisable sur 360 px | capture à 360 px, aucun débordement horizontal |
