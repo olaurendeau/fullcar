@@ -20,7 +20,7 @@ node_modules: package.json package-lock.json
 
 install: node_modules ## Installs dependencies (in the container)
 
-check: node_modules ## Everything the CI runs: lint, typecheck, i18n keys, tests
+check: node_modules ## Everything the CI runs: lint, typecheck, i18n keys, tests, production build
 	$(RUN) web npm run check
 
 up: node_modules ## Starts the slot's app and database, waits until the app answers
@@ -42,7 +42,14 @@ shot: up ## Takes screenshots at WIDTH px (default 360) into var/shots
 logs: ## Follows the slot's logs
 	$(COMPOSE) logs -f
 
+# Publication and version bumps are the human's (see .claude/workflow.json), aliases included.
+NPM_DENIED := version verison publish unpublish dist-tag dist-tags
+
 npm: ## Runs npm in the container, e.g. make npm ARGS="install zod"
+	@if [ -n "$(filter $(NPM_DENIED),$(ARGS))" ]; then \
+		echo "make npm: refused, '$(filter $(NPM_DENIED),$(ARGS))' is the human's (publication, versions)." >&2; \
+		exit 1; \
+	fi
 	$(NO_DEPS) npm $(ARGS)
 
 .PHONY: help install check up down migrate e2e shot logs npm
