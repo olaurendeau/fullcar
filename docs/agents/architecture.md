@@ -59,8 +59,7 @@ son conteneur Postgres, ses volumes. Rien n'est partagé, donc deux développeur
 ne se marchent pas dessus, et `make down SLOT={slot}` efface tout ce que le slot a créé.
 L'application du slot écoute sur le port `30{slot}0` de l'hôte, en `127.0.0.1` seulement ;
 Postgres n'est pas exposé, il n'est joignable que par le nom `db` dans le réseau du slot. Dans
-ce conteneur, la base
-`fullcar` sert au serveur de dev et aux tests de bout en bout, `fullcar_test` à Vitest.
+ce conteneur, la base `fullcar` sert au serveur de dev et aux tests de bout en bout, `fullcar_test` à Vitest.
 
 ### Production
 

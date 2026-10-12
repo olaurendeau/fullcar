@@ -43,7 +43,7 @@ logs: ## Follows the slot's logs
 	$(COMPOSE) logs -f
 
 # Publication and version bumps are the human's (see .claude/workflow.json), aliases included.
-NPM_DENIED := version verison publish unpublish dist-tag dist-tags
+NPM_DENIED := version verison publish unpublish dist-tag dist-tags deprecate
 
 npm: ## Runs npm in the container, e.g. make npm ARGS="install zod"
 	@if [ -n "$(filter $(NPM_DENIED),$(ARGS))" ]; then \
