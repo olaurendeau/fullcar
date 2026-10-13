@@ -149,6 +149,15 @@ describe("redactConnection", () => {
     expect(redacted).not.toContain("50%2Ax");
   });
 
+  // new URL ends the authority at the first / ? or #, and would read "12" as the port.
+  it.each([["postgres://u:12/ab@host/db"], ["postgres://u:12?ab@host/db"], ["postgres://u:12#ab@host/db"]])(
+    "withholds the whole message when the password holds an unencoded delimiter: %s",
+    (url) => {
+      const redacted = redactConnection("connect ECONNREFUSED u:12, user ab", url);
+      for (const secret of ["12", "ab"]) expect(redacted).not.toContain(secret);
+    },
+  );
+
   it("replaces in a single pass, never inside a marker it has just written", () => {
     expect(redactConnection("host: a", "postgres://host/appdb?application_name=a")).toBe("[redacted]: [redacted]");
   });

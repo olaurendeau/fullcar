@@ -65,6 +65,9 @@ function connectionParts(url: string): Set<string> | undefined {
     for (const word of url.split(" ")) parts.add(word);
     return parts;
   }
+  // new URL ends the authority at the first / ? or #: an @ after it means a password holding
+  // one of them, the start of which would be read as the host and the port.
+  if (/^[^:/?#]+:\/\/[^/?#]*[/?#][\s\S]*@/.test(url)) return undefined;
   // pg re-encodes a URL holding a space or a stray % before reading it: both readings count.
   let asPg: string;
   try {
