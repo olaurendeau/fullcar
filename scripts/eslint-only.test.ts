@@ -1,8 +1,11 @@
 import { ESLint } from "eslint";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 // A `.only` left behind silently skips every other test, locally and in CI alike.
 const eslint = new ESLint();
+
+// Loading the config and its plugins takes seconds: done once, outside any single test's timeout.
+beforeAll(() => eslint.lintText(""), 60_000);
 
 async function onlyErrors(code: string, filePath: string) {
   const [result] = await eslint.lintText(code, { filePath });
