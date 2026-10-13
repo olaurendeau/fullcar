@@ -11,8 +11,8 @@ est lu par trente personnes pendant trois jours, puis purgé.
 
 | besoin | choix |
 |---|---|
-| framework | Next.js, App Router, TypeScript strict |
-| composants | shadcn/ui (Tailwind, Radix), copiés dans le dépôt ; Drawer pour les feuilles mobiles |
+| framework | Next.js 16, App Router, TypeScript strict ; Cache Components désactivé (tout est personnel et par requête) |
+| composants | shadcn/ui (Tailwind v4, Radix, preset Nova), copiés dans `src/components/ui` ; Drawer pour les feuilles mobiles |
 | outillage local | Docker uniquement, piloté par `make` ; rien d'installé sur l'hôte |
 | base | Postgres : conteneur par slot en local, Neon en production |
 | accès aux données | Kysely (query builder typé, pas d'ORM) et le driver `pg` |
@@ -37,25 +37,30 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 
 | commande | effet |
 |---|---|
-| `make check` | tout ce que la CI exécute : lint, typecheck, tests, clés i18n |
+| `make check` | tout ce que la CI exécute : lint, typecheck, tests, clés i18n, build de production |
 | `make up` / `make down` | démarre / arrête et efface l'environnement du slot |
 | `make e2e` | tests de bout en bout Playwright contre le **build de production** du slot |
 | `make shot` | captures d'écran (360 px par défaut) |
-| `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple |
+| `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple ; refuse `version` et `publish`, qui reviennent à l'humain |
 
 Le dépôt est monté dans le conteneur, `node_modules` compris : installés par le conteneur
 Linux, ils restent lisibles par l'éditeur de l'hôte pour les types.
 
-La CI exécute le même `make check` : ce qui passe en local passe en CI.
+La CI exécute le même `make check` : ce qui passe en local passe en CI. La variable `CI` est
+transmise aux conteneurs : en CI, Vitest et Playwright refusent un `.only`, que le lint
+refuse déjà partout.
+
+Le service Node s'appelle `web`, pas `app` : Chromium précharge HSTS pour tout le TLD `.app`
+et force alors HTTPS sur `http://app:3000`, ce qui casse les tests de bout en bout.
 
 ### Slots
 
-Chaque slot est un **projet Compose distinct** (`fullcar-slot{slot}`) : son conteneur Node,
+Chaque slot est un **projet Compose distinct** (`fullcar-slot{slot}`) : son conteneur Node (`web`),
 son conteneur Postgres, ses volumes. Rien n'est partagé, donc deux développeurs en parallèle
 ne se marchent pas dessus, et `make down SLOT={slot}` efface tout ce que le slot a créé.
-L'application du slot écoute sur le port `30{slot}0` de l'hôte ; Postgres n'est pas exposé,
-il n'est joignable que par le nom `db` dans le réseau du slot. Dans ce conteneur, la base
-`fullcar` sert au serveur de dev et aux tests de bout en bout, `fullcar_test` à Vitest.
+L'application du slot écoute sur le port `30{slot}0` de l'hôte, en `127.0.0.1` seulement ;
+Postgres n'est pas exposé, il n'est joignable que par le nom `db` dans le réseau du slot. Dans
+ce conteneur, la base `fullcar` sert au serveur de dev et aux tests de bout en bout, `fullcar_test` à Vitest.
 
 `make up` lance le serveur de dev (`next dev`). Les tests de bout en bout, eux, tournent
 contre le build de production (`next build` puis `next start`) : c'est ce build qui part
