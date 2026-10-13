@@ -37,12 +37,29 @@ function urlVariable(env: Env): UrlVariable {
   return variable;
 }
 
-/** Removes the URL and each of its parts (user, password, host, database) from `text`. */
+/**
+ * Removes the URL and each of its parts from `text`: user, password, host and its first
+ * label (Neon's endpoint id), database, and every query value, since pg reads some of them
+ * (user, password, options, sslrootcert…) and may quote them in its errors. The port stays.
+ */
 export function redactConnection(text: string, url: string): string {
   const parts = new Set([url]);
   try {
-    const { username, password, host, hostname, pathname } = new URL(url);
-    for (const part of [username, password, host, hostname, pathname.slice(1)]) {
+    const { username, password, host, hostname, pathname, search, searchParams } = new URL(url);
+    const rawQueryValues = search
+      .slice(1)
+      .split("&")
+      .map((pair) => pair.slice(pair.indexOf("=") + 1));
+    for (const part of [
+      username,
+      password,
+      host,
+      hostname,
+      hostname.split(".")[0],
+      pathname.slice(1),
+      ...rawQueryValues,
+      ...searchParams.values(),
+    ]) {
       parts.add(part);
       parts.add(decode(part));
     }

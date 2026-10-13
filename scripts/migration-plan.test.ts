@@ -79,6 +79,44 @@ describe("redactConnection", () => {
     expect(redacted).toContain("getaddrinfo ENOTFOUND");
   });
 
+  it("removes the values of the query string, raw and decoded", () => {
+    const url = "postgres://db:5432/fullcar?options=endpoint%3Dep-direct-42&user=bob&sslrootcert=%2Fsecret-ca-path.pem";
+    const message = [
+      "unknown option endpoint%3Dep-direct-42 (endpoint=ep-direct-42)",
+      'password authentication failed for user "bob"',
+      "ENOENT: no such file or directory, open '/secret-ca-path.pem'",
+    ].join("\n");
+    const redacted = redactConnection(message, url);
+    for (const secret of ["endpoint%3Dep-direct-42", "endpoint=ep-direct-42", "bob", "/secret-ca-path.pem"]) {
+      expect(redacted).not.toContain(secret);
+    }
+    expect(redacted).toContain("ENOENT: no such file or directory");
+  });
+
+  // Both reproduced against a slot database during review.
+  it.each([
+    [
+      "postgres://db:5432/fullcar?user=alicesecret&password=wrongpw",
+      'error: password authentication failed for user "alicesecret" (wrongpw)',
+      ["alicesecret", "wrongpw"],
+    ],
+    [
+      "postgres://db:5432/fullcar?sslmode=verify-full&sslrootcert=/secret-ca-path.pem",
+      "ENOENT: no such file or directory, open '/secret-ca-path.pem'",
+      ["/secret-ca-path.pem"],
+    ],
+  ])("removes credentials passed as parameters: %s", (url, message, secrets) => {
+    const redacted = redactConnection(message, url);
+    for (const secret of secrets) expect(redacted).not.toContain(secret);
+  });
+
+  it("removes the host's first label on its own, keeping the port", () => {
+    const message = "endpoint ep-direct-42 not found; TLS: eu-central-1.aws.example; port 5432";
+    const redacted = redactConnection(message, "postgres://alice:s3cret@ep-direct-42.eu-central-1.aws.example:5432/appdb");
+    expect(redacted).not.toContain("ep-direct-42");
+    expect(redacted).toContain("port 5432");
+  });
+
   it("leaves a message alone when the URL cannot be parsed, except the URL itself", () => {
     expect(redactConnection("bad url: not a url", "not a url")).toBe("bad url: [redacted]");
   });
