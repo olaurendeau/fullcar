@@ -12,6 +12,7 @@ x-node: &node
   environment:
     DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar
     TEST_DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar_test
+    MIGRATIONS_TEST_DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar_migrations_test
     NEXT_TELEMETRY_DISABLED: "1"
     HOME: /tmp
     # Empty locally, "true" in CI: Vitest and Playwright then refuse `.only`.
