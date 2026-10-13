@@ -22,8 +22,9 @@ est lu par trente personnes pendant trois jours, puis purgé.
 | PWA | manifeste et service worker minimal, pas de mode hors ligne en V1 |
 | purge | Vercel Cron quotidienne vers une route protégée par `CRON_SECRET` |
 
-Polices servies par l'application (`next/font` en local ou police système) : aucune requête
-vers un tiers.
+Polices : la pile de polices système, **aucune police web**, ni distante ni servie par
+l'application. Aucune requête vers un tiers, et rien à télécharger avant le premier
+affichage.
 
 ## Environnements et base de données
 
@@ -38,7 +39,7 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 |---|---|
 | `make check` | tout ce que la CI exécute : lint, typecheck, tests, clés i18n |
 | `make up` / `make down` | démarre / arrête et efface l'environnement du slot |
-| `make e2e` | tests de bout en bout Playwright contre l'environnement du slot |
+| `make e2e` | tests de bout en bout Playwright contre le **build de production** du slot |
 | `make shot` | captures d'écran (360 px par défaut) |
 | `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple |
 
@@ -56,6 +57,11 @@ L'application du slot écoute sur le port `30{slot}0` de l'hôte ; Postgres n'es
 il n'est joignable que par le nom `db` dans le réseau du slot. Dans ce conteneur, la base
 `fullcar` sert au serveur de dev et aux tests de bout en bout, `fullcar_test` à Vitest.
 
+`make up` lance le serveur de dev (`next dev`). Les tests de bout en bout, eux, tournent
+contre le build de production (`next build` puis `next start`) : c'est ce build qui part
+sur Vercel, et le serveur de dev ne se comporte pas comme lui (compilation à la demande,
+rendu, cache).
+
 ### Production
 
 - Neon, région Europe, fonctions Vercel dans la même région. Connexion par l'URL **poolée**
@@ -65,6 +71,15 @@ il n'est joignable que par le nom `db` dans le réseau du slot. Dans ce conteneu
   accessible depuis un poste de dev ou un agent.
 - Neon met la base en veille quand elle ne sert pas : la première requête après une pause
   coûte un peu moins d'une seconde. C'est accepté.
+- **Migrations** : le build Vercel les applique, pour l'environnement de production
+  seulement, avec l'URL **non poolée** de Neon (les verrous et le DDL d'une migration ne
+  passent pas par le pooler). Le nouveau schéma est donc en place avant que le nouveau code
+  serve, mais l'ancien code sert encore pendant le déploiement, et c'est vers lui qu'un
+  retour arrière ramène : chaque migration reste **compatible avec le code déjà déployé**.
+  On procède par expansion puis contraction : ajouter (colonne nullable ou avec défaut,
+  table), déployer le code qui s'en sert, et ne retirer l'ancien que dans un déploiement
+  suivant. Renommer ou supprimer une colonne encore lue d'un seul coup est un défaut.
+- Les déploiements de prévisualisation (preview) n'ont pas de base pour l'instant.
 
 ## Concurrence
 
@@ -155,11 +170,18 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 - **360 px** : la largeur de référence, pas un cas limite.
 - **Options** : désactivée, une option est **absente** de l'UI, pas grisée. Le code ne doit
   pas supposer qu'une option est active.
-- **Purge** : toute nouvelle table se rattache à un événement par une clé étrangère en
-  `ON DELETE CASCADE`, sinon elle survivra à la purge. C'est la **seule** clé en cascade.
-  En particulier, `placement.ride_id` ne supprime pas le Placement : il est en
-  `ON DELETE SET NULL`, et quand un Ride est supprimé ses passagers repassent « sans
-  voiture » sur ce leg, au lieu de devenir « pas concernés ».
+- **Purge** : chaque table a une clé étrangère vers l'Event en `ON DELETE CASCADE`. C'est
+  ce qui fait marcher la purge : supprimer l'Event emporte tout le reste, et une table sans
+  cette clé survivrait à la purge.
+- **Autres clés étrangères** : chacune est choisie selon la relation, et écrite ici. Une
+  nouvelle clé s'ajoute à ce tableau dans la même PR.
+
+  | clé | `ON DELETE` | pourquoi |
+  |---|---|---|
+  | `stop.ride_id` | `CASCADE` | un Arrêt appartient à son Ride |
+  | `placement.person_id` | `CASCADE` | un Placement appartient à sa Person |
+  | `placement.ride_id` | `SET NULL` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » |
+  | `placement.stop_id` | `SET NULL` | quand un Arrêt est supprimé, le passager monte (ou descend) au lieu du Ride |
 - **Zéro tracking** : Vercel Web Analytics et Speed Insights restent désactivés.
 
 ## Décisions à remonter à l'humain
