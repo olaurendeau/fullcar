@@ -39,7 +39,7 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 |---|---|
 | `make ci` | tout ce que la CI exécute : `make check` puis `make e2e` |
 | `make check` | lint, typecheck, tests, clés i18n, build de production |
-| `make up` / `make down` | démarre / arrête et efface l'environnement du slot |
+| `make up` / `make down` | démarre / arrête et efface l'environnement du slot ; `make up` démarre la base, **lui applique les migrations**, puis démarre `web`, et une migration en échec l'arrête avant `web` (#27) |
 | `make e2e` | tests de bout en bout Playwright contre le **build de production** du slot |
 | `make shot` | captures d'écran (360 px par défaut) |
 | `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple ; refuse `version` (et sa variante `verison`), `publish`, `unpublish`, `dist-tag` (`dist-tags`) et `deprecate`, qui reviennent à l'humain |
