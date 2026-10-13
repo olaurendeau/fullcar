@@ -61,7 +61,8 @@ son conteneur Postgres, ses volumes. Rien n'est partagé, donc deux développeur
 ne se marchent pas dessus, et `make down SLOT={slot}` efface tout ce que le slot a créé.
 L'application du slot écoute sur le port `30{slot}0` de l'hôte, en `127.0.0.1` seulement ;
 Postgres n'est pas exposé, il n'est joignable que par le nom `db` dans le réseau du slot. Dans
-ce conteneur, la base `fullcar` sert au serveur de dev et aux tests de bout en bout, `fullcar_test` à Vitest.
+ce conteneur, la base `fullcar` sert au serveur de dev et aux tests de bout en bout,
+`fullcar_test` et `fullcar_migrations_test` à Vitest.
 
 `make up` lance le serveur de dev (`next dev`). Les tests de bout en bout, eux, tournent
 contre le build de production (`next build` puis `next start`) : c'est ce build qui part
@@ -98,6 +99,8 @@ Ces règles sont mises en place par #5.
   route HTTP réservée aux tests : une telle route finirait par exister en production.
 - **Chaque test possède son événement** : il le crée, et ne lit ni ne modifie celui d'un
   autre test. Les tests restent indépendants et peuvent tourner en parallèle.
+
+L'accès du conteneur Playwright à la base du slot et la fixture d'amorçage arrivent avec #20.
 
 ### Production
 
@@ -203,18 +206,20 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 
 | quoi | où | règle |
 |---|---|---|
-| domaine | `src/domain/` | fonctions pures : n'importe ni `kysely`, ni `pg`, ni `next/*`, ni `react`, ni `@/db/*` (le lint l'impose, #9) |
+| domaine | `src/domain/` | fonctions pures : n'importe ni `kysely`, ni `pg`, ni `next`, ni `react`, ni `react-dom` (ni leurs sous-chemins), ni `src/db`, par `@/db` ou par un chemin relatif ; le lint l'impose (#9, `eslint.config.mjs`) |
 | accès aux données | `src/db/<entité>.ts` (ex. `src/db/events.ts`) | chaque fonction reçoit `db: Kysely<Database>` en paramètre, pour qu'un test lui passe sa transaction ; aucune règle métier |
 | migrations | `src/db/migrations/` | seul endroit où `sql.raw` est permis |
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
-| composants | `src/components/<domaine>/` (ex. `src/components/event/`) | n'importent pas `@/db/*` |
+| composants | `src/components/<domaine>/` (ex. `src/components/event/`) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 
 Une server action renvoie des **données simples** (sérialisables) et des **clés d'erreur**
 (traduites par la vue), jamais un message rédigé ni le détail d'une erreur Postgres. Elle
-n'appelle **jamais `redirect()` vers une URL qui contient un jeton** : la redirection passe
-par l'en-tête `Location`. Le jeton revient dans le corps de la réponse, et c'est le client
-qui navigue vers `…#{jeton}`.
+n'appelle **jamais `redirect()` vers une URL qui contient un jeton** : la redirection
+passerait par un en-tête de réponse (`Location`, ou `x-action-redirect` pour une action
+appelée en JavaScript), et aucun en-tête de réponse ne porte de jeton (#3, C1.5 et C4.8).
+Le jeton revient dans le corps de la réponse, et c'est le client qui navigue vers
+`…#{jeton}`.
 
 ## Règles d'exécution
 
@@ -226,7 +231,8 @@ qui navigue vers `…#{jeton}`.
   en `timestamp without time zone` et relue comme **chaîne brute** (`2026-12-12 07:30:00`),
   jamais convertie en `Date` dans le fuseau du serveur ou du navigateur. Pour l'affichage,
   next-intl est configuré avec `timeZone: "UTC"`, et l'heure est mise en forme comme une
-  heure UTC : 07:30 s'affiche 07:30 à Paris comme à New York.
+  heure UTC : 07:30 s'affiche 07:30 à Paris comme à New York. La lecture en chaîne arrive
+  avec #7 (aujourd'hui, `pg` renvoie une `Date`), et `timeZone: "UTC"` avec #21.
 
 ## Contraintes permanentes
 

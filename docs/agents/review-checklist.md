@@ -74,13 +74,15 @@ celui qui écrit le code.
 ## Emplacement du code et exécution
 
 - Le code est à sa place (tableau « Emplacement du code » d'`architecture.md`) : une
-  fonction de `src/db/` qui crée sa connexion au lieu de recevoir `db` est bloquante, un
-  test ne pourrait pas lui passer sa transaction.
+  fonction d'accès aux données (`src/db/<entité>.ts`) qui crée ou prend sa connexion au
+  lieu de recevoir `db` est bloquante, un test ne pourrait pas lui passer sa transaction.
 - Une server action reste mince et renvoie des données simples et des clés d'erreur. Un
   `redirect()` vers une URL qui contient un jeton est bloquant.
 - Un `loading.tsx` sur une route qui peut répondre 404 est bloquant : le statut part en 200.
-- Une heure d'événement relue en `Date`, ou mise en forme dans un autre fuseau qu'UTC, est
-  bloquante : elle changerait selon le navigateur.
+- Une heure d'événement relue en `Date` dans le fuseau du serveur ou du navigateur, ou mise
+  en forme dans un autre fuseau qu'UTC, est bloquante : elle changerait selon la machine.
+  Une `Date` construite en UTC pour la mise en forme par next-intl (`timeZone: "UTC"`) est
+  le chemin prévu.
 
 ## Tests
 
