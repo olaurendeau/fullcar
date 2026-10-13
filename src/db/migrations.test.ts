@@ -24,20 +24,18 @@ describe("migrations", () => {
 
   // Its own database, emptied by the global setup: taking the schema up and down here
   // would otherwise pull tables from under the data tests running in parallel.
-  beforeAll(() => {
+  // Checked before any test: going up and down on another database would wreck it.
+  beforeAll(async () => {
     const url = process.env.MIGRATIONS_TEST_DATABASE_URL;
     if (!url) throw new Error("MIGRATIONS_TEST_DATABASE_URL is not set");
     db = createDb(url);
+    const { rows } = await sql<{ name: string }>`
+      select current_database() as name`.execute(db);
+    expect(rows[0]?.name).toBe("fullcar_migrations_test");
   });
 
   afterAll(async () => {
     await db?.destroy();
-  });
-
-  it("runs on its own database, apart from the dev and data-test ones", async () => {
-    const { rows } = await sql<{ name: string }>`
-      select current_database() as name`.execute(db);
-    expect(["fullcar", "fullcar_test"]).not.toContain(rows[0]?.name);
   });
 
   it("each migration goes up, down and up again", async () => {

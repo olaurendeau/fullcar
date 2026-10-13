@@ -9,11 +9,22 @@ function requireEnv(name: string): string {
   return value;
 }
 
+// Only these two are ever emptied, by name: never the dev and end-to-end `fullcar`,
+// whatever the environment's URLs say.
+const TEST_DATABASE = "fullcar_test";
+const MIGRATIONS_TEST_DATABASE = "fullcar_migrations_test";
+
 /**
- * Empties the `public` schema. The volume of a slot outlives a branch switch: its
- * database may hold migrations this branch does not know, which the migrator refuses.
+ * Empties the `public` schema, after checking it belongs to the `expected` database.
+ * The volume of a slot outlives a branch switch: its database may hold migrations
+ * this branch does not know, which the migrator refuses.
  */
-async function resetSchema(db: Kysely<Database>): Promise<void> {
+export async function resetSchema(db: Kysely<Database>, expected: string): Promise<void> {
+  const { rows } = await sql<{ name: string }>`select current_database() as name`.execute(db);
+  const name = rows[0]?.name;
+  if (name !== expected) {
+    throw new Error(`resetSchema: refusing to empty "${name}": expected "${expected}"`);
+  }
   await sql`drop schema if exists public cascade`.execute(db);
   await sql`create schema public`.execute(db);
 }
@@ -39,12 +50,12 @@ export default async function setup(): Promise<void> {
     await ensureDatabase(test, migrationsUrl);
     const migrationsDb = createDb(migrationsUrl);
     try {
-      await resetSchema(migrationsDb);
+      await resetSchema(migrationsDb, MIGRATIONS_TEST_DATABASE);
     } finally {
       await migrationsDb.destroy();
     }
 
-    await resetSchema(test);
+    await resetSchema(test, TEST_DATABASE);
     const { error } = await createMigrator(test).migrateToLatest();
     if (error) throw error;
   } finally {
