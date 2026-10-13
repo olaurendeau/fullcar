@@ -37,15 +37,49 @@ function urlVariable(env: Env): UrlVariable {
   return variable;
 }
 
+const WITHHELD = "[error withheld: its connection string could not be read safely]";
+
 /**
  * Removes the URL and each of its parts from `text`: user, password, host and its first
  * label (Neon's endpoint id), database, and every query value, since pg reads some of them
  * (user, password, options, sslrootcert…) and may quote them in its errors. The port stays.
+ * A URL read differently from pg-connection-string, or not at all, withholds the whole text.
  */
 export function redactConnection(text: string, url: string): string {
+  const parts = connectionParts(url);
+  if (!parts) return WITHHELD;
+  const pattern = [...parts]
+    .filter((part) => part.length > 0)
+    .sort((a, b) => b.length - a.length)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  // One pass, longest part first: a marker already written is never matched again.
+  return text.replace(new RegExp(pattern, "g"), "[redacted]");
+}
+
+function connectionParts(url: string): Set<string> | undefined {
+  if (url.length === 0) return undefined;
   const parts = new Set([url]);
+  // pg reads "/socket/directory database" as a host and a database.
+  if (url.startsWith("/")) {
+    for (const word of url.split(" ")) parts.add(word);
+    return parts;
+  }
+  // pg re-encodes a URL holding a space or a stray % before reading it: both readings count.
+  let asPg: string;
   try {
-    const { username, password, host, hostname, pathname, search, searchParams } = new URL(url);
+    asPg = / |%[^a-f0-9]|%[a-f0-9][^a-f0-9]/i.test(url) ? encodeURI(url).replace(/%25(\d\d)/g, "%$1") : url;
+  } catch {
+    return undefined;
+  }
+  const readings = [readUrl(asPg), readUrl(url)];
+  if (!readings[0]) return undefined;
+  for (const reading of readings) {
+    if (!reading) continue;
+    const { username, password, host, hostname, pathname, search, hash, searchParams } = reading.url;
+    const hostParts = reading.hostless
+      ? []
+      : [host, hostname, hostname.replace(/^\[(.+)\]$/, "$1"), hostname.split(".")[0]];
     const rawQueryValues = search
       .slice(1)
       .split("&")
@@ -53,29 +87,44 @@ export function redactConnection(text: string, url: string): string {
     for (const part of [
       username,
       password,
-      host,
-      hostname,
-      hostname.split(".")[0],
+      ...hostParts,
+      pathname,
       pathname.slice(1),
       ...rawQueryValues,
       ...searchParams.values(),
+      hash.slice(1),
     ]) {
-      parts.add(part);
-      parts.add(decode(part));
+      for (const decode of [(s: string) => s, decodeURI, decodeURIComponent]) {
+        try {
+          parts.add(decode(part));
+        } catch {
+          // Not decodable this way: the raw form is already there.
+        }
+      }
     }
-  } catch {
-    // Unparsable: only the URL as a whole can be recognised.
   }
-  return [...parts]
-    .filter((part) => part.length > 0)
-    .sort((a, b) => b.length - a.length)
-    .reduce((redacted, part) => redacted.split(part).join("[redacted]"), text);
+  return parts;
 }
 
-function decode(part: string): string {
-  try {
-    return decodeURIComponent(part);
-  } catch {
-    return part;
+/**
+ * Reads `url` as pg-connection-string does, a missing host included (`@/`, socket: URLs),
+ * but only as an absolute PostgreSQL or socket URL with a path: pg resolves anything else
+ * against a base of its own, which this does not try to follow.
+ */
+function readUrl(url: string): { url: URL; hostless: boolean } | undefined {
+  for (const [candidate, hostless] of [
+    [url, false],
+    [url.replace("@/", "@___DUMMY___/"), true],
+  ] as const) {
+    let parsed: URL;
+    try {
+      parsed = new URL(candidate);
+    } catch {
+      continue;
+    }
+    const known = ["postgres:", "postgresql:", "socket:"].includes(parsed.protocol);
+    const hierarchical = parsed.pathname === "" || parsed.pathname.startsWith("/");
+    return known && hierarchical ? { url: parsed, hostless } : undefined;
   }
+  return undefined;
 }

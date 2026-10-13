@@ -117,7 +117,52 @@ describe("redactConnection", () => {
     expect(redacted).toContain("port 5432");
   });
 
-  it("leaves a message alone when the URL cannot be parsed, except the URL itself", () => {
-    expect(redactConnection("bad url: not a url", "not a url")).toBe("bad url: [redacted]");
+  // Forms that pg reads although new URL() alone rejects or misreads them (see pg-connection-string).
+  it.each([
+    ["no host, the server named by a parameter", "postgres://alicesecret:wrongpw@/secretdb?host=db"],
+    ["a socket: URL", "socket://alicesecret:wrongpw@/var/run/secretdb?db=secretdb"],
+  ])("removes every part of a URL with %s", (_form, url) => {
+    const message = [
+      'password authentication failed for user "alicesecret" (wrongpw)',
+      'database "secretdb" does not exist',
+      "connect ENOENT /var/run/alicesecret/.s.PGSQL.5432",
+    ].join("\n");
+    const redacted = redactConnection(message, url);
+    for (const secret of ["alicesecret", "wrongpw", "secretdb"]) expect(redacted).not.toContain(secret);
+    expect(redacted).toContain("password authentication failed for user");
+  });
+
+  it("removes the directory and the database of pg's socket form", () => {
+    const message = 'connect ENOENT /var/run/pgsecret/.s.PGSQL.5432\ndatabase "secretdb" does not exist';
+    const redacted = redactConnection(message, "/var/run/pgsecret secretdb");
+    for (const secret of ["pgsecret", "secretdb"]) expect(redacted).not.toContain(secret);
+    expect(redacted).toContain("does not exist");
+  });
+
+  it("removes a bracketed IPv6 host as pg quotes it, without brackets", () => {
+    const redacted = redactConnection("connect ECONNREFUSED fd00::42:5432", "postgres://alice:pw@[fd00::42]:5432/appdb");
+    expect(redacted).not.toContain("fd00::42");
+  });
+
+  it("removes the password as pg reads it after re-encoding a stray %", () => {
+    const redacted = redactConnection("rejected password 50%2Ax", "postgres://alice:50%2%41x@db/appdb");
+    expect(redacted).not.toContain("50%2Ax");
+  });
+
+  it("replaces in a single pass, never inside a marker it has just written", () => {
+    expect(redactConnection("host: a", "postgres://host/appdb?application_name=a")).toBe("[redacted]: [redacted]");
+  });
+
+  it.each([
+    ["not a URL", "not a url"],
+    ["a relative reference pg would resolve", "db/secretdb?user=alicesecret&password=wrongpw"],
+    ["a scheme that is not PostgreSQL's", "alicesecret:wrongpw@db/secretdb"],
+    ["an opaque path", "postgres:secretdb"],
+    ["an empty string", ""],
+  ])("withholds the whole message when the URL is %s", (_form, url) => {
+    const redacted = redactConnection('password authentication failed for user "alicesecret" (wrongpw) on secretdb', url);
+    for (const secret of ["alicesecret", "wrongpw", "secretdb", "authentication"]) {
+      expect(redacted).not.toContain(secret);
+    }
   });
 });
