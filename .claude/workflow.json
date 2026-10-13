@@ -40,6 +40,9 @@
       "package.json",
       "package-lock.json",
       "compose.yaml",
+      "compose.*.y*ml",
+      "compose.override.*",
+      "docker-compose*",
       "vercel.json",
       "next.config.*",
       "middleware.ts",
@@ -60,10 +63,13 @@
         "regex": "randomBytes|randomUUID|getRandomValues|Math\\.random|createHash|timingSafeEqual"
       },
       {
-        "regex": "(?i)token|localStorage|sessionStorage|location\\.hash|\\.hash\\b|Referrer-Policy"
+        "regex": "(?i)token|localStorage|sessionStorage|location\\.hash|\\.hash\\b|Referrer-Policy|cookies\\(\\)|document\\.cookie|Set-Cookie"
       },
       {
         "regex": "(?i)phone"
+      },
+      {
+        "regex": "eslint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|\\.only\\(|\\.skip\\("
       },
       {
         "regex": "purge|CRON_SECRET|deleteFrom|dropTable|DROP TABLE|DELETE FROM|ON DELETE"
@@ -93,7 +99,7 @@
     },
     {
       "cmd": "docker",
-      "deny_args": "\\b(prune|push|login)\\b|(^|\\s)rm\\b|\\bdown\\b.*\\s(-[A-Za-z]*v[A-Za-z]*|--volumes)\\b|\\bcompose\\b.*\\s(-p|--project-name\\b)|\\bnpm\\b.*\\b(publish|unpublish|version|dist-tag|deprecate)\\b",
+      "deny_args": "\\b(prune|push|login)\\b|(^|\\s)(rm|remove)\\b|\\bdown\\b.*\\s(-[A-Za-z]*v[A-Za-z]*|--volumes)\\b|\\bcompose\\b.*\\s(-p|--project-name\\b)|\\bnpm\\b.*\\b(publish|unpublish|version|dist-tag|deprecate)\\b",
       "reason": "removing volumes or containers, or naming another Compose project, wipes other slots' data (make down SLOT={slot} is the way); registries and npm publication are the human's"
     },
     {
