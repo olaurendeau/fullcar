@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { randomBytes } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { generatePublicId, isPublicId, PUBLIC_ID_ALPHABET } from "./public-id";
+
+// Spies on the real CSPRNG, so the default byte source is proven, not assumed.
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return { ...actual, randomBytes: vi.fn(actual.randomBytes) };
+});
 
 const FORMAT = /^[2-9A-HJ-NP-Za-km-z]{8}$/;
 
@@ -22,6 +29,13 @@ describe("PUBLIC_ID_ALPHABET", () => {
 });
 
 describe("generatePublicId", () => {
+  // C8.1
+  it("draws from the cryptographic generator by default", () => {
+    vi.mocked(randomBytes).mockClear();
+    generatePublicId();
+    expect(randomBytes).toHaveBeenCalled();
+  });
+
   // C8.1
   it("draws 10 000 ids in the format, using the whole alphabet", () => {
     const seen = new Set<string>();
@@ -76,6 +90,12 @@ describe("isPublicId", () => {
 
   it.each(["-", "_", " ", "é", "/", ".", "\n"])("refuses %j, outside the alphabet", (outside) => {
     expect(isPublicId(`234${outside}5678`)).toBe(false);
+  });
+
+  it("refuses what is not a string, even when it would print as an id", () => {
+    for (const value of [["23456789"], 23456789, null, undefined, { toString: () => "23456789" }]) {
+      expect(isPublicId(value)).toBe(false);
+    }
   });
 
   it("refuses a valid id followed by a newline", () => {

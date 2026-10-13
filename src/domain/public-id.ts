@@ -16,8 +16,9 @@ const UNBIASED_LIMIT = 256 - (256 % PUBLIC_ID_ALPHABET.length);
 /** A source of random bytes; `randomBytes` outside tests. */
 export type RandomBytes = (size: number) => Uint8Array;
 
-export function isPublicId(value: string): boolean {
-  return FORMAT.test(value);
+/** Takes anything: `RegExp.test` would coerce `["23456789"]` into a match. */
+export function isPublicId(value: unknown): value is string {
+  return typeof value === "string" && FORMAT.test(value);
 }
 
 /**

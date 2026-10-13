@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { randomBytes } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { adminTokenMatches, hashAdminToken, newAdminToken } from "./admin-token";
+
+// Spies on the real CSPRNG, so the default byte source is proven, not assumed.
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return { ...actual, randomBytes: vi.fn(actual.randomBytes) };
+});
 
 /** Flips one character of `token` to another base64url character. */
 function oneCharOff(token: string, at: number) {
@@ -13,6 +20,13 @@ describe("newAdminToken", () => {
     const token = newAdminToken();
     expect(token).toMatch(/^[A-Za-z0-9_-]{22}$/);
     expect(Buffer.from(token, "base64url").length * 8).toBeGreaterThanOrEqual(128);
+  });
+
+  // C8.3
+  it("draws its 128 bits from the cryptographic generator by default", () => {
+    vi.mocked(randomBytes).mockClear();
+    newAdminToken();
+    expect(randomBytes).toHaveBeenCalledExactlyOnceWith(16);
   });
 
   it("draws 16 bytes from the source it is given", () => {
@@ -90,5 +104,18 @@ describe("adminTokenMatches", () => {
       expect(() => adminTokenMatches(token, malformed)).not.toThrow();
       expect(adminTokenMatches(token, malformed)).toBe(false);
     }
+  });
+
+  it("refuses, without throwing, a token or a stored hash that is not a string", () => {
+    for (const notString of [undefined, null, 42, [token], { toString: () => token }]) {
+      expect(() => adminTokenMatches(notString, stored)).not.toThrow();
+      expect(adminTokenMatches(notString, stored)).toBe(false);
+      expect(() => adminTokenMatches(token, notString)).not.toThrow();
+      expect(adminTokenMatches(token, notString)).toBe(false);
+    }
+  });
+
+  it("refuses a non-string token even against the hash of the empty token", () => {
+    expect(adminTokenMatches(undefined, hashAdminToken(""))).toBe(false);
   });
 });

@@ -23,13 +23,15 @@ export function hashAdminToken(token: string): string {
 /**
  * Whether `token` is the one whose hash is `storedHash`, in constant time.
  * Both sides are always 32 bytes, so the comparison never depends on where
- * the token differs. A malformed stored hash is refused without throwing.
+ * the token differs. Never throws: a token that is not a string, or a stored
+ * hash that is not a SHA-256 in hex, still costs a comparison, then is refused.
  */
-export function adminTokenMatches(token: string, storedHash: string): boolean {
-  const candidate = digest(token);
-  const wellFormed = STORED_HASH.test(storedHash);
+export function adminTokenMatches(token: unknown, storedHash: unknown): boolean {
+  const isToken = typeof token === "string";
+  const candidate = digest(isToken ? token : "");
+  const wellFormed = typeof storedHash === "string" && STORED_HASH.test(storedHash);
   const expected = wellFormed ? Buffer.from(storedHash, "hex") : candidate;
-  return timingSafeEqual(candidate, expected) && wellFormed;
+  return timingSafeEqual(candidate, expected) && isToken && wellFormed;
 }
 
 function digest(token: string): Buffer {
