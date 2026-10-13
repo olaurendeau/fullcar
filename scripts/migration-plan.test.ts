@@ -158,6 +158,28 @@ describe("redactConnection", () => {
     },
   );
 
+  // new URL and pg drop tabs and newlines anywhere, so they must not hide the delimiter.
+  it.each([["postgres:\t//u:12345/ab@host/db"], ["postgres:/\n/u:12345/ab@host/db"], ["postgres:/\r/u:12345?ab@host/db"]])(
+    "withholds the whole message when a tab or newline hides the delimiter: %j",
+    (url) => {
+      const redacted = redactConnection("connect ECONNREFUSED u:12345, user ab", url);
+      for (const secret of ["12345", "ab"]) expect(redacted).not.toContain(secret);
+    },
+  );
+
+  it("redacts a 40 KB password without printing it", () => {
+    const password = "SECRETPW".repeat(5000);
+    const url = `postgres://fullcar:${password}@db:5432/fullcar`;
+    const redacted = redactConnection(`connect to ${url} failed: password ${password} rejected`, url);
+    expect(redacted).not.toContain("SECRETPW");
+    expect(redacted).toContain("rejected");
+  });
+
+  it("covers the widest stretch where secrets overlap, leaving no piece of either", () => {
+    const url = "postgres://alice:secretABC@host/appdb?application_name=npg_sec";
+    expect(redactConnection("auth npg_secretABC failed", url)).toBe("auth [redacted] failed");
+  });
+
   it("replaces in a single pass, never inside a marker it has just written", () => {
     expect(redactConnection("host: a", "postgres://host/appdb?application_name=a")).toBe("[redacted]: [redacted]");
   });

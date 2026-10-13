@@ -43,18 +43,42 @@ const WITHHELD = "[error withheld: its connection string could not be read safel
  * Removes the URL and each of its parts from `text`: user, password, host and its first
  * label (Neon's endpoint id), database, and every query value, since pg reads some of them
  * (user, password, options, sslrootcert…) and may quote them in its errors. The port stays.
- * A URL read differently from pg-connection-string, or not at all, withholds the whole text.
+ * A URL read differently from pg-connection-string, or not at all, withholds the whole text,
+ * and so does any failure while redacting.
  */
 export function redactConnection(text: string, url: string): string {
-  const parts = connectionParts(url);
-  if (!parts) return WITHHELD;
-  const pattern = [...parts]
-    .filter((part) => part.length > 0)
-    .sort((a, b) => b.length - a.length)
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("|");
-  // One pass, longest part first: a marker already written is never matched again.
-  return text.replace(new RegExp(pattern, "g"), "[redacted]");
+  try {
+    const parts = connectionParts(url);
+    return parts ? cover(text, parts) : WITHHELD;
+  } catch {
+    return WITHHELD;
+  }
+}
+
+/**
+ * Replaces each stretch of `text` covered by one part or more with a single marker: every
+ * occurrence of every part, overlapping or adjacent ones merged, so no piece of a part is
+ * left beside the marker and no marker is ever matched again.
+ */
+function cover(text: string, parts: Set<string>): string {
+  const stretches: [number, number][] = [];
+  for (const part of parts) {
+    if (part.length === 0) continue;
+    for (let at = text.indexOf(part); at !== -1; at = text.indexOf(part, at + 1)) {
+      stretches.push([at, at + part.length]);
+    }
+  }
+  stretches.sort((a, b) => a[0] - b[0]);
+  let redacted = "";
+  let cursor = 0;
+  for (let i = 0; i < stretches.length; ) {
+    const start = stretches[i][0];
+    let end = stretches[i][1];
+    for (i++; i < stretches.length && stretches[i][0] <= end; i++) end = Math.max(end, stretches[i][1]);
+    redacted += `${text.slice(cursor, start)}[redacted]`;
+    cursor = end;
+  }
+  return redacted + text.slice(cursor);
 }
 
 function connectionParts(url: string): Set<string> | undefined {
@@ -66,8 +90,9 @@ function connectionParts(url: string): Set<string> | undefined {
     return parts;
   }
   // new URL ends the authority at the first / ? or #: an @ after it means a password holding
-  // one of them, the start of which would be read as the host and the port.
-  if (/^[^:/?#]+:\/\/[^/?#]*[/?#][\s\S]*@/.test(url)) return undefined;
+  // one of them, the start of which would be read as the host and the port. new URL drops
+  // tabs and newlines anywhere, so they are dropped here too before looking.
+  if (/^[^:/?#]+:\/\/[^/?#]*[/?#][\s\S]*@/.test(url.replace(/[\t\n\r]/g, ""))) return undefined;
   // pg re-encodes a URL holding a space or a stray % before reading it: both readings count.
   let asPg: string;
   try {
