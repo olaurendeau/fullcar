@@ -23,15 +23,17 @@ install: node_modules ## Installs dependencies (in the container)
 check: node_modules ## Everything the CI runs: lint, typecheck, i18n keys, tests, production build
 	$(RUN) web npm run check
 
-up: node_modules ## Starts the slot's app and database, waits until the app answers
+# The schema is in place before the app serves, as on Vercel: a failed migration stops `up`.
+up: migrate ## Starts the slot's database, migrates it, starts the app and waits until it answers
 	$(COMPOSE) up -d --wait web
 	@echo "http://localhost:30$(SLOT)0"
 
 down: ## Stops the slot and deletes its data
 	$(COMPOSE) --profile tools down --volumes --remove-orphans
 
-migrate: node_modules ## Applies pending migrations to the slot's database
-	$(RUN) web npm run db:migrate
+migrate: node_modules ## Starts the slot's database, waits until it is ready, applies pending migrations
+	$(COMPOSE) up -d --wait db
+	$(NO_DEPS) npm run db:migrate
 
 e2e: up ## Runs the end-to-end tests against the slot's app
 	$(RUN) e2e npx playwright test --project=e2e $(ARGS)
