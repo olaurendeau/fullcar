@@ -22,11 +22,16 @@ async function userTables(db: Kysely<Database>): Promise<string[]> {
 describe("migrations", () => {
   let db: Kysely<Database>;
 
+  // Its own database, emptied by the global setup: taking the schema up and down here
+  // would otherwise pull tables from under the data tests running in parallel.
+  // Checked before any test: going up and down on another database would wreck it.
   beforeAll(async () => {
-    const url = process.env.TEST_DATABASE_URL;
-    if (!url) throw new Error("TEST_DATABASE_URL is not set");
+    const url = process.env.MIGRATIONS_TEST_DATABASE_URL;
+    if (!url) throw new Error("MIGRATIONS_TEST_DATABASE_URL is not set");
     db = createDb(url);
-    expectSuccess(await createMigrator(db).migrateTo(NO_MIGRATIONS));
+    const { rows } = await sql<{ name: string }>`
+      select current_database() as name`.execute(db);
+    expect(rows[0]?.name).toBe("fullcar_migrations_test");
   });
 
   afterAll(async () => {
