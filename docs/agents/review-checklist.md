@@ -71,6 +71,24 @@ celui qui écrit le code.
 - Aucune transaction longue autour d'une purge ou d'un import.
 - Les requêtes passent par Kysely avec des paramètres liés : aucune concaténation de SQL.
 
+## Emplacement du code et exécution
+
+- Le code est à sa place (tableau « Emplacement du code » d'`architecture.md`) : une
+  fonction de `src/db/` qui crée sa connexion au lieu de recevoir `db` est bloquante, un
+  test ne pourrait pas lui passer sa transaction.
+- Une server action reste mince et renvoie des données simples et des clés d'erreur. Un
+  `redirect()` vers une URL qui contient un jeton est bloquant.
+- Un `loading.tsx` sur une route qui peut répondre 404 est bloquant : le statut part en 200.
+- Une heure d'événement relue en `Date`, ou mise en forme dans un autre fuseau qu'UTC, est
+  bloquante : elle changerait selon le navigateur.
+
+## Tests
+
+- Vitest n'écrit que dans `fullcar_test`, et chaque test qui écrit s'isole avec
+  `withRollback`.
+- Un test de bout en bout amorce ses données par une fixture, directement en base, et
+  possède son événement. Une route HTTP réservée aux tests est bloquante.
+
 ## États vides
 
 Chaque écran touché garde un état vide pensé : événement sans voiture, voiture complète,

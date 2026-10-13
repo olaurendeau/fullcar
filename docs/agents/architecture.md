@@ -42,7 +42,7 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 | `make up` / `make down` | démarre / arrête et efface l'environnement du slot |
 | `make e2e` | tests de bout en bout Playwright contre le **build de production** du slot |
 | `make shot` | captures d'écran (360 px par défaut) |
-| `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple ; refuse `version` et `publish`, qui reviennent à l'humain |
+| `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple ; refuse `version` (et sa variante `verison`), `publish`, `unpublish`, `dist-tag` (`dist-tags`) et `deprecate`, qui reviennent à l'humain |
 
 Le dépôt est monté dans le conteneur, `node_modules` compris : installés par le conteneur
 Linux, ils restent lisibles par l'éditeur de l'hôte pour les types.
@@ -67,6 +67,32 @@ ce conteneur, la base `fullcar` sert au serveur de dev et aux tests de bout en b
 contre le build de production (`next build` puis `next start`) : c'est ce build qui part
 sur Vercel, et le serveur de dev ne se comporte pas comme lui (compilation à la demande,
 rendu, cache).
+
+**Un worktree git par slot** : chaque développeur travaille dans son propre worktree, avec
+son slot. Deux slots dans le même répertoire partageraient `node_modules`, `.next` et les
+fichiers en cours d'écriture.
+
+### Base de test (Vitest)
+
+- Vitest se connecte à `fullcar_test`, dont l'URL vient de `TEST_DATABASE_URL` ; jamais à
+  `fullcar`, que le serveur de dev et les tests de bout en bout utilisent.
+- Un `globalSetup` remet le schéma à zéro et migre `fullcar_test` **une seule fois** par
+  lancement ; aucun test ne migre ni ne vide la base lui-même.
+- Un test qui écrit en base s'isole avec `withRollback` : il reçoit une transaction, qui est
+  annulée à la fin. Aucune donnée ne survit d'un test à l'autre, et l'ordre des tests ne
+  compte pas.
+- Le test d'aller-retour des migrations (montée, descente, remontée) a **sa propre base** :
+  il ne touche pas `fullcar_test`, que les autres tests lisent en même temps.
+
+Ces règles sont mises en place par #5.
+
+### Données des tests de bout en bout
+
+- Un test Playwright amorce ses données **directement dans la base du slot**, par une
+  fixture qui appelle les fonctions de `src/db/` (par exemple `seedEvent`). Jamais par une
+  route HTTP réservée aux tests : une telle route finirait par exister en production.
+- **Chaque test possède son événement** : il le crée, et ne lit ni ne modifie celui d'un
+  autre test. Les tests restent indépendants et peuvent tourner en parallèle.
 
 ### Production
 
@@ -167,6 +193,35 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 5. **UI** : un écran, les états vides compris.
 6. **i18n** : les deux langues en même temps que la vue, jamais après.
 7. **Test de bout en bout** du critère d'acceptation visé.
+
+## Emplacement du code
+
+| quoi | où | règle |
+|---|---|---|
+| domaine | `src/domain/` | fonctions pures : n'importe ni `kysely`, ni `pg`, ni `next/*`, ni `react`, ni `@/db/*` (le lint l'impose, #9) |
+| accès aux données | `src/db/<entité>.ts` (ex. `src/db/events.ts`) | chaque fonction reçoit `db: Kysely<Database>` en paramètre, pour qu'un test lui passe sa transaction ; aucune règle métier |
+| migrations | `src/db/migrations/` | seul endroit où `sql.raw` est permis |
+| server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
+| composants | `src/components/<domaine>/` (ex. `src/components/event/`) | n'importent pas `@/db/*` |
+| shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
+
+Une server action renvoie des **données simples** (sérialisables) et des **clés d'erreur**
+(traduites par la vue), jamais un message rédigé ni le détail d'une erreur Postgres. Elle
+n'appelle **jamais `redirect()` vers une URL qui contient un jeton** : la redirection passe
+par l'en-tête `Location`. Le jeton revient dans le corps de la réponse, et c'est le client
+qui navigue vers `…#{jeton}`.
+
+## Règles d'exécution
+
+- **Pas de `loading.tsx` sur une route qui peut répondre 404.** Avec un `loading.tsx`, Next
+  envoie la réponse en streaming dès le début, avec un statut 200 ; un `notFound()` appelé
+  ensuite ne peut plus changer le statut. Sous `/e/[id]`, la page attend sa lecture en base
+  et répond un vrai 404.
+- **Heures sans fuseau.** Une heure d'événement est l'heure locale du lieu : elle est stockée
+  en `timestamp without time zone` et relue comme **chaîne brute** (`2026-12-12 07:30:00`),
+  jamais convertie en `Date` dans le fuseau du serveur ou du navigateur. Pour l'affichage,
+  next-intl est configuré avec `timeZone: "UTC"`, et l'heure est mise en forme comme une
+  heure UTC : 07:30 s'affiche 07:30 à Paris comme à New York.
 
 ## Contraintes permanentes
 
