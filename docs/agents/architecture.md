@@ -74,15 +74,20 @@ fichiers en cours d'écriture.
 
 ### Base de test (Vitest)
 
-- Vitest se connecte à `fullcar_test`, dont l'URL vient de `TEST_DATABASE_URL` ; jamais à
-  `fullcar`, que le serveur de dev et les tests de bout en bout utilisent.
-- Un `globalSetup` remet le schéma à zéro et migre `fullcar_test` **une seule fois** par
-  lancement ; aucun test ne migre ni ne vide la base lui-même.
-- Un test qui écrit en base s'isole avec `withRollback` : il reçoit une transaction, qui est
-  annulée à la fin. Aucune donnée ne survit d'un test à l'autre, et l'ordre des tests ne
-  compte pas.
-- Le test d'aller-retour des migrations (montée, descente, remontée) a **sa propre base** :
-  il ne touche pas `fullcar_test`, que les autres tests lisent en même temps.
+Vitest utilise **deux bases**, jamais `fullcar`, que le serveur de dev et les tests de bout
+en bout utilisent :
+
+- `fullcar_test`, pour les tests de données, dont l'URL vient de `TEST_DATABASE_URL`. Un
+  `globalSetup` remet son schéma à zéro et la migre **une seule fois** par lancement ;
+  aucun test ne migre ni ne vide la base lui-même. Un test qui écrit en base s'isole avec
+  `withRollback` : il reçoit une transaction, qui est annulée à la fin. Aucune donnée ne
+  survit d'un test à l'autre, et l'ordre des tests ne compte pas.
+- `fullcar_migrations_test`, pour le seul test d'aller-retour des migrations (montée,
+  descente, remontée) : il ne touche pas `fullcar_test`, que les autres tests lisent en
+  même temps.
+
+La mise en place des tests **refuse de remettre à zéro toute autre base** que ces deux-là :
+une URL mal configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
 
 Ces règles sont mises en place par #5.
 

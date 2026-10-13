@@ -84,8 +84,9 @@ celui qui écrit le code.
 
 ## Tests
 
-- Vitest n'écrit que dans `fullcar_test`, et chaque test qui écrit s'isole avec
-  `withRollback`.
+- Vitest n'écrit que dans `fullcar_test`, où chaque test qui écrit s'isole avec
+  `withRollback`, et dans `fullcar_migrations_test`, réservée au test d'aller-retour des
+  migrations.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.
 
