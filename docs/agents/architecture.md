@@ -66,14 +66,15 @@ rendu, cache).
 
 - Neon, région Europe, fonctions Vercel dans la même région. Connexion par l'URL **poolée**
   de Neon, puisque chaque invocation serverless ouvre sa connexion.
-- L'URL de la base vient de `DATABASE_URL`, jamais écrite en dur. Une session de
+- L'URL de la base vient de `DATABASE_URL` (poolée) ou `DATABASE_URL_UNPOOLED` (non
+  poolée, pour les migrations seulement), jamais écrite en dur. Une session de
   développement ne se connecte qu'à la base de son slot : la base Neon n'est jamais
   accessible depuis un poste de dev ou un agent.
 - Neon met la base en veille quand elle ne sert pas : la première requête après une pause
   coûte un peu moins d'une seconde. C'est accepté.
 - **Migrations** : le build Vercel les applique, pour l'environnement de production
-  seulement, avec l'URL **non poolée** de Neon (les verrous et le DDL d'une migration ne
-  passent pas par le pooler). Le nouveau schéma est donc en place avant que le nouveau code
+  seulement, avec l'URL **non poolée** de Neon, lue dans `DATABASE_URL_UNPOOLED` (les
+  verrous et le DDL d'une migration ne passent pas par le pooler). Le nouveau schéma est donc en place avant que le nouveau code
   serve, mais l'ancien code sert encore pendant le déploiement, et c'est vers lui qu'un
   retour arrière ramène : chaque migration reste **compatible avec le code déjà déployé**.
   On procède par expansion puis contraction : ajouter (colonne nullable ou avec défaut,
@@ -182,6 +183,10 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
   | `placement.person_id` | `CASCADE` | un Placement appartient à sa Person |
   | `placement.ride_id` | `SET NULL` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » |
   | `placement.stop_id` | `SET NULL` | quand un Arrêt est supprimé, le passager monte (ou descend) au lieu du Ride |
+  | `ride.driver_id` | à trancher | à trancher dans l'epic « Proposer une voiture » (supprimer la voiture, ou refuser la suppression) |
+
+  Empêcher un Placement de pointer vers un Ride d'un autre événement ou d'un autre leg (clé
+  étrangère composite) est à concevoir avec l'epic « S'inscrire et prendre une place ».
 - **Zéro tracking** : Vercel Web Analytics et Speed Insights restent désactivés.
 
 ## Décisions à remonter à l'humain

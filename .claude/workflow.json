@@ -43,6 +43,8 @@
       "compose.*.y*ml",
       "compose.override.*",
       "docker-compose*",
+      ".env*",
+      "**/.env*",
       "vercel.json",
       "next.config.*",
       "middleware.ts",
@@ -69,13 +71,13 @@
         "regex": "(?i)phone"
       },
       {
-        "regex": "eslint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|\\.only\\(|\\.skip\\("
+        "regex": "eslint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|\\.(only|skip|skipIf|runIf|todo|fails|fixme)\\(|\\bx(it|describe|test)\\("
       },
       {
         "regex": "purge|CRON_SECRET|deleteFrom|dropTable|DROP TABLE|DELETE FROM|ON DELETE"
       },
       {
-        "regex": "DATABASE_URL"
+        "regex": "DATABASE_URL|POSTGRES_(PRISMA_)?URL"
       },
       {
         "regex": "@vercel/analytics|@vercel/speed-insights"

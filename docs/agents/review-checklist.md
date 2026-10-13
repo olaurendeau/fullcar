@@ -64,7 +64,7 @@ celui qui écrit le code.
 - Les migrations ont une descente, et elle est testée.
 - Une migration reste compatible avec le code déjà déployé (expansion puis contraction) :
   renommer ou supprimer d'un coup une colonne que ce code lit encore est bloquant.
-- L'URL de la base vient de `DATABASE_URL`, jamais écrite en dur.
+- L'URL de la base vient de `DATABASE_URL` ou `DATABASE_URL_UNPOOLED`, jamais écrite en dur.
 - Occuper une place verrouille la ligne du Ride (`SELECT … FOR UPDATE`) dans la transaction,
   avant de compter les places restantes. Une insertion conditionnelle sans ce verrou est
   bloquante : deux taps simultanés sur la dernière place surchargeraient la voiture.
