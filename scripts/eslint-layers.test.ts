@@ -121,20 +121,40 @@ describe("sql.raw is for migrations only", () => {
     ["src/db/rides.ts", 'import * as k from "kysely";\nk.sql["raw"](input);'],
     ["src/db/rides.ts", 'import * as k from "kysely";\nconst q = k.sql;'],
     ["src/db/rides.ts", 'import * as k from "kysely";\nconst { sql: q } = k;'],
+    ["src/db/rides.ts", 'import * as k from "kysely";'],
+    ["src/db/rides.ts", 'const k = await import("kysely");\nk.sql.raw(input);'],
+    ["src/db/rides.ts", 'const k = import("kysely");'],
+    ["src/db/rides.ts", 'const { sql: q } = await import("kysely");\nq.raw(input);'],
+    ["src/db/rides.ts", '(await import("kysely")).sql.raw(input);'],
     ["src/app/page.tsx", 'import { sql as q } from "kysely";'],
     ["src/domain/placement.ts", "const q = sql;"],
     ["src/components/ride/card.tsx", "const q = sql;"],
     ["src/db/rides.test.ts", 'import { sql as q } from "kysely";'],
+    // Migrations may use sql.raw, their tests may not (#28).
+    ["src/db/migrations/0001_event.test.ts", 'import { sql as q } from "kysely";\nq.raw(input);'],
   ])("rejects an alias of sql in %s: %s", async (filePath, code) => {
     expect(await syntax(code, filePath)).toHaveLength(1);
   });
 
   it.each([
     'import { sql } from "kysely";\nsql`select 1`;',
-    'import * as k from "kysely";\nk.sql`select 1`;',
+    'const { sql } = await import("kysely");\nsql`select 1`;',
     "const { ref } = sql;",
+    'export { sql } from "kysely";',
   ])("accepts sql under its own name: %s", async (code) => {
     expect(await syntax(code, "src/db/rides.ts")).toHaveLength(0);
+  });
+
+  // The `sql` of a CompiledQuery is a string: reading it is how one inspects generated SQL.
+  it.each([
+    ["src/db/rides.ts", "const text = query.compile().sql;"],
+    ["src/db/rides.ts", "const { sql: text } = query.compile();"],
+    ["src/db/rides.test.ts", "const { sql: text } = query.compile();"],
+    ["src/db/rides.ts", "o.text = c.sql;"],
+    ["src/db/rides.ts", 'const { sql = "" } = opts;'],
+    ["src/db/rides.ts", 'function f({ sql = "" }) {\n  return sql;\n}'],
+  ])("accepts another property named sql in %s: %s", async (filePath, code) => {
+    expect(await syntax(code, filePath)).toHaveLength(0);
   });
 
   it("accepts it in a migration", async () => {
