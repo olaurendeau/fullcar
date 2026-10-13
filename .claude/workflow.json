@@ -7,7 +7,7 @@
   },
   "base_branch": "main",
   "check": {
-    "full": "make check",
+    "full": "make ci SLOT={slot}",
     "affected": "make check SLOT={slot}",
     "cleanup": "make down SLOT={slot}"
   },

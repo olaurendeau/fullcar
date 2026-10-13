@@ -17,9 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # The same commands as on a laptop: only Docker and make are needed.
-      - run: make check
-      - run: make e2e
+      - run: make ci SLOT=0
       - if: failure()
         run: docker compose logs --no-color web
       - if: always()
-        run: make down
+        run: make down SLOT=0

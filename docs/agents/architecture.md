@@ -37,7 +37,8 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 
 | commande | effet |
 |---|---|
-| `make check` | tout ce que la CI exécute : lint, typecheck, tests, clés i18n, build de production |
+| `make ci` | tout ce que la CI exécute : `make check` puis `make e2e` |
+| `make check` | lint, typecheck, tests, clés i18n, build de production |
 | `make up` / `make down` | démarre / arrête et efface l'environnement du slot |
 | `make e2e` | tests de bout en bout Playwright contre le **build de production** du slot |
 | `make shot` | captures d'écran (360 px par défaut) |
@@ -46,7 +47,7 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 Le dépôt est monté dans le conteneur, `node_modules` compris : installés par le conteneur
 Linux, ils restent lisibles par l'éditeur de l'hôte pour les types.
 
-La CI exécute le même `make check` : ce qui passe en local passe en CI. La variable `CI` est
+La CI exécute le même `make ci`, avec un slot explicite : ce qui passe en local passe en CI. La variable `CI` est
 transmise aux conteneurs : en CI, Vitest et Playwright refusent un `.only`, que le lint
 refuse déjà partout.
 
