@@ -20,10 +20,17 @@ l'aller mais pas au retour — y est pénible à exprimer.
 - **i18n dès le départ** : français et anglais.
 - **Sans pub ni tracking**, purge automatique des données 30 jours après l'événement.
 
+## Stack
+
+Next.js (App Router) en TypeScript, shadcn/ui, Postgres via Kysely, next-intl. Neon en
+production, hébergement sur Vercel. En local, **tout passe par Docker** : il suffit de Docker
+et de `make`, rien d'autre à installer. Le détail et les
+raisons sont dans [`docs/agents/architecture.md`](docs/agents/architecture.md).
+
 ## État
 
 Projet neuf. Rien n'est encore écrit : la première tâche est de monter la boucle de
-vérification (`npm run check`), que le profil du workflow déclare déjà comme contrat.
+vérification (`make check`), que le profil du workflow déclare déjà comme contrat.
 
 Le développement suit le plugin [ola-workflow](https://github.com/olaurendeau/ola-workflow) :
 les documents que lisent les agents sont dans [`docs/agents/`](docs/agents/), et le profil
