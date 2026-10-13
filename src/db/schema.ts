@@ -20,5 +20,5 @@ export interface EventTable {
   participation_enabled: Generated<boolean>;
   stops_enabled: Generated<boolean>;
   admin_token_hash: Buffer;
-  created_at: ColumnType<Date | null, never, never>;
+  created_at: ColumnType<Date, never, never>;
 }

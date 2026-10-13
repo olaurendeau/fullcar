@@ -16,7 +16,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("participation_enabled", "boolean", (col) => col.notNull().defaultTo(false))
     .addColumn("stops_enabled", "boolean", (col) => col.notNull().defaultTo(false))
     .addColumn("admin_token_hash", "bytea", (col) => col.notNull())
-    .addColumn("created_at", "timestamptz", (col) => col.defaultTo(sql`now()`))
+    .addColumn("created_at", "timestamptz", (col) => col.notNull().defaultTo(sql`now()`))
     .addCheckConstraint("event_id_format", sql`id ~ '^[2-9A-HJ-NP-Za-km-z]{8}$'`)
     .addCheckConstraint("event_title_length", sql`char_length(title) between 1 and 80`)
     .addCheckConstraint("event_location_length", sql`char_length(location) between 1 and 120`)

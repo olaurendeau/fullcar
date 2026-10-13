@@ -48,7 +48,7 @@ describe("event table", () => {
       { name: "participation_enabled", type: "boolean", nullable: "NO", default: "false" },
       { name: "stops_enabled", type: "boolean", nullable: "NO", default: "false" },
       { name: "admin_token_hash", type: "bytea", nullable: "NO", default: null },
-      { name: "created_at", type: "timestamp with time zone", nullable: "YES", default: "now()" },
+      { name: "created_at", type: "timestamp with time zone", nullable: "NO", default: "now()" },
     ]);
   });
 
@@ -98,6 +98,19 @@ describe("event table", () => {
       return trx.selectFrom("event").select("retour_at").executeTakeFirstOrThrow();
     });
     expect(row.retour_at).toBeNull();
+  });
+
+  // Kysely's types forbid writing created_at at all: plain SQL is the only way to try.
+  it("refuses an explicit null creation time", async () => {
+    await expect(
+      withRollback((trx) =>
+        sql`
+          insert into event (id, title, location, aller_at, admin_token_hash, created_at)
+          values ('Ab3dEf7h', 'Tournoi', 'Gymnase', '2026-12-12 07:30:00', ${HASH}, null)`.execute(
+          trx,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23502", column: "created_at" });
   });
 
   it.each([
