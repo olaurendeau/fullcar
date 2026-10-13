@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   EVENT_FIELDS,
   LOCATION_MAX,
@@ -60,10 +60,29 @@ describe("validateEvent", () => {
   });
 
   it("C1.6: blank text counts as empty", () => {
-    expect(errorsOf({ ...valid, title: "   ", location: " \n" })).toEqual({
+    expect(errorsOf({ ...valid, title: "   ", location: "\u00a0\n" })).toEqual({
       title: "required",
       location: "required",
     });
+  });
+
+  it.each([
+    ["zero-width spaces and joiners", "\u200b\u200c\u200d\u2060\ufeff"],
+    ["characters trim() keeps, around a space", "\u180e\u200b \u200b"],
+    ["line and paragraph separators", "\u2028\u2029"],
+    ["direction marks", "\u200e\u200f\u202a\u202c"],
+    ["control characters", "\u0007\u007f"],
+  ])("C1.6: text with only %s counts as empty", (_, invisible) => {
+    expect(errorsOf({ ...valid, title: invisible, location: invisible })).toEqual({
+      title: "required",
+      location: "required",
+    });
+  });
+
+  it("keeps invisible characters inside visible text: an emoji sequence survives", () => {
+    const family = "\u{1f468}\u200d\u{1f469}\u200d\u{1f467}";
+    expect(eventOf({ ...valid, title: family }).title).toBe(family);
+    expect(eventOf({ ...valid, location: "\u200bSalle\u00a0B" }).location).toBe("\u200bSalle\u00a0B");
   });
 
   describe("lengths, in code points after trim", () => {
@@ -186,10 +205,37 @@ describe("firstInvalidField", () => {
   });
 });
 
+/** The tests of a block run in `zone`; see wall-clock.test.ts. */
+function inZone(zone: string) {
+  const saved = process.env.TZ;
+  beforeEach(() => {
+    process.env.TZ = zone;
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.TZ;
+    else process.env.TZ = saved;
+  });
+}
+
 describe("deviceBounds", () => {
-  it("runs from the device's date to + 365 days", () => {
-    expect(deviceBounds(new Date(2026, 9, 13, 23, 59))).toEqual({ min: "2026-10-13", max: "2027-10-13" });
-    expect(deviceBounds(new Date(2027, 2, 1, 0, 0))).toEqual({ min: "2027-03-01", max: "2028-02-29" });
+  describe("in Pacific/Kiritimati (UTC+14)", () => {
+    inZone("Pacific/Kiritimati");
+
+    it("runs from the device's date, already tomorrow in UTC, to + 365 days", () => {
+      expect(deviceBounds(new Date("2026-10-13T12:00:00Z"))).toEqual({ min: "2026-10-14", max: "2027-10-14" });
+    });
+  });
+
+  describe("in Pacific/Pago_Pago (UTC−11)", () => {
+    inZone("Pacific/Pago_Pago");
+
+    it("runs from the device's date, still yesterday in UTC, to + 365 days", () => {
+      expect(deviceBounds(new Date("2026-10-13T05:00:00Z"))).toEqual({ min: "2026-10-12", max: "2027-10-12" });
+    });
+
+    it("counts a leap day", () => {
+      expect(deviceBounds(new Date("2027-03-01T12:00:00Z"))).toEqual({ min: "2027-03-01", max: "2028-02-29" });
+    });
   });
 });
 
@@ -198,6 +244,15 @@ describe("C1.9: serverBounds", () => {
 
   it("runs from the UTC date − 1 day to + 366 days", () => {
     expect(serverBounds(now)).toEqual({ min: "2026-10-12", max: "2027-10-14" });
+  });
+
+  describe.each(["Pacific/Kiritimati", "Pacific/Pago_Pago"])("on a server in %s", (zone) => {
+    inZone(zone);
+
+    it("still counts from the UTC date", () => {
+      expect(serverBounds(new Date("2026-10-13T12:00:00Z"))).toEqual({ min: "2026-10-12", max: "2027-10-14" });
+      expect(serverBounds(new Date("2026-10-13T05:00:00Z"))).toEqual({ min: "2026-10-12", max: "2027-10-14" });
+    });
   });
 
   it("accepts an organiser a day behind or ahead of UTC", () => {

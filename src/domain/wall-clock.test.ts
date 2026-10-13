@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   addDays,
   isWallDate,
@@ -56,15 +56,50 @@ describe("addDays", () => {
   });
 });
 
-describe("today", () => {
+/**
+ * Runs the tests of a block in another time zone. The CI runs in UTC, where the local
+ * and the UTC readings of an instant agree: only another zone tells them apart.
+ * Node picks up a change of `process.env.TZ` at once.
+ */
+function inZone(zone: string) {
+  const saved = process.env.TZ;
+  beforeEach(() => {
+    process.env.TZ = zone;
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.TZ;
+    else process.env.TZ = saved;
+  });
+}
+
+// An instant whose local date differs from its UTC date, in each zone.
+const zones = [
+  { zone: "Pacific/Kiritimati", now: new Date("2026-10-13T12:00:00Z"), local: "2026-10-14" },
+  { zone: "Pacific/Pago_Pago", now: new Date("2026-10-13T05:00:00Z"), local: "2026-10-12" },
+] as const;
+
+describe.each(zones)("in $zone", ({ zone, now, local }) => {
+  inZone(zone);
+
   it("reads the device's date in its own time zone", () => {
-    expect(localDate(new Date(2026, 9, 13, 0, 0))).toBe("2026-10-13");
-    expect(localDate(new Date(2026, 9, 13, 23, 59))).toBe("2026-10-13");
+    expect(localDate(now)).toBe(local);
   });
 
   it("reads the server's date in UTC", () => {
-    expect(utcDate(new Date(Date.UTC(2026, 9, 13, 0, 0)))).toBe("2026-10-13");
-    expect(utcDate(new Date(Date.UTC(2026, 9, 13, 23, 59)))).toBe("2026-10-13");
+    expect(utcDate(now)).toBe("2026-10-13");
+  });
+
+  it("keeps the digits of a wall-clock time, formatted as UTC", () => {
+    const at = wallClockAsUtc("2026-12-12 07:30:00");
+    expect(at.toISOString()).toBe("2026-12-12T07:30:00.000Z");
+    const time = new Intl.DateTimeFormat("fr-FR", {
+      timeZone: "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(at);
+    const date = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", dateStyle: "short" }).format(at);
+    expect(time).toBe("07:30");
+    expect(date).toBe("12/12/2026");
   });
 });
 
@@ -77,15 +112,9 @@ describe("wall-clock time, without a time zone", () => {
     expect(wallClockParts("2026-12-12 07:30:00")).toEqual({ date: "2026-12-12", time: "07:30" });
   });
 
-  it("keeps the digits whatever the time zone, when formatted as UTC", () => {
-    const at = wallClockAsUtc("2026-12-12 07:30:00");
-    const time = new Intl.DateTimeFormat("fr-FR", {
-      timeZone: "UTC",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(at);
-    const date = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", dateStyle: "short" }).format(at);
-    expect(time).toBe("07:30");
-    expect(date).toBe("12/12/2026");
+  it("refuses to split anything else", () => {
+    for (const value of ["", "2026-12-12", "2026-12-12T07:30:00", "2026-12-12 07:30", "2026-12-12 07:30:00Z"]) {
+      expect(() => wallClockParts(value)).toThrow("not a wall-clock timestamp");
+    }
   });
 });

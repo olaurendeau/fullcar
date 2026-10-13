@@ -79,10 +79,20 @@ export function firstInvalidField(errors: EventErrors): EventField | undefined {
   return EVENT_FIELDS.find((field) => errors[field] !== undefined);
 }
 
-/** Trimmed text, or the error. Length in code points, so that an emoji counts as one. */
+/**
+ * Nothing to see: whitespace, separators (`\p{Z}`), and format (`\p{Cf}`) or control
+ * (`\p{Cc}`) characters, such as zero-width spaces and joiners, which trim() keeps.
+ */
+const INVISIBLE = /^[\s\p{Z}\p{Cf}\p{Cc}]*$/u;
+
+/**
+ * Trimmed text, or the error. Text without a visible character is empty; inside visible
+ * text, invisible characters stay, since an emoji sequence needs its joiners.
+ * Length in code points, so that an emoji counts as one.
+ */
 function text(value: string | undefined, max: number): { value: string } | { error: EventError } {
   const trimmed = (value ?? "").trim();
-  if (trimmed === "") return { error: "required" };
+  if (INVISIBLE.test(trimmed)) return { error: "required" };
   if ([...trimmed].length > max) return { error: "tooLong" };
   return { value: trimmed };
 }
