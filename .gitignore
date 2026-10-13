@@ -7,3 +7,5 @@ var/
 test-results/
 playwright-report/
 .claude/worktrees/
+next-env.d.ts
+*.tsbuildinfo
