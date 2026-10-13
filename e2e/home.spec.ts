@@ -26,6 +26,13 @@ test.describe("home", () => {
     expect(response?.headers()["referrer-policy"]).toBe("no-referrer");
   });
 
+  test("loads no web font", async ({ page }) => {
+    const fonts: string[] = [];
+    page.on("request", (r) => r.resourceType() === "font" && fonts.push(r.url()));
+    await page.goto("/", { waitUntil: "networkidle" });
+    expect(fonts).toEqual([]);
+  });
+
   test("does not scroll sideways at 360 px", async ({ page }) => {
     await page.goto("/");
     const overflow = await page.evaluate(
