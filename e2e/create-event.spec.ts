@@ -132,6 +132,41 @@ test.describe("creating an event from the home page", () => {
     expect(sent).toHaveLength(1);
   });
 
+  test("C1.5: the token comes in the creation's response body, and in no URL nor header on the way to the arrival", async ({
+    page,
+  }) => {
+    // What leaves the browser: a URL's path and query string, never its fragment.
+    const sent = (url: string) => {
+      const { origin, pathname, search } = new URL(url);
+      return `${origin}${pathname}${search}`;
+    };
+    const seen: Promise<string>[] = [];
+    const creationBodies: Promise<string>[] = [];
+    page.on("request", (request) => {
+      seen.push(Promise.resolve(sent(request.url())), request.allHeaders().then((headers) => JSON.stringify(headers)));
+    });
+    page.on("response", (response) => {
+      seen.push(Promise.resolve(sent(response.url())), response.allHeaders().then((headers) => JSON.stringify(headers)));
+      const request = response.request();
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/") creationBodies.push(response.text());
+    });
+
+    await openForm(page);
+    await fillAller(page);
+    await field(page, FR.retourTime).fill("18:00");
+    await createButton(page).click();
+    await expect(page).toHaveURL(ARRIVAL);
+    await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+
+    const token = new URL(page.url()).hash.slice(1);
+    expect((await Promise.all(creationBodies)).filter((body) => body.includes(token))).toHaveLength(1);
+    const texts = await Promise.all(seen);
+    // The arrival itself was watched: the App Router's fetch of the organiser's page.
+    expect(texts.filter((text) => /\/e\/\w{8}\/admin\?_rsc=/.test(text)).length).toBeGreaterThan(0);
+    expect(texts.filter((text) => text.includes(token))).toEqual([]);
+  });
+
   test("C2.1, C2.2: unchecking Retour hides its fields, and six actions create an event without a retour", async ({
     page,
   }) => {
@@ -286,17 +321,25 @@ test.describe("creating an event from the home page", () => {
     expect(await horizontalOverflow(page)).toBe(0);
   });
 
-  test("offline: one alert above Créer, the values kept, and a new try once back online succeeds", async ({
+  test("offline: one alert above Créer, no stale field error, the values kept, and a new try once back online succeeds", async ({
     page,
     context,
   }) => {
     await openForm(page);
+    // First sent empty: the errors it shows must not outlive the fields being filled.
+    await createButton(page).click();
+    await expect(field(page, FR.title)).toHaveAccessibleDescription(FR.required);
     await fillAller(page);
     await field(page, FR.retourTime).fill("18:00");
     await context.setOffline(true);
     await createButton(page).click();
 
     await expect(alert(page)).toHaveText(FR.failed);
+    for (const label of [FR.title, FR.location, FR.allerDate, FR.allerTime, FR.retourDate, FR.retourTime]) {
+      await expect(field(page, label), label).not.toHaveAttribute("aria-invalid", "true");
+      await expect(field(page, label), label).toHaveAccessibleDescription("");
+    }
+    await expect(page.getByText(FR.required)).toHaveCount(0);
     const alertBox = (await alert(page).boundingBox())!;
     expect(alertBox.y + alertBox.height).toBeLessThanOrEqual((await createButton(page).boundingBox())!.y);
     await expect(page).toHaveURL(/\/$/);

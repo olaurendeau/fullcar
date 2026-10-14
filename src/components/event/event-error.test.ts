@@ -3,7 +3,15 @@ import { EVENT_FIELDS, LOCATION_MAX, TITLE_MAX, type EventError } from "@/domain
 import fr from "../../../messages/fr.json";
 import { eventErrorMessage } from "./event-error";
 
-const CODES: EventError[] = ["required", "tooLong", "invalid", "tooEarly", "tooLate", "notAfterAller"];
+// Every code of the union, and nothing else: the typecheck fails on a code added to the domain.
+const CODES = Object.keys({
+  required: true,
+  tooLong: true,
+  invalid: true,
+  tooEarly: true,
+  tooLate: true,
+  notAfterAller: true,
+} satisfies Record<EventError, true>) as EventError[];
 
 describe("eventErrorMessage", () => {
   // #23: `invalid` on the title or the place is a character Postgres refuses, not a bad date.

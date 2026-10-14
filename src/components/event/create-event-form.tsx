@@ -81,6 +81,8 @@ export function CreateEventForm() {
     setFailed(false);
     const checked = validateEvent(fields, deviceBounds(new Date()));
     if (!checked.ok) return showErrors(checked.errors);
+    // The fields are right now: an earlier error, from either side, no longer holds.
+    setErrors({});
 
     inFlight.current = true;
     setSending(true);
