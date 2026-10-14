@@ -85,6 +85,18 @@ describe("validateEvent", () => {
     expect(eventOf({ ...valid, location: "\u200bSalle\u00a0B" }).location).toBe("\u200bSalle\u00a0B");
   });
 
+  // Postgres refuses a NUL in a `text`: caught here, it is a field error, not a server error.
+  it.each([
+    ["inside visible text", "Match\u0000 à Lyon"],
+    ["alone", "\u0000"],
+    ["among blanks", " \u0000 "],
+  ])("refuses a NUL character %s as invalid", (_, value) => {
+    expect(errorsOf({ ...valid, title: value, location: value })).toEqual({
+      title: "invalid",
+      location: "invalid",
+    });
+  });
+
   describe("lengths, in code points after trim", () => {
     it(`accepts a title of ${TITLE_MAX} and refuses ${TITLE_MAX + 1}`, () => {
       expect(TITLE_MAX).toBe(80);
