@@ -108,8 +108,9 @@ configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
   autre test. Les tests restent indépendants et peuvent tourner en parallèle.
 - Le conteneur Playwright atteint la base `fullcar` du slot, à l'hôte `db` (#20). Un test
   importe `test` et `expect` de `e2e/fixtures.ts` : la fixture `seededEvent` y crée son
-  événement avant le test et le supprime après, et `e2eDatabaseUrl` refuse toute autre base
-  et tout autre hôte avant de se connecter.
+  événement avant le test et le supprime après. Avant de se connecter, `e2eDatabaseUrl`
+  refuse toute URL qui n'a pas exactement la forme `postgres://…@db[:port]/fullcar` : ni
+  query string ni fragment, puisque `pg` y lit aussi un hôte, un port ou un socket.
 
 ### Production
 

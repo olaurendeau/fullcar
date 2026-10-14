@@ -6,24 +6,22 @@ import { seedEvent, type SeededEvent } from "@/db/test-events";
 
 export { expect } from "@playwright/test";
 
-const E2E_HOST = "db";
-const E2E_DATABASE = "fullcar";
+/**
+ * The only shape accepted, from end to end: `postgres://user:password@db[:port]/fullcar`.
+ * pg takes a host, a port or a socket from more than the URL's host part (`?host=`,
+ * `?port=`, `socket://`, a leading `/`, a `%2F` host): rather than list those, anything
+ * else (a query string, a fragment, another host or scheme) is refused.
+ */
+const SLOT_DATABASE_URL = /^postgres(?:ql)?:\/\/(?:[^@/?#\\\s]+@)?db(?::\d+)?\/fullcar$/;
 
 /**
- * The slot's database, the one its app serves, and nothing else: a URL reaching another
- * host or another database is refused before any connection. The message never repeats
- * the URL, which may carry a password.
+ * The slot's database, the one its app serves, and nothing else: refused before any
+ * connection otherwise. The message never repeats the URL, which may carry a password.
  */
 export function e2eDatabaseUrl(url: string | undefined): string {
   if (!url) throw new Error("e2e: DATABASE_URL is not set");
-  let parsed: URL | undefined;
-  try {
-    parsed = new URL(url);
-  } catch {
-    parsed = undefined;
-  }
-  if (parsed?.hostname !== E2E_HOST || parsed.pathname !== `/${E2E_DATABASE}`) {
-    throw new Error(`e2e: DATABASE_URL must reach the database ${E2E_DATABASE} at host ${E2E_HOST}`);
+  if (!SLOT_DATABASE_URL.test(url)) {
+    throw new Error("e2e: DATABASE_URL must reach the database fullcar at host db");
   }
   return url;
 }
