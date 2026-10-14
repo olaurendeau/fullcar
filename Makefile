@@ -9,6 +9,8 @@ export HOST_GID := $(shell id -g)
 
 COMPOSE := docker compose
 RUN := $(COMPOSE) run --rm
+# UTC+14: the server's time zone for the end-to-end tests and the screenshots.
+E2E_TZ := Pacific/Kiritimati
 NO_DEPS := $(RUN) --no-deps web
 
 help: ## Shows this help
@@ -45,15 +47,22 @@ e2e: node_modules ## Builds for production, then runs the end-to-end tests again
 	$(NO_DEPS) npm run build
 	$(MAKE) e2e-built SLOT=$(SLOT)
 
-# Serves the production build already in .next, so only right after building this tree (e2e, ci).
-# `next dev` writes to .next/dev, never .next/BUILD_ID: without a build, `next start` refuses to start.
-# Recreated every time, so that a `next start` left from an older build cannot keep serving it.
-e2e-built: migrate
-	WEB_SCRIPT=start $(COMPOSE) up -d --wait --force-recreate --no-deps web
+e2e-built: serve-built
 	$(RUN) e2e npx playwright test --project=e2e $(ARGS)
 
-shot: up ## Takes screenshots at WIDTH px (default 360) into var/shots
+# Against the production build too: from the e2e container, `next dev` blocks its own scripts
+# as cross-origin, and the pages it serves never hydrate.
+shot: node_modules ## Builds for production, then takes screenshots at WIDTH px (default 360) into var/shots
+	$(NO_DEPS) npm run build
+	$(MAKE) serve-built SLOT=$(SLOT)
 	$(RUN) -e SHOT_WIDTH=$(WIDTH) e2e npx playwright test --project=shot
+
+# Serves the production build already in .next, so only right after building this tree (e2e, ci, shot).
+# `next dev` writes to .next/dev, never .next/BUILD_ID: without a build, `next start` refuses to start.
+# Recreated every time, so that a `next start` left from an older build cannot keep serving it.
+# In a time zone far from UTC, where Vercel runs: a time shown in the server's zone shows up (C1.12).
+serve-built: migrate
+	WEB_SCRIPT=start WEB_TZ=$(E2E_TZ) $(COMPOSE) up -d --wait --force-recreate --no-deps web
 
 logs: ## Follows the slot's logs
 	$(COMPOSE) logs -f
@@ -68,4 +77,4 @@ npm: ## Runs npm in the container, e.g. make npm ARGS="install zod"
 	fi
 	$(NO_DEPS) npm $(ARGS)
 
-.PHONY: help install check ci up down migrate e2e e2e-built shot logs npm
+.PHONY: help install check ci up down migrate e2e e2e-built shot serve-built logs npm
