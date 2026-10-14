@@ -1,6 +1,6 @@
-import type { BrowserContext, Page, Request } from "@playwright/test";
+import type { Page, Request } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { expect, test } from "./fixtures";
+import { expect, test as base } from "./fixtures";
 
 // #69: a discreet "contact us" link, at the bottom of the pages, to the chat Crisp hosts.
 // Nothing of Crisp runs in the app's origin: the link opens Crisp's own page in a new tab.
@@ -25,18 +25,25 @@ const PAGES: [string, (event: SeededEvent) => string, string][] = [
 const isCrisp = (url: URL) => /(^|\.)crisp\.(chat|im)$/.test(url.hostname);
 
 /**
- * No test contacts Crisp: its chat page is answered here, any other Crisp address is
- * refused, and every request to Crisp is kept for the test to read.
+ * No test of this file contacts Crisp, whether it asks for `crisp` or not: the fixture is
+ * automatic. Crisp's chat page is answered here, any other Crisp address is refused, and
+ * every request to Crisp is kept in `crisp` for the test to read.
+ * Playwright's `use` is named `provide` here: the React hooks lint rule takes `use` for a hook.
  */
-async function interceptCrisp(context: BrowserContext): Promise<Request[]> {
-  const seen: Request[] = [];
-  await context.route(isCrisp, async (route) => {
-    seen.push(route.request());
-    if (route.request().url() !== CRISP_CHAT) return route.abort();
-    await route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Crisp</title>" });
-  });
-  return seen;
-}
+const test = base.extend<{ crisp: Request[] }>({
+  crisp: [
+    async ({ context }, provide) => {
+      const seen: Request[] = [];
+      await context.route(isCrisp, async (route) => {
+        seen.push(route.request());
+        if (route.request().url() !== CRISP_CHAT) return route.abort();
+        await route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Crisp</title>" });
+      });
+      await provide(seen);
+    },
+    { auto: true },
+  ],
+});
 
 /** The page once it has settled: on the organiser's page, once the token has been checked. */
 async function open(page: Page, path: string, heading: string) {
@@ -55,16 +62,18 @@ test.describe("contact link", () => {
   for (const [where, path, heading] of PAGES) {
     test(`K1, K2, K3, K5: on ${where}, the last link, discreet, to Crisp in a new tab, and nothing from Crisp`, async ({
       page,
-      context,
+      crisp,
       seededEvent,
     }) => {
-      const crisp = await interceptCrisp(context);
       await open(page, path(seededEvent), heading);
 
       const link = contactLink(page);
       await expect(link).toHaveCount(1);
       await expect(link).toHaveAttribute("href", CRISP_CHAT);
       await expect(link).toHaveAttribute("target", "_blank");
+      // The only test that protects `rel`: K4 below would pass without it, since Chromium
+      // already opens a target="_blank" link without opener and the app sends no referrer.
+      // Other browsers, or a later change to either, would not: do not remove this check.
       const rel = ((await link.getAttribute("rel")) ?? "").split(/\s+/);
       expect(rel).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
 
@@ -97,20 +106,21 @@ test.describe("contact link", () => {
     });
   }
 
-  test("K1: not in the organiser's panel, and no header added", async ({ page, seededEvent }) => {
+  test("K1: not in the organiser's panel, and no header added", async ({ page, crisp, seededEvent }) => {
     await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");
     await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
     await expect(page.getByRole("region", { name: PANEL }).getByRole("link", { name: FR })).toHaveCount(0);
     await expect(page.getByRole("banner")).toHaveCount(0);
+    expect(crisp.map((request) => request.url())).toEqual([]);
   });
 
   test("K4, K6: from the organiser's page, opens Crisp alone in a new tab, and the page stays", async ({
     page,
     context,
+    crisp,
     seededEvent,
     baseURL,
   }) => {
-    const crisp = await interceptCrisp(context);
     const path = `/e/${seededEvent.id}/admin#${seededEvent.token}`;
     await open(page, path, "Tournoi de Rennes");
     await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
@@ -133,11 +143,12 @@ test.describe("contact link", () => {
     await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
   });
 
-  test("K5: / asks nothing of another host than the app's", async ({ page, baseURL }) => {
+  test("K5: / asks nothing of another host than the app's", async ({ page, crisp, baseURL }) => {
     const origins = new Set<string>();
     page.on("request", (request) => origins.add(new URL(request.url()).origin));
     await page.goto("/", { waitUntil: "networkidle" });
     expect([...origins]).toEqual([new URL(baseURL!).origin]);
+    expect(crisp.map((request) => request.url())).toEqual([]);
   });
 });
 
