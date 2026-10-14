@@ -21,6 +21,15 @@ test.describe("home in a browser set to English", () => {
 });
 
 test.describe("home", () => {
+  // The end-to-end tests run against what Vercel serves (`next build`, `next start`), not `next dev`.
+  test("is served by the production build", async ({ page }) => {
+    const scripts: string[] = [];
+    page.on("request", (r) => r.resourceType() === "script" && scripts.push(r.url()));
+    await page.goto("/", { waitUntil: "networkidle" });
+    expect(scripts.length).toBeGreaterThan(0);
+    expect(scripts.filter((url) => /development|hmr-client/.test(url))).toEqual([]);
+  });
+
   test("sends no referrer", async ({ page }) => {
     const response = await page.goto("/");
     expect(response?.headers()["referrer-policy"]).toBe("no-referrer");

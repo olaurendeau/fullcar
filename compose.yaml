@@ -21,7 +21,8 @@ x-node: &node
 services:
   web:
     <<: *node
-    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+    # `dev` (next dev) for `make up`, `start` (next start, the production build) for `make e2e`.
+    command: npm run ${WEB_SCRIPT:-dev} -- --hostname 0.0.0.0 --port 3000
     ports:
       # Loopback only: the slot's app and data are not offered to the local network.
       - "127.0.0.1:30${SLOT:-0}0:3000"
