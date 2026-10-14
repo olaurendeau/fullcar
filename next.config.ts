@@ -3,9 +3,9 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
+// Every page is per-request and personal (tokens, placements): nothing to cache.
+// Cache Components stays off until a page has something worth caching.
 const nextConfig: NextConfig = {
-  // Every page is per-request and personal (tokens, placements): nothing to cache.
-  // Cache Components stays off until a page has something worth caching.
   logging: {
     // `next dev` prints each Server Function call with its arguments: a token is one.
     serverFunctions: false,

@@ -2,6 +2,7 @@
 
 import { getDb } from "@/db/client";
 import { readAdminTokenHash } from "@/db/events";
+import { databaseFailure } from "@/db/failure";
 import { adminTokenMatches } from "@/domain/admin-token";
 import { isPublicId } from "@/domain/public-id";
 
@@ -16,9 +17,9 @@ export async function checkAdminLink(id: unknown, token: unknown): Promise<boole
   let storedHash: string | undefined;
   try {
     storedHash = await readAdminTokenHash(getDb(), id);
-  } catch {
-    // A Postgres error carries no token, but no detail of it leaves the server either.
-    throw new Error("checkAdminLink: the event could not be read");
+  } catch (error) {
+    // Only its code is logged: no other detail of a Postgres error leaves the server.
+    throw databaseFailure("checkAdminLink: the event could not be read", error);
   }
   return adminTokenMatches(token, storedHash);
 }
