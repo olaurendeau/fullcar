@@ -12,7 +12,7 @@ est lu par trente personnes pendant trois jours, puis purgé.
 | besoin | choix |
 |---|---|
 | framework | Next.js 16, App Router, TypeScript strict ; Cache Components désactivé (tout est personnel et par requête) |
-| composants | shadcn/ui (Tailwind v4, Radix, preset Nova), copiés dans `src/components/ui` ; Drawer pour les feuilles mobiles |
+| composants | shadcn/ui (Tailwind v4, Radix, preset Nova), copiés dans `src/components/ui` ; une feuille mobile est un `Sheet` avec `side="bottom"` (sur `radix-ui`, déjà installé), pas le Drawer de `vaul` |
 | outillage local | Docker uniquement, piloté par `make` ; rien d'installé sur l'hôte |
 | base | Postgres : conteneur par slot en local, Neon en production |
 | accès aux données | Kysely (query builder typé, pas d'ORM) et le driver `pg` |
@@ -90,6 +90,17 @@ en bout utilisent :
   s'isole avec `withRollback` (`src/db/test-db.ts`) : il reçoit une transaction, qui est
   annulée à la fin, et la passe au code testé au lieu que celui-ci appelle `getDb()`.
   Aucune donnée ne survit d'un test à l'autre, et l'ordre des tests ne compte pas.
+
+  **Tests de concurrence**, à partir de #66 : une transaction annulée ne peut pas montrer
+  deux écritures simultanées, et vérifier que le SQL contient `FOR UPDATE` ne prouve rien.
+  Un test de concurrence (deux prises simultanées de la dernière place, par exemple)
+  s'exécute donc sur des **données validées**, sous un événement qui n'appartient qu'à
+  lui : `withCommittedEvent` (`src/db/test-committed.ts`) l'amorce avec `getDb()`, passe
+  la connexion et l'identifiant au test, puis supprime l'événement à la fin, même si le
+  test échoue ; la cascade emporte le reste. Pour que les autres tests ne voient pas ces
+  lignes passagères, `withRollback` ouvre sa transaction en `REPEATABLE READ` : un test
+  qui compte des lignes ne voit pas celles qu'un test de concurrence valide en parallèle
+  après sa première lecture.
 - `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
   seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
   remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la
@@ -150,6 +161,13 @@ Une insertion conditionnelle sans verrou (`INSERT … SELECT … WHERE` comptage
 ne suffit pas : sous `READ COMMITTED`, le niveau par défaut de Postgres, deux transactions
 simultanées voient la même place libre et insèrent toutes les deux.
 
+À partir de #66, valider la feuille (tout ou rien) et réduire les places d'un Ride
+verrouillent de même d'abord la ligne du Ride. Une écriture qui verrouille aussi une Person
+(les déclencheurs de #66, C12.8, voir « Contraintes permanentes ») le fait **après** le Ride :
+l'ordre est Ride, puis Person, dans tout le code, sans quoi deux transactions peuvent
+s'attendre l'une l'autre. Ces verrous se prouvent par des tests de concurrence (voir « Base
+de test (Vitest) »).
+
 ## Jetons, et pourquoi ils sont la pièce critique
 
 Il n'y a pas de compte : **un jeton est la seule identité**. Donc un jeton qui fuit est une
@@ -168,6 +186,30 @@ prise de contrôle, et un jeton deviné l'est aussi.
 - Comparaison à temps constant.
 - `Referrer-Policy: no-referrer` sur toutes les pages : le fragment n'est pas transmis dans le
   `Referer`, mais l'identifiant de l'événement l'est.
+
+Les deux jetons ne naissent pas au même endroit :
+
+- Le **jeton d'organisateur** est tiré par le **serveur** (`newAdminToken`,
+  `src/domain/admin-token.ts`) quand l'événement est créé, et revient une fois dans le corps
+  de la réponse.
+- Le **jeton personnel** est tiré par le **navigateur**, à partir de #66 (D1, D4) : une
+  réponse perdue après l'écriture ne doit pas emporter le seul jeton qui permet de modifier
+  la personne créée.
+  - Il est tiré avec `crypto.getRandomValues` : 16 octets, soit 128 bits, écrits en
+    22 caractères base64url canoniques (`^[A-Za-z0-9_-]{21}[AQgw]$`). Le serveur refuse
+    toute autre forme : trop court, trop long, caractère hors alphabet, absent, ou autre
+    chose qu'une chaîne.
+  - Il est rangé dans `localStorage` sous une clé propre à l'événement
+    (`fullcar:personal-token:{id}`), **avant** l'envoi de la requête qui le crée. Si
+    `localStorage` est indisponible, il est gardé en mémoire le temps de la page, avec un
+    avertissement avant l'inscription (D5).
+  - Dans une requête, il voyage dans le **corps**, jamais ailleurs : ni chemin, ni query
+    string, ni en-tête, ni cookie.
+  - Il est stocké en empreinte SHA-256 et comparé à temps constant, comme le jeton
+    d'organisateur.
+
+Un jeton dans `localStorage` est lisible par tout script de l'origine : aucun script tiers
+ne s'y exécute (#64).
 
 Toute PR qui touche la génération, le stockage, la comparaison, le transport ou la
 journalisation d'un jeton est une zone sensible : elle est mergée par l'humain.
@@ -192,11 +234,25 @@ seconde, tomber sur un événement parmi mille en cours prend plus de trois ans.
 
 ## Visibilité du téléphone : une règle, un seul endroit
 
-Un téléphone n'est visible que par l'admin, et par les détenteurs d'un jeton ayant une
-personne **dans la même voiture, pour le même leg**. Cette règle ne doit exister **qu'à un
-seul endroit** du code, traversé par toutes les lectures. Si deux chemins la re-dérivent,
-l'un des deux finira par la rater — et le défaut sera invisible dans l'UI de celui qui l'a
-écrit.
+À partir de #66 (D2), le téléphone d'une personne n'est envoyé à un appareil que dans deux
+cas :
+
+- l'appareil a une personne **dans la même voiture, pour le même leg**, conducteur
+  compris, dans les deux sens ;
+- la personne est une **personne de l'appareil** (créée avec le jeton personnel que ce
+  navigateur garde pour cet événement).
+
+Le numéro est posé **voiture par voiture**, et dans la section des personnes de l'appareil,
+jamais sur la personne elle-même : un passager de l'aller ne voit pas le numéro de son
+conducteur sur le retour, où ils ne partagent pas de voiture. La visibilité par l'admin
+arrive avec l'épic « Administrer l'événement » ; d'ici là, `/e/{id}/admin` ne montre aucun
+numéro de plus que `/e/{id}`.
+
+Cette règle ne doit exister **qu'à un seul endroit** du code, traversé par toutes les
+lectures. Si deux chemins la re-dérivent, l'un des deux finira par la rater — et le défaut
+sera invisible dans l'UI de celui qui l'a écrit. À partir de #66, cet endroit est
+`src/domain/phone-visibility.ts`, et une seule requête lit la colonne `phone` :
+`src/db/event-rows.ts`.
 
 ## i18n
 
@@ -227,6 +283,9 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | erreur de base | `src/db/failure.ts` | `databaseFailure` journalise un message fixe et le seul code de l'erreur (SQLSTATE, ou errno d'une erreur système), jamais son message, sa requête ni ses valeurs, et renvoie l'erreur à lever, qui ne porte que ce message ; une server action s'en sert quand la base échoue |
 | migrations | `src/db/migrations/`, listées dans `src/db/migrations/index.ts` | seul endroit où `sql.raw` est permis, mais pas dans leurs tests |
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
+| cas d'usage de l'événement | `src/app/e/[id]/*.ts` (précédent : `src/app/e/[id]/event.ts`) | reçoivent `db` en paramètre, composent le domaine et l'accès aux données ; testés avec `withRollback`, comme une fonction d'accès aux données |
+| jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur |
+| téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, et le seul endroit de la règle de visibilité |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 
@@ -271,13 +330,25 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   | clé | `ON DELETE` | pourquoi |
   |---|---|---|
   | `stop.ride_id` | `CASCADE` | un Arrêt appartient à son Ride |
-  | `placement.person_id` | `CASCADE` | un Placement appartient à sa Person |
-  | `placement.ride_id` | `SET NULL` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » |
+  | `placement (person_id, event_id)` → `person (id, event_id)` | `CASCADE` | un Placement appartient à sa Person, du même événement |
+  | `placement (ride_id, event_id, leg)` → `ride (id, event_id, leg)` | `SET NULL (ride_id)` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » ; seule `ride_id` est remise à `null`, `event_id` et `leg` restent |
   | `placement.stop_id` | `SET NULL` | quand un Arrêt est supprimé, le passager monte (ou descend) au lieu du Ride |
-  | `ride.driver_id` | à trancher | à trancher dans l'epic « Proposer une voiture » (supprimer la voiture, ou refuser la suppression) |
+  | `ride (driver_id, event_id)` → `person (id, event_id)` | `CASCADE` | supprimer le conducteur retire sa voiture, et ses passagers repassent « sans voiture » par la clé `placement → ride` ; rien ne supprime de personne dans #66 |
 
-  Empêcher un Placement de pointer vers un Ride d'un autre événement ou d'un autre leg (clé
-  étrangère composite) est à concevoir avec l'epic « S'inscrire et prendre une place ».
+  Les clés de `ride` et de `placement`, hors `stop_id`, arrivent avec #66. Les clés
+  composites empêchent un Placement de pointer vers un Ride d'un autre événement ou d'un
+  autre leg (C12.7), et un Ride ou un Placement de pointer vers une Person d'un autre
+  événement. Leurs cibles sont `unique (id, event_id)`
+  sur `person` et `unique (id, event_id, leg)` sur `ride`. Une clé composite n'est vérifiée
+  que si toutes ses colonnes sont renseignées (`MATCH SIMPLE`) : un Placement « sans
+  voiture » (`ride_id` à `null`) ne l'est pas. `SET NULL (ride_id)`, limité à une colonne,
+  exige Postgres 15 ou plus : 18 en local, 17 ou plus chez Neon.
+
+  Deux déclencheurs garantissent en base qu'une conductrice n'a pas de Placement sur le leg
+  où elle conduit (#66, C12.8) : `placement_driver_on_leg` sur `placement`, et
+  `ride_driver_placed` sur `ride`. Chacun verrouille d'abord la ligne de la Person
+  (`FOR UPDATE`), pour que deux écritures simultanées ne passent pas toutes les deux, et
+  lève `23514` avec un nom de contrainte.
 - **Zéro tracking** : Vercel Web Analytics et Speed Insights restent désactivés.
 
 ## Décisions à remonter à l'humain

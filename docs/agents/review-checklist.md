@@ -13,14 +13,26 @@ celui qui écrit le code.
 - Jamais dans le chemin ni dans la query string : uniquement dans le fragment (`#…`) ou dans
   le corps d'une requête. Un jeton dans un chemin finit dans les journaux de Vercel.
 - Comparaison à temps constant.
+- À partir de #66, le jeton personnel est tiré **par le navigateur** avec
+  `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
+  avant l'envoi. Un jeton personnel tiré
+  par le serveur, ou par un autre générateur, est bloquant.
+- Le serveur refuse tout jeton personnel qui n'a pas exactement cette forme (trop court,
+  trop long, hors alphabet, absent, autre chose qu'une chaîne).
+- Seul `src/app/e/[id]/device-token.ts` touche au jeton personnel dans le navigateur.
 - `Referrer-Policy: no-referrer` présent sur toutes les pages.
 
 ## Visibilité du téléphone
 
-- La règle (admin, ou même voiture pour le même leg) est appliquée **côté serveur**. Masquer
+- La règle (même voiture pour le même leg, conducteur compris, ou personne de l'appareil ;
+  l'admin arrive avec « Administrer l'événement ») est appliquée **côté serveur**. Masquer
   dans la vue ne compte pas : la donnée ne doit pas quitter le serveur.
-- Un seul endroit décide. Une deuxième implémentation de la règle est bloquante, même si
-  elle est correcte aujourd'hui.
+- Un seul endroit décide : à partir de #66, `src/domain/phone-visibility.ts`. Une deuxième
+  implémentation de la règle est bloquante, même si elle est correcte aujourd'hui.
+- Le numéro est posé voiture par voiture, et dans la section des personnes de l'appareil,
+  jamais sur la personne : un numéro qui suit la personne d'un leg à l'autre est une fuite.
+- Une seule requête lit la colonne `phone` : à partir de #66, `src/db/event-rows.ts`. Une
+  autre lecture de `phone` est bloquante.
 - Vérifier les réponses d'API, pas seulement les écrans : un champ `phone` dans un JSON est
   une fuite même si aucune vue ne l'affiche.
 
@@ -47,11 +59,14 @@ celui qui écrit le code.
 - Aucune donnée nouvelle sans nécessité : prénom et téléphone optionnel suffisent à la V1.
 - Chaque table a une clé étrangère vers l'Event en `ON DELETE CASCADE`, sinon elle échappe
   à la purge.
-- Les autres clés étrangères suivent le tableau d'`architecture.md` : `stop.ride_id` et
-  `placement.person_id` en `CASCADE`, `placement.ride_id` et `placement.stop_id` en
-  `SET NULL`. Un écart est bloquant : une cascade sur `placement.ride_id` effacerait les
-  Placements au lieu de renvoyer les passagers « sans voiture ». Une nouvelle clé absente
-  du tableau est bloquante tant que la PR ne l'y ajoute pas.
+- Les autres clés étrangères suivent le tableau d'`architecture.md` : `stop.ride_id`,
+  `placement (person_id, event_id)` et `ride (driver_id, event_id)` en `CASCADE`,
+  `placement (ride_id, event_id, leg)` en `SET NULL (ride_id)`, `placement.stop_id` en
+  `SET NULL`. Un écart est bloquant : une cascade sur la clé `placement → ride` effacerait
+  les Placements au lieu de renvoyer les passagers « sans voiture », et une clé
+  `placement → ride` sans `event_id` ni `leg` laisserait un Placement pointer vers le Ride
+  d'un autre événement ou d'un autre leg. Une nouvelle clé absente du tableau est bloquante
+  tant que la PR ne l'y ajoute pas.
 - La purge est testée : une donnée créée pour un événement passé disparaît 30 jours après
   son dernier leg, avec et sans retour.
 - Aucun tracking, aucune requête vers un tiers, aucun script distant, aucune police web :
@@ -98,8 +113,12 @@ celui qui écrit le code.
 ## Tests
 
 - Vitest n'écrit que dans `fullcar_test`, où chaque test qui écrit s'isole avec
-  `withRollback`, et dans `fullcar_migrations_test`, réservée au test d'aller-retour des
-  migrations.
+  `withRollback` (ou `withCommittedEvent` pour un test de concurrence), et dans
+  `fullcar_migrations_test`, réservée au test d'aller-retour des migrations.
+- À partir de #66, un test de concurrence s'exécute sur des données validées, sous un
+  événement qui n'appartient qu'à lui et qui est supprimé à la fin (`withCommittedEvent`).
+  Un verrou « prouvé » par la présence de `FOR UPDATE` dans le SQL, ou par un test sous
+  `withRollback`, est bloquant : il ne montre aucune écriture simultanée.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.
 
