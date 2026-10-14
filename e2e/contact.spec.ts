@@ -1,0 +1,156 @@
+import type { BrowserContext, Page, Request } from "@playwright/test";
+import type { SeededEvent } from "@/db/test-events";
+import { expect, test } from "./fixtures";
+
+// #69: a discreet "contact us" link, at the bottom of the pages, to the chat Crisp hosts.
+// Nothing of Crisp runs in the app's origin: the link opens Crisp's own page in a new tab.
+const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
+const FR = "Nous contacter (s’ouvre dans un nouvel onglet)";
+const EN = "Contact us (opens in a new tab)";
+const PANEL = "Espace organisateur";
+
+/** A well-formed id that no test stores. */
+const UNKNOWN_ID = "Zz9yXw8v";
+
+/** The pages the link is on: which, where, and the title that tells it is shown. */
+const PAGES: [string, (event: SeededEvent) => string, string][] = [
+  ["the home page", () => "/", "Fullcar"],
+  ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
+  ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
+  ["the organiser's page", ({ id, token }) => `/e/${id}/admin#${token}`, "Tournoi de Rennes"],
+  ["the organiser's page, wrong token", ({ id }) => `/e/${id}/admin#q3Vx9kLmN2pR7sT1uW4yZa`, "Tournoi de Rennes"],
+  ["the organiser's page, no token", ({ id }) => `/e/${id}/admin`, "Tournoi de Rennes"],
+];
+
+const isCrisp = (url: URL) => /(^|\.)crisp\.(chat|im)$/.test(url.hostname);
+
+/**
+ * No test contacts Crisp: its chat page is answered here, any other Crisp address is
+ * refused, and every request to Crisp is kept for the test to read.
+ */
+async function interceptCrisp(context: BrowserContext): Promise<Request[]> {
+  const seen: Request[] = [];
+  await context.route(isCrisp, async (route) => {
+    seen.push(route.request());
+    if (route.request().url() !== CRISP_CHAT) return route.abort();
+    await route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Crisp</title>" });
+  });
+  return seen;
+}
+
+/** The page once it has settled: on the organiser's page, once the token has been checked. */
+async function open(page: Page, path: string, heading: string) {
+  await page.goto(path, { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
+  if (path.includes("/admin")) {
+    await expect(page.getByRole("region", { name: PANEL }).or(page.getByRole("main").getByRole("alert"))).toBeVisible();
+  }
+}
+
+const contactLink = (page: Page, name = FR) => page.getByRole("link", { name, exact: true });
+
+test.describe("contact link", () => {
+  test.use({ locale: "fr-FR" });
+
+  for (const [where, path, heading] of PAGES) {
+    test(`K1, K2, K3, K5: on ${where}, the last link, discreet, to Crisp in a new tab, and nothing from Crisp`, async ({
+      page,
+      context,
+      seededEvent,
+    }) => {
+      const crisp = await interceptCrisp(context);
+      await open(page, path(seededEvent), heading);
+
+      const link = contactLink(page);
+      await expect(link).toHaveCount(1);
+      await expect(link).toHaveAttribute("href", CRISP_CHAT);
+      await expect(link).toHaveAttribute("target", "_blank");
+      const rel = ((await link.getAttribute("rel")) ?? "").split(/\s+/);
+      expect(rel).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
+
+      // K1: the last link, and no content after it, in the order of the document.
+      expect(await page.locator("a").last().getAttribute("href")).toBe(CRISP_CHAT);
+      const contentAfter = await link.evaluate((a) => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        walker.currentNode = a;
+        while (walker.nextNode()) {
+          const node = walker.currentNode;
+          if (!a.contains(node) && node.textContent?.trim() && node.parentElement?.closest("main")) return true;
+        }
+        return false;
+      });
+      expect(contentAfter).toBe(false);
+
+      // K3: smaller than the text, a 44 px target, nothing scrolls sideways at 360 px.
+      const [linkSize, textSize] = await link.evaluate((a) => [
+        parseFloat(getComputedStyle(a).fontSize),
+        parseFloat(getComputedStyle(document.body).fontSize),
+      ]);
+      expect(linkSize).toBeLessThan(textSize);
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      ).toBe(0);
+
+      // K5: the page asked nothing of Crisp.
+      expect(crisp.map((request) => request.url())).toEqual([]);
+    });
+  }
+
+  test("K1: not in the organiser's panel, and no header added", async ({ page, seededEvent }) => {
+    await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");
+    await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
+    await expect(page.getByRole("region", { name: PANEL }).getByRole("link", { name: FR })).toHaveCount(0);
+    await expect(page.getByRole("banner")).toHaveCount(0);
+  });
+
+  test("K4, K6: from the organiser's page, opens Crisp alone in a new tab, and the page stays", async ({
+    page,
+    context,
+    seededEvent,
+    baseURL,
+  }) => {
+    const crisp = await interceptCrisp(context);
+    const path = `/e/${seededEvent.id}/admin#${seededEvent.token}`;
+    await open(page, path, "Tournoi de Rennes");
+    await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
+
+    const [tab] = await Promise.all([context.waitForEvent("page"), contactLink(page).click()]);
+    await tab.waitForLoadState();
+
+    expect(tab.url()).toBe(CRISP_CHAT);
+    expect(await tab.evaluate(() => window.opener)).toBeNull();
+    expect(crisp).toHaveLength(1);
+    const request = crisp[0];
+    expect(request.url()).toBe(CRISP_CHAT);
+    expect(await request.headerValue("referer")).toBeNull();
+    const sent = `${request.url()} ${JSON.stringify(await request.allHeaders())} ${request.postData() ?? ""}`;
+    expect(sent).not.toContain(seededEvent.token);
+    expect(sent).not.toContain(seededEvent.id);
+
+    // K6: the organiser's tab has not moved.
+    expect(page.url()).toBe(`${new URL(baseURL!).origin}${path}`);
+    await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
+  });
+
+  test("K5: / asks nothing of another host than the app's", async ({ page, baseURL }) => {
+    const origins = new Set<string>();
+    page.on("request", (request) => origins.add(new URL(request.url()).origin));
+    await page.goto("/", { waitUntil: "networkidle" });
+    expect([...origins]).toEqual([new URL(baseURL!).origin]);
+  });
+});
+
+test.describe("contact link, in a browser set to English", () => {
+  test.use({ locale: "en-GB" });
+
+  test("K7: speaks English on the home page", async ({ page }) => {
+    await page.goto("/");
+    await expect(contactLink(page, EN)).toHaveAttribute("href", CRISP_CHAT);
+  });
+
+  test("K7: speaks English on the event's page", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(contactLink(page, EN)).toHaveAttribute("href", CRISP_CHAT);
+  });
+});

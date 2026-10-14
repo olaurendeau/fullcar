@@ -47,5 +47,9 @@
     "checkLink": "Check the link: it may have been copied wrong. Upper and lower case matter.",
     "deleted": "Events are deleted 30 days after their date.",
     "create": "Create an event"
+  },
+  "Contact": {
+    "link": "Contact us",
+    "newTab": "(opens in a new tab)"
   }
 }

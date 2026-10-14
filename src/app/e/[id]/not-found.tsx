@@ -1,6 +1,7 @@
 import { SearchX } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { ContactFooter } from "@/components/contact/contact-footer";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -23,6 +24,7 @@ export default function EventNotFound() {
       <Button asChild className="mt-6 h-11">
         <Link href="/">{t("create")}</Link>
       </Button>
+      <ContactFooter />
     </main>
   );
 }
