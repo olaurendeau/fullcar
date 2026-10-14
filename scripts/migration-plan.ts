@@ -41,8 +41,10 @@ const WITHHELD = "[error withheld: its connection string could not be read safel
 
 /**
  * Removes the URL and each of its parts from `text`: user, password, host and its first
- * label (Neon's endpoint id), database, and every query value, since pg reads some of them
- * (user, password, options, sslrootcert…) and may quote them in its errors. The port stays.
+ * label, database, and every query value, since pg reads some of them (user, password,
+ * options, sslrootcert…) and may quote them in its errors. Postgres quotes a piece of a value
+ * too (`options=-c a=secret` → `"secret"`), so each piece goes as well, and so does any Neon
+ * endpoint id found anywhere in the URL, with or without its `-pooler` suffix. The port stays.
  * A URL read differently from pg-connection-string, or not at all, withholds the whole text,
  * and so does any failure while redacting.
  */
@@ -80,6 +82,16 @@ function cover(text: string, parts: Set<string>): string {
   }
   return redacted + text.slice(cursor);
 }
+
+/** Where Postgres splits options (spaces, a backslash escaping the next one) and settings (= ,). */
+const PIECE_SEPARATORS = /[\s=,\\]+/;
+/**
+ * Shorter pieces are flags and settings (-c, on, off, 1, 30s), not secrets, and would blank
+ * every word or line number holding them. A whole value is removed whatever its length.
+ */
+const MIN_PIECE_LENGTH = 4;
+/** A Neon endpoint id, such as ep-cool-darkness-123456, as a label of its own. */
+const NEON_ENDPOINT = /(?<![a-z0-9-])ep-[a-z0-9-]*[a-z0-9]/gi;
 
 function connectionParts(url: string): Set<string> | undefined {
   if (url.length === 0) return undefined;
@@ -130,6 +142,13 @@ function connectionParts(url: string): Set<string> | undefined {
         }
       }
     }
+    // searchParams has decoded each value as pg does (% escapes, + as a space).
+    for (const value of searchParams.values()) {
+      for (const piece of value.split(PIECE_SEPARATORS)) if (piece.length >= MIN_PIECE_LENGTH) parts.add(piece);
+    }
+  }
+  for (const part of [...parts]) {
+    for (const [endpoint] of part.matchAll(NEON_ENDPOINT)) parts.add(endpoint).add(endpoint.replace(/-pooler$/, ""));
   }
   return parts;
 }

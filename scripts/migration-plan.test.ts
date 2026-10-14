@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { planMigration, redactConnection } from "./migration-plan";
 
 // A made-up URL shaped like Neon's: nothing here reaches a real database.
@@ -182,6 +182,58 @@ describe("redactConnection", () => {
 
   it("replaces in a single pass, never inside a marker it has just written", () => {
     expect(redactConnection("host: a", "postgres://host/appdb?application_name=a")).toBe("[redacted]: [redacted]");
+  });
+
+  // Postgres splits options on spaces and quotes one piece back (reproduced against a slot database).
+  it("removes a piece of a query value that Postgres quotes on its own", () => {
+    const url = "postgres://alice:pw@db:5432/appdb?options=-c%20statement_timeout%3Dsecretval";
+    const message = 'error: invalid value for parameter "statement_timeout": "secretval"';
+    const redacted = redactConnection(message, url);
+    expect(redacted).not.toContain("secretval");
+    expect(redacted).toContain("error: invalid value for parameter");
+  });
+
+  it("removes pieces split on spaces, +, = and commas, after decoding as pg does", () => {
+    const url = "postgres://db/appdb?options=-c+search_path%3Dtenantsecret,othersecret&application_name=ci%20jobsecret";
+    const redacted = redactConnection('schema "tenantsecret", then "othersecret", for jobsecret', url);
+    for (const secret of ["tenantsecret", "othersecret", "jobsecret"]) expect(redacted).not.toContain(secret);
+  });
+
+  it.each([
+    ["inside options", "postgres://alice:pw@db/appdb?options=endpoint%3Dep-direct-42"],
+    ["as a -pooler host", pooled],
+    ["in a password, as Neon accepts it", "postgres://alice:endpoint%3Dep-direct-42%24pw@db/appdb"],
+  ])("removes a bare Neon endpoint id %s", (_where, url) => {
+    const redacted = redactConnection("endpoint ep-direct-42 is disabled", url);
+    expect(redacted).not.toContain("ep-direct-42");
+    expect(redacted).toContain("is disabled");
+  });
+
+  // Flags and short settings (-c, on, 1) would otherwise blank any word or line number holding them.
+  it.each([
+    ["unpooled", unpooled],
+    ["pooled", pooled],
+    ["with short options", `${pooled}?sslmode=require&options=-c%20lock_timeout%3D1%20-c%20jit%3Don`],
+  ])("leaves an ordinary SQL error untouched (%s URL)", (_form, url) => {
+    const message = [
+      'error: relation "cars" already exists',
+      "    at Parser.parseErrorMessage (/app/node_modules/pg-protocol/dist/parser.js:283:98)",
+    ].join("\n");
+    expect(redactConnection(message, url)).toBe(message);
+  });
+
+  it("withholds the whole message when redacting throws, even with the URL in the error", () => {
+    const url = "postgres://alice:wrongpw@db/appdb";
+    const indexOf = vi.spyOn(String.prototype, "indexOf").mockImplementationOnce(() => {
+      throw new Error(url);
+    });
+    try {
+      const redacted = redactConnection(`password authentication failed (wrongpw) via ${url}`, url);
+      expect(indexOf).toHaveBeenCalled();
+      expect(redacted).toBe("[error withheld: its connection string could not be read safely]");
+    } finally {
+      indexOf.mockRestore();
+    }
   });
 
   it.each([
