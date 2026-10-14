@@ -14,6 +14,34 @@
     },
     "nobody": "Nobody has signed up yet."
   },
+  "Admin": {
+    "title": "Organiser area",
+    "shareLink": {
+      "label": "Link to share",
+      "hint": "Send it to the group."
+    },
+    "adminLink": {
+      "label": "Organiser link",
+      "badge": "Personal",
+      "hint": "Do not share it: it lets anyone change everything."
+    },
+    "keep": {
+      "title": "Keep this link",
+      "body": "It is the only way to change the event. With no account and no e-mail, we cannot send it to you again."
+    },
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed: select the link and copy it by hand.",
+    "share": "Share",
+    "invalid": {
+      "title": "This organiser link is not valid.",
+      "body": "Check that it was copied in full."
+    },
+    "failed": {
+      "title": "The organiser link could not be checked.",
+      "body": "Check your connection, then reload the page."
+    }
+  },
   "EventNotFound": {
     "title": "Event not found",
     "checkLink": "Check the link: it may have been copied wrong. Upper and lower case matter.",
