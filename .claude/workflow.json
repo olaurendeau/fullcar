@@ -65,19 +65,23 @@
         "regex": "randomBytes|randomUUID|getRandomValues|Math\\.random|createHash|timingSafeEqual"
       },
       {
-        "regex": "(?i)token|localStorage|sessionStorage|location\\.hash|\\.hash\\b|Referrer-Policy|cookies\\(\\)|document\\.cookie|Set-Cookie"
+        "regex": "(?i)(admin|personal|perso)[_-]?token|token_hash|newAdminToken|hashAdminToken|adminTokenMatches|[\"'`]token[\"'`]|\\$\\{\\s*token\\s*\\}|localStorage|sessionStorage|location\\.hash|\\.hash\\b|Referrer-Policy|cookies\\(\\)|document\\.cookie|Set-Cookie"
       },
       {
         "regex": "(?i)phone"
       },
       {
-        "regex": "eslint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|\\.(only|skip|skipIf|runIf|todo|fails|fixme)\\s*[(`]|\\b(it|test|describe|suite|bench)(\\.\\w+)*\\.(only|skip|skipIf|runIf|todo|fails|fixme)\\b|\\bx(it|describe|test)\\("
+        "regex": "eslint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|\\.(only|skip|skipIf|runIf|todo|fails|fixme)\\s*[(`]|\\b(it|test|describe|suite|bench|testInfo)(\\.\\w+)*\\.(only|skip|skipIf|runIf|todo|fails|fail|fixme)\\b|\\bx(it|describe|test)\\("
       },
       {
         "regex": "purge|CRON_SECRET|deleteFrom|dropTable|DROP TABLE|DELETE FROM|ON DELETE"
       },
       {
-        "regex": "DATABASE_URL|POSTGRES_(PRISMA_)?URL"
+        "regex": "DATABASE_URL|POSTGRES_(PRISMA_)?URL",
+        "exclude": [
+          "**/*.test.ts",
+          "e2e/**"
+        ]
       },
       {
         "regex": "@vercel/analytics|@vercel/speed-insights"
