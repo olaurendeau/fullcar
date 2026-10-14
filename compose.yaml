@@ -61,6 +61,8 @@ services:
       - .:/app
     environment:
       BASE_URL: http://web:3000
+      # The app's database, where the fixtures seed what a test reads (e2e/fixtures.ts).
+      DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar
       HOME: /tmp
       CI: ${CI:-}
     ipc: host
