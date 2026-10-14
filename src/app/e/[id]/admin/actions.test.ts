@@ -121,7 +121,7 @@ describe("checkAdminLink", () => {
     ["missing", undefined],
   ])("refuses an id %s without reading the database", async (_, id) => {
     reads = 0;
-    expect(await using(failingDb(), () =>checkAdminLink(id, newAdminToken()))).toBe(false);
+    expect(await using(failingDb(), () => checkAdminLink(id, newAdminToken()))).toBe(false);
     expect(reads).toBe(0);
   });
 

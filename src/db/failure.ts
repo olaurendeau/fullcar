@@ -10,8 +10,9 @@ function errorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   try {
     const { code, errno } = error as { code?: unknown; errno?: unknown };
-    if (typeof code === "string" && SQLSTATE.test(code)) return `SQLSTATE ${code}`;
+    // errno first: a system error's code may look like a SQLSTATE (EPIPE, EPERM, EBUSY).
     if (typeof errno === "number" && Number.isInteger(errno)) return `errno ${errno}`;
+    if (typeof code === "string" && SQLSTATE.test(code)) return `SQLSTATE ${code}`;
   } catch {
     // A getter that throws leaves nothing to log but the fixed message.
   }

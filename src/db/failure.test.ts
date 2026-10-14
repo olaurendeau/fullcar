@@ -29,6 +29,8 @@ describe("databaseFailure", () => {
     ["the SQLSTATE of a Postgres error", { code: "23505" }, `${MESSAGE} (SQLSTATE 23505)`],
     ["the SQLSTATE of a class with letters", { code: "57P01" }, `${MESSAGE} (SQLSTATE 57P01)`],
     ["the errno of a system error", { code: "ECONNREFUSED", errno: -111 }, `${MESSAGE} (errno -111)`],
+    // Five letters like a SQLSTATE: the errno says it is a system error.
+    ["the errno of a socket closed by the server", { code: "EPIPE", errno: -32 }, `${MESSAGE} (errno -32)`],
   ])("logs the fixed message with %s, and nothing else", (_, fields, line) => {
     const { calls } = logged(postgresError(fields));
     expect(calls).toEqual([[line]]);
