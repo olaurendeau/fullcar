@@ -218,9 +218,10 @@ test.describe("event not found", () => {
   }) => {
     const seen = async (id: string) => {
       const response = await page.goto(`/e/${encodeURIComponent(id)}`);
+      // The title is streamed after the page's content: waited for, not read at once.
+      await expect(page, id).toHaveTitle("Événement introuvable");
       return {
         status: response?.status(),
-        title: await page.title(),
         text: await page.locator("main").innerText(),
       };
     };
