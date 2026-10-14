@@ -65,7 +65,7 @@
         "regex": "randomBytes|randomUUID|getRandomValues|Math\\.random|createHash|timingSafeEqual"
       },
       {
-        "regex": "(?i)(admin|personal|perso)[_-]?token|token_?hash|token\\b|newAdminToken|hashAdminToken|adminTokenMatches|[\"'`]token[\"'`]|\\$\\{\\s*token\\s*\\}|localStorage|sessionStorage|location\\.hash|\\.hash\\b|Referrer-Policy|cookies\\(\\)|document\\.cookie|Set-Cookie"
+        "regex": "(?i)(admin|personal|perso)[_-]?token|token_?hash|token\\b|newAdminToken|hashAdminToken|adminTokenMatches|[\"'`]token[\"'`]|\\$\\{\\s*token\\s*\\}|localStorage|sessionStorage|location\\.hash|location\\.href|split\\(\\s*[\"'`]#|\\.hash\\b|\\breferrer|Referrer-Policy|cookies\\(\\)|document\\.cookie|Set-Cookie"
       },
       {
         "regex": "(?i)phone"

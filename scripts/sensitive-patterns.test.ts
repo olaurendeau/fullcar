@@ -174,6 +174,17 @@ describe("sensitive patterns: tokens", () => {
     "localStorage.setItem(key, value);",
     'headers.set("Referrer-Policy", "no-referrer");',
     "const jar = await cookies();",
+    // The fragment handled without being named: the whole URL, or the URL cut at `#`.
+    'console.error("save failed", window.location.href);',
+    "const url = location.href;",
+    'const fragment = page.url().split("#")[1];',
+    "const [, secret] = url.split( '#' );",
+    "const [, secret] = url.split(`#`);",
+    // What decides whether the URL, fragment aside, leaves with the referrer.
+    'export const metadata = { referrer: "unsafe-url" };',
+    '<meta name="referrer" content="origin" />',
+    '<a href={url} referrerPolicy="unsafe-url">',
+    "const from = document.referrer;",
   ])("flags %s", (line) => {
     expect(isSensitive(line)).toBe(true);
   });
@@ -185,6 +196,11 @@ describe("sensitive patterns: tokens", () => {
     "const tokens = lexer();",
     'const kind = "tokens";',
     "const count = `${tokens.length}`;",
+    '<a href={url} target="_blank" rel="noopener noreferrer">',
+    '<a href={url} rel="noreferrer">',
+    "const href = link.href;",
+    'const parts = line.split(",");',
+    'const [path] = url.split("?");',
   ])("ignores %s", (line) => {
     expect(isSensitive(line)).toBe(false);
   });
