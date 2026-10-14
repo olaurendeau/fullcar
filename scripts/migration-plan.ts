@@ -41,12 +41,10 @@ const WITHHELD = "[error withheld: its connection string could not be read safel
 
 /**
  * Removes the URL and each of its parts from `text`: user, password, host and its first
- * label, database, and every query value, since pg reads some of them (user, password,
- * options, sslrootcert…) and may quote them in its errors. Postgres quotes a piece of a value
- * too (`options=-c a=se\cret` → `"secret"`), so each piece goes as well, and so does any Neon
- * endpoint id found anywhere in the URL, with or without its `-pooler` suffix. The port stays.
- * A URL read differently from pg-connection-string, or not at all, withholds the whole text,
- * and so does any failure while redacting.
+ * label, database, and any Neon endpoint id found anywhere in the URL, with or without its
+ * `-pooler` suffix. The port and the values of the allowed query keys stay. A query key
+ * outside that list, or a value it does not expect, withholds the whole text, as does a URL
+ * read differently from pg-connection-string, or not at all, or any failure while redacting.
  */
 export function redactConnection(text: string, url: string): string {
   try {
@@ -84,12 +82,15 @@ function cover(text: string, parts: Set<string>): string {
 }
 
 /**
- * Shorter pieces are flags and settings (-c, on, off, 1, 30s), not secrets, and would blank
- * every word or line number holding them. A whole value is removed whatever its length.
+ * The query keys a Neon URL carries, or may, and the values each takes. Postgres quotes
+ * pieces of other values (options above all: unescaped, split, trimmed, unquoted) in ways
+ * no redaction keeps up with, so any other key or value withholds the whole text.
  */
-const MIN_PIECE_LENGTH = 4;
-/** isspace() in C, where Postgres splits options: not \s, which also holds Unicode spaces. */
-const PG_SPACE = /[ \t\n\v\f\r]/;
+const ALLOWED_QUERY = new Map<string, (value: string) => boolean>([
+  ["sslmode", (value) => ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"].includes(value)],
+  ["channel_binding", (value) => ["disable", "prefer", "require"].includes(value)],
+  ["connect_timeout", (value) => /^[0-9]+$/.test(value)],
+]);
 /** A Neon endpoint id, such as ep-cool-darkness-123456, as a label of its own. */
 const NEON_ENDPOINT = /(?<![a-z0-9-])ep-[a-z0-9-]*[a-z0-9]/gi;
 
@@ -116,24 +117,13 @@ function connectionParts(url: string): Set<string> | undefined {
   if (!readings[0]) return undefined;
   for (const reading of readings) {
     if (!reading) continue;
-    const { username, password, host, hostname, pathname, search, hash, searchParams } = reading.url;
+    const { username, password, host, hostname, pathname, hash, searchParams } = reading.url;
+    // searchParams decodes keys and values as pg reads them (% escapes, + as a space).
+    for (const [key, value] of searchParams) if (!ALLOWED_QUERY.get(key)?.(value)) return undefined;
     const hostParts = reading.hostless
       ? []
       : [host, hostname, hostname.replace(/^\[(.+)\]$/, "$1"), hostname.split(".")[0]];
-    const rawQueryValues = search
-      .slice(1)
-      .split("&")
-      .map((pair) => pair.slice(pair.indexOf("=") + 1));
-    for (const part of [
-      username,
-      password,
-      ...hostParts,
-      pathname,
-      pathname.slice(1),
-      ...rawQueryValues,
-      ...searchParams.values(),
-      hash.slice(1),
-    ]) {
+    for (const part of [username, password, ...hostParts, pathname, pathname.slice(1), hash.slice(1)]) {
       for (const decode of [(s: string) => s, decodeURI, decodeURIComponent]) {
         try {
           parts.add(decode(part));
@@ -142,45 +132,11 @@ function connectionParts(url: string): Set<string> | undefined {
         }
       }
     }
-    // searchParams has decoded each value as pg does (% escapes, + as a space).
-    for (const value of searchParams.values()) {
-      for (const piece of valuePieces(value)) if (piece.length >= MIN_PIECE_LENGTH) parts.add(piece);
-    }
   }
   for (const part of [...parts]) {
     for (const [endpoint] of part.matchAll(NEON_ENDPOINT)) parts.add(endpoint).add(endpoint.replace(/-pooler$/, ""));
   }
   return parts;
-}
-
-/**
- * What Postgres may quote from a query value: the value unescaped, and the words pg_split_opts
- * reads in options, each whole, after its first =, and split on = and commas
- * (`-c a=x,y` → `a=x,y`, `x,y`, `x`, `y`).
- */
-function valuePieces(value: string): string[] {
-  const words = unescapedWords(value);
-  const pieces = [words.join(" ")];
-  for (const word of words) {
-    pieces.push(word, word.slice(word.indexOf("=") + 1), ...word.split(/[=,]/));
-  }
-  return pieces;
-}
-
-/** As pg_split_opts: words split on spaces, a backslash dropped and the character after it kept. */
-function unescapedWords(value: string): string[] {
-  const words: string[] = [];
-  let word = "";
-  for (let i = 0; i < value.length; i++) {
-    if (PG_SPACE.test(value[i])) {
-      if (word) words.push(word);
-      word = "";
-    } else {
-      word += value[i] === "\\" ? (value[++i] ?? "") : value[i];
-    }
-  }
-  if (word) words.push(word);
-  return words;
 }
 
 /**

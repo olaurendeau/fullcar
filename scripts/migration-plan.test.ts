@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { planMigration, redactConnection } from "./migration-plan";
 
-// A made-up URL shaped like Neon's: nothing here reaches a real database.
-const unpooled = "postgres://alice:s3cr%40t@ep-direct-42.eu-central-1.aws.example/appdb?sslmode=require";
-const pooled = "postgres://alice:s3cr%40t@ep-direct-42-pooler.eu-central-1.aws.example/appdb";
+// Made-up URLs shaped like Neon's, its query included: nothing here reaches a real database.
+const neonQuery = "?sslmode=require&channel_binding=require";
+const unpooled = `postgres://alice:s3cr%40t@ep-direct-42.eu-central-1.aws.example/appdb${neonQuery}`;
+const pooled = `postgres://alice:s3cr%40t@ep-direct-42-pooler.eu-central-1.aws.example/appdb${neonQuery}`;
+const WITHHELD = "[error withheld: its connection string could not be read safely]";
 
 describe("planMigration on a Vercel build (deploy)", () => {
   it("migrates production to latest through the unpooled URL", () => {
@@ -79,35 +81,51 @@ describe("redactConnection", () => {
     expect(redacted).toContain("getaddrinfo ENOTFOUND");
   });
 
-  it("removes the values of the query string, raw and decoded", () => {
-    const url = "postgres://db:5432/fullcar?options=endpoint%3Dep-direct-42&user=bob&sslrootcert=%2Fsecret-ca-path.pem";
-    const message = [
-      "unknown option endpoint%3Dep-direct-42 (endpoint=ep-direct-42)",
-      'password authentication failed for user "bob"',
-      "ENOENT: no such file or directory, open '/secret-ca-path.pem'",
-    ].join("\n");
-    const redacted = redactConnection(message, url);
-    for (const secret of ["endpoint%3Dep-direct-42", "endpoint=ep-direct-42", "bob", "/secret-ca-path.pem"]) {
-      expect(redacted).not.toContain(secret);
-    }
-    expect(redacted).toContain("ENOENT: no such file or directory");
+  // Postgres quotes pieces of options in ways no redaction keeps up with (each reproduced
+  // against a slot database during review): any query key but Neon's withholds the message.
+  it.each([
+    ["-c%20statement_timeout%3Dsecretval", 'invalid value for parameter "statement_timeout": "secretval"'],
+    ["-c%20statement_timeout%3Dse%5Ccr%5Cet", 'invalid value for parameter "statement_timeout": "secret"'],
+    ["-c%20local_preload_libraries%3D%5C%20secretlib", 'could not access file "$libdir/plugins/secretlib"'],
+    ["-c%20statement_timeout%3Dsec%3Dret", 'invalid value for parameter "statement_timeout": "sec=ret"'],
+    ["-c%20local_preload_libraries%3D%22secret%22%22lib%22", 'could not access file "secret"lib"'],
+    ["endpoint%3Dep-direct-42", "invalid command-line argument for server process: endpoint=ep-direct-42"],
+  ])("withholds the whole message when the URL carries options=%s", (options, message) => {
+    expect(redactConnection(`error: ${message}`, `postgres://alice:pw@db/appdb?options=${options}`)).toBe(WITHHELD);
   });
 
-  // Both reproduced against a slot database during review.
   it.each([
-    [
-      "postgres://db:5432/fullcar?user=alicesecret&password=wrongpw",
-      'error: password authentication failed for user "alicesecret" (wrongpw)',
-      ["alicesecret", "wrongpw"],
-    ],
-    [
-      "postgres://db:5432/fullcar?sslmode=verify-full&sslrootcert=/secret-ca-path.pem",
-      "ENOENT: no such file or directory, open '/secret-ca-path.pem'",
-      ["/secret-ca-path.pem"],
-    ],
-  ])("removes credentials passed as parameters: %s", (url, message, secrets) => {
-    const redacted = redactConnection(message, url);
-    for (const secret of secrets) expect(redacted).not.toContain(secret);
+    ["application_name=ci%20jobsecret", 'application "ci jobsecret" failed'],
+    ["user=alicesecret&password=wrongpw", 'password authentication failed for user "alicesecret" (wrongpw)'],
+    ["sslmode=verify-full&sslrootcert=/secret-ca-path.pem", "ENOENT: no such file or directory, open '/secret-ca-path.pem'"],
+    ["sslcert=%2Fsecret%2Fclient.crt", "ENOENT: no such file or directory, open '/secret/client.crt'"],
+    ["sslkey=/secret/client.key", "ENOENT: no such file or directory, open '/secret/client.key'"],
+    ["host=db", 'database "appdb" does not exist'],
+    ["db=secretdb", 'database "secretdb" does not exist'],
+  ])("withholds the whole message when the URL carries a query key outside Neon's: %s", (query, message) => {
+    expect(redactConnection(`error: ${message}`, `postgres://db:5432/appdb?${query}`)).toBe(WITHHELD);
+  });
+
+  it.each([
+    ["sslmode=secretmode"],
+    ["sslmode=require&sslmode=secretmode"],
+    ["channel_binding=verify-full"],
+    ["sslmode"],
+    ["connect_timeout=abc"],
+    ["connect_timeout=10s"],
+    ["connect_timeout="],
+  ])("withholds the whole message when an allowed key has an unexpected value: %s", (query) => {
+    expect(redactConnection("error: failed with secretmode abc 10s", `postgres://db/appdb?${query}`)).toBe(WITHHELD);
+  });
+
+  it.each([
+    ...["disable", "allow", "prefer", "require", "verify-ca", "verify-full"].map((mode) => `sslmode=${mode}`),
+    ...["disable", "prefer", "require"].map((binding) => `channel_binding=${binding}`),
+    "connect_timeout=10",
+  ])("leaves the values of %s readable", (query) => {
+    const value = query.slice(query.indexOf("=") + 1);
+    const message = `error: relation "cars" already exists (${value})\n    at parser.js:283:10`;
+    expect(redactConnection(message, `postgres://alice:pw@db/appdb?${query}`)).toBe(message);
   });
 
   it("removes the host's first label on its own, keeping the port", () => {
@@ -119,8 +137,8 @@ describe("redactConnection", () => {
 
   // Forms that pg reads although new URL() alone rejects or misreads them (see pg-connection-string).
   it.each([
-    ["no host, the server named by a parameter", "postgres://alicesecret:wrongpw@/secretdb?host=db"],
-    ["a socket: URL", "socket://alicesecret:wrongpw@/var/run/secretdb?db=secretdb"],
+    ["no host", "postgres://alicesecret:wrongpw@/secretdb"],
+    ["a socket: URL", "socket://alicesecret:wrongpw@/secretdb"],
   ])("removes every part of a URL with %s", (_form, url) => {
     const message = [
       'password authentication failed for user "alicesecret" (wrongpw)',
@@ -176,64 +194,29 @@ describe("redactConnection", () => {
   });
 
   it("covers the widest stretch where secrets overlap, leaving no piece of either", () => {
-    const url = "postgres://alice:secretABC@host/appdb?application_name=npg_sec";
+    const url = "postgres://npg_sec:secretABC@host/appdb";
     expect(redactConnection("auth npg_secretABC failed", url)).toBe("auth [redacted] failed");
   });
 
   it("replaces in a single pass, never inside a marker it has just written", () => {
-    expect(redactConnection("host: a", "postgres://host/appdb?application_name=a")).toBe("[redacted]: [redacted]");
-  });
-
-  // Postgres splits options on spaces and quotes one piece back (reproduced against a slot database).
-  it("removes a piece of a query value that Postgres quotes on its own", () => {
-    const url = "postgres://alice:pw@db:5432/appdb?options=-c%20statement_timeout%3Dsecretval";
-    const message = 'error: invalid value for parameter "statement_timeout": "secretval"';
-    const redacted = redactConnection(message, url);
-    expect(redacted).not.toContain("secretval");
-    expect(redacted).toContain("error: invalid value for parameter");
-  });
-
-  it("removes pieces split on spaces, +, = and commas, after decoding as pg does", () => {
-    const url = "postgres://db/appdb?options=-c+search_path%3Dtenantsecret,othersecret&application_name=ci%20jobsecret";
-    const redacted = redactConnection('schema "tenantsecret", then "othersecret", for jobsecret', url);
-    for (const secret of ["tenantsecret", "othersecret", "jobsecret"]) expect(redacted).not.toContain(secret);
-  });
-
-  // pg_split_opts drops each escaping backslash and keeps an escaped space inside the word.
-  it.each([
-    ["-c%20statement_timeout%3Dsecr%5Cetval", "secretval"],
-    ["-c%20statement_timeout%3Dse%5Ccr%5Cet", "secret"],
-    ["-c%20application_name%3Dab%5C%20cd", "ab cd"],
-  ])("removes a value as Postgres reads it once unescaped: options=%s", (options, quoted) => {
-    const url = `postgres://alice:pw@db/appdb?options=${options}`;
-    const redacted = redactConnection(`error: invalid value for parameter "x": "${quoted}"`, url);
-    expect(redacted).not.toContain(quoted);
-    expect(redacted).toContain("error: invalid value for parameter");
-  });
-
-  it("keeps a piece of 3 characters readable, and removes one of 4 quoted on its own", () => {
-    const url = "postgres://alice:pw@db/appdb?options=-c%20statement_timeout%3D30s%20-c%20jit%3Doff%20-c%20role%3Dab12";
-    const redacted = redactConnection('timeout after 30s with jit off; role "ab12" does not exist', url);
-    expect(redacted).toContain("timeout after 30s with jit off;");
-    expect(redacted).not.toContain("ab12");
+    expect(redactConnection("host: a", "postgres://u:a@host/appdb")).toBe("[redacted]: [redacted]");
   });
 
   it.each([
-    ["inside options", "postgres://alice:pw@db/appdb?options=endpoint%3Dep-direct-42"],
     ["as a -pooler host", pooled],
     ["in a password, as Neon accepts it", "postgres://alice:endpoint%3Dep-direct-42%24pw@db/appdb"],
+    ["in a user name", "postgres://ep-direct-42%24alice:pw@db/appdb"],
   ])("removes a bare Neon endpoint id %s", (_where, url) => {
     const redacted = redactConnection("endpoint ep-direct-42 is disabled", url);
     expect(redacted).not.toContain("ep-direct-42");
     expect(redacted).toContain("is disabled");
   });
 
-  // Flags and short settings (-c, on, 1) would otherwise blank any word or line number holding them.
   it.each([
-    ["unpooled", unpooled],
+    ["direct", unpooled],
     ["pooled", pooled],
-    ["with short options", `${pooled}?sslmode=require&options=-c%20lock_timeout%3D1%20-c%20jit%3Don`],
-  ])("leaves an ordinary SQL error untouched (%s URL)", (_form, url) => {
+    ["with a connect timeout", `${pooled}&connect_timeout=10`],
+  ])("leaves an ordinary SQL error untouched (%s Neon URL)", (_form, url) => {
     const message = [
       'error: relation "cars" already exists',
       "    at Parser.parseErrorMessage (/app/node_modules/pg-protocol/dist/parser.js:283:98)",
