@@ -71,7 +71,7 @@
         "regex": "(?i)phone"
       },
       {
-        "regex": "eslint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|\\.(only|skip|skipIf|runIf|todo|fails|fixme)\\(|\\bx(it|describe|test)\\("
+        "regex": "eslint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|\\.(only|skip|skipIf|runIf|todo|fails|fixme)\\s*[(`]|\\b(it|test|describe|suite|bench)(\\.\\w+)*\\.(only|skip|skipIf|runIf|todo|fails|fixme)\\b|\\bx(it|describe|test)\\("
       },
       {
         "regex": "purge|CRON_SECRET|deleteFrom|dropTable|DROP TABLE|DELETE FROM|ON DELETE"
