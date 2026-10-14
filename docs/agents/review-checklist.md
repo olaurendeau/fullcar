@@ -70,6 +70,33 @@ celui qui écrit le code.
   bloquante : deux taps simultanés sur la dernière place surchargeraient la voiture.
 - Aucune transaction longue autour d'une purge ou d'un import.
 - Les requêtes passent par Kysely avec des paramètres liés : aucune concaténation de SQL.
+- `sql` n'est ni passé en argument, ni rangé dans un objet, ni importé par un chemin
+  calculé : la règle `sql.raw` ne le suit pas sous un autre nom.
+- Kysely n'est pas réexporté par un module local (`export * from "kysely"`,
+  `export { sql } from "kysely"`), et aucun espace de noms Kysely n'est obtenu par
+  affectation après coup ou par `.then` sur `import("kysely")` : le lint ne suit pas ces
+  chemins.
+
+## Emplacement du code et exécution
+
+- Le code est à sa place (tableau « Emplacement du code » d'`architecture.md`) : une
+  fonction d'accès aux données (`src/db/<entité>.ts`) qui crée ou prend sa connexion au
+  lieu de recevoir `db` est bloquante, un test ne pourrait pas lui passer sa transaction.
+- Une server action reste mince et renvoie des données simples et des clés d'erreur. Un
+  `redirect()` vers une URL qui contient un jeton est bloquant.
+- Un `loading.tsx` sur une route qui peut répondre 404 est bloquant : le statut part en 200.
+- Une heure d'événement relue en `Date` dans le fuseau du serveur ou du navigateur, ou mise
+  en forme dans un autre fuseau qu'UTC, est bloquante : elle changerait selon la machine.
+  Une `Date` construite en UTC par `wallClockAsUtc` pour la mise en forme par next-intl
+  (`timeZone: "UTC"`) est le chemin prévu.
+
+## Tests
+
+- Vitest n'écrit que dans `fullcar_test`, où chaque test qui écrit s'isole avec
+  `withRollback`, et dans `fullcar_migrations_test`, réservée au test d'aller-retour des
+  migrations.
+- Un test de bout en bout amorce ses données par une fixture, directement en base, et
+  possède son événement. Une route HTTP réservée aux tests est bloquante.
 
 ## États vides
 
