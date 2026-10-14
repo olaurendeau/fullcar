@@ -41,10 +41,10 @@ const WITHHELD = "[error withheld: its connection string could not be read safel
 
 /**
  * Removes the URL and each of its parts from `text`: user, password, host and its first
- * label (Neon's endpoint id), database, and every query value, since pg reads some of them
- * (user, password, options, sslrootcert…) and may quote them in its errors. The port stays.
- * A URL read differently from pg-connection-string, or not at all, withholds the whole text,
- * and so does any failure while redacting.
+ * label, database, and any Neon endpoint id found anywhere in the URL, with or without its
+ * `-pooler` suffix. The port and the values of the allowed query keys stay. A query key
+ * outside that list, or a value it does not expect, withholds the whole text, as does a URL
+ * read differently from pg-connection-string, or not at all, or any failure while redacting.
  */
 export function redactConnection(text: string, url: string): string {
   try {
@@ -81,6 +81,19 @@ function cover(text: string, parts: Set<string>): string {
   return redacted + text.slice(cursor);
 }
 
+/**
+ * The query keys a Neon URL carries, or may, and the values each takes. Postgres quotes
+ * pieces of other values (options above all: unescaped, split, trimmed, unquoted) in ways
+ * no redaction keeps up with, so any other key or value withholds the whole text.
+ */
+const ALLOWED_QUERY = new Map<string, (value: string) => boolean>([
+  ["sslmode", (value) => ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"].includes(value)],
+  ["channel_binding", (value) => ["disable", "prefer", "require"].includes(value)],
+  ["connect_timeout", (value) => /^[0-9]+$/.test(value)],
+]);
+/** A Neon endpoint id, such as ep-cool-darkness-123456, as a label of its own. */
+const NEON_ENDPOINT = /(?<![a-z0-9-])ep-[a-z0-9-]*[a-z0-9]/gi;
+
 function connectionParts(url: string): Set<string> | undefined {
   if (url.length === 0) return undefined;
   const parts = new Set([url]);
@@ -104,24 +117,13 @@ function connectionParts(url: string): Set<string> | undefined {
   if (!readings[0]) return undefined;
   for (const reading of readings) {
     if (!reading) continue;
-    const { username, password, host, hostname, pathname, search, hash, searchParams } = reading.url;
+    const { username, password, host, hostname, pathname, hash, searchParams } = reading.url;
+    // searchParams decodes keys and values as pg reads them (% escapes, + as a space).
+    for (const [key, value] of searchParams) if (!ALLOWED_QUERY.get(key)?.(value)) return undefined;
     const hostParts = reading.hostless
       ? []
       : [host, hostname, hostname.replace(/^\[(.+)\]$/, "$1"), hostname.split(".")[0]];
-    const rawQueryValues = search
-      .slice(1)
-      .split("&")
-      .map((pair) => pair.slice(pair.indexOf("=") + 1));
-    for (const part of [
-      username,
-      password,
-      ...hostParts,
-      pathname,
-      pathname.slice(1),
-      ...rawQueryValues,
-      ...searchParams.values(),
-      hash.slice(1),
-    ]) {
+    for (const part of [username, password, ...hostParts, pathname, pathname.slice(1), hash.slice(1)]) {
       for (const decode of [(s: string) => s, decodeURI, decodeURIComponent]) {
         try {
           parts.add(decode(part));
@@ -130,6 +132,9 @@ function connectionParts(url: string): Set<string> | undefined {
         }
       }
     }
+  }
+  for (const part of [...parts]) {
+    for (const [endpoint] of part.matchAll(NEON_ENDPOINT)) parts.add(endpoint).add(endpoint.replace(/-pooler$/, ""));
   }
   return parts;
 }
