@@ -199,6 +199,25 @@ describe("redactConnection", () => {
     for (const secret of ["tenantsecret", "othersecret", "jobsecret"]) expect(redacted).not.toContain(secret);
   });
 
+  // pg_split_opts drops each escaping backslash and keeps an escaped space inside the word.
+  it.each([
+    ["-c%20statement_timeout%3Dsecr%5Cetval", "secretval"],
+    ["-c%20statement_timeout%3Dse%5Ccr%5Cet", "secret"],
+    ["-c%20application_name%3Dab%5C%20cd", "ab cd"],
+  ])("removes a value as Postgres reads it once unescaped: options=%s", (options, quoted) => {
+    const url = `postgres://alice:pw@db/appdb?options=${options}`;
+    const redacted = redactConnection(`error: invalid value for parameter "x": "${quoted}"`, url);
+    expect(redacted).not.toContain(quoted);
+    expect(redacted).toContain("error: invalid value for parameter");
+  });
+
+  it("keeps a piece of 3 characters readable, and removes one of 4 quoted on its own", () => {
+    const url = "postgres://alice:pw@db/appdb?options=-c%20statement_timeout%3D30s%20-c%20jit%3Doff%20-c%20role%3Dab12";
+    const redacted = redactConnection('timeout after 30s with jit off; role "ab12" does not exist', url);
+    expect(redacted).toContain("timeout after 30s with jit off;");
+    expect(redacted).not.toContain("ab12");
+  });
+
   it.each([
     ["inside options", "postgres://alice:pw@db/appdb?options=endpoint%3Dep-direct-42"],
     ["as a -pooler host", pooled],

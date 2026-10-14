@@ -43,7 +43,7 @@ const WITHHELD = "[error withheld: its connection string could not be read safel
  * Removes the URL and each of its parts from `text`: user, password, host and its first
  * label, database, and every query value, since pg reads some of them (user, password,
  * options, sslrootcert…) and may quote them in its errors. Postgres quotes a piece of a value
- * too (`options=-c a=secret` → `"secret"`), so each piece goes as well, and so does any Neon
+ * too (`options=-c a=se\cret` → `"secret"`), so each piece goes as well, and so does any Neon
  * endpoint id found anywhere in the URL, with or without its `-pooler` suffix. The port stays.
  * A URL read differently from pg-connection-string, or not at all, withholds the whole text,
  * and so does any failure while redacting.
@@ -83,13 +83,13 @@ function cover(text: string, parts: Set<string>): string {
   return redacted + text.slice(cursor);
 }
 
-/** Where Postgres splits options (spaces, a backslash escaping the next one) and settings (= ,). */
-const PIECE_SEPARATORS = /[\s=,\\]+/;
 /**
  * Shorter pieces are flags and settings (-c, on, off, 1, 30s), not secrets, and would blank
  * every word or line number holding them. A whole value is removed whatever its length.
  */
 const MIN_PIECE_LENGTH = 4;
+/** isspace() in C, where Postgres splits options: not \s, which also holds Unicode spaces. */
+const PG_SPACE = /[ \t\n\v\f\r]/;
 /** A Neon endpoint id, such as ep-cool-darkness-123456, as a label of its own. */
 const NEON_ENDPOINT = /(?<![a-z0-9-])ep-[a-z0-9-]*[a-z0-9]/gi;
 
@@ -144,13 +144,43 @@ function connectionParts(url: string): Set<string> | undefined {
     }
     // searchParams has decoded each value as pg does (% escapes, + as a space).
     for (const value of searchParams.values()) {
-      for (const piece of value.split(PIECE_SEPARATORS)) if (piece.length >= MIN_PIECE_LENGTH) parts.add(piece);
+      for (const piece of valuePieces(value)) if (piece.length >= MIN_PIECE_LENGTH) parts.add(piece);
     }
   }
   for (const part of [...parts]) {
     for (const [endpoint] of part.matchAll(NEON_ENDPOINT)) parts.add(endpoint).add(endpoint.replace(/-pooler$/, ""));
   }
   return parts;
+}
+
+/**
+ * What Postgres may quote from a query value: the value unescaped, and the words pg_split_opts
+ * reads in options, each whole, after its first =, and split on = and commas
+ * (`-c a=x,y` → `a=x,y`, `x,y`, `x`, `y`).
+ */
+function valuePieces(value: string): string[] {
+  const words = unescapedWords(value);
+  const pieces = [words.join(" ")];
+  for (const word of words) {
+    pieces.push(word, word.slice(word.indexOf("=") + 1), ...word.split(/[=,]/));
+  }
+  return pieces;
+}
+
+/** As pg_split_opts: words split on spaces, a backslash dropped and the character after it kept. */
+function unescapedWords(value: string): string[] {
+  const words: string[] = [];
+  let word = "";
+  for (let i = 0; i < value.length; i++) {
+    if (PG_SPACE.test(value[i])) {
+      if (word) words.push(word);
+      word = "";
+    } else {
+      word += value[i] === "\\" ? (value[++i] ?? "") : value[i];
+    }
+  }
+  if (word) words.push(word);
+  return words;
 }
 
 /**
