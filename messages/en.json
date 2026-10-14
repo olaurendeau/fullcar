@@ -3,6 +3,42 @@
     "title": "Fullcar",
     "tagline": "Group carpooling, there and back, no account needed."
   },
+  "CreateEvent": {
+    "title": "Title",
+    "location": "Place",
+    "allerDate": "Outbound date",
+    "allerTime": "Outbound time",
+    "retour": "Return",
+    "retourHint": "Untick if no return trip is organised.",
+    "retourDate": "Return date",
+    "retourTime": "Return time",
+    "options": "Options",
+    "boosters": {
+      "label": "Booster seats",
+      "hint": "For children who need one."
+    },
+    "participation": {
+      "label": "Cost sharing",
+      "hint": "An amount per passenger, optional."
+    },
+    "stops": {
+      "label": "Meeting points",
+      "hint": "Stops along the cars’ route."
+    },
+    "create": "Create",
+    "needsJavaScript": "Creating an event needs JavaScript: turn it on, then reload the page.",
+    "failed": "The event could not be created. Check your connection, then try again.",
+    "errors": {
+      "required": "Required.",
+      "tooLong": "{max} characters at most.",
+      "invalidText": "This text contains a character that is not allowed.",
+      "invalidDate": "Not a valid date.",
+      "invalidTime": "Not a valid time.",
+      "tooEarly": "This date has already passed.",
+      "tooLate": "No more than a year ahead.",
+      "notAfterAller": "The return must be after the outbound trip."
+    }
+  },
   "Event": {
     "legs": {
       "aller": "Outbound",
