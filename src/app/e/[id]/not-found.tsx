@@ -1,0 +1,28 @@
+import { SearchX } from "lucide-react";
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Button } from "@/components/ui/button";
+
+/**
+ * One page for an unknown, a malformed id, or (later) an event deleted 30 days after its date: nothing tells them apart
+ * (#3, C6.1 to C6.3).
+ */
+export default function EventNotFound() {
+  const t = useTranslations("EventNotFound");
+
+  return (
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center p-6">
+      <div className="mb-4 grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground">
+        <SearchX className="size-6" />
+      </div>
+      <div className="flex flex-col gap-3">
+        <h1 className="text-2xl font-bold">{t("title")}</h1>
+        <p className="text-muted-foreground">{t("checkLink")}</p>
+        <p className="text-muted-foreground">{t("deleted")}</p>
+      </div>
+      <Button asChild className="mt-6 h-11">
+        <Link href="/">{t("create")}</Link>
+      </Button>
+    </main>
+  );
+}

@@ -2,5 +2,22 @@
   "Home": {
     "title": "Fullcar",
     "tagline": "Group carpooling, there and back, no account needed."
+  },
+  "Event": {
+    "legs": {
+      "aller": "Outbound",
+      "retour": "Return"
+    },
+    "noCar": {
+      "aller": "No car offered for the outbound trip",
+      "retour": "No car offered for the return trip"
+    },
+    "nobody": "Nobody has signed up yet."
+  },
+  "EventNotFound": {
+    "title": "Event not found",
+    "checkLink": "Check the link: it may have been copied wrong. Upper and lower case matter.",
+    "deleted": "Events are deleted 30 days after their date.",
+    "create": "Create an event"
   }
 }

@@ -2,5 +2,22 @@
   "Home": {
     "title": "Fullcar",
     "tagline": "Le covoiturage de groupe, aller et retour, sans compte."
+  },
+  "Event": {
+    "legs": {
+      "aller": "Aller",
+      "retour": "Retour"
+    },
+    "noCar": {
+      "aller": "Aucune voiture proposée pour l’aller",
+      "retour": "Aucune voiture proposée pour le retour"
+    },
+    "nobody": "Personne ne s’est encore inscrit."
+  },
+  "EventNotFound": {
+    "title": "Événement introuvable",
+    "checkLink": "Vérifiez le lien : il a peut-être été mal recopié. Les majuscules et les minuscules comptent.",
+    "deleted": "Les événements sont supprimés 30 jours après leur date.",
+    "create": "Créer un événement"
   }
 }
