@@ -37,10 +37,10 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 
 | commande | effet |
 |---|---|
-| `make ci` | tout ce que la CI exécute : `make check` puis `make e2e` |
+| `make ci` | tout ce que la CI exécute : `make check`, puis les tests de bout en bout contre le build de production que `make check` vient de produire (un seul build) |
 | `make check` | lint, typecheck, tests, clés i18n, build de production |
 | `make up` / `make down` | démarre / arrête et efface l'environnement du slot ; `make up` démarre la base, **lui applique les migrations**, puis démarre `web`, et une migration en échec l'arrête avant `web` (#27) |
-| `make e2e` | tests de bout en bout Playwright contre le **build de production** du slot |
+| `make e2e` | construit le **build de production** du slot, puis lance les tests de bout en bout Playwright contre `next start` |
 | `make shot` | captures d'écran (360 px par défaut) |
 | `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple ; refuse `version` (et sa variante `verison`), `publish`, `unpublish`, `dist-tag` (`dist-tags`) et `deprecate`, qui reviennent à l'humain |
 
@@ -67,8 +67,8 @@ ce conteneur, la base `fullcar` sert au serveur de dev et aux tests de bout en b
 `make up` lance le serveur de dev (`next dev`). Les tests de bout en bout, eux, tournent
 contre le build de production (`next build` puis `next start`) : c'est ce build qui part
 sur Vercel, et le serveur de dev ne se comporte pas comme lui (compilation à la demande,
-rendu, cache). #11 met cette règle en place : d'ici là, `make e2e` tourne contre le
-serveur de dev que démarre `make up`.
+rendu, cache). `make e2e` et `make ci` remplacent donc le serveur de dev du slot par
+`next start`.
 
 **Un worktree git par slot** : chaque développeur travaille dans son propre worktree, avec
 son slot. Deux slots dans le même répertoire partageraient `node_modules`, `.next` et les
@@ -101,16 +101,18 @@ configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
 ### Données des tests de bout en bout
 
 - Un test Playwright amorce ses données **directement dans la base du slot**, par une
-  fixture qui appelle les fonctions de `src/db/` (par exemple `seedEvent`, que #17 ajoute
-  dans `src/db/test-events.ts`). Jamais par une route HTTP réservée aux tests : une telle
+  fixture qui appelle les fonctions de `src/db/` (par exemple `seedEvent`, dans
+  `src/db/test-events.ts`). Jamais par une route HTTP réservée aux tests : une telle
   route finirait par exister en production.
 - **Chaque test possède son événement** : il le crée, et ne lit ni ne modifie celui d'un
   autre test. Les tests restent indépendants et peuvent tourner en parallèle.
 - Le conteneur Playwright atteint la base `fullcar` du slot, à l'hôte `db` (#20). Un test
   importe `test` et `expect` de `e2e/fixtures.ts` : la fixture `seededEvent` y crée son
   événement avant le test et le supprime après. Avant de se connecter, `e2eDatabaseUrl`
-  refuse toute URL qui n'a pas exactement la forme `postgres://…@db[:port]/fullcar` : ni
-  query string ni fragment, puisque `pg` y lit aussi un hôte, un port ou un socket.
+  refuse toute URL qui n'a pas exactement la forme
+  `postgres[ql]://[identifiants@]db[:port]/fullcar` : schéma `postgres` ou `postgresql`,
+  identifiants facultatifs, hôte `db`, port facultatif, base `fullcar`, et rien après. Ni
+  query string ni fragment, donc, puisque `pg` y lit aussi un hôte, un port ou un socket.
 
 ### Production
 
@@ -219,6 +221,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | domaine | `src/domain/` | fonctions pures : n'importe ni `kysely`, ni `pg`, ni `next`, ni `react`, ni `react-dom` (ni leurs sous-chemins), ni `src/db`, par `@/db` ou par un chemin relatif, en `import` comme en `import()` ; le lint l'impose (`eslint.config.mjs`, #28 et #39) |
 | socle des données | `src/db/client.ts`, `src/db/schema.ts`, `src/db/migrator.ts` | `getDb()` est la connexion de l'application, appelée par une page, une action ou une route, qui la passe aux fonctions d'accès aux données ; `schema.ts` grandit avec chaque migration |
 | accès aux données | `src/db/<entité>.ts` (ex. `src/db/events.ts`, que #17 crée) | chaque fonction reçoit `db: Kysely<Database>` en paramètre, pour qu'un test lui passe sa transaction ; aucune règle métier |
+| erreur de base | `src/db/failure.ts` | `databaseFailure` journalise un message fixe et le seul code de l'erreur (SQLSTATE, ou errno d'une erreur système), jamais son message, sa requête ni ses valeurs, et renvoie à lever une erreur qui ne porte que ce message ; une server action s'en sert quand la base échoue |
 | migrations | `src/db/migrations/`, listées dans `src/db/migrations/index.ts` | seul endroit où `sql.raw` est permis, mais pas dans leurs tests |
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
@@ -230,7 +233,7 @@ n'appelle **jamais `redirect()` vers une URL qui contient un jeton** : la redire
 passerait par un en-tête de réponse (`Location`, ou `x-action-redirect` pour une action
 appelée en JavaScript), et aucun en-tête de réponse ne porte de jeton (#3, C1.5 et C4.8).
 Le jeton revient dans le corps de la réponse, et c'est le client qui navigue vers
-`…#{jeton}`.
+`…#{token}`.
 
 ## Règles d'exécution
 

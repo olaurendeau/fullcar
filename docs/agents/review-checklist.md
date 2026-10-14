@@ -76,6 +76,9 @@ celui qui écrit le code.
   `export { sql } from "kysely"`), et aucun espace de noms Kysely n'est obtenu par
   affectation après coup ou par `.then` sur `import("kysely")` : le lint ne suit pas ces
   chemins.
+- `sql` n'est pas renommé avec une valeur par défaut en déstructurant `import("kysely")`
+  (`const { sql: q = … } = await import("kysely")`) : le lint refuse le renommage simple,
+  mais laisse passer celui-ci.
 
 ## Emplacement du code et exécution
 
