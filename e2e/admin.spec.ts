@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
 import { expect, test } from "./fixtures";
 
@@ -295,16 +295,24 @@ test.describe("organiser's link, not valid", () => {
     expect(await page.evaluate(() => "sameDocument" in window)).toBe(true);
   });
 
-  test("when the check fails, says so instead of calling the link invalid", async ({ page, seededEvent }) => {
-    await page.route(`**/e/${seededEvent.id}/admin`, (route) =>
-      route.request().method() === "POST" ? route.abort() : route.continue(),
-    );
-    await page.goto(adminPath(seededEvent));
-    await expect(alert(page)).toContainText(FR.checkFailed);
-    await expect(page.getByText(FR.invalid)).toHaveCount(0);
-    await expect(panel(page)).toHaveCount(0);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
-  });
+  for (const [what, fail] of [
+    ["the request fails", (route: Route) => route.abort()],
+    ["the server answers 500", (route: Route) => route.fulfill({ status: 500, body: "Internal Server Error" })],
+  ] as const) {
+    test(`when ${what}, says the check failed instead of calling the link invalid`, async ({
+      page,
+      seededEvent,
+    }) => {
+      await page.route(`**/e/${seededEvent.id}/admin`, (route) =>
+        route.request().method() === "POST" ? fail(route) : route.continue(),
+      );
+      await page.goto(adminPath(seededEvent));
+      await expect(alert(page)).toContainText(FR.checkFailed);
+      await expect(page.getByText(FR.invalid)).toHaveCount(0);
+      await expect(panel(page)).toHaveCount(0);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
+    });
+  }
 });
 
 test.describe("organiser's link of an unknown event", () => {
@@ -315,9 +323,10 @@ test.describe("organiser's link of an unknown event", () => {
       // From another document: a change of fragment alone would not load the page.
       await page.goto("about:blank");
       const response = await page.goto(path);
+      // The title is streamed after the page's content: waited for, not read at once.
+      await expect(page, path).toHaveTitle("Événement introuvable");
       return {
         status: response?.status(),
-        title: await page.title(),
         text: await page.locator("main").innerText(),
       };
     };

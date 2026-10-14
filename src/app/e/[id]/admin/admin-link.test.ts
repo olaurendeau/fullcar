@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { goToAdminLink, organiserLinks, tokenInFragment } from "./admin-link";
+import { checkFromAnswer, goToAdminLink, organiserLinks, tokenInFragment } from "./admin-link";
 
 const TOKEN = "q3Vx9kLmN2pR7sT1uW4yZa";
 
@@ -22,6 +22,34 @@ describe("tokenInFragment", () => {
     ["an empty fragment", "#"],
   ])("gives nothing for %s", (_, hash) => {
     expect(tokenInFragment(hash)).toBeUndefined();
+  });
+});
+
+describe("checkFromAnswer", () => {
+  // C4.9: the panel only on the server's `true`.
+  it("shows the panel when the server answers true", () => {
+    expect(checkFromAnswer(true, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toEqual({
+      state: "valid",
+      ...organiserLinks("https://fullcar.example", "Ab3dEf7h", TOKEN),
+    });
+  });
+
+  // C6.5: "not valid" only on the server's `false`.
+  it("calls the link invalid when the server answers false", () => {
+    expect(checkFromAnswer(false, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toEqual({ state: "invalid" });
+  });
+
+  // A good link must never read "not valid": Next resolves an action with undefined on
+  // an `x-action-redirect` response, for one.
+  it.each([
+    ["undefined", undefined],
+    ["null", null],
+    ["the string true", "true"],
+    ["the string false", "false"],
+    ["0", 0],
+    ["an object", { ok: true }],
+  ])("says the check failed when the server answers %s", (_, answer) => {
+    expect(checkFromAnswer(answer, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toEqual({ state: "failed" });
   });
 });
 

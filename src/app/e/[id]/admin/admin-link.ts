@@ -33,6 +33,17 @@ export type AdminLinkCheck =
   | { state: "failed" };
 
 /**
+ * What the server's answer means: `true` the panel (C4.9), `false` "not valid" (C6.5).
+ * Anything else, such as the `undefined` Next resolves an action with on an
+ * `x-action-redirect` response, is a failed check: a good link never reads "not valid".
+ */
+export function checkFromAnswer(answer: unknown, origin: string, id: string, token: string): AdminLinkCheck {
+  if (answer === true && token) return { state: "valid", ...organiserLinks(origin, id, token) };
+  if (answer === false) return { state: "invalid" };
+  return { state: "failed" };
+}
+
+/**
  * Whether the page's fragment holds the organiser's token of event `id`, as the server
  * answers (C4.9). Checked again when only the fragment changes, which does not reload the
  * page: pasting the right link over a wrong one. A failed check is not an invalid link.
@@ -47,9 +58,8 @@ export function useAdminLinkCheck(id: string): AdminLinkCheck {
       const token = tokenInFragment(window.location.hash);
       const valid = token ? checkAdminLink(id, token) : Promise.resolve(false);
       valid.then(
-        (ok) => {
-          if (run !== latest) return;
-          setCheck(ok && token ? { state: "valid", ...organiserLinks(window.location.origin, id, token) } : { state: "invalid" });
+        (answer) => {
+          if (run === latest) setCheck(checkFromAnswer(answer, window.location.origin, id, token ?? ""));
         },
         () => {
           if (run === latest) setCheck({ state: "failed" });
