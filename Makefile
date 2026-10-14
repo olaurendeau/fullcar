@@ -20,8 +20,12 @@ node_modules: package.json package-lock.json
 
 install: node_modules ## Installs dependencies (in the container)
 
-check: node_modules ## Everything the CI runs: lint, typecheck, i18n keys, tests, production build
+check: node_modules ## Lint, typecheck, i18n keys, tests, production build
 	$(RUN) web npm run check
+
+# Sequential, not prerequisites: `make -j ci` must not start e2e before check has passed.
+ci: ## Exactly what the CI runs: check, then the end-to-end tests
+	$(MAKE) check SLOT=$(SLOT) && $(MAKE) e2e SLOT=$(SLOT)
 
 # The schema is in place before the app serves, as on Vercel: a failed migration stops `up`.
 up: migrate ## Starts the slot's database, migrates it, starts the app and waits until it answers
@@ -54,4 +58,4 @@ npm: ## Runs npm in the container, e.g. make npm ARGS="install zod"
 	fi
 	$(NO_DEPS) npm $(ARGS)
 
-.PHONY: help install check up down migrate e2e shot logs npm
+.PHONY: help install check ci up down migrate e2e shot logs npm

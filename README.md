@@ -33,8 +33,9 @@ Il suffit de Docker et de `make` :
 
 ```bash
 make up      # app sur http://localhost:3000, avec sa base Postgres
-make check   # lint, typecheck, clés i18n, tests, build : ce que la CI exécute
+make check   # lint, typecheck, clés i18n, tests, build
 make e2e     # tests de bout en bout (Playwright, 360 px)
+make ci      # make check puis make e2e : ce que la CI exécute
 make down    # arrête tout et efface les données locales
 make help    # le reste
 ```
