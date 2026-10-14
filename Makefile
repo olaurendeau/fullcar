@@ -24,12 +24,13 @@ check: node_modules ## Lint, typecheck, i18n keys, tests, production build
 	$(RUN) web npm run check
 
 # Sequential, not prerequisites: `make -j ci` must not start e2e before check has passed.
+# `check` ends with `next build` of this very tree: e2e serves that build instead of making it twice.
 ci: ## Exactly what the CI runs: check, then the end-to-end tests
-	$(MAKE) check SLOT=$(SLOT) && $(MAKE) e2e SLOT=$(SLOT)
+	$(MAKE) check SLOT=$(SLOT) && $(MAKE) e2e-built SLOT=$(SLOT)
 
 # The schema is in place before the app serves, as on Vercel: a failed migration stops `up`.
-up: migrate ## Starts the slot's database, migrates it, starts the app and waits until it answers
-	$(COMPOSE) up -d --wait web
+up: migrate ## Starts the slot's database, migrates it, starts the dev server and waits until it answers
+	WEB_SCRIPT=dev $(COMPOSE) up -d --wait web
 	@echo "http://localhost:30$(SLOT)0"
 
 down: ## Stops the slot and deletes its data
@@ -39,7 +40,16 @@ migrate: node_modules ## Starts the slot's database, waits until it is ready, ap
 	$(COMPOSE) up -d --wait db
 	$(NO_DEPS) npm run db:migrate
 
-e2e: up ## Runs the end-to-end tests against the slot's app
+# Against what Vercel serves, not the dev server: a production build, then `next start`.
+e2e: node_modules ## Builds for production, then runs the end-to-end tests against `next start`
+	$(NO_DEPS) npm run build
+	$(MAKE) e2e-built SLOT=$(SLOT)
+
+# Serves the production build already in .next, so only right after building this tree (e2e, ci).
+# `next dev` writes to .next/dev, never .next/BUILD_ID: without a build, `next start` refuses to start.
+# Recreated every time, so that a `next start` left from an older build cannot keep serving it.
+e2e-built: migrate
+	WEB_SCRIPT=start $(COMPOSE) up -d --wait --force-recreate --no-deps web
 	$(RUN) e2e npx playwright test --project=e2e $(ARGS)
 
 shot: up ## Takes screenshots at WIDTH px (default 360) into var/shots
@@ -58,4 +68,4 @@ npm: ## Runs npm in the container, e.g. make npm ARGS="install zod"
 	fi
 	$(NO_DEPS) npm $(ARGS)
 
-.PHONY: help install check ci up down migrate e2e shot logs npm
+.PHONY: help install check ci up down migrate e2e e2e-built shot logs npm
