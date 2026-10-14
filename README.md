@@ -35,7 +35,7 @@ Il suffit de Docker et de `make` :
 make up      # serveur de dev sur http://localhost:3000, avec sa base Postgres
 make check   # lint, typecheck, clés i18n, tests, build
 make e2e     # tests de bout en bout (Playwright, 360 px) contre le build de production
-make ci      # make check puis make e2e : ce que la CI exécute
+make ci      # make check, puis les tests de bout en bout sur son build (un seul build) : ce que la CI exécute
 make down    # arrête tout et efface les données locales
 make help    # le reste
 ```

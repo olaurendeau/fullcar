@@ -220,8 +220,8 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 |---|---|---|
 | domaine | `src/domain/` | fonctions pures : n'importe ni `kysely`, ni `pg`, ni `next`, ni `react`, ni `react-dom` (ni leurs sous-chemins), ni `src/db`, par `@/db` ou par un chemin relatif, en `import` comme en `import()` ; le lint l'impose (`eslint.config.mjs`, #28 et #39) |
 | socle des données | `src/db/client.ts`, `src/db/schema.ts`, `src/db/migrator.ts` | `getDb()` est la connexion de l'application, appelée par une page, une action ou une route, qui la passe aux fonctions d'accès aux données ; `schema.ts` grandit avec chaque migration |
-| accès aux données | `src/db/<entité>.ts` (ex. `src/db/events.ts`, que #17 crée) | chaque fonction reçoit `db: Kysely<Database>` en paramètre, pour qu'un test lui passe sa transaction ; aucune règle métier |
-| erreur de base | `src/db/failure.ts` | `databaseFailure` journalise un message fixe et le seul code de l'erreur (SQLSTATE, ou errno d'une erreur système), jamais son message, sa requête ni ses valeurs, et renvoie à lever une erreur qui ne porte que ce message ; une server action s'en sert quand la base échoue |
+| accès aux données | `src/db/<entité>.ts` (ex. `src/db/events.ts`) | chaque fonction reçoit `db: Kysely<Database>` en paramètre, pour qu'un test lui passe sa transaction ; aucune règle métier |
+| erreur de base | `src/db/failure.ts` | `databaseFailure` journalise un message fixe et le seul code de l'erreur (SQLSTATE, ou errno d'une erreur système), jamais son message, sa requête ni ses valeurs, et renvoie l'erreur à lever, qui ne porte que ce message ; une server action s'en sert quand la base échoue |
 | migrations | `src/db/migrations/`, listées dans `src/db/migrations/index.ts` | seul endroit où `sql.raw` est permis, mais pas dans leurs tests |
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
