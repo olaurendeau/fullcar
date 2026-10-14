@@ -11,6 +11,9 @@ export default getRequestConfig(async () => {
 
   return {
     locale,
+    // Event times are wall-clock times, shown through `wallClockAsUtc`: formatted in UTC,
+    // 07:30 reads 07:30 whatever the server's or the browser's time zone (#3, C1.12).
+    timeZone: "UTC",
     messages: (await import(`../../messages/${locale}.json`)).default,
   };
 });

@@ -2,6 +2,7 @@ import { test as base } from "@playwright/test";
 import type { Kysely } from "kysely";
 import { createDb } from "@/db/client";
 import type { Database } from "@/db/schema";
+import type { NewEvent } from "@/domain/event";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 
 export { expect } from "@playwright/test";
@@ -31,9 +32,14 @@ export function e2eDatabaseUrl(url: string | undefined): string {
  * `seededEvent`: an event of the test's own, stored before it starts and deleted after it
  * (its rows go with it, by ON DELETE CASCADE). The test reaches it by `/e/{id}`, and by
  * its organiser's `token`.
+ * `eventFields`: what the seeded event changes from the seed, set by `test.use()`.
  * Playwright's `use` is named `provide` here: the React hooks lint rule takes `use` for a hook.
  */
-export const test = base.extend<{ seededEvent: SeededEvent }, { db: Kysely<Database> }>({
+export const test = base.extend<
+  { eventFields: Partial<NewEvent>; seededEvent: SeededEvent },
+  { db: Kysely<Database> }
+>({
+  eventFields: [{}, { option: true }],
   db: [
     async ({}, provide) => {
       const db = createDb(e2eDatabaseUrl(process.env.DATABASE_URL));
@@ -42,8 +48,8 @@ export const test = base.extend<{ seededEvent: SeededEvent }, { db: Kysely<Datab
     },
     { scope: "worker" },
   ],
-  seededEvent: async ({ db }, provide) => {
-    const event = await seedEvent(db);
+  seededEvent: async ({ db, eventFields }, provide) => {
+    const event = await seedEvent(db, eventFields);
     await provide(event);
     await db.deleteFrom("event").where("id", "=", event.id).execute();
   },
