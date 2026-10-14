@@ -3,6 +3,12 @@ import { defineConfig, devices } from "@playwright/test";
 // Runs in the `e2e` container against the slot's app (see compose.yaml and the Makefile).
 const baseURL = process.env.BASE_URL ?? "http://localhost:3000";
 const width = Number(process.env.SHOT_WIDTH ?? 360);
+// http://web:3000 is not a secure context: without this, the clipboard API does not exist.
+// The headless shell, Playwright's default, ignores the flag: the full Chromium honours it.
+const secureOrigin = {
+  channel: "chromium",
+  args: [`--unsafely-treat-insecure-origin-as-secure=${new URL(baseURL).origin}`],
+};
 
 export default defineConfig({
   testDir: "./e2e",
@@ -15,7 +21,7 @@ export default defineConfig({
       name: "e2e",
       testIgnore: /\.shot\.ts$/,
       // 360 px is the reference width, not an edge case.
-      use: { ...devices["Pixel 7"], viewport: { width: 360, height: 780 } },
+      use: { ...devices["Pixel 7"], viewport: { width: 360, height: 780 }, launchOptions: secureOrigin },
     },
     {
       name: "shot",
