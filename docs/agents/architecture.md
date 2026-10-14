@@ -106,8 +106,10 @@ configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
   route finirait par exister en production.
 - **Chaque test possède son événement** : il le crée, et ne lit ni ne modifie celui d'un
   autre test. Les tests restent indépendants et peuvent tourner en parallèle.
-
-L'accès du conteneur Playwright à la base du slot et la fixture d'amorçage arrivent avec #20.
+- Le conteneur Playwright atteint la base `fullcar` du slot, à l'hôte `db` (#20). Un test
+  importe `test` et `expect` de `e2e/fixtures.ts` : la fixture `seededEvent` y crée son
+  événement avant le test et le supprime après, et `e2eDatabaseUrl` refuse toute autre base
+  et tout autre hôte avant de se connecter.
 
 ### Production
 
