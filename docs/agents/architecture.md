@@ -47,9 +47,9 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 Le dépôt est monté dans le conteneur, `node_modules` compris : installés par le conteneur
 Linux, ils restent lisibles par l'éditeur de l'hôte pour les types.
 
-La CI exécute le même `make ci`, avec un slot explicite : ce qui passe en local passe en CI. La variable `CI` est
-transmise aux conteneurs : en CI, Vitest et Playwright refusent un `.only`, que le lint
-refuse déjà partout.
+La CI exécute le même `make ci`, avec un slot explicite (`make ci SLOT=0`) : ce qui passe
+en local passe en CI. La variable `CI` est transmise aux conteneurs : en CI, Vitest et
+Playwright refusent un `.only`, que le lint refuse déjà partout.
 
 Le service Node s'appelle `web`, pas `app` : Chromium précharge HSTS pour tout le TLD `.app`
 et force alors HTTPS sur `http://app:3000`, ce qui casse les tests de bout en bout.
@@ -67,7 +67,8 @@ ce conteneur, la base `fullcar` sert au serveur de dev et aux tests de bout en b
 `make up` lance le serveur de dev (`next dev`). Les tests de bout en bout, eux, tournent
 contre le build de production (`next build` puis `next start`) : c'est ce build qui part
 sur Vercel, et le serveur de dev ne se comporte pas comme lui (compilation à la demande,
-rendu, cache).
+rendu, cache). #11 met cette règle en place : d'ici là, `make e2e` tourne contre le
+serveur de dev que démarre `make up`.
 
 **Un worktree git par slot** : chaque développeur travaille dans son propre worktree, avec
 son slot. Deux slots dans le même répertoire partageraient `node_modules`, `.next` et les
@@ -78,25 +79,31 @@ fichiers en cours d'écriture.
 Vitest utilise **deux bases**, jamais `fullcar`, que le serveur de dev et les tests de bout
 en bout utilisent :
 
-- `fullcar_test`, pour les tests de données, dont l'URL vient de `TEST_DATABASE_URL`. Un
-  `globalSetup` remet son schéma à zéro et la migre **une seule fois** par lancement ;
-  aucun test ne migre ni ne vide la base lui-même. Un test qui écrit en base s'isole avec
-  `withRollback` : il reçoit une transaction, qui est annulée à la fin. Aucune donnée ne
-  survit d'un test à l'autre, et l'ordre des tests ne compte pas.
-- `fullcar_migrations_test`, pour le seul test d'aller-retour des migrations (montée,
-  descente, remontée) : il ne touche pas `fullcar_test`, que les autres tests lisent en
-  même temps.
+- `fullcar_test`, pour les tests de données, dont l'URL vient de `TEST_DATABASE_URL`.
+  `vitest.config.ts` y fait pointer `DATABASE_URL`, si bien que `getDb()` n'atteint
+  qu'elle, et refuse de se connecter si `TEST_DATABASE_URL` manque. Le `globalSetup`
+  (`src/db/test-setup.ts`) remet son schéma à zéro et la migre **une seule fois** par
+  lancement ; aucun test ne migre ni ne vide la base lui-même. Un test qui écrit en base
+  s'isole avec `withRollback` (`src/db/test-db.ts`) : il reçoit une transaction, qui est
+  annulée à la fin, et la passe au code testé au lieu que celui-ci appelle `getDb()`.
+  Aucune donnée ne survit d'un test à l'autre, et l'ordre des tests ne compte pas.
+- `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
+  seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
+  remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la
+  crée si le volume du slot est plus ancien qu'elle) ; le test ne touche pas
+  `fullcar_test`, que les autres tests lisent en même temps.
 
 La mise en place des tests **refuse de remettre à zéro toute autre base** que ces deux-là :
-une URL mal configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
-
-Ces règles sont mises en place par #5.
+`resetSchema` compare `current_database()` au nom attendu avant de vider quoi que ce
+soit, et le test des migrations vérifie le nom de sa base avant de commencer. Une URL mal
+configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
 
 ### Données des tests de bout en bout
 
 - Un test Playwright amorce ses données **directement dans la base du slot**, par une
-  fixture qui appelle les fonctions de `src/db/` (par exemple `seedEvent`). Jamais par une
-  route HTTP réservée aux tests : une telle route finirait par exister en production.
+  fixture qui appelle les fonctions de `src/db/` (par exemple `seedEvent`, que #17 ajoute
+  dans `src/db/test-events.ts`). Jamais par une route HTTP réservée aux tests : une telle
+  route finirait par exister en production.
 - **Chaque test possède son événement** : il le crée, et ne lit ni ne modifie celui d'un
   autre test. Les tests restent indépendants et peuvent tourner en parallèle.
 
@@ -206,11 +213,12 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 
 | quoi | où | règle |
 |---|---|---|
-| domaine | `src/domain/` | fonctions pures : n'importe ni `kysely`, ni `pg`, ni `next`, ni `react`, ni `react-dom` (ni leurs sous-chemins), ni `src/db`, par `@/db` ou par un chemin relatif ; le lint l'impose (#9, `eslint.config.mjs`) |
-| accès aux données | `src/db/<entité>.ts` (ex. `src/db/events.ts`) | chaque fonction reçoit `db: Kysely<Database>` en paramètre, pour qu'un test lui passe sa transaction ; aucune règle métier |
-| migrations | `src/db/migrations/` | seul endroit où `sql.raw` est permis |
+| domaine | `src/domain/` | fonctions pures : n'importe ni `kysely`, ni `pg`, ni `next`, ni `react`, ni `react-dom` (ni leurs sous-chemins), ni `src/db`, par `@/db` ou par un chemin relatif, en `import` comme en `import()` ; le lint l'impose (`eslint.config.mjs`, #28 et #39) |
+| socle des données | `src/db/client.ts`, `src/db/schema.ts`, `src/db/migrator.ts` | `getDb()` est la connexion de l'application, appelée par une page, une action ou une route, qui la passe aux fonctions d'accès aux données ; `schema.ts` grandit avec chaque migration |
+| accès aux données | `src/db/<entité>.ts` (ex. `src/db/events.ts`, que #17 crée) | chaque fonction reçoit `db: Kysely<Database>` en paramètre, pour qu'un test lui passe sa transaction ; aucune règle métier |
+| migrations | `src/db/migrations/`, listées dans `src/db/migrations/index.ts` | seul endroit où `sql.raw` est permis, mais pas dans leurs tests |
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
-| composants | `src/components/<domaine>/` (ex. `src/components/event/`) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif |
+| composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 
 Une server action renvoie des **données simples** (sérialisables) et des **clés d'erreur**
@@ -228,11 +236,13 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   ensuite ne peut plus changer le statut. Sous `/e/[id]`, la page attend sa lecture en base
   et répond un vrai 404.
 - **Heures sans fuseau.** Une heure d'événement est l'heure locale du lieu : elle est stockée
-  en `timestamp without time zone` et relue comme **chaîne brute** (`2026-12-12 07:30:00`),
-  jamais convertie en `Date` dans le fuseau du serveur ou du navigateur. Pour l'affichage,
-  next-intl est configuré avec `timeZone: "UTC"`, et l'heure est mise en forme comme une
-  heure UTC : 07:30 s'affiche 07:30 à Paris comme à New York. La lecture en chaîne arrive
-  avec #7 (aujourd'hui, `pg` renvoie une `Date`), et `timeZone: "UTC"` avec #21.
+  en `timestamp(0)` (sans fuseau) et relue comme **chaîne brute** (`2026-12-12 07:30:00`),
+  jamais convertie en `Date` dans le fuseau du serveur ou du navigateur. `src/db/client.ts`
+  le garantit : chaque pool garde `date` et `timestamp`, et leurs tableaux, en chaînes, sans
+  toucher aux `pg.types` globaux ; `src/domain/wall-clock.ts` les manipule en chaînes. Pour
+  l'affichage, `wallClockAsUtc` en fait l'instant UTC qui porte les mêmes chiffres,
+  next-intl est configuré avec `timeZone: "UTC"`, et 07:30 s'affiche 07:30 à Paris comme à
+  New York. `timeZone: "UTC"` arrive dans `src/i18n/request.ts` avec #21.
 
 ## Contraintes permanentes
 
