@@ -7,8 +7,9 @@ import { describe, expect, it } from "vitest";
 type Pattern = { regex: string; file?: string; exclude?: string[] };
 const profile = JSON.parse(
   readFileSync(new URL("../.claude/workflow.json", import.meta.url), "utf8"),
-) as { merge: { sensitive_patterns: Pattern[] } };
+) as { merge: { sensitive_paths: string[]; sensitive_patterns: Pattern[] } };
 const all = profile.merge.sensitive_patterns;
+const paths = profile.merge.sensitive_paths;
 
 // A leading `(?i)` is Perl's inline flag; JavaScript takes it as the `i` flag instead.
 const compile = (regex: string) =>
@@ -60,6 +61,9 @@ const appliesTo = (p: Pattern, path: string) =>
 /** Whether a line added to `path` sends the merge to the human. */
 const isSensitive = (line: string, path = "src/x.ts") =>
   all.some((p) => appliesTo(p, path) && compile(p.regex).test(line));
+
+/** Whether touching `path` at all sends the merge to the human. */
+const isSensitivePath = (path: string) => paths.some((glob) => globMatches(glob, path));
 
 const patternWith = (alternative: string) => {
   const found = all.find((p) => p.regex.includes(alternative));
@@ -291,5 +295,92 @@ describe("sensitive patterns: disabled or focused tests", () => {
     "test.slow();",
   ])("ignores %s", (line) => {
     for (const path of testFiles) expect(isSensitive(line, path)).toBe(false);
+  });
+});
+
+// Who sees a phone number is decided in two files, both sensitive paths: the visibility rule
+// and the one query that reads the column. A pattern catches a new read of the column
+// anywhere else; naming a phone (a form, a message, a test, a validation) is not a read.
+describe("sensitive patterns: phone numbers", () => {
+  it.each(["src/domain/phone-visibility.ts", "src/db/event-rows.ts"])(
+    "sends any change to %s to the human",
+    (path) => {
+      expect(isSensitivePath(path)).toBe(true);
+    },
+  );
+
+  it.each([
+    "src/domain/person.ts",
+    "src/domain/phone-visibility.test.ts",
+    "src/db/event-rows.test.ts",
+    "src/db/persons.ts",
+    "src/components/event/person-form.tsx",
+    "messages/fr.json",
+    "e2e/participants.spec.ts",
+  ])("leaves %s to the gate's other rules", (path) => {
+    expect(isSensitivePath(path)).toBe(false);
+  });
+
+  it.each([
+    // Kysely, on one line or a list spread over several.
+    ['.select(["id", "first_name", "phone"])', "src/db/persons.ts"],
+    ['.select("person.phone")', "src/db/rides.ts"],
+    ['.select("phone as number")', "src/db/persons.ts"],
+    ['    "phone",', "src/db/persons.ts"],
+    ["    'person.phone',", "src/db/rides.ts"],
+    ['.select((eb) => eb.ref("phone").as("number"))', "src/db/persons.ts"],
+    ['eb.ref("person.phone"),', "src/db/rides.ts"],
+    ['export const PERSON_COLUMNS = ["id", "first_name", "phone"] as const;', "src/db/persons.ts"],
+    ['.returning(["id", "phone"])', "src/db/persons.ts"],
+    // A query written in a use case or a script instead of src/db.
+    ['.select(["first_name", "phone"])', "src/app/e/[id]/event-state.ts"],
+    ['.select("person.phone")', "src/app/e/[id]/persons.ts"],
+    ['const rows = await db.selectFrom("person").select("phone").execute();', "scripts/export.ts"],
+    // Every column, phone included: the table is often on another line than the call.
+    [".selectAll()", "src/db/persons.ts"],
+    ['.selectAll("person")', "src/db/rides.ts"],
+    [".returningAll()", "src/db/persons.ts"],
+    ['return db.selectFrom("person").selectAll().where("id", "=", id).executeTakeFirst();', "src/app/e/[id]/persons.ts"],
+    // Raw SQL naming the column, every column, or the table itself.
+    ["select id, first_name, phone", "src/db/persons.ts"],
+    ["SELECT p.phone FROM person p", "src/app/e/[id]/event-state.ts"],
+    ["sql`select * from person where event_id = ${id}`", "src/db/persons.ts"],
+    ["  select p.*", "src/db/rides.ts"],
+    ["  returning *", "src/db/persons.ts"],
+    ["  from person p", "src/db/rides.ts"],
+    ['  join "person" on person.id = ride.driver_id', "src/db/rides.ts"],
+    ["  FROM public.person", "scripts/export.ts"],
+  ])("flags %s in %s", (line, path) => {
+    expect(isSensitive(line, path)).toBe(true);
+  });
+
+  it.each([
+    // A form and its labels.
+    ['<Input id="phone" name="phone" type="tel" autoComplete="tel" />', "src/components/event/person-form.tsx"],
+    ['<Label htmlFor="phone">{t("phone")}</Label>', "src/components/event/person-form.tsx"],
+    ['<Select name="phoneCountry" defaultValue="FR">', "src/components/event/person-form.tsx"],
+    ["{person.phone && <a href={`tel:${person.phone}`}>{person.phone}</a>}", "src/components/event/ride-card.tsx"],
+    // The messages, in both languages.
+    ['  "phone": "Téléphone (facultatif)",', "messages/fr.json"],
+    ['  "phoneHint": "Tap a seat, then select a car to see the driver’s phone.",', "messages/en.json"],
+    // Tests, end to end and unit, even when they read the column to assert on it.
+    ['await page.fill(\'input[name="phone"]\', "06 12 34 56 78");', "e2e/participants.spec.ts"],
+    ['const row = await db.selectFrom("person").select("phone").executeTakeFirstOrThrow();', "e2e/participants.spec.ts"],
+    ['.select(["id", "phone"])', "src/db/persons.test.ts"],
+    [".selectAll()", "src/app/e/[id]/event-state.test.ts"],
+    ['expect(screen.getByRole("link", { name: "06 12 34 56 78" })).toHaveAttribute("href", "tel:0612345678");', "src/components/event/ride-card.test.tsx"],
+    // The domain validates a number, it never reads one.
+    ["const PHONE = /^[0-9 +.()-]{1,25}$/;", "src/domain/person.ts"],
+    ['if (phone !== undefined && !PHONE.test(phone)) errors.phone = "invalid";', "src/domain/person.ts"],
+    ["phone: text(fields.phone),", "src/domain/person.ts"],
+    // An action reads the form, the data layer writes and types the column.
+    ['phone: text("phone"),', "src/app/e/[id]/actions.ts"],
+    [".set({ first_name: person.firstName, phone: person.phone })", "src/db/persons.ts"],
+    ["phone: string | null;", "src/db/schema.ts"],
+    ['.returning("id")', "src/db/persons.ts"],
+    ['if (constraint === "person_phone_check") return error;', "src/db/failure.ts"],
+    ['import { validatePerson } from "@/domain/person";', "src/db/persons.ts"],
+  ])("ignores %s in %s", (line, path) => {
+    expect(isSensitive(line, path)).toBe(false);
   });
 });
