@@ -31,15 +31,21 @@ function checkSeeded(token: (seeded: string) => unknown, id: (seeded: string) =>
   );
 }
 
-/** A database whose every use fails, with what a Postgres error carries. */
+/** A database whose every use fails, with what a Postgres error carries: `values` among it. */
 const POSTGRES_DETAIL = "Failing row contains (Ab3dEf7h, secret title)";
 let reads = 0;
-const failingDb = new Proxy({} as Kysely<Database>, {
-  get() {
-    reads++;
-    throw Object.assign(new Error(`relation "event": ${POSTGRES_DETAIL}`), { detail: POSTGRES_DETAIL });
-  },
-});
+function failingDb(...values: string[]): Kysely<Database> {
+  return new Proxy({} as Kysely<Database>, {
+    get() {
+      reads++;
+      throw Object.assign(new Error(`relation "event": ${POSTGRES_DETAIL} ${values.join(" ")}`), {
+        code: "08006",
+        detail: POSTGRES_DETAIL,
+        parameters: values,
+      });
+    },
+  });
+}
 
 function oneCharOff(token: string): string {
   const last = token.at(-1) === "A" ? "B" : "A";
@@ -58,9 +64,20 @@ describe("checkAdminLink", () => {
       ["a token one character off", oneCharOff],
       ["a token one character short", (token: string) => token.slice(0, -1)],
       ["a token one character longer", (token: string) => `${token}A`],
-      ["the token in another case", (token: string) => token.toUpperCase()],
     ])("refuses %s", async (_, token) => {
       expect(await checkSeeded(token)).toBe(false);
+    });
+
+    it("refuses the token in another case", async () => {
+      // Its first character is a lowercase letter, so that upper-casing it always changes it.
+      const token = `a${newAdminToken().slice(1)}`;
+      const checks = await withRollback((trx) =>
+        using(trx, async () => {
+          const { id } = await seedEvent(trx, {}, token);
+          return [await checkAdminLink(id, token), await checkAdminLink(id, token.toUpperCase())];
+        }),
+      );
+      expect(checks).toEqual([true, false]);
     });
 
     it("refuses the token of another event", async () => {
@@ -104,27 +121,34 @@ describe("checkAdminLink", () => {
     ["missing", undefined],
   ])("refuses an id %s without reading the database", async (_, id) => {
     reads = 0;
-    expect(await using(failingDb, () => checkAdminLink(id, newAdminToken()))).toBe(false);
+    expect(await using(failingDb(), () =>checkAdminLink(id, newAdminToken()))).toBe(false);
     expect(reads).toBe(0);
   });
 
   it("fails with a generic error, carrying neither the database's detail nor the token", async () => {
     const token = newAdminToken();
-    const failure = await using(failingDb, () => checkAdminLink("Ab3dEf7h", token)).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    expect(failure).toBeInstanceOf(Error);
-    const { message, stack, cause } = failure as Error;
-    for (const text of [message, stack, JSON.stringify(failure)]) {
-      expect(text).not.toContain(POSTGRES_DETAIL);
-      expect(text).not.toContain(token);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await using(failingDb(token), () => checkAdminLink("Ab3dEf7h", token)).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack, JSON.stringify(failure)]) {
+        expect(text).not.toContain(POSTGRES_DETAIL);
+        expect(text).not.toContain(token);
+      }
+      expect(cause).toBeUndefined();
+      // The SQLSTATE alone: never the token, whole or truncated, nor the database's detail.
+      expect(log.mock.calls).toEqual([["checkAdminLink: the event could not be read (SQLSTATE 08006)"]]);
+    } finally {
+      log.mockRestore();
     }
-    expect(cause).toBeUndefined();
   });
 
   // C6.6: `next dev` prints each Server Function call with its arguments, the token among them.
-  it("is not logged with its arguments by the dev server", () => {
+  it("sets logging.serverFunctions to false in the Next config", () => {
     expect(nextConfig.logging).toMatchObject({ serverFunctions: false });
   });
 });

@@ -2,6 +2,7 @@
 
 import { getDb } from "@/db/client";
 import { insertEvent } from "@/db/events";
+import { databaseFailure } from "@/db/failure";
 import { hashAdminToken, newAdminToken } from "@/domain/admin-token";
 import { serverBounds, validateEvent, type EventErrors, type EventFields } from "@/domain/event";
 
@@ -42,9 +43,9 @@ export async function createEvent(fields: unknown): Promise<CreateEventResult> {
   let id: string;
   try {
     id = await insertEvent(getDb(), validation.event, hashAdminToken(token));
-  } catch {
-    // A Postgres error may carry the row: none of it goes into the error, nor its cause.
-    throw new Error("createEvent: the event could not be stored");
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure("createEvent: the event could not be stored", error);
   }
   return { ok: true, id, token };
 }

@@ -20,9 +20,15 @@ export interface SeededEvent {
   token: string;
 }
 
-/** Stores an event, aller and retour without options unless `fields` says otherwise. */
-export async function seedEvent(db: Kysely<Database>, fields: Partial<NewEvent> = {}): Promise<SeededEvent> {
-  const token = newAdminToken();
+/**
+ * Stores an event, aller and retour without options unless `fields` says otherwise,
+ * with a new token unless the test needs a given one.
+ */
+export async function seedEvent(
+  db: Kysely<Database>,
+  fields: Partial<NewEvent> = {},
+  token: string = newAdminToken(),
+): Promise<SeededEvent> {
   const id = await insertEvent(db, { ...SEED, ...fields }, hashAdminToken(token));
   return { id, token };
 }

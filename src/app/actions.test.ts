@@ -30,7 +30,7 @@ function inTransaction<T>(fn: (trx: Transaction<Database>) => Promise<T>): Promi
 const POSTGRES_DETAIL = 'Failing row contains (Ab3dEf7h, secret title)';
 const failingDb = new Proxy({} as Kysely<Database>, {
   get() {
-    throw Object.assign(new Error(`relation "event": ${POSTGRES_DETAIL}`), { detail: POSTGRES_DETAIL });
+    throw Object.assign(new Error(`relation "event": ${POSTGRES_DETAIL}`), { code: "23505", detail: POSTGRES_DETAIL });
   },
 });
 
@@ -218,17 +218,23 @@ describe("createEvent", () => {
 
   it("fails with a generic error, without the database's detail, when the database fails", async () => {
     connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const failure = await createEvent(valid).then(
         () => undefined,
         (error: unknown) => error,
       );
       expect(failure).toBeInstanceOf(Error);
-      expect((failure as Error).message).not.toContain(POSTGRES_DETAIL);
-      expect((failure as Error).cause).toBeUndefined();
-      expect(JSON.stringify(failure)).not.toContain("secret");
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack]) {
+        expect(text).not.toContain("secret");
+      }
+      expect(cause).toBeUndefined();
+      // The SQLSTATE alone tells an outage from a broken constraint: nothing else is logged.
+      expect(log.mock.calls).toEqual([["createEvent: the event could not be stored (SQLSTATE 23505)"]]);
     } finally {
       connection.current = undefined;
+      log.mockRestore();
     }
   });
 });
