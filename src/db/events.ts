@@ -1,7 +1,7 @@
-import type { Kysely } from "kysely";
+import type { Kysely, Selectable } from "kysely";
 import type { NewEvent } from "@/domain/event";
 import { generatePublicId } from "@/domain/public-id";
-import type { Database } from "./schema";
+import type { Database, EventTable } from "./schema";
 
 /**
  * Ids drawn before giving up. With 57⁸ ids, even one collision is rare: several in a row
@@ -47,4 +47,26 @@ export async function insertEvent(
 export async function readAdminTokenHash(db: Kysely<Database>, id: string): Promise<string | undefined> {
   const row = await db.selectFrom("event").select("admin_token_hash").where("id", "=", id).executeTakeFirst();
   return row?.admin_token_hash.toString("hex");
+}
+
+/**
+ * What anyone holding the public link may read, listed one by one: a column added to the
+ * table stays private until it is added here. Never `admin_token_hash`.
+ */
+const PUBLIC_EVENT_COLUMNS = [
+  "id",
+  "title",
+  "location",
+  "aller_at",
+  "retour_at",
+  "boosters_enabled",
+  "participation_enabled",
+  "stops_enabled",
+] as const;
+
+export type PublicEvent = Pick<Selectable<EventTable>, (typeof PUBLIC_EVENT_COLUMNS)[number]>;
+
+/** The event's public fields; nothing for an unknown id. The id is compared as is: case counts. */
+export async function findEventById(db: Kysely<Database>, id: string): Promise<PublicEvent | undefined> {
+  return db.selectFrom("event").select(PUBLIC_EVENT_COLUMNS).where("id", "=", id).executeTakeFirst();
 }
