@@ -76,6 +76,11 @@ celui qui écrit le code.
   `export { sql } from "kysely"`), et aucun espace de noms Kysely n'est obtenu par
   affectation après coup ou par `.then` sur `import("kysely")` : le lint ne suit pas ces
   chemins.
+- `sql` n'est pas tiré de `import("kysely")` autrement que sous son nom : ni renommé avec
+  une valeur par défaut (`const { sql: q = … } = await import("kysely")`), ni déstructuré
+  jusqu'à `raw` (`const { sql: { raw } } = await import("kysely")`, puis `raw(input)`), ni
+  renommé par affectation (`({ sql: q } = await import("kysely"))`). Le lint refuse la
+  déclaration `const { sql: q } = await import("kysely")`, mais laisse passer ces trois-là.
 
 ## Emplacement du code et exécution
 

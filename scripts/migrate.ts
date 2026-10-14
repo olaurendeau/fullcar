@@ -3,7 +3,8 @@ import { createDb } from "../src/db/client";
 import { createMigrator } from "../src/db/migrator";
 import { planMigration, redactConnection } from "./migration-plan";
 
-// Never print the connection string, nor any part of it but the port: build logs are not ours to purge.
+// Never print the connection string, nor any part of it but the port and the values of the allowed
+// query keys (redactConnection): build logs are not ours to purge.
 const [argument = "latest"] = process.argv.slice(2);
 const plan = planMigration(argument, process.env);
 if (plan.action === "skip") {

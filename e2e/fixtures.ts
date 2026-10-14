@@ -8,7 +8,9 @@ import { seedEvent, type SeededEvent } from "@/db/test-events";
 export { expect } from "@playwright/test";
 
 /**
- * The only shape accepted, from end to end: `postgres://user:password@db[:port]/fullcar`.
+ * The only shape accepted, from end to end: `postgres[ql]://[credentials@]db[:port]/fullcar`,
+ * that is `postgres` or `postgresql`, optional credentials, host `db`, optional port,
+ * database `fullcar`, and nothing after.
  * pg takes a host, a port or a socket from more than the URL's host part (`?host=`,
  * `?port=`, `socket://`, a leading `/`, a `%2F` host): rather than list those, anything
  * else (a query string, a fragment, another host or scheme) is refused.
