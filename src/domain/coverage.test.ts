@@ -10,14 +10,19 @@ function placed(personId: string, rideId: string | null, leg: RideRow["leg"] = "
   return { personId, leg, rideId, placedAt: new Date(Date.UTC(2026, 9, 14)) };
 }
 
-/** Every id is also a person of the event. */
-function aller(rides: RideRow[], placements: PlacementRow[]) {
+/** Every id is also a person of the event; with `allOnDevice`, a person of the device too. */
+function aller(rides: RideRow[], placements: PlacementRow[], allOnDevice = false) {
   const ids = new Set([...rides.map((r) => r.driverId), ...placements.map((p) => p.personId)]);
   const data: BoardRows = { persons: [...ids].map((id) => ({ id, firstName: id })), rides, placements };
-  return legBoard("aller", data, new Set());
+  return legBoard("aller", data, allOnDevice ? ids : new Set());
 }
 
-describe("C9.5: coverage gives N, the persons without a car, and M, the free seats", () => {
+// Drivers and persons not concerned are in the device section (C2.2, C3.3): N must not
+// change whether the persons are the device's or not.
+describe.each([
+  { device: "seen from another device", allOnDevice: false },
+  { device: "with every person on this device", allOnDevice: true },
+])("C9.5: coverage gives N, the persons without a car, and M, the free seats, $device", ({ allOnDevice }) => {
   it.each([
     { name: "empty leg", rides: [], placements: [], withoutCar: 0, freeSeats: 0 },
     {
@@ -49,6 +54,20 @@ describe("C9.5: coverage gives N, the persons without a car, and M, the free sea
       freeSeats: 3,
     },
     {
+      name: "a driver's own Placement on the leg they drive does not count in N",
+      rides: [ride("r1", "marc", 3)],
+      placements: [placed("marc", null)],
+      withoutCar: 0,
+      freeSeats: 3,
+    },
+    {
+      name: "a car over its seats takes no free seat from the others",
+      rides: [ride("r1", "marc", 1), ride("r2", "ana", 3)],
+      placements: [placed("lea", "r1"), placed("tom", "r1")],
+      withoutCar: 0,
+      freeSeats: 3,
+    },
+    {
       name: "a person not concerned does not count in N",
       rides: [],
       placements: [placed("tom", null), placed("absent", null, "retour")],
@@ -56,7 +75,7 @@ describe("C9.5: coverage gives N, the persons without a car, and M, the free sea
       freeSeats: 0,
     },
   ])("$name", ({ rides, placements, withoutCar, freeSeats }) => {
-    expect(coverage(aller(rides, placements))).toEqual({ withoutCar, freeSeats });
+    expect(coverage(aller(rides, placements, allOnDevice))).toEqual({ withoutCar, freeSeats });
   });
 });
 

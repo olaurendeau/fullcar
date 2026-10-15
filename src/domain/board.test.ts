@@ -90,6 +90,19 @@ describe("legBoard: cars", () => {
     expect(board.cars[0]).toMatchObject({ freeSeats: 0, full: true });
   });
 
+  it("a car with more passengers than seats has no free seat, never fewer than none", () => {
+    const board = legBoard(
+      "aller",
+      rows({
+        persons: [person("marc"), person("lea"), person("tom")],
+        rides: [ride("r1", "marc", { seats: 1 })],
+        placements: [placed("lea", "r1"), placed("tom", "r1")],
+      }),
+      NONE,
+    );
+    expect(board.cars[0]).toMatchObject({ freeSeats: 0, full: true });
+  });
+
   it("a car without passengers has all its seats free", () => {
     const board = legBoard("aller", rows({ persons: [person("marc")], rides: [ride("r1", "marc")] }), NONE);
     expect(board.cars[0]).toMatchObject({ passengers: [], freeSeats: 3, full: false });
@@ -150,13 +163,34 @@ describe("legBoard: without a car", () => {
     expect(board.device).toEqual([{ id: "absent", firstName: "Absent", state: { kind: "notConcerned" } }]);
   });
 
-  it("a placement in a car that is not on the board leaves the person without a car", () => {
+  it("a placement in a car that is not on the leg's board leaves the person without a car (C12.7)", () => {
     const board = legBoard(
       "aller",
-      rows({ persons: [person("lea")], placements: [placed("lea", "gone")] }),
-      NONE,
+      rows({
+        persons: [person("marc"), person("ana"), person("lea", "Léa"), person("tom")],
+        rides: [ride("r1", "marc"), ride("r9", "ana", { leg: "retour" })],
+        placements: [placed("lea", "r9"), placed("tom", "gone")],
+      }),
+      new Set(["lea"]),
+    );
+    expect(board.withoutCar.map((p) => p.id)).toEqual(["lea", "tom"]);
+    expect(board.cars[0]).toMatchObject({ id: "r1", passengers: [], freeSeats: 3 });
+    expect(board.device).toEqual([{ id: "lea", firstName: "Léa", state: { kind: "withoutCar" } }]);
+  });
+
+  it("a driver's own Placement on the leg they drive is ignored: they are in no list but their car (C12.8)", () => {
+    const board = legBoard(
+      "aller",
+      rows({
+        persons: [person("marc"), person("lea")],
+        rides: [ride("r1", "marc")],
+        placements: [placed("marc", null), placed("lea", null)],
+      }),
+      new Set(["marc"]),
     );
     expect(board.withoutCar.map((p) => p.id)).toEqual(["lea"]);
+    expect(board.cars[0].passengers).toEqual([]);
+    expect(board.device[0].state).toEqual({ kind: "driver", rideId: "r1" });
   });
 });
 
