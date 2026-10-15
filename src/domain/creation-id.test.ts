@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isCreationId, uuidV4FromBytes } from "./creation-id";
+import { browserUnsafe } from "./test-browser-safe";
 
 describe("uuidV4FromBytes", () => {
   it("writes 16 zero bytes with only the version and variant bits set", () => {
@@ -73,9 +74,13 @@ describe("isCreationId", () => {
 });
 
 describe("creation-id module", () => {
-  it("uses neither node: nor Buffer, so the browser can load it", () => {
-    const source = readFileSync(new URL("./creation-id.ts", import.meta.url), "utf8");
-    expect(source).not.toMatch(/["']node:/);
-    expect(source).not.toMatch(/\bBuffer\b/);
+  const source = readFileSync(new URL("./creation-id.ts", import.meta.url), "utf8");
+
+  it("uses no Node built-in, with or without node:, nor Buffer, so the browser can load it", () => {
+    expect(browserUnsafe(source)).toEqual([]);
+  });
+
+  it("would be refused with a bare Node built-in injected", () => {
+    expect(browserUnsafe(`import { randomBytes } from "crypto";\n${source}`)).toEqual(["crypto"]);
   });
 });

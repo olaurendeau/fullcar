@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isPersonalToken, PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "./personal-token";
+import { browserUnsafe } from "./test-browser-safe";
 
 const BASE64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
@@ -89,9 +90,13 @@ describe("isPersonalToken", () => {
 });
 
 describe("personal-token module", () => {
-  it("uses neither node: nor Buffer, so the browser can load it", () => {
-    const source = readFileSync(new URL("./personal-token.ts", import.meta.url), "utf8");
-    expect(source).not.toMatch(/["']node:/);
-    expect(source).not.toMatch(/\bBuffer\b/);
+  const source = readFileSync(new URL("./personal-token.ts", import.meta.url), "utf8");
+
+  it("uses no Node built-in, with or without node:, nor Buffer, so the browser can load it", () => {
+    expect(browserUnsafe(source)).toEqual([]);
+  });
+
+  it("would be refused with a bare Node built-in injected", () => {
+    expect(browserUnsafe(`import { randomBytes } from "crypto";\n${source}`)).toEqual(["crypto"]);
   });
 });
