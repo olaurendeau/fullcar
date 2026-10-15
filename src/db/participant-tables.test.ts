@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { sql, type Insertable, type Kysely, type Selectable, type Transaction } from "kysely";
+import { sql, type ControlledTransaction, type Insertable, type Kysely, type Selectable, type Transaction } from "kysely";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { Database, PersonTable, PlacementTable, RideTable } from "./schema";
-import { getDb } from "./client";
+import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
 
@@ -540,17 +540,6 @@ describe("participant tables", () => {
   // the Ride first must not lock the Person before it: two sessions, on committed data,
   // since a rolled-back transaction cannot show another one waiting.
   describe("locks, on committed data", () => {
-    /** An event of this test's own, committed, deleted at the end even when `fn` fails. */
-    async function withCommittedEvent(fn: (db: Db, eventId: string) => Promise<void>) {
-      const db = getDb();
-      const { id } = await seedEvent(db);
-      try {
-        await fn(db, id);
-      } finally {
-        await db.deleteFrom("event").where("id", "=", id).execute();
-      }
-    }
-
     /** Resolves once the session `pid` waits for a lock that another one holds. */
     async function waitingForLock(db: Db, pid: number) {
       for (let attempt = 0; attempt < 200; attempt++) {
@@ -562,6 +551,19 @@ describe("participant tables", () => {
       throw new Error("the session never waited for a lock");
     }
 
+    /**
+     * Rolls back a transaction that may already be committed or rolled back, and gives its
+     * connection back to the pool. Kysely throws synchronously on a finished transaction:
+     * inside this try, that cannot hide the error the test is about.
+     */
+    async function release(trx: ControlledTransaction<Database>) {
+      try {
+        await trx.rollback().execute();
+      } catch {
+        // Already finished: nothing to give back.
+      }
+    }
+
     it("a placement written without locking its ride first does not deadlock with a seat taker", async () => {
       await withCommittedEvent(async (db, eventId) => {
         const driverId = await addPerson(db, eventId);
@@ -571,6 +573,8 @@ describe("participant tables", () => {
         // `taker` follows the rule and locks the Ride first; `forgetful` does not.
         const taker = await db.startTransaction().execute();
         const forgetful = await db.startTransaction().execute();
+        // `finally`, not `catch`: the error that failed the test is the one reported.
+        // `taker` first, so that `forgetful` stops waiting for its lock.
         try {
           await sql`select 1 from ride where id = ${rideId} for update`.execute(taker);
           const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(forgetful);
@@ -584,10 +588,9 @@ describe("participant tables", () => {
           await taker.commit().execute();
           await placed;
           await forgetful.commit().execute();
-        } catch (error) {
-          await taker.rollback().execute().catch(() => {});
-          await forgetful.rollback().execute().catch(() => {});
-          throw error;
+        } finally {
+          await release(taker);
+          await release(forgetful);
         }
 
         const placements = await db
