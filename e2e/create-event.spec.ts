@@ -147,9 +147,19 @@ test.describe("creating an event from the home page", () => {
     });
     page.on("response", (response) => {
       seen.push(Promise.resolve(sent(response.url())), response.allHeaders().then((headers) => JSON.stringify(headers)));
-      const request = response.request();
-      if (request.method() === "POST" && new URL(request.url()).pathname === "/") creationBodies.push(response.text());
     });
+    // The creation's body is read here, in Node: the browser navigates away at once and may
+    // already have dropped it when a `response` handler asks for it.
+    await page.route(
+      (url) => url.pathname === "/",
+      async (route) => {
+        if (route.request().method() !== "POST") return route.continue();
+        const response = await route.fetch();
+        const body = await response.text();
+        creationBodies.push(Promise.resolve(body));
+        await route.fulfill({ response, body });
+      },
+    );
 
     await openForm(page);
     await fillAller(page);
