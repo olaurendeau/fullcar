@@ -17,6 +17,14 @@ async function backendPid(trx: Transaction<Database>): Promise<number> {
   return rows[0]!.pid;
 }
 
+async function countEvents(trx: Transaction<Database>): Promise<number> {
+  const row = await trx
+    .selectFrom("event")
+    .select((eb) => eb.fn.countAll<string>().as("n"))
+    .executeTakeFirstOrThrow();
+  return Number(row.n);
+}
+
 // A pool of its own: getDb() would hand back the very session being observed once released.
 let observer: Kysely<Database>;
 beforeAll(() => {
@@ -87,11 +95,11 @@ describe("withRollback", () => {
   // see them appear between two of its reads.
   it("does not see a row committed by another connection after its first read", async () => {
     await withRollback(async (trx) => {
-      const before = await trx.selectFrom("event").select("id").orderBy("id").execute();
+      const before = await countEvents(trx);
       await withCommittedEvent(async (_, eventId) => {
-        const after = await trx.selectFrom("event").select("id").orderBy("id").execute();
-        expect(after.map((row) => row.id)).not.toContain(eventId);
-        expect(after).toEqual(before);
+        const seen = await trx.selectFrom("event").select("id").where("id", "=", eventId).execute();
+        expect(seen).toEqual([]);
+        expect(await countEvents(trx)).toBe(before);
       });
     });
   });
