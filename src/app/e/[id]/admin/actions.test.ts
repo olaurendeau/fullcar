@@ -1,6 +1,7 @@
 import type { Kysely, Transaction } from "kysely";
 import { describe, expect, it, vi } from "vitest";
 import { newAdminToken } from "@/domain/admin-token";
+import { generatePublicId } from "@/domain/public-id";
 import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
@@ -107,7 +108,15 @@ describe("checkAdminLink", () => {
 
   it("refuses the token on an unknown id, or on the id in another case", async () => {
     expect(await checkSeeded((token) => token, () => "Zz9yXw8v")).toBe(false);
-    expect(await checkSeeded((token) => token, (id) => id.toLowerCase())).toBe(false);
+    // Its first character is a capital, so that lower-casing it always changes it; both stay
+    // valid ids whatever the rest of the draw, so only the database can tell them apart.
+    const checks = await withRollback((trx) =>
+      using(trx, async () => {
+        const { id, token } = await seedEvent(trx, {}, undefined, () => `A${generatePublicId().slice(1)}`);
+        return [await checkAdminLink(id, token), await checkAdminLink(`a${id.slice(1)}`, token)];
+      }),
+    );
+    expect(checks).toEqual([true, false]);
   });
 
   it.each([
