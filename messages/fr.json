@@ -47,5 +47,9 @@
     "checkLink": "Vérifiez le lien : il a peut-être été mal recopié. Les majuscules et les minuscules comptent.",
     "deleted": "Les événements sont supprimés 30 jours après leur date.",
     "create": "Créer un événement"
+  },
+  "Contact": {
+    "link": "Nous contacter",
+    "newTab": "(s’ouvre dans un nouvel onglet)"
   }
 }

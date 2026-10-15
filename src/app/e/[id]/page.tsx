@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { ContactFooter } from "@/components/contact/contact-footer";
 import { EventView } from "@/components/event/event-view";
 import { eventMetadata, loadEvent } from "./load-event";
 
@@ -22,6 +23,7 @@ export default async function EventPage({ params }: PageProps<"/e/[id]">) {
         allerAt={event.aller_at}
         retourAt={event.retour_at}
       />
+      <ContactFooter />
     </main>
   );
 }
