@@ -9,7 +9,7 @@ x-node: &node
   working_dir: /app
   volumes:
     - .:/app
-  environment:
+  environment: &node-env
     DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar
     TEST_DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar_test
     MIGRATIONS_TEST_DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar_migrations_test
@@ -21,8 +21,12 @@ x-node: &node
 services:
   web:
     <<: *node
-    # `dev` (next dev) for `make up`, `start` (next start, the production build) for `make e2e`.
+    # `dev` (next dev) for `make up`, `start` (next start, the production build) for `make e2e` and `make shot`.
     command: npm run ${WEB_SCRIPT:-dev} -- --hostname 0.0.0.0 --port 3000
+    environment:
+      <<: *node-env
+      # UTC by default, as on Vercel; another zone for `make e2e` and `make shot` (see the Makefile).
+      TZ: ${WEB_TZ:-UTC}
     ports:
       # Loopback only: the slot's app and data are not offered to the local network.
       - "127.0.0.1:30${SLOT:-0}0:3000"

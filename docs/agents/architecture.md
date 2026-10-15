@@ -41,7 +41,7 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 | `make check` | lint, typecheck, tests, clés i18n, build de production |
 | `make up` / `make down` | démarre / arrête et efface l'environnement du slot ; `make up` démarre la base, **lui applique les migrations**, puis démarre `web`, et une migration en échec l'arrête avant `web` (#27) |
 | `make e2e` | construit le **build de production** du slot, puis lance les tests de bout en bout Playwright contre `next start` |
-| `make shot` | captures d'écran (360 px par défaut) |
+| `make shot` | construit le build de production du slot, puis prend les captures d'écran (360 px par défaut, `WIDTH=…`) contre `next start`, dans `var/shots` |
 | `make npm ARGS="…"` | npm dans le conteneur, pour ajouter une dépendance par exemple ; refuse `version` (et sa variante `verison`), `publish`, `unpublish`, `dist-tag` (`dist-tags`) et `deprecate`, qui reviennent à l'humain |
 
 Le dépôt est monté dans le conteneur, `node_modules` compris : installés par le conteneur
@@ -67,8 +67,11 @@ ce conteneur, la base `fullcar` sert au serveur de dev et aux tests de bout en b
 `make up` lance le serveur de dev (`next dev`). Les tests de bout en bout, eux, tournent
 contre le build de production (`next build` puis `next start`) : c'est ce build qui part
 sur Vercel, et le serveur de dev ne se comporte pas comme lui (compilation à la demande,
-rendu, cache). `make e2e` et `make ci` remplacent donc le serveur de dev du slot par
-`next start`.
+rendu, cache). `make e2e`, `make ci` et `make shot` remplacent donc le serveur de dev du
+slot par `next start` ; `make up` le remet. Les captures en ont besoin aussi : depuis le
+conteneur Playwright, `next dev` bloque ses propres scripts (origine croisée) et la page
+n'hydrate jamais. Ce `next start` tourne dans le fuseau `Pacific/Kiritimati` (UTC+14), pas
+en UTC comme Vercel : une heure mise en forme dans le fuseau du serveur s'y voit (C1.12).
 
 **Un worktree git par slot** : chaque développeur travaille dans son propre worktree, avec
 son slot. Deux slots dans le même répertoire partageraient `node_modules`, `.next` et les
