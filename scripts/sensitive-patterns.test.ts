@@ -350,6 +350,29 @@ describe("sensitive patterns: phone numbers", () => {
     ["  from person p", "src/db/rides.ts"],
     ['  join "person" on person.id = ride.driver_id', "src/db/rides.ts"],
     ["  FROM public.person", "scripts/export.ts"],
+    ['  from "public"."person" p', "src/db/rides.ts"],
+    ['  from ${sql.table("person")} p', "src/app/e/[id]/event-state.ts"],
+    // A column of a multi-line raw query, alone on its line, whether or not the `+` is kept.
+    ["    p.phone,", "src/db/rides.ts"],
+    ["    person.phone as number", "src/db/rides.ts"],
+    ["+    p.phone,", "src/db/rides.ts"],
+    // A whole row turned into JSON carries the number without naming it.
+    ['.select((eb) => eb.fn.toJson("person").as("p"))', "src/db/rides.ts"],
+    ["sql`to_jsonb(person)`", "src/app/e/[id]/event-state.ts"],
+    ["  select row_to_json(p) from people p", "scripts/export.ts"],
+    ["  json_agg(p) as persons", "src/db/rides.ts"],
+    // A Kysely query on the table outside src/db: its columns may sit on the lines after.
+    ['  .selectFrom("person")', "src/app/e/[id]/event-state.ts"],
+    ['  .selectFrom("person as p")', "src/lib/export.ts"],
+    ["  .selectFrom(['person', 'ride'])", "scripts/export.ts"],
+    ['  .innerJoin("person", "person.id", "ride.driver_id")', "src/app/e/[id]/event-state.ts"],
+    ["  .leftJoin('person as d', 'd.id', 'ride.driver_id')", "src/app/e/[id]/seats.ts"],
+    ['  .updateTable("person")', "src/app/e/[id]/persons.ts"],
+    ['  .insertInto("person")', "src/app/e/[id]/persons.ts"],
+    ['eb.ref("person.phone").as("n"),', "src/app/e/[id]/event-state.ts"],
+    // Test helpers without a `.test` suffix can be imported by production code: covered.
+    ['    "phone",', "src/db/test-participants.ts"],
+    [".returningAll()", "src/db/test-participants.ts"],
   ])("flags %s in %s", (line, path) => {
     expect(isSensitive(line, path)).toBe(true);
   });
@@ -379,6 +402,19 @@ describe("sensitive patterns: phone numbers", () => {
     ["phone: string | null;", "src/db/schema.ts"],
     ['.returning("id")', "src/db/persons.ts"],
     ['if (constraint === "person_phone_check") return error;', "src/db/failure.ts"],
+    // Kysely on the table inside src/db is where it belongs: only phone is looked for there.
+    ['  .selectFrom("person")', "src/db/persons.ts"],
+    ['  .innerJoin("person", "person.id", "ride.driver_id")', "src/db/rides.ts"],
+    // Other tables, and names that only start like the table.
+    ['  .selectFrom("placement")', "src/app/e/[id]/seats.ts"],
+    ['  .selectFrom("persons_view")', "src/app/e/[id]/seats.ts"],
+    ["  from persons_view", "src/app/e/[id]/seats.ts"],
+    // A JavaScript date or object turned into JSON, a value spread over several lines.
+    ["const at = date.toJSON();", "src/app/e/[id]/event-state.ts"],
+    ["    person.phone,", "src/app/e/[id]/persons.ts"],
+    ["    phone: person.phone,", "src/db/persons.ts"],
+    // Documentation names things in prose.
+    ["Select a car to see the phone of whoever drives it, from person to person.", "README.md"],
     ['import { validatePerson } from "@/domain/person";', "src/db/persons.ts"],
   ])("ignores %s in %s", (line, path) => {
     expect(isSensitive(line, path)).toBe(false);
