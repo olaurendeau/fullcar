@@ -70,35 +70,31 @@
         "regex": "(?i)(admin|personal|perso)[_-]?token|token_?hash|token\\b|newAdminToken|hashAdminToken|adminTokenMatches|[\"'`]token[\"'`]|\\$\\{\\s*token\\s*\\}|localStorage|sessionStorage|location\\.hash|location\\.href|split\\(\\s*[\"'`]#|\\.hash\\b|\\breferrer|Referrer-Policy|cookies\\(\\)|document\\.cookie|Set-Cookie"
       },
       {
-        "regex": "\\b(selectAll|returningAll)\\s*\\(|\\b(select|SELECT|returning|RETURNING)\\b.*\\bphone\\b|\\b(select|SELECT|returning|RETURNING)\\s+(\\w+\\.)?\\*|\\b(from|FROM|join|JOIN)\\s+(\"?\\w+\"?\\.)?\"?person\\b|\\bsql\\.(table|id)\\(\\s*[\"'`](\\w+\\.)?person\\b|\\bref\\(\\s*[\"'`](\\w+\\.)?phone\\b|\\b(toJson|to_jsonb?|row_to_json|jsonb?_agg)\\s*\\(",
+        "file": "src/db/**",
+        "regex": "(?i)phone",
         "exclude": [
-          "**/*.test.ts",
-          "**/*.test.tsx",
-          "e2e/**",
-          "messages/**",
-          "src/components/**",
-          "src/domain/**",
-          "**/*.md"
+          "**/*.test.ts"
         ]
       },
       {
-        "regex": "\\b(selectFrom|updateTable|insertInto|deleteFrom|mergeInto|(inner|left|right|full|cross)Join(Lateral)?)\\(\\s*(\\[\\s*)?[\"'`](\\w+\\.)?person\\b",
+        "regex": "[\"'`](\\w+\\.)?person(\\s+(as|AS|As)\\s+\\w+)?[\"'`]|\\bsql\\.(table|id)\\(\\s*[\"'`](\\w+\\.)?person\\b|\\b(from|FROM|join|JOIN)\\s+(\"?\\w+\"?\\.)?\"?person\\b|\\bsql\\s*(<[^`]*>)?\\s*`|\\bref\\(\\s*[\"'`](\\w+\\.)?phone\\b",
         "exclude": [
           "src/db/**",
           "**/*.test.ts",
           "**/*.test.tsx",
           "e2e/**",
           "messages/**",
+          "**/*.md",
           "src/components/**",
-          "src/domain/**",
-          "**/*.md"
+          "src/domain/**"
         ]
       },
       {
-        "file": "src/db/**",
-        "regex": "[\"'`](\\w+\\.)?phone\\b|^\\+?\\s*\\w+\\.phone\\b(\\s+as\\s+\\w+)?\\s*,?\\s*$",
+        "file": "src/**",
+        "regex": "\\b(selectAll|returningAll)\\b|\\b(select|SELECT|returning|RETURNING)\\s+\\*|[\\w\"]\\.\\*|\\b(toJson|jsonb?Agg)\\b|\\b(to_jsonb?|TO_JSONB?|row_to_json|ROW_TO_JSON|jsonb?_agg|JSONB?_AGG|array_agg|ARRAY_AGG)\\b",
         "exclude": [
-          "**/*.test.ts"
+          "**/*.test.ts",
+          "**/*.test.tsx"
         ]
       },
       {
