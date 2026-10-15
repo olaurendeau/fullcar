@@ -1,16 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { sql, type Insertable, type Selectable, type Transaction } from "kysely";
+import { sql, type Insertable, type Kysely, type Selectable, type Transaction } from "kysely";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { Database, PersonTable, PlacementTable, RideTable } from "./schema";
+import { getDb } from "./client";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
 
 const HASH = Buffer.alloc(32, 7);
 
 type Trx = Transaction<Database>;
+/** A transaction, or the connection itself for committed data. */
+type Db = Kysely<Database>;
 type Leg = "aller" | "retour";
 
-async function addPerson(trx: Trx, eventId: string, fields: Partial<Insertable<PersonTable>> = {}) {
+async function addPerson(trx: Db, eventId: string, fields: Partial<Insertable<PersonTable>> = {}) {
   const id = randomUUID();
   await trx
     .insertInto("person")
@@ -20,7 +23,7 @@ async function addPerson(trx: Trx, eventId: string, fields: Partial<Insertable<P
 }
 
 async function addRide(
-  trx: Trx,
+  trx: Db,
   eventId: string,
   driverId: string,
   fields: Partial<Insertable<RideTable>> = {},
@@ -42,7 +45,7 @@ async function addRide(
   return id;
 }
 
-async function place(trx: Trx, eventId: string, personId: string, leg: Leg, rideId: string | null) {
+async function place(trx: Db, eventId: string, personId: string, leg: Leg, rideId: string | null) {
   await trx
     .insertInto("placement")
     .values({ person_id: personId, event_id: eventId, leg, ride_id: rideId })
@@ -136,7 +139,11 @@ describe("participant tables", () => {
         passengerId,
         person: await trx.selectFrom("person").selectAll().where("id", "=", passengerId).executeTakeFirstOrThrow(),
         ride: await trx.selectFrom("ride").selectAll().where("id", "=", rideId).executeTakeFirstOrThrow(),
-        placement: await trx.selectFrom("placement").selectAll().executeTakeFirstOrThrow(),
+        placement: await trx
+          .selectFrom("placement")
+          .selectAll()
+          .where("event_id", "=", eventId)
+          .executeTakeFirstOrThrow(),
       };
     });
     expect(rows.person).toMatchObject({ id: rows.passengerId, first_name: "Léa", phone: "06 12 34 56 78" });
@@ -330,7 +337,12 @@ describe("participant tables", () => {
         const rideId = await addRide(trx, eventId, driverId);
         await place(trx, eventId, personId, "aller", rideId);
         await place(trx, eventId, personId, "retour", null);
-        return trx.selectFrom("placement").select(["leg", "ride_id"]).orderBy("leg").execute();
+        return trx
+          .selectFrom("placement")
+          .select(["leg", "ride_id"])
+          .where("event_id", "=", eventId)
+          .orderBy("leg")
+          .execute();
       });
       expect(rows).toEqual([
         { leg: "aller", ride_id: expect.any(String) },
@@ -486,7 +498,11 @@ describe("participant tables", () => {
         return {
           eventId,
           passengerId,
-          rows: await trx.selectFrom("placement").select(["person_id", "event_id", "leg", "ride_id"]).execute(),
+          rows: await trx
+            .selectFrom("placement")
+            .select(["person_id", "event_id", "leg", "ride_id"])
+            .where("event_id", "=", eventId)
+            .execute(),
         };
       });
       expect(rows.rows).toEqual([
@@ -517,6 +533,74 @@ describe("participant tables", () => {
       });
       expect(rows.rides).toEqual([{ driver_id: rows.otherDriver }]);
       expect(rows.placements).toEqual([{ person_id: rows.passengerId, leg: "aller", ride_id: null }]);
+    });
+  });
+
+  // The lock order is Ride, then Person. A placement in a car whose writer forgot to lock
+  // the Ride first must not lock the Person before it: two sessions, on committed data,
+  // since a rolled-back transaction cannot show another one waiting.
+  describe("locks, on committed data", () => {
+    /** An event of this test's own, committed, deleted at the end even when `fn` fails. */
+    async function withCommittedEvent(fn: (db: Db, eventId: string) => Promise<void>) {
+      const db = getDb();
+      const { id } = await seedEvent(db);
+      try {
+        await fn(db, id);
+      } finally {
+        await db.deleteFrom("event").where("id", "=", id).execute();
+      }
+    }
+
+    /** Resolves once the session `pid` waits for a lock that another one holds. */
+    async function waitingForLock(db: Db, pid: number) {
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const { rows } = await sql<{ wait: string | null }>`
+          select wait_event_type as wait from pg_stat_activity where pid = ${pid}`.execute(db);
+        if (rows[0]?.wait === "Lock") return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error("the session never waited for a lock");
+    }
+
+    it("a placement written without locking its ride first does not deadlock with a seat taker", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const driverId = await addPerson(db, eventId);
+        const personId = await addPerson(db, eventId);
+        const rideId = await addRide(db, eventId, driverId);
+
+        // `taker` follows the rule and locks the Ride first; `forgetful` does not.
+        const taker = await db.startTransaction().execute();
+        const forgetful = await db.startTransaction().execute();
+        try {
+          await sql`select 1 from ride where id = ${rideId} for update`.execute(taker);
+          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(forgetful);
+          const placed = place(forgetful, eventId, personId, "aller", rideId);
+          placed.catch(() => {});
+          await waitingForLock(db, rows[0]!.pid);
+
+          // The taker now locks the same Person: if `forgetful` held it, each would wait
+          // for the other.
+          await place(taker, eventId, personId, "retour", null);
+          await taker.commit().execute();
+          await placed;
+          await forgetful.commit().execute();
+        } catch (error) {
+          await taker.rollback().execute().catch(() => {});
+          await forgetful.rollback().execute().catch(() => {});
+          throw error;
+        }
+
+        const placements = await db
+          .selectFrom("placement")
+          .select(["leg", "ride_id"])
+          .where("event_id", "=", eventId)
+          .orderBy("leg")
+          .execute();
+        expect(placements).toEqual([
+          { leg: "aller", ride_id: rideId },
+          { leg: "retour", ride_id: null },
+        ]);
+      });
     });
   });
 });

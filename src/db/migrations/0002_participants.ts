@@ -98,10 +98,16 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   // C12.8: a driver has no placement on the leg she drives. Each trigger first locks the
   // person's row, so that a placement and a ride written at the same time for her, by two
   // transactions under READ COMMITTED (the default), cannot both pass: the second waits,
-  // then sees the first. Lock order everywhere: Ride, then Person.
+  // then sees the first. Lock order everywhere: Ride, then Person. A placement in a car
+  // takes its Ride first, with the lock its foreign key would take after the trigger
+  // anyway: without it, a writer that forgot to lock the Ride would hold the Person, then
+  // wait for the Ride, and deadlock with a seat taker holding the Ride.
   await sql`
     create function placement_driver_on_leg() returns trigger language plpgsql as $$
     begin
+      if new.ride_id is not null then
+        perform 1 from ride where id = new.ride_id for key share;
+      end if;
       perform 1 from person where id = new.person_id for update;
       if exists (select 1 from ride where driver_id = new.person_id and leg = new.leg) then
         raise exception 'a driver has no placement on the leg she drives'
