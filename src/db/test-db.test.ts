@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDb, getDb } from "./client";
 import { migrations } from "./migrations";
 import type { Database } from "./schema";
+import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 
 async function tableExists(name: string): Promise<boolean> {
@@ -14,6 +15,14 @@ async function tableExists(name: string): Promise<boolean> {
 async function backendPid(trx: Transaction<Database>): Promise<number> {
   const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx);
   return rows[0]!.pid;
+}
+
+async function countEvents(trx: Transaction<Database>): Promise<number> {
+  const row = await trx
+    .selectFrom("event")
+    .select((eb) => eb.fn.countAll<string>().as("n"))
+    .executeTakeFirstOrThrow();
+  return Number(row.n);
 }
 
 // A pool of its own: getDb() would hand back the very session being observed once released.
@@ -80,6 +89,19 @@ describe("withRollback", () => {
     ).rejects.toBe(failure);
     expect(await sessionState(pid)).toBe("idle");
     expect(await tableExists("rollback_throw_probe")).toBe(false);
+  });
+
+  // A concurrency test commits rows while other tests run: a test counting rows must not
+  // see them appear between two of its reads.
+  it("does not see a row committed by another connection after its first read", async () => {
+    await withRollback(async (trx) => {
+      const before = await countEvents(trx);
+      await withCommittedEvent(async (_, eventId) => {
+        const seen = await trx.selectFrom("event").select("id").where("id", "=", eventId).execute();
+        expect(seen).toEqual([]);
+        expect(await countEvents(trx)).toBe(before);
+      });
+    });
   });
 
   it("keeps the callback's error when the rollback fails too", async () => {

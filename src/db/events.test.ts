@@ -79,7 +79,12 @@ describe("insertEvent", () => {
     const titles = await withRollback(async (trx) => {
       await insertEvent(trx, event, HASH, () => "Ab3dEf7h");
       await insertEvent(trx, { ...event, title: "Autre" }, HASH, idsInOrder("Ab3dEf7h", "Zz9yXw8v"));
-      return trx.selectFrom("event").select(["id", "title"]).orderBy("id").execute();
+      return trx
+        .selectFrom("event")
+        .select(["id", "title"])
+        .where("id", "in", ["Ab3dEf7h", "Zz9yXw8v"])
+        .orderBy("id")
+        .execute();
     });
     expect(titles).toEqual([
       { id: "Ab3dEf7h", title: "Tournoi de Rennes" },

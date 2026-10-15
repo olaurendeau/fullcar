@@ -4,10 +4,12 @@ import type { Database } from "./schema";
 import { withRollback } from "./test-db";
 
 const HASH = Buffer.alloc(32, 7);
+// Read back by id: a concurrency test may have committed another event in the meantime.
+const ID = "Ab3dEf7h";
 
 function anEvent(overrides: Record<string, unknown> = {}) {
   return {
-    id: "Ab3dEf7h",
+    id: ID,
     title: "Tournoi de Rennes",
     location: "Gymnase des Gayeulles",
     aller_at: "2026-12-12 07:30:00",
@@ -79,7 +81,7 @@ describe("event table", () => {
   it("gives back the times as the exact strings written, options off by default", async () => {
     const row = await withRollback(async (trx) => {
       await insert(trx, { retour_at: "2026-12-12 18:00:00" });
-      return trx.selectFrom("event").selectAll().executeTakeFirstOrThrow();
+      return trx.selectFrom("event").selectAll().where("id", "=", ID).executeTakeFirstOrThrow();
     });
     expect(row).toMatchObject({
       aller_at: "2026-12-12 07:30:00",
@@ -95,7 +97,7 @@ describe("event table", () => {
   it("accepts an event without retour", async () => {
     const row = await withRollback(async (trx) => {
       await insert(trx, { retour_at: null });
-      return trx.selectFrom("event").select("retour_at").executeTakeFirstOrThrow();
+      return trx.selectFrom("event").select("retour_at").where("id", "=", ID).executeTakeFirstOrThrow();
     });
     expect(row.retour_at).toBeNull();
   });
@@ -148,7 +150,7 @@ describe("event table", () => {
   ])("accepts a %s of %i code points and refuses one more, or none", async (column, max, constraint) => {
     const row = await withRollback(async (trx) => {
       await insert(trx, { [column]: "🚗".repeat(max) });
-      return trx.selectFrom("event").select(["title", "location"]).executeTakeFirstOrThrow();
+      return trx.selectFrom("event").select(["title", "location"]).where("id", "=", ID).executeTakeFirstOrThrow();
     });
     expect(row[column as "title" | "location"]).toBe("🚗".repeat(max));
     await expectRefusedBy({ [column]: "🚗".repeat(max + 1) }, constraint);
