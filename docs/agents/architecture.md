@@ -97,10 +97,17 @@ en bout utilisent :
   s'exécute donc sur des **données validées**, sous un événement qui n'appartient qu'à
   lui : `withCommittedEvent` (`src/db/test-committed.ts`) l'amorce avec `getDb()`, passe
   la connexion et l'identifiant au test, puis supprime l'événement à la fin, même si le
-  test échoue ; la cascade emporte le reste. Pour que les autres tests ne voient pas ces
-  lignes passagères, `withRollback` ouvre sa transaction en `REPEATABLE READ` : un test
-  qui compte des lignes ne voit pas celles qu'un test de concurrence valide en parallèle
-  après sa première lecture.
+  test échoue ; la cascade emporte le reste.
+
+  Ces lignes validées sont visibles des autres tests tant qu'elles existent. Un test sous
+  `withRollback` ne lit donc **que les lignes de son propre événement** (filtre sur son
+  identifiant), ou compare deux comptages faits dans sa propre transaction. Pour ces
+  comptages, `withRollback` ouvre sa transaction en `REPEATABLE READ` : l'instantané est
+  pris à la première requête, et une ligne validée ensuite par un test de concurrence ne
+  fausse pas l'écart. Ce niveau ne cache pas une ligne validée **avant** cette première
+  requête : il ne remplace pas le filtre. Sur `main`, `src/db/events.test.ts` et
+  `src/db/event-table.test.ts` lisent encore `event` sans filtre ; #79 les restreint à
+  leur événement, avant le premier test de concurrence.
 - `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
   seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
   remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la
@@ -165,7 +172,11 @@ simultanées voient la même place libre et insèrent toutes les deux.
 verrouillent de même d'abord la ligne du Ride. Une écriture qui verrouille aussi une Person
 (les déclencheurs de #66, C12.8, voir « Contraintes permanentes ») le fait **après** le Ride :
 l'ordre est Ride, puis Person, dans tout le code, sans quoi deux transactions peuvent
-s'attendre l'une l'autre. Ces verrous se prouvent par des tests de concurrence (voir « Base
+s'attendre l'une l'autre. Ainsi, **toute écriture d'un Placement qui porte un `ride_id`**
+verrouille d'abord ce Ride (`SELECT … FROM ride … FOR UPDATE`). Sans ce verrou, le
+déclencheur prend la Person `FOR UPDATE` avant que la clé `placement → ride` prenne le
+Ride `FOR KEY SHARE` : l'ordre devient Person, puis Ride, et l'écriture peut se bloquer
+mutuellement avec une prise de place. Ces verrous se prouvent par des tests de concurrence (voir « Base
 de test (Vitest) »).
 
 ## Jetons, et pourquoi ils sont la pièce critique
@@ -252,7 +263,11 @@ Cette règle ne doit exister **qu'à un seul endroit** du code, traversé par to
 lectures. Si deux chemins la re-dérivent, l'un des deux finira par la rater — et le défaut
 sera invisible dans l'UI de celui qui l'a écrit. À partir de #66, cet endroit est
 `src/domain/phone-visibility.ts`, et une seule requête lit la colonne `phone` :
-`src/db/event-rows.ts`.
+`src/db/event-rows.ts`. Celle-ci renvoie les téléphones **à part** des autres données
+(`phonesById`), et seul `withVisiblePhones` (`phone-visibility.ts`) les reçoit et les
+pose : un `row.phone` recopié ailleurs, dans le board par exemple, re-dériverait la règle.
+Une liste de colonnes qui contient `phone` reste privée à `event-rows.ts` (non exportée) :
+un `.select(cette liste)` ailleurs serait une nouvelle lecture.
 
 ## i18n
 
@@ -285,7 +300,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
 | cas d'usage de l'événement | `src/app/e/[id]/*.ts` (précédent : `src/app/e/[id]/event.ts`) | reçoivent `db` en paramètre, composent le domaine et l'accès aux données ; testés avec `withRollback`, comme une fonction d'accès aux données |
 | jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur |
-| téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, et le seul endroit de la règle de visibilité |
+| téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` est le seul à recevoir ces téléphones |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 

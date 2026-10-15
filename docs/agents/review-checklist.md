@@ -19,7 +19,8 @@ celui qui écrit le code.
   par le serveur, ou par un autre générateur, est bloquant.
 - Le serveur refuse tout jeton personnel qui n'a pas exactement cette forme (trop court,
   trop long, hors alphabet, absent, autre chose qu'une chaîne).
-- Seul `src/app/e/[id]/device-token.ts` touche au jeton personnel dans le navigateur.
+- À partir de #66, seul `src/app/e/[id]/device-token.ts` touche au jeton personnel dans le
+  navigateur.
 - `Referrer-Policy: no-referrer` présent sur toutes les pages.
 
 ## Visibilité du téléphone
@@ -33,6 +34,10 @@ celui qui écrit le code.
   jamais sur la personne : un numéro qui suit la personne d'un leg à l'autre est une fuite.
 - Une seule requête lit la colonne `phone` : à partir de #66, `src/db/event-rows.ts`. Une
   autre lecture de `phone` est bloquante.
+- `event-rows.ts` renvoie les téléphones à part (`phonesById`), et seul `withVisiblePhones`
+  (`phone-visibility.ts`) les reçoit. Un `row.phone` recopié ailleurs (dans le board, par
+  exemple) est bloquant, comme une liste de colonnes contenant `phone` exportée par
+  `event-rows.ts` : la porte de merge ne voit ni l'un ni l'autre.
 - Vérifier les réponses d'API, pas seulement les écrans : un champ `phone` dans un JSON est
   une fuite même si aucune vue ne l'affiche.
 
@@ -113,8 +118,13 @@ celui qui écrit le code.
 ## Tests
 
 - Vitest n'écrit que dans `fullcar_test`, où chaque test qui écrit s'isole avec
-  `withRollback` (ou `withCommittedEvent` pour un test de concurrence), et dans
-  `fullcar_migrations_test`, réservée au test d'aller-retour des migrations.
+  `withRollback` (ou, à partir de #66, `withCommittedEvent` pour un test de concurrence),
+  et dans `fullcar_migrations_test`, réservée au test d'aller-retour des migrations.
+- Un test sous `withRollback` ne lit que les lignes de son propre événement, ou compare
+  deux comptages faits dans sa transaction. Une lecture sans filtre (`selectFrom("event")`
+  sans `where`, ou une liste comparée en entier) est bloquante : à partir de #66, les
+  lignes validées d'un test de concurrence y apparaîtraient au hasard, et
+  `REPEATABLE READ` ne cache pas celles validées avant la première requête.
 - À partir de #66, un test de concurrence s'exécute sur des données validées, sous un
   événement qui n'appartient qu'à lui et qui est supprimé à la fin (`withCommittedEvent`).
   Un verrou « prouvé » par la présence de `FOR UPDATE` dans le SQL, ou par un test sous
