@@ -21,10 +21,13 @@ export type PersonField = (typeof PERSON_FIELDS)[number];
 export type PersonError = TextError;
 export type PersonErrors = Partial<Record<PersonField, PersonError>>;
 
-/** What the form sends. A missing text counts as empty. */
+/**
+ * What the form sends: text, or nothing, which counts as empty. Typed `unknown`, since a
+ * forged request can send anything; a value that is not text is `invalid`.
+ */
 export interface PersonFields {
-  firstName?: string;
-  phone?: string;
+  firstName?: unknown;
+  phone?: unknown;
 }
 
 export interface NewPerson {
@@ -37,7 +40,7 @@ export type PersonValidation =
   | { ok: true; person: NewPerson }
   | { ok: false; errors: PersonErrors; first: PersonField };
 
-function phone(value: string | undefined): { value: string | null } | { error: PersonError } {
+function phone(value: unknown): { value: string | null } | { error: PersonError } {
   const read = optionalText(value, PHONE_MAX);
   if ("error" in read || read.value === null) return read;
   if (!PHONE_CHARACTERS.test(read.value)) return { error: "invalid" };

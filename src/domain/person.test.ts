@@ -104,6 +104,22 @@ describe("validatePerson", () => {
     });
   });
 
+  // Only a forged request sends these: a field error, never an exception.
+  it.each<[keyof PersonFields, unknown]>([
+    ["firstName", 42],
+    ["firstName", { name: "Louise" }],
+    ["phone", 612345678],
+    ["phone", ["0612345678"]],
+    ["phone", true],
+  ])("refuses a forged %s of %j as invalid, without throwing", (field, value) => {
+    expect(failureOf({ firstName: "Louise", [field]: value }).errors).toEqual({ [field]: "invalid" });
+  });
+
+  it("reads null as a missing value", () => {
+    expect(failureOf({ firstName: null }).errors).toEqual({ firstName: "required" });
+    expect(personOf({ firstName: "Louise", phone: null }).phone).toBeNull();
+  });
+
   it("C1.8: reports an error per field, and the first field in error", () => {
     const both = failureOf({ firstName: "", phone: "abc" });
     expect(both.errors).toEqual({ firstName: "required", phone: "invalid" });

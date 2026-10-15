@@ -26,14 +26,17 @@ export type RideField = (typeof RIDE_FIELDS)[number];
 export type RideError = TextError | "outOfRange";
 export type RideErrors = Partial<Record<RideField, RideError>>;
 
-/** What the form sends. A missing text counts as empty. */
+/**
+ * What the form sends: text, or nothing, which counts as empty. Typed `unknown`, since a
+ * forged request can send anything; a value of the wrong type is `invalid`.
+ */
 export interface RideFields {
-  location?: string;
+  location?: unknown;
   /** `HH:MM`, as an `<input type="time">` sends it; the date is the leg's. */
-  time?: string;
+  time?: unknown;
   /** As the form sends it, or already a number. */
-  seats?: string | number;
-  note?: string;
+  seats?: unknown;
+  note?: unknown;
 }
 
 export interface NewRide {
@@ -46,18 +49,20 @@ export interface NewRide {
 
 export type RideValidation = { ok: true; ride: NewRide } | { ok: false; errors: RideErrors; first: RideField };
 
-function time(value: string | undefined): { value: WallTime } | { error: RideError } {
-  if (!value) return { error: "required" };
-  if (!isWallTime(value)) return { error: "invalid" };
+function time(value: unknown): { value: WallTime } | { error: RideError } {
+  if (value === undefined || value === null || value === "") return { error: "required" };
+  if (typeof value !== "string" || !isWallTime(value)) return { error: "invalid" };
   return { value };
 }
 
-function seats(value: string | number | undefined): { value: number } | { error: RideError } {
+function seats(value: unknown): { value: number } | { error: RideError } {
+  const raw = value ?? "";
   let count: number;
-  if (typeof value === "number") {
-    count = value;
+  if (typeof raw === "number") {
+    count = raw;
   } else {
-    const trimmed = (value ?? "").trim();
+    if (typeof raw !== "string") return { error: "invalid" };
+    const trimmed = raw.trim();
     if (trimmed === "") return { error: "required" };
     if (!WHOLE_NUMBER.test(trimmed)) return { error: "invalid" };
     count = Number(trimmed);
@@ -92,22 +97,40 @@ export function validateRide(fields: RideFields): RideValidation {
 
 export type SeatReduction = { ok: true; leaving: string[] } | { ok: false; error: "passengersChanged" };
 
+/** A seat reduction as the driver sent it, and the Ride's passengers as read under its lock. */
+export interface SeatReductionRequest {
+  /** The passengers now. */
+  passengerIds: readonly string[];
+  /** The passengers the driver saw when choosing who leaves. */
+  seenPassengerIds: readonly string[];
+  newSeats: number;
+  /** Who the driver chose to leave. */
+  leaving: readonly string[];
+}
+
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
 /**
- * C8.4 and C8.5: going down to `newSeats`, exactly the passengers beyond them leave, and
- * the driver has named them among the passengers read under the Ride's lock. Any other
- * count means the passengers changed since the driver chose: nothing changes, and the
- * step reopens with the current passengers.
+ * C8.4: going down to `newSeats`, exactly the passengers beyond them leave, each named
+ * once, all of them passengers.
+ * C8.5: once someone has to leave, the driver chose among the passengers they saw; if
+ * those are not the passengers now (someone boarded or left in between, even with the
+ * same count), the choice no longer holds. Nothing changes, and the step reopens with the
+ * current passengers. When everyone still fits and no one is named, there was no choice.
  */
-export function seatReduction(
-  passengerIds: readonly string[],
-  newSeats: number,
-  leaving: readonly string[],
-): SeatReduction {
-  const passengers = new Set(passengerIds);
+export function seatReduction(request: SeatReductionRequest): SeatReduction {
+  const { newSeats, leaving } = request;
+  const passengers = new Set(request.passengerIds);
   const chosen = new Set(leaving);
   const expected = Math.max(0, passengers.size - newSeats);
+  const choiceHolds = leaving.length === 0 || sameSet(passengers, new Set(request.seenPassengerIds));
   const fits =
-    chosen.size === leaving.length && chosen.size === expected && leaving.every((id) => passengers.has(id));
+    choiceHolds &&
+    chosen.size === leaving.length &&
+    chosen.size === expected &&
+    leaving.every((id) => passengers.has(id));
   return fits ? { ok: true, leaving: [...leaving] } : { ok: false, error: "passengersChanged" };
 }
 
@@ -124,14 +147,14 @@ export interface SeatsRequest {
 }
 
 /**
- * - `notEnoughSeats`: fewer free seats than persons to place; `free` is what is left, for
+ * - `notEnoughSeats`: fewer free seats than persons to place; `freeSeats` is what is left, for
  *   the sheet to show (C6.5). A tap reports it as the seat just taken (C5.7).
  * - `alreadyInCar`: someone asked is already in another car on this leg, or drives.
  */
 export type SeatsDecision =
   | { ok: true; place: string[] }
   | { ok: false; error: "alreadyInCar" }
-  | { ok: false; error: "notEnoughSeats"; free: number };
+  | { ok: false; error: "notEnoughSeats"; freeSeats: number };
 
 /**
  * All or nothing (C6.5): either everyone asked has a seat, or no one is placed. Someone
@@ -143,7 +166,8 @@ export function seatsDecision(request: SeatsRequest): SeatsDecision {
   const elsewhere = new Set(request.elsewhereIds);
   const place = [...new Set(request.personIds)].filter((id) => !passengers.has(id));
   if (place.some((id) => elsewhere.has(id))) return { ok: false, error: "alreadyInCar" };
-  const free = Math.max(0, request.seats - passengers.size);
-  if (place.length > free) return { ok: false, error: "notEnoughSeats", free };
+  // Never below zero, should the seats have gone under the passengers.
+  const freeSeats = Math.max(0, request.seats - passengers.size);
+  if (place.length > freeSeats) return { ok: false, error: "notEnoughSeats", freeSeats };
   return { ok: true, place };
 }

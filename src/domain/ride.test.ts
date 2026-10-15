@@ -124,6 +124,30 @@ describe("validateRide", () => {
     });
   });
 
+  // Only a forged request sends these: a field error, never an exception.
+  it.each<[keyof RideFields, unknown]>([
+    ["location", 42],
+    ["location", { value: "Gare" }],
+    ["time", 730],
+    ["time", ["07:30"]],
+    ["seats", true],
+    ["seats", { seats: 3 }],
+    ["seats", [3]],
+    ["note", false],
+    ["note", ["a"]],
+  ])("refuses a forged %s of %j as invalid, without throwing", (field, value) => {
+    expect(failureOf({ ...valid, [field]: value }).errors).toEqual({ [field]: "invalid" });
+  });
+
+  it("reads null as a missing value", () => {
+    expect(failureOf({ location: null, time: null, seats: null }).errors).toEqual({
+      location: "required",
+      time: "required",
+      seats: "required",
+    });
+    expect(rideOf({ ...valid, note: null }).note).toBeNull();
+  });
+
   it("C4.7: reports an error per field, and the first field in error", () => {
     const failure = failureOf({ location: "Gare", time: "25:00", seats: "12", note: "a".repeat(201) });
     expect(failure.errors).toEqual({ time: "invalid", seats: "outOfRange", note: "tooLong" });
@@ -133,40 +157,59 @@ describe("validateRide", () => {
 
 describe("seatReduction (C8.4, C8.5)", () => {
   const passengers = ["anna", "ben", "chloe", "dan"];
+  /** The driver saw the passengers as they are now: nothing moved during the step. */
+  function reduce(newSeats: number, leaving: string[], passengerIds = passengers, seenPassengerIds = passengers) {
+    return seatReduction({ passengerIds, seenPassengerIds, newSeats, leaving });
+  }
+  const changed = { ok: false, error: "passengersChanged" };
 
   it("C8.4: accepts exactly passengers − new seats leaving, all of them passengers", () => {
-    expect(seatReduction(passengers, 2, ["ben", "dan"])).toEqual({ ok: true, leaving: ["ben", "dan"] });
+    expect(reduce(2, ["ben", "dan"])).toEqual({ ok: true, leaving: ["ben", "dan"] });
   });
 
   it("C8.4: refuses one leaving too many", () => {
-    expect(seatReduction(passengers, 2, ["anna", "ben", "dan"])).toEqual({ ok: false, error: "passengersChanged" });
+    expect(reduce(2, ["anna", "ben", "dan"])).toEqual(changed);
   });
 
   it("C8.4: refuses one leaving too few", () => {
-    expect(seatReduction(passengers, 2, ["ben"])).toEqual({ ok: false, error: "passengersChanged" });
+    expect(reduce(2, ["ben"])).toEqual(changed);
   });
 
   it("C8.4: refuses someone leaving who is not a passenger", () => {
-    expect(seatReduction(passengers, 2, ["ben", "zoe"])).toEqual({ ok: false, error: "passengersChanged" });
+    expect(reduce(2, ["ben", "zoe"])).toEqual(changed);
   });
 
-  it("refuses the same passenger counted twice", () => {
-    expect(seatReduction(passengers, 2, ["ben", "ben"])).toEqual({ ok: false, error: "passengersChanged" });
+  it("refuses the same passenger counted twice, even when the count matches", () => {
+    expect(reduce(2, ["ben", "ben", "dan"])).toEqual(changed);
   });
 
   it("C8.5: refuses when someone boarded during the step", () => {
-    // The driver chose one leaving among anna, ben, chloe to go from 4 seats to 2; dan boarded meanwhile.
-    expect(seatReduction(passengers, 2, ["chloe"])).toEqual({ ok: false, error: "passengersChanged" });
+    // The driver saw anna, ben, chloe and chose one to leave to go down to 2 seats; dan boarded meanwhile.
+    expect(reduce(2, ["chloe"], passengers, ["anna", "ben", "chloe"])).toEqual(changed);
+  });
+
+  it("C8.5: refuses when someone boarded and someone else left during the step, the count unchanged", () => {
+    // Seen: anna, ben, chloe. Now: anna, chloe, dan. Still 3 passengers, and chloe is still one of them.
+    expect(reduce(2, ["chloe"], ["anna", "chloe", "dan"], ["anna", "ben", "chloe"])).toEqual(changed);
   });
 
   it("C8.5: refuses when the one chosen to leave left during the step", () => {
-    expect(seatReduction(["anna", "ben"], 1, ["chloe"])).toEqual({ ok: false, error: "passengersChanged" });
+    expect(reduce(1, ["chloe"], ["anna", "ben"], ["anna", "ben", "chloe"])).toEqual(changed);
+  });
+
+  it("reads the passengers as a set: the order they come in does not matter", () => {
+    expect(reduce(3, ["anna"], passengers, ["dan", "chloe", "ben", "anna"])).toEqual({ ok: true, leaving: ["anna"] });
   });
 
   it("asks no one to leave when the new seats still hold every passenger", () => {
-    expect(seatReduction(passengers, 4, [])).toEqual({ ok: true, leaving: [] });
-    expect(seatReduction(passengers, 8, [])).toEqual({ ok: true, leaving: [] });
-    expect(seatReduction(passengers, 8, ["anna"])).toEqual({ ok: false, error: "passengersChanged" });
+    expect(reduce(4, [])).toEqual({ ok: true, leaving: [] });
+    expect(reduce(8, [])).toEqual({ ok: true, leaving: [] });
+    expect(reduce(8, ["anna"])).toEqual(changed);
+  });
+
+  it("without anyone to leave, someone boarding meanwhile changes nothing as long as all still fit", () => {
+    expect(reduce(5, [], passengers, ["anna", "ben"])).toEqual({ ok: true, leaving: [] });
+    expect(reduce(3, [], passengers, ["anna", "ben"])).toEqual(changed);
   });
 });
 
@@ -181,7 +224,7 @@ describe("seatsDecision", () => {
     expect(seatsDecision({ ...ride, passengerIds: ["anna", "ben", "chloe"], personIds: ["dan"] })).toEqual({
       ok: false,
       error: "notEnoughSeats",
-      free: 0,
+      freeSeats: 0,
     });
   });
 
@@ -189,7 +232,15 @@ describe("seatsDecision", () => {
     expect(seatsDecision({ ...ride, passengerIds: ["anna", "ben"], personIds: ["chloe", "dan"] })).toEqual({
       ok: false,
       error: "notEnoughSeats",
-      free: 1,
+      freeSeats: 1,
+    });
+  });
+
+  it("never counts fewer than zero free seats, when the seats went below the passengers", () => {
+    expect(seatsDecision({ ...ride, seats: 2, passengerIds: ["anna", "ben", "chloe"], personIds: ["dan"] })).toEqual({
+      ok: false,
+      error: "notEnoughSeats",
+      freeSeats: 0,
     });
   });
 

@@ -36,6 +36,16 @@ describe("text", () => {
     expect(text("a".repeat(121), 120)).toEqual({ error: "tooLong" });
   });
 
+  it("reads null as a missing value", () => {
+    expect(text(null, 40)).toEqual({ error: "required" });
+    expect(optionalText(null, 40)).toEqual({ value: null });
+  });
+
+  it.each([42, true, {}, ["Louise"]])("refuses %j, which is not text, as invalid without throwing", (value) => {
+    expect(text(value, 40)).toEqual({ error: "invalid" });
+    expect(optionalText(value, 40)).toEqual({ error: "invalid" });
+  });
+
   it.each([
     ["inside visible text", "Lou\u0000ise"],
     ["alone", "\u0000"],
