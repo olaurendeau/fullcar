@@ -33,7 +33,10 @@ celui qui écrit le code.
 - Le numéro est posé voiture par voiture, et dans la section des personnes de l'appareil,
   jamais sur la personne : un numéro qui suit la personne d'un leg à l'autre est une fuite.
 - Une seule requête lit la colonne `phone` : à partir de #66, `src/db/event-rows.ts`. Une
-  autre lecture de `phone` est bloquante.
+  autre lecture de `phone` est bloquante. Lire la ligne entière d'une personne compte comme
+  lire `phone`, même si le mot n'apparaît pas : `selectAll()` sur `person`, `returningAll()`
+  après `insertInto("person")` ou une mise à jour de `person`, une fonction JSON qui prend
+  toute la ligne (`to_json(person)`, `row_to_json`, `jsonObjectFrom` sur `selectAll()`).
 - `event-rows.ts` renvoie les téléphones à part (`phonesById`), et seul `withVisiblePhones`
   (`phone-visibility.ts`) les reçoit. Un `row.phone` recopié ailleurs (dans le board, par
   exemple) est bloquant, comme une liste de colonnes contenant `phone` exportée par

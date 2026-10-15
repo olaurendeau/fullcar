@@ -102,7 +102,8 @@ en bout utilisent :
   Ces lignes validées sont visibles des autres tests tant qu'elles existent. Un test sous
   `withRollback` ne lit donc **que les lignes de son propre événement** (filtre sur son
   identifiant), ou compare deux comptages faits dans sa propre transaction. Pour ces
-  comptages, `withRollback` ouvre sa transaction en `REPEATABLE READ` : l'instantané est
+  comptages, à partir de #79, `withRollback` ouvre sa transaction en `REPEATABLE READ`
+  (sur `main`, il garde le niveau par défaut, `READ COMMITTED`) : l'instantané est
   pris à la première requête, et une ligne validée ensuite par un test de concurrence ne
   fausse pas l'écart. Ce niveau ne cache pas une ligne validée **avant** cette première
   requête : il ne remplace pas le filtre. Sur `main`, `src/db/events.test.ts` et
