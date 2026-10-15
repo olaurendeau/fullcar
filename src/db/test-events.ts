@@ -22,13 +22,14 @@ export interface SeededEvent {
 
 /**
  * Stores an event, aller and retour without options unless `fields` says otherwise,
- * with a new token unless the test needs a given one.
+ * with a new token and a drawn id unless the test needs given ones.
  */
 export async function seedEvent(
   db: Kysely<Database>,
   fields: Partial<NewEvent> = {},
   token: string = newAdminToken(),
+  newId?: () => string,
 ): Promise<SeededEvent> {
-  const id = await insertEvent(db, { ...SEED, ...fields }, hashAdminToken(token));
+  const id = await insertEvent(db, { ...SEED, ...fields }, hashAdminToken(token), newId);
   return { id, token };
 }
