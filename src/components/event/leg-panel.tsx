@@ -1,8 +1,7 @@
 import { Car, Clock } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
+import type { Leg } from "@/domain/leg";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
-
-export type Leg = "aller" | "retour";
 
 /**
  * A leg's date and time as the locale writes them, with no conversion: the wall-clock
