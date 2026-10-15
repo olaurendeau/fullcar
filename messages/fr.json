@@ -3,6 +3,42 @@
     "title": "Fullcar",
     "tagline": "Le covoiturage de groupe, aller et retour, sans compte."
   },
+  "CreateEvent": {
+    "title": "Titre",
+    "location": "Lieu",
+    "allerDate": "Date de l’aller",
+    "allerTime": "Heure de l’aller",
+    "retour": "Retour",
+    "retourHint": "Décochez s’il n’y a pas de retour organisé.",
+    "retourDate": "Date du retour",
+    "retourTime": "Heure du retour",
+    "options": "Options",
+    "boosters": {
+      "label": "Rehausseurs",
+      "hint": "Pour les enfants qui en ont besoin."
+    },
+    "participation": {
+      "label": "Participation aux frais",
+      "hint": "Un montant par passager, facultatif."
+    },
+    "stops": {
+      "label": "Points de RDV",
+      "hint": "Des arrêts sur la route des voitures."
+    },
+    "create": "Créer",
+    "needsJavaScript": "La création d’un événement nécessite JavaScript : activez-le, puis rechargez la page.",
+    "failed": "Impossible de créer l’événement. Vérifiez la connexion, puis réessayez.",
+    "errors": {
+      "required": "Champ requis.",
+      "tooLong": "{max} caractères au maximum.",
+      "invalidText": "Ce texte contient un caractère non autorisé.",
+      "invalidDate": "Date non valide.",
+      "invalidTime": "Heure non valide.",
+      "tooEarly": "Cette date est déjà passée.",
+      "tooLate": "Pas plus d’un an à l’avance.",
+      "notAfterAller": "Le retour doit être après l’aller."
+    }
+  },
   "Event": {
     "legs": {
       "aller": "Aller",
