@@ -299,8 +299,16 @@ describe("sensitive patterns: disabled or focused tests", () => {
 });
 
 // Who sees a phone number is decided in two files, both sensitive paths: the visibility rule
-// and the one query that reads the column. A pattern catches a new read of the column
-// anywhere else; naming a phone (a form, a message, a test, a validation) is not a read.
+// and the one query that reads the column. Three coarse rules send any other read of the
+// column to the human, and fail closed rather than follow the syntax of each query:
+// - in src/db, any line naming a phone;
+// - outside src/db, any query naming the person table, and any raw SQL;
+// - in src, any read of whole rows, which carries the number without naming it.
+// Naming a phone elsewhere (a form, a message, a test, a validation) is not a read.
+
+/** Whether a patch adding these lines to `path` sends the merge to the human: one line is enough. */
+const isSensitivePatch = (lines: string[], path: string) => lines.some((line) => isSensitive(line, path));
+
 describe("sensitive patterns: phone numbers", () => {
   it.each(["src/domain/phone-visibility.ts", "src/db/event-rows.ts"])(
     "sends any change to %s to the human",
@@ -315,72 +323,116 @@ describe("sensitive patterns: phone numbers", () => {
     "src/db/event-rows.test.ts",
     "src/db/persons.ts",
     "src/components/event/person-form.tsx",
+    "src/app/e/[id]/participant-board.tsx",
     "messages/fr.json",
     "e2e/participants.spec.ts",
   ])("leaves %s to the gate's other rules", (path) => {
     expect(isSensitivePath(path)).toBe(false);
   });
 
-  it.each([
-    // Kysely, on one line or a list spread over several.
-    ['.select(["id", "first_name", "phone"])', "src/db/persons.ts"],
-    ['.select("person.phone")', "src/db/rides.ts"],
-    ['.select("phone as number")', "src/db/persons.ts"],
-    ['    "phone",', "src/db/persons.ts"],
-    ["    'person.phone',", "src/db/rides.ts"],
-    ['.select((eb) => eb.ref("phone").as("number"))', "src/db/persons.ts"],
-    ['eb.ref("person.phone"),', "src/db/rides.ts"],
-    ['export const PERSON_COLUMNS = ["id", "first_name", "phone"] as const;', "src/db/persons.ts"],
-    ['.returning(["id", "phone"])', "src/db/persons.ts"],
-    // A query written in a use case or a script instead of src/db.
-    ['.select(["first_name", "phone"])', "src/app/e/[id]/event-state.ts"],
-    ['.select("person.phone")', "src/app/e/[id]/persons.ts"],
-    ['const rows = await db.selectFrom("person").select("phone").execute();', "scripts/export.ts"],
-    // Every column, phone included: the table is often on another line than the call.
-    [".selectAll()", "src/db/persons.ts"],
-    ['.selectAll("person")', "src/db/rides.ts"],
-    [".returningAll()", "src/db/persons.ts"],
-    ['return db.selectFrom("person").selectAll().where("id", "=", id).executeTakeFirst();', "src/app/e/[id]/persons.ts"],
-    // Raw SQL naming the column, every column, or the table itself.
-    ["select id, first_name, phone", "src/db/persons.ts"],
-    ["SELECT p.phone FROM person p", "src/app/e/[id]/event-state.ts"],
-    ["sql`select * from person where event_id = ${id}`", "src/db/persons.ts"],
-    ["  select p.*", "src/db/rides.ts"],
-    ["  returning *", "src/db/persons.ts"],
-    ["  from person p", "src/db/rides.ts"],
-    ['  join "person" on person.id = ride.driver_id', "src/db/rides.ts"],
-    ["  FROM public.person", "scripts/export.ts"],
-  ])("flags %s in %s", (line, path) => {
-    expect(isSensitive(line, path)).toBe(true);
+  // Every way around the earlier patterns that the reviews of #100 and #110 found.
+  it.each<[string, string, string[]]>([
+    [
+      "a Kysely read of the column over several lines, outside src/db (#70's own example)",
+      "src/app/e/[id]/event-state.ts",
+      ["return db", '  .selectFrom("person")', "  .select([", '    "person.id",', '    "person.phone",', "  ])"],
+    ],
+    ["the same in a library module", "src/lib/export.ts", ['  .selectFrom("person as p")', '  .select(["p.phone"])']],
+    ["the same in a script", "scripts/export.ts", ["  .selectFrom(['person', 'ride'])", "  .select([", '    "phone",']],
+    ["the table second in an array", "src/app/e/[id]/event-state.ts", ['  .selectFrom(["ride", "person as p"])', "  .select([", '    "p.phone",']],
+    [
+      "a join whose arguments sit on their own lines",
+      "src/app/e/[id]/event-state.ts",
+      ["  .innerJoin(", '    "person as driver",', '    "driver.id",', '    "ride.driver_id",', "  )", "  .select([", '    "driver.phone",', "  ])"],
+    ],
+    ["a join written on one line", "src/app/e/[id]/seats.ts", ["  .leftJoin('person as d', 'd.id', 'ride.driver_id')"]],
+    ["an alias in capitals", "src/app/e/[id]/seats.ts", ['  .innerJoin("person AS d", "d.id", "ride.driver_id")']],
+    ["a schema-qualified name", "src/app/e/[id]/seats.ts", ['  .selectFrom("public.person")']],
+    ["a returning list on a write", "src/app/e/[id]/persons.ts", ['  .updateTable("person")', "  .set({ first_name })", "  .returning([", '    "phone",', "  ])"]],
+    ["a reference to the column, alone on its line", "src/app/e/[id]/event-state.ts", ['    eb.ref("driver.phone").as("n"),']],
+    ["sql.table", "src/app/e/[id]/event-state.ts", ['  from ${sql.table("person")} p']],
+    ["raw SQL with a quoted schema", "src/app/e/[id]/event-state.ts", ['  FROM "public"."person" p']],
+    ["raw SQL with FROM alone on its line", "src/app/e/[id]/event-state.ts", ["const { rows } = await sql`", "  select p.first_name, p.phone", "  FROM", "    person p", "`.execute(db);"]],
+    ["raw SQL with a comma join", "scripts/export.ts", ["await sql<{ phone: string }>`select p.phone from ride r, person p`.execute(db);"]],
+    // In src/db, any line naming a phone: a multi-line SQL column in every form.
+    ["a column alone on its line", "src/db/rides.ts", ["    p.phone,"]],
+    ["a column alone on its line, with the diff's +", "src/db/rides.ts", ["+    p.phone,"]],
+    ["a column renamed in capitals", "src/db/rides.ts", ["    p.phone AS phone_number,"]],
+    ["a column inside a function", "src/db/rides.ts", ["    coalesce(p.phone, '') as phone,"]],
+    ["a column cast", "src/db/rides.ts", ["    p.phone::text,"]],
+    ["a Kysely column list", "src/db/persons.ts", ['  .select(["id", "first_name", "phone"])']],
+    ["a column list in a constant", "src/db/persons.ts", ['export const PERSON_COLUMNS = ["id", "first_name", "phone"] as const;']],
+    ["a test helper without a .test suffix", "src/db/test-participants.ts", ['    "phone",']],
+    // Whole rows: the number comes back without being named.
+    [
+      "eb.fn.jsonAgg, the idiomatic load of a car and its passengers",
+      "src/db/rides.ts",
+      ['  .selectFrom("ride")', '  .innerJoin("person as passenger", "passenger.id", "placement.person_id")', "  .select((eb) => [", '    "ride.id",', '    eb.fn.jsonAgg("passenger").as("passengers"),', "  ])"],
+    ],
+    ["the aggregate named as a string", "src/db/rides.ts", ['    eb.fn.agg("json_agg", ["passenger"]).as("passengers"),']],
+    ["eb.fn.toJson", "src/db/rides.ts", ['  .select((eb) => eb.fn.toJson("person").as("p"))']],
+    ["selectAll", "src/db/persons.ts", ["  .selectAll()"]],
+    ["selectAll on one table", "src/db/rides.ts", ['  .selectAll("person")']],
+    ["returningAll", "src/db/test-participants.ts", ["  .returningAll()"]],
+    ["select *", "src/db/persons.ts", ["sql`select * from person where event_id = ${id}`"]],
+    ["p.*", "src/db/rides.ts", ["  select r.id, p.*"]],
+    ["returning *", "src/db/persons.ts", ["  RETURNING *"]],
+    ["to_jsonb", "src/db/rides.ts", ["  select to_jsonb(p) from person p"]],
+    ["row_to_json", "src/db/rides.ts", ["  select row_to_json(p)"]],
+    ["json_agg", "src/db/rides.ts", ["  json_agg(p) as passengers"]],
+    ["array_agg", "src/db/rides.ts", ["  array_agg(p) as passengers"]],
+  ])("flags %s (%s)", (_name, path, lines) => {
+    expect(isSensitivePatch(lines, path)).toBe(true);
   });
 
-  it.each([
-    // A form and its labels.
-    ['<Input id="phone" name="phone" type="tel" autoComplete="tel" />', "src/components/event/person-form.tsx"],
-    ['<Label htmlFor="phone">{t("phone")}</Label>', "src/components/event/person-form.tsx"],
-    ['<Select name="phoneCountry" defaultValue="FR">', "src/components/event/person-form.tsx"],
-    ["{person.phone && <a href={`tel:${person.phone}`}>{person.phone}</a>}", "src/components/event/ride-card.tsx"],
-    // The messages, in both languages.
-    ['  "phone": "Téléphone (facultatif)",', "messages/fr.json"],
-    ['  "phoneHint": "Tap a seat, then select a car to see the driver’s phone.",', "messages/en.json"],
-    // Tests, end to end and unit, even when they read the column to assert on it.
-    ['await page.fill(\'input[name="phone"]\', "06 12 34 56 78");', "e2e/participants.spec.ts"],
-    ['const row = await db.selectFrom("person").select("phone").executeTakeFirstOrThrow();', "e2e/participants.spec.ts"],
-    ['.select(["id", "phone"])', "src/db/persons.test.ts"],
-    [".selectAll()", "src/app/e/[id]/event-state.test.ts"],
-    ['expect(screen.getByRole("link", { name: "06 12 34 56 78" })).toHaveAttribute("href", "tel:0612345678");', "src/components/event/ride-card.test.tsx"],
-    // The domain validates a number, it never reads one.
-    ["const PHONE = /^[0-9 +.()-]{1,25}$/;", "src/domain/person.ts"],
-    ['if (phone !== undefined && !PHONE.test(phone)) errors.phone = "invalid";', "src/domain/person.ts"],
-    ["phone: text(fields.phone),", "src/domain/person.ts"],
-    // An action reads the form, the data layer writes and types the column.
-    ['phone: text("phone"),', "src/app/e/[id]/actions.ts"],
-    [".set({ first_name: person.firstName, phone: person.phone })", "src/db/persons.ts"],
-    ["phone: string | null;", "src/db/schema.ts"],
-    ['.returning("id")', "src/db/persons.ts"],
-    ['if (constraint === "person_phone_check") return error;', "src/db/failure.ts"],
-    ['import { validatePerson } from "@/domain/person";', "src/db/persons.ts"],
-  ])("ignores %s in %s", (line, path) => {
-    expect(isSensitive(line, path)).toBe(false);
+  // Stand-ins for the files epic #66 plans outside the two sensitive ones.
+  it.each<[string, string, string[]]>([
+    [
+      "the person form",
+      "src/components/event/person-form.tsx",
+      ['<Label htmlFor="phone">{t("phone")}</Label>', '<Input id="phone" name="phone" type="tel" autoComplete="tel" />', "{errors.phone && <p>{t(`errors.${errors.phone}`)}</p>}"],
+    ],
+    ["a ride card showing a number it was given", "src/components/event/ride-card.tsx", ["{phone && <a href={`tel:${phone}`}>{phone}</a>}"]],
+    [
+      "the domain validation",
+      "src/domain/person.ts",
+      ["const PHONE = /^[0-9 +.()-]{1,25}$/;", "phone: text(fields.phone),", 'if (phone !== undefined && !PHONE.test(phone)) errors.phone = "invalid";'],
+    ],
+    [
+      "a server action reading the form",
+      "src/app/e/[id]/actions.ts",
+      ["const fields = {", '  firstName: form.get("firstName"),', '  phone: form.get("phone"),', "};", "return addPerson(getDb(), id, fields);"],
+    ],
+    [
+      "the participant board",
+      "src/app/e/[id]/participant-board.tsx",
+      ['const t = useTranslations("participants");', "const phone = state.phonesById[person.id];", "runAction(() => updatePersonAction(id, { ...person, phone }));"],
+    ],
+    ["a use case on another table", "src/app/e/[id]/seats.ts", ['  .selectFrom("placement")', '  .where("ride_id", "=", rideId)']],
+    ["a view whose name starts like the table", "src/app/e/[id]/seats.ts", ['  .selectFrom("persons_view")', '    "persons",']],
+    ["a JavaScript date turned into JSON", "src/app/e/[id]/event-state.ts", ["const at = date.toJSON();"]],
+    [
+      "an end-to-end test seeding and reading a person",
+      "e2e/participants.spec.ts",
+      ['await db.insertInto("person").values({ id, event_id, first_name: "Léa", phone: "06 12 34 56 78" }).execute();', 'const row = await db.selectFrom("person").select("phone").executeTakeFirstOrThrow();', 'await page.fill(\'input[name="phone"]\', "06 12 34 56 78");'],
+    ],
+    ["a unit test reading the column", "src/db/persons.test.ts", ['  .selectFrom("person")', '  .select(["id", "phone"])', "  .selectAll()"]],
+    ["a component test", "src/components/event/ride-card.test.tsx", ['expect(screen.getByRole("link")).toHaveAttribute("href", "tel:0612345678");']],
+    ["the messages", "messages/en.json", ['  "phone": "Phone (optional)",', '  "phoneHint": "Tap a seat, then select a car to see the driver’s phone.",']],
+    ["the documentation", "README.md", ["Select a car to see the phone of whoever drives it: `select * from person` is never written."]],
+  ])("ignores %s (%s)", (_name, path, lines) => {
+    expect(isSensitivePatch(lines, path)).toBe(false);
+  });
+
+  // The price of failing closed: code in src/db that only writes or types the column goes to
+  // the human too. Few files do (persons.ts, schema.ts), so few pull requests pay it.
+  it.each<[string, string, string[]]>([
+    ["a write", "src/db/persons.ts", ["  .set({ first_name: person.firstName, phone: person.phone })"]],
+    ["the column's type", "src/db/schema.ts", ["  phone: string | null;"]],
+    ["a constraint name", "src/db/failure.ts", ['if (constraint === "person_phone_check") return error;']],
+    ["a query on the table outside src/db, whatever its columns", "src/app/e/[id]/persons.ts", ['  .selectFrom("person")', '  .select(["id", "first_name"])']],
+    ["any raw SQL outside src/db", "scripts/report.ts", ["const { rows } = await sql`select count(*) as n from event`.execute(db);"]],
+  ])("over-catches %s (%s), accepted", (_name, path, lines) => {
+    expect(isSensitivePatch(lines, path)).toBe(true);
   });
 });
