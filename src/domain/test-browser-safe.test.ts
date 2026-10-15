@@ -14,6 +14,9 @@ describe("nodeBuiltinsImported", () => {
       'const crypto = await import("crypto");',
       'const { webcrypto } = require("crypto");',
       'import x from "node:not-even-a-module";',
+      "const crypto = await import(`crypto`);",
+      "const { Buffer: B } = require(`buffer`);",
+      "const fs = await import(`node:fs`);",
     ]) {
       expect(nodeBuiltinsImported(line), line).toHaveLength(1);
     }
