@@ -50,21 +50,29 @@ export function deviceTokens({ storage, random }: { storage: () => DeviceStorage
     }
   }
 
-  /** Whether `localStorage` works: the form warns before a registration when it does not (C1.14). */
+  /**
+   * Whether `localStorage` keeps what it is given: the form warns before a registration when
+   * it does not (C1.14). A storage that accepts a write and keeps nothing does not.
+   */
   function storageAvailable(): boolean {
     try {
       const probed = storage();
       probed.setItem(PROBE_KEY, PROBE_KEY);
+      const kept = probed.getItem(PROBE_KEY) === PROBE_KEY;
       probed.removeItem(PROBE_KEY);
-      return true;
+      return kept;
     } catch {
       return false;
     }
   }
 
-  /** The device's token for event `id`, if it has one. Reads only; a malformed token is none. */
+  /**
+   * The device's token for event `id`, if it has one. Reads only; a malformed token is none.
+   * The page's memory first: once this page keeps its token there, a token another tab
+   * stores later for the same event does not change who this page is (C1.14).
+   */
   function readDeviceToken(id: string): string | undefined {
-    return stored(id) ?? memory.get(id);
+    return memory.get(id) ?? stored(id);
   }
 
   /**

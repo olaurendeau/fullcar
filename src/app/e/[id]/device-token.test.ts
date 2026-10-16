@@ -147,15 +147,34 @@ describe("ensureDeviceToken", () => {
     expect(tokens.readDeviceToken(A)).toBe(token);
   });
 
-  // The token is never part of what a failure says.
-  it("throws without the token when the randomness fails", () => {
+  // No randomness, no token: nothing weaker is stored in its place.
+  it("throws, and stores nothing, when the randomness fails", () => {
+    const storage = fakeStorage();
     const tokens = deviceTokens({
-      storage: () => fakeStorage(),
+      storage: () => storage,
       random: () => {
         throw new Error("no randomness");
       },
     });
     expect(() => tokens.ensureDeviceToken(A)).toThrow("no randomness");
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(tokens.readDeviceToken(A)).toBeUndefined();
+  });
+
+  // C1.14: once this page keeps its token in memory, another tab that stores one for the
+  // same event does not change who this page is.
+  it("keeps the page's token over the one another tab stores later", () => {
+    const storage = fakeStorage();
+    const { tokens } = tokensWith({
+      ...storage,
+      setItem: () => {
+        throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+      },
+    });
+    const token = tokens.ensureDeviceToken(A);
+    storage.items.set(`fullcar:personal-token:${A}`, VALID);
+    expect(tokens.readDeviceToken(A)).toBe(token);
+    expect(tokens.ensureDeviceToken(A)).toBe(token);
   });
 });
 
@@ -200,6 +219,13 @@ describe("storageAvailable", () => {
   // C1.14: the form warns before the registration.
   it("is false when localStorage throws", () => {
     const { tokens } = tokensWith(brokenStorage);
+    expect(tokens.storageAvailable()).toBe(false);
+  });
+
+  // C1.14: a storage that keeps nothing would lose the token on reload: the form warns.
+  it("is false when localStorage drops the write", () => {
+    const storage = { ...fakeStorage(), setItem: vi.fn() };
+    const { tokens } = tokensWith(storage);
     expect(tokens.storageAvailable()).toBe(false);
   });
 
@@ -320,5 +346,17 @@ describe("startDevice", () => {
     await Promise.resolve();
     expect(report.mock.calls).toEqual([["loading"]]);
     expect(loaded).not.toHaveBeenCalled();
+  });
+
+  // A first load that fails after a retry has succeeded does not turn the page to failed.
+  it("ignores the failure of a stopped load", async () => {
+    const { load, calls } = deferredLoad();
+    const report = vi.fn();
+    const stop = startDevice(VALID, load, vi.fn(), report);
+    stop();
+    calls[0].reject(new Error("late"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(report.mock.calls).toEqual([["loading"]]);
   });
 });
