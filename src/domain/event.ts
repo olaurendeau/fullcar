@@ -13,6 +13,7 @@ import {
   type WallClock,
   type WallDate,
 } from "./wall-clock";
+import { text, type TextError } from "./text";
 
 export const TITLE_MAX = 80;
 export const LOCATION_MAX = 120;
@@ -24,7 +25,7 @@ export const EVENT_FIELDS = ["title", "location", "allerDate", "allerTime", "ret
 export type EventField = (typeof EVENT_FIELDS)[number];
 
 /** Error codes, translated by the view. */
-export type EventError = "required" | "tooLong" | "invalid" | "tooEarly" | "tooLate" | "notAfterAller";
+export type EventError = TextError | "tooEarly" | "tooLate" | "notAfterAller";
 export type EventErrors = Partial<Record<EventField, EventError>>;
 
 /** What the form sends. A missing text counts as empty, a missing option as disabled. */
@@ -77,28 +78,6 @@ export function serverBounds(now: Date): DateBounds {
 
 export function firstInvalidField(errors: EventErrors): EventField | undefined {
   return EVENT_FIELDS.find((field) => errors[field] !== undefined);
-}
-
-/**
- * Nothing to see: whitespace, separators (`\p{Z}`), and format (`\p{Cf}`) or control
- * (`\p{Cc}`) characters, such as zero-width spaces and joiners, which trim() keeps.
- */
-const INVISIBLE = /^[\s\p{Z}\p{Cf}\p{Cc}]*$/u;
-
-/** Postgres refuses it in a `text`: only a forged request can send it. */
-const NUL = "\u0000";
-
-/**
- * Trimmed text, or the error. Text without a visible character is empty; inside visible
- * text, invisible characters stay, since an emoji sequence needs its joiners.
- * Length in code points, so that an emoji counts as one.
- */
-function text(value: string | undefined, max: number): { value: string } | { error: EventError } {
-  const trimmed = (value ?? "").trim();
-  if (trimmed.includes(NUL)) return { error: "invalid" };
-  if (INVISIBLE.test(trimmed)) return { error: "required" };
-  if ([...trimmed].length > max) return { error: "tooLong" };
-  return { value: trimmed };
 }
 
 function date(value: string | undefined, bounds: DateBounds): { value: WallDate } | { error: EventError } {
