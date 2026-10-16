@@ -58,11 +58,15 @@ export interface RideTable {
   created_at: ColumnType<Date, never, never>;
 }
 
-/** One per person and leg. `ride_id` null: the person is without a car on that leg. */
+/**
+ * One per person and leg. `ride_id` null: the person is without a car on that leg.
+ * `placed_at` gives the boarding order: set by the database on insert, and set back to its
+ * `now()` when `ride_id` changes (src/db/placements.ts), never to a time from the app.
+ */
 export interface PlacementTable {
   person_id: string;
   event_id: string;
   leg: LegColumn;
   ride_id: string | null;
-  placed_at: ColumnType<Date, never, never>;
+  placed_at: ColumnType<Date, never, Date>;
 }
