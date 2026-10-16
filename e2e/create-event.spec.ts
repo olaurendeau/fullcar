@@ -1,4 +1,4 @@
-import type { Locator, Page, Request } from "@playwright/test";
+import { devices, type Locator, type Page, type Request } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 const FR = {
@@ -379,6 +379,82 @@ test.describe("creating an event from the home page", () => {
     await expect(field(page, FR.title)).toHaveValue("Sortie ski du club");
     await expect(createButton(page)).toBeEnabled();
   });
+});
+
+/**
+ * The date and time of each leg, side by side: each field within its own column, the date
+ * left of the time, the time short of the form's right edge, and nothing scrolls sideways.
+ */
+async function expectDateAndTimeSideBySide(page: Page) {
+  const form = (await page.locator("form").boundingBox())!;
+  for (const [date, time] of [
+    [FR.allerDate, FR.allerTime],
+    [FR.retourDate, FR.retourTime],
+  ]) {
+    const dateBox = (await field(page, date).boundingBox())!;
+    const timeBox = (await field(page, time).boundingBox())!;
+    expect(dateBox.x, date).toBeGreaterThanOrEqual(form.x);
+    expect(dateBox.x + dateBox.width, `${date} overlaps ${time}`).toBeLessThan(timeBox.x);
+    expect(timeBox.x + timeBox.width, `${time} past the form's edge`).toBeLessThanOrEqual(form.x + form.width);
+    expect(Math.abs(dateBox.y - timeBox.y), `${date} and ${time} on one row`).toBeLessThan(1);
+  }
+  expect(await horizontalOverflow(page)).toBe(0);
+}
+
+async function fillDatesAndTimes(page: Page) {
+  await field(page, FR.allerDate).fill(await deviceDate(page, 7));
+  await field(page, FR.allerTime).fill("07:30");
+  await field(page, FR.retourTime).fill("18:00");
+}
+
+test.describe("the date and time fields side by side (#114)", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("stay in their columns at 360 px", async ({ page }) => {
+    await openForm(page);
+    await expectDateAndTimeSideBySide(page);
+    await fillDatesAndTimes(page);
+    await expectDateAndTimeSideBySide(page);
+  });
+
+  // Safari on iOS gives a date or time field of native appearance a minimum width, that of
+  // its longest value, padding not included: wider than its column at 390 px, past
+  // `min-w-0` (WebKit's RenderThemeIOS). Playwright's WebKit has the desktop theme, which
+  // does not: the geometry passes there either way, and the appearance is what is left to
+  // check, on the same engine. Launched from this project, so that `make e2e` runs it too.
+  for (const width of [360, 390]) {
+    test(`have no native appearance under WebKit, and stay in their columns with its desktop theme at ${width} px`, async ({
+      playwright,
+      baseURL,
+    }) => {
+      // Without the project's Chromium launch options, which WebKit refuses.
+      const browser = await playwright.webkit.launch({ channel: undefined, args: [] });
+      try {
+        const context = await browser.newContext({
+          ...devices["iPhone 13"],
+          viewport: { width, height: 780 },
+          locale: "fr-FR",
+          baseURL,
+        });
+        try {
+          const page = await context.newPage();
+          await openForm(page);
+          for (const label of [FR.allerDate, FR.allerTime, FR.retourDate, FR.retourTime]) {
+            await expect(field(page, label), label).toHaveCSS("appearance", "none");
+          }
+          await expectDateAndTimeSideBySide(page);
+          await fillDatesAndTimes(page);
+          await expectDateAndTimeSideBySide(page);
+        } finally {
+          // The project's trace covers this context too, but is only kept when the context
+          // itself closes: closing the browser alone would lose it.
+          await context.close();
+        }
+      } finally {
+        await browser.close();
+      }
+    });
+  }
 });
 
 test.describe("creating an event without JavaScript", () => {

@@ -109,7 +109,9 @@ export function CreateEventForm() {
         <Input
           id={idOf(name)}
           type={type}
-          className="h-10"
+          // Safari on iOS gives a date or time field of native appearance the width of its
+          // longest value, past `min-w-0` and `w-full`: out of its column (#114).
+          className={cn("h-10", type !== "text" && "appearance-none")}
           value={name === "retourDate" ? retourDate : texts[name]}
           onChange={(e) => change(name, e.target.value)}
           aria-invalid={error ? true : undefined}
