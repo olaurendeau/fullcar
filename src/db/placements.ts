@@ -22,7 +22,8 @@ const now = () => sql<Date>`now()`;
 /**
  * Writes where the person stands on the leg: in that Ride, or without a car. The other
  * leg is not touched (C3.5). When `ride_id` changes, the boarding time goes back to
- * `now()`; written again with the same Ride, the row is left as it is.
+ * `now()`; written again with the same Ride, the row is left as it is. A person of
+ * another event is left as she is too: the update is limited to `eventId`.
  *
  * In a car, the Ride is locked first (lock order: Ride, then Person, which the trigger on
  * placement locks), in the caller's transaction or in one opened here.
@@ -49,6 +50,7 @@ async function upsertPlacement(db: Kysely<Database>, placement: NewPlacement): P
       conflict
         .columns(["person_id", "leg"])
         .doUpdateSet((eb) => ({ ride_id: eb.ref("excluded.ride_id"), placed_at: now() }))
+        .whereRef("placement.event_id", "=", "excluded.event_id")
         .whereRef("placement.ride_id", "is distinct from", "excluded.ride_id"),
     )
     .execute();

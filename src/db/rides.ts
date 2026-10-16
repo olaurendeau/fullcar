@@ -49,12 +49,13 @@ const STORED_RIDE_COLUMNS = [
 ] as const;
 
 /**
- * Stores the Ride, unless its id is taken: then nothing is written, and the Ride holding
- * the id is returned as it is, whatever its event or leg, for the caller to compare. It is
- * read by id alone: the creation id is what tells a resent creation apart. A second Ride
- * for the same driver and leg is refused by the database (`ride_driver_leg_unique`).
+ * Stores the Ride, unless its id is taken: then nothing is written, and the Ride already
+ * stored under that id in this event and on this leg is returned as it is, for the caller
+ * to compare. Nothing when another event or leg holds the id: none of its data comes back.
+ * A second Ride for the same driver and leg is refused by the database
+ * (`ride_driver_leg_unique`).
  */
-export async function insertRide(db: Kysely<Database>, ride: NewRide): Promise<StoredRide> {
+export async function insertRide(db: Kysely<Database>, ride: NewRide): Promise<StoredRide | undefined> {
   await db
     .insertInto("ride")
     .values({
@@ -73,7 +74,10 @@ export async function insertRide(db: Kysely<Database>, ride: NewRide): Promise<S
     .selectFrom("ride")
     .select(STORED_RIDE_COLUMNS)
     .where("id", "=", ride.id)
-    .executeTakeFirstOrThrow();
+    .where("event_id", "=", ride.eventId)
+    .where("leg", "=", ride.leg)
+    .executeTakeFirst();
+  if (!row) return undefined;
   return {
     id: row.id,
     eventId: row.event_id,

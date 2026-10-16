@@ -85,6 +85,18 @@ describe("setPlacement", () => {
     });
   });
 
+  it("leaves a person of another event as she is", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, rideA, personId } = await aCrowd(trx);
+      const { id: otherId } = await seedEvent(trx);
+      await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA });
+      const before = await placementsOf(trx, eventId);
+      await setPlacement(trx, { personId, eventId: otherId, leg: "aller", rideId: null });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+      expect(await placementsOf(trx, otherId)).toEqual([]);
+    });
+  });
+
   // The order is Ride, then Person: the trigger on placement locks the Person, so the Ride
   // must already be held FOR UPDATE, a lock that stops a FOR KEY SHARE from elsewhere.
   it("takes its Ride FOR UPDATE first, when it writes one", async () => {
@@ -108,6 +120,9 @@ describe("deletePlacement", () => {
       const { eventId, rideA, personId } = await aCrowd(trx);
       await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA });
       await setPlacement(trx, { personId, eventId, leg: "retour", rideId: null });
+      const { id: otherId } = await seedEvent(trx);
+      expect(await deletePlacement(trx, { personId, eventId: otherId, leg: "aller" })).toBe(false);
+      expect(await placementsOf(trx, eventId)).toHaveLength(2);
       expect(await deletePlacement(trx, { personId, eventId, leg: "aller" })).toBe(true);
       expect(await deletePlacement(trx, { personId, eventId, leg: "aller" })).toBe(false);
       expect(await placementsOf(trx, eventId)).toEqual([
@@ -136,6 +151,20 @@ describe("removePassengers", () => {
       expect(row(personId, "aller")).toEqual({ person_id: personId, leg: "aller", ride_id: null, placed_at: await now(trx) });
       expect(row(personId, "retour")).toEqual(before.find((p) => p.person_id === personId && p.leg === "retour"));
       expect(row(stays, "aller")).toEqual(before.find((p) => p.person_id === stays));
+    });
+  });
+
+  it("takes the Ride FOR UPDATE first", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const { id: driverId } = await seedPerson(db, eventId);
+      const { id: personId } = await seedPerson(db, eventId);
+      const rideId = await seedRide(db, eventId, driverId);
+      await setPlacement(db, { personId, eventId, leg: "aller", rideId });
+      const keyShare = () => sql`select id from ride where id = ${rideId} for key share nowait`.execute(db);
+      await atomically(db, async (trx) => {
+        await removePassengers(trx, { id: rideId, eventId, leg: "aller" }, [personId]);
+        await expect(keyShare()).rejects.toMatchObject({ code: "55P03" });
+      });
     });
   });
 

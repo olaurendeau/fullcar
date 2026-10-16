@@ -53,6 +53,56 @@ describe("insertRide", () => {
       ]);
     });
   });
+
+  it("returns nothing of the other event holding the id, and writes nothing", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: otherId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      const { id: otherDriverId } = await seedPerson(trx, otherId);
+      const ride = aRide(eventId, driverId);
+      await insertRide(trx, ride);
+      expect(await insertRide(trx, aRide(otherId, otherDriverId, { id: ride.id }))).toBeUndefined();
+      expect(await ridesOf(trx, otherId)).toEqual([]);
+      expect(await ridesOf(trx, eventId)).toEqual([expect.objectContaining({ id: ride.id, driver_id: driverId })]);
+    });
+  });
+});
+
+/** A Ride of one event, and another event naming it: what a stranger's request would send. */
+async function aRideAndAStranger(trx: Kysely<Database>) {
+  const { id: eventId } = await seedEvent(trx);
+  const { id: otherId } = await seedEvent(trx);
+  const { id: driverId } = await seedPerson(trx, eventId);
+  const id = await seedRide(trx, eventId, driverId);
+  return { eventId, id, stranger: { id, eventId: otherId, leg: "aller" as const } };
+}
+
+describe("a Ride named with another event", () => {
+  it("is not locked", async () => {
+    await withRollback(async (trx) => {
+      const { stranger } = await aRideAndAStranger(trx);
+      expect(await lockRide(trx, stranger)).toBeUndefined();
+    });
+  });
+
+  it("is not changed", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, stranger } = await aRideAndAStranger(trx);
+      const before = await ridesOf(trx, eventId);
+      const changes = { location: "Gare", departureTime: "18:30:00", seats: 1, note: null };
+      expect(await updateRide(trx, stranger, changes)).toBe(false);
+      expect(await ridesOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("is not deleted", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, id, stranger } = await aRideAndAStranger(trx);
+      expect(await deleteRide(trx, stranger)).toBe(false);
+      expect(await ridesOf(trx, eventId)).toEqual([expect.objectContaining({ id })]);
+    });
+  });
 });
 
 describe("lockRide", () => {

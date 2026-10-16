@@ -29,10 +29,11 @@ export interface PersonRef {
 
 /**
  * Stores the person, unless its id is taken: then nothing is written (no failed
- * statement, so a surrounding transaction survives), and the row holding the id is
- * returned as it is, whatever its event or its hash. Comparing them is the caller's job.
+ * statement, so a surrounding transaction survives), and the person already stored under
+ * that id in this event is returned as it is, whatever its hash: comparing it is the
+ * caller's job. Nothing when another event holds the id: none of its data comes back.
  */
-export async function insertPerson(db: Kysely<Database>, person: NewPerson): Promise<StoredPerson> {
+export async function insertPerson(db: Kysely<Database>, person: NewPerson): Promise<StoredPerson | undefined> {
   await db
     .insertInto("person")
     .values({
@@ -48,8 +49,9 @@ export async function insertPerson(db: Kysely<Database>, person: NewPerson): Pro
     .selectFrom("person")
     .select(["id", "event_id", "first_name", "token_hash"])
     .where("id", "=", person.id)
-    .executeTakeFirstOrThrow();
-  return { id: row.id, eventId: row.event_id, firstName: row.first_name, tokenHash: row.token_hash.toString("hex") };
+    .where("event_id", "=", person.eventId)
+    .executeTakeFirst();
+  return row && { id: row.id, eventId: row.event_id, firstName: row.first_name, tokenHash: row.token_hash.toString("hex") };
 }
 
 /** Whether a person of that event had that id, and now has these first name and number. */

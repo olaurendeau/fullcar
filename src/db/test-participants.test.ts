@@ -15,7 +15,9 @@ describe("seedPerson", () => {
       expect(isPersonalToken(drawn.token)).toBe(true);
       expect(given.token).toBe(drawn.token);
       expect(given.id).not.toBe(drawn.id);
-      for (const holder of await readTokenHolders(trx, eventId)) {
+      const holders = await readTokenHolders(trx, eventId);
+      expect(holders).toHaveLength(2);
+      for (const holder of holders) {
         expect(tokenMatches(drawn.token, holder.tokenHash)).toBe(true);
       }
     });

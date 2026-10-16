@@ -44,15 +44,18 @@ describe("insertPerson", () => {
     });
   });
 
-  it("returns the row of the other event holding the id, for the caller to refuse", async () => {
+  it("returns nothing of the other event holding the id, and writes nothing", async () => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       const { id: otherId } = await seedEvent(trx);
       const id = randomUUID();
       await insertPerson(trx, { id, eventId, firstName: "Léa", phone: null, tokenHash: HASH_A });
-      const again = await insertPerson(trx, { id, eventId: otherId, firstName: "Léa", phone: null, tokenHash: HASH_A });
-      expect(again).toEqual({ id, eventId, firstName: "Léa", tokenHash: HASH_A });
+      const again = await insertPerson(trx, { id, eventId: otherId, firstName: "Paul", phone: null, tokenHash: HASH_B });
+      expect(again).toBeUndefined();
       expect(await personsOf(trx, otherId)).toEqual([]);
+      expect(await personsOf(trx, eventId)).toEqual([
+        { id, first_name: "Léa", phone: null, token_hash: Buffer.from(HASH_A, "hex") },
+      ]);
     });
   });
 });

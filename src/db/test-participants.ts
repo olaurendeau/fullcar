@@ -25,7 +25,7 @@ export async function seedPerson(
   fields: Partial<Pick<NewPerson, "id" | "firstName" | "phone">> = {},
   token: string = personalTokenFromBytes(randomBytes(PERSONAL_TOKEN_BYTES)),
 ): Promise<SeededPerson> {
-  const { id } = await insertPerson(db, {
+  const person = await insertPerson(db, {
     id: randomUUID(),
     firstName: "Léa",
     phone: null,
@@ -33,7 +33,8 @@ export async function seedPerson(
     eventId,
     tokenHash: hashToken(token),
   });
-  return { id, token };
+  if (!person) throw new Error("seedPerson: the id is taken by another event");
+  return { id: person.id, token };
 }
 
 /** Stores a Ride driven by `driverId`, on the aller with 3 seats unless `fields` says otherwise. */
@@ -54,6 +55,7 @@ export async function seedRide(
     eventId,
     driverId,
   });
+  if (!ride) throw new Error("seedRide: the id is taken by another event or leg");
   return ride.id;
 }
 

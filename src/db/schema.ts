@@ -60,8 +60,9 @@ export interface RideTable {
 
 /**
  * One per person and leg. `ride_id` null: the person is without a car on that leg.
- * `placed_at` gives the boarding order: set by the database on insert, and set back to its
- * `now()` when `ride_id` changes (src/db/placements.ts), never to a time from the app.
+ * `placed_at` gives the boarding order: set by the database on insert. Its update type
+ * lets the code write it, as a Date too; src/db/placements.ts only ever sets it back to the
+ * database's `now()`, when `ride_id` changes.
  */
 export interface PlacementTable {
   person_id: string;
