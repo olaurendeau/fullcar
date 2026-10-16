@@ -423,7 +423,10 @@ test.describe("the date and time fields side by side (#114)", () => {
   // does not: the geometry passes there either way, and the appearance is what is left to
   // check, on the same engine. Launched from this project, so that `make e2e` runs it too.
   for (const width of [360, 390]) {
-    test(`stay in their columns under WebKit at ${width} px, as on an iPhone`, async ({ playwright, baseURL }) => {
+    test(`have no native appearance under WebKit, and stay in their columns with its desktop theme at ${width} px`, async ({
+      playwright,
+      baseURL,
+    }) => {
       // Without the project's Chromium launch options, which WebKit refuses.
       const browser = await playwright.webkit.launch({ channel: undefined, args: [] });
       try {
@@ -433,14 +436,20 @@ test.describe("the date and time fields side by side (#114)", () => {
           locale: "fr-FR",
           baseURL,
         });
-        const page = await context.newPage();
-        await openForm(page);
-        for (const label of [FR.allerDate, FR.allerTime, FR.retourDate, FR.retourTime]) {
-          await expect(field(page, label), label).toHaveCSS("appearance", "none");
+        try {
+          const page = await context.newPage();
+          await openForm(page);
+          for (const label of [FR.allerDate, FR.allerTime, FR.retourDate, FR.retourTime]) {
+            await expect(field(page, label), label).toHaveCSS("appearance", "none");
+          }
+          await expectDateAndTimeSideBySide(page);
+          await fillDatesAndTimes(page);
+          await expectDateAndTimeSideBySide(page);
+        } finally {
+          // The project's trace covers this context too, but is only kept when the context
+          // itself closes: closing the browser alone would lose it.
+          await context.close();
         }
-        await expectDateAndTimeSideBySide(page);
-        await fillDatesAndTimes(page);
-        await expectDateAndTimeSideBySide(page);
       } finally {
         await browser.close();
       }
