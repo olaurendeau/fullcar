@@ -178,6 +178,55 @@ describe("ensureDeviceToken", () => {
   });
 });
 
+describe("two tabs of one device registering on the same event (#82)", () => {
+  const OTHER = "AAAAAAAAAAAAAAAAAAAAAA";
+  const key = `fullcar:personal-token:${A}`;
+
+  // Two pages over one localStorage: the second reads the token the first stored, just
+  // before its own request leaves, and sends that one.
+  it("the second tab reuses the token the first stored, and writes nothing", () => {
+    const storage = fakeStorage();
+    const first = tokensWith(storage);
+    const second = tokensWith(storage);
+    const token = first.tokens.ensureDeviceToken(A);
+    storage.setItem.mockClear();
+    expect(second.tokens.ensureDeviceToken(A)).toBe(token);
+    expect(second.random).not.toHaveBeenCalled();
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  // Both read an empty key, and the other tab's token lands right after this one's: the
+  // token kept by localStorage is the one sent, so that both persons share it.
+  it("sends the token another tab stored over this one's, before the request leaves", () => {
+    const storage = fakeStorage();
+    storage.setItem.mockImplementation((name: string, value: string) => {
+      storage.items.set(name, value);
+      storage.items.set(name, OTHER);
+    });
+    const { tokens } = tokensWith(storage);
+    expect(tokens.ensureDeviceToken(A)).toBe(OTHER);
+    expect(tokens.readDeviceToken(A)).toBe(OTHER);
+  });
+
+  // The page's memory serves only after a fallback: a token localStorage kept stays read
+  // from it, and follows what another tab stores later.
+  it("follows the stored token after a write that localStorage kept", () => {
+    const storage = fakeStorage();
+    const { tokens } = tokensWith(storage);
+    tokens.ensureDeviceToken(A);
+    storage.items.set(key, OTHER);
+    expect(tokens.readDeviceToken(A)).toBe(OTHER);
+  });
+
+  it("follows the stored token after reusing it", () => {
+    const storage = fakeStorage({ [key]: VALID });
+    const { tokens } = tokensWith(storage);
+    expect(tokens.ensureDeviceToken(A)).toBe(VALID);
+    storage.items.set(key, OTHER);
+    expect(tokens.readDeviceToken(A)).toBe(OTHER);
+  });
+});
+
 describe("readDeviceToken", () => {
   it("reads the event's stored token", () => {
     const { tokens } = tokensWith(fakeStorage({ [`fullcar:personal-token:${A}`]: VALID }));
