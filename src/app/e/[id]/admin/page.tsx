@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ContactFooter } from "@/components/contact/contact-footer";
 import { EventView } from "@/components/event/event-view";
-import { eventMetadata, loadEvent } from "../load-event";
+import { eventMetadata, loadEvent, loadPublicState } from "../load-event";
 import { AdminArrival } from "./admin-arrival";
 
 // No loading.tsx here either: an unknown id answers a real 404 (C6.4).
@@ -17,8 +17,9 @@ export async function generateMetadata({ params }: PageProps<"/e/[id]/admin">): 
  * same for every visitor, and the client checks the token through the action.
  */
 export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) {
-  const event = await loadEvent((await params).id);
-  if (!event) notFound();
+  const { id } = await params;
+  const [event, board] = await Promise.all([loadEvent(id), loadPublicState(id)]);
+  if (!event || !board) notFound();
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 p-4">
@@ -28,6 +29,7 @@ export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) 
         location={event.location}
         allerAt={event.aller_at}
         retourAt={event.retour_at}
+        board={board}
       />
       <ContactFooter />
     </main>

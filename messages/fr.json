@@ -50,6 +50,22 @@
     },
     "nobody": "Personne ne s’est encore inscrit."
   },
+  "Board": {
+    "banner": {
+      "everyoneSeated": "Tout le monde a une place",
+      "everyoneSeatedFree": "Tout le monde a une place · {free, plural, one {# place libre} other {# places libres}}",
+      "enoughSeats": "{withoutCar, plural, other {# sans voiture}} · {free, plural, one {# place libre} other {# places libres}}",
+      "missingSeats": "{withoutCar, plural, other {# sans voiture}} · il manque {missing, plural, one {# place} other {# places}}"
+    },
+    "tabCount": "{count, plural, other {# sans voiture}}",
+    "car": {
+      "title": "Voiture de {driver}",
+      "full": "Complet",
+      "seats": "Places",
+      "freeSeat": "Place libre"
+    },
+    "withoutCar": "Sans voiture"
+  },
   "Admin": {
     "title": "Espace organisateur",
     "shareLink": {
