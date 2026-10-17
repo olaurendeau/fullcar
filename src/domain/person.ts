@@ -5,13 +5,27 @@
 import { optionalText, text, type TextError } from "./text";
 
 export const FIRST_NAME_MAX = 40;
-/** Characters, after trimming; the migration holds the same bounds. */
+/** Characters, after cleaning and trimming; the migration holds the same bounds. */
 export const PHONE_MAX = 25;
 export const PHONE_DIGITS_MIN = 6;
 export const PHONE_DIGITS_MAX = 15;
 
 /** Digits, spaces and `+ . - ( )`, nothing else. */
 const PHONE_CHARACTERS = /^[0-9 +.()-]+$/;
+
+/** Invisible format characters (`\p{Cf}`): bidi marks from iOS contacts, zero-width spaces, BOM. */
+const FORMAT_CHARACTERS = /\p{Cf}/gu;
+/** Space separators (`\p{Zs}`): no-break, narrow no-break and figure spaces among them. */
+const SPACE_SEPARATORS = /\p{Zs}/gu;
+
+/**
+ * A phone pasted from a contact list carries characters nobody sees (#123): the format
+ * characters go, every space separator becomes a plain space. The phone only: the other
+ * free texts keep their invisible characters, since an emoji sequence needs its joiners.
+ */
+function cleanPhone(value: unknown): unknown {
+  return typeof value === "string" ? value.replace(FORMAT_CHARACTERS, "").replace(SPACE_SEPARATORS, " ") : value;
+}
 
 /** The fields that can carry an error, in the order of the form: the first one gets the focus. */
 export const PERSON_FIELDS = ["firstName", "phone"] as const;
@@ -41,7 +55,8 @@ export type PersonValidation =
   | { ok: false; errors: PersonErrors; first: PersonField };
 
 function phone(value: unknown): { value: string | null } | { error: PersonError } {
-  const read = optionalText(value, PHONE_MAX);
+  // Cleaned first, so that the limits and the stored value apply to the cleaned phone.
+  const read = optionalText(cleanPhone(value), PHONE_MAX);
   if ("error" in read || read.value === null) return read;
   if (!PHONE_CHARACTERS.test(read.value)) return { error: "invalid" };
   const digits = read.value.replace(/[^0-9]/g, "").length;
