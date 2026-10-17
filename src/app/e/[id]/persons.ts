@@ -103,10 +103,10 @@ export async function addPerson(
     const leg = legs.find((known) => known === fields.leg);
     if (!isCreationId(id) || leg === undefined) return INVALID;
     if (!isPersonalToken(token)) return FORBIDDEN;
-    const held = (await readTokenHolders(trx, eventId)).find((holder) => holder.id === id);
-    if (held) return tokenMatches(token, held.tokenHash) ? { ok: true } : FORBIDDEN;
     const stored = await insertPerson(trx, { id, eventId, ...validation.person, tokenHash: hashToken(token) });
     if (stored === undefined || !tokenMatches(token, stored.tokenHash)) return FORBIDDEN;
+    // Sent again, or twice at once (the second insert waits for the first): nothing more to write.
+    if (!stored.created) return { ok: true };
     const withoutCar = initialLegs({ bothLegs: fields.bothLegs === true, leg, hasRetour: legs.includes("retour") });
     for (const placed of withoutCar) {
       await setPlacement(trx, { personId: id, eventId, leg: placed, rideId: null });

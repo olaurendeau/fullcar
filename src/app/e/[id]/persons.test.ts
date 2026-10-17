@@ -290,13 +290,10 @@ describe("C2.4, C7.3, C12.3: only the device that created the person changes her
     await withRollback(async (trx) => {
       const { eventId, lea } = await seedScene(trx);
       const personId = randomUUID();
-      expect(await updatePerson(trx, eventId, lea.token, { personId, firstName: "Ana", phone: "" })).toEqual(
-        expect.objectContaining({ ok: false, error: "forbidden" }),
-      );
-      expect(await setPersonLeg(trx, eventId, lea.token, { personId, leg: "aller", kind: "notConcerned" })).toEqual(
-        expect.objectContaining({ ok: false, error: "forbidden" }),
-      );
-      expect(await personIds(trx, eventId)).not.toContain(personId);
+      // The refusal carries the device's current state, which nothing changed.
+      const refused = { ok: false, error: "forbidden", state: await readEventState(trx, eventId, lea.token) };
+      expect(await updatePerson(trx, eventId, lea.token, { personId, firstName: "Ana", phone: "" })).toEqual(refused);
+      expect(await setPersonLeg(trx, eventId, lea.token, { personId, leg: "aller", kind: "notConcerned" })).toEqual(refused);
     });
   });
 });
@@ -398,6 +395,34 @@ describe("setPersonLeg", () => {
       const lea = await seedPerson(trx, eventId);
       const outcome = await setPersonLeg(trx, eventId, lea.token, { personId: lea.id, leg: "retour", kind: "withoutCar" });
       expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "invalid" }));
+    });
+  });
+});
+
+describe("C12.4: the same creation sent twice at once", () => {
+  it("the second waits for the first's insert, then writes nothing: she stays in the car she boarded", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const marc = await seedPerson(db, eventId, { firstName: "Marc" });
+      const ride = await seedRide(db, eventId, marc.id, { leg: "aller" });
+      const sent = registration();
+      // The first send, not committed yet: she is stored, and boards Marc's car.
+      const first = await db.startTransaction().execute();
+      try {
+        await seedPerson(first, eventId, { id: sent.id, firstName: sent.firstName }, NEW_TOKEN);
+        await seedPlacement(first, { personId: sent.id, eventId, leg: "aller", rideId: ride });
+        await seedPlacement(first, { personId: sent.id, eventId, leg: "retour", rideId: null });
+      } catch (error) {
+        await first.rollback().execute();
+        throw error;
+      }
+      const second = addPerson(db, eventId, NEW_TOKEN, sent);
+      // Time for the second to reach its insert, which waits on the first's id until it commits.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await first.commit().execute();
+
+      const state = stateOf(await second);
+      expect(standing(state, sent.id)).toEqual({ aller: "passenger", retour: "withoutCar" });
+      expect((await personIds(db, eventId)).sort()).toEqual([marc.id, sent.id].sort());
     });
   });
 });

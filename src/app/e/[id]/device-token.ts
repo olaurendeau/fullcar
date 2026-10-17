@@ -82,6 +82,9 @@ export function deviceTokens({ storage, random }: { storage: () => DeviceStorage
    * Two tabs registering at once (#82): the stored token is read just before the request
    * leaves, and after the write too, so that a token another tab stored meanwhile is the one
    * sent, and both persons share it. The page's memory serves only when nothing is stored.
+   * A window remains: a browser passes `localStorage` writes from one tab to another
+   * asynchronously (a few milliseconds in Chrome), and two tabs that both read an empty key
+   * within it each keep their own token.
    */
   function ensureDeviceToken(id: string): string {
     const existing = readDeviceToken(id);
