@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
+import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { expect, test } from "./fixtures";
@@ -64,6 +65,14 @@ function car(scope: Page | Locator, driver: string): Locator {
 
 function withoutCar(scope: Page | Locator): Locator {
   return scope.getByRole("region", { name: "Sans voiture" });
+}
+
+/** The headings of the page's content, in document order, as `h{level} {text}`. */
+function outline(page: Page): Promise<string[]> {
+  return page
+    .getByRole("main")
+    .getByRole("heading")
+    .evaluateAll((headings) => headings.map((heading) => `${heading.tagName.toLowerCase()} ${heading.textContent}`));
 }
 
 test.describe("board, with a retour", () => {
@@ -131,15 +140,6 @@ test.describe("board, with a retour", () => {
     await expect(page.getByRole("tab", { name: "Retour 1 sans voiture", exact: true })).toBeVisible();
   });
 
-  test("C10.2: no digit of a seeded number is in the HTML of /e/{id}", async ({ request, seededEvent }) => {
-    const html = await (await request.get(`/e/${seededEvent.id}`)).text();
-    expect(html).toContain("Marc");
-    for (const phone of Object.values(PHONES)) {
-      expect(html).not.toContain(phone);
-      expect(html).not.toContain(phone.replace(/\D/g, ""));
-    }
-  });
-
   test("C11.7: the organiser's page shows the same board", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}/admin`);
     const panel = page.getByRole("tabpanel");
@@ -172,6 +172,118 @@ test.describe("board, JavaScript disabled", () => {
     await expect(car(page, "Zoé")).toBeVisible();
     expect(await horizontalOverflow(page)).toBe(0);
   });
+
+  test("each leg is a region named by its leg alone, not a tab panel", async ({ db, page, seededEvent }) => {
+    await seedScene(db, seededEvent.id);
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(page.getByRole("tabpanel")).toHaveCount(0);
+    const aller = page.getByRole("region", { name: "Aller", exact: true });
+    const retour = page.getByRole("region", { name: "Retour", exact: true });
+    await expect(aller).toHaveAccessibleName("Aller");
+    await expect(retour).toHaveAccessibleName("Retour");
+    await expect(car(aller, "Marc")).toBeVisible();
+    await expect(car(retour, "Zoé")).toBeVisible();
+  });
+
+  test("headings go h1, then h2 per leg, then h3 for its cars and persons without a car", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await seedScene(db, seededEvent.id);
+    await page.goto(`/e/${seededEvent.id}`);
+    expect(await outline(page)).toEqual([
+      "h1 Tournoi de Rennes",
+      "h2 Aller",
+      "h3 Voiture de Marc",
+      "h3 Sans voiture",
+      "h2 Retour",
+      "h3 Voiture de Zoé",
+      "h3 Sans voiture",
+    ]);
+  });
+});
+
+test.describe("board without a retour, JavaScript disabled", () => {
+  test.use({ locale: "fr-FR", javaScriptEnabled: false, eventFields: { retourAt: null } });
+
+  test("headings go h1, h2 for the aller, then h3", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    await seedRide(db, id, await person(db, id, "Marc"));
+    await place(db, id, await person(db, id, "Léa"), "aller", null);
+
+    await page.goto(`/e/${id}`);
+    expect(await outline(page)).toEqual(["h1 Tournoi de Rennes", "h2 Aller", "h3 Voiture de Marc", "h3 Sans voiture"]);
+  });
+});
+
+/*
+ * C10.2, C10.6: no number reaches a browser, on the public page or the organiser's, with or
+ * without the organiser's link, with or without JavaScript. Searched in every answer the
+ * page receives (HTML, RSC, scripts, the link's check) and in its final DOM. No component
+ * shows a number yet: this guards the data the pages are given, not only what they display.
+ */
+const LEAKS = Object.values(PHONES).flatMap((phone) => [phone, phone.replace(/\D/g, "")]);
+
+function expectNoNumber(where: string, text: string) {
+  for (const leak of LEAKS) expect(text, `${where} holds ${leak}`).not.toContain(leak);
+}
+
+const PAGES = [
+  { name: "/e/{id}", path: ({ id }: SeededEvent) => `/e/${id}`, organiser: false },
+  { name: "/e/{id}/admin, without its fragment", path: ({ id }: SeededEvent) => `/e/${id}/admin`, organiser: false },
+  {
+    name: "/e/{id}/admin, with a valid organiser's link",
+    path: (event: SeededEvent) => `/e/${event.id}/admin#${event.token}`,
+    organiser: true,
+  },
+];
+
+for (const javaScriptEnabled of [true, false]) {
+  test.describe(`board, no number, JavaScript ${javaScriptEnabled ? "enabled" : "disabled"}`, () => {
+    test.use({ locale: "fr-FR", javaScriptEnabled });
+
+    test.beforeEach(async ({ db, seededEvent }) => {
+      await seedScene(db, seededEvent.id);
+    });
+
+    for (const { name, path, organiser } of PAGES) {
+      test(`C10.2, C10.6: no digit of a seeded number on ${name}`, async ({ page, seededEvent }) => {
+        const bodies: Promise<[string, string]>[] = [];
+        page.on("response", (response) => {
+          bodies.push(response.text().then((text) => [response.url(), text], () => [response.url(), ""]));
+        });
+        await page.goto(path(seededEvent), { waitUntil: "networkidle" });
+        // With JavaScript, the link's check answered: its panel shows.
+        if (javaScriptEnabled && organiser) {
+          await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
+        }
+
+        const dom = await page.content();
+        expect(dom).toContain("Marc");
+        expectNoNumber("the DOM", dom);
+        const received = await Promise.all(bodies);
+        expect(received.length).toBeGreaterThan(0);
+        for (const [url, text] of received) expectNoNumber(url, text);
+      });
+    }
+  });
+}
+
+test.describe("board, no number in the RSC payload", () => {
+  test.beforeEach(async ({ db, seededEvent }) => {
+    await seedScene(db, seededEvent.id);
+  });
+
+  for (const { name, path } of PAGES.filter(({ organiser }) => !organiser)) {
+    test(`C10.2, C10.6: no digit of a seeded number in the RSC answer of ${name}`, async ({ request, seededEvent }) => {
+      const response = await request.get(path(seededEvent), { headers: { RSC: "1" } });
+      expect(response.headers()["content-type"]).toContain("text/x-component");
+      const payload = await response.text();
+      expect(payload).toContain("Marc");
+      expectNoNumber("the RSC payload", payload);
+    });
+  }
 });
 
 test.describe("board, everyone seated", () => {

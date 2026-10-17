@@ -9,9 +9,9 @@ export function WithoutCarList({ leg, persons }: { leg: Leg; persons: readonly B
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2">
-      <h2 id={headingId} className="font-semibold">
+      <h3 id={headingId} className="font-semibold">
         {t("withoutCar")}
-      </h2>
+      </h3>
       <ul className="flex flex-wrap gap-2">
         {persons.map((person) => (
           <li key={person.id} className="max-w-full rounded-full border px-3 py-1 text-sm wrap-anywhere">

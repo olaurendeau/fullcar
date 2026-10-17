@@ -18,9 +18,9 @@ export function RideCard({ car, date }: { car: VisibleCar; date: WallDate }) {
   return (
     <article aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-2">
-        <h2 id={headingId} className="min-w-0 font-semibold wrap-anywhere">
+        <h3 id={headingId} className="min-w-0 font-semibold wrap-anywhere">
           {t("title", { driver: car.driver.firstName })}
-        </h2>
+        </h3>
         {car.full && (
           <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{t("full")}</span>
         )}
