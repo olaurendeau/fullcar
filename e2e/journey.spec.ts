@@ -261,6 +261,41 @@ test.describe("the organiser's token on the network", () => {
     expect(ats).toEqual(expect.arrayContaining(["POST /", `GET ${admin}?_rsc=`, `POST ${admin}`, `GET ${admin}`]));
     expect(JSON.stringify(await context.cookies())).not.toContain(token);
   });
+
+  test("L3.2: changing the language sends the token nowhere, and does not check it again", async ({
+    page,
+    context,
+    seededEvent,
+  }) => {
+    const { id, token } = seededEvent;
+    const admin = `/e/${id}/admin`;
+    const traffic = await recordTraffic(context);
+    // The check and the language switch are both a POST to the page: told apart by their body.
+    const checks = () => traffic.filter(({ at, requestBody }) => at === `POST ${admin}` && requestBody.includes(token));
+
+    await page.goto(`${admin}#${token}`, { waitUntil: "networkidle" });
+    await expect(page.getByRole("region", { name: WORDS.fr.panel })).toBeVisible();
+    expect(checks()).toHaveLength(1);
+    const before = traffic.length;
+
+    await expect(page.getByRole("button", { name: "English", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "English", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("region", { name: WORDS.en.panel })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+
+    const after = traffic.slice(before);
+    // Watched: the switch is in what was recorded.
+    expect(after.map(({ at, requestBody }) => `${at} ${requestBody}`)).toContain(`POST ${admin} ["en"]`);
+    const where = after.flatMap(({ at, ...parts }) =>
+      Object.entries({ url: at, ...parts })
+        .filter(([, text]) => text.includes(token))
+        .map(([part]) => `${at} ${part}`),
+    );
+    expect(where).toEqual([]);
+    expect(checks()).toHaveLength(1);
+    expect(JSON.stringify(await context.cookies())).not.toContain(token);
+  });
 });
 
 test.describe("an event with its three options", () => {

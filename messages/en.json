@@ -84,6 +84,11 @@
     "deleted": "Events are deleted 30 days after their date.",
     "create": "Create an event"
   },
+  "LanguageSwitch": {
+    "label": "Français",
+    "failed": "La langue n’a pas pu être changée. Vérifiez la connexion, puis réessayez.",
+    "cookiesBlocked": "Votre navigateur bloque les cookies, qui retiennent le choix de la langue. Autorisez-les pour ce site, puis réessayez."
+  },
   "Contact": {
     "link": "Contact us",
     "newTab": "(opens in a new tab)"

@@ -84,6 +84,11 @@
     "deleted": "Les événements sont supprimés 30 jours après leur date.",
     "create": "Créer un événement"
   },
+  "LanguageSwitch": {
+    "label": "English",
+    "failed": "The language could not be changed. Check your connection, then try again.",
+    "cookiesBlocked": "Your browser blocks cookies, which keep the language choice. Allow them for this site, then try again."
+  },
   "Contact": {
     "link": "Nous contacter",
     "newTab": "(s’ouvre dans un nouvel onglet)"
