@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
-import { insertPerson, readTokenHolders, updatePerson } from "./persons";
+import { insertPerson, lockPersons, readTokenHolders, updatePerson } from "./persons";
 import type { Database } from "./schema";
+import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
+import { seedPerson } from "./test-participants";
+import { atomically } from "./transaction";
 
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
@@ -108,5 +111,30 @@ describe("readTokenHolders", () => {
 
   it("lists nobody for an unknown event", async () => {
     expect(await withRollback((trx) => readTokenHolders(trx, "zzzzzzzz"))).toEqual([]);
+  });
+});
+
+describe("lockPersons", () => {
+  it("returns those of the ids that are persons of the event, in id order", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: otherEventId } = await seedEvent(trx);
+      const ids = [(await seedPerson(trx, eventId)).id, (await seedPerson(trx, eventId)).id];
+      const stranger = (await seedPerson(trx, otherEventId)).id;
+      expect(await lockPersons(trx, eventId, [...ids].reverse().concat(stranger, randomUUID()))).toEqual(ids.sort());
+      expect(await lockPersons(trx, eventId, [])).toEqual([]);
+    });
+  });
+
+  it("holds the lock until the transaction ends", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const { id } = await seedPerson(db, eventId);
+      const forUpdate = () => sql`select id from person where id = ${id} for update nowait`.execute(db);
+      await atomically(db, async (trx) => {
+        await lockPersons(trx, eventId, [id]);
+        await expect(forUpdate()).rejects.toMatchObject({ code: "55P03" });
+      });
+      await expect(forUpdate()).resolves.toBeDefined();
+    });
   });
 });

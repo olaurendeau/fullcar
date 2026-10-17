@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { loadEventState } from "./actions";
+import { loadEventState, takeSeats } from "./actions";
 import { readEventState } from "./event-state";
 
 // The action reaches the database through getDb(): here, the test's transaction,
@@ -50,7 +50,7 @@ async function seedScene(trx: Transaction<Database>) {
   const r1 = await seedRide(trx, eventId, marc.id);
   await seedPlacement(trx, { personId: lea.id, eventId, leg: "aller", rideId: r1 });
   await seedPlacement(trx, { personId: tom.id, eventId, leg: "aller", rideId: null });
-  return { eventId, marc, lea, tom };
+  return { eventId, marc, lea, tom, r1 };
 }
 
 describe("loadEventState", () => {
@@ -124,6 +124,60 @@ describe("loadEventState", () => {
       }
       expect(cause).toBeUndefined();
       expect(log.mock.calls).toEqual([["loadEventState: the event could not be read (SQLSTATE 57P01)"]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe("takeSeats", () => {
+  it("C5.2: places the device's person and gives the state the device now sees, in plain data", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, tom, r1 } = await seedScene(trx);
+      const result = await takeSeats(eventId, tom.token, r1, "aller", [tom.id]);
+      expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, tom.token) });
+      expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
+      const [aller] = result?.state ?? [];
+      expect(aller.cars[0].passengers.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
+    });
+  });
+
+  it("C2.4: a refusal gives the state too, and places nobody", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea, tom, r1 } = await seedScene(trx);
+      const result = await takeSeats(eventId, lea.token, r1, "aller", [tom.id]);
+      expect(result).toEqual({ ok: false, error: "forbidden", state: await readEventState(trx, eventId, lea.token) });
+      expect(result?.state[0].withoutCar.map((person) => person.firstName)).toEqual(["Tom"]);
+    });
+  });
+
+  it.each<[string, unknown]>([
+    ["a 0", "Ab3dEf70"],
+    ["a number", 12345678],
+    ["an object", { id: "Ab3dEf7h" }],
+  ])("reads and writes nothing for %s as the id", async (_, id) => {
+    connection.current = untouchable;
+    await expect(takeSeats(id, undefined, undefined, "aller", [])).resolves.toBeUndefined();
+  });
+
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    const token = "AAAAAAAAAAAAAAAAAAAAAA";
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const ids = ["0b0b2a4e-6a8f-4c1d-9e2f-3a4b5c6d7e8f", "1c1c2a4e-6a8f-4c1d-9e2f-3a4b5c6d7e8f"];
+      const failure = await takeSeats("Ab3dEf7h", token, ids[0], "aller", [ids[1]]).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack]) {
+        expect(text).not.toContain("06 22");
+        expect(text).not.toContain(token);
+      }
+      expect(cause).toBeUndefined();
+      expect(log.mock.calls).toEqual([["takeSeats: the seats could not be taken (SQLSTATE 57P01)"]]);
     } finally {
       log.mockRestore();
     }

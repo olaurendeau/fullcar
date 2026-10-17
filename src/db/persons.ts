@@ -83,3 +83,21 @@ export async function readTokenHolders(db: Kysely<Database>, eventId: string): P
     .execute();
   return rows.map((row) => ({ id: row.id, tokenHash: row.token_hash.toString("hex") }));
 }
+
+/**
+ * `SELECT … FOR UPDATE` on those of `ids` that are persons of the event, in id order, held
+ * until the transaction ends; returns their ids, in that order. A write that also locks a
+ * Ride locks it first (lock order: Ride, then Person). Call it inside `atomically`.
+ */
+export async function lockPersons(db: Kysely<Database>, eventId: string, ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .selectFrom("person")
+    .select("id")
+    .where("event_id", "=", eventId)
+    .where("id", "in", ids)
+    .orderBy("id")
+    .forUpdate()
+    .execute();
+  return rows.map((row) => row.id);
+}
