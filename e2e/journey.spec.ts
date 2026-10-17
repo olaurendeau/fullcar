@@ -1,0 +1,305 @@
+import { readFileSync } from "node:fs";
+import type { BrowserContext, Page, Response } from "@playwright/test";
+import { expect, test } from "./fixtures";
+
+/*
+ * The organiser's whole journey (#3, #24): from `/` to the link to share, against the
+ * production build served in UTC+14 (the Makefile's E2E_TZ), from browsers in other zones.
+ */
+
+type Messages = { [key: string]: string | Messages };
+
+const messages = (locale: "fr" | "en"): string[] => {
+  const flatten = (node: Messages): string[] =>
+    Object.values(node).flatMap((value) => (typeof value === "string" ? [value] : flatten(value)));
+  return flatten(JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), "utf8")));
+};
+
+/** What both languages write the same way: any other shared text is a missing translation. */
+const IN_BOTH = ["Fullcar", "Options"];
+
+/** The words of one language: what a page in the other must never show (C7.1). */
+function onlyIn(locale: "fr" | "en"): string[] {
+  return messages(locale).filter((text) => !IN_BOTH.includes(text) && !text.includes("{"));
+}
+
+const WORDS = {
+  fr: {
+    title: "Titre",
+    location: "Lieu",
+    allerDate: "Date de l’aller",
+    allerTime: "Heure de l’aller",
+    retour: "Retour",
+    retourTime: "Heure du retour",
+    options: ["Rehausseurs", "Participation aux frais", "Points de RDV"],
+    create: "Créer",
+    panel: "Espace organisateur",
+    shareLink: "Lien à partager",
+    aller: "Aller",
+    at: (time: string) => `à ${time}`,
+    // 07:30 and 18:00, as the language writes them.
+    clock: { aller: "07:30", retour: "18:00" },
+  },
+  en: {
+    title: "Title",
+    location: "Place",
+    allerDate: "Outbound date",
+    allerTime: "Outbound time",
+    retour: "Return",
+    retourTime: "Return time",
+    options: ["Booster seats", "Cost sharing", "Meeting points"],
+    create: "Create",
+    panel: "Organiser area",
+    shareLink: "Link to share",
+    aller: "Outbound",
+    at: (time: string) => `at ${time}`,
+    clock: { aller: "7:30\\sAM", retour: "6:00\\sPM" },
+  },
+};
+
+/** Where a new event lands: its organiser's link, the secret in the fragment only (C1.5). */
+const ARRIVAL = /\/e\/([2-9A-HJ-NP-Za-km-z]{8})\/admin#[A-Za-z0-9_-]{22}$/;
+
+const field = (page: Page, label: string) => page.getByLabel(label, { exact: true });
+
+/** The device's date, `days` from today, as an `<input type="date">` takes it. */
+function deviceDate(page: Page, days: number): Promise<string> {
+  return page.evaluate((days) => {
+    const at = new Date();
+    at.setDate(at.getDate() + days);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+  }, days);
+}
+
+/** A leg's date and time as the page must write them: the digits typed, in any zone (C1.12). */
+function legText(lang: "fr" | "en", date: string, time: string): RegExp {
+  const day = new Intl.DateTimeFormat(lang, { dateStyle: "full", timeZone: "UTC" }).format(new Date(`${date}T00:00Z`));
+  return new RegExp(`^${day} ${WORDS[lang].at(time)}$`);
+}
+
+/** The server action that checks the organiser's token: a POST to `/e/{id}/admin` (C4.9). */
+const isCheck = (response: Response) =>
+  response.request().method() === "POST" && /^\/e\/[^/]+\/admin$/.test(new URL(response.url()).pathname);
+
+const JOURNEYS = [
+  { locale: "fr-FR", lang: "fr", timezoneId: "America/New_York", retour: true },
+  { locale: "fr-FR", lang: "fr", timezoneId: "Europe/Paris", retour: false },
+  { locale: "en-GB", lang: "en", timezoneId: "Pacific/Honolulu", retour: true },
+  { locale: "en-GB", lang: "en", timezoneId: "Asia/Tokyo", retour: false },
+  // No German: the French, whole (C7.1).
+  { locale: "de-DE", lang: "fr", timezoneId: "Europe/Berlin", retour: true },
+] as const;
+
+for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
+  const words = WORDS[lang];
+  const name = `${locale}, ${retour ? "with" : "without"} a retour, browser in ${timezoneId}`;
+
+  test.describe(`the organiser's journey, ${name}`, () => {
+    test.use({ locale, timezoneId });
+
+    test("C1.4, C1.12, C5.9, C7.1: at most six actions to the link to share, in less than 30 s, in one language", async ({
+      page,
+      baseURL,
+    }) => {
+      const origin = new URL(baseURL!).origin;
+      const requests: string[] = [];
+      const scripts: string[] = [];
+      page.on("request", (request) => {
+        requests.push(request.url());
+        if (request.resourceType() === "script") scripts.push(request.url());
+      });
+      const title = lang === "fr" ? "Sortie ski du club" : "Club ski trip";
+
+      const start = Date.now();
+      await page.goto("/");
+      // Hydrated: "Créer" stays inactive until then. Waiting is not an action.
+      await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
+      const allerDate = await deviceDate(page, 7);
+      // C1.4 and C2.2: the shortest path, every action of the user in this list.
+      const actions = [
+        () => field(page, words.title).fill(title),
+        () => field(page, words.location).fill("La Clusaz"),
+        () => field(page, words.allerDate).fill(allerDate),
+        () => field(page, words.allerTime).fill("07:30"),
+        retour ? () => field(page, words.retourTime).fill("18:00") : () => field(page, words.retour).click(),
+        () => page.getByRole("button", { name: words.create }).click(),
+      ];
+      expect(actions.length).toBeLessThanOrEqual(6);
+      for (const action of actions) await action();
+
+      const shareLink = page.getByRole("region", { name: words.panel }).getByRole("group", { name: words.shareLink });
+      await expect(page).toHaveURL(ARRIVAL);
+      const id = ARRIVAL.exec(page.url())![1];
+      await expect(shareLink.getByTestId("link")).toHaveText(`${origin}/e/${id}`);
+      expect(Date.now() - start).toBeLessThan(30_000);
+
+      // C1.12: 07:30 and 18:00, as typed, from a server in UTC+14 to a browser elsewhere.
+      const legs = [legText(lang, allerDate, words.clock.aller)];
+      if (retour) legs.push(legText(lang, allerDate, words.clock.retour));
+      await expect(page.locator("header dd")).toHaveText(legs);
+      await expectOneLanguage(page, lang, allerDate);
+
+      // The link to share, opened: the event, on both tabs when it has a retour.
+      await page.goto(`${origin}/e/${id}`);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
+      await expect(page.getByRole("region", { name: words.panel })).toHaveCount(0);
+      await expect(page.locator("header dd")).toHaveText(legs);
+      if (retour) {
+        await expect(page.getByRole("tab", { name: words.aller })).toHaveAttribute("aria-selected", "true");
+        await page.getByRole("tab", { name: words.retour }).click();
+        await expect(page.getByRole("tab", { name: words.retour })).toHaveAttribute("aria-selected", "true");
+        await expect(page.getByRole("tabpanel").locator("time")).toHaveText(legs[1]);
+      } else {
+        await expect(page.getByRole("tab")).toHaveCount(0);
+      }
+      await expectOneLanguage(page, lang, allerDate);
+
+      // C1.4: the production build, not `next dev`. C5.9: nothing but the app's host.
+      expect(scripts.length).toBeGreaterThan(0);
+      expect(scripts.filter((url) => /development|hmr-client/.test(url))).toEqual([]);
+      expect([...new Set(requests.map((url) => new URL(url).origin))]).toEqual([origin]);
+    });
+  });
+}
+
+/** C7.1: the page's language, and not a word of the other one, dates included. */
+async function expectOneLanguage(page: Page, lang: "fr" | "en", date: string) {
+  await expect(page.locator("html")).toHaveAttribute("lang", lang);
+  const other = lang === "fr" ? "en" : "fr";
+  const otherDate = new Intl.DateTimeFormat(other, { dateStyle: "full", timeZone: "UTC" }).format(
+    new Date(`${date}T00:00Z`),
+  );
+  const text = await page.locator("body").innerText();
+  expect([...onlyIn(other), otherDate].filter((words) => text.includes(words))).toEqual([]);
+}
+
+interface Exchange {
+  /** Method and path, the query string included: what a server's log keeps. */
+  at: string;
+  requestHeaders: string;
+  requestBody: string;
+  responseHeaders: string;
+  responseBody: string;
+}
+
+/**
+ * Every request of the context, and its response, body included: each response is read
+ * here, in Node, before the browser gets it, so that none escapes for having been dropped
+ * by a navigation. What leaves the browser is a URL's path and query string, never its
+ * fragment.
+ */
+async function recordTraffic(context: BrowserContext): Promise<Exchange[]> {
+  const traffic: Exchange[] = [];
+  await context.route(
+    () => true,
+    async (route) => {
+      const request = route.request();
+      const response = await route.fetch();
+      const body = await response.body();
+      const { pathname, search } = new URL(request.url());
+      traffic.push({
+        at: `${request.method()} ${pathname}${search}`,
+        requestHeaders: JSON.stringify(await request.allHeaders()),
+        requestBody: request.postDataBuffer()?.toString("utf8") ?? "",
+        responseHeaders: JSON.stringify(response.headersArray()),
+        responseBody: body.toString("utf8"),
+      });
+      await route.fulfill({ response, body });
+    },
+  );
+  return traffic;
+}
+
+test.describe("the organiser's token on the network", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("C1.5, C4.8: from creation to the organiser's page, the token is only in the creation's answer and the check's request", async ({
+    page,
+    context,
+  }) => {
+    const words = WORDS.fr;
+    const traffic = await recordTraffic(context);
+
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
+    await field(page, words.title).fill("Sortie ski du club");
+    await field(page, words.location).fill("La Clusaz");
+    await field(page, words.allerDate).fill(await deviceDate(page, 7));
+    await field(page, words.allerTime).fill("07:30");
+    await field(page, words.retourTime).fill("18:00");
+    // Waited for, rather than the network going idle: a leak in an answer the page never
+    // reads must fail on the token, not on a timeout.
+    let checked = page.waitForResponse(isCheck);
+    await page.getByRole("button", { name: words.create }).click();
+    await checked;
+    await expect(page.getByRole("region", { name: words.panel })).toBeVisible();
+
+    // The server's HTML of the organiser's page, which `router.push` did not ask for.
+    checked = page.waitForResponse(isCheck);
+    await page.reload();
+    await checked;
+    await expect(page.getByRole("region", { name: words.panel })).toBeVisible();
+
+    const { pathname, hash } = new URL(page.url());
+    const token = hash.slice(1);
+    expect(token).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    const admin = pathname;
+    expect(admin).toMatch(/^\/e\/\w{8}\/admin$/);
+
+    // Wherever the token is, by request, the query string included, and by part.
+    const where = traffic.flatMap(({ at, ...parts }) =>
+      Object.entries({ url: at, ...parts })
+        .filter(([, text]) => text.includes(token))
+        .map(([part]) => `${at} ${part}`),
+    );
+    expect(where).toEqual(["POST / responseBody", `POST ${admin} requestBody`, `POST ${admin} requestBody`]);
+
+    // Everything was watched: the creation, the App Router's fetch of the organiser's page
+    // (`router.push`, its RSC payload), the check, and the page's HTML.
+    const ats = traffic.map(({ at }) => at.replace(/\?_rsc=.*$/, "?_rsc="));
+    expect(ats).toEqual(expect.arrayContaining(["POST /", `GET ${admin}?_rsc=`, `POST ${admin}`, `GET ${admin}`]));
+    expect(JSON.stringify(await context.cookies())).not.toContain(token);
+  });
+});
+
+test.describe("an event with its three options", () => {
+  test.use({ locale: "fr-FR" });
+
+  /** Creates the same event by the form, with or without its options: its organiser's URL. */
+  async function create(page: Page, withOptions: boolean): Promise<string> {
+    const words = WORDS.fr;
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
+    await field(page, words.title).fill("Sortie ski du club");
+    await field(page, words.location).fill("La Clusaz");
+    await field(page, words.allerDate).fill(await deviceDate(page, 7));
+    await field(page, words.allerTime).fill("07:30");
+    await field(page, words.retourTime).fill("18:00");
+    if (withOptions) for (const option of words.options) await field(page, option).check();
+    await page.getByRole("button", { name: words.create }).click();
+    await expect(page).toHaveURL(ARRIVAL);
+    await expect(page.getByRole("region", { name: words.panel })).toBeVisible();
+    return page.url();
+  }
+
+  /** The page's markup on each tab, its event's id and token replaced, the organiser's page first. */
+  async function markup(page: Page, adminUrl: string): Promise<string[]> {
+    const { pathname, hash } = new URL(adminUrl);
+    const id = pathname.split("/")[2];
+    const normalise = (html: string) => html.replaceAll(hash.slice(1), "{token}").replaceAll(id, "{id}");
+    const seen = [normalise(await page.locator("main").innerHTML())];
+    await page.goto(`/e/${id}`, { waitUntil: "networkidle" });
+    seen.push(normalise(await page.locator("body").innerHTML()));
+    await page.getByRole("tab", { name: WORDS.fr.retour }).click();
+    await expect(page.getByRole("tab", { name: WORDS.fr.retour })).toHaveAttribute("aria-selected", "true");
+    seen.push(normalise(await page.locator("body").innerHTML()));
+    return seen;
+  }
+
+  test("C3.4: its pages are the same as without any option", async ({ page }) => {
+    const plain = await markup(page, await create(page, false));
+    const withOptions = await markup(page, await create(page, true));
+    expect(withOptions).toEqual(plain);
+  });
+});

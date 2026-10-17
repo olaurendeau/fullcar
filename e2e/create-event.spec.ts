@@ -164,10 +164,16 @@ test.describe("creating an event from the home page", () => {
     await openForm(page);
     await fillAller(page);
     await field(page, FR.retourTime).fill("18:00");
+    // The check's answer, rather than the network going idle: a leak in an answer the page
+    // never reads must fail on the token, not on a timeout.
+    const checked = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" && /^\/e\/\w{8}\/admin$/.test(new URL(response.url()).pathname),
+    );
     await createButton(page).click();
+    await checked;
     await expect(page).toHaveURL(ARRIVAL);
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
-    await page.waitForLoadState("networkidle");
 
     const token = new URL(page.url()).hash.slice(1);
     expect((await Promise.all(creationBodies)).filter((body) => body.includes(token))).toHaveLength(1);
