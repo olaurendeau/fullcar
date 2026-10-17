@@ -102,13 +102,14 @@ en bout utilisent :
   Ces lignes validées sont visibles des autres tests tant qu'elles existent. Un test sous
   `withRollback` ne lit donc **que les lignes de son propre événement** (filtre sur son
   identifiant), ou compare deux comptages faits dans sa propre transaction. Pour ces
-  comptages, à partir de #79, `withRollback` ouvre sa transaction en `REPEATABLE READ`
-  (sur `main`, il garde le niveau par défaut, `READ COMMITTED`) : l'instantané est
-  pris à la première requête, et une ligne validée ensuite par un test de concurrence ne
-  fausse pas l'écart. Ce niveau ne cache pas une ligne validée **avant** cette première
-  requête : il ne remplace pas le filtre. Sur `main`, `src/db/events.test.ts` et
-  `src/db/event-table.test.ts` lisent encore `event` sans filtre ; #79 les restreint à
-  leur événement, avant le premier test de concurrence.
+  comptages, `withRollback` ouvre sa transaction en `REPEATABLE READ` (#79) : l'instantané
+  est pris à la première requête, et une ligne validée ensuite par un test de concurrence
+  ne fausse pas l'écart. Ce niveau ne cache pas une ligne validée **avant** cette première
+  requête : il ne remplace pas le filtre. Depuis #79, `src/db/events.test.ts` et
+  `src/db/event-table.test.ts` ne lisent `event` que filtré sur un identifiant : celui
+  d'un de leurs propres événements, ou un identifiant inconnu dont ils vérifient
+  l'absence. Seule exception, un comptage de `events.test.ts`, comparé à un second
+  comptage de la même transaction.
 - `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
   seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
   remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la
@@ -173,12 +174,22 @@ simultanées voient la même place libre et insèrent toutes les deux.
 verrouillent de même d'abord la ligne du Ride. Une écriture qui verrouille aussi une Person
 (les déclencheurs de #66, C12.8, voir « Contraintes permanentes ») le fait **après** le Ride :
 l'ordre est Ride, puis Person, dans tout le code, sans quoi deux transactions peuvent
-s'attendre l'une l'autre. Ainsi, **toute écriture d'un Placement qui porte un `ride_id`**
-verrouille d'abord ce Ride (`SELECT … FROM ride … FOR UPDATE`). Sans ce verrou, le
-déclencheur prend la Person `FOR UPDATE` avant que la clé `placement → ride` prenne le
-Ride `FOR KEY SHARE` : l'ordre devient Person, puis Ride, et l'écriture peut se bloquer
-mutuellement avec une prise de place. Ces verrous se prouvent par des tests de concurrence (voir « Base
-de test (Vitest) »).
+s'attendre l'une l'autre. Ainsi, dans `src/db/placements.ts`, `setPlacement` (un Placement
+dans une voiture) et `removePassengers` verrouillent d'abord le Ride avec `lockRide`
+(`src/db/rides.ts`, `SELECT … FROM ride … FOR UPDATE`), dans la transaction de l'appelant
+ou dans celle qu'ouvre `atomically` (`src/db/transaction.ts`). `deletePlacement`, lui, ne
+verrouille pas le Ride et n'en a pas besoin : un `DELETE` ne déclenche pas
+`placement_driver_on_leg` et ne contrôle pas la clé `placement → ride`, donc il ne
+verrouille ni Ride ni Person. Au pire, une prise de place simultanée compte encore la place
+qui se libère et la refuse, sans jamais surcharger la voiture.
+
+Le déclencheur `placement_driver_on_leg` tient lui-même cet ordre : quand `ride_id` est
+renseigné, il prend le Ride `FOR KEY SHARE`, le verrou que la clé `placement → ride`
+prend à l'insertion, **avant** la Person `FOR UPDATE`. Une écriture qui aurait oublié
+`lockRide` attend donc le Ride sans tenir la Person, au lieu de se bloquer mutuellement
+avec une prise de place. Ces verrous se prouvent par des tests de concurrence (voir « Base
+de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts` et
+`src/db/participant-tables.test.ts`.
 
 ## Jetons, et pourquoi ils sont la pièce critique
 
@@ -361,10 +372,13 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   exige Postgres 15 ou plus : 18 en local, 17 ou plus chez Neon.
 
   Deux déclencheurs garantissent en base qu'une conductrice n'a pas de Placement sur le leg
-  où elle conduit (#66, C12.8) : `placement_driver_on_leg` sur `placement`, et
-  `ride_driver_placed` sur `ride`. Chacun verrouille d'abord la ligne de la Person
-  (`FOR UPDATE`), pour que deux écritures simultanées ne passent pas toutes les deux, et
-  lève `23514` avec un nom de contrainte.
+  où elle conduit (#66, C12.8) : `placement_driver_on_leg` sur `placement` (insertion, ou
+  mise à jour de `person_id` ou de `leg`), et `ride_driver_placed` sur `ride` (insertion,
+  ou mise à jour de `driver_id` ou de `leg`). Chacun verrouille la ligne de la Person
+  (`FOR UPDATE`) avant de vérifier, pour que deux écritures simultanées ne passent pas
+  toutes les deux, et lève `23514` avec un nom de contrainte. Quand `ride_id` est
+  renseigné, `placement_driver_on_leg` verrouille d'abord le Ride (`FOR KEY SHARE`) :
+  l'ordre reste Ride, puis Person (voir « Concurrence »).
 - **Zéro tracking** : Vercel Web Analytics et Speed Insights restent désactivés.
 
 ## Décisions à remonter à l'humain
