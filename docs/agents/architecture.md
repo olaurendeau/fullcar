@@ -106,9 +106,10 @@ en bout utilisent :
   est pris à la première requête, et une ligne validée ensuite par un test de concurrence
   ne fausse pas l'écart. Ce niveau ne cache pas une ligne validée **avant** cette première
   requête : il ne remplace pas le filtre. Depuis #79, `src/db/events.test.ts` et
-  `src/db/event-table.test.ts` ne lisent `event` que sous les identifiants de leurs
-  propres événements, sauf un comptage de `events.test.ts`, comparé à un second comptage
-  de la même transaction.
+  `src/db/event-table.test.ts` ne lisent `event` que filtré sur un identifiant : celui
+  d'un de leurs propres événements, ou un identifiant inconnu dont ils vérifient
+  l'absence. Seule exception, un comptage de `events.test.ts`, comparé à un second
+  comptage de la même transaction.
 - `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
   seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
   remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la
@@ -176,11 +177,15 @@ l'ordre est Ride, puis Person, dans tout le code, sans quoi deux transactions pe
 s'attendre l'une l'autre. Ainsi, dans `src/db/placements.ts`, `setPlacement` (un Placement
 dans une voiture) et `removePassengers` verrouillent d'abord le Ride avec `lockRide`
 (`src/db/rides.ts`, `SELECT … FROM ride … FOR UPDATE`), dans la transaction de l'appelant
-ou dans celle qu'ouvre `atomically` (`src/db/transaction.ts`).
+ou dans celle qu'ouvre `atomically` (`src/db/transaction.ts`). `deletePlacement`, lui, ne
+verrouille pas le Ride et n'en a pas besoin : un `DELETE` ne déclenche pas
+`placement_driver_on_leg` et ne contrôle pas la clé `placement → ride`, donc il ne
+verrouille ni Ride ni Person. Au pire, une prise de place simultanée compte encore la place
+qui se libère et la refuse, sans jamais surcharger la voiture.
 
 Le déclencheur `placement_driver_on_leg` tient lui-même cet ordre : quand `ride_id` est
 renseigné, il prend le Ride `FOR KEY SHARE`, le verrou que la clé `placement → ride`
-prendrait de toute façon, **avant** la Person `FOR UPDATE`. Une écriture qui aurait oublié
+prend à l'insertion, **avant** la Person `FOR UPDATE`. Une écriture qui aurait oublié
 `lockRide` attend donc le Ride sans tenir la Person, au lieu de se bloquer mutuellement
 avec une prise de place. Ces verrous se prouvent par des tests de concurrence (voir « Base
 de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts` et
