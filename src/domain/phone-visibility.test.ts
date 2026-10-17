@@ -140,6 +140,18 @@ describe("withVisiblePhones", () => {
     expect(aller.cars[0].passengers).toEqual([{ id: "lea", firstName: "lea", phone: "06 22 22 22 22" }]);
   });
 
+  it("a person absent from phonesById has a null number, never undefined, in the car and the device section", () => {
+    const deviceIds = new Set(["lea"]);
+    const board = buildBoard(ROWS, ["aller"], deviceIds);
+    const [aller] = withVisiblePhones(board, new Map(), deviceIds);
+    const r1 = aller.cars.find((card) => card.id === "r1");
+    expect(r1?.driver).toStrictEqual({ id: "marc", firstName: "marc", phone: null });
+    expect(r1?.passengers).toStrictEqual([{ id: "lea", firstName: "lea", phone: null }]);
+    expect(aller.device.map((person) => person.phone)).toStrictEqual([null]);
+    // The key survives serialization: no `tel:undefined` link on the other side.
+    expect(JSON.parse(JSON.stringify(aller.device[0]))).toHaveProperty("phone", null);
+  });
+
   it("the list without a car carries no number, not even the device's own", () => {
     const [aller] = visibleFor(["tom"]);
     expect(aller.withoutCar).toEqual([{ id: "tom", firstName: "tom" }]);
