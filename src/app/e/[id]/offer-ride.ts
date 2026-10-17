@@ -37,13 +37,14 @@ export type OfferField = PersonField | RideField;
 export type OfferErrors = PersonErrors & RideErrors;
 
 /**
- * - `invalidRequest`: what no form sends (an id or a leg malformed, a leg the event does
+ * - `eventNotFound`: no such event (or a malformed id, never looked up);
+ * - `invalid`: what no form sends (an id or a leg malformed, a leg the event does
  *   not have, a new driver without a well-formed token);
- * - `notDevicePerson`: the driver is not a person of this device;
+ * - `forbidden`: the driver is not a person of this device;
  * - `alreadyDriving`: she drives another car on this leg (C4.6);
  * - `idTaken`: the Ride's id, or the new driver's, is held by someone else.
  */
-export type OfferRefusal = "invalidRequest" | "notFound" | "notDevicePerson" | "alreadyDriving" | "idTaken";
+export type OfferRefusal = "invalid" | "eventNotFound" | "forbidden" | "alreadyDriving" | "idTaken";
 
 export type OfferRideResult =
   | { ok: true; rideId: string; driverId: string }
@@ -143,9 +144,9 @@ export async function offerRide(
   input: unknown,
 ): Promise<OfferRideResult> {
   const offer = readOffer(input, token);
-  if (offer === undefined) return { ok: false, error: "invalidRequest" };
+  if (offer === undefined) return { ok: false, error: "invalid" };
   if (!("rideId" in offer)) return offer;
-  if (!isPublicId(eventId)) return { ok: false, error: "notFound" };
+  if (!isPublicId(eventId)) return { ok: false, error: "eventNotFound" };
   for (let attempt = 1; ; attempt++) {
     try {
       return await atomically(db, (trx) => offerOnce(trx, eventId, token, offer));
@@ -165,8 +166,8 @@ async function offerOnce(
   { rideId, leg, driver, ride }: Offer,
 ): Promise<OfferRideResult> {
   const event = await findPublicEvent(trx, eventId);
-  if (event === undefined) throw new Refused("notFound");
-  if (!eventLegs(event.retour_at).includes(leg)) throw new Refused("invalidRequest");
+  if (event === undefined) throw new Refused("eventNotFound");
+  if (!eventLegs(event.retour_at).includes(leg)) throw new Refused("invalid");
 
   const driverId = driver.personId;
   if (driver.kind === "new") {
@@ -174,7 +175,7 @@ async function offerOnce(
     const stored = await insertPerson(trx, { id: driverId, eventId, ...driver.person, tokenHash });
     if (stored === undefined || !tokenMatches(token, stored.tokenHash)) throw new Refused("idTaken");
   } else if (!devicePersonIds(token, await readTokenHolders(trx, eventId)).includes(driverId)) {
-    throw new Refused("notDevicePerson");
+    throw new Refused("forbidden");
   }
 
   // Lock order: the Ride she sits in, then her Person, which the trigger on ride locks too.

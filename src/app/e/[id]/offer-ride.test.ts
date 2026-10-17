@@ -197,7 +197,7 @@ describe("offerRide", () => {
       const before = await rowsOf(trx, scene.eventId);
       const offer = anOffer("aller", { kind: "device", personId: scene.tom.id });
       const result = await offerRide(trx, scene.eventId, tokenOf(scene), offer);
-      expect(result).toEqual({ ok: false, error: "notDevicePerson" });
+      expect(result).toEqual({ ok: false, error: "forbidden" });
       expect(await rowsOf(trx, scene.eventId)).toEqual(before);
     });
   });
@@ -226,7 +226,7 @@ describe("offerRide", () => {
       },
     });
     const offer = forge(anOffer("aller", { kind: "device", personId: randomUUID() }));
-    expect(await offerRide(untouchable, "Ab3dEf7h", newToken(), offer)).toEqual({ ok: false, error: "invalidRequest" });
+    expect(await offerRide(untouchable, "Ab3dEf7h", newToken(), offer)).toEqual({ ok: false, error: "invalid" });
   });
 
   it("refuses a new driver without a well-formed token, before reading anything", async () => {
@@ -235,7 +235,7 @@ describe("offerRide", () => {
       const before = await rowsOf(trx, eventId);
       expect(await offerRide(trx, eventId, "short", anOffer("aller", aNewDriver()))).toEqual({
         ok: false,
-        error: "invalidRequest",
+        error: "invalid",
       });
       expect(await rowsOf(trx, eventId)).toEqual(before);
     });
@@ -260,8 +260,8 @@ describe("offerRide", () => {
       const { id: eventId } = await seedEvent(trx, { retourAt: null });
       const { id, token } = await seedPerson(trx, eventId);
       const offer = anOffer("retour", { kind: "device", personId: id });
-      expect(await offerRide(trx, eventId, token, offer)).toEqual({ ok: false, error: "invalidRequest" });
-      expect(await offerRide(trx, "Zz9yXw8v", token, offer)).toEqual({ ok: false, error: "notFound" });
+      expect(await offerRide(trx, eventId, token, offer)).toEqual({ ok: false, error: "invalid" });
+      expect(await offerRide(trx, "Zz9yXw8v", token, offer)).toEqual({ ok: false, error: "eventNotFound" });
       expect((await rowsOf(trx, eventId)).rides).toEqual([]);
     });
   });

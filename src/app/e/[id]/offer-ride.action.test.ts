@@ -134,7 +134,7 @@ describe("offerRide (action)", () => {
         throw new Error(`the database was used (${String(property)})`);
       },
     });
-    await expect(offerRide(id, newToken(), anOffer())).resolves.toEqual({ ok: false, error: "notFound" });
+    await expect(offerRide(id, newToken(), anOffer())).resolves.toEqual({ ok: false, error: "eventNotFound" });
   });
 
   it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {

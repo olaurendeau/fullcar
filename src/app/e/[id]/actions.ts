@@ -126,12 +126,12 @@ export async function removeRide(
  * hashed and compared, never logged.
  */
 export async function offerRide(id: unknown, token: unknown, offer: unknown): Promise<OfferRideOutcome> {
-  if (!isPublicId(id)) return { ok: false, error: "notFound" };
+  if (!isPublicId(id)) return { ok: false, error: "eventNotFound" };
   try {
     const result = await storeRideOffer(getDb(), id, token, offer);
     if (!result.ok) return result;
     const state = await readEventState(getDb(), id, token);
-    return state === undefined ? { ok: false, error: "notFound" } : { ok: true, state };
+    return state === undefined ? { ok: false, error: "eventNotFound" } : { ok: true, state };
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("offerRide: the car could not be stored", error);
