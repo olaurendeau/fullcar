@@ -6,6 +6,7 @@ import { withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { atomically } from "@/db/transaction";
 import { buildBoard } from "@/domain/board";
 import type { Leg } from "@/domain/leg";
 import { withVisiblePhones, type VisibleBoard } from "@/domain/phone-visibility";
@@ -217,6 +218,12 @@ describe("readEventState", () => {
       await seedScene(trx);
       expect(await readEventState(trx, "Zz9yXw8v")).toBeUndefined();
     });
+  });
+
+  it("refuses to read in a READ COMMITTED transaction, rather than mixing snapshots", async () => {
+    await expect(atomically(getDb(), (trx) => readEventState(trx, "Zz9yXw8v"))).rejects.toThrow(
+      "onOneSnapshot: the transaction given is in read committed, not repeatable read",
+    );
   });
 
   it("gives nothing for a malformed id, without reading the database", async () => {

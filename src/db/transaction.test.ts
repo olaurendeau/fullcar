@@ -50,6 +50,26 @@ describe("onOneSnapshot", () => {
     });
   });
 
+  it("refuses a transaction in READ COMMITTED, where each read would see its own snapshot", async () => {
+    let reached = false;
+    await expect(
+      atomically(getDb(), (trx) =>
+        onOneSnapshot(trx, async () => {
+          reached = true;
+        }),
+      ),
+    ).rejects.toThrow("onOneSnapshot: the transaction given is in read committed, not repeatable read");
+    expect(reached).toBe(false);
+  });
+
+  it("reads inside a SERIALIZABLE transaction, which holds one snapshot too", async () => {
+    const seen = await getDb()
+      .transaction()
+      .setIsolationLevel("serializable")
+      .execute(async (trx) => (await onOneSnapshot(trx, async (db) => db)) === trx);
+    expect(seen).toBe(true);
+  });
+
   it("opens a read-only transaction in REPEATABLE READ on a connection", async () => {
     const settings = await onOneSnapshot(getDb(), async (trx) => {
       expect(trx.isTransaction).toBe(true);
