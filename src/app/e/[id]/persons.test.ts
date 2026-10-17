@@ -139,7 +139,7 @@ describe("addPerson", () => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       expect(await addPerson(trx, eventId, token, registration())).toEqual(
-        expect.objectContaining({ ok: false, error: "notAllowed" }),
+        expect.objectContaining({ ok: false, error: "forbidden" }),
       );
       expect(await personIds(trx, eventId)).toEqual([]);
     });
@@ -171,7 +171,7 @@ describe("addPerson", () => {
       const { eventId, tom } = await seedScene(trx);
       const before = await readEventState(trx, eventId, tom.token);
       const outcome = await addPerson(trx, eventId, NEW_TOKEN, registration({ id: tom.id, firstName: "Intrus" }));
-      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "notAllowed" }));
+      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
       expect(await readEventState(trx, eventId, tom.token)).toEqual(before);
       expect(standing(await readEventState(trx, eventId, NEW_TOKEN), tom.id)).toEqual({});
     });
@@ -182,7 +182,7 @@ describe("addPerson", () => {
       const other = await seedScene(trx);
       const { id: eventId } = await seedEvent(trx);
       const outcome = await addPerson(trx, eventId, other.tom.token, registration({ id: other.tom.id }));
-      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "notAllowed" }));
+      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
       expect(await personIds(trx, eventId)).toEqual([]);
     });
   });
@@ -266,7 +266,7 @@ describe("C2.4, C7.3, C12.3: only the device that created the person changes her
         firstName: "Intrus",
         phone: "",
       });
-      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "notAllowed" }));
+      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
       expect(await readEventState(trx, scene.eventId, scene.lea.token)).toEqual(before);
     });
   });
@@ -281,7 +281,7 @@ describe("C2.4, C7.3, C12.3: only the device that created the person changes her
         leg: "aller",
         kind: "withoutCar",
       });
-      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "notAllowed" }));
+      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
       expect(await readEventState(trx, scene.eventId, scene.lea.token)).toEqual(before);
     });
   });
@@ -291,10 +291,10 @@ describe("C2.4, C7.3, C12.3: only the device that created the person changes her
       const { eventId, lea } = await seedScene(trx);
       const personId = randomUUID();
       expect(await updatePerson(trx, eventId, lea.token, { personId, firstName: "Ana", phone: "" })).toEqual(
-        expect.objectContaining({ ok: false, error: "notAllowed" }),
+        expect.objectContaining({ ok: false, error: "forbidden" }),
       );
       expect(await setPersonLeg(trx, eventId, lea.token, { personId, leg: "aller", kind: "notConcerned" })).toEqual(
-        expect.objectContaining({ ok: false, error: "notAllowed" }),
+        expect.objectContaining({ ok: false, error: "forbidden" }),
       );
       expect(await personIds(trx, eventId)).not.toContain(personId);
     });

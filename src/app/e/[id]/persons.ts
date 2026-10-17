@@ -24,7 +24,7 @@ export type PersonRefusal =
   /** No such event, or a malformed id. */
   | "eventNotFound"
   /** The token is malformed or absent, the person is not the device's, or the id is someone else's. */
-  | "notAllowed"
+  | "forbidden"
   /** The person drives on that leg: she has no Placement there to change. */
   | "drives"
   /** Something only a forged request sends: an id, a leg or a state that is not one. */
@@ -40,7 +40,7 @@ export type PersonOutcome =
 
 type Written = { ok: true } | { ok: false; error: "eventNotFound" } | { ok: false; error: Refused };
 
-const NOT_ALLOWED = { ok: false, error: "notAllowed" } as const;
+const FORBIDDEN = { ok: false, error: "forbidden" } as const;
 const INVALID = { ok: false, error: "invalid" } as const;
 
 /** What `setPersonLeg` may make of a person on a leg: the two states she declares herself. */
@@ -102,11 +102,11 @@ export async function addPerson(
   return writeThenRead(db, eventId, token, async (trx, legs) => {
     const leg = legs.find((known) => known === fields.leg);
     if (!isCreationId(id) || leg === undefined) return INVALID;
-    if (!isPersonalToken(token)) return NOT_ALLOWED;
+    if (!isPersonalToken(token)) return FORBIDDEN;
     const held = (await readTokenHolders(trx, eventId)).find((holder) => holder.id === id);
-    if (held) return tokenMatches(token, held.tokenHash) ? { ok: true } : NOT_ALLOWED;
+    if (held) return tokenMatches(token, held.tokenHash) ? { ok: true } : FORBIDDEN;
     const stored = await insertPerson(trx, { id, eventId, ...validation.person, tokenHash: hashToken(token) });
-    if (stored === undefined || !tokenMatches(token, stored.tokenHash)) return NOT_ALLOWED;
+    if (stored === undefined || !tokenMatches(token, stored.tokenHash)) return FORBIDDEN;
     const withoutCar = initialLegs({ bothLegs: fields.bothLegs === true, leg, hasRetour: legs.includes("retour") });
     for (const placed of withoutCar) {
       await setPlacement(trx, { personId: id, eventId, leg: placed, rideId: null });
@@ -128,7 +128,7 @@ export async function updatePerson(
   const { personId } = fields;
   return writeThenRead(db, eventId, token, async (trx) => {
     if (!isCreationId(personId)) return INVALID;
-    if (!(await isDevicePerson(trx, eventId, token, personId))) return NOT_ALLOWED;
+    if (!(await isDevicePerson(trx, eventId, token, personId))) return FORBIDDEN;
     await storePersonFields(trx, { id: personId, eventId }, validation.person);
     return { ok: true };
   });
@@ -152,7 +152,7 @@ export async function setPersonLeg(
   return writeThenRead(db, eventId, token, async (trx, legs) => {
     const leg = legs.find((known) => known === fields.leg);
     if (kind === undefined || leg === undefined || !isCreationId(personId)) return INVALID;
-    if (!(await isDevicePerson(trx, eventId, token, personId))) return NOT_ALLOWED;
+    if (!(await isDevicePerson(trx, eventId, token, personId))) return FORBIDDEN;
     const placement = { personId, eventId, leg };
     if (await drivesOn(trx, placement)) return { ok: false, error: "drives" };
     if (kind === "withoutCar") await setPlacement(trx, { ...placement, rideId: null });
