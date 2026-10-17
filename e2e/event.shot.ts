@@ -46,13 +46,21 @@ test("organiser's page, with a retour", async ({ page, seededEvent }, testInfo) 
 });
 
 test("event, Aller then Retour tab", async ({ page, seededEvent }, testInfo) => {
+  const tab = (name: string) => page.getByRole("tab", { name });
   await page.goto(`/e/${seededEvent.id}`, { waitUntil: "networkidle" });
-  await expect(page.getByRole("tab", { name: "Aller" })).toHaveAttribute("aria-selected", "true");
+  await expect(tab("Aller")).toHaveAttribute("aria-selected", "true");
+
+  // One click each, not retried: a page that has not hydrated stays on Aller, and the
+  // Aller capture is taken only once Retour has been selected and left.
+  await tab("Retour").click();
+  await expect(tab("Retour")).toHaveAttribute("aria-selected", "true");
+  await tab("Aller").click();
+  await expect(tab("Aller")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel")).toContainText("Aucune voiture proposée pour l’aller");
   await shoot(page, testInfo, "event-aller");
 
-  // One click, not retried: a page that has not hydrated stays on Aller.
-  await page.getByRole("tab", { name: "Retour" }).click();
-  await expect(page.getByRole("tab", { name: "Retour" })).toHaveAttribute("aria-selected", "true");
+  await tab("Retour").click();
+  await expect(tab("Retour")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel")).toContainText("Aucune voiture proposée pour le retour");
   await shoot(page, testInfo, "event-retour");
 });

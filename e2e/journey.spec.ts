@@ -287,7 +287,13 @@ test.describe("an event with its three options", () => {
   async function markup(page: Page, adminUrl: string): Promise<string[]> {
     const { pathname, hash } = new URL(adminUrl);
     const id = pathname.split("/")[2];
-    const normalise = (html: string) => html.replaceAll(hash.slice(1), "{token}").replaceAll(id, "{id}");
+    // React's generated ids too: the panel mounts after `router.push`, and its ids follow
+    // whatever was rendered on `/` before, ticking the options included.
+    const normalise = (html: string) =>
+      html
+        .replaceAll(hash.slice(1), "{token}")
+        .replaceAll(id, "{id}")
+        .replace(/_r_\w+_/g, "{useId}");
     const seen = [normalise(await page.locator("main").innerHTML())];
     await page.goto(`/e/${id}`, { waitUntil: "networkidle" });
     seen.push(normalise(await page.locator("body").innerHTML()));
@@ -297,9 +303,30 @@ test.describe("an event with its three options", () => {
     return seen;
   }
 
-  test("C3.4: its pages are the same as without any option", async ({ page }) => {
-    const plain = await markup(page, await create(page, false));
-    const withOptions = await markup(page, await create(page, true));
+  test("C3.4: its pages are the same as without any option", async ({ page, db }) => {
+    const options = (url: string) =>
+      db
+        .selectFrom("event")
+        .select(["boosters_enabled", "participation_enabled", "stops_enabled"])
+        .where("id", "=", new URL(url).pathname.split("/")[2])
+        .executeTakeFirstOrThrow();
+
+    const plainUrl = await create(page, false);
+    expect(await options(plainUrl)).toEqual({
+      boosters_enabled: false,
+      participation_enabled: false,
+      stops_enabled: false,
+    });
+    const plain = await markup(page, plainUrl);
+
+    // Stored with its three options: otherwise, two events without any would compare equal.
+    const withOptionsUrl = await create(page, true);
+    expect(await options(withOptionsUrl)).toEqual({
+      boosters_enabled: true,
+      participation_enabled: true,
+      stops_enabled: true,
+    });
+    const withOptions = await markup(page, withOptionsUrl);
     expect(withOptions).toEqual(plain);
   });
 });
