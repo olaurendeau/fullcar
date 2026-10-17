@@ -1,5 +1,7 @@
 import { MapPin } from "lucide-react";
 import { useTranslations } from "next-intl";
+import type { Leg } from "@/domain/leg";
+import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
 import type { WallClock } from "@/domain/wall-clock";
 import { LegPanel, LegTime } from "./leg-panel";
 import { LegTabs } from "./leg-tabs";
@@ -9,14 +11,22 @@ export interface EventViewProps {
   location: string;
   allerAt: WallClock;
   retourAt: WallClock | null;
+  /** Each leg's cars, persons without a car and coverage (#86), in the event's order. */
+  board: VisibleBoard;
+}
+
+/** A leg's state; one the board does not have is empty. */
+function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
+  return board.find((candidate) => candidate.leg === leg) ?? { leg, cars: [], withoutCar: [], device: [] };
 }
 
 /**
  * The event as its participants see it (#3, R5): title, place, both legs' date and time,
  * then one tab per leg, or the aller alone, without tabs, when there is no retour (C5.4).
+ * Each leg shows its coverage, its cars and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
  */
-export function EventView({ title, location, allerAt, retourAt }: EventViewProps) {
+export function EventView({ title, location, allerAt, retourAt, board }: EventViewProps) {
   const t = useTranslations("Event.legs");
 
   return (
@@ -44,7 +54,11 @@ export function EventView({ title, location, allerAt, retourAt }: EventViewProps
           )}
         </dl>
       </header>
-      {retourAt ? <LegTabs allerAt={allerAt} retourAt={retourAt} /> : <LegPanel leg="aller" at={allerAt} />}
+      {retourAt ? (
+        <LegTabs allerAt={allerAt} retourAt={retourAt} aller={legOf(board, "aller")} retour={legOf(board, "retour")} />
+      ) : (
+        <LegPanel at={allerAt} board={legOf(board, "aller")} />
+      )}
     </div>
   );
 }

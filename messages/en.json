@@ -50,6 +50,22 @@
     },
     "nobody": "Nobody has signed up yet."
   },
+  "Board": {
+    "banner": {
+      "everyoneSeated": "Everyone has a seat",
+      "everyoneSeatedFree": "Everyone has a seat · {free, plural, one {# free seat} other {# free seats}}",
+      "enoughSeats": "{withoutCar, plural, other {# without a car}} · {free, plural, one {# free seat} other {# free seats}}",
+      "missingSeats": "{withoutCar, plural, other {# without a car}} · {missing, plural, one {# seat missing} other {# seats missing}}"
+    },
+    "tabCount": "{count, plural, other {# without a car}}",
+    "car": {
+      "title": "{driver}’s car",
+      "full": "Full",
+      "seats": "Seats",
+      "freeSeat": "Free seat"
+    },
+    "withoutCar": "Without a car"
+  },
   "Admin": {
     "title": "Organiser area",
     "shareLink": {
