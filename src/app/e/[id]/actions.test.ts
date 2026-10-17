@@ -6,7 +6,7 @@ import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { addPerson, loadEventState, setPersonLeg, takeSeats, updatePerson } from "./actions";
+import { addPerson, loadEventState, removeRide, setPersonLeg, takeSeats, updatePerson, updateRide } from "./actions";
 import { readEventState } from "./event-state";
 
 // The action reaches the database through getDb(): here, the test's transaction,
@@ -293,6 +293,104 @@ describe("the person actions", () => {
         expect(cause).toBeUndefined();
         expect(log).toHaveBeenLastCalledWith(`${name}: the change could not be written (SQLSTATE 57P01)`);
       }
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+/** The fields the change form sends, with the passengers its step showed. */
+function rideForm(fields: Record<string, unknown> = {}) {
+  return { location: "Mairie", time: "07:15", seats: "3", note: "", seenPassengerIds: [], leaving: [], ...fields };
+}
+
+describe("updateRide", () => {
+  it("C8.5: refuses a reduction when a passenger seen left and another boarded, the count unchanged", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, marc, lea, tom, r1 } = await seedScene(trx);
+      const ben = await seedPerson(trx, eventId, { firstName: "Ben" });
+      await seedPlacement(trx, { personId: ben.id, eventId, leg: "aller", rideId: r1 });
+      // The step showed Léa and Ben; then Ben left and Tom boarded: still two passengers.
+      const seenPassengerIds = [lea.id, ben.id];
+      await seedPlacement(trx, { personId: ben.id, eventId, leg: "aller", rideId: null });
+      await seedPlacement(trx, { personId: tom.id, eventId, leg: "aller", rideId: r1 });
+
+      const result = await updateRide(eventId, marc.token, r1, "aller", rideForm({ seats: "1", seenPassengerIds, leaving: [lea.id] }));
+
+      expect(result).toMatchObject({ ok: false, error: "passengersChanged" });
+      expect(result && "passengerIds" in result && [...result.passengerIds].sort()).toEqual([lea.id, tom.id].sort());
+      expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
+      const car = result && "state" in result ? result.state[0].cars[0] : undefined;
+      expect(car?.passengers.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
+      expect(car?.seats).toBe(3);
+    });
+  });
+
+  it("refuses as invalid a form that does not send the passengers its step showed", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, marc, r1 } = await seedScene(trx);
+      const result = await updateRide(eventId, marc.token, r1, "aller", rideForm({ seats: "1", seenPassengerIds: undefined }));
+      expect(result).toMatchObject({ ok: false, error: "invalid" });
+    });
+  });
+
+  it("reads and writes nothing for a malformed event id", async () => {
+    connection.current = untouchable;
+    await expect(updateRide("Ab3dEf70", undefined, undefined, "aller", rideForm())).resolves.toBeUndefined();
+  });
+});
+
+describe("removeRide", () => {
+  it("C8.6: removes the driver's car and gives the state the device now sees, in plain data", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, marc, r1 } = await seedScene(trx);
+      const result = await removeRide(eventId, marc.token, r1, "aller");
+      expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, marc.token) });
+      expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
+      expect(result?.state[0].withoutCar.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
+    });
+  });
+
+  it("C8.1: refuses a passenger's token, and the car stays", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const result = await removeRide(eventId, lea.token, r1, "aller");
+      expect(result).toMatchObject({ ok: false, error: "forbidden" });
+      expect(result?.state[0].cars.map((car) => car.id)).toEqual([r1]);
+    });
+  });
+
+  it("reads and writes nothing for a malformed event id", async () => {
+    connection.current = untouchable;
+    await expect(removeRide({ id: "Ab3dEf7h" }, undefined, undefined, "aller")).resolves.toBeUndefined();
+  });
+});
+
+describe.each<[string, string, (token: string, rideId: string) => Promise<unknown>]>([
+  [
+    "updateRide",
+    "updateRide: the car could not be changed",
+    (token, rideId) => updateRide("Ab3dEf7h", token, rideId, "aller", rideForm()),
+  ],
+  ["removeRide", "removeRide: the car could not be removed", (token, rideId) => removeRide("Ab3dEf7h", token, rideId, "aller")],
+])("%s", (_, logged, action) => {
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    const token = "AAAAAAAAAAAAAAAAAAAAAA";
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await action(token, "0b0b2a4e-6a8f-4c1d-9e2f-3a4b5c6d7e8f").then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack]) {
+        expect(text).not.toContain("06 22");
+        expect(text).not.toContain(token);
+      }
+      expect(cause).toBeUndefined();
+      expect(log.mock.calls).toEqual([[`${logged} (SQLSTATE 57P01)`]]);
     } finally {
       log.mockRestore();
     }

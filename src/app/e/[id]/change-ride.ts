@@ -1,0 +1,157 @@
+import type { Kysely } from "kysely";
+import { readTokenHolders } from "@/db/persons";
+import { removePassengers } from "@/db/placements";
+import { deleteRide, lockRide, ridePassengers, updateRide as writeRide, type LockedRide, type RideRef } from "@/db/rides";
+import type { Database } from "@/db/schema";
+import { atomically } from "@/db/transaction";
+import { isCreationId } from "@/domain/creation-id";
+import { devicePersonIds } from "@/domain/device";
+import { LEGS, type Leg } from "@/domain/leg";
+import { isPublicId } from "@/domain/public-id";
+import { seatReduction, validateRide, type NewRide, type RideErrors, type RideField } from "@/domain/ride";
+import { readEventState, type EventState } from "./event-state";
+
+/**
+ * - `invalid`: a request no page sends (an id, a leg or a list malformed).
+ * - `forbidden`: the car is not driven by a person of the device (C8.1).
+ * - `rideGone`: the car is no longer offered on that leg.
+ * - `passengersChanged`: the passengers are not those the driver chose among, or the
+ *   number leaving is not right (C8.4, C8.5); `passengerIds` are the passengers now, read
+ *   under the Ride's lock, for the step to reopen with them.
+ */
+export type UpdateRideOutcome =
+  | { ok: true }
+  | { ok: false; error: "invalid" | "forbidden" | "rideGone" }
+  | { ok: false; error: "passengersChanged"; passengerIds: string[] };
+
+/** The outcome and the state the device now sees; or field errors, and nothing read. */
+export type UpdateRideResult =
+  | (UpdateRideOutcome & { state: EventState })
+  | { ok: false; errors: RideErrors; first: RideField };
+
+/** Removing a car already removed is a success (C8.6). */
+export type RemoveRideOutcome = { ok: true } | { ok: false; error: "invalid" | "forbidden" };
+
+export type RemoveRideResult = RemoveRideOutcome & { state: EventState };
+
+const INVALID = { ok: false, error: "invalid" } as const;
+const FORBIDDEN = { ok: false, error: "forbidden" } as const;
+
+function rideRef(eventId: string, rideId: unknown, leg: unknown): RideRef | undefined {
+  if (!isCreationId(rideId) || !LEGS.some((known) => known === leg)) return undefined;
+  return { id: rideId, eventId, leg: leg as Leg };
+}
+
+function ids(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every(isCreationId) ? [...value] : undefined;
+}
+
+interface Change {
+  ride: NewRide;
+  /** The passengers the form showed while the driver chose who leaves, never read again. */
+  seenPassengerIds: string[];
+  leaving: string[];
+}
+
+/** The fields, checked against R4, and the step's lists, which the form always sends. */
+function readChange(fields: unknown): Change | { errors: RideErrors; first: RideField } | undefined {
+  if (typeof fields !== "object" || fields === null) return undefined;
+  const sent: Record<string, unknown> = { ...fields };
+  const seenPassengerIds = ids(sent.seenPassengerIds);
+  const leaving = ids(sent.leaving);
+  if (seenPassengerIds === undefined || leaving === undefined) return undefined;
+  const validation = validateRide({ location: sent.location, time: sent.time, seats: sent.seats, note: sent.note });
+  if (!validation.ok) return { errors: validation.errors, first: validation.first };
+  return { ride: validation.ride, seenPassengerIds, leaving };
+}
+
+/**
+ * The Ride under its lock, if a person of the device drives it. The token's holders are
+ * read first, without a lock; the Ride is the first row locked (lock order: Ride, then
+ * Person), and nothing here locks a Person.
+ */
+async function lockDriversRide(
+  trx: Kysely<Database>,
+  token: unknown,
+  ride: RideRef,
+): Promise<LockedRide | "forbidden" | "gone"> {
+  const device = new Set(devicePersonIds(token, await readTokenHolders(trx, ride.eventId)));
+  if (device.size === 0) return "forbidden";
+  const locked = await lockRide(trx, ride);
+  if (locked === undefined) return "gone";
+  return device.has(locked.driverId) ? locked : "forbidden";
+}
+
+async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, change: Change): Promise<UpdateRideOutcome> {
+  const locked = await lockDriversRide(trx, token, ride);
+  if (locked === "forbidden") return FORBIDDEN;
+  if (locked === "gone") return { ok: false, error: "rideGone" };
+  // Counted under the lock (C12.11): a seat taken meanwhile has committed, or waits.
+  const passengerIds = (await ridePassengers(trx, ride)).map((passenger) => passenger.personId);
+  const decision = seatReduction({
+    passengerIds,
+    seenPassengerIds: change.seenPassengerIds,
+    newSeats: change.ride.seats,
+    leaving: change.leaving,
+  });
+  if (!decision.ok) return { ok: false, error: "passengersChanged", passengerIds };
+  await removePassengers(trx, ride, decision.leaving);
+  const { location, time, seats, note } = change.ride;
+  await writeRide(trx, ride, { location, departureTime: `${time}:00`, seats, note });
+  return { ok: true };
+}
+
+/**
+ * The driver changes their car (epic #66, R8, C8.2 to C8.5): place, time, note and seats,
+ * by the rules of R4, and who leaves when the seats go below the passengers. Nothing for an
+ * unknown event; a malformed id is never looked up.
+ *
+ * On the connection, the write commits in its own transaction (READ COMMITTED, so that the
+ * passengers counted after the Ride's lock include a seat just taken), and the state is
+ * read after the commit, on one snapshot. Given a transaction, both run in it. The token is
+ * only compared, never logged nor kept.
+ */
+export async function updateRide(
+  db: Kysely<Database>,
+  eventId: string,
+  token: unknown,
+  rideId: unknown,
+  leg: unknown,
+  fields: unknown,
+): Promise<UpdateRideResult | undefined> {
+  if (!isPublicId(eventId)) return undefined;
+  const ride = rideRef(eventId, rideId, leg);
+  const change = ride && readChange(fields);
+  if (change && "errors" in change) return { ok: false, ...change };
+  const outcome: UpdateRideOutcome =
+    ride && change ? await atomically(db, (trx) => changeRide(trx, token, ride, change)) : INVALID;
+  const state = await readEventState(db, eventId, token);
+  return state && { ...outcome, state };
+}
+
+/**
+ * The driver removes their car (C8.6). Its passengers are left without a car on the leg by
+ * the `placement → ride` key, and the driver, who has no Placement there, is not concerned.
+ * Nothing for an unknown event; a malformed id is never looked up. Committed, then the
+ * state is read, as for updateRide.
+ */
+export async function removeRide(
+  db: Kysely<Database>,
+  eventId: string,
+  token: unknown,
+  rideId: unknown,
+  leg: unknown,
+): Promise<RemoveRideResult | undefined> {
+  if (!isPublicId(eventId)) return undefined;
+  const ride = rideRef(eventId, rideId, leg);
+  const outcome: RemoveRideOutcome = ride
+    ? await atomically(db, async (trx) => {
+        const locked = await lockDriversRide(trx, token, ride);
+        if (locked === "forbidden") return FORBIDDEN;
+        if (locked !== "gone") await deleteRide(trx, ride);
+        return { ok: true } as const;
+      })
+    : INVALID;
+  const state = await readEventState(db, eventId, token);
+  return state && { ...outcome, state };
+}

@@ -3,6 +3,7 @@
 import { getDb } from "@/db/client";
 import { databaseFailure } from "@/db/failure";
 import { isPublicId } from "@/domain/public-id";
+import * as changeRide from "./change-ride";
 import { readEventState, type EventState } from "./event-state";
 import * as persons from "./persons";
 import { takeSeats as takeSeatsInRide, type TakeSeatsResult } from "./seats";
@@ -78,4 +79,41 @@ export async function updatePerson(id: unknown, token: unknown, fields: unknown)
 /** Without a car, or not concerned, on one leg, for one of the device's persons. */
 export async function setPersonLeg(id: unknown, token: unknown, fields: unknown): Promise<persons.PersonOutcome> {
   return changePerson("setPersonLeg", persons.setPersonLeg, id, token, fields);
+}
+
+/**
+ * The driver changes their car (R8, C8.2 to C8.5). `fields` carries the form's fields and
+ * its step's lists: the passengers it showed (`seenPassengerIds`) and who leaves
+ * (`leaving`). The token arrives in the body, never in the URL; it is only compared, never
+ * logged. Nothing for an unknown event or a malformed id.
+ */
+export async function updateRide(
+  id: unknown,
+  token: unknown,
+  rideId: unknown,
+  leg: unknown,
+  fields: unknown,
+): Promise<changeRide.UpdateRideResult | undefined> {
+  if (!isPublicId(id)) return undefined;
+  try {
+    return await changeRide.updateRide(getDb(), id, token, rideId, leg, fields);
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure("updateRide: the car could not be changed", error);
+  }
+}
+
+/** The driver removes their car (C8.6); removing it again succeeds. As for updateRide. */
+export async function removeRide(
+  id: unknown,
+  token: unknown,
+  rideId: unknown,
+  leg: unknown,
+): Promise<changeRide.RemoveRideResult | undefined> {
+  if (!isPublicId(id)) return undefined;
+  try {
+    return await changeRide.removeRide(getDb(), id, token, rideId, leg);
+  } catch (error) {
+    throw databaseFailure("removeRide: the car could not be removed", error);
+  }
 }
