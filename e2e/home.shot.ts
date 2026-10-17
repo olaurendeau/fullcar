@@ -9,5 +9,7 @@ test("home", async ({ page }, testInfo) => {
   // as cross-origin, and a capture would show a page that never hydrated (#65).
   expect(scripts.length).toBeGreaterThan(0);
   expect(scripts.filter((url) => /development|hmr-client/.test(url))).toEqual([]);
+  // #3, C7.2: no sideways scrolling.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.screenshot({ path: `var/shots/home-${width}.png`, fullPage: true });
 });
