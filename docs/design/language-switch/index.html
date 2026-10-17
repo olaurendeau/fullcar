@@ -1,0 +1,487 @@
+<title>Fullcar, changer de langue</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8; --card: #ffffff;
+    --accent: #2457c5; --accent-soft: #e6edfb; --note: #fff7e0; --note-line: #ecd48a;
+    /* The app's own look, light only, from src/app/globals.css (oklch converted): */
+    --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
+    --app-border: #e5e5e5; --app-primary: #171717; --app-primary-fg: #fafafa;
+    --app-destructive: #e7000b; --app-destructive-bg: #fef2f2; --app-destructive-line: #f8c4c4;
+    --app-ring: #a1a1a1; --app-check: #171717; --app-check-fg: #fafafa;
+    --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444; --fold: #2457c5;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  h2 { font-size: 1.3rem; margin: 48px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 75ch; }
+  a { color: var(--accent); }
+  code { font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 32px 24px; margin-top: 20px; align-items: start; }
+  .state { min-width: 0; }
+  .state > p { color: var(--muted); font-size: 0.9rem; margin: 0 0 10px; }
+  .crit { font-size: 0.8rem; color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+  /* Phone: a 360 px wide viewport inside a 6 px frame */
+  .phone { box-sizing: content-box; width: 360px; max-width: calc(100% - 12px); border: 6px solid var(--frame); border-radius: 22px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); }
+  .urlbar { background: var(--urlbar); color: var(--urlbar-fg); font: 12px ui-monospace, Menlo, monospace; padding: 7px 10px; overflow-wrap: anywhere; }
+  .urlbar b { color: var(--app-destructive); font-weight: 600; }
+  .screen { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 24px; font-size: 14px; line-height: 1.43; }
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .stack.tight { gap: 4px; }
+  .cut { color: var(--app-muted); font-size: 11px; text-align: center; letter-spacing: .04em; }
+  .fold { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--fold); }
+  .fold span { position: absolute; right: 6px; top: -20px; font-size: 11px; color: var(--fold); background: var(--app-bg); padding: 0 4px; }
+  .app-h1 { font-size: 30px; font-weight: 700; margin: 0; line-height: 1.2; }
+  .ev-h1 { font-size: 24px; font-weight: 700; margin: 0; line-height: 1.25; }
+  .app-muted { color: var(--app-muted); margin: 0; }
+  .small-muted { color: var(--app-muted); font-size: 13px; line-height: 18px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field label { font-weight: 500; font-size: 14px; }
+  .field label.err { color: var(--app-destructive); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .input { height: 40px; box-sizing: border-box; border: 1px solid var(--app-border); border-radius: 8px; padding: 0 10px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
+  .input.err { border-color: var(--app-destructive); }
+  .errtext { color: var(--app-destructive); font-size: 13px; line-height: 18px; }
+  .box { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 4px 0; }
+  .cb { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid var(--app-border); border-radius: 4px; display: grid; place-items: center; font-size: 11px; line-height: 1; }
+  .cb.on { background: var(--app-check); border-color: var(--app-check); color: var(--app-check-fg); }
+  .box strong { font-weight: 500; display: block; }
+  .options { border: 1px solid var(--app-border); border-radius: 14px; padding: 8px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .options > span { font-weight: 600; padding-top: 6px; }
+  .btn { height: 44px; border-radius: 10px; background: var(--app-primary); color: var(--app-primary-fg); display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 500; flex: 1; }
+  .btn.outline { background: var(--app-bg); color: var(--app-fg); border: 1px solid var(--app-border); }
+  .btn svg { width: 16px; height: 16px; }
+  .row { display: flex; gap: 8px; }
+  .panel { border: 1px solid var(--app-border); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .panel hr { border: 0; border-top: 1px solid var(--app-border); margin: 0; }
+  .group { display: flex; flex-direction: column; gap: 8px; }
+  .glabel { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border: 1px solid var(--app-border); border-radius: 999px; background: var(--app-muted-bg); font-size: 12px; }
+  .badge svg { width: 12px; height: 12px; }
+  .link { background: var(--app-muted-bg); border-radius: 8px; padding: 10px 12px; font: 13px/20px ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+  .notice { display: grid; grid-template-columns: 16px 1fr; gap: 2px 10px; border: 1px solid var(--app-border); border-radius: 10px; padding: 12px; font-size: 14px; }
+  .notice svg { grid-row: span 2; width: 16px; height: 16px; margin-top: 2px; }
+  .notice p { margin: 0; }
+  .notice .t { font-weight: 600; }
+  .notice .b { color: var(--app-muted); }
+  .notice.destructive { border-color: var(--app-destructive-line); background: var(--app-destructive-bg); color: var(--app-destructive); }
+  .notice.destructive .b { color: var(--app-destructive); }
+  .dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: baseline; margin: 0; }
+  .dl dt { font-size: 13px; color: var(--app-muted); }
+  .dl dd { margin: 0; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--app-muted-bg); border-radius: 10px; padding: 3px; }
+  .tabs span { height: 44px; display: grid; place-items: center; border-radius: 8px; font-weight: 500; color: var(--app-muted); }
+  .tabs span.on { background: var(--app-bg); color: var(--app-fg); }
+  .empty { border: 1px dashed var(--app-border); border-radius: 14px; padding: 28px 16px; text-align: center; }
+  .empty strong { display: block; }
+  .place { display: flex; gap: 8px; margin: 0; }
+  .place svg { width: 16px; height: 16px; margin-top: 3px; color: var(--app-muted); flex: none; }
+
+  /* The footer: the subject of this design */
+  .foot { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 24px; margin-top: -24px; outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 4px; }
+  .foot-row { display: flex; justify-content: center; flex-wrap: wrap; }
+  .sw, .contact { min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; font-size: 14px; color: var(--app-muted); }
+  .sw { gap: 6px; border-radius: 8px; }
+  .sw svg { width: 15px; height: 15px; }
+  .sw.disabled { opacity: .5; }
+  .sw.focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring) 50%, transparent); outline: 1px solid var(--app-ring); }
+  .contact { text-decoration: underline; text-underline-offset: 4px; }
+  /* The existing alert pattern: <p role="alert" class="text-sm text-destructive"> */
+  .alert { margin: 0; color: var(--app-destructive); font-size: 14px; line-height: 20px; text-align: center; }
+
+  .anatomy { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; margin-top: 16px; }
+  .anatomy .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .anatomy .phone { border-width: 1px; border-radius: 10px; width: auto; max-width: none; }
+  .anatomy ul { margin: 6px 0 0; padding-left: 18px; }
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 80ch; }
+  .table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.92rem; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  ol.decisions { padding-left: 20px; max-width: 80ch; }
+  ol.decisions li { margin-bottom: 10px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+</svg>
+
+<div class="wrap">
+  <h1>Changer de langue</h1>
+  <p class="lead">Epic <a href="https://github.com/olaurendeau/fullcar/issues/113">#113</a>, version 2. Un bouton discret dans le bas de page, à gauche de « Nous contacter », passe la page du français à l’anglais ou l’inverse en un tap, sans recharger la page, et l’appareil s’en souvient. Les maquettes sont à 360 px de large ; le cadre pointillé bleu marque ce qui change ; <code>{hôte}</code> tient lieu du nom de domaine.</p>
+
+  <h2>Le contrôle</h2>
+  <p class="lead">Un seul bouton, qui nomme <strong>l’autre</strong> langue dans cette langue : « English » sur une page en français, « Français » sur une page en anglais.</p>
+  <div class="anatomy">
+    <div class="card">
+      <h3>Page en français</h3>
+      <div class="phone"><div class="screen">
+        <div class="foot"><div class="foot-row">
+          <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          <span class="contact">Nous contacter</span>
+        </div></div>
+      </div></div>
+    </div>
+    <div class="card">
+      <h3>Page en anglais</h3>
+      <div class="phone"><div class="screen">
+        <div class="foot"><div class="foot-row">
+          <span class="sw" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+          <span class="contact">Contact us</span>
+        </div></div>
+      </div></div>
+    </div>
+    <div class="card">
+      <h3>Anatomie <span class="crit">L1.1, L1.2</span></h3>
+      <ul>
+        <li>Un <code>&lt;button type="button"&gt;</code>, pas un lien : il ne navigue pas. « Nous contacter » reste le dernier lien de la page, et rien ne le suit (K1 de #69).</li>
+        <li>Le <strong>bouton lui-même</strong> porte <code>lang="en"</code> ou <code>lang="fr"</code>, la langue qu’il nomme.</li>
+        <li>Contenu : une icône globe décorative (<code>aria-hidden</code>), puis le nom de la langue. Nom accessible : exactement « English » ou « Français ».</li>
+        <li>Même taille et même gris que « Nous contacter » (<code>text-sm text-muted-foreground</code>, plus petit que le texte courant), sans soulignement ; au moins 44 px de haut.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Accueil</h2>
+  <p class="lead">La page entière, de l’accroche au bas de page. Le formulaire est à moitié rempli et le lieu est en erreur : tout ce qui est saisi ou coché reste en place après le tap.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>En français, avant le tap</h3>
+      <p>Titre saisi, dates saisies, « Retour » cochée, « Rehausseurs » cochée, lieu en erreur. <span class="crit">L1.1</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/</div>
+        <div class="screen">
+          <div class="stack tight"><p class="app-h1">Fullcar</p><p class="app-muted">Le covoiturage de groupe, aller et retour, sans compte.</p></div>
+          <div class="stack">
+            <div class="field"><label>Titre</label><div class="input">Tournoi de Rennes</div></div>
+            <div class="field"><label class="err">Lieu</label><div class="input err"></div><span class="errtext">Champ requis.</span></div>
+            <div class="two">
+              <div class="field"><label>Date de l’aller</label><div class="input">12/12/2026</div></div>
+              <div class="field"><label>Heure de l’aller</label><div class="input">07:30</div></div>
+            </div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Retour</strong><span class="small-muted">Décochez s’il n’y a pas de retour organisé.</span></span></div>
+            <div class="two">
+              <div class="field"><label>Date du retour</label><div class="input">12/12/2026</div></div>
+              <div class="field"><label>Heure du retour</label><div class="input">18:00</div></div>
+            </div>
+            <div class="options"><span>Options</span>
+              <div class="box"><span class="cb on">✓</span><span><strong>Rehausseurs</strong><span class="small-muted">Pour les enfants qui en ont besoin.</span></span></div>
+              <div class="box"><span class="cb"></span><span><strong>Participation aux frais</strong><span class="small-muted">Un montant par passager, facultatif.</span></span></div>
+              <div class="box"><span class="cb"></span><span><strong>Points de RDV</strong><span class="small-muted">Des arrêts sur la route des voitures.</span></span></div>
+            </div>
+            <div class="row"><div class="btn">Créer</div></div>
+          </div>
+          <div class="foot"><div class="foot-row">
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="contact">Nous contacter</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Après le tap sur « English »</h3>
+      <p>Même URL, pas de rechargement. L’accroche et les libellés sont en anglais ; le titre, les dates, « Return » et « Booster seats » cochées sont conservés ; l’erreur est traduite ; le focus reste sur le bouton, qui lit « Français ». Les champs date et heure gardent l’affichage du navigateur. <span class="crit">L1.3, L1.7, L3.4, L3.5</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/</div>
+        <div class="screen">
+          <div class="stack tight"><p class="app-h1">Fullcar</p><p class="app-muted">Group carpooling, there and back, no account needed.</p></div>
+          <div class="stack">
+            <div class="field"><label>Title</label><div class="input">Tournoi de Rennes</div></div>
+            <div class="field"><label class="err">Place</label><div class="input err"></div><span class="errtext">Required.</span></div>
+            <div class="two">
+              <div class="field"><label>Outbound date</label><div class="input">12/12/2026</div></div>
+              <div class="field"><label>Outbound time</label><div class="input">07:30</div></div>
+            </div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Return</strong><span class="small-muted">Untick if no return trip is organised.</span></span></div>
+            <div class="two">
+              <div class="field"><label>Return date</label><div class="input">12/12/2026</div></div>
+              <div class="field"><label>Return time</label><div class="input">18:00</div></div>
+            </div>
+            <div class="options"><span>Options</span>
+              <div class="box"><span class="cb on">✓</span><span><strong>Booster seats</strong><span class="small-muted">For children who need one.</span></span></div>
+              <div class="box"><span class="cb"></span><span><strong>Cost sharing</strong><span class="small-muted">An amount per passenger, optional.</span></span></div>
+              <div class="box"><span class="cb"></span><span><strong>Meeting points</strong><span class="small-muted">Stops along the cars’ route.</span></span></div>
+            </div>
+            <div class="row"><div class="btn">Create</div></div>
+          </div>
+          <div class="foot"><div class="foot-row">
+            <span class="sw focus" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+            <span class="contact">Contact us</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Espace organisateur</h2>
+  <p class="lead">Les trois cas de <code>/e/{id}/admin</code> : jeton valide, faux jeton, pas de jeton. Dans les trois, l’URL reste identique après le tap, fragment compris (en rouge), et aucune requête ne porte le jeton.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Jeton valide, après le tap, page complète à 360 × 780</h3>
+      <p>Le panneau reste affiché sans nouvelle vérification ; les deux liens sont identiques, sans langue dedans. Au-dessus du pli de 780 px : les deux liens et l’avertissement (C4.2 de #3). Le bas de page est sous le pli, après l’événement. <span class="crit">L3.1, L3.2, L2.7, L1.2</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Kp7mQx3a/admin<b>#q3Vx9kLmN2pR7sT1uW4yZa</b></div>
+        <div class="screen">
+          <div class="fold" style="top:780px"><span>pli : 780 px (repère indicatif)</span></div>
+          <section class="panel">
+            <strong>Organiser area</strong>
+            <div class="group">
+              <div class="stack tight"><span class="glabel">Link to share</span><span class="small-muted">Send it to the group.</span></div>
+              <div class="link">https://{hôte}/e/Kp7mQx3a</div>
+              <div class="row"><div class="btn outline"><svg aria-hidden="true"><use href="#copy"/></svg>Copy</div><div class="btn"><svg aria-hidden="true"><use href="#share"/></svg>Share</div></div>
+            </div>
+            <hr>
+            <div class="group">
+              <div class="stack tight"><span class="glabel">Organiser link <span class="badge"><svg aria-hidden="true"><use href="#lock"/></svg>Personal</span></span><span class="small-muted">Do not share it: it lets anyone change everything.</span></div>
+              <div class="link">https://{hôte}/e/Kp7mQx3a/admin#q3Vx9kLmN2pR7sT1uW4yZa</div>
+              <div class="row"><div class="btn outline"><svg aria-hidden="true"><use href="#copy"/></svg>Copy</div></div>
+            </div>
+            <div class="notice"><svg aria-hidden="true"><use href="#warn"/></svg><p class="t">Keep this link</p><p class="b">It is the only way to change the event. With no account and no e-mail, we cannot send it to you again.</p></div>
+          </section>
+          <div class="stack">
+            <div class="stack tight"><p class="ev-h1">Tournoi de Rennes</p><p class="place"><svg aria-hidden="true"><use href="#pin"/></svg>Gymnase Colette Besson</p></div>
+            <dl class="dl"><dt>Outbound</dt><dd>Saturday, December 12, 2026 at 7:30 AM</dd><dt>Return</dt><dd>Saturday, December 12, 2026 at 6:00 PM</dd></dl>
+            <div class="tabs"><span class="on">Outbound</span><span>Return</span></div>
+            <p class="small-muted" style="margin:0">Saturday, December 12, 2026 at 7:30 AM</p>
+            <div class="empty"><strong>No car offered for the outbound trip</strong><span class="small-muted">Nobody has signed up yet.</span></div>
+          </div>
+          <div class="foot"><div class="foot-row">
+            <span class="sw focus" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+            <span class="contact">Contact us</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Faux jeton, en français, avant le tap</h3>
+      <p>L’alerte du lien non valide, puis l’événement, puis le bas de page. <span class="crit">L3.3</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Kp7mQx3a/admin<b>#Zq3Vx9kLmN2pR7sT1uW4y</b></div>
+        <div class="screen">
+          <div class="notice destructive" role="alert"><svg aria-hidden="true"><use href="#warn"/></svg><p class="t">Ce lien d’organisateur n’est pas valide.</p><p class="b">Vérifiez qu’il a été copié en entier.</p></div>
+          <div class="stack">
+            <div class="stack tight"><p class="ev-h1">Tournoi de Rennes</p><p class="place"><svg aria-hidden="true"><use href="#pin"/></svg>Gymnase Colette Besson</p></div>
+            <dl class="dl"><dt>Aller</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Retour</dt><dd>samedi 12 décembre 2026 à 18:00</dd></dl>
+            <div class="tabs"><span class="on">Aller</span><span>Retour</span></div>
+            <div class="empty"><strong>Aucune voiture proposée pour l’aller</strong><span class="small-muted">Personne ne s’est encore inscrit.</span></div>
+          </div>
+          <div class="foot"><div class="foot-row">
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="contact">Nous contacter</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Faux jeton, après le tap sur « English »</h3>
+      <p>La même URL, fragment compris ; l’alerte est traduite ; le jeton n’est pas revérifié. <span class="crit">L3.2, L3.3</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Kp7mQx3a/admin<b>#Zq3Vx9kLmN2pR7sT1uW4y</b></div>
+        <div class="screen">
+          <div class="notice destructive" role="alert"><svg aria-hidden="true"><use href="#warn"/></svg><p class="t">This organiser link is not valid.</p><p class="b">Check that it was copied in full.</p></div>
+          <div class="stack">
+            <div class="stack tight"><p class="ev-h1">Tournoi de Rennes</p><p class="place"><svg aria-hidden="true"><use href="#pin"/></svg>Gymnase Colette Besson</p></div>
+            <dl class="dl"><dt>Outbound</dt><dd>Saturday, December 12, 2026 at 7:30 AM</dd><dt>Return</dt><dd>Saturday, December 12, 2026 at 6:00 PM</dd></dl>
+            <div class="tabs"><span class="on">Outbound</span><span>Return</span></div>
+            <div class="empty"><strong>No car offered for the outbound trip</strong><span class="small-muted">Nobody has signed up yet.</span></div>
+          </div>
+          <div class="foot"><div class="foot-row">
+            <span class="sw focus" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+            <span class="contact">Contact us</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Pas de jeton, après le tap sur « English »</h3>
+      <p>Sans fragment avant, sans fragment après : la même alerte, traduite. <span class="crit">L3.3</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Kp7mQx3a/admin</div>
+        <div class="screen">
+          <div class="notice destructive" role="alert"><svg aria-hidden="true"><use href="#warn"/></svg><p class="t">This organiser link is not valid.</p><p class="b">Check that it was copied in full.</p></div>
+          <div class="stack">
+            <div class="stack tight"><p class="ev-h1">Tournoi de Rennes</p><p class="place"><svg aria-hidden="true"><use href="#pin"/></svg>Gymnase Colette Besson</p></div>
+            <dl class="dl"><dt>Outbound</dt><dd>Saturday, December 12, 2026 at 7:30 AM</dd><dt>Return</dt><dd>Saturday, December 12, 2026 at 6:00 PM</dd></dl>
+            <div class="tabs"><span class="on">Outbound</span><span>Return</span></div>
+            <div class="empty"><strong>No car offered for the outbound trip</strong><span class="small-muted">Nobody has signed up yet.</span></div>
+          </div>
+          <div class="foot"><div class="foot-row">
+            <span class="sw focus" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+            <span class="contact">Contact us</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Page d’un événement et Événement introuvable</h2>
+  <div class="grid">
+    <div class="state">
+      <h3>Page d’un événement, en anglais</h3>
+      <p>Les dates suivent la langue ; le titre et le lieu, écrits par l’organisateur, ne sont jamais traduits. <span class="crit">L1.4</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Kp7mQx3a</div>
+        <div class="screen">
+          <div class="stack">
+            <div class="stack tight"><p class="ev-h1">Tournoi de Rennes</p><p class="place"><svg aria-hidden="true"><use href="#pin"/></svg>Gymnase Colette Besson</p></div>
+            <dl class="dl"><dt>Outbound</dt><dd>Saturday, December 12, 2026 at 7:30 AM</dd><dt>Return</dt><dd>Saturday, December 12, 2026 at 6:00 PM</dd></dl>
+            <div class="tabs"><span class="on">Outbound</span><span>Return</span></div>
+            <div class="empty"><strong>No car offered for the outbound trip</strong><span class="small-muted">Nobody has signed up yet.</span></div>
+          </div>
+          <div class="foot"><div class="foot-row">
+            <span class="sw" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+            <span class="contact">Contact us</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Événement introuvable, en anglais</h3>
+      <p>Le titre du document devient « Event not found » ; la réponse reste un 404. <span class="crit">L1.5</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Zz9yXw8v</div>
+        <div class="screen">
+          <div class="stack" style="gap:12px">
+            <p class="ev-h1">Event not found</p>
+            <p class="app-muted">Check the link: it may have been copied wrong. Upper and lower case matter.</p>
+            <p class="app-muted">Events are deleted 30 days after their date.</p>
+            <div class="row"><div class="btn">Create an event</div></div>
+          </div>
+          <div class="foot"><div class="foot-row">
+            <span class="sw" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+            <span class="contact">Contact us</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Quand ça ne se passe pas comme prévu</h2>
+  <p class="lead">Un message n’apparaît qu’en cas d’échec, au-dessus de la ligne du bas de page (jamais après « Nous contacter »), avec le motif d’alerte existant : <code>&lt;p role="alert" class="text-sm text-destructive"&gt;</code>, comme l’échec de création sur l’accueil, centré dans le bas de page. Il est dans la langue <strong>demandée</strong>, et porte son <code>lang</code> : la personne qui tape « English » lit l’anglais.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Pendant le changement</h3>
+      <p>Le bouton est inactif jusqu’à ce que la page soit dans la nouvelle langue. Pas d’indicateur de chargement : un second tap ne fait rien. <span class="crit">L4.4</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">· · ·</div>
+        <div class="foot"><div class="foot-row">
+          <span class="sw disabled" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          <span class="contact">Nous contacter</span>
+        </div></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Échec : hors ligne, ou le serveur ne répond pas</h3>
+      <p>Rien ne change : ni la page, ni le choix enregistré. Le bouton redevient actif. <span class="crit">L4.1</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">· · · page toujours en français · · ·</div>
+        <div class="foot">
+          <p class="alert" role="alert" lang="en">The language could not be changed. Check your connection, then try again.</p>
+          <div class="foot-row">
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="contact">Nous contacter</span>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Échec, dans l’autre sens</h3>
+      <p>Page en anglais, tap sur « Français », pas de connexion. <span class="crit">L4.1</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">· · · page still in English · · ·</div>
+        <div class="foot">
+          <p class="alert" role="alert" lang="fr">La langue n’a pas pu être changée. Vérifiez la connexion, puis réessayez.</p>
+          <div class="foot-row">
+            <span class="sw" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+            <span class="contact">Contact us</span>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Le navigateur refuse les cookies</h3>
+      <p>Le choix ne peut pas être retenu : rien ne change, et on dit quoi faire. <span class="crit">L4.2</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">· · · page toujours en français · · ·</div>
+        <div class="foot">
+          <p class="alert" role="alert" lang="en">Your browser blocks cookies, which keep the language choice. Allow them for this site, then try again.</p>
+          <div class="foot-row">
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="contact">Nous contacter</span>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Sans JavaScript, ou avant qu’il soit chargé</h3>
+      <p>Le bouton est affiché inactif, à sa place (la ligne ne bouge pas à l’hydratation), comme « Créer » sur l’accueil. <span class="crit">L4.3</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">· · ·</div>
+        <div class="foot"><div class="foot-row">
+          <span class="sw disabled" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          <span class="contact">Nous contacter</span>
+        </div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <h2>Les mots</h2>
+  <p class="lead">Un nouvel espace de clés, <code>LanguageSwitch</code>. Chaque fichier y range les mots que lit quelqu’un qui <strong>quitte</strong> cette langue, donc écrits dans l’autre (décision 4).</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>clé</th><th>dans <code>messages/fr.json</code> (page en français)</th><th>dans <code>messages/en.json</code> (page en anglais)</th><th>quand</th></tr></thead>
+      <tbody>
+        <tr><td><code>LanguageSwitch.label</code></td><td lang="en">English</td><td lang="fr">Français</td><td>le bouton, toujours</td></tr>
+        <tr><td><code>LanguageSwitch.failed</code></td><td lang="en">The language could not be changed. Check your connection, then try again.</td><td lang="fr">La langue n’a pas pu être changée. Vérifiez la connexion, puis réessayez.</td><td>hors ligne, ou le serveur échoue</td></tr>
+        <tr><td><code>LanguageSwitch.cookiesBlocked</code></td><td lang="en">Your browser blocks cookies, which keep the language choice. Allow them for this site, then try again.</td><td lang="fr">Votre navigateur bloque les cookies, qui retiennent le choix de la langue. Autorisez-les pour ce site, puis réessayez.</td><td>le navigateur refuse les cookies</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Aucun autre mot : pas de confirmation (la page qui change de langue en est une), pas de bandeau cookies (décision 1), pas d’infobulle. Tous les autres textes des maquettes sont ceux de <code>messages/*.json</code>, inchangés.</p>
+
+  <h2>Décisions</h2>
+  <ol class="decisions">
+    <li><strong>Un cookie, pas <code>localStorage</code>.</strong> <code>NEXT_LOCALE</code>, déjà lu par <code>src/i18n/negotiate.ts</code> avant <code>Accept-Language</code>, comme l’écrit <code>docs/agents/architecture.md</code>. Le serveur rend la page : <code>localStorage</code> lui est invisible, chaque page s’afficherait d’abord dans la langue du navigateur puis basculerait, et le 404, son titre et <code>&lt;html lang&gt;</code> seraient faux au premier affichage. Valeur <code>fr</code> ou <code>en</code>, rien d’autre ; <code>Path=/</code>, <code>SameSite=Lax</code>, <code>Secure</code> en HTTPS, 365 jours, renouvelé à chaque changement. Posé seulement sur un tap, jamais à la simple visite : cookie fonctionnel demandé par la personne, pas de bandeau.</li>
+    <li><strong>Un bouton qui nomme l’autre langue</strong>, pas une liste ni un sélecteur FR/EN : deux langues, un tap, et le mot « English » se reconnaît sans lire le français. Une troisième langue en ferait une liste : hors périmètre.</li>
+    <li><strong>Dans le bas de page, avant « Nous contacter »</strong>, et un bouton plutôt qu’un lien : K1 de #69 (le lien Crisp est le dernier lien, rien après lui) tient sans retouche, et aucun en-tête n’est ajouté.</li>
+    <li><strong>Les messages de <code>LanguageSwitch</code> sont dans la langue demandée</strong> : <code>fr.json</code> y contient de l’anglais, <code>en.json</code> du français. Le libellé du bouton l’est déjà ; un message d’échec écrit dans la langue que la personne essaie de quitter ne lui sert à rien.</li>
+    <li><strong>Sans rechargement du document.</strong> L’URL ne change pas, fragment compris ; ce qui est saisi ou coché reste en place ; le panneau organisateur n’est pas revérifié, donc le jeton ne part dans aucune requête.</li>
+    <li><strong>Tout ou rien.</strong> Un changement qui échoue ne change ni la page ni le choix enregistré : au rechargement, la page est dans l’ancienne langue.</li>
+  </ol>
+
+  <h2>Hors périmètre</h2>
+  <ul style="max-width:80ch">
+    <li>La langue dans l’URL (préfixe <code>/en</code>, <code>?lang=</code>) : un lien partagé s’ouvre toujours dans la langue de celui qui le reçoit.</li>
+    <li>Une troisième langue ; traduire le titre ou le lieu d’un événement ; la langue de la discussion Crisp (son lien ne change pas).</li>
+    <li>L’affichage des champs date et heure natifs, qui suit le navigateur et non la page.</li>
+    <li>Les autres onglets déjà ouverts : ils prennent la nouvelle langue à leur prochain chargement.</li>
+    <li>Le 404 générique de Next pour une adresse hors de <code>/e/…</code> (par exemple <code>/abc</code>), qui n’a pas de bas de page.</li>
+  </ul>
+</div>
