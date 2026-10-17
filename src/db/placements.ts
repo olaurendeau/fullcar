@@ -110,3 +110,18 @@ export async function seatedOnLeg(db: Kysely<Database>, eventId: string, leg: Le
     .execute();
   return [...drivers.map((row) => row.driver_id), ...passengers.map((row) => row.person_id)];
 }
+
+/** Where the person stands on the leg: in a Ride, without a car (`null`), or nothing (not concerned). */
+export async function findPlacement(
+  db: Kysely<Database>,
+  placement: PlacementRef,
+): Promise<{ rideId: string | null } | undefined> {
+  const row = await db
+    .selectFrom("placement")
+    .select("ride_id")
+    .where("person_id", "=", placement.personId)
+    .where("event_id", "=", placement.eventId)
+    .where("leg", "=", placement.leg)
+    .executeTakeFirst();
+  return row && { rideId: row.ride_id };
+}

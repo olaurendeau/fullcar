@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
-import { deleteRide, drivesOn, insertRide, lockRide, ridePassengers, updateRide, type NewRide } from "./rides";
+import {
+  deleteRide,
+  drivesOn,
+  findDrivenRide,
+  insertRide,
+  lockRide,
+  ridePassengers,
+  updateRide,
+  type NewRide,
+} from "./rides";
 import type { Database } from "./schema";
 import { atomically } from "./transaction";
 import { withCommittedEvent } from "./test-committed";
@@ -221,6 +230,22 @@ describe("drivesOn", () => {
       expect(await drivesOn(trx, { personId: marc.id, eventId, leg: "retour" })).toBe(false);
       expect(await drivesOn(trx, { personId: lea.id, eventId, leg: "aller" })).toBe(false);
       expect(await drivesOn(trx, { personId: marc.id, eventId: otherEvent, leg: "aller" })).toBe(false);
+    });
+  });
+});
+
+describe("findDrivenRide", () => {
+  it("finds the ride the person drives on that leg only, in that event only", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: otherId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      const { id: walkerId } = await seedPerson(trx, eventId);
+      const id = await seedRide(trx, eventId, driverId, { leg: "retour" });
+      expect(await findDrivenRide(trx, { driverId, eventId, leg: "retour" })).toBe(id);
+      expect(await findDrivenRide(trx, { driverId, eventId, leg: "aller" })).toBeUndefined();
+      expect(await findDrivenRide(trx, { driverId, eventId: otherId, leg: "retour" })).toBeUndefined();
+      expect(await findDrivenRide(trx, { driverId: walkerId, eventId, leg: "retour" })).toBeUndefined();
     });
   });
 });
