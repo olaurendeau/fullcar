@@ -80,7 +80,6 @@ describe("validatePerson", () => {
       ["a letter", "06 12 34 56 7O"],
       ["a slash", "06/12/34/56/78"],
       ["a tab inside", "06\t12345678"],
-      ["a zero-width space inside", "0612​345678"],
       ["fullwidth digits", "０６１２３４"],
       ["a NUL character", "061234\u00005678"],
       ["5 digits", "12345"],
@@ -95,6 +94,44 @@ describe("validatePerson", () => {
       const phone = "+33 (0)6 12 34 56 78 9....";
       expect(phone.length).toBe(26);
       expect(failureOf({ firstName: "Louise", phone }).errors).toEqual({ phone: "tooLong" });
+    });
+
+    describe("a pasted phone (#123)", () => {
+      it.each([
+        ["iOS bidi marks", "‪+33 6 12 34 56 78‬", "+33 6 12 34 56 78"],
+        ["a zero-width space and a byte order mark", "​0612345678﻿", "0612345678"],
+        ["a zero-width space inside", "0612​345678", "0612345678"],
+        ["word joiners and directional isolates", "⁠⁦+33612345678⁩", "+33612345678"],
+        ["no-break spaces", "06 12 34 56 78", "06 12 34 56 78"],
+        ["narrow no-break spaces", "06 12 34 56 78", "06 12 34 56 78"],
+        ["figure spaces", "06 12 34 56 78", "06 12 34 56 78"],
+        ["leading and trailing no-break spaces", "  06 12 34 56 78 ", "06 12 34 56 78"],
+      ])("C1.8: cleans %s, and returns the cleaned phone", (_, phone, cleaned) => {
+        expect(personOf({ firstName: "Louise", phone }).phone).toBe(cleaned);
+      });
+
+      it("C1.8: measures the phone after cleaning", () => {
+        const phone = "+33 (0)6 12 34 56 78 9...";
+        expect(phone.length).toBe(25);
+        expect(personOf({ firstName: "Louise", phone: `‪${phone}‬​` }).phone).toBe(phone);
+        expect(failureOf({ firstName: "Louise", phone: `‪${phone}.‬` }).errors).toEqual({
+          phone: "tooLong",
+        });
+      });
+
+      it("reads a phone of invisible characters only as none", () => {
+        expect(personOf({ firstName: "Louise", phone: "‪‬​﻿  " }).phone).toBeNull();
+      });
+
+      it.each([
+        ["a letter", "‪06 12 34 56 7O‬"],
+        ["an emoji", "‪06 12 34 56 78 \u{1f4de}‬"],
+        ["an emoji after a zero-width joiner", "0612345678‍\u{1f4de}"],
+        ["a tab after a no-break space", "06 \t12345678"],
+        ["a NUL character", " 061234\u00005678"],
+      ])("C1.8: still refuses %s as invalid", (_, phone) => {
+        expect(failureOf({ firstName: "Louise", phone }).errors).toEqual({ phone: "invalid" });
+      });
     });
 
     it("measures the phone after trimming", () => {
