@@ -85,7 +85,7 @@ export async function setPersonLeg(id: unknown, token: unknown, fields: unknown)
  * The driver changes their car (R8, C8.2 to C8.5). `fields` carries the form's fields and
  * its step's lists: the passengers it showed (`seenPassengerIds`) and who leaves
  * (`leaving`). The token arrives in the body, never in the URL; it is only compared, never
- * logged. Nothing for an unknown event or a malformed id.
+ * logged. `eventNotFound` for an unknown event; a malformed id is never looked up.
  */
 export async function updateRide(
   id: unknown,
@@ -93,8 +93,8 @@ export async function updateRide(
   rideId: unknown,
   leg: unknown,
   fields: unknown,
-): Promise<changeRide.UpdateRideResult | undefined> {
-  if (!isPublicId(id)) return undefined;
+): Promise<changeRide.UpdateRideResult> {
+  if (!isPublicId(id)) return changeRide.EVENT_NOT_FOUND;
   try {
     return await changeRide.updateRide(getDb(), id, token, rideId, leg, fields);
   } catch (error) {
@@ -109,8 +109,8 @@ export async function removeRide(
   token: unknown,
   rideId: unknown,
   leg: unknown,
-): Promise<changeRide.RemoveRideResult | undefined> {
-  if (!isPublicId(id)) return undefined;
+): Promise<changeRide.RemoveRideResult> {
+  if (!isPublicId(id)) return changeRide.EVENT_NOT_FOUND;
   try {
     return await changeRide.removeRide(getDb(), id, token, rideId, leg);
   } catch (error) {

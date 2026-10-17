@@ -7,7 +7,7 @@ import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { addPerson, loadEventState, removeRide, setPersonLeg, takeSeats, updatePerson, updateRide } from "./actions";
-import { readEventState } from "./event-state";
+import { readEventState, type EventState } from "./event-state";
 
 // The action reaches the database through getDb(): here, the test's transaction,
 // so that nothing it reads comes from another test.
@@ -299,7 +299,15 @@ describe("the person actions", () => {
   });
 });
 
+/** What every write action gives for an unknown event (decision on #135 and #138). */
+const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" };
+
 /** The fields the change form sends, with the passengers its step showed. */
+/** The state a result gives, if it gives one. */
+function stateOf(result: object): EventState | undefined {
+  return "state" in result ? (result.state as EventState) : undefined;
+}
+
 function rideForm(fields: Record<string, unknown> = {}) {
   return { location: "Mairie", time: "07:15", seats: "3", note: "", seenPassengerIds: [], leaving: [], ...fields };
 }
@@ -320,7 +328,7 @@ describe("updateRide", () => {
       expect(result).toMatchObject({ ok: false, error: "passengersChanged" });
       expect(result && "passengerIds" in result && [...result.passengerIds].sort()).toEqual([lea.id, tom.id].sort());
       expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
-      const car = result && "state" in result ? result.state[0].cars[0] : undefined;
+      const car = stateOf(result)?.[0].cars[0];
       expect(car?.passengers.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
       expect(car?.seats).toBe(3);
     });
@@ -334,9 +342,16 @@ describe("updateRide", () => {
     });
   });
 
-  it("reads and writes nothing for a malformed event id", async () => {
+  it("gives eventNotFound for an unknown event", async () => {
+    await inTransaction(async (trx) => {
+      const { marc, r1 } = await seedScene(trx);
+      expect(await updateRide("Zz9yXw8v", marc.token, r1, "aller", rideForm())).toEqual(EVENT_NOT_FOUND);
+    });
+  });
+
+  it("gives eventNotFound for a malformed event id, without reading anything", async () => {
     connection.current = untouchable;
-    await expect(updateRide("Ab3dEf70", undefined, undefined, "aller", rideForm())).resolves.toBeUndefined();
+    await expect(updateRide("Ab3dEf70", undefined, undefined, "aller", rideForm())).resolves.toEqual(EVENT_NOT_FOUND);
   });
 });
 
@@ -347,7 +362,7 @@ describe("removeRide", () => {
       const result = await removeRide(eventId, marc.token, r1, "aller");
       expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, marc.token) });
       expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
-      expect(result?.state[0].withoutCar.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
+      expect(stateOf(result)?.[0].withoutCar.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
     });
   });
 
@@ -356,13 +371,20 @@ describe("removeRide", () => {
       const { eventId, lea, r1 } = await seedScene(trx);
       const result = await removeRide(eventId, lea.token, r1, "aller");
       expect(result).toMatchObject({ ok: false, error: "forbidden" });
-      expect(result?.state[0].cars.map((car) => car.id)).toEqual([r1]);
+      expect(stateOf(result)?.[0].cars.map((car) => car.id)).toEqual([r1]);
     });
   });
 
-  it("reads and writes nothing for a malformed event id", async () => {
+  it("gives eventNotFound for an unknown event", async () => {
+    await inTransaction(async (trx) => {
+      const { marc, r1 } = await seedScene(trx);
+      expect(await removeRide("Zz9yXw8v", marc.token, r1, "aller")).toEqual(EVENT_NOT_FOUND);
+    });
+  });
+
+  it("gives eventNotFound for a malformed event id, without reading anything", async () => {
     connection.current = untouchable;
-    await expect(removeRide({ id: "Ab3dEf7h" }, undefined, undefined, "aller")).resolves.toBeUndefined();
+    await expect(removeRide({ id: "Ab3dEf7h" }, undefined, undefined, "aller")).resolves.toEqual(EVENT_NOT_FOUND);
   });
 });
 

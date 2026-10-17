@@ -25,6 +25,9 @@ const untouchable = new Proxy({} as Db, {
 /** Well-formed (22 base64url characters, the last one canonical), and held by nobody. */
 const NOBODYS_TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
 
+/** What every write action gives for an unknown event (decision on #135 and #138). */
+const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" };
+
 /**
  * Aller: Marc drives r1 (3 seats) with Léa then Hugo, Tom is without a car. Retour: Marc
  * drives r2 with Léa. Léa and Hugo are the persons of one device; Marc and Tom each have
@@ -69,6 +72,11 @@ async function rowsOf(db: Db, eventId: string) {
   return { rides, placements };
 }
 
+/** The state a result gives, if it gives one. */
+function stateOf(result: object): VisibleBoard | undefined {
+  return "state" in result ? (result.state as VisibleBoard) : undefined;
+}
+
 function carOf(state: VisibleBoard | undefined, leg: Leg, rideId: string) {
   return state?.find((board) => board.leg === leg)?.cars.find((car) => car.id === rideId);
 }
@@ -98,7 +106,7 @@ describe("updateRide", () => {
       const result = await updateRide(trx, eventId, marc.token, r1, "aller", fields);
 
       expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, marc.token) });
-      const car = carOf(result && "state" in result ? result.state : undefined, "aller", r1);
+      const car = carOf(stateOf(result), "aller", r1);
       expect(car).toMatchObject({ location: "Gare de Cesson", departureTime: "08:05:00", note: "Coffre plein", seats: 5 });
       expect(car?.freeSeats).toBe(3);
       expect(car?.passengers.map((person) => person.firstName).sort()).toEqual(["Hugo", "Léa"]);
@@ -128,7 +136,7 @@ describe("updateRide", () => {
       const result = await updateRide(trx, eventId, marc.token, r1, "aller", fields);
 
       expect(result).toMatchObject({ ok: true });
-      const state = result && "state" in result ? result.state : undefined;
+      const state = stateOf(result);
       expect(carOf(state, "aller", r1)?.passengers.map((person) => person.firstName)).toEqual(["Léa"]);
       expect(legOf(state, "aller").withoutCar.map((person) => person.firstName).sort()).toEqual(["Hugo", "Tom"]);
       const after = await rowsOf(trx, eventId);
@@ -229,12 +237,14 @@ describe("updateRide", () => {
     });
   });
 
-  it("gives nothing for an unknown event, and never looks up a malformed id", async () => {
+  it("gives eventNotFound for an unknown event, and never looks up a malformed id", async () => {
     await withRollback(async (trx) => {
       const { marc, r1 } = await seedScene(trx);
-      expect(await updateRide(trx, "Zz9yXw8v", marc.token, r1, "aller", form())).toBeUndefined();
+      expect(await updateRide(trx, "Zz9yXw8v", marc.token, r1, "aller", form())).toEqual(EVENT_NOT_FOUND);
     });
-    expect(await updateRide(untouchable, "Ab3dEf70", NOBODYS_TOKEN, randomUUID(), "aller", form())).toBeUndefined();
+    expect(await updateRide(untouchable, "Ab3dEf70", NOBODYS_TOKEN, randomUUID(), "aller", form())).toEqual(
+      EVENT_NOT_FOUND,
+    );
   });
 
   it("on the connection, commits the change, then gives the state read after the commit", async () => {
@@ -242,7 +252,7 @@ describe("updateRide", () => {
       const marc = await seedPerson(db, eventId, { firstName: "Marc" });
       const rideId = await seedRide(db, eventId, marc.id);
       const result = await updateRide(db, eventId, marc.token, rideId, "aller", form({ seats: "6" }));
-      expect(carOf(result && "state" in result ? result.state : undefined, "aller", rideId)?.seats).toBe(6);
+      expect(carOf(stateOf(result), "aller", rideId)?.seats).toBe(6);
       expect((await rowsOf(db, eventId)).rides).toEqual([expect.objectContaining({ id: rideId, seats: 6 })]);
     });
   });
@@ -257,12 +267,12 @@ describe("removeRide", () => {
       const result = await removeRide(trx, eventId, marc.token, r1, "aller");
 
       expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, marc.token) });
-      const aller = legOf(result?.state, "aller");
+      const aller = legOf(stateOf(result), "aller");
       expect(aller.cars).toEqual([]);
       expect(aller.withoutCar.map((person) => person.firstName).sort()).toEqual(["Hugo", "Léa", "Tom"]);
       expect(aller.withoutCar.length).toBe(legOf(before, "aller").withoutCar.length + 2);
       expect(aller.device).toEqual([{ id: marc.id, firstName: "Marc", phone: null, state: { kind: "notConcerned" } }]);
-      expect(legOf(result?.state, "retour")).toEqual(legOf(before, "retour"));
+      expect(legOf(stateOf(result), "retour")).toEqual(legOf(before, "retour"));
     });
   });
 
@@ -272,7 +282,7 @@ describe("removeRide", () => {
       const marc = await seedPerson(trx, eventId, { firstName: "Marc" });
       const rideId = await seedRide(trx, eventId, marc.id);
       const result = await removeRide(trx, eventId, marc.token, rideId, "aller");
-      expect(legOf(result?.state, "aller")).toMatchObject({ cars: [], withoutCar: [] });
+      expect(legOf(stateOf(result), "aller")).toMatchObject({ cars: [], withoutCar: [] });
     });
   });
 
@@ -330,12 +340,12 @@ describe("removeRide", () => {
     });
   });
 
-  it("gives nothing for an unknown event, and never looks up a malformed id", async () => {
+  it("gives eventNotFound for an unknown event, and never looks up a malformed id", async () => {
     await withRollback(async (trx) => {
       const { marc, r1 } = await seedScene(trx);
-      expect(await removeRide(trx, "Zz9yXw8v", marc.token, r1, "aller")).toBeUndefined();
+      expect(await removeRide(trx, "Zz9yXw8v", marc.token, r1, "aller")).toEqual(EVENT_NOT_FOUND);
     });
-    expect(await removeRide(untouchable, "Ab3dEf70", NOBODYS_TOKEN, randomUUID(), "aller")).toBeUndefined();
+    expect(await removeRide(untouchable, "Ab3dEf70", NOBODYS_TOKEN, randomUUID(), "aller")).toEqual(EVENT_NOT_FOUND);
   });
 });
 
@@ -399,7 +409,7 @@ describe("at the same time as another session, on committed data", () => {
       );
 
       expect(result).toMatchObject({ ok: false, error: "passengersChanged", passengerIds: [lea.id, ben.id, chloe.id] });
-      const car = carOf(result && "state" in result ? result.state : undefined, "aller", rideId);
+      const car = carOf(stateOf(result), "aller", rideId);
       expect(car?.passengers.map((person) => person.firstName)).toEqual(["Léa", "Ben", "Chloé"]);
       expect((await rowsOf(db, eventId)).rides).toEqual([expect.objectContaining({ id: rideId, seats: 3 })]);
       const passengers = await ridePassengers(db, { id: rideId, eventId, leg: "aller" });

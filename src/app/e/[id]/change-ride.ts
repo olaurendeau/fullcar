@@ -24,15 +24,20 @@ export type UpdateRideOutcome =
   | { ok: false; error: "invalid" | "forbidden" | "rideGone" }
   | { ok: false; error: "passengersChanged"; passengerIds: string[] };
 
+/** An unknown event, or a malformed id: nothing to change, and no state to give. */
+export type EventNotFound = { ok: false; error: "eventNotFound" };
+export const EVENT_NOT_FOUND: EventNotFound = { ok: false, error: "eventNotFound" };
+
 /** The outcome and the state the device now sees; or field errors, and nothing read. */
 export type UpdateRideResult =
   | (UpdateRideOutcome & { state: EventState })
-  | { ok: false; errors: RideErrors; first: RideField };
+  | { ok: false; errors: RideErrors; first: RideField }
+  | EventNotFound;
 
 /** Removing a car already removed is a success (C8.6). */
 export type RemoveRideOutcome = { ok: true } | { ok: false; error: "invalid" | "forbidden" };
 
-export type RemoveRideResult = RemoveRideOutcome & { state: EventState };
+export type RemoveRideResult = (RemoveRideOutcome & { state: EventState }) | EventNotFound;
 
 const INVALID = { ok: false, error: "invalid" } as const;
 const FORBIDDEN = { ok: false, error: "forbidden" } as const;
@@ -103,13 +108,16 @@ async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, 
 
 /**
  * The driver changes their car (epic #66, R8, C8.2 to C8.5): place, time, note and seats,
- * by the rules of R4, and who leaves when the seats go below the passengers. Nothing for an
- * unknown event; a malformed id is never looked up.
+ * by the rules of R4, and who leaves when the seats go below the passengers.
+ * `eventNotFound` for an unknown event; a malformed id is never looked up.
  *
- * On the connection, the write commits in its own transaction (READ COMMITTED, so that the
- * passengers counted after the Ride's lock include a seat just taken), and the state is
- * read after the commit, on one snapshot. Given a transaction, both run in it. The token is
- * only compared, never logged nor kept.
+ * The application passes the connection: the write commits in its own transaction (READ
+ * COMMITTED, so that the passengers counted after the Ride's lock include a seat just
+ * taken), and the state is read after the commit, on one snapshot. A transaction passed in
+ * is for tests only, and loses that guarantee: in REPEATABLE READ, its snapshot is taken
+ * before the lock, so a seat taken while waiting would not be counted and the reduction
+ * would pass (C12.11); in READ COMMITTED, readEventState throws after the write. The token
+ * is only compared, never logged nor kept.
  */
 export async function updateRide(
   db: Kysely<Database>,
@@ -118,22 +126,22 @@ export async function updateRide(
   rideId: unknown,
   leg: unknown,
   fields: unknown,
-): Promise<UpdateRideResult | undefined> {
-  if (!isPublicId(eventId)) return undefined;
+): Promise<UpdateRideResult> {
+  if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
   const ride = rideRef(eventId, rideId, leg);
   const change = ride && readChange(fields);
   if (change && "errors" in change) return { ok: false, ...change };
   const outcome: UpdateRideOutcome =
     ride && change ? await atomically(db, (trx) => changeRide(trx, token, ride, change)) : INVALID;
   const state = await readEventState(db, eventId, token);
-  return state && { ...outcome, state };
+  return state ? { ...outcome, state } : EVENT_NOT_FOUND;
 }
 
 /**
  * The driver removes their car (C8.6). Its passengers are left without a car on the leg by
  * the `placement → ride` key, and the driver, who has no Placement there, is not concerned.
- * Nothing for an unknown event; a malformed id is never looked up. Committed, then the
- * state is read, as for updateRide.
+ * `eventNotFound` for an unknown event; a malformed id is never looked up. Committed, then
+ * the state is read, as for updateRide, and a transaction passed in is for tests only.
  */
 export async function removeRide(
   db: Kysely<Database>,
@@ -141,8 +149,8 @@ export async function removeRide(
   token: unknown,
   rideId: unknown,
   leg: unknown,
-): Promise<RemoveRideResult | undefined> {
-  if (!isPublicId(eventId)) return undefined;
+): Promise<RemoveRideResult> {
+  if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
   const ride = rideRef(eventId, rideId, leg);
   const outcome: RemoveRideOutcome = ride
     ? await atomically(db, async (trx) => {
@@ -153,5 +161,5 @@ export async function removeRide(
       })
     : INVALID;
   const state = await readEventState(db, eventId, token);
-  return state && { ...outcome, state };
+  return state ? { ...outcome, state } : EVENT_NOT_FOUND;
 }
