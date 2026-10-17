@@ -92,3 +92,21 @@ export async function removePassengers(
     return rows.map((row) => row.person_id);
   });
 }
+
+/** On the leg, the persons in a car: the drivers of its Rides and their passengers. */
+export async function seatedOnLeg(db: Kysely<Database>, eventId: string, leg: Leg): Promise<string[]> {
+  const drivers = await db
+    .selectFrom("ride")
+    .select("driver_id")
+    .where("event_id", "=", eventId)
+    .where("leg", "=", leg)
+    .execute();
+  const passengers = await db
+    .selectFrom("placement")
+    .select("person_id")
+    .where("event_id", "=", eventId)
+    .where("leg", "=", leg)
+    .where("ride_id", "is not", null)
+    .execute();
+  return [...drivers.map((row) => row.driver_id), ...passengers.map((row) => row.person_id)];
+}

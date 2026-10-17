@@ -1,6 +1,6 @@
 import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
-import { deletePlacement, removePassengers, setPlacement } from "./placements";
+import { deletePlacement, removePassengers, seatedOnLeg, setPlacement } from "./placements";
 import type { Database } from "./schema";
 import { atomically } from "./transaction";
 import { withCommittedEvent } from "./test-committed";
@@ -186,6 +186,28 @@ describe("removePassengers", () => {
       expect(await removePassengers(trx, { id: rideA, eventId, leg: "aller" }, [])).toEqual([]);
       expect(await removePassengers(trx, { id: rideA, eventId, leg: "retour" }, [personId])).toEqual([]);
       expect(await placementsOf(trx, eventId)).toEqual([expect.objectContaining({ ride_id: rideA })]);
+    });
+  });
+});
+
+describe("seatedOnLeg", () => {
+  it("lists the leg's drivers and passengers, not those without a car, nor the other leg or event", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const ids: string[] = [];
+      for (const firstName of ["Marc", "Zoé", "Léa", "Tom", "Max"]) ids.push((await seedPerson(trx, eventId, { firstName })).id);
+      const [marc, zoe, lea, tom, max] = ids;
+      const rideMarc = await seedRide(trx, eventId, marc, { leg: "aller" });
+      await seedRide(trx, eventId, zoe, { leg: "aller" });
+      const rideRetour = await seedRide(trx, eventId, marc, { leg: "retour" });
+      await setPlacement(trx, { personId: lea, eventId, leg: "aller", rideId: rideMarc });
+      await setPlacement(trx, { personId: tom, eventId, leg: "aller", rideId: null });
+      await setPlacement(trx, { personId: max, eventId, leg: "retour", rideId: rideRetour });
+      const other = await aCrowd(trx);
+      await setPlacement(trx, { personId: other.personId, eventId: other.eventId, leg: "aller", rideId: other.rideA });
+
+      expect((await seatedOnLeg(trx, eventId, "aller")).sort()).toEqual([marc, zoe, lea].sort());
+      expect((await seatedOnLeg(trx, eventId, "retour")).sort()).toEqual([marc, max].sort());
     });
   });
 });
