@@ -40,17 +40,19 @@ describe("insertRide", () => {
       const ride = aRide(eventId, driverId, { note: "Coffre plein" });
       expect(await insertRide(trx, ride)).toEqual(ride);
       expect(await insertRide(trx, { ...ride, location: "Ailleurs", seats: 8 })).toEqual(ride);
-      expect(await ridesOf(trx, eventId)).toEqual([
-        {
-          id: ride.id,
-          leg: "aller",
-          driver_id: driverId,
-          location: "Mairie de Cesson",
-          departure_time: "07:15:00",
-          seats: 3,
-          note: "Coffre plein",
-        },
-      ]);
+      const { id, leg, location, departureTime: departure_time, seats, note } = ride;
+      expect(await ridesOf(trx, eventId)).toEqual([{ id, leg, driver_id: driverId, location, departure_time, seats, note }]);
+    });
+  });
+
+  it("returns nothing when the id is held on the other leg, and writes nothing", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      const ride = aRide(eventId, driverId);
+      await insertRide(trx, ride);
+      expect(await insertRide(trx, { ...ride, leg: "retour" })).toBeUndefined();
+      expect(await ridesOf(trx, eventId)).toEqual([expect.objectContaining({ id: ride.id, leg: "aller" })]);
     });
   });
 
@@ -69,12 +71,14 @@ describe("insertRide", () => {
   });
 });
 
-/** A Ride of one event, and another event naming it: what a stranger's request would send. */
+/** A Ride of one event with a passenger, and another event naming it: what a stranger's request would send. */
 async function aRideAndAStranger(trx: Kysely<Database>) {
   const { id: eventId } = await seedEvent(trx);
   const { id: otherId } = await seedEvent(trx);
   const { id: driverId } = await seedPerson(trx, eventId);
+  const { id: passengerId } = await seedPerson(trx, eventId);
   const id = await seedRide(trx, eventId, driverId);
+  await seedPlacement(trx, { personId: passengerId, eventId, leg: "aller", rideId: id });
   return { eventId, id, stranger: { id, eventId: otherId, leg: "aller" as const } };
 }
 
@@ -93,6 +97,14 @@ describe("a Ride named with another event", () => {
       const changes = { location: "Gare", departureTime: "18:30:00", seats: 1, note: null };
       expect(await updateRide(trx, stranger, changes)).toBe(false);
       expect(await ridesOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("has no passengers listed", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, id, stranger } = await aRideAndAStranger(trx);
+      expect(await ridePassengers(trx, { id, eventId, leg: "aller" })).toHaveLength(1);
+      expect(await ridePassengers(trx, stranger)).toEqual([]);
     });
   });
 

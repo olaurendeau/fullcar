@@ -37,16 +37,7 @@ export interface Passenger {
   placedAt: Date;
 }
 
-const STORED_RIDE_COLUMNS = [
-  "id",
-  "event_id",
-  "leg",
-  "driver_id",
-  "location",
-  "departure_time",
-  "seats",
-  "note",
-] as const;
+const STORED_RIDE_COLUMNS = ["id", "event_id", "leg", "driver_id", "location", "departure_time", "seats", "note"] as const;
 
 /**
  * Stores the Ride, unless its id is taken: then nothing is written, and the Ride already
@@ -112,12 +103,7 @@ export async function lockRide(db: Kysely<Database>, ride: RideRef): Promise<Loc
 export async function updateRide(db: Kysely<Database>, ride: RideRef, fields: RideFields): Promise<boolean> {
   const result = await db
     .updateTable("ride")
-    .set({
-      location: fields.location,
-      departure_time: fields.departureTime,
-      seats: fields.seats,
-      note: fields.note,
-    })
+    .set({ location: fields.location, departure_time: fields.departureTime, seats: fields.seats, note: fields.note })
     .where("id", "=", ride.id)
     .where("event_id", "=", ride.eventId)
     .where("leg", "=", ride.leg)

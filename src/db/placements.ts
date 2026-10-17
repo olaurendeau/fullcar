@@ -69,7 +69,8 @@ export async function deletePlacement(db: Kysely<Database>, placement: Placement
 
 /**
  * Leaves those of `personIds` who are in the Ride without a car on its leg, boarding time
- * `now()`, and returns their ids. The Ride is locked first, as for any write in a car.
+ * `now()`, and returns their ids. The Ride is locked first, as for any write in a car; a
+ * Ride unknown in that event and on that leg removes nobody.
  */
 export async function removePassengers(
   db: Kysely<Database>,
@@ -78,7 +79,7 @@ export async function removePassengers(
 ): Promise<string[]> {
   if (personIds.length === 0) return [];
   return atomically(db, async (trx) => {
-    await lockRide(trx, ride);
+    if (!(await lockRide(trx, ride))) return [];
     const rows = await trx
       .updateTable("placement")
       .set({ ride_id: null, placed_at: now() })

@@ -168,6 +168,17 @@ describe("removePassengers", () => {
     });
   });
 
+  it("removes nobody through another event", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, rideA, personId } = await aCrowd(trx);
+      const { id: otherId } = await seedEvent(trx);
+      await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA });
+      const before = await placementsOf(trx, eventId);
+      expect(await removePassengers(trx, { id: rideA, eventId: otherId, leg: "aller" }, [personId])).toEqual([]);
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
   it("removes nobody for an empty list, or from another leg", async () => {
     await withRollback(async (trx) => {
       const { eventId, rideA, personId } = await aCrowd(trx);
