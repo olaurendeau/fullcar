@@ -536,10 +536,14 @@ describe("participant tables", () => {
     });
   });
 
-  // The lock order is Ride, then Person. A placement in a car whose writer forgot to lock
-  // the Ride first must not lock the Person before it: two sessions, on committed data,
-  // since a rolled-back transaction cannot show another one waiting.
+  // Two sessions, on committed data, since a rolled-back transaction cannot show another
+  // one waiting.
   describe("locks, on committed data", () => {
+    async function backendPid(trx: ControlledTransaction<Database>) {
+      const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx);
+      return rows[0]!.pid;
+    }
+
     /** Resolves once the session `pid` waits for a lock that another one holds. */
     async function waitingForLock(db: Db, pid: number) {
       for (let attempt = 0; attempt < 200; attempt++) {
@@ -564,6 +568,55 @@ describe("participant tables", () => {
       }
     }
 
+    // C12.8 under READ COMMITTED, the level of the application's writes: a trigger reads
+    // only what is committed. The second writer's trigger sees the first write only because
+    // its `FOR UPDATE` waits for the Person that the first one locked, then reads again.
+    // Without it, the trigger reads before waiting and both writes pass: each order tests
+    // the trigger of its second writer.
+    it.each([
+      ["places her on a leg, then the other makes her its driver", "placement", "ride_driver_placed"],
+      ["makes her the driver of a leg, then the other places her on it", "ride", "placement_driver_on_leg"],
+    ] as const)("of two sessions at once, one %s: the second is refused", async (_, first, constraint) => {
+      await withCommittedEvent(async (db, eventId) => {
+        const personId = await addPerson(db, eventId);
+        const writes = {
+          placement: (trx: Db) => place(trx, eventId, personId, "aller", null),
+          ride: (trx: Db) => addRide(trx, eventId, personId, { leg: "aller" }),
+        };
+        const second = first === "placement" ? "ride" : "placement";
+
+        const one = await db.startTransaction().setIsolationLevel("read committed").execute();
+        const other = await db.startTransaction().setIsolationLevel("read committed").execute();
+        let outcome: { code?: string; constraint?: string } | "accepted";
+        // `one` is released first, so that `other` stops waiting for its lock.
+        try {
+          await writes[first](one);
+          const pid = await backendPid(other);
+          const written = writes[second](other).then(
+            () => "accepted" as const,
+            (error: { code?: string; constraint?: string }) => ({ code: error.code, constraint: error.constraint }),
+          );
+          await waitingForLock(db, pid);
+          await one.commit().execute();
+          outcome = await written;
+          if (outcome === "accepted") await other.commit().execute();
+        } finally {
+          await release(one);
+          await release(other);
+        }
+
+        expect(outcome).toEqual({ code: "23514", constraint });
+        const committed = {
+          placement: (await db.selectFrom("placement").select("leg").where("person_id", "=", personId).execute())
+            .length,
+          ride: (await db.selectFrom("ride").select("leg").where("driver_id", "=", personId).execute()).length,
+        };
+        expect(committed).toEqual({ [first]: 1, [second]: 0 });
+      });
+    });
+
+    // The lock order is Ride, then Person. A placement in a car whose writer forgot to lock
+    // the Ride first must not lock the Person before it.
     it("a placement written without locking its ride first does not deadlock with a seat taker", async () => {
       await withCommittedEvent(async (db, eventId) => {
         const driverId = await addPerson(db, eventId);
@@ -577,10 +630,10 @@ describe("participant tables", () => {
         // `taker` first, so that `forgetful` stops waiting for its lock.
         try {
           await sql`select 1 from ride where id = ${rideId} for update`.execute(taker);
-          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(forgetful);
+          const pid = await backendPid(forgetful);
           const placed = place(forgetful, eventId, personId, "aller", rideId);
           placed.catch(() => {});
-          await waitingForLock(db, rows[0]!.pid);
+          await waitingForLock(db, pid);
 
           // The taker now locks the same Person: if `forgetful` held it, each would wait
           // for the other.
