@@ -10,6 +10,13 @@ describe("negotiateLocale", () => {
     expect(negotiateLocale("de", "en-US,en;q=0.9")).toBe("en");
   });
 
+  it("L2.6: ignores an empty cookie, or one in capitals, and follows the browser", () => {
+    expect(negotiateLocale("", "fr-FR,fr;q=0.9")).toBe("fr");
+    expect(negotiateLocale("EN", "fr-FR,fr;q=0.9")).toBe("fr");
+    expect(negotiateLocale("FR", "en-GB")).toBe("en");
+    expect(negotiateLocale("", null)).toBe("fr");
+  });
+
   it("follows Accept-Language quality, not order", () => {
     expect(negotiateLocale(undefined, "de;q=1, en;q=0.5, fr;q=0.8")).toBe("fr");
   });
