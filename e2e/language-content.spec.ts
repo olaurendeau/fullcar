@@ -81,7 +81,7 @@ async function openView(page: Page, path: string, lang: Lang) {
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(TITLE);
   if (path.endsWith("/admin")) {
-    await expect(page.getByRole("main").getByRole("alert")).toContainText(LANGUAGES[lang].invalid);
+    await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(LANGUAGES[lang].invalid);
   }
 }
 
