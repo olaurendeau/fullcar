@@ -1,0 +1,1338 @@
+<title>Fullcar, écran d’un événement</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8; --card: #ffffff;
+    --accent: #2457c5; --accent-soft: #e6edfb; --note: #fff7e0; --note-line: #ecd48a;
+    /* The app's own look, light only, from src/app/globals.css (oklch converted): */
+    --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
+    --app-border: #e5e5e5; --app-primary: #171717; --app-primary-fg: #fafafa;
+    --app-destructive: #e7000b; --app-destructive-bg: #fef2f2; --app-destructive-line: #f8c4c4;
+    --app-amber-bg: #fef3c7; --app-amber-fg: #461901; --app-overlay: rgba(0,0,0,.10);
+    --app-ring: #a1a1a1; --app-check: #171717; --app-check-fg: #fafafa;
+    --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444; --fold: #2457c5;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  h2 { font-size: 1.3rem; margin: 48px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 78ch; }
+  a { color: var(--accent); }
+  code { font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 0; font-size: .92rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 32px 24px; margin-top: 20px; align-items: start; }
+  .state { min-width: 0; }
+  .state > p { color: var(--muted); font-size: 0.9rem; margin: 0 0 10px; }
+  .crit { font-size: 0.8rem; color: var(--accent); font-weight: 600; }
+
+  /* Phone: a 360 px wide viewport inside a 6 px frame */
+  .phone { position: relative; box-sizing: content-box; width: 360px; max-width: calc(100% - 12px); border: 6px solid var(--frame); border-radius: 22px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); }
+  .urlbar { background: var(--urlbar); color: var(--urlbar-fg); font: 12px ui-monospace, Menlo, monospace; padding: 7px 10px; overflow-wrap: anywhere; }
+  .screen { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 16px; font-size: 14px; line-height: 1.43; }
+  .screen.pb { padding-bottom: 84px; }
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .stack.tight { gap: 4px; }
+  .stack.s8 { gap: 8px; }
+  .cut { color: var(--app-muted); font-size: 11px; text-align: center; letter-spacing: .04em; }
+  .fold { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--fold); z-index: 3; }
+  .fold span { position: absolute; right: 6px; top: -20px; font-size: 11px; color: var(--fold); background: var(--app-bg); padding: 0 4px; }
+  .ev-h1 { font-size: 24px; font-weight: 700; margin: 0; line-height: 1.25; overflow-wrap: anywhere; }
+  .muted { color: var(--app-muted); }
+  .small-muted { color: var(--app-muted); font-size: 13px; line-height: 18px; }
+  .ico { width: 16px; height: 16px; flex: none; }
+  .ico.s { width: 14px; height: 14px; }
+  .line { display: flex; align-items: flex-start; gap: 8px; margin: 0; min-width: 0; }
+  .line .ico { margin-top: 2px; color: var(--app-muted); }
+  .line span { min-width: 0; overflow-wrap: anywhere; }
+  .dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: baseline; margin: 0; }
+  .dl dt { font-size: 13px; color: var(--app-muted); }
+  .dl dd { margin: 0; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--app-muted-bg); border-radius: 10px; padding: 3px; }
+  .tabs > span { height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; font-weight: 500; color: var(--app-muted); }
+  .tabs > span.on { background: var(--app-bg); color: var(--app-fg); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .count { min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: var(--app-primary); color: var(--app-primary-fg); font-size: 12px; line-height: 20px; text-align: center; }
+
+  /* The coverage banner (PR #141): bg-muted, amber when seats are missing */
+  .banner { display: flex; gap: 8px; align-items: flex-start; border-radius: 10px; padding: 10px 12px; background: var(--app-muted-bg); font-weight: 500; }
+  .banner .ico { margin-top: 2px; }
+  .banner.warn { background: var(--app-amber-bg); color: var(--app-amber-fg); }
+
+  /* Buttons */
+  /* shadcn Button is whitespace-nowrap: a label never wraps inside its button; a row of buttons wraps instead */
+  .btn { min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid transparent; background: var(--app-primary); color: var(--app-primary-fg); display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 500; padding: 0 12px; text-align: center; white-space: nowrap; }
+  .btn.outline { background: var(--app-bg); color: var(--app-fg); border-color: var(--app-border); }
+  .btn.ghost { background: transparent; color: var(--app-fg); }
+  /* variant="outline" + text-destructive: #e7000b on white, 4.77:1 */
+  .btn.danger { background: var(--app-bg); color: var(--app-destructive); border-color: var(--app-border); }
+  .btn.solid-danger { background: var(--app-destructive); color: #fff; }
+  .btn.off { opacity: .5; }
+  .btn.full { width: 100%; }
+  .btn.grow { flex: 1; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > .grow { flex: 1 1 auto; }
+  .actions { display: flex; flex-direction: column; gap: 8px; outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 10px; }
+  .new { outline: 2px dashed var(--accent); outline-offset: 3px; }
+
+  /* Car card (PR #141) */
+  .car { border: 1px solid var(--app-border); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .car-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .car-h strong { min-width: 0; overflow-wrap: anywhere; }
+  .pill { flex: none; border-radius: 999px; background: var(--app-muted-bg); padding: 2px 8px; font-size: 12px; font-weight: 500; }
+  .car-info { display: flex; flex-direction: column; gap: 4px; }
+  .seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .pass { min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-radius: 8px; background: var(--app-muted-bg); padding: 6px 12px; }
+  .pass .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .pass .ico { color: var(--app-muted); }
+  .tel { color: var(--app-fg); text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; white-space: nowrap; align-self: flex-start; }
+  .car > .tel, .person > .tel { margin-block: -8px; }
+  .tel .ico { color: var(--app-muted); }
+  .free { min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; border-radius: 8px; border: 1px dashed #c9c9c9; padding: 0 12px; color: var(--app-fg); font-weight: 500; background: var(--app-bg); }
+  .free .ico { color: var(--app-muted); }
+  .free.off { opacity: .5; }
+  .free.tap { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring) 50%, transparent); border-color: var(--app-ring); }
+  .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips li { border: 1px solid var(--app-border); border-radius: 999px; padding: 4px 12px; font-size: 14px; max-width: 100%; overflow-wrap: anywhere; box-sizing: border-box; }
+  .empty { border: 1px dashed var(--app-border); border-radius: 14px; padding: 28px 16px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .empty .ibox { width: 44px; height: 44px; border-radius: 12px; background: var(--app-muted-bg); color: var(--app-muted); display: grid; place-items: center; margin-bottom: 6px; }
+  .empty strong { display: block; }
+
+  /* Device persons */
+  .dev { border: 1px solid var(--app-border); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .dev ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .person { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--app-border); }
+  .person:first-child { border-top: 0; padding-top: 0; }
+  .person:last-child { padding-bottom: 0; }
+  .p-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .p-top > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .p-top strong { overflow-wrap: anywhere; }
+  .st { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--app-muted); }
+  .st .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--app-fg); flex: none; }
+  .st.wait .dot { background: #d97706; }
+  .st.out .dot { background: transparent; border: 1px solid var(--app-muted); box-sizing: border-box; }
+  .edit { min-height: 44px; padding: 0 10px; margin: -10px -10px 0 0; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; border-radius: 8px; flex: none; }
+  .loading { display: flex; gap: 8px; align-items: center; color: var(--app-muted); font-size: 13px; }
+
+  /* Forms */
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field label, .field .lbl { font-weight: 500; font-size: 14px; }
+  .field .err-l { color: var(--app-destructive); }
+  .input { min-height: 40px; box-sizing: border-box; border: 1px solid var(--app-border); border-radius: 8px; padding: 0 10px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
+  .input.ta { min-height: 64px; align-items: flex-start; padding-top: 8px; white-space: normal; }
+  .input.err { border-color: var(--app-destructive); }
+  .input.focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring) 50%, transparent); border-color: var(--app-ring); }
+  .input.narrow { width: 88px; }
+  .caret { display: inline-block; width: 1px; height: 18px; background: var(--app-fg); margin-left: 1px; }
+  .errtext { color: var(--app-destructive); font-size: 13px; line-height: 18px; margin: 0; }
+  .box { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 4px 0; box-sizing: border-box; }
+  .cb { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid #cfcfcf; border-radius: 4px; display: grid; place-items: center; font-size: 11px; line-height: 1; box-sizing: border-box; }
+  .cb.on { background: var(--app-check); border-color: var(--app-check); color: var(--app-check-fg); }
+  .rd { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid #cfcfcf; border-radius: 50%; box-sizing: border-box; display: grid; place-items: center; }
+  .rd.on { border-color: var(--app-check); background: var(--app-check); }
+  .rd.on::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--app-check-fg); }
+  .box > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+  .box strong { font-weight: 500; }
+  .fieldset { border: 1px solid var(--app-border); border-radius: 12px; padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .fieldset > .lbl { font-weight: 600; padding-top: 6px; }
+  .notice { display: grid; grid-template-columns: 16px 1fr; gap: 2px 10px; border: 1px solid var(--app-border); border-radius: 10px; padding: 12px; font-size: 14px; }
+  .notice .ico { grid-row: span 2; margin-top: 2px; }
+  .notice p { margin: 0; }
+  .notice .t { font-weight: 600; }
+  .notice .b { color: var(--app-muted); }
+  /* No red tint behind red text: title text-destructive on bg-background (4.77:1), body text-muted-foreground (4.74:1) */
+  .notice.destructive { border-color: var(--app-destructive); background: var(--app-bg); }
+  .notice.destructive .ico, .notice.destructive .t { color: var(--app-destructive); }
+  .notice .act { grid-column: 2; margin-top: 8px; }
+  .alert { margin: 0; color: var(--app-destructive); font-size: 14px; line-height: 20px; }
+
+  /* The Sheet (side="bottom") over the dimmed page, and the dialog */
+  .behind { height: 96px; padding: 16px; box-sizing: border-box; background: var(--app-bg); position: relative; overflow: hidden; }
+  .behind::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.28); }
+  .behind .ghosttext { color: var(--app-muted); font-size: 13px; }
+  .sheet { border-top: 1px solid var(--app-border); background: var(--app-bg); display: flex; flex-direction: column; box-shadow: 0 -8px 24px rgba(0,0,0,.12); }
+  .sheet .sh-h { padding: 16px 16px 0; display: flex; flex-direction: column; gap: 4px; }
+  .sheet .sh-h strong { font-size: 16px; font-weight: 500; overflow-wrap: anywhere; }
+  .sheet .sh-b { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .sheet .sh-f { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .remaining { font-size: 14px; color: var(--app-muted); margin: 0; }
+  .remaining.over { color: var(--app-destructive); font-weight: 500; }
+  .dimmed { position: relative; }
+  .dimmed::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.28); }
+  .dialog-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; z-index: 2; }
+  .dialog { background: var(--app-bg); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); width: 100%; box-sizing: border-box; }
+  .dialog strong { font-size: 17px; }
+  .dialog p { margin: 0; color: var(--app-muted); }
+
+  /* The message bar of in-page actions: fixed to the bottom of the viewport */
+  .bar { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 4; display: flex; gap: 10px; align-items: flex-start; border-radius: 12px; padding: 12px 4px 12px 14px; background: var(--app-primary); color: var(--app-primary-fg); font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.2); outline: 2px dashed var(--accent); outline-offset: 3px; }
+  .bar .ico { margin-top: 2px; }
+  .bar .msg { flex: 1; min-width: 0; }
+  .bar .x { flex: none; width: 44px; height: 44px; margin: -12px 0; display: grid; place-items: center; border-radius: 8px; }
+  .bar .x .ico { margin: 0; }
+  /* Error: text-foreground on bg-background, red border and icon; never red text on a red tint */
+  .bar.err { background: var(--app-bg); color: var(--app-fg); border: 1px solid var(--app-destructive); }
+  .bar.err > .ico { color: var(--app-destructive); }
+  .p-top > div > strong { align-self: flex-start; }
+  .focusring { outline: 2px solid var(--app-ring) !important; outline-offset: 3px; border-radius: 4px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-ring) 35%, transparent); }
+  .reserve { height: 112px; flex: none; border: 1px dashed var(--accent); border-radius: 8px; display: grid; place-items: center; color: var(--accent); font-size: 11px; text-align: center; padding: 0 8px; }
+  .foot { display: flex; justify-content: center; color: var(--app-muted); text-decoration: underline; text-underline-offset: 4px; min-height: 44px; align-items: center; }
+  .role { position: absolute; right: 8px; top: -9px; background: var(--accent); color: #fff; font: 600 10px/16px ui-monospace, Menlo, monospace; padding: 0 5px; border-radius: 4px; }
+
+  .anatomy { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 16px; }
+  .anatomy .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .anatomy ol, .anatomy ul { margin: 6px 0 0; padding-left: 20px; }
+  .anatomy li { margin-bottom: 4px; }
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 80ch; }
+  .table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.9rem; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  table.words td:nth-child(2), table.words td:nth-child(3) { min-width: 200px; }
+  ol.decisions { padding-left: 20px; max-width: 82ch; }
+  ol.decisions li { margin-bottom: 10px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></symbol>
+  <symbol id="user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="userplus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+  <symbol id="users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="wifioff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="m2 2 20 20"/></symbol>
+</svg>
+
+<div class="wrap">
+  <h1>Écran d’un événement : s’inscrire, proposer une voiture, prendre une place</h1>
+  <p class="lead">Epic <a href="https://github.com/olaurendeau/fullcar/issues/66">#66</a>, version 3.2 (revues de design appliquées, rendu vérifié), pour les tâches #86 à #93 et #95. Toutes les maquettes sont à 360 px de large, dans le style de <code>event-view.tsx</code>, <code>leg-panel.tsx</code> et des composants shadcn de <code>src/components/ui</code>. Le cadre pointillé bleu marque ce qui est nouveau par rapport à la PR #141 ; chaque texte est celui de la table « Les mots », en français, sauf la section anglaise. L’événement d’exemple : « Tournoi de Rennes », aller le samedi 12 décembre 2026 à 08:00, retour à 18:00. Sur l’appareil d’exemple : Claire (qui conduit à l’aller) et ses enfants Léa, Tom et Hugo.</p>
+  <nav class="toc" aria-label="Sections">
+    <a href="#ordre">L’ordre d’un leg</a><a href="#tableau">Le tableau</a><a href="#appareil">Personnes de l’appareil</a><a href="#personne">Ajouter une personne</a><a href="#feuille">La feuille</a><a href="#voiture">Proposer une voiture</a><a href="#retour">Conduit à l’aller, cherche au retour</a><a href="#tap">Un tap</a><a href="#focus">Focus</a><a href="#modifier">Modifier, retirer</a><a href="#reseau">Erreurs et chargement</a><a href="#anglais">En anglais</a><a href="#mots">Les mots</a><a href="#decisions">Décisions</a>
+  </nav>
+
+  <!-- ===================================================================== -->
+  <h2 id="ordre">L’ordre d’un leg</h2>
+  <p class="lead">Le même ordre sur chaque onglet, avec ou sans personne sur l’appareil, et sur <code>/e/{id}/admin</code> sous l’espace organisateur (C11.7).</p>
+  <div class="anatomy">
+    <div class="card">
+      <h3>De haut en bas</h3>
+      <ol>
+        <li><strong>Bandeau de couverture</strong> (<code>role="status"</code>), absent sur un leg vide. <span class="crit">C9.1, C9.6</span></li>
+        <li>Date et heure du leg (inchangé, PR #141).</li>
+        <li><strong>« Ajouter une personne »</strong> puis <strong>« Proposer une voiture »</strong>, l’un sous l’autre, pleine largeur, 44 px, style <code>outline</code>. Toujours présents. <span class="crit">C1.1, C9.6, C11.4</span></li>
+        <li>Sans JavaScript : la phrase <code>Board.needsJavaScript</code>, dans un <code>&lt;noscript&gt;</code>.</li>
+        <li><strong>Personnes de l’appareil</strong>, absente sans personne ; à sa place pendant le chargement, « Chargement de vos inscriptions… », ou l’alerte d’échec. Tant que les personnes de l’appareil ne sont pas connues (chargement ou échec), <strong>les deux actions et les places libres sont inactives</strong>. <span class="crit">C2.2, C5.9</span></li>
+        <li>Les voitures, par heure de départ, ou « Aucune voiture proposée pour l’aller » (PR #141).</li>
+        <li>La liste « Sans voiture ». <span class="crit">C3.4</span></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>Où s’ouvrent les choses</h3>
+      <ul>
+        <li><strong>Tous les formulaires</strong> (ajouter ou modifier une personne, proposer ou modifier une voiture, l’étape « qui sort ») s’ouvrent dans la même <strong>feuille</strong> que le choix des passagers : <code>Sheet side="bottom"</code>, hauteur au plus 90 % de l’écran, corps qui défile, boutons en bas. Elle s’ouvre là où l’on a tapé, et le tableau ne bouge pas dessous.</li>
+        <li>Une feuille se ferme par « Fermer » (en bas, <code>outline</code>, 44 px) et par Échap, sans effet. La croix de <code>sheet.tsx</code> (« Close » en dur) n’est pas affichée : <code>showCloseButton={false}</code>.</li>
+        <li>Le <strong>retrait d’une voiture</strong> passe par un <code>AlertDialog</code> centré.</li>
+        <li>Les messages d’une action faite <strong>sur la page</strong> (un tap sur une place, « Sortir de la voiture »…) arrivent dans une <strong>barre en bas de l’écran</strong>, fixe, au-dessus de la zone sûre, avec un bouton « Fermer » (icône, 44 px). Une réussite y reste 6 s (<code>role="status"</code>), un échec jusqu’à « Fermer », Échap ou l’action suivante (<code>role="alert"</code>). Tant que la barre est affichée, la page réserve 112 px en bas, pour que rien ne reste caché dessous. Dans une feuille, le message est dans la feuille, au-dessus des boutons.</li>
+        <li>Les deux régions vivantes de la barre (<code>status</code> et <code>alert</code>) ne contiennent <strong>que le texte du message</strong> : elles sont <strong>toujours montées, vides</strong>, et seul leur texte change, pour être annoncé. Le bouton « Fermer » est leur voisin, <strong>hors</strong> des régions. Le bandeau est aussi un <code>status</code> : les tests filtrent <code>getByRole("status")</code> par leur texte.</li>
+        <li>Une seule barre pour la page, placée dans le DOM <strong>juste avant les onglets</strong> (après l’en-tête de l’événement), même si elle s’affiche en bas : sa croix est atteinte en quelques Tab depuis le haut, jamais après 15 voitures. Échap la ferme aussi, depuis n’importe où sur la page, tant qu’aucune feuille ni confirmation n’est ouverte.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Ce qui ne change pas</h3>
+      <ul>
+        <li>En-tête de l’événement, onglets et leur compteur (PR #141), bas de page.</li>
+        <li>Les mots de la PR #141 sont tous gardés (voir « Les mots »).</li>
+        <li>Les options (rehausseurs, participation, arrêts) n’ajoutent rien à l’écran, même actives. <span class="crit">C4.9</span></li>
+        <li>Un prénom de 40, un lieu de 120 et une note de 200 caractères sans espace se coupent n’importe où (<code>wrap-anywhere</code>). <span class="crit">C11.3</span></li>
+        <li>Tout bouton et toute place libre font au moins 44 px de haut. <span class="crit">C11.5</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="tableau">Le tableau d’un leg</h2>
+  <p class="lead">Ce que tout le monde voit, plus ce que voit l’appareil de Claire. Les numéros ne s’affichent que là où C10.1 les envoie.</p>
+  <div class="grid">
+
+    <div class="state">
+      <h3>Page complète à 360 × 780, onglet Aller</h3>
+      <p>Bandeau visible sans défilement ; le compteur de l’onglet Retour annonce « 4 sans voiture » à un lecteur d’écran. <span class="crit">C9.1, C9.2, C9.3, C1.1, C2.2</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Kp7mQx3a</div>
+        <div class="screen">
+          <div class="fold" style="top:764px"><span>pli : 780 px</span></div>
+          <div class="stack tight">
+            <p class="ev-h1">Tournoi de Rennes</p>
+            <p class="line"><svg class="ico"><use href="#pin"/></svg><span>Gymnase Colette-Besson, Rennes</span></p>
+          </div>
+          <dl class="dl"><dt>Aller</dt><dd>samedi 12 décembre 2026 à 08:00</dd><dt>Retour</dt><dd>samedi 12 décembre 2026 à 18:00</dd></dl>
+          <div class="tabs"><span class="on">Aller<span class="count">2</span></span><span>Retour<span class="count">4</span></span></div>
+          <div class="banner" role="status"><svg class="ico"><use href="#users"/></svg><span>2 sans voiture · 3 places libres</span></div>
+          <p class="line muted" style="font-size:13px"><svg class="ico"><use href="#clock"/></svg><span>samedi 12 décembre 2026 à 08:00</span></p>
+          <div class="actions">
+            <div class="btn outline full"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+            <div class="btn outline full"><svg class="ico"><use href="#car"/></svg>Proposer une voiture</div>
+          </div>
+          <section class="dev new">
+            <div class="stack tight"><strong>Personnes de l’appareil</strong><span class="small-muted">Inscrites depuis cet appareil : vous pouvez les modifier.</span></div>
+            <ul>
+              <li class="person"><div class="p-top"><div><strong>Claire</strong><span class="st"><span class="dot"></span>Conduit</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><a class="tel"><svg class="ico s"><use href="#phone"/></svg>06 11 22 33 44</a></li>
+              <li class="person"><div class="p-top"><div><strong>Léa</strong><span class="st"><span class="dot"></span>Dans la voiture de Marc</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Sortir de la voiture</span><span class="btn outline grow">Pas concernée</span></div></li>
+              <li class="person"><div class="p-top"><div><strong>Tom</strong><span class="st wait"><span class="dot"></span>Sans voiture</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Pas concernée</span></div></li>
+            </ul>
+          </section>
+          <article class="car">
+            <div class="car-h"><strong>Voiture de Marc</strong></div>
+            <a class="tel"><svg class="ico s"><use href="#phone"/></svg>07 98 76 54 32</a>
+            <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Parking de la mairie, Vitré</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>07:15</span></p></div>
+            <ul class="seats">
+              <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Léa</span></li>
+              <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Inès</span><a class="tel">06 55 44 33 22</a></li>
+              <li class="free new"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+            </ul>
+          </article>
+          <div class="cut">… la voiture de Claire, puis « Sans voiture » : Tom, Jules</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Leg vide</h3>
+      <p>Aucune voiture, aucune personne sur ce leg : l’état vide de #3, sans bandeau, mais avec les deux actions au-dessus. <span class="crit">C9.6, C1.1</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… en-tête et onglets</div>
+        <p class="line muted" style="font-size:13px"><svg class="ico"><use href="#clock"/></svg><span>samedi 12 décembre 2026 à 08:00</span></p>
+        <div class="actions">
+          <div class="btn outline full"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          <div class="btn outline full"><svg class="ico"><use href="#car"/></svg>Proposer une voiture</div>
+        </div>
+        <div class="empty"><div class="ibox"><svg class="ico" style="width:20px;height:20px"><use href="#car"/></svg></div><strong>Aucune voiture proposée pour l’aller</strong><span class="small-muted" style="font-size:14px">Personne ne s’est encore inscrit.</span></div>
+      </div></div>
+
+      <h3 style="margin-top:28px">Une personne sans voiture, aucune voiture</h3>
+      <p>Bandeau ambre quand il manque des places (PR #141). <span class="crit">C9.1</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… en-tête et onglets</div>
+        <div class="banner warn" role="status"><svg class="ico"><use href="#users"/></svg><span>1 sans voiture · il manque 1 place</span></div>
+        <p class="line muted" style="font-size:13px"><svg class="ico"><use href="#clock"/></svg><span>samedi 12 décembre 2026 à 08:00</span></p>
+        <div class="actions">
+          <div class="btn outline full"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          <div class="btn outline full"><svg class="ico"><use href="#car"/></svg>Proposer une voiture</div>
+        </div>
+        <p class="small-muted" style="font-size:14px;margin:0">Aucune voiture proposée pour l’aller</p>
+        <section class="stack s8"><strong>Sans voiture</strong><ul class="chips"><li>Inès</li></ul></section>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Une voiture sans passager, une voiture complète</h3>
+      <p>Vu d’un appareil qui n’a personne dans ces voitures : aucun numéro. Les places libres sont des boutons ; la voiture complète n’en a aucun. <span class="crit">C4.3, C5.1, C10.2</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… en-tête et onglets</div>
+        <div class="banner" role="status"><svg class="ico"><use href="#check"/></svg><span>Tout le monde a une place · 3 places libres</span></div>
+        <div class="cut">… heure, actions</div>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Sophie</strong></div>
+          <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Gare de Laval</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>07:00</span></p><p class="muted" style="margin:0">Coffre plein, un sac par personne.</p></div>
+          <ul class="seats">
+            <li class="free new"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+            <li class="free new"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+            <li class="free new"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+          </ul>
+        </article>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Karim</strong><span class="pill">Complet</span></div>
+          <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Place des Lices, Rennes</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>07:40</span></p></div>
+          <ul class="seats">
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Nina</span></li>
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Jules</span></li>
+          </ul>
+        </article>
+      </div></div>
+      <div class="note"><strong>Une place libre</strong> : <code>&lt;button&gt;</code> de 44 px, bordure pointillée, icône « + » décorative, texte visible « Place libre ». Son nom accessible <strong>commence par le texte visible</strong> : « Place libre : prendre une place dans la voiture de Sophie » (C5.1 et WCAG 2.5.3, « Label in Name »). Inactive tant que les personnes de l’appareil ne sont pas connues, et sans JavaScript.</div>
+    </div>
+
+    <div class="state">
+      <h3>La voiture de l’appareil, vue par sa conductrice</h3>
+      <p>Seul l’appareil de Claire voit « Modifier » et « Retirer la voiture ». Elle voit le numéro de ses passagers ; ses passagers voient le sien. <span class="crit">C8.1, C10.1, C5.6</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… section des personnes de l’appareil</div>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Claire</strong></div>
+          <a class="tel"><svg class="ico s"><use href="#phone"/></svg>06 11 22 33 44</a>
+          <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Église de Saint-Grégoire</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>07:30</span></p></div>
+          <ul class="seats">
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Nina</span><a class="tel">06 01 02 03 04</a></li>
+            <li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+            <li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+          </ul>
+          <div class="row new" style="border-radius:8px"><span class="btn outline grow"><svg class="ico"><use href="#pencil"/></svg>Modifier</span><span class="btn danger grow"><svg class="ico"><use href="#trash"/></svg>Retirer la voiture</span></div>
+        </article>
+      </div></div>
+      <div class="note"><strong>Numéro</strong> : un lien <code>tel:</code> de 44 px de haut, dont le texte est le numéro tel qu’il a été saisi, et le nom accessible « Appeler Marc au 07 98 76 54 32 ». Celui du conducteur est sous le titre de la carte ; celui d’un passager, à droite de son prénom (il passe à la ligne si le prénom est long). Conducteur sans téléphone : aucune ligne. <span class="crit">C10.1, C11.5</span><br><strong>« Retirer la voiture »</strong> : <code>variant="outline"</code> avec <code>text-destructive</code> (rouge sur blanc, 4,77:1), pas <code>variant="destructive"</code>, dont le fond teinté donne 4,0:1. Les deux boutons tiennent sur une ligne à 360 px ; sinon la rangée passe à la ligne, jamais le texte d’un bouton.</div>
+    </div>
+
+    <div class="state">
+      <h3>Événement sans retour</h3>
+      <p>Pas d’onglets, un seul bandeau, pas de case « Aller et retour » dans les formulaires. <span class="crit">C1.4, C11.2</span></p>
+      <div class="phone"><div class="screen">
+        <div class="stack tight"><p class="ev-h1">Mariage de Julie</p><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Domaine de la Roche, Angers</span></p></div>
+        <dl class="dl"><dt>Aller</dt><dd>samedi 20 juin 2026 à 14:00</dd></dl>
+        <div class="banner" role="status"><svg class="ico"><use href="#users"/></svg><span>1 sans voiture · 2 places libres</span></div>
+        <p class="line muted" style="font-size:13px"><svg class="ico"><use href="#clock"/></svg><span>samedi 20 juin 2026 à 14:00</span></p>
+        <div class="actions">
+          <div class="btn outline full"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          <div class="btn outline full"><svg class="ico"><use href="#car"/></svg>Proposer une voiture</div>
+        </div>
+        <div class="cut">… voitures, puis « Sans voiture »</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Sans JavaScript</h3>
+      <p>Tout est lisible, les deux legs l’un sous l’autre (PR #141). Les boutons et les places libres sont inactifs, et une phrase dit pourquoi. Aucun numéro dans le HTML. <span class="crit">C3.4, état « JavaScript désactivé »</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… en-tête</div>
+        <strong style="font-size:18px">Aller</strong>
+        <div class="banner" role="status"><svg class="ico"><use href="#users"/></svg><span>2 sans voiture · 3 places libres</span></div>
+        <div class="actions">
+          <div class="btn outline full off"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          <div class="btn outline full off"><svg class="ico"><use href="#car"/></svg>Proposer une voiture</div>
+          <p class="small-muted" style="margin:0">S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page.</p>
+        </div>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Marc</strong></div>
+          <ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Léa</span></li><li class="free off"><svg class="ico"><use href="#plus"/></svg>Place libre</li></ul>
+        </article>
+        <div class="cut">… voiture de Claire</div>
+        <section class="stack s8"><strong>Sans voiture</strong><ul class="chips"><li>Tom</li><li>Jules</li></ul></section>
+        <div class="cut">… puis le leg Retour, sous son nom, avec ses voitures et sa liste</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="appareil">Personnes de l’appareil</h2>
+  <p class="lead">Une ligne par personne : prénom, état sur <strong>ce</strong> leg, son numéro (lien <code>tel:</code>), puis ses actions. Chaque ligne est un <code>role="group"</code> nommé par le prénom, pour que deux « Pas concernée » se distinguent. Les boutons font 44 px, côte à côte, et passent à la ligne s’il le faut.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Les quatre états et leurs actions</h3>
+      <p>Conduit : seulement « Modifier » (la voiture se gère sur sa carte). Passagère : « Sortir de la voiture » et « Pas concernée ». Sans voiture : « Pas concernée ». Pas concernée : « Je cherche une place ». <span class="crit">C2.2, C2.3, C3.1, C3.2, C7.1, C7.2, C11.2</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… bandeau, heure, actions</div>
+        <section class="dev">
+          <div class="stack tight"><strong>Personnes de l’appareil</strong><span class="small-muted">Inscrites depuis cet appareil : vous pouvez les modifier.</span></div>
+          <ul>
+            <li class="person"><div class="p-top"><div><strong>Claire</strong><span class="st"><span class="dot"></span>Conduit</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><a class="tel"><svg class="ico s"><use href="#phone"/></svg>06 11 22 33 44</a></li>
+            <li class="person"><div class="p-top"><div><strong>Léa</strong><span class="st"><span class="dot"></span>Dans la voiture de Marc</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Sortir de la voiture</span><span class="btn outline grow">Pas concernée</span></div></li>
+            <li class="person"><div class="p-top"><div><strong>Tom</strong><span class="st wait"><span class="dot"></span>Sans voiture</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><a class="tel"><svg class="ico s"><use href="#phone"/></svg>07 12 12 12 12</a><div class="row"><span class="btn outline grow">Pas concernée</span></div></li>
+            <li class="person"><div class="p-top"><div><strong>Hugo</strong><span class="st out"><span class="dot"></span>Pas concernée</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Je cherche une place</span></div></li>
+          </ul>
+        </section>
+        <div class="cut">… voitures</div>
+      </div></div>
+      <div class="note">Hugo, pas concerné à l’aller, n’apparaît <strong>que</strong> ici : ni dans une voiture, ni dans « Sans voiture » (C3.3). Le point de l’état : plein pour « dans une voiture », ambre pour « sans voiture », vide pour « pas concernée » ; le texte suffit sans la couleur. Le prénom et la ligne d’état sont en <code>wrap-anywhere</code> (« Dans la voiture de » + un prénom de 40 caractères, C11.3).<br><strong>Deux personnes de même prénom</strong> : deux groupes « Léa » ont le même nom accessible. Chaque prénom porte <code>aria-describedby</code> vers sa ligne d’état, ce qui les distingue quand leurs états diffèrent ; sinon elles se distinguent par leur ordre, comme à l’écran. Les distinguer davantage est hors périmètre ; un test les prend par leur rang (<code>nth</code>).</div>
+    </div>
+
+    <div class="state">
+      <h3>Pendant le chargement</h3>
+      <p>L’appareil a un jeton, ses personnes ne sont pas encore connues : une ligne à la place de la section ; <strong>« Ajouter une personne », « Proposer une voiture » et les places libres sont inactifs</strong>. Un tap ne fait rien, et surtout n’ouvre pas la première inscription. <span class="crit">C5.9, C1.1</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… bandeau, heure</div>
+        <div class="actions">
+          <div class="btn outline full off"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          <div class="btn outline full off"><svg class="ico"><use href="#car"/></svg>Proposer une voiture</div>
+        </div>
+        <p class="loading new" role="status"><svg class="ico"><use href="#loader"/></svg>Chargement de vos inscriptions…</p>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Marc</strong></div>
+          <ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Inès</span></li><li class="free off"><svg class="ico"><use href="#plus"/></svg>Place libre</li><li class="free off"><svg class="ico"><use href="#plus"/></svg>Place libre</li></ul>
+        </article>
+      </div></div>
+
+      <h3 style="margin-top:28px">Échec du chargement</h3>
+      <p>La page reste lisible. Les deux actions et les places libres restent <strong>inactives</strong> jusqu’à un chargement réussi, et l’alerte le dit : sinon « Proposer une voiture » s’ouvrirait comme pour un appareil sans personne et créerait une seconde Claire. « Réessayer » relance la lecture et passe par « Chargement… ». <span class="crit">état « échec du chargement », C1.1</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… bandeau, heure</div>
+        <div class="actions">
+          <div class="btn outline full off"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          <div class="btn outline full off"><svg class="ico"><use href="#car"/></svg>Proposer une voiture</div>
+        </div>
+        <div class="notice destructive new" role="alert"><svg class="ico"><use href="#warn"/></svg><p class="t">Vos inscriptions n’ont pas pu être chargées</p><p class="b">Rien ne peut être ajouté ni modifié tant qu’elles ne sont pas chargées. Vérifiez la connexion, puis réessayez.</p><div class="act"><span class="btn outline" style="display:inline-flex">Réessayer</span></div></div>
+        <div class="cut">… voitures, places libres inactives</div>
+      </div></div>
+      <div class="note">Contraste : titre <code>text-destructive</code> sur <code>bg-background</code> (4,77:1), texte <code>text-muted-foreground</code> (4,74:1), bordure <code>border-destructive</code>. Pas de fond teinté : du rouge sur <code>#fef2f2</code> ne donne que 4,36:1.</div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="personne">Ajouter une personne</h2>
+  <p class="lead">Un seul formulaire pour la première inscription et les suivantes, dans la feuille. Le focus va sur « Prénom » à l’ouverture : C1.10 tient en trois actions (« Ajouter une personne », prénom, « Valider »).</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Première inscription</h3>
+      <p>Appareil sans personne : une phrase dit qu’il n’y a ni compte ni e-mail. Rien n’est écrit dans <code>localStorage</code> avant « Valider ». <span class="crit">C1.2, C1.3, C1.13, C11.2</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet new">
+          <div class="sh-h"><strong>Ajouter une personne</strong><span class="small-muted" style="font-size:14px">Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.</span></div>
+          <div class="sh-b">
+            <div class="field"><label>Prénom</label><div class="input focus">Léa<span class="caret"></span></div></div>
+            <div class="field"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Aller et retour</strong><span class="small-muted">Décochez si cette personne ne fait que l’aller.</span></span></div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+      <div class="note">Sur l’onglet Retour, l’explication devient « Décochez si cette personne ne fait que le retour. » Événement sans retour : la case est absente. <span class="crit">C1.3, C1.4</span></div>
+    </div>
+
+    <div class="state">
+      <h3>Envoyé avec des erreurs</h3>
+      <p>Rien n’est créé ; chaque erreur sous son champ, focus sur le premier champ en erreur, valeurs conservées. <span class="crit">C1.8</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Ajouter une personne</strong><span class="small-muted" style="font-size:14px">Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.</span></div>
+          <div class="sh-b">
+            <div class="field"><label class="err-l">Prénom</label><div class="input err focus"><span class="caret"></span></div><p class="errtext">Champ requis.</p></div>
+            <div class="field"><label class="err-l">Téléphone (facultatif)</label><div class="input err">06 12</div><p class="errtext">Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )</p><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Aller et retour</strong><span class="small-muted">Décochez si cette personne ne fait que l’aller.</span></span></div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Stockage indisponible</h3>
+      <p>L’avertissement est là dès l’ouverture, avant « Valider », et remplace la phrase « Sans compte ni e-mail ». L’inscription aboutit quand même. <span class="crit">C1.14, C11.2</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Ajouter une personne</strong></div>
+          <div class="sh-b">
+            <div class="notice new" role="note"><svg class="ico"><use href="#warn"/></svg><p class="t">Cet appareil ne pourra pas s’en souvenir</p><p class="b">Votre navigateur bloque le stockage : après la fermeture de la page, ces inscriptions ne pourront plus être modifiées depuis cet appareil.</p></div>
+            <div class="field"><label>Prénom</label><div class="input focus"><span class="caret"></span></div></div>
+            <div class="field"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Aller et retour</strong><span class="small-muted">Décochez si cette personne ne fait que l’aller.</span></span></div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Depuis une place libre, appareil sans personne</h3>
+      <p>Le tap sur une place de la voiture de Marc ouvre la première inscription ; « Valider » crée la personne et la place directement. Trois actions. <span class="crit">C5.4</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Marc</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Ajouter une personne</strong><span class="small-muted new" style="font-size:14px;border-radius:4px">Elle prendra une place dans la voiture de Marc.</span><span class="small-muted" style="font-size:14px">Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.</span></div>
+          <div class="sh-b">
+            <div class="field"><label>Prénom</label><div class="input focus">Inès<span class="caret"></span></div></div>
+            <div class="field"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Aller et retour</strong><span class="small-muted">Décochez si cette personne ne fait que l’aller.</span></span></div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+      <div class="note">Si la place a été prise entre-temps, la personne est créée quand même, sans voiture sur ce leg ; la feuille se ferme et la barre dit « Cette place vient d’être prise » (décision du coordinateur, #92).</div>
+    </div>
+
+    <div class="state">
+      <h3>Modifier une personne</h3>
+      <p>Depuis « Modifier » dans la section. Prénom et téléphone, mêmes règles ; vider le téléphone le supprime. Pas de case « Aller et retour » : chaque leg se change dans la section. <span class="crit">C2.3</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Personnes de l’appareil</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Modifier Tom</strong></div>
+          <div class="sh-b">
+            <div class="field"><label>Prénom</label><div class="input">Tom</div></div>
+            <div class="field"><label>Téléphone (facultatif)</label><div class="input focus">07 12 12 12 12<span class="caret"></span></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="feuille">La feuille : placer plusieurs personnes</h2>
+  <p class="lead">Elle s’ouvre par un tap sur une place libre quand l’appareil n’a pas exactement une personne sans voiture sur ce leg. Titre : la voiture visée ; sous le titre, toujours, les places qui restent.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Trois personnes à placer</h3>
+      <p>Tom et Léa sans voiture, cochés ; Hugo pas concerné, décoché. Claire, qui conduit, n’y est pas. <span class="crit">C6.1, C6.2, C6.6, C11.2</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Sophie</span></div>
+        <div class="sheet new">
+          <div class="sh-h"><strong>Qui monte dans la voiture de Sophie ?</strong><p class="remaining">Il reste 3 places dans cette voiture</p></div>
+          <div class="sh-b" style="gap:0">
+            <div class="box"><span class="cb on">✓</span><span><strong>Tom</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Léa</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="box"><span class="cb"></span><span><strong>Hugo</strong><span class="small-muted">Pas concernée</span></span></div>
+            <div class="btn outline full" style="margin-top:10px"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          </div>
+          <div class="sh-f"><div class="btn full">Placer 2 personnes</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+      <div class="note">Chaque ligne entière est la cible de sa case (44 px). L’état sous le prénom reprend les mots de la section. Fermer ou Échap : rien ne change. <span class="crit">C6.9</span></div>
+    </div>
+
+    <div class="state">
+      <h3>Aucune case cochée</h3>
+      <p>Tom et Léa décochés : le bouton lit « Placer » et il est inactif. <span class="crit">C6.2</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Sophie</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Qui monte dans la voiture de Sophie ?</strong><p class="remaining">Il reste 3 places dans cette voiture</p></div>
+          <div class="sh-b" style="gap:0">
+            <div class="box"><span class="cb"></span><span><strong>Tom</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="box"><span class="cb"></span><span><strong>Léa</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="box"><span class="cb"></span><span><strong>Hugo</strong><span class="small-muted">Pas concernée</span></span></div>
+            <div class="btn outline full" style="margin-top:10px"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          </div>
+          <div class="sh-f"><div class="btn full off new">Placer</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Plus de cochées que de places</h3>
+      <p>La ligne des places passe en rouge, le bouton est inactif. <span class="crit">C6.3</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Marc</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Qui monte dans la voiture de Marc ?</strong><p class="remaining over" aria-live="polite">Il reste 2 places dans cette voiture</p></div>
+          <div class="sh-b" style="gap:0">
+            <div class="box"><span class="cb on">✓</span><span><strong>Tom</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Léa</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Hugo</strong><span class="small-muted">Pas concernée</span></span></div>
+            <div class="btn outline full" style="margin-top:10px"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          </div>
+          <div class="sh-f"><div class="btn full off">Placer 3 personnes</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Personne à placer</h3>
+      <p>Tout le monde conduit ou est déjà dans une voiture : la feuille le dit, et ne propose que « Ajouter une personne ». C’est le chemin de Claire qui inscrit un enfant dans sa propre voiture. <span class="crit">C6.7, C5.6</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Claire</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Qui monte dans la voiture de Claire ?</strong><p class="remaining">Il reste 2 places dans cette voiture</p></div>
+          <div class="sh-b">
+            <p style="margin:0">Toutes vos personnes sont déjà dans une voiture pour l’aller.</p>
+            <div class="btn outline full"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          </div>
+          <div class="sh-f"><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>« Ajouter une personne » dans la feuille</h3>
+      <p>Le formulaire remplace la liste dans la même feuille. « Valider » crée la personne et revient à la liste, où elle est cochée ; « Annuler » revient à la liste sans rien créer. Si la feuille est fermée ensuite sans placer, la personne reste sans voiture. <span class="crit">C6.6</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Claire</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Ajouter une personne</strong></div>
+          <div class="sh-b">
+            <div class="field"><label>Prénom</label><div class="input focus">Zoé<span class="caret"></span></div></div>
+            <div class="field"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Aller et retour</strong><span class="small-muted">Décochez si cette personne ne fait que l’aller.</span></span></div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Annuler</div></div>
+        </div>
+      </div>
+      <div class="note">Pas de phrase « Elle prendra une place… » ici : la personne n’est placée qu’après « Placer ». Pas de « Sans compte ni e-mail » non plus : l’appareil a déjà des personnes.</div>
+    </div>
+
+    <div class="state">
+      <h3>Retour à la liste après « Valider »</h3>
+      <p>Zoé est créée, sans voiture sur ce leg, et apparaît cochée en bas de la liste ; le focus va sur sa case. Le bouton et la ligne des places suivent. <span class="crit">C6.6</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Claire</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Qui monte dans la voiture de Claire ?</strong><p class="remaining">Il reste 2 places dans cette voiture</p></div>
+          <div class="sh-b" style="gap:0">
+            <div class="box new"><span class="cb on focusring">✓</span><span><strong>Zoé</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="btn outline full" style="margin-top:10px"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          </div>
+          <div class="sh-f"><div class="btn full">Placer 1 personne</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+      <div class="note">Ici, depuis la feuille vide de C6.7 : la phrase « Toutes vos personnes sont déjà dans une voiture… » disparaît dès qu’il y a quelqu’un à placer.</div>
+    </div>
+
+    <div class="state">
+      <h3>Plus assez de places au moment de valider</h3>
+      <p>Tout ou rien : personne n’est placé, la sélection reste, la ligne des places montre ce qui reste vraiment. <span class="crit">C6.5</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Sophie</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Qui monte dans la voiture de Sophie ?</strong><p class="remaining over">Il reste 1 place dans cette voiture</p></div>
+          <div class="sh-b" style="gap:0">
+            <div class="box"><span class="cb on">✓</span><span><strong>Tom</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Léa</strong><span class="small-muted">Sans voiture</span></span></div>
+            <div class="box"><span class="cb"></span><span><strong>Hugo</strong><span class="small-muted">Pas concernée</span></span></div>
+          </div>
+          <div class="sh-f"><p class="alert new" role="alert">Il n’y a plus assez de places : personne n’a été placé.</p><div class="btn full off">Placer 2 personnes</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Voiture retirée pendant que la feuille est ouverte</h3>
+      <p>Personne n’est placé ; derrière la feuille, le tableau montre déjà l’état actuel. Seul « Fermer » reste. <span class="crit">C6.8</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">(la voiture de Sophie a disparu)</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Qui monte dans la voiture de Sophie ?</strong></div>
+          <div class="sh-b"><p class="alert new" role="alert">Cette voiture n’est plus proposée</p></div>
+          <div class="sh-f"><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="voiture">Proposer une voiture</h2>
+  <p class="lead">Le leg est celui de l’onglet, et une phrase le rappelle. Ordre des champs : conducteur, lieu, heure, places, note. Aucun champ d’option.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Appareil sans personne : quatre actions</h3>
+      <p>Seule la nouvelle personne est possible, donc pas de choix : ses champs directement. Focus sur « Prénom » à l’ouverture ; heure préremplie, 3 places. <span class="crit">C4.1, R4</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet new">
+          <div class="sh-h"><strong>Proposer une voiture</strong><span class="small-muted" style="font-size:14px">Pour l’aller seulement : pour le retour, proposez-la aussi sur l’onglet Retour.</span></div>
+          <div class="sh-b">
+            <div class="fieldset"><span class="lbl">Conducteur</span>
+              <div class="field"><label>Prénom</label><div class="input focus">Marc<span class="caret"></span></div></div>
+              <div class="field" style="margin-top:8px"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            </div>
+            <div class="field"><label>Lieu de départ</label><div class="input">Parking de la mairie, Vitré</div></div>
+            <div class="field"><label>Heure de départ</label><div class="input narrow">08:00</div><span class="small-muted">Le samedi 12 décembre 2026</span></div>
+            <div class="field"><label>Places, conducteur non compris</label><div class="input narrow">3</div><span class="small-muted">De 1 à 8.</span></div>
+            <div class="field"><label>Note (facultatif)</label><div class="input ta"></div><span class="small-muted">Ce que les passagers doivent savoir.</span></div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+      <div class="note">« Places » est un <code>&lt;input type="number" inputmode="numeric" min="1" max="8"&gt;</code>. L’heure, un <code>type="time"</code> avec <code>appearance-none</code> (#114).</div>
+    </div>
+
+    <div class="state">
+      <h3>Stockage indisponible, nouveau conducteur</h3>
+      <p>Un nouveau conducteur tire aussi un jeton personnel : l’avertissement est en tête du formulaire dès l’ouverture, avant « Valider ». La proposition aboutit quand même. Il s’affiche dans tout formulaire qui crée (personne ou voiture) tant que le stockage est indisponible. <span class="crit">C1.14, D5, C4.1</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Proposer une voiture</strong><span class="small-muted" style="font-size:14px">Pour l’aller seulement : pour le retour, proposez-la aussi sur l’onglet Retour.</span></div>
+          <div class="sh-b">
+            <div class="notice new" role="note"><svg class="ico"><use href="#warn"/></svg><p class="t">Cet appareil ne pourra pas s’en souvenir</p><p class="b">Votre navigateur bloque le stockage : après la fermeture de la page, cette voiture et son conducteur ne pourront plus être modifiés depuis cet appareil.</p></div>
+            <div class="fieldset"><span class="lbl">Conducteur</span>
+              <div class="field"><label>Prénom</label><div class="input focus"><span class="caret"></span></div></div>
+              <div class="field" style="margin-top:8px"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            </div>
+            <div class="cut">… lieu, heure, places, note</div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Avec des personnes sur l’appareil, onglet Retour</h3>
+      <p>Choix du conducteur en boutons radio : les personnes de l’appareil qui ne conduisent pas au retour, puis « Une nouvelle personne » (qui déplie prénom et téléphone). Une passagère choisie quitte sa place, et c’est dit sous son prénom. Une seule éligible : présélectionnée ; plusieurs : aucune, ici Claire vient d’être choisie. <span class="crit">R4, C4.5, C4.6</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Proposer une voiture</strong><span class="small-muted" style="font-size:14px">Pour le retour seulement : pour l’aller, proposez-la aussi sur l’onglet Aller.</span></div>
+          <div class="sh-b">
+            <div class="fieldset" role="radiogroup"><span class="lbl">Conducteur</span>
+              <div class="box"><span class="rd on"></span><span><strong>Claire</strong><span class="small-muted">Quittera la voiture de Sophie</span></span></div>
+              <div class="box"><span class="rd"></span><span><strong>Léa</strong></span></div>
+              <div class="box"><span class="rd"></span><span><strong>Une nouvelle personne</strong></span></div>
+            </div>
+            <div class="field"><label>Lieu de dépose</label><div class="input focus">Église de Saint-Grégoire<span class="caret"></span></div></div>
+            <div class="field"><label>Heure de départ</label><div class="input narrow">18:00</div><span class="small-muted">Le samedi 12 décembre 2026</span></div>
+            <div class="field"><label>Places, conducteur non compris</label><div class="input narrow">3</div><span class="small-muted">De 1 à 8.</span></div>
+            <div class="cut">… note</div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Aucun conducteur choisi, puis « Une nouvelle personne »</h3>
+      <p>À gauche de la flèche : envoyé sans choix, l’erreur est sous le groupe et le focus sur le premier bouton radio. À droite : « Une nouvelle personne » choisie déplie Prénom et Téléphone dans le groupe. <span class="crit">C4.7, R4</span></p>
+      <div class="phone">
+        <div class="sheet" style="border-top:0;box-shadow:none">
+          <div class="sh-h"><strong>Proposer une voiture</strong><span class="small-muted" style="font-size:14px">Pour le retour seulement : pour l’aller, proposez-la aussi sur l’onglet Aller.</span></div>
+          <div class="sh-b">
+            <div class="fieldset" role="radiogroup" style="border-color:var(--app-destructive)"><span class="lbl err-l" style="color:var(--app-destructive)">Conducteur</span>
+              <div class="box"><span class="rd focusring"></span><span><strong>Claire</strong><span class="small-muted">Quittera la voiture de Sophie</span></span></div>
+              <div class="box"><span class="rd"></span><span><strong>Léa</strong></span></div>
+              <div class="box"><span class="rd"></span><span><strong>Une nouvelle personne</strong></span></div>
+              <p class="errtext new">Choisissez le conducteur.</p>
+            </div>
+            <div class="cut">… lieu, heure, places, note, valeurs conservées</div>
+          </div>
+        </div>
+      </div>
+      <p style="text-align:center;margin:10px 0;color:var(--muted)">↓ « Une nouvelle personne »</p>
+      <div class="phone">
+        <div class="sheet" style="border-top:0;box-shadow:none">
+          <div class="sh-b">
+            <div class="fieldset" role="radiogroup"><span class="lbl">Conducteur</span>
+              <div class="box"><span class="rd"></span><span><strong>Claire</strong><span class="small-muted">Quittera la voiture de Sophie</span></span></div>
+              <div class="box"><span class="rd"></span><span><strong>Léa</strong></span></div>
+              <div class="box"><span class="rd on"></span><span><strong>Une nouvelle personne</strong></span></div>
+              <div class="field new" style="margin-left:26px"><label>Prénom</label><div class="input">Paul</div></div>
+              <div class="field" style="margin:8px 0 0 26px"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            </div>
+            <div class="cut">… lieu, heure, places, note</div>
+          </div>
+        </div>
+      </div>
+      <div class="note">Choisir « Une nouvelle personne » ne déplace pas le focus : il reste sur le bouton radio, et Tab mène au Prénom. Revenir à une personne de l’appareil replie les deux champs sans perdre ce qui y était tapé.</div>
+    </div>
+
+    <div class="state">
+      <h3>Envoyé avec des erreurs</h3>
+      <p>Lieu vide, 9 places : rien n’est créé, focus sur « Lieu de départ », valeurs conservées. <span class="crit">C4.7, C11.2</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Proposer une voiture</strong><span class="small-muted" style="font-size:14px">Pour l’aller seulement : pour le retour, proposez-la aussi sur l’onglet Retour.</span></div>
+          <div class="sh-b">
+            <div class="fieldset"><span class="lbl">Conducteur</span><div class="field"><label>Prénom</label><div class="input">Marc</div></div><div class="field" style="margin-top:8px"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div></div>
+            <div class="field"><label class="err-l">Lieu de départ</label><div class="input err focus"><span class="caret"></span></div><p class="errtext">Champ requis.</p></div>
+            <div class="field"><label>Heure de départ</label><div class="input narrow">07:15</div><span class="small-muted">Le samedi 12 décembre 2026</span></div>
+            <div class="field"><label class="err-l">Places, conducteur non compris</label><div class="input narrow err">9</div><p class="errtext">De 1 à 8 places.</p></div>
+            <div class="cut">… note</div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="retour">Conduit à l’aller, cherche une place au retour</h2>
+  <p class="lead">L’état que <code>product.md</code> range parmi « la moitié du produit ». Claire conduit à l’aller ; au retour, elle est sans voiture, seule de l’appareil à l’être (Léa et Tom rentrent avec Marc, Hugo n’est pas concerné). Un tap sur une place libre de l’onglet Retour la place.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Onglet Retour, avant le tap</h3>
+      <p>L’onglet Retour est choisi ; son compteur dit 4, celui de l’Aller 2. Dans la section, Claire est « Sans voiture » ici alors qu’elle « Conduit » à l’aller. <span class="crit">C9.3, C2.2, C3.5</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… en-tête</div>
+        <div class="tabs"><span>Aller<span class="count">2</span></span><span class="on">Retour<span class="count">4</span></span></div>
+        <div class="banner" role="status"><svg class="ico"><use href="#users"/></svg><span>4 sans voiture · 5 places libres</span></div>
+        <p class="line muted" style="font-size:13px"><svg class="ico"><use href="#clock"/></svg><span>samedi 12 décembre 2026 à 18:00</span></p>
+        <div class="actions">
+          <div class="btn outline full"><svg class="ico"><use href="#userplus"/></svg>Ajouter une personne</div>
+          <div class="btn outline full"><svg class="ico"><use href="#car"/></svg>Proposer une voiture</div>
+        </div>
+        <section class="dev">
+          <div class="stack tight"><strong>Personnes de l’appareil</strong><span class="small-muted">Inscrites depuis cet appareil : vous pouvez les modifier.</span></div>
+          <ul>
+            <li class="person"><div class="p-top"><div><strong>Claire</strong><span class="st wait"><span class="dot"></span>Sans voiture</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><a class="tel"><svg class="ico s"><use href="#phone"/></svg>06 11 22 33 44</a><div class="row"><span class="btn outline grow">Pas concernée</span></div></li>
+            <li class="person"><div class="p-top"><div><strong>Léa</strong><span class="st"><span class="dot"></span>Dans la voiture de Marc</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Sortir de la voiture</span><span class="btn outline grow">Pas concernée</span></div></li>
+            <li class="person"><div class="p-top"><div><strong>Tom</strong><span class="st"><span class="dot"></span>Dans la voiture de Marc</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Sortir de la voiture</span><span class="btn outline grow">Pas concernée</span></div></li>
+            <li class="person"><div class="p-top"><div><strong>Hugo</strong><span class="st out"><span class="dot"></span>Pas concernée</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Je cherche une place</span></div></li>
+          </ul>
+        </section>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Sophie</strong></div>
+          <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Gare de Laval</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>18:15</span></p></div>
+          <ul class="seats">
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Nina</span></li>
+            <li class="free tap"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+            <li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+          </ul>
+        </article>
+        <div class="cut">… voiture de Marc, puis « Sans voiture » : Claire, Inès, Jules, Paul</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Après un seul tap</h3>
+      <p>Claire est dans la voiture de Sophie au retour ; le compteur Retour passe à 3, l’Aller ne bouge pas. Focus : le titre de la carte, la place tapée n’existant plus. <span class="crit">C5.2, C5.3, C9.3, C9.4, C3.5</span></p>
+      <div class="phone"><div class="screen pb">
+        <div class="cut">… en-tête</div>
+        <div class="tabs"><span>Aller<span class="count">2</span></span><span class="on">Retour<span class="count">3</span></span></div>
+        <div class="banner" role="status"><svg class="ico"><use href="#users"/></svg><span>3 sans voiture · 4 places libres</span></div>
+        <div class="cut">… heure, actions</div>
+        <section class="dev">
+          <ul>
+            <li class="person"><div class="p-top"><div><strong>Claire</strong><span class="st"><span class="dot"></span>Dans la voiture de Sophie</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><a class="tel"><svg class="ico s"><use href="#phone"/></svg>06 11 22 33 44</a><div class="row"><span class="btn outline grow">Sortir de la voiture</span><span class="btn outline grow">Pas concernée</span></div></li>
+          </ul>
+          <div class="cut">… Léa, Tom, Hugo inchangés</div>
+        </section>
+        <article class="car">
+          <div class="car-h"><strong class="focusring">Voiture de Sophie</strong></div>
+          <a class="tel"><svg class="ico s"><use href="#phone"/></svg>06 99 88 77 66</a>
+          <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Gare de Laval</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>18:15</span></p></div>
+          <ul class="seats">
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Nina</span></li>
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Claire</span><a class="tel">06 11 22 33 44</a></li>
+            <li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+          </ul>
+        </article>
+        <div class="bar"><span class="role">region status = le texte seul</span><svg class="ico"><use href="#check"/></svg><span class="msg" role="status">Claire est dans la voiture de Sophie</span><span class="x" aria-label="Fermer"><svg class="ico"><use href="#x"/></svg></span></div>
+      </div></div>
+      <div class="note">Le numéro de Sophie apparaît pour Claire sur la carte du retour seulement ; à l’aller, Claire et Sophie ne partagent aucune voiture (C10.3).</div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="tap">Prendre une place d’un seul tap</h2>
+  <p class="lead">L’appareil a exactement une personne sans voiture sur ce leg : le tap la place, sans autre étape. Le message arrive dans la barre du bas.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Après le tap</h3>
+      <p>Tom était la seule personne sans voiture : il est dans la voiture de Sophie, la place a pris son prénom, le bandeau et l’onglet sont à jour. <span class="crit">C5.2, C5.3, C9.4</span></p>
+      <div class="phone"><div class="screen pb">
+        <div class="cut">… en-tête et onglets</div>
+        <div class="banner" role="status"><svg class="ico"><use href="#users"/></svg><span>1 sans voiture · 2 places libres</span></div>
+        <div class="cut">… heure, actions, section</div>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Sophie</strong></div>
+          <a class="tel"><svg class="ico s"><use href="#phone"/></svg>06 99 88 77 66</a>
+          <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Gare de Laval</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>07:00</span></p></div>
+          <ul class="seats">
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Tom</span><a class="tel">07 12 12 12 12</a></li>
+            <li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+            <li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li>
+          </ul>
+        </article>
+        <div class="bar"><span class="role">region status = le texte seul</span><svg class="ico"><use href="#check"/></svg><span class="msg" role="status">Tom est dans la voiture de Sophie</span><span class="x" aria-label="Fermer"><svg class="ico"><use href="#x"/></svg></span></div>
+      </div></div>
+      <div class="note">Après la feuille, la même barre avec la liste des prénoms (<code>format.list</code>) : « Tom et Léa sont dans la voiture de Sophie ». Pendant l’envoi, la place tapée est inactive.</div>
+    </div>
+
+    <div class="state">
+      <h3>Place prise entre-temps</h3>
+      <p>L’état de Tom ne change pas ; la carte montre l’état actuel, ici complète. <span class="crit">C5.7</span></p>
+      <div class="phone"><div class="screen pb">
+        <div class="cut">… bandeau, actions, section</div>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Marc</strong><span class="pill">Complet</span></div>
+          <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Parking de la mairie, Vitré</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>07:15</span></p></div>
+          <ul class="seats">
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Léa</span></li>
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Inès</span></li>
+            <li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Paul</span></li>
+          </ul>
+        </article>
+        <div class="bar err"><span class="role">region alert = le texte seul</span><svg class="ico"><use href="#warn"/></svg><span class="msg" role="alert">Cette place vient d’être prise</span><span class="x" aria-label="Fermer"><svg class="ico"><use href="#x"/></svg></span></div>
+      </div></div>
+      <div class="note">Les autres refus d’un tap utilisent la même barre : voiture retirée, « Cette voiture n’est plus proposée » ; personne déjà ailleurs, « Cette personne est déjà dans une voiture : rien n’a changé. »</div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="focus">Le focus après une action</h2>
+  <p class="lead">Quand une action fait disparaître le bouton qui avait le focus, le focus ne tombe jamais en haut du document : il va sur un repère stable, rendu focalisable par <code>tabIndex={-1}</code>, avec l’anneau de focus habituel. Pour une feuille ou la confirmation, c’est leur <code>onCloseAutoFocus</code> qui l’y envoie.</p>
+  <div class="anatomy">
+    <div class="card">
+      <h3>Où va le focus</h3>
+      <ul>
+        <li><strong>« Sortir de la voiture », « Pas concernée », « Je cherche une place »</strong> : le prénom de la personne dans la section. Il porte <code>aria-describedby</code> vers sa ligne d’état : un lecteur d’écran lit « Léa, Sans voiture », et Tab mène à sa nouvelle action. <span class="crit">C7.1, C7.2, C3.1, C3.2</span></li>
+        <li><strong>« Retirer la voiture » confirmé</strong> : le prénom du conducteur dans la section, désormais « Pas concernée ». <span class="crit">C8.6</span></li>
+        <li><strong>Un tap qui place, ou la feuille validée</strong> : le titre de la carte de cette voiture. <span class="crit">C5.2, C6.4</span></li>
+        <li><strong>Un refus qui supprime la cible</strong> (place prise, voiture retirée) : le titre de la carte si elle existe encore, sinon le bandeau du leg. <span class="crit">C5.7, C6.8</span></li>
+        <li><strong>Feuille fermée sans effet, formulaire validé</strong> (ajouter, proposer, modifier) : le bouton qui l’a ouverte, comportement par défaut de Radix, puisqu’il existe toujours.</li>
+        <li>Un refus <strong>dans</strong> une feuille ne déplace pas le focus ; un formulaire en erreur le met sur son premier champ en erreur.</li>
+        <li><strong>La croix « Fermer » de la barre</strong> : le focus va au repère que la règle ci-dessus a donné à l’action qui a produit le message (gardé avec le message), s’il existe encore ; sinon à l’onglet actif du leg, ou, sans onglets, au titre de l’événement (<code>tabIndex={-1}</code>). <strong>Échap</strong> : focus dans la barre (sur sa croix), il suit la règle de « Fermer » ci-dessus ; focus ailleurs, Échap ferme la barre et le focus ne bouge pas.</li>
+        <li><strong>La barre de réussite</strong> ne s’efface pas tant que le focus est dans la barre (sur sa croix) ; ses 6 s repartent quand il en sort. Elle ne disparaît donc jamais sous le focus.</li>
+        <li><strong>L’action suivante</strong> remplace le message de la barre sans démonter la croix : un focus posé dessus y reste.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Après « Pas concernée » sur Tom</h3>
+      <div class="phone" style="width:auto;max-width:none;border-width:1px;border-radius:10px"><div class="screen">
+        <section class="dev">
+          <ul>
+            <li class="person"><div class="p-top"><div><strong class="focusring new">Tom</strong><span class="st out"><span class="dot"></span>Pas concernée</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Je cherche une place</span></div></li>
+          </ul>
+        </section>
+      </div></div>
+      <p class="small-muted" style="margin:8px 0 0">Annoncé : « Tom, Pas concernée ». Le bandeau et le compteur de l’onglet sont à jour (C9.4).</p>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="modifier">Modifier ou retirer sa voiture</h2>
+  <p class="lead">Depuis la carte, sur l’appareil du conducteur. Modifier ouvre la feuille ; réduire sous le nombre de passagers ajoute une étape dans la même feuille ; retirer passe par une confirmation.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Modifier la voiture</h3>
+      <p>Lieu, heure, places et note, préremplis, règles de R4 ; pas de conducteur. Ici Claire passe de 3 à 1 place avec 2 passagers : « Valider » ouvre l’étape « qui sort ». <span class="crit">C8.2, C8.3</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Claire</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Modifier la voiture</strong></div>
+          <div class="sh-b">
+            <div class="field"><label>Lieu de départ</label><div class="input">Église de Saint-Grégoire</div></div>
+            <div class="field"><label>Heure de départ</label><div class="input narrow">07:30</div><span class="small-muted">Le samedi 12 décembre 2026</span></div>
+            <div class="field"><label>Places, conducteur non compris</label><div class="input narrow focus">1<span class="caret"></span></div><span class="small-muted">De 1 à 8.</span></div>
+            <div class="field"><label>Note (facultatif)</label><div class="input ta"></div><span class="small-muted">Ce que les passagers doivent savoir.</span></div>
+          </div>
+          <div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Qui sort de la voiture ?</h3>
+      <p>Les passagers actuels, aucune case cochée. « Valider » reste inactif tant que le nombre coché n’est pas exactement passagers − places. « Annuler » revient au formulaire, valeurs gardées. <span class="crit">C8.4, C11.2</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Claire</span></div>
+        <div class="sheet new">
+          <div class="sh-h"><strong>Qui sort de la voiture ?</strong><span class="small-muted" style="font-size:14px">2 passagers pour 1 place : cochez la personne qui sort.</span><span class="small-muted" style="font-size:14px">Les personnes qui sortent redeviennent sans voiture.</span></div>
+          <div class="sh-b" style="gap:0">
+            <div class="box"><span class="cb"></span><span><strong>Nina</strong></span></div>
+            <div class="box"><span class="cb"></span><span><strong>Paul</strong></span></div>
+            <p class="remaining" aria-live="polite" style="margin-top:8px">0 cochée sur 1</p>
+          </div>
+          <div class="sh-f"><div class="btn full off">Valider</div><div class="btn outline full">Annuler</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Quelqu’un est monté pendant l’étape</h3>
+      <p>Réduction refusée, rien ne change ; l’étape se rouvre avec les passagers actuels (Jules est monté), cases décochées. <span class="crit">C8.5</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Voiture de Claire</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Qui sort de la voiture ?</strong><span class="small-muted" style="font-size:14px">3 passagers pour 1 place : cochez les 2 personnes qui sortent.</span><span class="small-muted" style="font-size:14px">Les personnes qui sortent redeviennent sans voiture.</span></div>
+          <div class="sh-b" style="gap:0">
+            <p class="alert new" role="alert" style="margin-bottom:8px">Quelqu’un a pris ou libéré une place entre-temps : rien n’a changé. Choisissez à nouveau parmi les passagers actuels.</p>
+            <div class="box"><span class="cb"></span><span><strong>Nina</strong></span></div>
+            <div class="box"><span class="cb"></span><span><strong>Paul</strong></span></div>
+            <div class="box"><span class="cb"></span><span><strong>Jules</strong></span></div>
+            <p class="remaining" style="margin-top:8px">0 cochée sur 2</p>
+          </div>
+          <div class="sh-f"><div class="btn full off">Valider</div><div class="btn outline full">Annuler</div></div>
+        </div>
+      </div>
+      <div class="note">Si, au contraire, quelqu’un est sorti et que tout le monde tient dans les nouvelles places, l’étape n’a plus lieu d’être : la feuille revient au formulaire avec le même message, et « Valider » applique la réduction directement.</div>
+    </div>
+
+    <div class="state">
+      <h3>Retirer la voiture : confirmation</h3>
+      <p><code>AlertDialog</code>. Le nombre de passagers qui redeviendront sans voiture, puis le rappel qu’aucune notification n’est envoyée. « Annuler » ne change rien. <span class="crit">C8.6, C8.7, C8.8, C11.2</span></p>
+      <div class="phone">
+        <div class="dimmed"><div class="screen">
+          <div class="cut">… voitures</div>
+          <article class="car"><div class="car-h"><strong>Voiture de Claire</strong></div><ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Nina</span></li><li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Paul</span></li></ul><div class="row"><span class="btn outline grow">Modifier</span><span class="btn danger grow">Retirer la voiture</span></div></article>
+          <div style="height:120px"></div>
+        </div></div>
+        <div class="dialog-wrap"><div class="dialog new" role="alertdialog">
+          <strong>Retirer la voiture ?</strong>
+          <p>2 passagers redeviendront sans voiture.</p>
+          <p>Personne n’est prévenu : pensez à le leur dire.</p>
+          <div class="stack s8" style="margin-top:4px"><div class="btn solid-danger full">Retirer la voiture</div><div class="btn outline full">Annuler</div></div>
+        </div></div>
+      </div>
+      <div class="note">Sans passager : « Aucun passager ne redeviendra sans voiture. », sans la seconde phrase. Le focus s’ouvre sur « Annuler » (<code>AlertDialogCancel</code>, <code>outline</code>). Le bouton rouge n’est <strong>pas</strong> <code>AlertDialogAction</code> avec une <code>className</code> : ce composant pose <code>&lt;Button asChild&gt;</code> autour de l’Action Radix, et Slot joint les classes sans <code>twMerge</code>, si bien que <code>bg-primary</code> et <code>bg-destructive</code> coexistent et que le noir peut gagner. À la place : <code>&lt;AlertDialogPrimitive.Action asChild&gt;&lt;Button className="h-11 bg-destructive text-white hover:bg-destructive/90"&gt;Retirer la voiture&lt;/Button&gt;&lt;/AlertDialogPrimitive.Action&gt;</code> ; <code>Button</code> passe sa <code>className</code> par <code>cn</code> (<code>twMerge</code>), qui retire <code>bg-primary</code>. <strong>Aucune variante ajoutée</strong> à <code>button.tsx</code>. Blanc sur <code>#e7000b</code> : 4,77:1. Le test de #93 vérifie la couleur calculée du bouton.</div>
+    </div>
+
+    <div class="state">
+      <h3>Après confirmation</h3>
+      <p>La carte a disparu ; Nina et Paul sont dans « Sans voiture » ; le bandeau passe de 2 à 4 sans voiture ; Claire est « Pas concernée » dans la section, et <strong>le focus est sur son prénom</strong> (le bouton qui l’avait n’existe plus). L’autre leg n’a pas bougé. <span class="crit">C8.6, C9.4</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… en-tête et onglets</div>
+        <div class="banner warn" role="status"><svg class="ico"><use href="#users"/></svg><span>4 sans voiture · il manque 3 places</span></div>
+        <div class="cut">… heure, actions</div>
+        <section class="dev">
+          <div class="stack tight"><strong>Personnes de l’appareil</strong><span class="small-muted">Inscrites depuis cet appareil : vous pouvez les modifier.</span></div>
+          <ul>
+            <li class="person"><div class="p-top"><div><strong class="focusring new">Claire</strong><span class="st out"><span class="dot"></span>Pas concernée</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><a class="tel"><svg class="ico s"><use href="#phone"/></svg>06 11 22 33 44</a><div class="row"><span class="btn outline grow">Je cherche une place</span></div></li>
+            <li class="person"><div class="p-top"><div><strong>Léa</strong><span class="st"><span class="dot"></span>Dans la voiture de Marc</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Modifier</span></div><div class="row"><span class="btn outline grow">Sortir de la voiture</span><span class="btn outline grow">Pas concernée</span></div></li>
+          </ul>
+        </section>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Marc</strong></div>
+          <ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Léa</span></li><li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Inès</span></li><li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li></ul>
+        </article>
+        <section class="stack s8"><strong>Sans voiture</strong><ul class="chips"><li>Tom</li><li>Jules</li><li>Nina</li><li>Paul</li></ul></section>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="reseau">Erreurs, hors ligne, chargement</h2>
+  <p class="lead">Un seul traitement pour toutes les actions (<code>runAction</code>, #87) : bouton inactif pendant l’envoi, rien ne change en cas d’échec, valeurs conservées, et après le retour du réseau la même action aboutit.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Hors ligne dans un formulaire</h3>
+      <p>L’alerte se place au-dessus des boutons, dans la feuille, qui reste ouverte. <span class="crit">état « hors ligne »</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Ajouter une personne</strong><span class="small-muted" style="font-size:14px">Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.</span></div>
+          <div class="sh-b">
+            <div class="field"><label>Prénom</label><div class="input">Léa</div></div>
+            <div class="field"><label>Téléphone (facultatif)</label><div class="input">06 12 34 56 78</div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Aller et retour</strong><span class="small-muted">Décochez si cette personne ne fait que l’aller.</span></span></div>
+          </div>
+          <div class="sh-f"><p class="alert new" role="alert">Action impossible, vérifiez la connexion</p><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>Hors ligne sur la page</h3>
+      <p>Un tap sur une place, « Pas concernée », « Réessayer »… : l’alerte arrive dans la barre du bas, la page ne change pas. <span class="crit">état « hors ligne »</span></p>
+      <div class="phone"><div class="screen pb">
+        <div class="cut">… bandeau, actions, section</div>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Sophie</strong></div>
+          <ul class="seats"><li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li><li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li></ul>
+        </article>
+        <div class="bar err"><span class="role">region alert = le texte seul</span><svg class="ico"><use href="#wifioff"/></svg><span class="msg" role="alert">Action impossible, vérifiez la connexion</span><span class="x" aria-label="Fermer"><svg class="ico"><use href="#x"/></svg></span></div>
+      </div></div>
+
+      <div class="note">Erreur : texte <code>text-foreground</code> sur <code>bg-background</code>, bordure et icône <code>destructive</code> ; jamais de rouge sur fond rouge. La barre se ferme par sa croix (« Fermer », 44 px, hors de la région <code>alert</code>), par Échap, ou à l’action suivante.</div>
+
+      <h3 style="margin-top:28px">Erreur serveur</h3>
+      <p>Même place que l’alerte hors ligne (barre ou feuille), sans aucun détail technique. <span class="crit">état « erreur serveur »</span></p>
+      <div class="phone"><div class="screen" style="min-height:170px">
+        <div class="cut">… la page, inchangée</div>
+        <div class="bar err"><span class="role">region alert = le texte seul</span><svg class="ico"><use href="#warn"/></svg><span class="msg" role="alert">Une erreur est survenue et rien n’a changé. Réessayez dans un instant.</span><span class="x" aria-label="Fermer"><svg class="ico"><use href="#x"/></svg></span></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Pendant l’envoi</h3>
+      <p>Le bouton qui envoie est inactif et montre une roue, son texte ne change pas ; un second tap n’envoie rien. Les autres boutons de la feuille restent actifs. <span class="crit">C1.9, C4.8</span></p>
+      <div class="phone">
+        <div class="behind"><span class="ghosttext">Tournoi de Rennes</span></div>
+        <div class="sheet">
+          <div class="cut" style="padding-top:12px">… champs</div>
+          <div class="sh-f" style="padding-top:12px"><div class="btn full off"><svg class="ico"><use href="#loader"/></svg>Valider</div><div class="btn outline full">Fermer</div></div>
+        </div>
+      </div>
+      <div class="note">Fermer la feuille pendant l’envoi n’annule pas l’envoi : le résultat s’applique au tableau, et un échec arrive dans la barre du bas.</div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:28px">15 voitures et 60 personnes : le bas de la page, avec la barre</h3>
+  <div class="grid" style="margin-top:8px">
+    <div class="state">
+      <p>Défilé jusqu’en bas. Tant que la barre est affichée, <code>&lt;main&gt;</code> reçoit 112 px de plus en bas (plus la zone sûre) : la dernière place libre, la fin de « Sans voiture » et le bas de page passent au-dessus de la barre. Les actions restent en tête du leg. <span class="crit">C11.4, C11.5</span></p>
+      <div class="phone"><div class="screen" style="padding-bottom:12px">
+        <div class="cut">… 14 voitures, actions en tête</div>
+        <article class="car">
+          <div class="car-h"><strong>Voiture de Yann</strong></div>
+          <div class="car-info"><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Rond-point de Cesson</span></p><p class="line"><svg class="ico"><use href="#clock"/></svg><span>08:10</span></p></div>
+          <ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Lucas</span></li><li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li></ul>
+        </article>
+        <section class="stack s8"><strong>Sans voiture</strong><ul class="chips"><li>Ambre</li><li>Basile</li><li>Céleste</li><li>Diane</li><li>Émile</li><li>Fanny</li><li>Gaspard</li><li>Héloïse</li><li>Irène</li><li>Jade</li><li>Kylian</li><li>Louise</li></ul></section>
+        <div class="foot">Nous contacter</div>
+        <div class="reserve">112 px réservés tant que la barre est affichée</div>
+        <div class="bar err"><span class="role">region alert = le texte seul</span><svg class="ico"><use href="#wifioff"/></svg><span class="msg" role="alert">Action impossible, vérifiez la connexion</span><span class="x" aria-label="Fermer"><svg class="ico"><use href="#x"/></svg></span></div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="anglais">En anglais</h2>
+  <p class="lead">La même page en <code>en-GB</code> : la section de l’appareil et la feuille, pluriels compris. <span class="crit">C11.1</span></p>
+  <div class="grid">
+    <div class="state">
+      <h3>Board and device section</h3>
+      <div class="phone" lang="en"><div class="screen">
+        <div class="tabs"><span class="on">Outbound<span class="count">2</span></span><span>Return<span class="count">4</span></span></div>
+        <div class="banner" role="status"><svg class="ico"><use href="#users"/></svg><span>2 without a car · 3 free seats</span></div>
+        <div class="actions">
+          <div class="btn outline full"><svg class="ico"><use href="#userplus"/></svg>Add a person</div>
+          <div class="btn outline full"><svg class="ico"><use href="#car"/></svg>Offer a car</div>
+        </div>
+        <section class="dev">
+          <div class="stack tight"><strong>People on this device</strong><span class="small-muted">Signed up from this device: you can change them.</span></div>
+          <ul>
+            <li class="person"><div class="p-top"><div><strong>Claire</strong><span class="st"><span class="dot"></span>Driving</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Edit</span></div></li>
+            <li class="person"><div class="p-top"><div><strong>Léa</strong><span class="st"><span class="dot"></span>In Marc’s car</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Edit</span></div><div class="row"><span class="btn outline grow">Leave the car</span><span class="btn outline grow">Not on this trip</span></div></li>
+            <li class="person"><div class="p-top"><div><strong>Hugo</strong><span class="st out"><span class="dot"></span>Not on this trip</span></div><span class="edit"><svg class="ico s"><use href="#pencil"/></svg>Edit</span></div><div class="row"><span class="btn outline grow">I need a seat</span></div></li>
+          </ul>
+        </section>
+        <article class="car">
+          <div class="car-h"><strong>Marc’s car</strong></div>
+          <ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span class="name">Léa</span></li><li class="free"><svg class="ico"><use href="#plus"/></svg>Free seat</li></ul>
+        </article>
+      </div></div>
+    </div>
+    <div class="state">
+      <h3>The sheet</h3>
+      <div class="phone" lang="en">
+        <div class="behind"><span class="ghosttext">Sophie’s car</span></div>
+        <div class="sheet">
+          <div class="sh-h"><strong>Who gets in Sophie’s car?</strong><p class="remaining">3 seats left in this car</p></div>
+          <div class="sh-b" style="gap:0">
+            <div class="box"><span class="cb on">✓</span><span><strong>Tom</strong><span class="small-muted">Without a car</span></span></div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Léa</strong><span class="small-muted">Without a car</span></span></div>
+            <div class="box"><span class="cb"></span><span><strong>Hugo</strong><span class="small-muted">Not on this trip</span></span></div>
+            <div class="btn outline full" style="margin-top:10px"><svg class="ico"><use href="#userplus"/></svg>Add a person</div>
+          </div>
+          <div class="sh-f"><div class="btn full">Seat 2 people</div><div class="btn outline full">Close</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="mots">Les mots</h2>
+  <p class="lead">Chaque texte de l’écran, avec sa clé. La colonne « source » dit d’où vient le mot : un critère qui le cite, le glossaire, la PR #141, ou « nouveau ». La colonne « tâche » dit quelle tâche l’ajoute. Les pluriels sont en ICU. Typographie : apostrophe <code>’</code>, comme le reste de <code>messages/*.json</code>.</p>
+  <div class="table-wrap"><table class="words"><thead><tr><th>clé</th><th><code>fr.json</code></th><th><code>en.json</code></th><th>source</th><th>tâche</th></tr></thead><tbody>
+<tr><td><code>Board.banner.everyoneSeated</code></td><td lang="fr">Tout le monde a une place</td><td lang="en">Everyone has a seat</td><td>C9.1 (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.banner.everyoneSeatedFree</code></td><td lang="fr">Tout le monde a une place · {free, plural, one {# place libre} other {# places libres}}</td><td lang="en">Everyone has a seat · {free, plural, one {# free seat} other {# free seats}}</td><td>C9.1 (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.banner.enoughSeats</code></td><td lang="fr">{withoutCar, plural, other {# sans voiture}} · {free, plural, one {# place libre} other {# places libres}}</td><td lang="en">{withoutCar, plural, other {# without a car}} · {free, plural, one {# free seat} other {# free seats}}</td><td>C9.1 (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.banner.missingSeats</code></td><td lang="fr">{withoutCar, plural, other {# sans voiture}} · il manque {missing, plural, one {# place} other {# places}}</td><td lang="en">{withoutCar, plural, other {# without a car}} · {missing, plural, one {# seat missing} other {# seats missing}}</td><td>C9.1 (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.tabCount</code></td><td lang="fr">{count, plural, other {# sans voiture}}</td><td lang="en">{count, plural, other {# without a car}}</td><td>C9.3 (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.car.title</code></td><td lang="fr">Voiture de {driver}</td><td lang="en">{driver}’s car</td><td>C5.1, C2.2 (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.car.full</code></td><td lang="fr">Complet</td><td lang="en">Full</td><td>C4.3 (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.car.seats</code></td><td lang="fr">Places</td><td lang="en">Seats</td><td>glossaire (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.car.freeSeat</code></td><td lang="fr">Place libre</td><td lang="en">Free seat</td><td>C4.3 (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.withoutCar</code></td><td lang="fr">Sans voiture</td><td lang="en">Without a car</td><td>glossaire (PR #141)</td><td>#86</td></tr>
+<tr><td><code>Board.car.takeSeat</code></td><td lang="fr">Place libre : prendre une place dans la voiture de {driver}</td><td lang="en">Free seat: take a seat in {driver}’s car</td><td>C5.1</td><td>#91</td></tr>
+<tr><td><code>Board.call</code></td><td lang="fr">Appeler {firstName} au {phone}</td><td lang="en">Call {firstName} on {phone}</td><td>C10.1</td><td>#87</td></tr>
+<tr><td><code>Board.addPerson</code></td><td lang="fr">Ajouter une personne</td><td lang="en">Add a person</td><td>C1.1</td><td>#88</td></tr>
+<tr><td><code>Board.offerRide</code></td><td lang="fr">Proposer une voiture</td><td lang="en">Offer a car</td><td>C1.1</td><td>#90</td></tr>
+<tr><td><code>Board.needsJavaScript</code></td><td lang="fr">S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page.</td><td lang="en">Signing up, offering a car or taking a seat needs JavaScript: turn it on, then reload the page.</td><td>état « JavaScript désactivé »</td><td>#87</td></tr>
+<tr><td><code>Board.car.edit</code></td><td lang="fr">Modifier</td><td lang="en">Edit</td><td>C8.1</td><td>#93</td></tr>
+<tr><td><code>Board.car.remove</code></td><td lang="fr">Retirer la voiture</td><td lang="en">Remove the car</td><td>C8.1</td><td>#93</td></tr>
+<tr><td><code>Event.noCar.aller</code></td><td lang="fr">Aucune voiture proposée pour l’aller</td><td lang="en">No car offered for the outbound trip</td><td>#3 (inchangé)</td><td>—</td></tr>
+<tr><td><code>Event.noCar.retour</code></td><td lang="fr">Aucune voiture proposée pour le retour</td><td lang="en">No car offered for the return trip</td><td>#3 (inchangé)</td><td>—</td></tr>
+<tr><td><code>Event.nobody</code></td><td lang="fr">Personne ne s’est encore inscrit.</td><td lang="en">Nobody has signed up yet.</td><td>#3 (inchangé)</td><td>—</td></tr>
+<tr><td><code>DevicePersons.title</code></td><td lang="fr">Personnes de l’appareil</td><td lang="en">People on this device</td><td>C2.2</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.hint</code></td><td lang="fr">Inscrites depuis cet appareil : vous pouvez les modifier.</td><td lang="en">Signed up from this device: you can change them.</td><td>nouveau</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.state.passenger</code></td><td lang="fr">Dans la voiture de {driver}</td><td lang="en">In {driver}’s car</td><td>C2.2</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.state.driver</code></td><td lang="fr">Conduit</td><td lang="en">Driving</td><td>C2.2</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.state.withoutCar</code></td><td lang="fr">Sans voiture</td><td lang="en">Without a car</td><td>C2.2, glossaire</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.state.notConcerned</code></td><td lang="fr">Pas concernée</td><td lang="en">Not on this trip</td><td>C2.2, glossaire</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.notConcerned</code></td><td lang="fr">Pas concernée</td><td lang="en">Not on this trip</td><td>C3.1, C7.2</td><td>#89</td></tr>
+<tr><td><code>DevicePersons.lookingForSeat</code></td><td lang="fr">Je cherche une place</td><td lang="en">I need a seat</td><td>C3.2</td><td>#89</td></tr>
+<tr><td><code>DevicePersons.leaveCar</code></td><td lang="fr">Sortir de la voiture</td><td lang="en">Leave the car</td><td>C7.1</td><td>#89</td></tr>
+<tr><td><code>DevicePersons.edit</code></td><td lang="fr">Modifier</td><td lang="en">Edit</td><td>C2.3</td><td>#89</td></tr>
+<tr><td><code>DevicePersons.loading</code></td><td lang="fr">Chargement de vos inscriptions…</td><td lang="en">Loading your sign-ups…</td><td>nouveau (C5.9)</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.failed</code></td><td lang="fr">Vos inscriptions n’ont pas pu être chargées</td><td lang="en">Your sign-ups could not be loaded</td><td>état « échec du chargement »</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.failedBody</code></td><td lang="fr">Rien ne peut être ajouté ni modifié tant qu’elles ne sont pas chargées. Vérifiez la connexion, puis réessayez.</td><td lang="en">Nothing can be added or changed until they are loaded. Check your connection, then try again.</td><td>nouveau (v2 : actions inactives)</td><td>#87</td></tr>
+<tr><td><code>DevicePersons.retry</code></td><td lang="fr">Réessayer</td><td lang="en">Try again</td><td>état « échec du chargement »</td><td>#87</td></tr>
+<tr><td><code>PersonForm.title.add</code></td><td lang="fr">Ajouter une personne</td><td lang="en">Add a person</td><td>R1</td><td>#88</td></tr>
+<tr><td><code>PersonForm.title.edit</code></td><td lang="fr">Modifier {firstName}</td><td lang="en">Edit {firstName}</td><td>nouveau (C2.3)</td><td>#89</td></tr>
+<tr><td><code>PersonForm.remember</code></td><td lang="fr">Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.</td><td lang="en">No account, no e-mail: this device will remember it for this event.</td><td>nouveau (R1)</td><td>#88</td></tr>
+<tr><td><code>PersonForm.forSeat</code></td><td lang="fr">Elle prendra une place dans la voiture de {driver}.</td><td lang="en">They will take a seat in {driver}’s car.</td><td>nouveau (C5.4)</td><td>#92</td></tr>
+<tr><td><code>PersonForm.firstName</code></td><td lang="fr">Prénom</td><td lang="en">First name</td><td>R1</td><td>#88</td></tr>
+<tr><td><code>PersonForm.phone</code></td><td lang="fr">Téléphone (facultatif)</td><td lang="en">Phone (optional)</td><td>R1</td><td>#88</td></tr>
+<tr><td><code>PersonForm.phoneHint</code></td><td lang="fr">Visible seulement par l’organisateur et par les personnes de la même voiture.</td><td lang="en">Only visible to the organiser and to the people in the same car.</td><td>C1.2</td><td>#88</td></tr>
+<tr><td><code>PersonForm.both</code></td><td lang="fr">Aller et retour</td><td lang="en">Outbound and return</td><td>R1, C1.3</td><td>#88</td></tr>
+<tr><td><code>PersonForm.bothHint.aller</code></td><td lang="fr">Décochez si cette personne ne fait que l’aller.</td><td lang="en">Untick if this person only makes the outbound trip.</td><td>nouveau (C1.3)</td><td>#88</td></tr>
+<tr><td><code>PersonForm.bothHint.retour</code></td><td lang="fr">Décochez si cette personne ne fait que le retour.</td><td lang="en">Untick if this person only makes the return trip.</td><td>nouveau (C1.3)</td><td>#88</td></tr>
+<tr><td><code>PersonForm.storage.title</code></td><td lang="fr">Cet appareil ne pourra pas s’en souvenir</td><td lang="en">This device will not remember it</td><td>C1.14</td><td>#88</td></tr>
+<tr><td><code>PersonForm.storage.body</code></td><td lang="fr">Votre navigateur bloque le stockage : après la fermeture de la page, ces inscriptions ne pourront plus être modifiées depuis cet appareil.</td><td lang="en">Your browser blocks storage: once this page is closed, these sign-ups can no longer be changed from this device.</td><td>C1.14</td><td>#88</td></tr>
+<tr><td><code>RideForm.title.offer</code></td><td lang="fr">Proposer une voiture</td><td lang="en">Offer a car</td><td>R4</td><td>#90</td></tr>
+<tr><td><code>RideForm.title.edit</code></td><td lang="fr">Modifier la voiture</td><td lang="en">Edit the car</td><td>nouveau (C8.2)</td><td>#93</td></tr>
+<tr><td><code>RideForm.forLeg.aller</code></td><td lang="fr">Pour l’aller seulement : pour le retour, proposez-la aussi sur l’onglet Retour.</td><td lang="en">For the outbound trip only: for the return, offer it on the Return tab too.</td><td>hors périmètre « les deux legs en une fois »</td><td>#90</td></tr>
+<tr><td><code>RideForm.forLeg.retour</code></td><td lang="fr">Pour le retour seulement : pour l’aller, proposez-la aussi sur l’onglet Aller.</td><td lang="en">For the return trip only: for the outbound trip, offer it on the Outbound tab too.</td><td>idem</td><td>#90</td></tr>
+<tr><td><code>RideForm.storage.title</code></td><td lang="fr">Cet appareil ne pourra pas s’en souvenir</td><td lang="en">This device will not remember it</td><td>C1.14, D5 (v2)</td><td>#90</td></tr>
+<tr><td><code>RideForm.storage.body</code></td><td lang="fr">Votre navigateur bloque le stockage : après la fermeture de la page, cette voiture et son conducteur ne pourront plus être modifiés depuis cet appareil.</td><td lang="en">Your browser blocks storage: once this page is closed, this car and its driver can no longer be changed from this device.</td><td>C1.14, D5 (v2)</td><td>#90</td></tr>
+<tr><td><code>RideForm.driver</code></td><td lang="fr">Conducteur</td><td lang="en">Driver</td><td>R4</td><td>#90</td></tr>
+<tr><td><code>RideForm.newDriver</code></td><td lang="fr">Une nouvelle personne</td><td lang="en">Someone new</td><td>R4 (« nouvelle personne »)</td><td>#90</td></tr>
+<tr><td><code>RideForm.leavesCar</code></td><td lang="fr">Quittera la voiture de {driver}</td><td lang="en">Will leave {driver}’s car</td><td>nouveau (C4.5)</td><td>#90</td></tr>
+<tr><td><code>RideForm.location.aller</code></td><td lang="fr">Lieu de départ</td><td lang="en">Departure place</td><td>R4</td><td>#90</td></tr>
+<tr><td><code>RideForm.location.retour</code></td><td lang="fr">Lieu de dépose</td><td lang="en">Drop-off place</td><td>R4, glossaire</td><td>#90</td></tr>
+<tr><td><code>RideForm.time</code></td><td lang="fr">Heure de départ</td><td lang="en">Departure time</td><td>R4</td><td>#90</td></tr>
+<tr><td><code>RideForm.timeHint</code></td><td lang="fr">Le {date}</td><td lang="en">On {date}</td><td>nouveau (R4 : « la date est celle du leg »)</td><td>#90</td></tr>
+<tr><td><code>RideForm.seats</code></td><td lang="fr">Places, conducteur non compris</td><td lang="en">Seats, driver not included</td><td>R4</td><td>#90</td></tr>
+<tr><td><code>RideForm.seatsHint</code></td><td lang="fr">De 1 à 8.</td><td lang="en">From 1 to 8.</td><td>R4</td><td>#90</td></tr>
+<tr><td><code>RideForm.note</code></td><td lang="fr">Note (facultatif)</td><td lang="en">Note (optional)</td><td>R4</td><td>#90</td></tr>
+<tr><td><code>RideForm.noteHint</code></td><td lang="fr">Ce que les passagers doivent savoir.</td><td lang="en">What passengers should know.</td><td>nouveau</td><td>#90</td></tr>
+<tr><td><code>FormErrors.required</code></td><td lang="fr">Champ requis.</td><td lang="en">Required.</td><td>= CreateEvent.errors</td><td>#88</td></tr>
+<tr><td><code>FormErrors.tooLong</code></td><td lang="fr">{max} caractères au maximum.</td><td lang="en">{max} characters at most.</td><td>= CreateEvent.errors</td><td>#88</td></tr>
+<tr><td><code>FormErrors.invalidText</code></td><td lang="fr">Ce texte contient un caractère non autorisé.</td><td lang="en">This text contains a character that is not allowed.</td><td>= CreateEvent.errors</td><td>#88</td></tr>
+<tr><td><code>FormErrors.invalidPhone</code></td><td lang="fr">Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )</td><td lang="en">Not a valid number: 6 to 15 digits, with only spaces and + . - ( )</td><td>R1</td><td>#88</td></tr>
+<tr><td><code>FormErrors.invalidTime</code></td><td lang="fr">Heure non valide.</td><td lang="en">Not a valid time.</td><td>= CreateEvent.errors</td><td>#90</td></tr>
+<tr><td><code>FormErrors.seats</code></td><td lang="fr">De 1 à 8 places.</td><td lang="en">From 1 to 8 seats.</td><td>R4</td><td>#90</td></tr>
+<tr><td><code>FormErrors.chooseDriver</code></td><td lang="fr">Choisissez le conducteur.</td><td lang="en">Choose the driver.</td><td>nouveau (R4)</td><td>#90</td></tr>
+<tr><td><code>Sheet.title</code></td><td lang="fr">Qui monte dans la voiture de {driver} ?</td><td lang="en">Who gets in {driver}’s car?</td><td>nouveau (R6)</td><td>#91</td></tr>
+<tr><td><code>Sheet.remaining</code></td><td lang="fr">{count, plural, =0 {Il ne reste aucune place dans cette voiture} one {Il reste # place dans cette voiture} other {Il reste # places dans cette voiture}}</td><td lang="en">{count, plural, =0 {No seat left in this car} one {# seat left in this car} other {# seats left in this car}}</td><td>C6.3, C6.5</td><td>#91</td></tr>
+<tr><td><code>Sheet.submit</code></td><td lang="fr">{count, plural, =0 {Placer} one {Placer # personne} other {Placer # personnes}}</td><td lang="en">{count, plural, =0 {Seat} one {Seat # person} other {Seat # people}}</td><td>C6.2</td><td>#91</td></tr>
+<tr><td><code>Sheet.nobody.aller</code></td><td lang="fr">Toutes vos personnes sont déjà dans une voiture pour l’aller.</td><td lang="en">All your people are already in a car for the outbound trip.</td><td>C6.7</td><td>#91</td></tr>
+<tr><td><code>Sheet.nobody.retour</code></td><td lang="fr">Toutes vos personnes sont déjà dans une voiture pour le retour.</td><td lang="en">All your people are already in a car for the return trip.</td><td>C6.7</td><td>#91</td></tr>
+<tr><td><code>Sheet.notEnoughSeats</code></td><td lang="fr">Il n’y a plus assez de places : personne n’a été placé.</td><td lang="en">There are no longer enough seats: nobody was seated.</td><td>C6.5</td><td>#91</td></tr>
+<tr><td><code>Sheet.placed</code></td><td lang="fr">{names} sont dans la voiture de {driver}</td><td lang="en">{names} are in {driver}’s car</td><td>nouveau (pluriel de C5.2)</td><td>#91</td></tr>
+<tr><td><code>Seat.placed</code></td><td lang="fr">{firstName} est dans la voiture de {driver}</td><td lang="en">{firstName} is in {driver}’s car</td><td>C5.2</td><td>#92</td></tr>
+<tr><td><code>Seat.seatTaken</code></td><td lang="fr">Cette place vient d’être prise</td><td lang="en">This seat has just been taken</td><td>C5.7</td><td>#92</td></tr>
+<tr><td><code>RideChanges.leaving.title</code></td><td lang="fr">Qui sort de la voiture ?</td><td lang="en">Who leaves the car?</td><td>C8.4</td><td>#93</td></tr>
+<tr><td><code>RideChanges.leaving.body</code></td><td lang="fr">{passengers, plural, one {# passager} other {# passagers}} pour {seats, plural, one {# place} other {# places}} : cochez {leaving, plural, one {la personne qui sort} other {les # personnes qui sortent}}.</td><td lang="en">{passengers, plural, one {# passenger} other {# passengers}} for {seats, plural, one {# seat} other {# seats}}: tick {leaving, plural, one {the person who leaves} other {the # people who leave}}.</td><td>C8.4</td><td>#93</td></tr>
+<tr><td><code>RideChanges.leaving.rule</code></td><td lang="fr">Les personnes qui sortent redeviennent sans voiture.</td><td lang="en">Those who leave are without a car again.</td><td>C8.4</td><td>#93</td></tr>
+<tr><td><code>RideChanges.leaving.count</code></td><td lang="fr">{chosen, plural, one {# cochée} other {# cochées}} sur {leaving}</td><td lang="en">{chosen} of {leaving} ticked</td><td>C8.4</td><td>#93</td></tr>
+<tr><td><code>RideChanges.leaving.changed</code></td><td lang="fr">Quelqu’un a pris ou libéré une place entre-temps : rien n’a changé. Choisissez à nouveau parmi les passagers actuels.</td><td lang="en">Someone took or left a seat in the meantime: nothing has changed. Choose again among the current passengers.</td><td>C8.5</td><td>#93</td></tr>
+<tr><td><code>RideChanges.remove.title</code></td><td lang="fr">Retirer la voiture ?</td><td lang="en">Remove the car?</td><td>C8.6</td><td>#93</td></tr>
+<tr><td><code>RideChanges.remove.body</code></td><td lang="fr">{passengers, plural, =0 {Aucun passager ne redeviendra sans voiture.} one {# passager redeviendra sans voiture.} other {# passagers redeviendront sans voiture.}}</td><td lang="en">{passengers, plural, =0 {No passenger will be left without a car.} one {# passenger will be without a car again.} other {# passengers will be without a car again.}}</td><td>C8.6</td><td>#93</td></tr>
+<tr><td><code>RideChanges.remove.notified</code></td><td lang="fr">Personne n’est prévenu : pensez à le leur dire.</td><td lang="en">Nobody is notified: remember to tell them.</td><td>C8.8</td><td>#93</td></tr>
+<tr><td><code>Actions.submit</code></td><td lang="fr">Valider</td><td lang="en">Confirm</td><td>C1.9, C1.10</td><td>#87</td></tr>
+<tr><td><code>Actions.close</code></td><td lang="fr">Fermer</td><td lang="en">Close</td><td>C6.9 ; aussi nom de la croix de la barre du bas</td><td>#87</td></tr>
+<tr><td><code>Actions.cancel</code></td><td lang="fr">Annuler</td><td lang="en">Cancel</td><td>C8.7</td><td>#87</td></tr>
+<tr><td><code>Actions.offline</code></td><td lang="fr">Action impossible, vérifiez la connexion</td><td lang="en">Action failed, check your connection</td><td>état « hors ligne »</td><td>#87</td></tr>
+<tr><td><code>Actions.failed</code></td><td lang="fr">Une erreur est survenue et rien n’a changé. Réessayez dans un instant.</td><td lang="en">Something went wrong and nothing has changed. Try again in a moment.</td><td>état « erreur serveur »</td><td>#87</td></tr>
+<tr><td><code>Actions.rideGone</code></td><td lang="fr">Cette voiture n’est plus proposée</td><td lang="en">This car is no longer offered</td><td>C6.8</td><td>#87</td></tr>
+<tr><td><code>Actions.alreadyInCar</code></td><td lang="fr">{count, plural, one {Cette personne est déjà dans une voiture} other {Une de ces personnes est déjà dans une voiture}} : rien n’a changé.</td><td lang="en">{count, plural, one {This person is already in a car} other {One of these people is already in a car}}: nothing has changed.</td><td>décision « alreadyInCar » de la conception</td><td>#87</td></tr>
+</tbody></table></div>
+  <div class="note"><strong>Mots changés par rapport à la PR #141 : aucun.</strong> Ses dix clés <code>Board.*</code> sont gardées telles quelles. La place libre devient un bouton (#91) : son texte visible reste « Place libre », et C5.1 est tenu par son nom accessible (<code>Board.car.takeSeat</code>), qui commence par ce texte.</div>
+
+  <!-- ===================================================================== -->
+  <h2 id="decisions">Décisions</h2>
+  <ol class="decisions">
+    <li>Décision : tous les formulaires s’ouvrent dans la feuille du bas (<code>Sheet side="bottom"</code>), celle qui sert à choisir les passagers. — Raison : la décision de l’humain existe déjà pour la feuille ; un seul motif à apprendre ; le formulaire s’ouvre là où l’on a tapé, même sur la 15ᵉ voiture (C5.4, C11.4), et le tableau ne bouge pas.</li>
+    <li>Décision : ordre d’un leg : bandeau, heure, actions, personnes de l’appareil, voitures, sans voiture. — Raison : C9.1 (bandeau avant les actions) et C1.1 (actions avant les voitures) ; la section de l’appareil juste après les actions, parce que c’est là que l’on agit sur ses propres personnes.</li>
+    <li>Décision : « Ajouter une personne » et « Proposer une voiture » l’un sous l’autre, pleine largeur, au même poids (<code>outline</code>). — Raison : côte à côte à 360 px, « Ajouter une personne » ne tient pas sur une ligne ; aucune des deux n’est l’action principale de tout le monde. Le bouton plein est réservé à la validation d’un formulaire.</li>
+    <li>Décision : le nom accessible d’une place libre est « Place libre : prendre une place dans la voiture de {conducteur} ». — Raison : C5.1 demande le prénom du conducteur ; WCAG 2.5.3 demande que le nom contienne le texte visible, que la PR #141 a posé.</li>
+    <li>Décision : les messages d’une action faite sur la page arrivent dans une barre fixe en bas ; une réussite reste 6 s (<code>role="status"</code>), un échec jusqu’à « Fermer », Échap ou l’action suivante (<code>role="alert"</code>). — Raison : l’action peut venir du bas d’une longue page ; un message en tête de leg serait hors de l’écran.</li>
+    <li>Décision : la croix de <code>sheet.tsx</code> n’est pas affichée ; chaque feuille a un bouton « Fermer » en bas. — Raison : C6.9 nomme « Fermer », et la croix porte « Close » en dur, sans traduction.</li>
+    <li>Décision : la ligne « Il reste n places dans cette voiture » est toujours sous le titre de la feuille, en rouge quand il y a trop de cochées ou après un refus. — Raison : C6.3 et C6.5 ; savoir combien on peut cocher avant de cocher évite l’erreur.</li>
+    <li>Décision : les textes cités par un critère sont repris à la lettre, sans point final ajouté (« Cette place vient d’être prise », « Action impossible, vérifiez la connexion »…). Les phrases nouvelles finissent par un point. — Raison : un test peut comparer au critère ; la table reste la référence.</li>
+    <li>Décision : en anglais, « pas concernée » se dit « Not on this trip ». — Raison : « Not concerned » est un contresens en anglais ; l’anglais existant appelle déjà un leg « trip » (« the outbound trip », « the return trip »).</li>
+    <li>Décision : la section s’appelle « Personnes de l’appareil », le nom de C2.2, avec une phrase dessous. — Raison : le critère et la conception l’emploient ; un autre nom serait un synonyme.</li>
+    <li>Décision : les messages partagés par plusieurs tâches (Valider, Fermer, Annuler, hors ligne, erreur serveur, voiture retirée, déjà dans une voiture) sont dans un espace <code>Actions</code>, posé par #87 avec <code>runAction</code> ; les erreurs de champ des nouveaux formulaires dans <code>FormErrors</code>, aux mêmes mots que <code>CreateEvent.errors</code>, qui ne bouge pas. — Raison : un seul endroit par mot partagé, et <code>CreateEvent</code> reste intact.</li>
+    <li>Décision : un leg vide garde « Personne ne s’est encore inscrit. », même quand une personne de l’appareil y est pas concernée. — Raison : C9.6 demande l’état vide de #3 tel quel ; la section de l’appareil, juste au-dessus, montre la personne et son état.</li>
+    <li>Décision : sur la confirmation de retrait, la phrase « Personne n’est prévenu : pensez à le leur dire. » quand il y a des passagers. — Raison : C8.8, aucune notification ; le conducteur doit le savoir avant de confirmer.</li>
+    <li>Décision (v2) : tant que les personnes de l’appareil ne sont pas connues (lecture en cours ou en échec), « Ajouter une personne », « Proposer une voiture » et les places libres sont inactifs. — Raison : sinon les formulaires s’ouvrent comme pour un appareil sans personne (pas de choix de conducteur, « Sans compte ni e-mail ») et créent un doublon impossible à relier.</li>
+    <li>Décision (v2) : l’avertissement de stockage indisponible s’affiche dans tout formulaire qui crée, personne ou voiture. — Raison : D5 et C1.14 ; un nouveau conducteur tire aussi un jeton.</li>
+    <li>Décision (v2) : aucun texte rouge sur un fond teinté de rouge. Erreurs : texte <code>foreground</code> ou <code>destructive</code> sur <code>background</code>, bordure et icône <code>destructive</code> ; « Retirer la voiture » en <code>outline</code> + <code>text-destructive</code>. — Raison : WCAG AA, 4,5:1 pour du texte de 14 px.</li>
+    <li>Décision (v2) : la barre du bas a un bouton « Fermer », et la page réserve 112 px en bas tant qu’elle est affichée. — Raison : C11.4, toutes les places libres atteignables, même avec une alerte qui reste.</li>
+    <li>Décision (v2) : après une action qui fait disparaître son propre bouton, le focus va au prénom de la personne, au titre de la carte, ou au bandeau (section « Le focus après une action »). — Raison : WCAG 2.4.3 ; sinon le focus tombe en haut du document.</li>
+    <li>Décision (v3) : une seule barre, dans le DOM juste avant les onglets ; Échap la ferme ; sa croix rend le focus au repère de l’action, sinon à l’onglet actif ; une réussite ne s’efface pas tant que le focus est dans la barre ; la croix est hors des régions vivantes. — Raison : la croix doit être atteignable sans traverser 15 voitures, et ne jamais disparaître sous le focus.</li>
+    <li>Décision (v3) : le bouton rouge de la confirmation est un <code>Button</code> sous <code>AlertDialogPrimitive.Action asChild</code>, pas une <code>className</code> sur <code>AlertDialogAction</code>. — Raison : Slot joint les classes sans <code>twMerge</code> ; seul <code>Button</code> les fusionne.</li>
+  </ol>
+
+  <h2>Hors périmètre, rappel</h2>
+  <p class="lead">Rien de ce qui suit n’a d’UI ici : le lien perso et son QR code, la fraîcheur, supprimer une personne, tout ce que fait l’organisateur avec son jeton (dont voir tous les numéros), les options à l’écran, proposer une voiture sur les deux legs en une fois, changer de voiture en un geste, faire sortir un passager sans réduire ses places, une liste d’attente, distinguer deux personnes de même prénom, les notifications.</p>
+</div>
