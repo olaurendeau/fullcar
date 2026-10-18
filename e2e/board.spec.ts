@@ -4,7 +4,9 @@ import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 /*
  * #86: the cars, their passengers, the persons without a car and the coverage of each leg,

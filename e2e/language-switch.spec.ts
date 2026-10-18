@@ -1,6 +1,8 @@
 import { devices, type Locator, type Page } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 /*
  * #113, #128: a button in the shared footer, before "contact us", that names the other

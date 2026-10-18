@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import type { BrowserContext, Page, Response } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 /*
  * The organiser's whole journey (#3, #24): from `/` to the link to share, against the

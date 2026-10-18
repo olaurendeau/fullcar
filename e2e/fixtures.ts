@@ -56,3 +56,16 @@ export const test = base.extend<
     await db.deleteFrom("event").where("id", "=", event.id).execute();
   },
 });
+
+/**
+ * For a file that opens the organiser's page with a valid token, called at its top: nothing
+ * Playwright writes when a test fails may carry the token (#158). No trace, and every page
+ * of the test's context leaves for about:blank before the context closes, when Playwright
+ * takes the page snapshot it writes into error-context.md.
+ */
+export function leaveNoToken() {
+  test.use({ trace: "off" });
+  test.afterEach(async ({ context }) => {
+    for (const page of context.pages()) await page.goto("about:blank");
+  });
+}

@@ -1,5 +1,7 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 const FR = {
   title: "Titre",

@@ -1,6 +1,8 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { expect, test as base } from "./fixtures";
+import { expect, leaveNoToken, test as base } from "./fixtures";
+
+leaveNoToken();
 
 // #69: a discreet "contact us" link, at the bottom of the pages, to the chat Crisp hosts.
 // Nothing of Crisp runs in the app's origin: the link opens Crisp's own page in a new tab.

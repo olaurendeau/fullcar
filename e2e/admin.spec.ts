@@ -1,6 +1,8 @@
 import type { Page, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 const FR = {
   panel: "Espace organisateur",
