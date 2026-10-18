@@ -31,15 +31,8 @@ function StateText({ state }: { state: DeviceState }) {
  * line while reading, then the section's title, or « Réessayer » again after a failure),
  * and goes to `device.refocus()` when the leg has no section to show (decision 18).
  */
-export function DevicePersons({
-  leg,
-  persons,
-  device: { status, retry, refocus },
-}: {
-  leg: Leg;
-  persons: readonly VisibleDevicePerson[];
-  device: BoardDevice;
-}) {
+export function DevicePersons(props: { leg: Leg; persons: readonly VisibleDevicePerson[]; device: BoardDevice }) {
+  const { leg, persons, device: { status, retry, refocus } } = props;
   const t = useTranslations("DevicePersons");
   const headingId = `device-${leg}`;
   const retried = useRef(false);
