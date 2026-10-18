@@ -7,7 +7,12 @@ import * as changeRide from "./change-ride";
 import { readEventState, type EventState } from "./event-state";
 import { offerRide as storeRideOffer, type OfferRideOutcome } from "./offer-ride";
 import * as persons from "./persons";
-import { takeSeats as takeSeatsInRide, type TakeSeatsResult } from "./seats";
+import {
+  takeSeats as takeSeatsInRide,
+  undoSeats as undoSeatsInRide,
+  type TakeSeatsResult,
+  type UndoSeatsResult,
+} from "./seats";
 
 /**
  * The event's state as this device sees it, for the browser to replace the one rendered
@@ -136,5 +141,28 @@ export async function offerRide(id: unknown, token: unknown, offer: unknown): Pr
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("offerRide: the car could not be stored", error);
+  }
+}
+
+/**
+ * « Annuler » after a placement (C5.10): each person asked, of the device, gets back her
+ * state before on that leg if she is still in that car, and the state the device now sees
+ * comes back, refusal included. The token arrives in the body, never in the URL; it is only
+ * compared, never logged. `eventNotFound` for an unknown event; a malformed id is never
+ * looked up.
+ */
+export async function undoSeats(
+  id: unknown,
+  token: unknown,
+  rideId: unknown,
+  leg: unknown,
+  persons: unknown,
+): Promise<UndoSeatsResult | changeRide.EventNotFound> {
+  if (!isPublicId(id)) return changeRide.EVENT_NOT_FOUND;
+  try {
+    return await undoSeatsInRide(getDb(), id, token, rideId, leg, persons);
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure("undoSeats: the seats could not be given back", error);
   }
 }

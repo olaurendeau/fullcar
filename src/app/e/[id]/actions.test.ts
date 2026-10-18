@@ -6,7 +6,16 @@ import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { addPerson, loadEventState, removeRide, setPersonLeg, takeSeats, updatePerson, updateRide } from "./actions";
+import {
+  addPerson,
+  loadEventState,
+  removeRide,
+  setPersonLeg,
+  takeSeats,
+  undoSeats,
+  updatePerson,
+  updateRide,
+} from "./actions";
 import { readEventState, type EventState } from "./event-state";
 
 // The action reaches the database through getDb(): here, the test's transaction,
@@ -420,6 +429,76 @@ describe.each<[string, string, (token: string, rideId: string) => Promise<unknow
       }
       expect(cause).toBeUndefined();
       expect(log.mock.calls).toEqual([[`${logged} (SQLSTATE 57P01)`]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe("undoSeats", () => {
+  it("C5.10: gives Léa her state before, and the state the device now sees, in plain data", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const result = await undoSeats(eventId, lea.token, r1, "aller", [{ personId: lea.id, before: "withoutCar" }]);
+      expect(result).toEqual({ ok: true, undoneIds: [lea.id], state: await readEventState(trx, eventId, lea.token) });
+      expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
+      expect(stateOf(result)?.[0].withoutCar.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
+    });
+  });
+
+  it("C7.3: refuses another device's token, and Léa stays in the car", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea, tom, r1 } = await seedScene(trx);
+      const result = await undoSeats(eventId, tom.token, r1, "aller", [{ personId: lea.id, before: "withoutCar" }]);
+      expect(result).toMatchObject({ ok: false, error: "forbidden" });
+      expect(stateOf(result)?.[0].cars[0].passengers.map((person) => person.firstName)).toEqual(["Léa"]);
+    });
+  });
+
+  it.each<[string, unknown, unknown, unknown]>([
+    ["nothing", undefined, undefined, undefined],
+    ["null", null, null, null],
+    ["numbers", 42, 7, 3],
+    ["a string as the list", "r1", "aller", "Léa"],
+    ["objects", { id: "r1" }, { leg: "aller" }, { personId: "Léa" }],
+  ])("reads %s as input without an error, as invalid", async (_, rideId, leg, persons) => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea } = await seedScene(trx);
+      expect(await undoSeats(eventId, lea.token, rideId, leg, persons)).toMatchObject({ ok: false, error: "invalid" });
+    });
+  });
+
+  it("gives eventNotFound for an unknown event", async () => {
+    await inTransaction(async (trx) => {
+      const { lea, r1 } = await seedScene(trx);
+      const persons = [{ personId: lea.id, before: "withoutCar" }];
+      expect(await undoSeats("Zz9yXw8v", lea.token, r1, "aller", persons)).toEqual(EVENT_NOT_FOUND);
+    });
+  });
+
+  it("gives eventNotFound for a malformed event id, without reading anything", async () => {
+    connection.current = untouchable;
+    await expect(undoSeats({ id: "Ab3dEf7h" }, undefined, undefined, "aller", [])).resolves.toEqual(EVENT_NOT_FOUND);
+  });
+
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    const token = "AAAAAAAAAAAAAAAAAAAAAA";
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const persons = [{ personId: "1c1c2a4e-6a8f-4c1d-9e2f-3a4b5c6d7e8f", before: "withoutCar" }];
+      const failure = await undoSeats("Ab3dEf7h", token, "0b0b2a4e-6a8f-4c1d-9e2f-3a4b5c6d7e8f", "aller", persons).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack]) {
+        expect(text).not.toContain("06 22");
+        expect(text).not.toContain(token);
+      }
+      expect(cause).toBeUndefined();
+      expect(log.mock.calls).toEqual([["undoSeats: the seats could not be given back (SQLSTATE 57P01)"]]);
     } finally {
       log.mockRestore();
     }

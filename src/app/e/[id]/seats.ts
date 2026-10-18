@@ -1,6 +1,6 @@
 import type { Kysely } from "kysely";
 import { lockPersons, readTokenHolders } from "@/db/persons";
-import { seatedOnLeg, setPlacement } from "@/db/placements";
+import { dropPassengers, removePassengers, seatedOnLeg, setPlacement } from "@/db/placements";
 import { lockRide, ridePassengers } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
@@ -97,6 +97,97 @@ export async function takeSeats(
   const request = seatsRequest(rideId, leg, personIds);
   const outcome: SeatsOutcome = request
     ? await atomically(db, (trx) => placeInRide(trx, eventId, token, request))
+    : { ok: false, error: "invalid" };
+  const state = await readEventState(db, eventId, token);
+  return state ? { ...outcome, state } : EVENT_NOT_FOUND;
+}
+
+/** Where a person stood on the leg before she took a seat, as the page showed it. */
+const BEFORE = ["withoutCar", "notConcerned"] as const;
+type Before = (typeof BEFORE)[number];
+
+/**
+ * - `undoneIds`: the persons given back their state before; nobody when the car is gone.
+ * - `invalid`: a request no page sends (nobody asked, someone twice, an id, a leg or a state
+ *   before malformed).
+ * - `forbidden`: someone asked is not a person of the device (C7.3).
+ */
+export type UndoOutcome = { ok: true; undoneIds: string[] } | { ok: false; error: "invalid" | "forbidden" };
+
+/** The outcome, and the event's state as the device now sees it, refusal or not. */
+export type UndoSeatsResult = UndoOutcome & { state: EventState };
+
+interface UndoRequest {
+  rideId: string;
+  leg: Leg;
+  persons: { personId: string; before: Before }[];
+}
+
+function undoEntry(entry: unknown): UndoRequest["persons"][number] | undefined {
+  if (typeof entry !== "object" || entry === null) return undefined;
+  const { personId, before } = entry as Record<string, unknown>;
+  const known = BEFORE.find((state) => state === before);
+  return isCreationId(personId) && known ? { personId, before: known } : undefined;
+}
+
+/** The request as a page sends it, or nothing: at least one person, each once, every field well-formed. */
+function undoRequest(rideId: unknown, leg: unknown, persons: unknown): UndoRequest | undefined {
+  if (!isCreationId(rideId) || !LEGS.some((known) => known === leg)) return undefined;
+  if (!Array.isArray(persons) || persons.length === 0) return undefined;
+  const entries = persons.map(undoEntry);
+  if (!entries.every((entry) => entry !== undefined)) return undefined;
+  if (new Set(entries.map((entry) => entry.personId)).size !== entries.length) return undefined;
+  return { rideId, leg: leg as Leg, persons: entries };
+}
+
+/**
+ * Under the Ride's lock, then the persons' (lock order: Ride, then Person), who is still in
+ * the Ride is read again: only they change, back without a car or with no Placement on the
+ * leg (C5.10, as C7.4). All or nothing. Neither write fires a trigger of C12.8: an update
+ * of `ride_id` alone and a delete are not among their events.
+ */
+async function giveBackSeats(
+  trx: Kysely<Database>,
+  eventId: string,
+  token: unknown,
+  { rideId, leg, persons }: UndoRequest,
+): Promise<UndoOutcome> {
+  const personIds = persons.map(({ personId }) => personId);
+  const device = new Set(devicePersonIds(token, await readTokenHolders(trx, eventId)));
+  if (!personIds.every((id) => device.has(id))) return { ok: false, error: "forbidden" };
+  const ride = { id: rideId, eventId, leg };
+  // Gone, its passengers are already without a car (`SET NULL`): nobody to give back.
+  if ((await lockRide(trx, ride)) === undefined) return { ok: true, undoneIds: [] };
+  await lockPersons(trx, eventId, personIds);
+  const inRide = new Set((await ridePassengers(trx, ride)).map((passenger) => passenger.personId));
+  const stillIn = (before: Before) =>
+    persons.filter((person) => person.before === before && inRide.has(person.personId)).map((person) => person.personId);
+  const undone = new Set([
+    ...(await removePassengers(trx, ride, stillIn("withoutCar"))),
+    ...(await dropPassengers(trx, ride, stillIn("notConcerned"))),
+  ]);
+  return { ok: true, undoneIds: personIds.filter((id) => undone.has(id)) };
+}
+
+/**
+ * « Annuler » after a placement (C5.10): gives each person asked, of the device, her state
+ * before on that leg, if she is still in that Ride, then reads the event's state for it.
+ * `eventNotFound` for an unknown event, forged request or not; a malformed id is never
+ * looked up. As for takeSeats, the write commits in its own transaction and the state is
+ * read after the commit; the token is only compared, never logged nor kept.
+ */
+export async function undoSeats(
+  db: Kysely<Database>,
+  eventId: string,
+  token: unknown,
+  rideId: unknown,
+  leg: unknown,
+  persons: unknown,
+): Promise<UndoSeatsResult | EventNotFound> {
+  if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
+  const request = undoRequest(rideId, leg, persons);
+  const outcome: UndoOutcome = request
+    ? await atomically(db, (trx) => giveBackSeats(trx, eventId, token, request))
     : { ok: false, error: "invalid" };
   const state = await readEventState(db, eventId, token);
   return state ? { ...outcome, state } : EVENT_NOT_FOUND;

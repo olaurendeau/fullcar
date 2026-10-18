@@ -93,6 +93,31 @@ export async function removePassengers(
   });
 }
 
+/**
+ * Deletes the Placement of those of `personIds` who are in the Ride on its leg, who are then
+ * not concerned there, and returns their ids. The Ride is locked first, as in
+ * removePassengers; a Ride unknown in that event and on that leg deletes nobody.
+ */
+export async function dropPassengers(
+  db: Kysely<Database>,
+  ride: RideRef,
+  personIds: readonly string[],
+): Promise<string[]> {
+  if (personIds.length === 0) return [];
+  return atomically(db, async (trx) => {
+    if (!(await lockRide(trx, ride))) return [];
+    const rows = await trx
+      .deleteFrom("placement")
+      .where("ride_id", "=", ride.id)
+      .where("event_id", "=", ride.eventId)
+      .where("leg", "=", ride.leg)
+      .where("person_id", "in", personIds)
+      .returning("person_id")
+      .execute();
+    return rows.map((row) => row.person_id);
+  });
+}
+
 /** On the leg, the persons in a car: the drivers of its Rides and their passengers. */
 export async function seatedOnLeg(db: Kysely<Database>, eventId: string, leg: Leg): Promise<string[]> {
   const drivers = await db
