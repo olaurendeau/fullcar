@@ -251,9 +251,16 @@ test.describe("event not found, without JavaScript", () => {
   test.use({ locale: "fr-FR", javaScriptEnabled: false });
 
   for (const path of NOT_FOUND_PATHS) {
-    test(`C6.1, C6.4: ${path} still answers 404`, async ({ page }) => {
+    test(`C6.1, C6.4: ${path} still answers 404, with Next's empty error document`, async ({ page }) => {
       const response = await page.goto(path);
       expect(response?.status()).toBe(404);
+      // Pins the limit itself: the day Next renders the 404 on the server, this fails.
+      const stale =
+        "the 404 is no longer Next's empty error document: update the #142 paragraph of " +
+        "docs/agents/architecture.md (Règles d'exécution), then this test";
+      await expect(page.locator("html"), stale).toHaveAttribute("id", "__next_error__");
+      // innerText, not textContent: the inlined scripts carry the render's data as text.
+      await expect(page.locator("body"), stale).toHaveText("", { useInnerText: true });
     });
   }
 });
