@@ -9,6 +9,7 @@ import { devicePersonIds } from "@/domain/device";
 import { LEGS, type Leg } from "@/domain/leg";
 import { isPublicId } from "@/domain/public-id";
 import { seatsDecision } from "@/domain/ride";
+import { EVENT_NOT_FOUND, type EventNotFound } from "./change-ride";
 import { readEventState, type EventState } from "./event-state";
 
 /**
@@ -73,12 +74,15 @@ async function placeInRide(
 
 /**
  * Takes seats in a Ride for persons of the device (epic #66, R5 and R6), then reads the
- * event's state for it. Nothing for an unknown event; a malformed id is never looked up.
+ * event's state for it. `eventNotFound` for an unknown event, forged request or not; a
+ * malformed id is never looked up.
  *
- * On the connection, the write commits in its own transaction (READ COMMITTED, so that each
- * read after the Ride's lock sees what the take before it committed), and the state is read
- * after the commit, on one snapshot: readEventState refuses READ COMMITTED. Given a
- * transaction, both run in it, which must then be REPEATABLE READ. The token is only
+ * The application passes the connection: the write commits in its own transaction (READ
+ * COMMITTED, so that each read after the Ride's lock sees what the take before it
+ * committed), and the state is read after the commit, on one snapshot. A transaction passed
+ * in is for tests only, and loses that guarantee (C12.11): readEventState needs it in
+ * REPEATABLE READ, whose snapshot is taken before the Ride's lock, so a seat taken while it
+ * waited is not counted, and the car is overbooked without an error. The token is only
  * compared, never logged nor kept.
  */
 export async function takeSeats(
@@ -88,12 +92,12 @@ export async function takeSeats(
   rideId: unknown,
   leg: unknown,
   personIds: unknown,
-): Promise<TakeSeatsResult | undefined> {
-  if (!isPublicId(eventId)) return undefined;
+): Promise<TakeSeatsResult | EventNotFound> {
+  if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
   const request = seatsRequest(rideId, leg, personIds);
   const outcome: SeatsOutcome = request
     ? await atomically(db, (trx) => placeInRide(trx, eventId, token, request))
     : { ok: false, error: "invalid" };
   const state = await readEventState(db, eventId, token);
-  return state && { ...outcome, state };
+  return state ? { ...outcome, state } : EVENT_NOT_FOUND;
 }

@@ -3,7 +3,6 @@ import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import {
   deleteRide,
-  drivesOn,
   findDrivenRide,
   insertRide,
   lockRide,
@@ -214,22 +213,6 @@ describe("ridePassengers", () => {
       expect(passengers.map((passenger) => passenger.personId)).toEqual([first, second]);
       expect(passengers[0].placedAt).toBeInstanceOf(Date);
       expect(await ridePassengers(trx, { id, eventId, leg: "retour" })).toEqual([]);
-    });
-  });
-});
-
-describe("drivesOn", () => {
-  it("is true on the leg the person drives only, and only in her event", async () => {
-    await withRollback(async (trx) => {
-      const { id: eventId } = await seedEvent(trx);
-      const { id: otherEvent } = await seedEvent(trx);
-      const marc = await seedPerson(trx, eventId, { firstName: "Marc" });
-      const lea = await seedPerson(trx, eventId);
-      await seedRide(trx, eventId, marc.id, { leg: "aller" });
-      expect(await drivesOn(trx, { personId: marc.id, eventId, leg: "aller" })).toBe(true);
-      expect(await drivesOn(trx, { personId: marc.id, eventId, leg: "retour" })).toBe(false);
-      expect(await drivesOn(trx, { personId: lea.id, eventId, leg: "aller" })).toBe(false);
-      expect(await drivesOn(trx, { personId: marc.id, eventId: otherEvent, leg: "aller" })).toBe(false);
     });
   });
 });

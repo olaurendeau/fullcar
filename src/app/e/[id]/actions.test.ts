@@ -139,7 +139,7 @@ describe("takeSeats", () => {
       const result = await takeSeats(eventId, tom.token, r1, "aller", [tom.id]);
       expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, tom.token) });
       expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
-      const [aller] = result?.state ?? [];
+      const [aller] = stateOf(result) ?? [];
       expect(aller.cars[0].passengers.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
     });
   });
@@ -149,7 +149,14 @@ describe("takeSeats", () => {
       const { eventId, lea, tom, r1 } = await seedScene(trx);
       const result = await takeSeats(eventId, lea.token, r1, "aller", [tom.id]);
       expect(result).toEqual({ ok: false, error: "forbidden", state: await readEventState(trx, eventId, lea.token) });
-      expect(result?.state[0].withoutCar.map((person) => person.firstName)).toEqual(["Tom"]);
+      expect(stateOf(result)?.[0].withoutCar.map((person) => person.firstName)).toEqual(["Tom"]);
+    });
+  });
+
+  it("refuses an unknown event as eventNotFound", async () => {
+    await inTransaction(async (trx) => {
+      const { tom, r1 } = await seedScene(trx);
+      expect(await takeSeats("Zz9yXw8v", tom.token, r1, "aller", [tom.id])).toEqual(EVENT_NOT_FOUND);
     });
   });
 
@@ -157,9 +164,9 @@ describe("takeSeats", () => {
     ["a 0", "Ab3dEf70"],
     ["a number", 12345678],
     ["an object", { id: "Ab3dEf7h" }],
-  ])("reads and writes nothing for %s as the id", async (_, id) => {
+  ])("refuses %s as the id as eventNotFound, and reads and writes nothing", async (_, id) => {
     connection.current = untouchable;
-    await expect(takeSeats(id, undefined, undefined, "aller", [])).resolves.toBeUndefined();
+    await expect(takeSeats(id, undefined, undefined, "aller", [])).resolves.toEqual(EVENT_NOT_FOUND);
   });
 
   it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
@@ -302,12 +309,12 @@ describe("the person actions", () => {
 /** What every write action gives for an unknown event (decision on #135 and #138). */
 const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" };
 
-/** The fields the change form sends, with the passengers its step showed. */
 /** The state a result gives, if it gives one. */
 function stateOf(result: object): EventState | undefined {
   return "state" in result ? (result.state as EventState) : undefined;
 }
 
+/** The fields the change form sends, with the passengers its step showed. */
 function rideForm(fields: Record<string, unknown> = {}) {
   return { location: "Mairie", time: "07:15", seats: "3", note: "", seenPassengerIds: [], leaving: [], ...fields };
 }

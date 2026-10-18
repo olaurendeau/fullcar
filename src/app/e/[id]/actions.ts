@@ -27,7 +27,8 @@ export async function loadEventState(id: unknown, token: unknown): Promise<Event
 /**
  * Takes seats in a Ride for persons of the device (C5.2, C6.4), and always gives the state
  * the device now sees, refusal included. The token arrives in the body, never in the URL;
- * it is only compared, never logged. Nothing for an unknown event or a malformed id.
+ * it is only compared, never logged. `eventNotFound` for an unknown event; a malformed id
+ * is never looked up.
  */
 export async function takeSeats(
   id: unknown,
@@ -35,8 +36,8 @@ export async function takeSeats(
   rideId: unknown,
   leg: unknown,
   personIds: unknown,
-): Promise<TakeSeatsResult | undefined> {
-  if (!isPublicId(id)) return undefined;
+): Promise<TakeSeatsResult | changeRide.EventNotFound> {
+  if (!isPublicId(id)) return changeRide.EVENT_NOT_FOUND;
   try {
     return await takeSeatsInRide(getDb(), id, token, rideId, leg, personIds);
   } catch (error) {

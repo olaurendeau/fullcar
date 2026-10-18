@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
-import { insertPerson, lockPerson, lockPersons, readTokenHolders, updatePerson } from "./persons";
+import { insertPerson, lockPersons, readTokenHolders, updatePerson } from "./persons";
 import type { Database } from "./schema";
 import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
@@ -136,34 +136,6 @@ describe("lockPersons", () => {
         await expect(forUpdate()).rejects.toMatchObject({ code: "55P03" });
       });
       await expect(forUpdate()).resolves.toBeDefined();
-    });
-  });
-});
-
-describe("lockPerson", () => {
-  it("finds the person of that event only", async () => {
-    await withRollback(async (trx) => {
-      const { id: eventId } = await seedEvent(trx);
-      const { id: otherId } = await seedEvent(trx);
-      const id = randomUUID();
-      await insertPerson(trx, { id, eventId, firstName: "Léa", phone: null, tokenHash: HASH_A });
-      expect(await lockPerson(trx, { id, eventId })).toBe(true);
-      expect(await lockPerson(trx, { id, eventId: otherId })).toBe(false);
-      expect(await lockPerson(trx, { id: randomUUID(), eventId })).toBe(false);
-    });
-  });
-
-  // The lock the triggers of C12.8 take: a writer that holds it is not overtaken by them.
-  it("holds the person FOR UPDATE until the transaction ends", async () => {
-    await withCommittedEvent(async (db, eventId) => {
-      const id = randomUUID();
-      await insertPerson(db, { id, eventId, firstName: "Léa", phone: null, tokenHash: HASH_A });
-      const locked = () => sql`select id from person where id = ${id} for update nowait`.execute(db);
-      await atomically(db, async (trx) => {
-        await lockPerson(trx, { id, eventId });
-        await expect(locked()).rejects.toMatchObject({ code: "55P03" });
-      });
-      await expect(locked()).resolves.toBeDefined();
     });
   });
 });

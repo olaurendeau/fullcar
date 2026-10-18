@@ -139,22 +139,10 @@ export async function ridePassengers(db: Kysely<Database>, ride: RideRef): Promi
   return rows.map((row) => ({ personId: row.person_id, placedAt: row.placed_at }));
 }
 
-/** Whether the person drives a Ride of that event on that leg: she has no Placement there. */
-export async function drivesOn(
-  db: Kysely<Database>,
-  driver: { personId: string; eventId: string; leg: Leg },
-): Promise<boolean> {
-  const row = await db
-    .selectFrom("ride")
-    .select("id")
-    .where("driver_id", "=", driver.personId)
-    .where("event_id", "=", driver.eventId)
-    .where("leg", "=", driver.leg)
-    .executeTakeFirst();
-  return row !== undefined;
-}
-
-/** The id of the Ride the person drives on that leg of that event; nothing if she does not drive there. */
+/**
+ * The id of the Ride the person drives on that leg of that event, where she then has no
+ * Placement (C12.8); nothing if she does not drive there.
+ */
 export async function findDrivenRide(
   db: Kysely<Database>,
   driver: { driverId: string; eventId: string; leg: Leg },
