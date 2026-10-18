@@ -164,7 +164,7 @@ test.describe("board, JavaScript disabled", () => {
     await expect(withoutCar(page)).toHaveCount(2);
     await expect(withoutCar(page).first().getByRole("listitem")).toHaveText(["Tom"]);
     await expect(withoutCar(page).last().getByRole("listitem")).toHaveText(["Léa"]);
-    await expect(page.getByRole("status")).toHaveText([
+    await expect(page.getByRole("status").filter({ hasText: /\S/ })).toHaveText([
       "1 sans voiture · 2 places libres",
       "1 sans voiture · il manque 1 place",
     ]);
@@ -220,8 +220,8 @@ test.describe("board without a retour, JavaScript disabled", () => {
 /*
  * C10.2, C10.6: no number reaches a browser, on the public page or the organiser's, with or
  * without the organiser's link, with or without JavaScript. Searched in every answer the
- * page receives (HTML, RSC, scripts, the link's check) and in its final DOM. No component
- * shows a number yet: this guards the data the pages are given, not only what they display.
+ * page receives (HTML, RSC, scripts, the link's check) and in its final DOM. This browser holds
+ * no personal token: e2e/device-persons.spec.ts covers one that does, whose cards show numbers.
  */
 const LEAKS = Object.values(PHONES).flatMap((phone) => [phone, phone.replace(/\D/g, "")]);
 
@@ -325,7 +325,7 @@ test.describe("board, without a retour", () => {
     await place(db, id, lea, "aller", ride);
 
     await page.goto(`/e/${id}`);
-    await expect(page.getByRole("status")).toHaveText("Tout le monde a une place");
+    await expect(page.getByRole("status").filter({ hasText: /\S/ })).toHaveText("Tout le monde a une place");
     await expect(car(page, "Marc").getByText("Complet")).toBeVisible();
   });
 
@@ -334,7 +334,7 @@ test.describe("board, without a retour", () => {
     for (const firstName of ["Léa", "Tom"]) await place(db, id, await person(db, id, firstName), "aller", null);
 
     await page.goto(`/e/${id}`);
-    await expect(page.getByRole("status")).toHaveText("2 sans voiture · il manque 2 places");
+    await expect(page.getByRole("status").filter({ hasText: /\S/ })).toHaveText("2 sans voiture · il manque 2 places");
     await expect(withoutCar(page).getByRole("listitem")).toHaveText(["Léa", "Tom"]);
     await expect(page.getByText("Aucune voiture proposée pour l’aller")).toBeVisible();
   });
@@ -346,7 +346,7 @@ test.describe("board, at 360 × 780 with a title and a place of 30 characters", 
   test("C9.2: the aller's banner is visible without scrolling", async ({ db, page, seededEvent }) => {
     await place(db, seededEvent.id, await person(db, seededEvent.id, "Léa"), "aller", null);
     await page.goto(`/e/${seededEvent.id}`);
-    await expect(page.getByRole("status")).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("status").filter({ hasText: /\S/ })).toBeInViewport({ ratio: 1 });
   });
 });
 

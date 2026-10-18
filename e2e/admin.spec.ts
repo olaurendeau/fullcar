@@ -32,8 +32,9 @@ function oneCharOff(token: string): string {
 
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
 const linkGroup = (page: Page, name: string) => panel(page).getByRole("group", { name });
-// Within the page's content: Next's route announcer is an alert as well.
-const alert = (page: Page) => page.getByRole("main").getByRole("alert");
+// Within the page's content: Next's route announcer is an alert as well. With text: the bar of
+// messages keeps its own alert region, empty, on the page (#87).
+const alert = (page: Page) => page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ });
 
 async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

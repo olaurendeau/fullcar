@@ -56,7 +56,7 @@ async function open(page: Page, path: string, heading: string, words: Words = FR
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
     await expect(
-      page.getByRole("region", { name: words.panel }).or(page.getByRole("main").getByRole("alert")),
+      page.getByRole("region", { name: words.panel }).or(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })),
     ).toBeVisible();
   }
 }

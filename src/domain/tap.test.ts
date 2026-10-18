@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DevicePerson, DeviceState } from "./board";
-import { sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
+import { deviceKnown, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
 
 function of(id: string, state: DeviceState): DevicePerson {
   return { id, firstName: id.toUpperCase(), state };
@@ -11,6 +11,13 @@ const notConcerned = (id: string) => of(id, { kind: "notConcerned" });
 const driver = (id: string) => of(id, { kind: "driver", rideId: `car-of-${id}` });
 const passenger = (id: string) =>
   of(id, { kind: "passenger", rideId: "car-of-ana", driver: { id: "ana", firstName: "Ana" } });
+
+describe("deviceKnown (C5.9)", () => {
+  it("is true once the device's persons are known: none, or read", () => {
+    const known = (["pending", "none", "loading", "ready", "failed"] as const).filter(deviceKnown);
+    expect(known).toEqual(["none", "ready"]);
+  });
+});
 
 describe("tapOutcome: what a tap on a free seat does", () => {
   it.each<[string, DeviceStatus]>([

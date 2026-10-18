@@ -87,6 +87,6 @@ test("event not found", async ({ page }, testInfo) => {
 test("organiser's link, not valid", async ({ page, seededEvent }, testInfo) => {
   await page.goto(`/e/${seededEvent.id}/admin#q3Vx9kLmN2pR7sT1uW4yZa`);
   // Shown once the client has had the server's answer.
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("Ce lien d’organisateur n’est pas valide.");
+  await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText("Ce lien d’organisateur n’est pas valide.");
   await shoot(page, testInfo, "event-admin-invalide");
 });

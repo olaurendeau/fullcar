@@ -54,7 +54,9 @@ async function settled(page: Page, words: Words, arrival: Arrival) {
   // Inactive until hydrated (L4.3).
   await expect(page.getByRole("button", { name: words.switch, exact: true })).toBeEnabled({ timeout: 15_000 });
   if (arrival === "panel") await expect(page.getByRole("region", { name: words.panel })).toBeVisible();
-  if (arrival === "alert") await expect(page.getByRole("main").getByRole("alert")).toContainText(words.invalid);
+  if (arrival === "alert") {
+    await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(words.invalid);
+  }
 }
 
 async function shoot(page: Page, testInfo: TestInfo, name: string) {

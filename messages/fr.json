@@ -62,9 +62,35 @@
       "title": "Voiture de {driver}",
       "full": "Complet",
       "seats": "Places",
-      "freeSeat": "Place libre"
+      "freeSeat": "Place libre",
+      "takeSeat": "Place libre : prendre une place dans la voiture de {driver}"
     },
-    "withoutCar": "Sans voiture"
+    "withoutCar": "Sans voiture",
+    "call": "Appeler {firstName} au {phone}",
+    "needsJavaScript": "S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page."
+  },
+  "DevicePersons": {
+    "title": "Personnes de l’appareil",
+    "hint": "Inscrites depuis cet appareil : vous pouvez les modifier.",
+    "state": {
+      "passenger": "Dans la voiture de {driver}",
+      "driver": "Conduit",
+      "withoutCar": "Sans voiture",
+      "notConcerned": "Pas concernée"
+    },
+    "loading": "Chargement de vos inscriptions…",
+    "failed": "Vos inscriptions n’ont pas pu être chargées",
+    "failedBody": "Rien ne peut être ajouté ni modifié tant qu’elles ne sont pas chargées. Vérifiez la connexion, puis réessayez.",
+    "retry": "Réessayer"
+  },
+  "Actions": {
+    "submit": "Valider",
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "offline": "Action impossible, vérifiez la connexion",
+    "failed": "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
+    "rideGone": "Cette voiture n’est plus proposée",
+    "alreadyInCar": "{count, plural, one {Cette personne est déjà dans une voiture} other {Une de ces personnes est déjà dans une voiture}} : rien n’a changé."
   },
   "Admin": {
     "title": "Espace organisateur",

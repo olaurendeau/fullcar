@@ -15,6 +15,14 @@ import type { DevicePerson } from "./board";
  */
 export type DeviceStatus = "pending" | "none" | "loading" | "ready" | "failed";
 
+/**
+ * Whether the device's persons are known: none, or read. Until then, the free seats and the
+ * actions that create are inactive, or they would open as for a device without a person (C5.9).
+ */
+export function deviceKnown(status: DeviceStatus): boolean {
+  return status === "none" || status === "ready";
+}
+
 export type TapOutcome =
   /** The device's persons are not known yet: the seat does nothing (C5.9). */
   | { kind: "wait" }
@@ -30,8 +38,8 @@ export type TapOutcome =
  * that leg are counted: a driver, a passenger or a person not concerned never is (C5.6).
  */
 export function tapOutcome(status: DeviceStatus, device: readonly DevicePerson[]): TapOutcome {
+  if (!deviceKnown(status)) return { kind: "wait" };
   if (status === "none") return { kind: "register" };
-  if (status !== "ready") return { kind: "wait" };
   // A key that no person of the event carries is a device without a person.
   if (device.length === 0) return { kind: "register" };
   const toPlace = device.filter((person) => person.state.kind === "withoutCar");

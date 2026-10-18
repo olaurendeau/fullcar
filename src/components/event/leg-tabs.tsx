@@ -4,7 +4,7 @@ import { coverage } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import type { WallClock } from "@/domain/wall-clock";
-import { LegPanel } from "./leg-panel";
+import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabPanel } from "./leg-tab-panel";
 
 /** A tab's label, then its persons without a car when there are any, in its accessible name (C9.3). */
@@ -35,7 +35,13 @@ function LegTrigger({ leg, board }: { leg: Leg; board: VisibleLegBoard }) {
  * one under the other, each under its name (C3.4). That name is the leg's h2, always there
  * and visually hidden with JavaScript, so that its cars and persons are h3 in both cases.
  */
-export function LegTabs(props: { allerAt: WallClock; retourAt: WallClock; aller: VisibleLegBoard; retour: VisibleLegBoard }) {
+export function LegTabs(props: {
+  allerAt: WallClock;
+  retourAt: WallClock;
+  aller: VisibleLegBoard;
+  retour: VisibleLegBoard;
+  device: BoardDevice;
+}) {
   const t = useTranslations("Event.legs");
   const legs = [
     { leg: "aller", at: props.allerAt, board: props.aller },
@@ -59,7 +65,7 @@ export function LegTabs(props: { allerAt: WallClock; retourAt: WallClock; aller:
           <h2 id={`leg-${leg}`} className="sr-only text-lg font-semibold noscript:not-sr-only">
             {t(leg)}
           </h2>
-          <LegPanel at={at} board={board} />
+          <LegPanel at={at} board={board} device={props.device} />
         </LegTabPanel>
       ))}
     </Tabs>
