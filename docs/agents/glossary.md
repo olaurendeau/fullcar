@@ -15,7 +15,7 @@ Les mêmes mots dans le code, la base, l'UI et les issues. Un synonyme est un d�
 | **État sur un leg** | pour chaque leg, une Person est soit **dans une voiture** (conductrice d'un Ride, ou passagère), soit **sans voiture**, soit **pas concernée** (elle ne fait pas ce trajet). Pas concernée = aucun Placement et ne conduit pas. Une conductrice n'a pas de Placement sur le leg où elle conduit. |
 | **Sans voiture** | un état déclaré, pas une absence d'information. C'est ce qui alimente le bandeau de couverture et la liste à placer. |
 | **Pas concernée** | l'absence de Placement sur un leg, pour une personne qui ne conduit pas sur ce leg : elle ne fait pas ce trajet. Exemple : le parent qui dépose à l'aller et ne revient pas. N'entre pas dans la couverture. |
-| **Jeton d'admin** | créé avec l'événement, permet de tout modifier. Voyage dans le fragment de l'URL, `/e/{id}/admin#{token}`, jamais dans le chemin. |
+| **Jeton d'admin** | créé avec l'événement, permet de tout modifier, et donne les numéros des personnes sans voiture (DO1). Voyage dans le fragment de l'URL, `/e/{id}/admin#{token}`, jamais dans le chemin. |
 | **Jeton personnel** | créé à la première inscription, stocké en `localStorage`. Permet de modifier **toutes** les personnes créées avec lui. Transférable par le « lien perso » (URL + QR). |
 | **Lien perso** | l'URL qui porte le jeton personnel dans son fragment, `/e/{id}/moi#{token}`, et son QR code, pour passer d'un appareil à l'autre. |
 | **Couverture** | combien de personnes restent sans voiture pour un leg. C'est le chiffre du bandeau, et la seule métrique que l'organisateur regarde. |

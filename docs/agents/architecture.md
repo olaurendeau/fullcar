@@ -257,28 +257,36 @@ seconde, tomber sur un événement parmi mille en cours prend plus de trois ans.
 
 ## Visibilité du téléphone : une règle, un seul endroit
 
-À partir de #66 (D2), le téléphone d'une personne n'est envoyé à un appareil que dans deux
-cas :
+À partir de #66 (D2), le téléphone d'une personne n'est envoyé que dans trois cas :
 
 - l'appareil a une personne **dans la même voiture, pour le même leg**, conducteur
   compris, dans les deux sens ;
 - la personne est une **personne de l'appareil** (créée avec le jeton personnel que ce
-  navigateur garde pour cet événement).
+  navigateur garde pour cet événement) ;
+- à partir de #154 (DO1), la personne est **sans voiture sur un leg**, et la requête est
+  celle de l'espace organisateur, dont le corps porte le jeton d'admin de l'événement,
+  vérifié par le serveur : son numéro n'est posé que dans la liste « Sans voiture » de ce
+  leg.
 
 Le numéro est posé **voiture par voiture**, et dans la section des personnes de l'appareil,
 jamais sur la personne elle-même : un passager de l'aller ne voit pas le numéro de son
-conducteur sur le retour, où ils ne partagent pas de voiture. La visibilité par l'admin
-arrive avec l'épic « Administrer l'événement » ; d'ici là, `/e/{id}/admin` ne montre aucun
-numéro de plus que `/e/{id}`.
+conducteur sur le retour, où ils ne partagent pas de voiture. Pour l'organisateur (DO1,
+#154), le numéro n'est posé que dans la réponse de l'espace organisateur, dans la liste
+« Sans voiture » d'un leg. Du numéro de la personne qui conduit, cette réponse ne dit que
+s'il existe, jamais lequel. Elle ne porte le numéro d'aucun conducteur, d'aucun
+passager placé, d'aucune personne pas concernée. Le tableau des participants de
+`/e/{id}/admin` suit la règle des appareils, comme `/e/{id}`. Un jeton d'admin faux, absent
+ou mal formé ne donne aucun numéro de plus.
 
 Cette règle ne doit exister **qu'à un seul endroit** du code, traversé par toutes les
 lectures. Si deux chemins la re-dérivent, l'un des deux finira par la rater — et le défaut
 sera invisible dans l'UI de celui qui l'a écrit. À partir de #66, cet endroit est
 `src/domain/phone-visibility.ts`, et une seule requête lit la colonne `phone` :
 `src/db/event-rows.ts`. Celle-ci renvoie les téléphones **à part** des autres données
-(`phonesById`), et seul `withVisiblePhones` (`phone-visibility.ts`) les reçoit et les
-pose : un `row.phone` recopié ailleurs, dans le board par exemple, re-dériverait la règle.
-Une liste de colonnes qui contient `phone` reste privée à `event-rows.ts` (non exportée) :
+(`phonesById`), et seuls `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`)
+les reçoivent et les posent : un `row.phone` recopié ailleurs, dans le board par exemple,
+re-dériverait la règle. `withOrganiserPhones` vérifie lui-même le jeton d'admin
+(`adminTokenMatches`) et ne rend rien s'il ne correspond pas. Une liste de colonnes qui contient `phone` reste privée à `event-rows.ts` (non exportée) :
 un `.select(cette liste)` ailleurs serait une nouvelle lecture.
 
 ## i18n
@@ -351,7 +359,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
 | cas d'usage de l'événement | `src/app/e/[id]/*.ts` (précédent : `src/app/e/[id]/event.ts`) | reçoivent `db` en paramètre, composent le domaine et l'accès aux données ; testés avec `withRollback`, comme une fonction d'accès aux données |
 | jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur |
-| téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` est le seul à recevoir ces téléphones |
+| téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 
