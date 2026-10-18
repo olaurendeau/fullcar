@@ -287,6 +287,32 @@ next-intl, sans préfixe de langue : `/e/{id}` est le même lien pour tout le mo
 vient d'un cookie s'il existe, sinon d'`Accept-Language`, sinon le français. Un lien partagé
 s'ouvre dans la langue de celui qui le reçoit.
 
+`negotiateLocale` (`src/i18n/negotiate.ts`, appelée par `src/i18n/request.ts`) prend le
+cookie `NEXT_LOCALE` s'il vaut exactement `fr` ou `en`, et ignore toute autre valeur ; puis
+la première langue d'`Accept-Language` reconnue, par qualité puis par ordre, sous-étiquette
+de région ignorée ; puis `fr`.
+
+**Le cookie de langue (#113).** Seule la server action `setLocale` (`src/app/actions.ts`) le
+pose, et seul le bouton du bas de page l'appelle, sur un tap
+(`src/components/i18n/language-switch.tsx`, qui nomme `otherLocale` de la langue affichée).
+Une valeur autre que `fr` ou `en` ne pose rien. Ses attributs viennent de
+`localeCookieOptions` (`src/i18n/locales.ts`) : `Path=/`, `SameSite=Lax`, 365 jours,
+renouvelés à chaque changement, pas d'`HttpOnly`. `Secure` vaut `true` seulement si
+l'en-tête `x-forwarded-proto` vaut `https` : Vercel l'envoie, alors que `next start` pose
+`http`, et un cookie `Secure` y serait ignoré.
+
+Poser un cookie dans une action fait rendre la page courante à nouveau par Next, et ce
+rendu, déjà dans la nouvelle langue, arrive dans la réponse de l'action. Le client
+l'applique sur place : pas de rechargement du document, pas de `router.refresh()`, pas de
+navigation. Le fragment (`#{jeton}`) et ce qui est saisi restent, et le jeton n'est pas
+revérifié. Jamais de `redirect()` ni de langue dans l'URL. Une action qui échoue (hors
+ligne, erreur serveur) laisse la page telle quelle et rend le bouton de nouveau actif. Si
+le re-rendu échoue après la pose du cookie, le cookie reste posé : cas accepté dans #113.
+
+`experimental.useOffline` doit rester désactivé (sa valeur par défaut, `next.config.ts` ne
+le pose pas). Activé, une action lancée hors ligne attendrait le réseau puis serait rejouée,
+au lieu d'échouer : la langue changerait au retour du réseau, ce qui casse L4.1 de #113.
+
 ## Découpage d'une fonctionnalité
 
 Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
