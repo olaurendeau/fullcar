@@ -153,3 +153,18 @@ export async function drivesOn(
     .executeTakeFirst();
   return row !== undefined;
 }
+
+/** The id of the Ride the person drives on that leg of that event; nothing if she does not drive there. */
+export async function findDrivenRide(
+  db: Kysely<Database>,
+  driver: { driverId: string; eventId: string; leg: Leg },
+): Promise<string | undefined> {
+  const row = await db
+    .selectFrom("ride")
+    .select("id")
+    .where("driver_id", "=", driver.driverId)
+    .where("event_id", "=", driver.eventId)
+    .where("leg", "=", driver.leg)
+    .executeTakeFirst();
+  return row?.id;
+}

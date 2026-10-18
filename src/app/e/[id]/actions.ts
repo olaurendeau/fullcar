@@ -5,6 +5,7 @@ import { databaseFailure } from "@/db/failure";
 import { isPublicId } from "@/domain/public-id";
 import * as changeRide from "./change-ride";
 import { readEventState, type EventState } from "./event-state";
+import { offerRide as storeRideOffer, type OfferRideOutcome } from "./offer-ride";
 import * as persons from "./persons";
 import { takeSeats as takeSeatsInRide, type TakeSeatsResult } from "./seats";
 
@@ -115,5 +116,24 @@ export async function removeRide(
     return await changeRide.removeRide(getDb(), id, token, rideId, leg);
   } catch (error) {
     throw databaseFailure("removeRide: the car could not be removed", error);
+  }
+}
+
+/**
+ * « Proposer une voiture » (R4): the car is stored, then the state is read after the
+ * commit, since the write runs under READ COMMITTED and the state needs one snapshot.
+ * Field errors or a refusal otherwise. The personal token arrives in the body; it is only
+ * hashed and compared, never logged.
+ */
+export async function offerRide(id: unknown, token: unknown, offer: unknown): Promise<OfferRideOutcome> {
+  if (!isPublicId(id)) return { ok: false, error: "eventNotFound" };
+  try {
+    const result = await storeRideOffer(getDb(), id, token, offer);
+    if (!result.ok) return result;
+    const state = await readEventState(getDb(), id, token);
+    return state === undefined ? { ok: false, error: "eventNotFound" } : { ok: true, state };
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure("offerRide: the car could not be stored", error);
   }
 }

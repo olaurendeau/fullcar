@@ -1,6 +1,6 @@
 import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
-import { deletePlacement, removePassengers, seatedOnLeg, setPlacement } from "./placements";
+import { deletePlacement, findPlacement, removePassengers, seatedOnLeg, setPlacement } from "./placements";
 import type { Database } from "./schema";
 import { atomically } from "./transaction";
 import { withCommittedEvent } from "./test-committed";
@@ -208,6 +208,21 @@ describe("seatedOnLeg", () => {
 
       expect((await seatedOnLeg(trx, eventId, "aller")).sort()).toEqual([marc, zoe, lea].sort());
       expect((await seatedOnLeg(trx, eventId, "retour")).sort()).toEqual([marc, max].sort());
+    });
+  });
+});
+
+describe("findPlacement", () => {
+  it("gives where the person stands on that leg only, in that event only", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, rideA, personId } = await aCrowd(trx);
+      const { id: otherId } = await seedEvent(trx);
+      await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA });
+      expect(await findPlacement(trx, { personId, eventId, leg: "aller" })).toEqual({ rideId: rideA });
+      expect(await findPlacement(trx, { personId, eventId, leg: "retour" })).toBeUndefined();
+      expect(await findPlacement(trx, { personId, eventId: otherId, leg: "aller" })).toBeUndefined();
+      await setPlacement(trx, { personId, eventId, leg: "aller", rideId: null });
+      expect(await findPlacement(trx, { personId, eventId, leg: "aller" })).toEqual({ rideId: null });
     });
   });
 });
