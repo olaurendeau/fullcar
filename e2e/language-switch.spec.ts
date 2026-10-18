@@ -194,8 +194,9 @@ test.describe("the language switch, in a browser set to French", () => {
     baseURL,
     seededEvent,
   }) => {
-    // The event's page: what it shows does not depend on JavaScript. Without it, `/` adds a
-    // notice above the footer, and the 404's content comes only with the scripts.
+    // The event's page: what is above its footer depends on JavaScript (both legs stacked
+    // without it, tabs with one panel once hydrated), so the footer is not at the same height.
+    // The button is compared where it is in the footer it belongs to, not in the page.
     const path = `/e/${seededEvent.id}`;
     await open(page, path, "Tournoi de Rennes");
     const hydrated = languageSwitch(page, FR.switch);
@@ -214,7 +215,7 @@ test.describe("the language switch, in a browser set to French", () => {
       const inactive = languageSwitch(still, FR.switch);
       await expectSwitch(inactive, "en");
       await expect(inactive).toBeDisabled();
-      expect(await inactive.boundingBox()).toEqual(await hydrated.boundingBox());
+      expect(await inFooter(inactive)).toEqual(await inFooter(hydrated));
     } finally {
       await noScript.close();
     }
@@ -269,6 +270,23 @@ async function expectSwitch(button: Locator, lang: "fr" | "en") {
       };
     }, CRISP_CHAT),
   ).toEqual({ tag: "BUTTON", inFooter: true, beforeLink: true });
+}
+
+/** L4.3: the button's box, from the top left corner of the footer it is in, and that footer's width. */
+async function inFooter(button: Locator) {
+  const [box, footer] = await Promise.all([
+    button.boundingBox(),
+    button.locator("xpath=ancestor::footer[1]").boundingBox(),
+  ]);
+  expect(box).not.toBeNull();
+  expect(footer).not.toBeNull();
+  return {
+    x: box!.x - footer!.x,
+    y: box!.y - footer!.y,
+    width: box!.width,
+    height: box!.height,
+    footerWidth: footer!.width,
+  };
 }
 
 /** A mark only the same document keeps: a reload would lose it. */
