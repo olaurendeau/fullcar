@@ -364,6 +364,16 @@ test.describe("board, the tabs' pills", () => {
       await expect(pill).toHaveCSS(property, amber);
     }
     expect(await tabHeights(page)).toEqual([48, 48]);
+    // The name and the pill fit inside the tab's border and padding, not over them.
+    const overflow = await aller.evaluate((tab) => {
+      const box = tab.getBoundingClientRect();
+      const style = getComputedStyle(tab);
+      const top = box.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
+      const bottom = box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
+      const [name, pill] = [...tab.children].map((child) => child.getBoundingClientRect());
+      return { above: top - name.top, below: pill.bottom - bottom };
+    });
+    expect(overflow).toEqual({ above: 0, below: 0 });
   });
 
   test("C9.3: no pill at 0, and both tabs the same height beside a pill", async ({ db, page, seededEvent }) => {

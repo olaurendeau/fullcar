@@ -17,7 +17,8 @@ function LegTrigger({ leg, withoutCar, tall }: { leg: Leg; withoutCar: number; t
   const t = useTranslations();
 
   return (
-    <TabsTrigger value={leg} className={cn("flex-col gap-0.5 py-1", tall ? "h-12" : "h-11")}>
+    // 48 px: a 1 px border, 3 px of padding, the name's 20 px, 2 px, then the pill's 18 px.
+    <TabsTrigger value={leg} className={cn("flex-col gap-0.5 py-[3px]", tall ? "h-12" : "h-11")}>
       <span>{t(`Event.legs.${leg}`)}</span>
       {withoutCar > 0 && (
         <>
