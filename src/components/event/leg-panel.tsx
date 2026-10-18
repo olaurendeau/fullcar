@@ -2,10 +2,18 @@ import { Car, Clock } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { hasBanner } from "@/domain/coverage";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
+import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { CoverageBanner } from "./coverage-banner";
+import { DevicePersons } from "./device-persons";
 import { RideCard } from "./ride-card";
 import { WithoutCarList } from "./without-car-list";
+
+/** What the page knows of the device's persons, and how to read them again after a failure. */
+export interface BoardDevice {
+  status: DeviceStatus;
+  retry: () => void;
+}
 
 /**
  * A leg's date and time as the locale writes them, with no conversion: the wall-clock
@@ -22,12 +30,13 @@ export function LegTime({ at }: { at: WallClock }) {
 }
 
 /**
- * One leg (#86): its coverage first, then its cars, then its persons without a car. A leg
- * with neither a car nor a person shows the empty state of #3 instead, without a banner
- * (C9.6). No action in this task.
+ * One leg (#86): its coverage first, then the device's persons (#87), its cars, and its
+ * persons without a car. A leg with neither a car nor a person shows the empty state of #3
+ * instead, without a banner (C9.6), the device's persons still above it.
  */
-export function LegPanel({ at, board }: { at: WallClock; board: VisibleLegBoard }) {
+export function LegPanel({ at, board, device }: { at: WallClock; board: VisibleLegBoard; device: BoardDevice }) {
   const t = useTranslations("Event");
+  const tBoard = useTranslations("Board");
   const { leg, cars, withoutCar } = board;
   const legDate = wallClockParts(at).date;
 
@@ -38,10 +47,16 @@ export function LegPanel({ at, board }: { at: WallClock; board: VisibleLegBoard 
         <Clock className="size-4 shrink-0 text-muted-foreground" />
         <LegTime at={at} />
       </p>
+      <noscript>
+        <p className="text-sm text-muted-foreground">{tBoard("needsJavaScript")}</p>
+      </noscript>
+      <DevicePersons leg={leg} persons={board.device} status={device.status} onRetry={device.retry} />
       {hasBanner(board) ? (
         <>
           {cars.length > 0 ? (
-            cars.map((car) => <RideCard key={car.id} car={car} date={legDate} />)
+            cars.map((car) => (
+              <RideCard key={car.id} car={car} date={legDate} seatsActive={deviceKnown(device.status)} />
+            ))
           ) : (
             <p className="text-sm text-muted-foreground">{t(`noCar.${leg}`)}</p>
           )}

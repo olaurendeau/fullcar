@@ -49,7 +49,7 @@ async function open(page: Page, path: string, heading: string) {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
     await expect(
-      page.getByRole("region", { name: FR.panel }).or(page.getByRole("main").getByRole("alert")),
+      page.getByRole("region", { name: FR.panel }).or(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })),
     ).toBeVisible();
   }
 }
@@ -156,11 +156,11 @@ test.describe("the language switch, in a browser set to French", () => {
       seededEvent,
     }) => {
       await open(page, `/e/${seededEvent.id}/admin${fragment}`, "Tournoi de Rennes");
-      await expect(page.getByRole("main").getByRole("alert")).toContainText(FR.invalid);
+      await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(FR.invalid);
       const before = page.url();
 
       await switchTo(page, FR, EN, "en");
-      await expect(page.getByRole("main").getByRole("alert")).toContainText(EN.invalid);
+      await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(EN.invalid);
       expect(page.url()).toBe(before);
     });
   }

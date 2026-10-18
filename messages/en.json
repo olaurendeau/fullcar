@@ -62,9 +62,35 @@
       "title": "{driver}’s car",
       "full": "Full",
       "seats": "Seats",
-      "freeSeat": "Free seat"
+      "freeSeat": "Free seat",
+      "takeSeat": "Free seat: take a seat in {driver}’s car"
     },
-    "withoutCar": "Without a car"
+    "withoutCar": "Without a car",
+    "call": "Call {firstName} on {phone}",
+    "needsJavaScript": "Signing up, offering a car or taking a seat needs JavaScript: turn it on, then reload the page."
+  },
+  "DevicePersons": {
+    "title": "People on this device",
+    "hint": "Signed up from this device: you can change them.",
+    "state": {
+      "passenger": "In {driver}’s car",
+      "driver": "Driving",
+      "withoutCar": "Without a car",
+      "notConcerned": "Not on this trip"
+    },
+    "loading": "Loading your sign-ups…",
+    "failed": "Your sign-ups could not be loaded",
+    "failedBody": "Nothing can be added or changed until they are loaded. Check your connection, then try again.",
+    "retry": "Try again"
+  },
+  "Actions": {
+    "submit": "Confirm",
+    "close": "Close",
+    "cancel": "Cancel",
+    "offline": "Action failed, check your connection",
+    "failed": "Something went wrong and nothing has changed. Try again in a moment.",
+    "rideGone": "This car is no longer offered",
+    "alreadyInCar": "{count, plural, one {This person is already in a car} other {One of these people is already in a car}}: nothing has changed."
   },
   "Admin": {
     "title": "Organiser area",

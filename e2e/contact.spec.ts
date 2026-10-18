@@ -52,7 +52,7 @@ async function open(page: Page, path: string, heading: string) {
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
-    await expect(page.getByRole("region", { name: PANEL }).or(page.getByRole("main").getByRole("alert"))).toBeVisible();
+    await expect(page.getByRole("region", { name: PANEL }).or(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ }))).toBeVisible();
   }
 }
 
