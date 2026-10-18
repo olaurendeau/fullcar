@@ -330,6 +330,18 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   envoie la réponse en streaming dès le début, avec un statut 200 ; un `notFound()` appelé
   ensuite ne peut plus changer le statut. Sous `/e/[id]`, la page attend sa lecture en base
   et répond un vrai 404.
+- **Le contenu du 404 de `/e/[id]` arrive avec les scripts (#142), limite acceptée.** Avec
+  Next 16.4, un `notFound()` levé pendant le rendu serveur d'une page dynamique arrête le
+  rendu HTML : React n'a pas de limite d'erreur côté serveur, et Next répond alors un
+  document d'erreur vide (`<html id="__next_error__">`), avec le statut 404. Le contenu de
+  `not-found.tsx` est dans les données du rendu, et c'est le navigateur qui l'affiche ; sans
+  JavaScript, la page est vide. Écarté : un `src/proxy.ts` qui vérifie l'événement et pose le
+  404 avant le rendu, la page affichant alors `not-found.tsx` sans lever `notFound()`. Il
+  marche, mais coûte une lecture de base de plus à chaque page d'événement, pour un cas rare
+  (un lien mort ouvert sans JavaScript). Ce qui reste vrai : `/e/{id}` et `/e/{id}/admin`
+  inconnus répondent 404 avec ou sans JavaScript, et avec JavaScript le titre, le texte et
+  le bas de page s'affichent (`e2e/event.spec.ts`). Un critère « sans JavaScript » ne se
+  prouve donc pas sur cette page.
 - **Heures sans fuseau.** Une heure d'événement est l'heure locale du lieu : elle est stockée
   en `timestamp(0)` (sans fuseau) et relue comme **chaîne brute** (`2026-12-12 07:30:00`),
   jamais convertie en `Date` dans le fuseau du serveur ou du navigateur. `src/db/client.ts`
