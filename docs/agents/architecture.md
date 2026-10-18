@@ -272,8 +272,8 @@ Le numéro est posé **voiture par voiture**, et dans la section des personnes d
 jamais sur la personne elle-même : un passager de l'aller ne voit pas le numéro de son
 conducteur sur le retour, où ils ne partagent pas de voiture. Pour l'organisateur (DO1,
 #154), le numéro n'est posé que dans la réponse de l'espace organisateur, dans la liste
-« Sans voiture » d'un leg. Pour une voiture, cette réponse dit seulement si la personne qui
-conduit a un numéro, jamais lequel. Elle ne porte le numéro d'aucun conducteur, d'aucun
+« Sans voiture » d'un leg. Du numéro de la personne qui conduit, cette réponse ne dit que
+s'il existe, jamais lequel. Elle ne porte le numéro d'aucun conducteur, d'aucun
 passager placé, d'aucune personne pas concernée. Le tableau des participants de
 `/e/{id}/admin` suit la règle des appareils, comme `/e/{id}`. Un jeton d'admin faux, absent
 ou mal formé ne donne aucun numéro de plus.
@@ -284,9 +284,9 @@ sera invisible dans l'UI de celui qui l'a écrit. À partir de #66, cet endroit 
 `src/domain/phone-visibility.ts`, et une seule requête lit la colonne `phone` :
 `src/db/event-rows.ts`. Celle-ci renvoie les téléphones **à part** des autres données
 (`phonesById`), et seuls `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`)
-les reçoivent et les posent ; `withOrganiserPhones` vérifie lui-même le jeton d'admin
-(`adminTokenMatches`) et ne rend rien s'il ne correspond pas : un `row.phone` recopié ailleurs, dans le board par exemple, re-dériverait la règle.
-Une liste de colonnes qui contient `phone` reste privée à `event-rows.ts` (non exportée) :
+les reçoivent et les posent : un `row.phone` recopié ailleurs, dans le board par exemple,
+re-dériverait la règle. `withOrganiserPhones` vérifie lui-même le jeton d'admin
+(`adminTokenMatches`) et ne rend rien s'il ne correspond pas. Une liste de colonnes qui contient `phone` reste privée à `event-rows.ts` (non exportée) :
 un `.select(cette liste)` ailleurs serait une nouvelle lecture.
 
 ## i18n

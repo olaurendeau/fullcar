@@ -222,7 +222,7 @@ function phonePlaces(board: OrganiserLegBoard[], phone: string): string[] {
   );
 }
 
-type EveOnAller = "without a car" | "a passenger" | "a driver" | "not concerned" | "without a car on the retour only";
+type EveOnAller = "without a car" | "a passenger" | "a driver" | "not concerned" | "not concerned, and without a car on the retour";
 
 /**
  * Aller: Marc drives Léa (r1), Tom is without a car. Retour: Ana drives Tom (r3), Sam is
@@ -240,7 +240,7 @@ function sceneWithEve(eve: EveOnAller): BoardRows {
   if (eve === "without a car") placements.push(placed("eve", "aller", null));
   if (eve === "a passenger") placements.push(placed("eve", "aller", "r1"));
   if (eve === "a driver") rides.push(ride("r2", "aller", "eve", "08:00:00"));
-  if (eve === "without a car on the retour only") placements.push(placed("eve", "retour", null));
+  if (eve === "not concerned, and without a car on the retour") placements.push(placed("eve", "retour", null));
   return {
     persons: ["marc", "lea", "tom", "ana", "eve", "sam"].map((id) => ({ id, firstName: id })),
     rides,
@@ -259,8 +259,8 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
     ["a passenger", []],
     ["a driver", []],
     ["not concerned", []],
-    ["without a car on the retour only", ["retour.withoutCar"]],
-  ])("Eve %s on the aller", (eve, places) => {
+    ["not concerned, and without a car on the retour", ["retour.withoutCar"]],
+  ])("Eve, on the aller: %s", (eve, places) => {
     it("the right token: her number is set only in the list without a car of the leg where she is", () => {
       const board = organiserBoard(sceneWithEve(eve), RIGHT);
       expect(board).toBeDefined();
@@ -338,6 +338,32 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
     ]);
     expect(sentOrganiserNumbers(aller.cars)).toEqual([]);
     expect(sentOrganiserNumbers(retour.cars)).toEqual([]);
+  });
+
+  it("copies only the known fields: a board that already carries numbers gives none of them away", () => {
+    // TypeScript accepts a VisibleBoard where a Board is expected: the rule must not trust it.
+    const deviceIds = new Set(["lea", "tom"]);
+    const visible = withVisiblePhones(buildBoard(sceneWithEve("a passenger"), ["aller", "retour"], deviceIds), ORGANISER_PHONES, deviceIds);
+    expect(sentOrganiserNumbers(visible.map((leg) => leg.cars)).sort()).toEqual(["ana", "eve", "lea", "marc", "tom"]);
+    const board = withOrganiserPhones(visible, ORGANISER_PHONES, RIGHT) ?? [];
+    expect(sentOrganiserNumbers(board.map((leg) => leg.cars))).toEqual([]);
+    expect(board[0].cars[0]).toStrictEqual({
+      id: "r1",
+      leg: "aller",
+      driver: { id: "marc", firstName: "marc" },
+      location: "Gymnase",
+      departureTime: "07:00:00",
+      note: null,
+      seats: 3,
+      passengers: [
+        { id: "lea", firstName: "lea" },
+        { id: "eve", firstName: "eve" },
+      ],
+      freeSeats: 1,
+      full: false,
+      driverHasPhone: true,
+    });
+    expect(board[0].withoutCar).toStrictEqual([{ id: "tom", firstName: "tom", phone: "+33 6 33 33 33 33" }]);
   });
 
   it("does not take the device's section: only the leg, its cars and its list without a car", () => {

@@ -107,7 +107,9 @@ export interface OrganiserLegBoard {
  * wrong, absent, not a string, or no stored hash. The rule checks the token itself, so that
  * no caller can tell it « checked » by mistake. A number is set only in the list without a
  * car of the leg where the person is without a car. The board given is built without a
- * device; its device section is not taken, and the board is left as it was.
+ * device; its device section is not taken, and the board is left as it was. Only the known
+ * fields are copied, one by one: TypeScript accepts a `VisibleBoard` for a `Board`, and a
+ * spread would carry its numbers along.
  */
 export function withOrganiserPhones(
   board: Board,
@@ -124,11 +126,22 @@ export function withOrganiserPhones(
   return board.map(({ leg, cars, withoutCar }) => ({
     leg,
     cars: cars.map((car) => ({
-      ...car,
-      driver: { ...car.driver },
-      passengers: car.passengers.map((person) => ({ ...person })),
+      id: car.id,
+      leg: car.leg,
+      driver: personOnly(car.driver),
+      location: car.location,
+      departureTime: car.departureTime,
+      note: car.note,
+      seats: car.seats,
+      passengers: car.passengers.map(personOnly),
+      freeSeats: car.freeSeats,
+      full: car.full,
       driverHasPhone: phoneOf(car.driver.id) !== null,
     })),
-    withoutCar: withoutCar.map((person) => ({ ...person, phone: phoneOf(person.id) })),
+    withoutCar: withoutCar.map((person) => ({ ...personOnly(person), phone: phoneOf(person.id) })),
   }));
+}
+
+function personOnly({ id, firstName }: BoardPerson): BoardPerson {
+  return { id, firstName };
 }
