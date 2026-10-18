@@ -8,10 +8,8 @@ import type { Leg } from "@/domain/leg";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
 import { expect, test } from "./fixtures";
 
-/*
- * #87: the device's persons on the page. The device's token is seeded with its persons,
- * then set in `localStorage` before the page's scripts run, under the event's own key.
- */
+// #87: the device's persons on the page. The device's token is seeded with its persons, then set
+// in `localStorage` before the page's scripts run, under the event's own key.
 
 type Db = Kysely<Database>;
 
@@ -105,11 +103,7 @@ const ALLER = ["Claire: Conduit", "Léa: Dans la voiture de Marc", "Tom: Sans vo
 /** Each of the device's persons in the section, as « first name: state ». */
 async function states(scope: Locator): Promise<string[]> {
   return scope.getByRole("group").evaluateAll((groups) =>
-    groups.map((group) => {
-      const name = group.querySelector("[data-slot=name]")?.textContent;
-      const state = group.querySelector("[data-slot=state]")?.textContent;
-      return `${name}: ${state}`;
-    }),
+    groups.map((group) => Array.from(group.querySelectorAll("[data-slot]"), (slot) => slot.textContent).join(": ")),
   );
 }
 
@@ -144,14 +138,19 @@ test.describe("device persons", () => {
 
   // A link on the cards the device shares; none elsewhere, nor for a driver without a number.
   test("C10.1, C10.2: tel: links where the device shares a car only", async ({ page, seededEvent }) => {
-    const answer = page.waitForResponse(async (response) => !!(await response.request().headerValue("next-action")));
+    // loadEventState's answer, read through the route: Chromium may discard a streamed body it has delivered.
+    let sent = "";
+    await page.route("**/e/**", async (route) => {
+      const response = await route.fetch();
+      if (route.request().method() === "POST") sent = await response.text();
+      await route.fulfill({ response });
+    });
     await page.goto(`/e/${seededEvent.id}`);
     const panel = page.getByRole("tabpanel");
     await expect(section(panel)).toBeVisible();
     // Paul's car shares nothing with the device: no link, and his number is neither sent nor shown.
     await expect(car(panel, "Paul").getByRole("listitem")).toHaveText(["Nina"]);
     await expect(car(panel, "Paul").getByRole("link")).toHaveCount(0);
-    const sent = await (await answer).text();
     expect(sent).toContain(PHONES.marc);
     for (const text of [sent, await page.content()]) {
       expect(text).not.toContain(PHONES.paul);
@@ -276,12 +275,16 @@ test.describe("device persons, without a retour", () => {
 test.describe("device persons, a token no person holds", () => {
   test.use({ locale: "fr-FR" });
 
+  // Read after a failure: with no section to take it, the focus of « Réessayer » goes to the active tab.
   test("is a device without a person: no section, the seats active", async ({ db, page, seededEvent }) => {
     await seedScene(db, seededEvent.id, newToken());
     await holdToken(page, seededEvent.id, newToken());
-    const loaded = page.waitForResponse(async (response) => !!(await response.request().headerValue("next-action")));
+    const failing = await failActions(page);
     await page.goto(`/e/${seededEvent.id}`);
-    await loaded;
+    await page.getByRole("button", { name: "Réessayer" }).focus();
+    failing.on = false;
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("tab", { name: /^Aller/ })).toBeFocused();
     await expect(freeSeats(page.getByRole("tabpanel")).first()).toBeEnabled();
     await expect(section(page)).toHaveCount(0);
     await expect(page.getByText("Vos inscriptions n’ont pas pu être chargées")).toHaveCount(0);

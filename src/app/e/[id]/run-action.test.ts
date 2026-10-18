@@ -2,13 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
 import { actionRunner, sendAction, stateOf, type ActionProblem } from "./run-action";
 
-const online = () => true;
-const offline = () => false;
-
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
     const action = vi.fn(async () => "sent");
-    expect(await sendAction(action, offline)).toEqual({ ok: false, problem: "offline" });
+    expect(await sendAction(action, () => false)).toEqual({ ok: false, problem: "offline" });
     expect(action).not.toHaveBeenCalled();
   });
 
@@ -25,7 +22,7 @@ describe("sendAction", () => {
     const action = async () => {
       throw new Error("An unexpected response was received from the server.");
     };
-    expect(await sendAction(action, online)).toEqual({ ok: false, problem: "failed" });
+    expect(await sendAction(action, () => true)).toEqual({ ok: false, problem: "failed" });
   });
 });
 
