@@ -1,4 +1,6 @@
 import type { Page, TestInfo } from "@playwright/test";
+import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { holdToken, newToken } from "./device";
 import { expect, test } from "./fixtures";
 
 /*
@@ -63,6 +65,30 @@ test("event, Aller then Retour tab", async ({ page, seededEvent }, testInfo) => 
   await expect(tab("Retour")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel")).toContainText("Aucune voiture proposée pour le retour");
   await shoot(page, testInfo, "event-retour");
+});
+
+// C3.6: Claire drives the aller and needs a seat back, Léa rides with her and needs one too, Tom only goes.
+test("« Vos inscriptions », unfolded then folded", async ({ db, page, seededEvent }, testInfo) => {
+  const token = newToken();
+  const eventId = seededEvent.id;
+  const mine = async (firstName: string) => (await seedPerson(db, eventId, { firstName }, token)).id;
+  const claire = await mine("Claire");
+  const lea = await mine("Léa");
+  const tom = await mine("Tom");
+  const clairesCar = await seedRide(db, eventId, claire);
+  await seedPlacement(db, { personId: lea, eventId, leg: "aller", rideId: clairesCar });
+  await seedPlacement(db, { personId: tom, eventId, leg: "aller", rideId: null });
+  await seedPlacement(db, { personId: claire, eventId, leg: "retour", rideId: null });
+  await seedPlacement(db, { personId: lea, eventId, leg: "retour", rideId: null });
+  await holdToken(page, eventId, token);
+  await page.goto(`/e/${eventId}`, { waitUntil: "networkidle" });
+  const toggle = page.getByRole("button", { name: /^Vos inscriptions/ });
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await shoot(page, testInfo, "vos-inscriptions-depliee");
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await shoot(page, testInfo, "vos-inscriptions-repliee");
 });
 
 test.describe("without a retour", () => {

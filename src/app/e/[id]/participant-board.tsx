@@ -2,22 +2,12 @@
 
 import { useRef, useState } from "react";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
+import { focusLandmark } from "@/components/event/focus";
 import { MessageBar } from "@/components/event/message-bar";
 import { loadEventState } from "./actions";
 import { useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import { actionRunner, sendAction, type ActionProblem } from "./run-action";
-
-/**
- * Where the focus goes when what had it is gone (the bar closed from inside, a section that
- * no longer shows): the active tab, or the event's title without tabs.
- */
-function focusLandmark() {
-  const target =
-    document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ??
-    document.getElementById("event-title");
-  target?.focus();
-}
 
 /**
  * The event's board on `/e/{id}` and `/e/{id}/admin` (C11.7), as `admin-arrival.tsx` is for

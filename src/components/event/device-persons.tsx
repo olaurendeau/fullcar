@@ -1,52 +1,65 @@
-import { LoaderCircle, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { DeviceState } from "@/domain/board";
-import type { Leg } from "@/domain/leg";
-import type { VisibleDevicePerson } from "@/domain/phone-visibility";
+import { deviceMatrix, matrixSummary, startsExpanded } from "@/domain/device-matrix";
+import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { cn } from "@/lib/utils";
 import type { BoardDevice } from "./leg-panel";
-import { PhoneLink } from "./phone-link";
+import { PersonSheet } from "./person-sheet";
+import { PersonsMatrix } from "./persons-matrix";
 
-/** The dot of a state: full in a car, amber without a car, empty not concerned. The text says it alone. */
-const DOT: Record<DeviceState["kind"], string> = {
-  driver: "bg-foreground",
-  passenger: "bg-foreground",
-  withoutCar: "bg-amber-600",
-  notConcerned: "border border-muted-foreground",
-};
+const TITLE_ID = "device-persons-title";
+const MATRIX_ID = "device-persons-matrix";
 
-function StateText({ state }: { state: DeviceState }) {
-  const t = useTranslations("DevicePersons.state");
-  return state.kind === "passenger" ? t("passenger", { driver: state.driver.firstName }) : t(state.kind);
+/** A person's own number: the one `withVisiblePhones` set in the device's section, and nowhere else. */
+function personOf(board: readonly VisibleLegBoard[], id: string) {
+  const person = board.flatMap((leg) => leg.device).find((candidate) => candidate.id === id);
+  return person && { id: person.id, firstName: person.firstName, phone: person.phone };
 }
 
 /**
- * The device's persons on one leg (C2.2): each one's state on this leg, and their own
- * number. Absent without a person. While they are read, a line in its place (C5.9); if the
- * read fails, an alert with « Réessayer ». No action in this task (#89 adds them).
+ * « Vos inscriptions » (C2.2, C3.6), above the tabs: the device's persons, one row each and
+ * one cell per leg of `board`, the event's legs in their order. Absent without a person, and
+ * without JavaScript. Its title is the button that folds it, with its summary. Unfolded when
+ * it first has rows if a cell is « Sans voiture », folded otherwise; then only that button
+ * changes it, and nothing keeps it (v4-3). While the persons are read, a line in its place
+ * (C5.9); if the read fails, an alert with « Réessayer ».
  *
  * « Réessayer » goes away as it is pressed: the focus follows what takes its place (the
- * line while reading, then the section's title, or « Réessayer » again after a failure),
- * and goes to `device.refocus()` when the leg has no section to show (decision 18).
+ * line while reading, then the section's button, or « Réessayer » again after a failure),
+ * and goes to `device.refocus()` when there is no section to show (decision 18). It moves
+ * only while nobody has put it elsewhere: on what it was given, or on nothing.
  */
-export function DevicePersons(props: { leg: Leg; persons: readonly VisibleDevicePerson[]; device: BoardDevice }) {
-  const { leg, persons, device: { status, retry, refocus } } = props;
+export function DevicePersons({ board, device: { status, retry, refocus } }: { board: readonly VisibleLegBoard[]; device: BoardDevice }) {
   const t = useTranslations("DevicePersons");
-  const headingId = `device-${leg}`;
+  const rows = deviceMatrix(board);
+  const [expanded, setExpanded] = useState<boolean | null>(null);
+  const [sheet, setSheet] = useState<{ id: string; open: boolean } | null>(null);
   const retried = useRef(false);
   const focusTarget = useRef<HTMLElement>(null);
-  // On whichever of the loading line, « Réessayer » or the section's title is shown.
+  const focused = useRef<HTMLElement>(null);
+  // On whichever of the loading line, « Réessayer » or the section's button is shown.
   const target = (element: HTMLElement | null) => {
     focusTarget.current = element;
   };
 
+  const ready = status === "ready" && rows.length > 0;
+  // Decided once, the first time there are rows: at the first read, or the first registration.
+  if (ready && expanded === null) setExpanded(startsExpanded(rows));
+
   useEffect(() => {
     if (!retried.current) return;
-    if (focusTarget.current) focusTarget.current.focus();
-    else refocus();
-    if (status !== "loading") retried.current = false;
+    const active = document.activeElement;
+    if (active === null || active === document.body || active === focused.current) {
+      if (focusTarget.current) focusTarget.current.focus();
+      else refocus();
+      focused.current = focusTarget.current;
+    }
+    if (status !== "loading") {
+      retried.current = false;
+      focused.current = null;
+    }
   }, [status, refocus]);
 
   if (status === "loading") {
@@ -86,47 +99,49 @@ export function DevicePersons(props: { leg: Leg; persons: readonly VisibleDevice
       </div>
     );
   }
-  if (status !== "ready" || persons.length === 0) return null;
+  if (!ready) return null;
+
+  const open = expanded ?? startsExpanded(rows);
+  const Chevron = open ? ChevronUp : ChevronDown;
+  const person = sheet && personOf(board, sheet.id);
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-xl border p-4">
-      <div className="flex flex-col gap-0.5">
-        <h3
+    <section
+      aria-labelledby={TITLE_ID}
+      className={cn("flex flex-col gap-1 rounded-[14px] border px-3 pt-1", open ? "pb-3" : "pb-1")}
+    >
+      <h2>
+        <button
           ref={target}
-          id={headingId}
-          tabIndex={-1}
-          className="font-semibold outline-none"
+          type="button"
+          aria-expanded={open}
+          aria-controls={MATRIX_ID}
+          onClick={() => setExpanded(!open)}
+          className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          {t("title")}
-        </h3>
-        <p className="text-sm text-muted-foreground">{t("hint")}</p>
+          <span className="flex min-w-0 flex-col">
+            <strong id={TITLE_ID} className="font-semibold">
+              {t("title")}
+            </strong>
+            <span className="text-[13px] leading-[18px] text-muted-foreground">{t("summary", matrixSummary(rows))}</span>
+          </span>
+          <Chevron aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        </button>
+      </h2>
+      <div id={MATRIX_ID} hidden={!open}>
+        <PersonsMatrix
+          legs={board.map((leg) => leg.leg)}
+          rows={rows}
+          onName={(id) => setSheet({ id, open: true })}
+        />
       </div>
-      <ul className="flex flex-col">
-        {persons.map((person) => {
-          const nameId = `${headingId}-${person.id}`;
-          return (
-            <li key={person.id} className="border-t py-3 first:border-t-0 first:pt-0 last:pb-0">
-              <div role="group" aria-labelledby={nameId} className="flex min-w-0 flex-col gap-1">
-                <strong
-                  id={nameId}
-                  data-slot="name"
-                  aria-describedby={`${nameId}-state`}
-                  className="self-start wrap-anywhere"
-                >
-                  {person.firstName}
-                </strong>
-                <span className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <span aria-hidden className={cn("mt-1.5 size-2 shrink-0 rounded-full", DOT[person.state.kind])} />
-                  <span id={`${nameId}-state`} data-slot="state" className="min-w-0 wrap-anywhere">
-                    <StateText state={person.state} />
-                  </span>
-                </span>
-                {person.phone && <PhoneLink firstName={person.firstName} phone={person.phone} icon />}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      {person && (
+        <PersonSheet
+          person={person}
+          open={sheet.open}
+          onOpenChange={(isOpen) => setSheet({ id: person.id, open: isOpen })}
+        />
+      )}
     </section>
   );
 }

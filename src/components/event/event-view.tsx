@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { Leg } from "@/domain/leg";
 import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
 import type { WallClock } from "@/domain/wall-clock";
+import { DevicePersons } from "./device-persons";
 import { LegPanel, LegTime, type BoardDevice } from "./leg-panel";
 import { LegTabs } from "./leg-tabs";
 
@@ -27,12 +28,14 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
 
 /**
  * The event as its participants see it (#3, R5): title, place, both legs' date and time,
- * then one tab per leg, or the aller alone, without tabs, when there is no retour (C5.4).
- * Each leg shows its coverage, its cars and its persons without a car (#86).
+ * the bar of messages and « Vos inscriptions » (#162), then one tab per leg, or the aller
+ * alone, without tabs, when there is no retour (C5.4). Each leg shows its coverage, its cars
+ * and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
  */
 export function EventView({ title, location, allerAt, retourAt, board, device, messageBar }: EventViewProps) {
   const t = useTranslations("Event.legs");
+  const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,6 +63,7 @@ export function EventView({ title, location, allerAt, retourAt, board, device, m
         </dl>
       </header>
       {messageBar}
+      <DevicePersons board={legs.map((leg) => legOf(board, leg))} device={device} />
       {retourAt ? (
         <LegTabs
           allerAt={allerAt}

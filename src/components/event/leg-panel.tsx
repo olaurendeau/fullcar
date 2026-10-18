@@ -5,7 +5,6 @@ import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { CoverageBanner } from "./coverage-banner";
-import { DevicePersons } from "./device-persons";
 import { RideCard } from "./ride-card";
 import { WithoutCarList } from "./without-car-list";
 
@@ -32,9 +31,9 @@ export function LegTime({ at }: { at: WallClock }) {
 }
 
 /**
- * One leg (#86): its coverage first, then the device's persons (#87), its cars, and its
- * persons without a car. A leg with neither a car nor a person shows the empty state of #3
- * instead, without a banner (C9.6), the device's persons still above it.
+ * One leg (#86): its coverage first, then its cars, and its persons without a car. A leg
+ * with neither a car nor a person shows the empty state of #3 instead, without a banner
+ * (C9.6). The device's persons are above the tabs (`DevicePersons`, #162).
  */
 export function LegPanel({ at, board, device }: { at: WallClock; board: VisibleLegBoard; device: BoardDevice }) {
   const t = useTranslations("Event");
@@ -52,7 +51,6 @@ export function LegPanel({ at, board, device }: { at: WallClock; board: VisibleL
       <noscript>
         <p className="text-sm text-muted-foreground">{tBoard("needsJavaScript")}</p>
       </noscript>
-      <DevicePersons leg={leg} persons={board.device} device={device} />
       {hasBanner(board) ? (
         <>
           {cars.length > 0 ? (
