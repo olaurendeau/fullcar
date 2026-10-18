@@ -32,7 +32,10 @@ export function LanguageSwitch({ children }: { children: ReactNode }) {
   // Set at once, unlike `switching`: a second tap before the next render sends nothing (L4.4).
   const inFlight = useRef(false);
   const button = useRef<HTMLButtonElement>(null);
-  const [problem, setProblem] = useState<Problem | null>(null);
+  // `tap` numbers the message: a second failure for the same reason is a new node, which a
+  // screen reader announces again, even when nothing renders between the two (L4.2).
+  const [problem, setProblem] = useState<{ reason: Problem; tap: number } | null>(null);
+  const taps = useRef(0);
 
   // Released once the page is in the new language, or once it failed. The button lost the
   // focus when it became inactive: it gets it back (L1.7).
@@ -45,9 +48,10 @@ export function LanguageSwitch({ children }: { children: ReactNode }) {
   function change() {
     if (inFlight.current) return;
     setProblem(null);
+    const tap = ++taps.current;
     // Without cookies, the choice could not be kept: the server is not asked (L4.2).
     if (!navigator.cookieEnabled) {
-      setProblem("cookiesBlocked");
+      setProblem({ reason: "cookiesBlocked", tap });
       return;
     }
     inFlight.current = true;
@@ -57,7 +61,7 @@ export function LanguageSwitch({ children }: { children: ReactNode }) {
       } catch {
         // Offline, or the server failed: the page stays as it is, the button comes back, and
         // the message says so (L4.1). Caught here, it never reaches React's error boundary.
-        setProblem("failed");
+        setProblem({ reason: "failed", tap });
       }
     });
   }
@@ -65,8 +69,8 @@ export function LanguageSwitch({ children }: { children: ReactNode }) {
   return (
     <>
       {problem && (
-        <p role="alert" lang={next} className="text-center text-sm text-destructive">
-          {t(problem)}
+        <p key={problem.tap} role="alert" lang={next} className="text-center text-sm text-destructive">
+          {t(problem.reason)}
         </p>
       )}
       <div className="flex flex-wrap justify-center">

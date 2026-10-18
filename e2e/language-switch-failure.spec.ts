@@ -92,13 +92,31 @@ async function expectMessage(page: Page, from: Words, text: string, lang: Lang) 
   expect(above!.y + above!.height).toBeLessThanOrEqual(below!.y);
 }
 
-/** Taps the button while the change cannot succeed, and checks that only the message came of it. */
+/**
+ * A second tap that fails for the same reason is announced again: its alert is a new node,
+ * not the one already read, which a screen reader would stay silent about.
+ */
+async function expectAnnouncedAgain(page: Page, from: Words, text: string, lang: Lang) {
+  await footerAlert(page).evaluate((element) => {
+    (element as HTMLElement & { announced?: boolean }).announced = true;
+  });
+  await languageSwitch(page, from.switch).click();
+  await expectMessage(page, from, text, lang);
+  const marked = await footerAlert(page).evaluate(
+    (element) => (element as HTMLElement & { announced?: boolean }).announced,
+  );
+  expect(marked).toBeUndefined();
+}
+
+/** Taps the button, twice, while the change cannot succeed, and checks that only the message came of it. */
 async function failOnce(page: Page, context: BrowserContext, cause: Cause, from: Words, langs: [Lang, Lang]) {
   await markWindow(page);
   const url = page.url();
   await cause.on(page, context);
   await languageSwitch(page, from.switch).click();
   await expectMessage(page, from, from.failed, langs[1]);
+  await expectUnchanged(page, from, langs[0], url);
+  await expectAnnouncedAgain(page, from, from.failed, langs[1]);
   await expectUnchanged(page, from, langs[0], url);
   await cause.off(page, context);
   return url;
@@ -167,6 +185,9 @@ for (const [locale, from, langs] of [
 
       await languageSwitch(page, from.switch).click();
       await expectMessage(page, from, from.cookiesBlocked, langs[1]);
+      await page.waitForLoadState("networkidle");
+      await expectUnchanged(page, from, langs[0], url);
+      await expectAnnouncedAgain(page, from, from.cookiesBlocked, langs[1]);
       await page.waitForLoadState("networkidle");
       await expectUnchanged(page, from, langs[0], url);
       expect(sent).toEqual([]);
