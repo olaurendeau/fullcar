@@ -243,6 +243,44 @@ test.describe("event not found", () => {
   });
 });
 
+// #142: Next 16.4 sends an empty document for a `notFound()` thrown while rendering; the
+// 404's content only arrives with the scripts (docs/agents/architecture.md, Règles d'exécution).
+const NOT_FOUND_PATHS = [`/e/${UNKNOWN_ID}`, `/e/${UNKNOWN_ID}/admin`];
+
+test.describe("event not found, without JavaScript", () => {
+  test.use({ locale: "fr-FR", javaScriptEnabled: false });
+
+  for (const path of NOT_FOUND_PATHS) {
+    test(`C6.1, C6.4: ${path} still answers 404, with Next's empty error document`, async ({ page }) => {
+      const response = await page.goto(path);
+      expect(response?.status()).toBe(404);
+      // Pins the limit itself: the day Next renders the 404 on the server, this fails.
+      const stale =
+        "the 404 is no longer Next's empty error document: update the #142 paragraph of " +
+        "docs/agents/architecture.md (Règles d'exécution), then this test";
+      await expect(page.locator("html"), stale).toHaveAttribute("id", "__next_error__");
+      // innerText, not textContent: the inlined scripts carry the render's data as text.
+      await expect(page.locator("body"), stale).toHaveText("", { useInnerText: true });
+    });
+  }
+});
+
+test.describe("event not found, with JavaScript", () => {
+  test.use({ locale: "fr-FR" });
+
+  for (const path of NOT_FOUND_PATHS) {
+    test(`C6.1, C6.4: ${path} shows its heading, its text and the footer`, async ({ page }) => {
+      const response = await page.goto(path);
+      expect(response?.status()).toBe(404);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Événement introuvable");
+      await expect(page.getByText(/Vérifiez le lien/)).toBeVisible();
+      await expect(page.getByText(/supprimés 30\sjours après leur date/)).toBeVisible();
+      // Inside <main>, the footer has no `contentinfo` role: reached by its element.
+      await expect(page.locator("footer").getByRole("link", { name: /^Nous contacter/ })).toBeVisible();
+    });
+  }
+});
+
 test.describe("event not found, in a browser set to English", () => {
   test.use({ locale: "en-GB" });
 
