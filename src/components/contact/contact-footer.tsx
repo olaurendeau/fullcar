@@ -1,4 +1,5 @@
 import { useTranslations } from "next-intl";
+import { LanguageSwitch } from "@/components/i18n/language-switch";
 
 /**
  * The chat Crisp hosts, on Crisp's own page (#64, #69): nothing of Crisp runs in the app's
@@ -8,24 +9,27 @@ import { useTranslations } from "next-intl";
 export const CRISP_CHAT_URL = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
 
 /**
- * The last thing of a page: a discreet "contact us" link (#69, K1 to K3). A new tab, with
- * neither opener nor referrer: Crisp's page can reach back to the organiser's page, its
- * fragment included, through none of them (K4).
+ * The last thing of a page: the language switch (#113), then a discreet "contact us" link
+ * (#69, K1 to K3), the last link of the page. A new tab, with neither opener nor referrer:
+ * Crisp's page can reach back to the organiser's page, its fragment included, through none
+ * of them (K4).
  */
 export function ContactFooter() {
   const t = useTranslations("Contact");
 
   return (
-    <footer className="flex justify-center pt-6">
-      <a
-        href={CRISP_CHAT_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex min-h-11 items-center px-3 text-sm text-muted-foreground underline underline-offset-4"
-      >
-        {t("link")}
-        <span className="sr-only"> {t("newTab")}</span>
-      </a>
+    <footer className="flex flex-col items-center gap-1 pt-6">
+      <LanguageSwitch>
+        <a
+          href={CRISP_CHAT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center px-3 text-sm text-muted-foreground underline underline-offset-4"
+        >
+          {t("link")}
+          <span className="sr-only"> {t("newTab")}</span>
+        </a>
+      </LanguageSwitch>
     </footer>
   );
 }

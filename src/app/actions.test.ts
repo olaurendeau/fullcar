@@ -5,7 +5,8 @@ import type { EventFields } from "@/domain/event";
 import { isPublicId } from "@/domain/public-id";
 import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
-import { createEvent } from "./actions";
+import { localeCookieOptions } from "@/i18n/locales";
+import { createEvent, setLocale } from "./actions";
 
 // The action reaches the database through getDb(): here, the test's transaction,
 // so that nothing it writes outlives the test.
@@ -14,6 +15,16 @@ vi.mock("@/db/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/db/client")>();
   return { ...actual, getDb: () => connection.current ?? actual.getDb() };
 });
+
+// The request the action reads its headers from, and the cookies it sets on the response.
+const request = vi.hoisted(() => ({
+  headers: new Headers(),
+  set: vi.fn(),
+}));
+vi.mock("next/headers", () => ({
+  headers: async () => request.headers,
+  cookies: async () => ({ set: request.set }),
+}));
 
 function inTransaction<T>(fn: (trx: Transaction<Database>) => Promise<T>): Promise<T> {
   return withRollback(async (trx) => {
@@ -237,4 +248,42 @@ describe("createEvent", () => {
       log.mockRestore();
     }
   });
+});
+
+describe("setLocale", () => {
+  beforeEach(() => {
+    request.headers = new Headers();
+    request.set.mockReset();
+  });
+
+  it("L2.2: sets NEXT_LOCALE to the language asked, for the whole site, Lax, 365 days", async () => {
+    request.headers = new Headers({ "x-forwarded-proto": "http" });
+    expect(await setLocale("en")).toBe(true);
+    expect(request.set.mock.calls).toEqual([["NEXT_LOCALE", "en", localeCookieOptions(false)]]);
+  });
+
+  it("L2.2: sets French back the same way", async () => {
+    expect(await setLocale("fr")).toBe(true);
+    expect(request.set.mock.calls).toEqual([["NEXT_LOCALE", "fr", localeCookieOptions(false)]]);
+  });
+
+  it.each([
+    ["https", true],
+    ["http", false],
+    ["HTTPS", false],
+    ["https, http", false],
+    [undefined, false],
+  ])("L2.2: with x-forwarded-proto %s, Secure is %s", async (proto, secure) => {
+    request.headers = new Headers(proto === undefined ? {} : { "x-forwarded-proto": proto });
+    await setLocale("en");
+    expect(request.set.mock.calls).toEqual([["NEXT_LOCALE", "en", { ...localeCookieOptions(secure), secure }]]);
+  });
+
+  it.each([["de"], [""], ["EN"], [42], [undefined], [null], [["en"]], [{ locale: "en" }]])(
+    "sets nothing and answers false for %j",
+    async (value) => {
+      expect(await setLocale(value)).toBe(false);
+      expect(request.set).not.toHaveBeenCalled();
+    },
+  );
 });
