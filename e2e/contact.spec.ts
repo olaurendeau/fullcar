@@ -1,4 +1,4 @@
-import type { Page, Request } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
 import { expect, test as base } from "./fixtures";
 
@@ -8,6 +8,8 @@ const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4
 const FR = "Nous contacter (s’ouvre dans un nouvel onglet)";
 const EN = "Contact us (opens in a new tab)";
 const PANEL = "Espace organisateur";
+/** The language switch (#113), named in the language it offers. */
+const SWITCH = { fr: "English", en: "Français" };
 
 /** A well-formed id that no test stores. */
 const UNKNOWN_ID = "Zz9yXw8v";
@@ -55,6 +57,39 @@ async function open(page: Page, path: string, heading: string) {
 }
 
 const contactLink = (page: Page, name = FR) => page.getByRole("link", { name, exact: true });
+const languageSwitch = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
+
+/** K1, K3: Crisp's link is the last link, nothing comes after it, discreet, and nothing scrolls sideways. */
+async function expectLastAndDiscreet(page: Page, link: Locator) {
+  // K1: the last link, and no content after it, in the order of the document.
+  expect(await page.locator("a").last().getAttribute("href")).toBe(CRISP_CHAT);
+  const contentAfter = await link.evaluate((a) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    walker.currentNode = a;
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!a.contains(node) && node.textContent?.trim() && node.parentElement?.closest("main")) return true;
+    }
+    return false;
+  });
+  expect(contentAfter).toBe(false);
+
+  // K3: smaller than the text, a 44 px target, nothing scrolls sideways at 360 px.
+  await expectDiscreet(link);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+  ).toBe(0);
+}
+
+/** K3, L1.2: smaller than the page's text, and a tap target of 44 px at least. */
+async function expectDiscreet(element: Locator) {
+  const [size, textSize] = await element.evaluate((node) => [
+    parseFloat(getComputedStyle(node).fontSize),
+    parseFloat(getComputedStyle(document.body).fontSize),
+  ]);
+  expect(size).toBeLessThan(textSize);
+  expect((await element.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+}
 
 test.describe("contact link", () => {
   test.use({ locale: "fr-FR" });
@@ -77,31 +112,39 @@ test.describe("contact link", () => {
       const rel = ((await link.getAttribute("rel")) ?? "").split(/\s+/);
       expect(rel).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
 
-      // K1: the last link, and no content after it, in the order of the document.
-      expect(await page.locator("a").last().getAttribute("href")).toBe(CRISP_CHAT);
-      const contentAfter = await link.evaluate((a) => {
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-        walker.currentNode = a;
-        while (walker.nextNode()) {
-          const node = walker.currentNode;
-          if (!a.contains(node) && node.textContent?.trim() && node.parentElement?.closest("main")) return true;
-        }
-        return false;
-      });
-      expect(contentAfter).toBe(false);
+      await expectLastAndDiscreet(page, link);
 
-      // K3: smaller than the text, a 44 px target, nothing scrolls sideways at 360 px.
-      const [linkSize, textSize] = await link.evaluate((a) => [
-        parseFloat(getComputedStyle(a).fontSize),
-        parseFloat(getComputedStyle(document.body).fontSize),
-      ]);
-      expect(linkSize).toBeLessThan(textSize);
-      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-      expect(
-        await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
-      ).toBe(0);
+      // L1.2: the language switch beside it is as discreet, with the same 44 px target.
+      const button = languageSwitch(page, SWITCH.fr);
+      await expect(button).toHaveCount(1);
+      await expectDiscreet(button);
 
       // K5: the page asked nothing of Crisp.
+      expect(crisp.map((request) => request.url())).toEqual([]);
+    });
+  }
+
+  for (const [where, path, heading] of PAGES) {
+    test(`L1.2, L3.6: on ${where}, once in English, the contact link is still the last link, discreet, to the same Crisp`, async ({
+      page,
+      crisp,
+      seededEvent,
+    }) => {
+      await open(page, path(seededEvent), heading);
+      const before = await contactLink(page).getAttribute("href");
+      const button = languageSwitch(page, SWITCH.fr);
+      await expect(button).toBeEnabled();
+      await button.click();
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+      await expect(languageSwitch(page, SWITCH.en)).toBeEnabled();
+
+      const link = contactLink(page, EN);
+      await expect(link).toHaveCount(1);
+      // L3.6: the very same address, not one rebuilt for the new language.
+      expect(before).toBe(CRISP_CHAT);
+      await expect(link).toHaveAttribute("href", before!);
+      await expectLastAndDiscreet(page, link);
+      await expectDiscreet(languageSwitch(page, SWITCH.en));
       expect(crisp.map((request) => request.url())).toEqual([]);
     });
   }
@@ -110,6 +153,7 @@ test.describe("contact link", () => {
     await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");
     await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
     await expect(page.getByRole("region", { name: PANEL }).getByRole("link", { name: FR })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: PANEL }).getByRole("button", { name: SWITCH.fr })).toHaveCount(0);
     await expect(page.getByRole("banner")).toHaveCount(0);
     expect(crisp.map((request) => request.url())).toEqual([]);
   });
