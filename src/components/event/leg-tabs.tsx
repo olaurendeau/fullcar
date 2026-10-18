@@ -4,23 +4,27 @@ import { coverage } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import type { WallClock } from "@/domain/wall-clock";
+import { cn } from "@/lib/utils";
 import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabPanel } from "./leg-tab-panel";
 
-/** A tab's label, then its persons without a car when there are any, in its accessible name (C9.3). */
-function LegTrigger({ leg, board }: { leg: Leg; board: VisibleLegBoard }) {
+/**
+ * A tab's label, then, under it, an amber pill with its persons without a car when there are
+ * any (C9.3): shown as it is read, part of the tab's name, nothing hidden. 48 px high when
+ * either tab has a pill, both the same; 44 px otherwise.
+ */
+function LegTrigger({ leg, withoutCar, tall }: { leg: Leg; withoutCar: number; tall: boolean }) {
   const t = useTranslations();
-  const { withoutCar } = coverage(board);
 
   return (
-    <TabsTrigger value={leg} className="h-11 gap-2">
-      {t(`Event.legs.${leg}`)}
+    <TabsTrigger value={leg} className={cn("flex-col gap-0.5 py-1", tall ? "h-12" : "h-11")}>
+      <span>{t(`Event.legs.${leg}`)}</span>
       {withoutCar > 0 && (
         <>
-          <span aria-hidden className="min-w-5 rounded-full bg-primary px-1.5 text-xs leading-5 text-primary-foreground">
-            {withoutCar}
+          {" "}
+          <span className="rounded-full bg-amber-100 px-2 text-xs leading-[18px] text-amber-950">
+            {t("Board.tabCount", { count: withoutCar })}
           </span>
-          <span className="sr-only"> {t("Board.tabCount", { count: withoutCar })}</span>
         </>
       )}
     </TabsTrigger>
@@ -47,12 +51,14 @@ export function LegTabs(props: {
     { leg: "aller", at: props.allerAt, board: props.aller },
     { leg: "retour", at: props.retourAt, board: props.retour },
   ] as const;
+  const counts = legs.map(({ board }) => coverage(board).withoutCar);
+  const tall = counts.some((count) => count > 0);
 
   return (
     <Tabs defaultValue="aller" className="gap-4">
       <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto noscript:hidden">
-        {legs.map(({ leg, board }) => (
-          <LegTrigger key={leg} leg={leg} board={board} />
+        {legs.map(({ leg }, index) => (
+          <LegTrigger key={leg} leg={leg} withoutCar={counts[index]} tall={tall} />
         ))}
       </TabsList>
       {legs.map(({ leg, at, board }) => (

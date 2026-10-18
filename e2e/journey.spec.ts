@@ -149,7 +149,8 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
         await expect(page.getByRole("tab", { name: words.aller })).toHaveAttribute("aria-selected", "true");
         await page.getByRole("tab", { name: words.retour }).click();
         await expect(page.getByRole("tab", { name: words.retour })).toHaveAttribute("aria-selected", "true");
-        await expect(page.getByRole("tabpanel").locator("time")).toHaveText(legs[1]);
+        // v4.1: the header holds the legs' dates; a tab has no date line of its own.
+        await expect(page.getByRole("tabpanel").locator("time")).toHaveCount(0);
       } else {
         await expect(page.getByRole("tab")).toHaveCount(0);
       }

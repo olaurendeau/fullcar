@@ -63,6 +63,29 @@ function car(scope: Page | Locator, driver: string): Locator {
   return scope.getByRole("article", { name: `Voiture de ${driver}` });
 }
 
+/** Whether two boxes share a line: each starts above where the other ends. */
+async function onOneLine(a: Locator, b: Locator): Promise<boolean> {
+  const [boxA, boxB] = await Promise.all([a.boundingBox(), b.boundingBox()]);
+  return boxA!.y < boxB!.y + boxB!.height && boxB!.y < boxA!.y + boxA!.height;
+}
+
+/** Whether `a` starts where `b` ends, or further right. */
+async function rightOf(a: Locator, b: Locator): Promise<boolean> {
+  const [boxA, boxB] = await Promise.all([a.boundingBox(), b.boundingBox()]);
+  return boxA!.x >= boxB!.x + boxB!.width;
+}
+
+/** Whether `a` starts where `b` ends, or further down. */
+async function below(a: Locator, b: Locator): Promise<boolean> {
+  const [boxA, boxB] = await Promise.all([a.boundingBox(), b.boundingBox()]);
+  return boxA!.y >= boxB!.y + boxB!.height;
+}
+
+/** Each tab's height, Aller first. */
+async function tabHeights(page: Page): Promise<number[]> {
+  return page.getByRole("tab").evaluateAll((tabs) => tabs.map((tab) => tab.getBoundingClientRect().height));
+}
+
 function withoutCar(scope: Page | Locator): Locator {
   return scope.getByRole("region", { name: "Sans voiture" });
 }
@@ -104,6 +127,28 @@ test.describe("board, with a retour", () => {
     await expect(zoe.getByText("Complet")).toBeVisible();
     await expect(zoe.getByText("Place libre")).toHaveCount(0);
     await expect(car(panel, "Marc")).toHaveCount(0);
+  });
+
+  test("C4.3: a card's time is on its title's line, on the right, before « Complet »", async ({
+    page,
+    seededEvent,
+  }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    const panel = page.getByRole("tabpanel");
+    const marc = car(panel, "Marc");
+    const marcTitle = marc.getByRole("heading", { name: "Voiture de Marc" });
+    expect(await onOneLine(marc.locator("time"), marcTitle)).toBe(true);
+    expect(await rightOf(marc.locator("time"), marcTitle)).toBe(true);
+
+    await selectTab(page, "Retour");
+    const zoe = car(panel, "Zoé");
+    const zoeTitle = zoe.getByRole("heading", { name: "Voiture de Zoé" });
+    const time = zoe.locator("time");
+    const full = zoe.getByText("Complet", { exact: true });
+    expect(await onOneLine(time, zoeTitle)).toBe(true);
+    expect(await onOneLine(full, time)).toBe(true);
+    expect(await rightOf(time, zoeTitle)).toBe(true);
+    expect(await rightOf(full, time)).toBe(true);
   });
 
   test("C3.4, C3.3: each leg lists its persons without a car; a person not concerned is in no list", async ({
@@ -286,6 +331,56 @@ test.describe("board, no number in the RSC payload", () => {
   }
 });
 
+test.describe("board, the tabs' pills", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("C9.3: 2 and 4 without a car, in an amber pill under each name, part of it and nothing hidden", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    const { id } = seededEvent;
+    const persons: string[] = [];
+    for (const firstName of ["Léa", "Tom", "Marc", "Zoé"]) persons.push(await person(db, id, firstName));
+    for (const somebody of persons.slice(0, 2)) await place(db, id, somebody, "aller", null);
+    for (const somebody of persons) await place(db, id, somebody, "retour", null);
+
+    await page.goto(`/e/${id}`);
+    const aller = page.getByRole("tab", { name: "Aller 2 sans voiture", exact: true });
+    const retour = page.getByRole("tab", { name: "Retour 4 sans voiture", exact: true });
+    const pill = aller.getByText("2 sans voiture", { exact: true });
+    await expect(pill).toBeVisible();
+    await expect(retour.getByText("4 sans voiture", { exact: true })).toBeVisible();
+    // What a tab says is what it shows: no hidden text, no bare number.
+    expect(await aller.innerText()).toMatch(/^Aller\s+2 sans voiture$/);
+    expect(await retour.innerText()).toMatch(/^Retour\s+4 sans voiture$/);
+    // Under the name, at 12 px, in the amber of a banner with seats missing.
+    expect(await below(pill, aller.getByText("Aller", { exact: true }))).toBe(true);
+    await expect(pill).toHaveCSS("font-size", "12px");
+    const banner = page.getByRole("tabpanel").getByRole("status");
+    await expect(banner).toHaveText("2 sans voiture · il manque 2 places");
+    for (const property of ["background-color", "color"]) {
+      const amber = await banner.evaluate((element, name) => getComputedStyle(element).getPropertyValue(name), property);
+      await expect(pill).toHaveCSS(property, amber);
+    }
+    expect(await tabHeights(page)).toEqual([48, 48]);
+  });
+
+  test("C9.3: no pill at 0, and both tabs the same height beside a pill", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const ride = await seedRide(db, id, await person(db, id, "Marc"));
+    await place(db, id, await person(db, id, "Léa"), "aller", ride);
+    await place(db, id, await person(db, id, "Tom"), "retour", null);
+
+    await page.goto(`/e/${id}`);
+    const aller = page.getByRole("tab", { name: "Aller", exact: true });
+    await expect(aller).toBeVisible();
+    expect(await aller.innerText()).toBe("Aller");
+    await expect(page.getByRole("tab", { name: "Retour 1 sans voiture", exact: true })).toBeVisible();
+    expect(await tabHeights(page)).toEqual([48, 48]);
+  });
+});
+
 test.describe("board, everyone seated", () => {
   test.use({ locale: "fr-FR" });
 
@@ -305,6 +400,8 @@ test.describe("board, everyone seated", () => {
     await expect(panel.getByRole("status")).toHaveText("Tout le monde a une place · 2 places libres");
     await expect(page.getByRole("tab", { name: "Aller", exact: true })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Retour", exact: true })).toBeVisible();
+    expect(await page.getByRole("tab").allInnerTexts()).toEqual(["Aller", "Retour"]);
+    expect(await tabHeights(page)).toEqual([44, 44]);
     await expect(withoutCar(panel)).toHaveCount(0);
 
     await selectTab(page, "Retour");
