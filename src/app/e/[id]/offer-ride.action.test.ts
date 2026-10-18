@@ -71,6 +71,27 @@ describe("offerRide (action)", () => {
     });
   });
 
+  // C11.6, as takeSeats: the page shows the state after a refusal, but keeps its form on a field error.
+  it("a refusal carries the state read after the commit, a field error does not", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+      const driver = { kind: "device", personId: lea.id };
+      expect(await offerRide(eventId, lea.token, anOffer({ driver }))).toMatchObject({ ok: true });
+      const state = await readEventState(db, eventId, lea.token);
+
+      const again = anOffer({ driver });
+      expect(await offerRide(eventId, lea.token, again)).toEqual({ ok: false, error: "alreadyDriving", state });
+      const forged = anOffer({ driver, otherLeg: { kind: "fly" } });
+      expect(await offerRide(eventId, lea.token, forged)).toEqual({ ok: false, error: "invalid", state });
+      const wrong = anOffer({ driver, leg: "retour", otherLeg: { kind: "drive", rideId: randomUUID(), location: "" } });
+      expect(await offerRide(eventId, lea.token, wrong)).toEqual({
+        ok: false,
+        errors: { otherLocation: "required", otherTime: "required" },
+        first: "otherLocation",
+      });
+    });
+  });
+
   it("C4.7: invalid, nothing is created, with one error per field", async () => {
     await inTransaction(async (trx) => {
       const { id: eventId } = await seedEvent(trx);

@@ -99,6 +99,17 @@ export async function lockRide(db: Kysely<Database>, ride: RideRef): Promise<Loc
   return row && { id: row.id, driverId: row.driver_id, seats: row.seats };
 }
 
+/**
+ * `lockRide` on each of `rides`, by ascending id, whatever their leg: a write that locks
+ * several Rides takes them in that order, so that two such writes never hold one each
+ * while waiting for the other (lock order: Rides by id, then Persons by id). The ids are
+ * those the database gives, lowercase, whose text order is the order of the uuids.
+ */
+export async function lockRides(db: Kysely<Database>, rides: readonly RideRef[]): Promise<void> {
+  const byId = [...rides].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const ride of byId) await lockRide(db, ride);
+}
+
 /** Whether that Ride existed on that leg, and now has these fields. */
 export async function updateRide(db: Kysely<Database>, ride: RideRef, fields: RideFields): Promise<boolean> {
   const result = await db
