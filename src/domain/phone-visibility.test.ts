@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { hashAdminToken } from "./admin-token";
 import { buildBoard, type BoardPerson, type BoardRows, type PlacementRow, type RideRow } from "./board";
 import type { Leg } from "./leg";
-import { phoneVisible, withVisiblePhones, type CarMembers } from "./phone-visibility";
+import {
+  phoneVisible,
+  withOrganiserPhones,
+  withVisiblePhones,
+  type CarMembers,
+  type OrganiserLegBoard,
+  type OrganiserProof,
+  type PhonesById,
+} from "./phone-visibility";
 
 const PHONES = new Map<string, string | null>([
   ["marc", "06 11 11 11 11"],
@@ -174,5 +183,180 @@ describe("withVisiblePhones", () => {
     const board = buildBoard(ROWS, ["aller", "retour"], deviceIds);
     withVisiblePhones(board, PHONES, deviceIds);
     expect(sentNumbers(board)).toEqual([]);
+  });
+});
+
+/*
+ * DO1 (#154, decided by the human on 2026-10-18): what the organiser area receives. The token
+ * below is a test value, not a real one, and no test title carries it nor any number.
+ */
+const ADMIN_TOKEN = "Zm9yLXRoZS10ZXN0cy1vbm";
+const STORED_HASH = hashAdminToken(ADMIN_TOKEN);
+const ONE_CHARACTER_OFF = `${ADMIN_TOKEN.slice(0, -1)}${ADMIN_TOKEN.endsWith("A") ? "B" : "A"}`;
+const RIGHT: OrganiserProof = { token: ADMIN_TOKEN, storedHash: STORED_HASH };
+
+const ORGANISER_PHONES = new Map<string, string | null>([
+  ["marc", "06 11 11 11 11"],
+  ["lea", "06 22 22 22 22"],
+  ["tom", "+33 6 33 33 33 33"],
+  ["ana", "07 44 44 44 44"],
+  ["eve", "07 66 66 66 66"],
+  ["sam", null],
+]);
+const EVE_PHONE = "07 66 66 66 66";
+
+/** The persons of the scene whose number's digits appear anywhere in what would be sent. */
+function sentOrganiserNumbers(value: unknown): string[] {
+  const sent = digits(JSON.stringify(value) ?? "");
+  return [...ORGANISER_PHONES.entries()].flatMap(([id, phone]) =>
+    phone !== null && sent.includes(digits(phone)) ? [id] : [],
+  );
+}
+
+/** Where a number's digits appear in the organiser's board: `{leg}.withoutCar` or `{leg}.cars`. */
+function phonePlaces(board: OrganiserLegBoard[], phone: string): string[] {
+  return board.flatMap((leg) =>
+    (["withoutCar", "cars"] as const).flatMap((list) =>
+      digits(JSON.stringify(leg[list])).includes(digits(phone)) ? [`${leg.leg}.${list}`] : [],
+    ),
+  );
+}
+
+type EveOnAller = "without a car" | "a passenger" | "a driver" | "not concerned" | "without a car on the retour only";
+
+/**
+ * Aller: Marc drives Léa (r1), Tom is without a car. Retour: Ana drives Tom (r3), Sam is
+ * without a car and has no number. Eve, the person of the case, is on the aller as the case
+ * says, and not concerned at the retour, except in the last case, where it is the reverse.
+ */
+function sceneWithEve(eve: EveOnAller): BoardRows {
+  const rides = [ride("r1", "aller", "marc", "07:00:00"), ride("r3", "retour", "ana", "17:00:00")];
+  const placements = [
+    placed("lea", "aller", "r1"),
+    placed("tom", "aller", null),
+    placed("tom", "retour", "r3"),
+    placed("sam", "retour", null),
+  ];
+  if (eve === "without a car") placements.push(placed("eve", "aller", null));
+  if (eve === "a passenger") placements.push(placed("eve", "aller", "r1"));
+  if (eve === "a driver") rides.push(ride("r2", "aller", "eve", "08:00:00"));
+  if (eve === "without a car on the retour only") placements.push(placed("eve", "retour", null));
+  return {
+    persons: ["marc", "lea", "tom", "ana", "eve", "sam"].map((id) => ({ id, firstName: id })),
+    rides,
+    placements,
+  };
+}
+
+/** The board is built without a device, as the organiser area has none. */
+function organiserBoard(rows: BoardRows, proof: OrganiserProof, phones: PhonesById = ORGANISER_PHONES) {
+  return withOrganiserPhones(buildBoard(rows, ["aller", "retour"], new Set()), phones, proof);
+}
+
+describe("withOrganiserPhones (DO1, O2.1)", () => {
+  describe.each<[EveOnAller, string[]]>([
+    ["without a car", ["aller.withoutCar"]],
+    ["a passenger", []],
+    ["a driver", []],
+    ["not concerned", []],
+    ["without a car on the retour only", ["retour.withoutCar"]],
+  ])("Eve %s on the aller", (eve, places) => {
+    it("the right token: her number is set only in the list without a car of the leg where she is", () => {
+      const board = organiserBoard(sceneWithEve(eve), RIGHT);
+      expect(board).toBeDefined();
+      expect(phonePlaces(board ?? [], EVE_PHONE)).toEqual(places);
+    });
+
+    it.each<[string, unknown]>([
+      ["a token one character off", ONE_CHARACTER_OFF],
+      ["no token", undefined],
+      ["an empty token", ""],
+      ["a number", 42],
+      ["null", null],
+      ["an object", { token: ADMIN_TOKEN }],
+      ["an array", [ADMIN_TOKEN]],
+    ])("%s: nothing at all", (_, token) => {
+      expect(organiserBoard(sceneWithEve(eve), { token, storedHash: STORED_HASH })).toBeUndefined();
+    });
+
+    it("the right token, but no stored hash: nothing at all", () => {
+      expect(organiserBoard(sceneWithEve(eve), { token: ADMIN_TOKEN, storedHash: undefined })).toBeUndefined();
+    });
+
+    it("the right token, but a stored hash that is not a hash: nothing at all", () => {
+      expect(organiserBoard(sceneWithEve(eve), { token: ADMIN_TOKEN, storedHash: "" })).toBeUndefined();
+      expect(organiserBoard(sceneWithEve(eve), { token: ADMIN_TOKEN, storedHash: ADMIN_TOKEN })).toBeUndefined();
+    });
+  });
+
+  it("O3.4: no number of a driver or a placed passenger, digits searched in the serialized output", () => {
+    // Marc and Eve drive at the aller, where Léa is placed; Ana drives Tom at the retour.
+    const board = organiserBoard(sceneWithEve("a driver"), RIGHT) ?? [];
+    expect(sentOrganiserNumbers(board)).toEqual(["tom"]);
+    expect(phonePlaces(board, "+33 6 33 33 33 33")).toEqual(["aller.withoutCar"]);
+  });
+
+  it("the list without a car keeps the board's order, with a null number for a person who has none", () => {
+    const [aller, retour] = organiserBoard(sceneWithEve("without a car"), RIGHT) ?? [];
+    expect(aller.withoutCar).toStrictEqual([
+      { id: "tom", firstName: "tom", phone: "+33 6 33 33 33 33" },
+      { id: "eve", firstName: "eve", phone: EVE_PHONE },
+    ]);
+    expect(retour.withoutCar).toStrictEqual([{ id: "sam", firstName: "sam", phone: null }]);
+  });
+
+  it("O2.3: a person without a car on both legs has her number in both lists", () => {
+    const rows = sceneWithEve("without a car");
+    const both: BoardRows = { ...rows, placements: [...rows.placements, placed("eve", "retour", null)] };
+    const board = organiserBoard(both, RIGHT) ?? [];
+    expect(phonePlaces(board, EVE_PHONE)).toEqual(["aller.withoutCar", "retour.withoutCar"]);
+  });
+
+  it.each<[string, string | null | undefined, boolean]>([
+    ["a number", EVE_PHONE, true],
+    ["no entry", undefined, false],
+    ["a null number", null, false],
+    ["an empty string", "", false],
+  ])("O3.4: a driver with %s: whether she has a number, never the number", (_, phone, expected) => {
+    const phones = new Map(ORGANISER_PHONES);
+    if (phone === undefined) phones.delete("eve");
+    else phones.set("eve", phone);
+    const board = organiserBoard(sceneWithEve("a driver"), RIGHT, phones) ?? [];
+    const r2 = board[0].cars.find((card) => card.id === "r2");
+    expect(r2?.driverHasPhone).toBe(expected);
+    expect(sentOrganiserNumbers(board)).not.toContain("eve");
+  });
+
+  it("O3.4: a car says whether its driver has a number, and carries no number of anyone in it", () => {
+    const [aller, retour] = organiserBoard(sceneWithEve("a passenger"), RIGHT) ?? [];
+    const r1 = aller.cars[0];
+    expect(r1.driverHasPhone).toBe(true);
+    expect(r1.driver).toStrictEqual({ id: "marc", firstName: "marc" });
+    expect(r1.passengers).toStrictEqual([
+      { id: "lea", firstName: "lea" },
+      { id: "eve", firstName: "eve" },
+    ]);
+    expect(sentOrganiserNumbers(aller.cars)).toEqual([]);
+    expect(sentOrganiserNumbers(retour.cars)).toEqual([]);
+  });
+
+  it("does not take the device's section: only the leg, its cars and its list without a car", () => {
+    const board = buildBoard(sceneWithEve("without a car"), ["aller", "retour"], new Set(["tom"]));
+    const organiser = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT) ?? [];
+    expect(organiser.map((leg) => Object.keys(leg).sort())).toEqual([
+      ["cars", "leg", "withoutCar"],
+      ["cars", "leg", "withoutCar"],
+    ]);
+  });
+
+  it("leaves the board it is given as it was", () => {
+    const board = buildBoard(sceneWithEve("a passenger"), ["aller", "retour"], new Set());
+    const before = structuredClone(board);
+    const organiser = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT) ?? [];
+    organiser[0].cars[0].driver.firstName = "changed";
+    organiser[0].cars[0].passengers[0].firstName = "changed";
+    organiser[0].withoutCar[0].firstName = "changed";
+    expect(board).toStrictEqual(before);
+    expect(sentOrganiserNumbers(board)).toEqual([]);
   });
 });

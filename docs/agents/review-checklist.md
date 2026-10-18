@@ -26,21 +26,30 @@ celui qui écrit le code.
 ## Visibilité du téléphone
 
 - La règle (même voiture pour le même leg, conducteur compris, ou personne de l'appareil ;
-  l'admin arrive avec « Administrer l'événement ») est appliquée **côté serveur**. Masquer
-  dans la vue ne compte pas : la donnée ne doit pas quitter le serveur.
+  pour l'organisateur, à partir de #154, le numéro d'une personne sans voiture sur un leg,
+  dans la liste de ce leg de la réponse de l'espace organisateur, et nulle part ailleurs)
+  est appliquée **côté serveur**. Masquer dans la vue ne compte pas : la donnée ne doit pas
+  quitter le serveur.
 - Un seul endroit décide : à partir de #66, `src/domain/phone-visibility.ts`. Une deuxième
   implémentation de la règle est bloquante, même si elle est correcte aujourd'hui.
-- Le numéro est posé voiture par voiture, et dans la section des personnes de l'appareil,
-  jamais sur la personne : un numéro qui suit la personne d'un leg à l'autre est une fuite.
+- Le numéro est posé voiture par voiture, et dans la section des personnes de l'appareil
+  et, pour l'organisateur, dans la liste « Sans voiture » du leg, jamais sur la personne :
+  un numéro qui suit la personne d'un leg à l'autre est une fuite.
 - Une seule requête lit la colonne `phone` : à partir de #66, `src/db/event-rows.ts`. Une
   autre lecture de `phone` est bloquante. Lire la ligne entière d'une personne compte comme
   lire `phone`, même si le mot n'apparaît pas : `selectAll()` sur `person`, `returningAll()`
   après `insertInto("person")` ou une mise à jour de `person`, une fonction JSON qui prend
   toute la ligne (`to_json(person)`, `row_to_json`, `jsonObjectFrom` sur `selectAll()`).
-- `event-rows.ts` renvoie les téléphones à part (`phonesById`), et seul `withVisiblePhones`
-  (`phone-visibility.ts`) les reçoit. Un `row.phone` recopié ailleurs (dans le board, par
-  exemple) est bloquant, comme une liste de colonnes contenant `phone` exportée par
-  `event-rows.ts` : la porte de merge ne voit ni l'un ni l'autre.
+- `event-rows.ts` renvoie les téléphones à part (`phonesById`), et seuls
+  `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`) les reçoivent. Un
+  `row.phone` recopié ailleurs (dans le board, par exemple) est bloquant, comme une liste de
+  colonnes contenant `phone` exportée par `event-rows.ts` : la porte de merge ne voit ni
+  l'un ni l'autre.
+- La réponse de l'espace organisateur ne porte aucun numéro de conducteur, de passager
+  placé ni de personne pas concernée. Pour une voiture, elle dit seulement si son conducteur
+  a un numéro. Pour un jeton d'admin faux, absent ou mal formé, elle ne contient que
+  `{ state: "invalid" }`. Un booléen « vérifié » passé à la règle au lieu du jeton est
+  bloquant : la règle vérifie elle-même.
 - Vérifier les réponses d'API, pas seulement les écrans : un champ `phone` dans un JSON est
   une fuite même si aucune vue ne l'affiche.
 
