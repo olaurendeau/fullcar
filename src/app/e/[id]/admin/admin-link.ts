@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { checkAdminLink } from "./actions";
+import type { OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import { loadOrganiserPanel } from "./actions";
 
 /*
  * The only client code that touches the organiser's token (docs/agents/architecture.md,
  * "Jetons"). The token travels in the URL's fragment, which the browser never sends, and
- * in the body of the check: never in a path, a query string, a log or an error report.
- * It is compared on the server only.
+ * in the body of `loadOrganiserPanel`: never in a path, a query string, a header, a log,
+ * an error report or the browser's storage. It is compared on the server only.
  */
 
 /**
@@ -28,18 +29,22 @@ export function organiserLinks(origin: string, id: string, token: string) {
 
 export type AdminLinkCheck =
   | { state: "checking" }
-  | { state: "valid"; publicUrl: string; adminUrl: string }
+  | { state: "valid"; publicUrl: string; adminUrl: string; legs: OrganiserLeg[] }
   | { state: "invalid" }
   | { state: "failed" };
 
 /**
- * What the server's answer means: `true` the panel (C4.9), `false` "not valid" (C6.5).
- * Anything else, such as the `undefined` Next resolves an action with on an
+ * What the server's answer means: the panel with its legs (C4.9 amended), or "not valid"
+ * (C6.5). Anything else, such as the `undefined` Next resolves an action with on an
  * `x-action-redirect` response, is a failed check: a good link never reads "not valid".
  */
 export function checkFromAnswer(answer: unknown, origin: string, id: string, token: string): AdminLinkCheck {
-  if (answer === true && token) return { state: "valid", ...organiserLinks(origin, id, token) };
-  if (answer === false) return { state: "invalid" };
+  if (typeof answer !== "object" || answer === null) return { state: "failed" };
+  const { state, legs } = answer as { state?: unknown; legs?: unknown };
+  if (state === "panel" && Array.isArray(legs) && token) {
+    return { state: "valid", ...organiserLinks(origin, id, token), legs: legs as OrganiserLeg[] };
+  }
+  if (state === "invalid") return { state: "invalid" };
   return { state: "failed" };
 }
 
@@ -56,8 +61,10 @@ export function useAdminLinkCheck(id: string): AdminLinkCheck {
     function verify() {
       const run = ++latest;
       const token = tokenInFragment(window.location.hash);
-      const valid = token ? checkAdminLink(id, token) : Promise.resolve(false);
-      valid.then(
+      const read: Promise<OrganiserPanelAnswer> = token
+        ? loadOrganiserPanel(id, token)
+        : Promise.resolve({ state: "invalid" });
+      read.then(
         (answer) => {
           if (run === latest) setCheck(checkFromAnswer(answer, window.location.origin, id, token ?? ""));
         },

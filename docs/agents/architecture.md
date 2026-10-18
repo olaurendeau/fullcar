@@ -211,7 +211,9 @@ prise de contrôle, et un jeton deviné l'est aussi.
 - **Jamais dans le chemin ni dans la query string d'une URL.** Vercel journalise le chemin de
   chaque requête, et ces journaux ne nous appartiennent pas. Un jeton qui voyage dans une URL
   le fait dans le **fragment** (`#…`), que le navigateur n'envoie jamais au serveur : le
-  client le lit et le transmet dans le corps de la requête.
+  client le lit et le transmet dans le corps de la requête. Pour le lien admin, ce corps est
+  celui de `loadOrganiserPanel`, qui répond `{ state: "invalid" }` sans aucune donnée, ou le
+  panneau, et rien d'autre (amendement de #3 C4.9). Le panneau n'est jamais dans le HTML.
   - lien admin : `/e/{id}/admin#{token}`
   - lien perso : `/e/{id}/moi#{token}`
 - **Jamais journalisés**, ni en clair ni tronqués, ni côté serveur ni dans un rapport
@@ -296,8 +298,9 @@ sera invisible dans l'UI de celui qui l'a écrit. À partir de #66, cet endroit 
 (`phonesById`), et seuls `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`)
 les reçoivent et les posent : un `row.phone` recopié ailleurs, dans le board par exemple,
 re-dériverait la règle. `withOrganiserPhones` vérifie lui-même le jeton d'admin
-(`adminTokenMatches`) et ne rend rien s'il ne correspond pas. Une liste de colonnes qui contient `phone` reste privée à `event-rows.ts` (non exportée) :
-un `.select(cette liste)` ailleurs serait une nouvelle lecture.
+(`adminTokenMatches`) et ne rend rien s'il ne correspond pas. Une liste de colonnes qui
+contient `phone` reste privée à `event-rows.ts` (non exportée) : un `.select(cette liste)`
+ailleurs serait une nouvelle lecture.
 
 ## i18n
 

@@ -5,8 +5,9 @@ import type { Database } from "./schema";
 
 /**
  * The rows of one event, as the board reads them, and the persons' numbers apart: only
- * `withVisiblePhones` (src/domain/phone-visibility.ts) receives `phonesById` and sets the
- * numbers a device may see. No row of the board carries one.
+ * `withVisiblePhones` and `withOrganiserPhones` (src/domain/phone-visibility.ts) receive
+ * `phonesById`, and set the numbers a device, or the organiser (DO1), may see. No row of
+ * the board carries one.
  */
 export interface EventRows extends BoardRows {
   phonesById: PhonesById;

@@ -1,25 +1,25 @@
 "use server";
 
 import { getDb } from "@/db/client";
-import { readAdminTokenHash } from "@/db/events";
 import { databaseFailure } from "@/db/failure";
-import { adminTokenMatches } from "@/domain/admin-token";
+import type { OrganiserPanelAnswer } from "@/domain/organiser-panel";
 import { isPublicId } from "@/domain/public-id";
+import { readOrganiserState } from "../organiser-state";
 
 /**
- * Whether `token` is the organiser's token of event `id` (C4.9, C8.4). The client reads
- * the token from the URL's fragment and sends it here, in the request's body.
- * A malformed id is refused without reading the database; a token that is not a string
- * is refused by the comparison. Never logs the token, never puts it in an error.
+ * The organiser area of event `id` (#3 C4.9 amended, C8.4; epic #154, O6.1): the panel when
+ * `token` is the event's admin token, `{ state: "invalid" }` and nothing else otherwise.
+ * The client reads the token from the URL's fragment and sends it here, in the request's
+ * body: this is the only action that receives it. A malformed id reads nothing; a token
+ * that is not a string is refused by the comparison. Never logs the token nor the panel,
+ * never puts either in an error.
  */
-export async function checkAdminLink(id: unknown, token: unknown): Promise<boolean> {
-  if (!isPublicId(id)) return false;
-  let storedHash: string | undefined;
+export async function loadOrganiserPanel(id: unknown, token: unknown): Promise<OrganiserPanelAnswer> {
+  if (!isPublicId(id)) return { state: "invalid" };
   try {
-    storedHash = await readAdminTokenHash(getDb(), id);
+    return await readOrganiserState(getDb(), id, token);
   } catch (error) {
     // Only its code is logged: no other detail of a Postgres error leaves the server.
-    throw databaseFailure("checkAdminLink: the event could not be read", error);
+    throw databaseFailure("loadOrganiserPanel: the panel could not be read", error);
   }
-  return adminTokenMatches(token, storedHash);
 }
