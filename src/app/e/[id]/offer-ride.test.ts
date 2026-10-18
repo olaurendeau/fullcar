@@ -29,6 +29,63 @@ function aNewDriver(firstName = "Ana") {
   return { kind: "new" as const, personId: randomUUID(), firstName, phone: "06 44 44 44 44" };
 }
 
+/** « Je ramène aussi » / « J'emmène aussi »: a second car on the other leg. */
+function aDrive(fields: Record<string, unknown> = {}) {
+  return { kind: "drive" as const, rideId: randomUUID(), location: "Salle Paul Bert", time: "18:30", ...fields };
+}
+
+type Choice = "keep" | "withoutCar" | "notConcerned" | "drive";
+type Start = "new" | "notConcerned" | "withoutCar" | "passenger";
+
+/**
+ * Retour: Marc drives r2, 3 seats. Ana, who offers a car on the aller, is new to the event,
+ * or of her device: without a car on the aller, and on the retour as `start` says.
+ */
+async function aRetourScene(db: Db, eventId: string, start: Start) {
+  const marc = await seedPerson(db, eventId, { firstName: "Marc" });
+  const r2 = await seedRide(db, eventId, marc.id, { leg: "retour" });
+  if (start === "new") {
+    const driver = aNewDriver();
+    return { marc, r2, token: newToken(), driver, driverId: driver.personId };
+  }
+  const ana = await seedPerson(db, eventId, { firstName: "Ana" });
+  await seedPlacement(db, { personId: ana.id, eventId, leg: "aller", rideId: null });
+  if (start !== "notConcerned") {
+    const rideId = start === "passenger" ? r2 : null;
+    await seedPlacement(db, { personId: ana.id, eventId, leg: "retour", rideId });
+  }
+  return { marc, r2, token: ana.token, driver: { kind: "device" as const, personId: ana.id }, driverId: ana.id };
+}
+
+/** Ana's state on the retour after the offer: what she chose, or what she had if she kept it. */
+function retourAfter(choice: Choice, start: Start, r2: string, drive: string) {
+  if (choice === "drive") return { kind: "driver", rideId: drive };
+  if (choice !== "keep") return { kind: choice };
+  if (start === "passenger") return { kind: "passenger", rideId: r2 };
+  return { kind: start === "new" ? "notConcerned" : start };
+}
+
+/**
+ * Resolves once `sessions` sessions wait for a lock the session `pid` holds, within 3 s,
+ * under Vitest's 5 s. A session queued behind another for the same row waits for that one
+ * (its tuple lock), not for `pid`: it counts too.
+ */
+async function blockedBy(db: Db, pid: number, sessions = 1) {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const { rows } = await sql<{ pid: number }>`
+      with recursive waiting(pid) as (
+        select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))
+        union
+        select activity.pid from pg_stat_activity activity, waiting
+        where waiting.pid = any(pg_blocking_pids(activity.pid))
+      )
+      select pid from waiting`.execute(db);
+    if (rows.length >= sessions) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`fewer than ${sessions} sessions waited for that lock`);
+}
+
 /**
  * Aller: Marc drives Léa (r1), Tom is without a car. Retour: Léa and Tom are without a car.
  * Each has their own device.
@@ -219,6 +276,10 @@ describe("offerRide", () => {
     ["a driver id that is not a uuid", (offer) => ({ ...offer, driver: { kind: "device", personId: 7 } })],
     ["no driver", (offer) => ({ ...offer, driver: undefined })],
     ["an offer that is not an object", () => "car"],
+    ["another leg of no known kind", (offer) => ({ ...offer, otherLeg: { kind: "fly" } })],
+    ["another leg that is not an object", (offer) => ({ ...offer, otherLeg: "keep" })],
+    ["a car on the other leg without a uuid", (offer) => ({ ...offer, otherLeg: { ...aDrive(), rideId: "r2" } })],
+    ["a car on the other leg with this leg's id", (offer) => ({ ...offer, otherLeg: { ...aDrive(), rideId: offer.rideId } })],
   ])("refuses %s as invalid, as eventNotFound on an unknown event, and changes nothing", async (_, forge) => {
     await withRollback(async (trx) => {
       const { eventId, lea } = await aScene(trx);
@@ -237,7 +298,9 @@ describe("offerRide", () => {
       },
     });
     const offer = anOffer("aller", { kind: "device", personId: randomUUID() });
-    for (const sent of [offer, { ...offer, rideId: "r1" }, "car"]) {
+    // Field errors included: a malformed id is refused before them.
+    const withFieldErrors = { ...offer, location: "", seats: "9", otherLeg: { kind: "drive", rideId: randomUUID() } };
+    for (const sent of [offer, withFieldErrors, { ...offer, rideId: "r1" }, "car"]) {
       expect(await offerRide(untouchable, "Ab3dEf70", newToken(), sent)).toEqual({ ok: false, error: "eventNotFound" });
     }
   });
@@ -278,29 +341,171 @@ describe("offerRide", () => {
     });
   });
 
+  describe("the other leg", () => {
+    const choices: Choice[] = ["drive", "withoutCar", "notConcerned", "keep"];
+    const starts: Start[] = ["new", "notConcerned", "withoutCar", "passenger"];
+
+    it.each(choices.flatMap((choice) => starts.map((start) => [choice, start] as const)))(
+      "C4.11, C4.12: %s on the retour, from %s there",
+      async (choice, start) => {
+        await withRollback(async (trx) => {
+          const { id: eventId } = await seedEvent(trx);
+          const { r2, marc, token, driver, driverId } = await aRetourScene(trx, eventId, start);
+          const drive = aDrive();
+          const otherLeg = choice === "drive" ? drive : { kind: choice };
+          const offer = anOffer("aller", driver, { otherLeg });
+
+          expect(await offerRide(trx, eventId, token, offer)).toEqual({ ok: true, rideId: offer.rideId, driverId });
+
+          const state = await readEventState(trx, eventId, token);
+          expect(legOf(state, "aller").device).toEqual([
+            expect.objectContaining({ id: driverId, state: { kind: "driver", rideId: offer.rideId } }),
+          ]);
+          const retour = legOf(state, "retour");
+          const expected = retourAfter(choice, start, r2, drive.rideId);
+          expect(retour.device).toEqual([expect.objectContaining({ id: driverId, state: expect.objectContaining(expected) })]);
+          // The retour's cars: Marc's, which she leaves unless she keeps her seat (C4.12), and hers if she drives.
+          const stays = expected.kind === "passenger";
+          expect(retour.cars.map((car) => [car.id, car.driver.id, car.passengers.map((person) => person.id), car.freeSeats])).toEqual(
+            [[r2, marc.id, stays ? [driverId] : [], stays ? 2 : 3], ...(choice === "drive" ? [[drive.rideId, driverId, [], 3]] : [])],
+          );
+          // C12.8 on both legs: no Placement where she drives.
+          expect(await findPlacement(trx, { personId: driverId, eventId, leg: "aller" })).toBeUndefined();
+          if (choice === "drive") {
+            expect(await findPlacement(trx, { personId: driverId, eventId, leg: "retour" })).toBeUndefined();
+          }
+        });
+      },
+    );
+
+    it("C4.2: a car on the retour too, by the same driver, with the same seats and note, at the place and time sent", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, tom } = await aScene(trx);
+        const drive = aDrive();
+        const offer = anOffer("aller", { kind: "device", personId: tom.id }, { seats: "5", note: "Coffre plein", otherLeg: drive });
+
+        expect(await offerRide(trx, eventId, tom.token, offer)).toMatchObject({ ok: true });
+
+        const fields = ["id", "leg", "driver_id", "location", "departure_time", "seats", "note"] as const;
+        const rides = await trx.selectFrom("ride").select(fields).where("driver_id", "=", tom.id).orderBy("leg").execute();
+        expect(rides).toEqual([
+          { ...{ id: offer.rideId, leg: "aller", driver_id: tom.id }, location: "Gare de Cesson", departure_time: "08:00:00", seats: 5, note: "Coffre plein" },
+          { ...{ id: drive.rideId, leg: "retour", driver_id: tom.id }, location: "Salle Paul Bert", departure_time: "18:30:00", seats: 5, note: "Coffre plein" },
+        ]);
+      });
+    });
+
+    it("C4.10: the same offer sent again with a car on the retour creates no third car and no second Placement", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, lea } = await aScene(trx);
+        const offer = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg: aDrive() });
+        const first = await offerRide(trx, eventId, lea.token, offer);
+        const once = await rowsOf(trx, eventId);
+
+        expect(await offerRide(trx, eventId, lea.token, offer)).toEqual(first);
+        expect(await rowsOf(trx, eventId)).toEqual(once);
+        expect(once.rides.filter((ride) => ride.driver_id === lea.id)).toHaveLength(2);
+        const state = await readEventState(trx, eventId, lea.token);
+        expect(legOf(state, "retour").device.map((person) => person.state.kind)).toEqual(["driver"]);
+      });
+    });
+
+    it.each(["withoutCar", "notConcerned", "drive"] as const)(
+      "C4.6: driving on the aller already, %s there is refused, and nothing changes",
+      async (choice) => {
+        await withRollback(async (trx) => {
+          const { eventId, marc } = await aScene(trx);
+          const before = await rowsOf(trx, eventId);
+          const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
+          const offer = anOffer("retour", { kind: "device", personId: marc.id }, { otherLeg });
+          expect(await offerRide(trx, eventId, marc.token, offer)).toEqual({ ok: false, error: "alreadyDriving" });
+          expect(await rowsOf(trx, eventId)).toEqual(before);
+        });
+      },
+    );
+
+    it("C4.7: the retour's place and time get their own errors, after the note, and nothing is created", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, tom } = await aScene(trx);
+        const before = await rowsOf(trx, eventId);
+        const driver = { kind: "device" as const, personId: tom.id };
+        const otherLeg = aDrive({ location: " ", time: "7h" });
+        expect(await offerRide(trx, eventId, tom.token, anOffer("aller", driver, { otherLeg }))).toEqual({
+          ok: false,
+          errors: { otherLocation: "required", otherTime: "invalid" },
+          first: "otherLocation",
+        });
+        const withNote = anOffer("aller", driver, { note: "n".repeat(201), otherLeg: aDrive({ time: "" }) });
+        expect(await offerRide(trx, eventId, tom.token, withNote)).toEqual({
+          ok: false,
+          errors: { note: "tooLong", otherTime: "required" },
+          first: "note",
+        });
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+      });
+    });
+
+    it.each(["withoutCar", "notConcerned", "drive"] as const)(
+      "refuses %s on the other leg of an event without a retour, and accepts keep",
+      async (choice) => {
+        await withRollback(async (trx) => {
+          const { id: eventId } = await seedEvent(trx, { retourAt: null });
+          const { id, token } = await seedPerson(trx, eventId);
+          const driver = { kind: "device" as const, personId: id };
+          const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
+          expect(await offerRide(trx, eventId, token, anOffer("aller", driver, { otherLeg }))).toEqual({ ok: false, error: "invalid" });
+          expect((await rowsOf(trx, eventId)).rides).toEqual([]);
+          const kept = anOffer("aller", driver, { otherLeg: { kind: "keep" } });
+          expect(await offerRide(trx, eventId, token, kept)).toMatchObject({ ok: true });
+        });
+      },
+    );
+  });
+
   describe("on committed data", () => {
-    /** A connection whose insert into `ride` fails, as if the database broke at that moment. */
-    const failingRideInsert: KyselyPlugin = {
-      transformQuery({ node }) {
-        const into = node.kind === "InsertQueryNode" ? node.into : undefined;
-        if (into && TableNode.is(into) && into.table.identifier.name === "ride") throw new Error("injected failure");
-        return node;
-      },
-      async transformResult({ result }) {
-        return result;
-      },
-    };
+    /** A plugin whose inserts into `ride` fail from the `nth` on, as if the database broke at that moment. */
+    function failingRideInsert(nth = 1): KyselyPlugin {
+      let inserts = 0;
+      return {
+        transformQuery({ node }) {
+          const into = node.kind === "InsertQueryNode" ? node.into : undefined;
+          if (into && TableNode.is(into) && into.table.identifier.name === "ride" && ++inserts >= nth) {
+            throw new Error("injected failure");
+          }
+          return node;
+        },
+        async transformResult({ result }) {
+          return result;
+        },
+      };
+    }
 
     it("C4.5: one write: a failure at the insert of the Ride leaves the seat and the person as they were", async () => {
       await withCommittedEvent(async (db, eventId) => {
         const { lea } = await seedScene(db, eventId);
         const before = await rowsOf(db, eventId);
-        const failing = db.withPlugin(failingRideInsert);
+        const failing = db.withPlugin(failingRideInsert());
 
         const asPassenger = anOffer("aller", { kind: "device", personId: lea.id });
         await expect(offerRide(failing, eventId, lea.token, asPassenger)).rejects.toThrow("injected failure");
         const asNewcomer = anOffer("aller", aNewDriver());
         await expect(offerRide(failing, eventId, newToken(), asNewcomer)).rejects.toThrow("injected failure");
+        expect(await rowsOf(db, eventId)).toEqual(before);
+      });
+    });
+
+    // The car on the retour is inserted first, then the aller's: the second insert fails
+    // after every other write, the first before the aller's.
+    it.each([
+      ["the retour's car", 1],
+      ["the aller's car, the last write", 2],
+    ])("C4.5: all or nothing: a failure at the insert of %s changes neither leg", async (_, nth) => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { lea } = await seedScene(db, eventId);
+        const before = await rowsOf(db, eventId);
+        const offer = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg: aDrive() });
+        const failing = db.withPlugin(failingRideInsert(nth));
+        await expect(offerRide(failing, eventId, lea.token, offer)).rejects.toThrow("injected failure");
         expect(await rowsOf(db, eventId)).toEqual(before);
       });
     });
@@ -319,17 +524,6 @@ describe("offerRide", () => {
         expect(await rowsOf(db, eventId)).toEqual(before);
       });
     });
-
-    /** Resolves once a session waits for a lock that the session `pid` holds. */
-    async function blockedBy(db: Db, pid: number) {
-      for (let attempt = 0; attempt < 200; attempt++) {
-        const { rows } = await sql<{ pid: number }>`
-          select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`.execute(db);
-        if (rows.length > 0) return;
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      throw new Error("no session waited for that lock");
-    }
 
     // Under READ COMMITTED, the level of its write: Tom is placed in Marc's car while his
     // offer waits for his Person. Once it gets her, it sees the seat he took, locks that
@@ -379,6 +573,55 @@ describe("offerRide", () => {
         const aller = legOf(await readEventState(db, eventId, tom.token), "aller");
         expect(aller.cars.find((car) => car.id === r1)?.passengers.map((person) => person.id)).not.toContain(tom.id);
         expect(await findPlacement(db, { personId: tom.id, eventId, leg: "aller" })).toBeUndefined();
+      });
+    });
+
+    // Léa offers on the aller and Tom on the retour, each with a car on the other leg: each
+    // leaves A (aller) and B (retour), in reverse roles. Locked by leg, Léa would hold A and
+    // wait for B while Tom holds B and waits for A. Locked by id, both start with the same one.
+    it("locks: two offers that leave the same two Rides in reverse roles both succeed, without a deadlock", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const marc = await seedPerson(db, eventId, { firstName: "Marc" });
+        const ines = await seedPerson(db, eventId, { firstName: "Inès" });
+        const a = await seedRide(db, eventId, marc.id, { leg: "aller" });
+        const b = await seedRide(db, eventId, ines.id, { leg: "retour" });
+        const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+        const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+        for (const person of [lea, tom]) {
+          await seedPlacement(db, { personId: person.id, eventId, leg: "aller", rideId: a });
+          await seedPlacement(db, { personId: person.id, eventId, leg: "retour", rideId: b });
+        }
+
+        // Both Rides held, so that both offers wait at their first lock, then start together.
+        const holder = await db.startTransaction().setIsolationLevel("read committed").execute();
+        let offers: Promise<PromiseSettledResult<unknown>[]> | undefined;
+        try {
+          await sql`select id from ride where id in (${a}, ${b}) for update`.execute(holder);
+          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
+          const fromAller = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg: aDrive() });
+          const fromRetour = anOffer("retour", { kind: "device", personId: tom.id }, { otherLeg: aDrive({ time: "08:00" }) });
+          offers = Promise.allSettled([
+            offerRide(db, eventId, lea.token, fromAller),
+            offerRide(db, eventId, tom.token, fromRetour),
+          ]);
+          await blockedBy(db, rows[0].pid, 2);
+          await holder.commit().execute();
+        } finally {
+          try {
+            await holder.rollback().execute();
+          } catch {
+            // Committed.
+          }
+        }
+
+        const ok = { status: "fulfilled", value: expect.objectContaining({ ok: true }) };
+        expect(await offers).toEqual([ok, ok]);
+        const state = await readEventState(db, eventId, lea.token);
+        for (const leg of ["aller", "retour"] as const) {
+          const { cars } = legOf(state, leg);
+          expect(cars.flatMap((car) => car.passengers)).toEqual([]);
+          expect(cars.map((car) => car.driver.id).sort()).toEqual([leg === "aller" ? marc.id : ines.id, lea.id, tom.id].sort());
+        }
       });
     });
   });

@@ -400,9 +400,13 @@ describe("setPersonLeg", () => {
 });
 
 describe("C12.4: the same creation sent twice at once", () => {
-  /** Resolves once a session waits on a lock (`wait_event_type = 'Lock'`) that the session `pid` holds. */
+  /**
+   * Resolves once a session waits on a lock (`wait_event_type = 'Lock'`) that the session
+   * `pid` holds. Within 3 s, under Vitest's 5 s: a send that never waits fails on this
+   * message, and `first` is rolled back before the test ends.
+   */
   async function waitingForLockOf(db: Db, pid: number) {
-    for (let attempt = 0; attempt < 200; attempt++) {
+    for (let attempt = 0; attempt < 120; attempt++) {
       const { rows } = await sql<{ pid: number }>`
         select pid from pg_stat_activity
         where wait_event_type = 'Lock' and ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);

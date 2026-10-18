@@ -183,13 +183,23 @@ verrouille pas le Ride et n'en a pas besoin : un `DELETE` ne déclenche pas
 verrouille ni Ride ni Person. Au pire, une prise de place simultanée compte encore la place
 qui se libère et la refuse, sans jamais surcharger la voiture.
 
+Une écriture qui verrouille **plusieurs** Rides les verrouille par identifiant croissant,
+quel que soit leur leg (`lockRides`, `src/db/rides.ts`), puis les Persons par identifiant
+croissant (`lockPersons`, `src/db/persons.ts`). Ainsi, proposer une voiture sur les deux
+legs (`offerRide`, `src/app/e/[id]/offer-ride.ts`) verrouille les Rides que qui conduit
+quitte, sur ce leg et sur l'autre, puis sa Person. Verrouillés par leg, deux propositions
+qui quittent les deux mêmes Rides dans des rôles inverses tiendraient chacune l'un et
+attendraient l'autre. Une écriture qui ne verrouille qu'un Ride, comme une prise de place,
+suit déjà cet ordre. Les Rides qu'une écriture crée ne sont pas verrouillés : personne ne
+les voit avant la validation.
+
 Le déclencheur `placement_driver_on_leg` tient lui-même cet ordre : quand `ride_id` est
 renseigné, il prend le Ride `FOR KEY SHARE`, le verrou que la clé `placement → ride`
 prend à l'insertion, **avant** la Person `FOR UPDATE`. Une écriture qui aurait oublié
 `lockRide` attend donc le Ride sans tenir la Person, au lieu de se bloquer mutuellement
 avec une prise de place. Ces verrous se prouvent par des tests de concurrence (voir « Base
-de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts` et
-`src/db/participant-tables.test.ts`.
+de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts`,
+`src/db/participant-tables.test.ts` et `src/app/e/[id]/offer-ride.test.ts`.
 
 ## Jetons, et pourquoi ils sont la pièce critique
 
