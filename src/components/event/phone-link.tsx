@@ -6,17 +6,8 @@ import { cn } from "@/lib/utils";
  * A number the state carries, as a `tel:` link of 44 px (C10.1, C11.5): its text is the
  * number as typed, its name « Appeler {prénom} au {numéro} ». The link dials its digits.
  */
-export function PhoneLink({
-  firstName,
-  phone,
-  icon = false,
-  className,
-}: {
-  firstName: string;
-  phone: string;
-  icon?: boolean;
-  className?: string;
-}) {
+export function PhoneLink(props: { firstName: string; phone: string; icon?: boolean; className?: string }) {
+  const { firstName, phone, icon = false, className } = props;
   const t = useTranslations("Board");
 
   return (

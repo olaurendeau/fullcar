@@ -1,11 +1,12 @@
 import { LoaderCircle, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import type { DeviceState } from "@/domain/board";
 import type { Leg } from "@/domain/leg";
 import type { VisibleDevicePerson } from "@/domain/phone-visibility";
-import type { DeviceStatus } from "@/domain/tap";
 import { cn } from "@/lib/utils";
+import type { BoardDevice } from "./leg-panel";
 import { PhoneLink } from "./phone-link";
 
 /** The dot of a state: full in a car, amber without a car, empty not concerned. The text says it alone. */
@@ -25,24 +26,44 @@ function StateText({ state }: { state: DeviceState }) {
  * The device's persons on one leg (C2.2): each one's state on this leg, and their own
  * number. Absent without a person. While they are read, a line in its place (C5.9); if the
  * read fails, an alert with « Réessayer ». No action in this task (#89 adds them).
+ *
+ * « Réessayer » goes away as it is pressed: the focus follows what takes its place (the
+ * line while reading, then the section's title, or « Réessayer » again after a failure),
+ * and goes to `device.refocus()` when the leg has no section to show (decision 18).
  */
 export function DevicePersons({
   leg,
   persons,
-  status,
-  onRetry,
+  device: { status, retry, refocus },
 }: {
   leg: Leg;
   persons: readonly VisibleDevicePerson[];
-  status: DeviceStatus;
-  onRetry: () => void;
+  device: BoardDevice;
 }) {
   const t = useTranslations("DevicePersons");
   const headingId = `device-${leg}`;
+  const retried = useRef(false);
+  const focusTarget = useRef<HTMLElement>(null);
+  // On whichever of the loading line, « Réessayer » or the section's title is shown.
+  const target = (element: HTMLElement | null) => {
+    focusTarget.current = element;
+  };
+
+  useEffect(() => {
+    if (!retried.current) return;
+    if (focusTarget.current) focusTarget.current.focus();
+    else refocus();
+    if (status !== "loading") retried.current = false;
+  }, [status, refocus]);
 
   if (status === "loading") {
     return (
-      <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+      <p
+        ref={target}
+        role="status"
+        tabIndex={-1}
+        className="flex items-center gap-2 text-sm text-muted-foreground outline-none"
+      >
         <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
         {t("loading")}
       </p>
@@ -58,7 +79,15 @@ export function DevicePersons({
         <TriangleAlert aria-hidden className="row-span-2 mt-0.5 size-4 text-destructive" />
         <p className="font-semibold text-destructive">{t("failed")}</p>
         <p className="text-muted-foreground">{t("failedBody")}</p>
-        <Button variant="outline" className="col-start-2 mt-2 h-11 justify-self-start" onClick={onRetry}>
+        <Button
+          ref={target}
+          variant="outline"
+          className="col-start-2 mt-2 h-11 justify-self-start"
+          onClick={() => {
+            retried.current = true;
+            retry();
+          }}
+        >
           {t("retry")}
         </Button>
       </div>
@@ -69,7 +98,12 @@ export function DevicePersons({
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-xl border p-4">
       <div className="flex flex-col gap-0.5">
-        <h3 id={headingId} className="font-semibold">
+        <h3
+          ref={target}
+          id={headingId}
+          tabIndex={-1}
+          className="font-semibold outline-none"
+        >
           {t("title")}
         </h3>
         <p className="text-sm text-muted-foreground">{t("hint")}</p>

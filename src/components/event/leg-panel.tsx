@@ -13,6 +13,8 @@ import { WithoutCarList } from "./without-car-list";
 export interface BoardDevice {
   status: DeviceStatus;
   retry: () => void;
+  /** Gives the focus to a stable landmark, when what had it is gone. */
+  refocus: () => void;
 }
 
 /**
@@ -50,7 +52,7 @@ export function LegPanel({ at, board, device }: { at: WallClock; board: VisibleL
       <noscript>
         <p className="text-sm text-muted-foreground">{tBoard("needsJavaScript")}</p>
       </noscript>
-      <DevicePersons leg={leg} persons={board.device} status={device.status} onRetry={device.retry} />
+      <DevicePersons leg={leg} persons={board.device} device={device} />
       {hasBanner(board) ? (
         <>
           {cars.length > 0 ? (

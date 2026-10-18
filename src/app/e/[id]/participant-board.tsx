@@ -6,9 +6,12 @@ import { MessageBar } from "@/components/event/message-bar";
 import { loadEventState } from "./actions";
 import { useDevice } from "./device-token";
 import type { EventState } from "./event-state";
-import { sendAction, stateOf, type ActionProblem, type Sent } from "./run-action";
+import { actionRunner, sendAction, type ActionProblem } from "./run-action";
 
-/** Where the focus goes when the bar closes from inside: the active tab, or the event's title. */
+/**
+ * Where the focus goes when what had it is gone (the bar closed from inside, a section that
+ * no longer shows): the active tab, or the event's title without tabs.
+ */
 function focusLandmark() {
   const target =
     document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ??
@@ -30,31 +33,17 @@ export function ParticipantBoard({
   const [board, setBoard] = useState(rendered);
   const [problem, setProblem] = useState<ActionProblem | null>(null);
   const retrying = useRef(false);
-
-  /**
-   * Every action of the page goes through here: the bar's message is cleared, the action
-   * sent, offline or a server error said in the bar, and the state the server answers
-   * replaces the page's. Nothing else changes on a failure: what was typed stays.
-   */
-  async function runAction<T>(action: () => Promise<T>): Promise<Sent<T>> {
-    setProblem(null);
-    const sent = await sendAction(action);
-    if (!sent.ok) setProblem(sent.problem);
-    else {
-      const state = stateOf(sent.value);
-      if (state) setBoard(state);
-    }
-    return sent;
-  }
+  // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
+  const [runAction] = useState(() => actionRunner({ problem: setProblem, state: setBoard }));
 
   const device = useDevice(
     id,
     async (token) => {
       // The first read is not an action: its failure shows in the section alone.
       const read = () => loadEventState(id, token);
-      const sent = retrying.current ? await runAction(read) : await sendAction(read);
+      const sent = retrying.current ? await runAction("retry", read) : await sendAction(read);
       retrying.current = false;
-      if (sent.ok && sent.value) return sent.value;
+      if (sent?.ok && sent.value) return sent.value;
       throw new Error("The device's persons could not be read.");
     },
     setBoard,
@@ -70,6 +59,7 @@ export function ParticipantBoard({
           retrying.current = true;
           device.retry();
         },
+        refocus: focusLandmark,
       }}
       messageBar={<MessageBar problem={problem} onClose={() => setProblem(null)} refocus={focusLandmark} />}
     />

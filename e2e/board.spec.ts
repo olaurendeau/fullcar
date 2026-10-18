@@ -220,8 +220,8 @@ test.describe("board without a retour, JavaScript disabled", () => {
 /*
  * C10.2, C10.6: no number reaches a browser, on the public page or the organiser's, with or
  * without the organiser's link, with or without JavaScript. Searched in every answer the
- * page receives (HTML, RSC, scripts, the link's check) and in its final DOM. No component
- * shows a number yet: this guards the data the pages are given, not only what they display.
+ * page receives (HTML, RSC, scripts, the link's check) and in its final DOM. This browser holds
+ * no personal token: e2e/device-persons.spec.ts covers one that does, whose cards show numbers.
  */
 const LEAKS = Object.values(PHONES).flatMap((phone) => [phone, phone.replace(/\D/g, "")]);
 
