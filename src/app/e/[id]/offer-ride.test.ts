@@ -219,24 +219,36 @@ describe("offerRide", () => {
     ["a driver id that is not a uuid", (offer) => ({ ...offer, driver: { kind: "device", personId: 7 } })],
     ["no driver", (offer) => ({ ...offer, driver: undefined })],
     ["an offer that is not an object", () => "car"],
-  ])("refuses %s before reading anything", async (_, forge) => {
+  ])("refuses %s as invalid, as eventNotFound on an unknown event, and changes nothing", async (_, forge) => {
+    await withRollback(async (trx) => {
+      const { eventId, lea } = await aScene(trx);
+      const before = await rowsOf(trx, eventId);
+      const offer = forge(anOffer("aller", { kind: "device", personId: lea.id }));
+      expect(await offerRide(trx, eventId, lea.token, offer)).toEqual({ ok: false, error: "invalid" });
+      expect(await offerRide(trx, "Zz9yXw8v", lea.token, offer)).toEqual({ ok: false, error: "eventNotFound" });
+      expect(await rowsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("refuses a malformed event id as eventNotFound before reading anything, the offer forged or not", async () => {
     const untouchable = new Proxy({} as Db, {
       get(_target, property) {
         throw new Error(`the database was used (${String(property)})`);
       },
     });
-    const offer = forge(anOffer("aller", { kind: "device", personId: randomUUID() }));
-    expect(await offerRide(untouchable, "Ab3dEf7h", newToken(), offer)).toEqual({ ok: false, error: "invalid" });
+    const offer = anOffer("aller", { kind: "device", personId: randomUUID() });
+    for (const sent of [offer, { ...offer, rideId: "r1" }, "car"]) {
+      expect(await offerRide(untouchable, "Ab3dEf70", newToken(), sent)).toEqual({ ok: false, error: "eventNotFound" });
+    }
   });
 
-  it("refuses a new driver without a well-formed token, before reading anything", async () => {
+  it("refuses a new driver without a well-formed token as invalid, and changes nothing", async () => {
     await withRollback(async (trx) => {
       const { eventId } = await aScene(trx);
       const before = await rowsOf(trx, eventId);
-      expect(await offerRide(trx, eventId, "short", anOffer("aller", aNewDriver()))).toEqual({
-        ok: false,
-        error: "invalid",
-      });
+      const offer = anOffer("aller", aNewDriver());
+      expect(await offerRide(trx, eventId, "short", offer)).toEqual({ ok: false, error: "invalid" });
+      expect(await offerRide(trx, "Zz9yXw8v", "short", offer)).toEqual({ ok: false, error: "eventNotFound" });
       expect(await rowsOf(trx, eventId)).toEqual(before);
     });
   });

@@ -1,7 +1,7 @@
 import type { Kysely } from "kysely";
 import { insertPerson, readTokenHolders, updatePerson as storePersonFields } from "@/db/persons";
 import { deletePlacement, setPlacement } from "@/db/placements";
-import { drivesOn } from "@/db/rides";
+import { findDrivenRide } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
@@ -154,7 +154,9 @@ export async function setPersonLeg(
     if (kind === undefined || leg === undefined || !isCreationId(personId)) return INVALID;
     if (!(await isDevicePerson(trx, eventId, token, personId))) return FORBIDDEN;
     const placement = { personId, eventId, leg };
-    if (await drivesOn(trx, placement)) return { ok: false, error: "drives" };
+    if ((await findDrivenRide(trx, { driverId: personId, eventId, leg })) !== undefined) {
+      return { ok: false, error: "drives" };
+    }
     if (kind === "withoutCar") await setPlacement(trx, { ...placement, rideId: null });
     else await deletePlacement(trx, placement);
     return { ok: true };

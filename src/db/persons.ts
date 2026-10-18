@@ -98,8 +98,9 @@ export async function readTokenHolders(db: Kysely<Database>, eventId: string): P
 
 /**
  * `SELECT … FOR UPDATE` on those of `ids` that are persons of the event, in id order, held
- * until the transaction ends; returns their ids, in that order. A write that also locks a
- * Ride locks it first (lock order: Ride, then Person). Call it inside `atomically`.
+ * until the transaction ends; returns their ids, in that order. The lock the triggers of
+ * C12.8 take, taken first by a writer that must not be overtaken by them. A write that also
+ * locks a Ride locks it first (lock order: Ride, then Person). Call it inside `atomically`.
  */
 export async function lockPersons(db: Kysely<Database>, eventId: string, ids: readonly string[]): Promise<string[]> {
   if (ids.length === 0) return [];
@@ -112,20 +113,4 @@ export async function lockPersons(db: Kysely<Database>, eventId: string, ids: re
     .forUpdate()
     .execute();
   return rows.map((row) => row.id);
-}
-
-/**
- * `SELECT … FOR UPDATE` on the person, held until the transaction ends: the lock the
- * triggers of C12.8 take, taken first by a writer that must not be overtaken by them
- * (lock order: Ride, then Person). Whether the person exists in that event.
- */
-export async function lockPerson(db: Kysely<Database>, person: PersonRef): Promise<boolean> {
-  const row = await db
-    .selectFrom("person")
-    .select("id")
-    .where("id", "=", person.id)
-    .where("event_id", "=", person.eventId)
-    .forUpdate()
-    .executeTakeFirst();
-  return row !== undefined;
 }

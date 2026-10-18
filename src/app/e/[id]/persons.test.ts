@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { getDb } from "@/db/client";
 import { readTokenHolders } from "@/db/persons";
@@ -400,6 +400,18 @@ describe("setPersonLeg", () => {
 });
 
 describe("C12.4: the same creation sent twice at once", () => {
+  /** Resolves once a session waits on a lock (`wait_event_type = 'Lock'`) that the session `pid` holds. */
+  async function waitingForLockOf(db: Db, pid: number) {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const { rows } = await sql<{ pid: number }>`
+        select pid from pg_stat_activity
+        where wait_event_type = 'Lock' and ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
+      if (rows.length > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error("the second send never waited for the first");
+  }
+
   it("the second waits for the first's insert, then writes nothing: she stays in the car she boarded", async () => {
     await withCommittedEvent(async (db, eventId) => {
       const marc = await seedPerson(db, eventId, { firstName: "Marc" });
@@ -407,18 +419,21 @@ describe("C12.4: the same creation sent twice at once", () => {
       const sent = registration();
       // The first send, not committed yet: she is stored, and boards Marc's car.
       const first = await db.startTransaction().execute();
+      let second: Promise<PersonOutcome>;
       try {
         await seedPerson(first, eventId, { id: sent.id, firstName: sent.firstName }, NEW_TOKEN);
         await seedPlacement(first, { personId: sent.id, eventId, leg: "aller", rideId: ride });
         await seedPlacement(first, { personId: sent.id, eventId, leg: "retour", rideId: null });
+        const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(first);
+        second = addPerson(db, eventId, NEW_TOKEN, sent);
+        second.catch(() => {});
+        // The second has reached its insert, which waits on the first's id until it commits.
+        await waitingForLockOf(db, rows[0].pid);
+        await first.commit().execute();
       } catch (error) {
         await first.rollback().execute();
         throw error;
       }
-      const second = addPerson(db, eventId, NEW_TOKEN, sent);
-      // Time for the second to reach its insert, which waits on the first's id until it commits.
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      await first.commit().execute();
 
       const state = stateOf(await second);
       expect(standing(state, sent.id)).toEqual({ aller: "passenger", retour: "withoutCar" });

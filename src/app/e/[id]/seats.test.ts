@@ -58,7 +58,9 @@ async function placementsOf(db: Db, eventId: string) {
     .execute();
 }
 
-function passengersOf(state: VisibleBoard | undefined, leg: Leg, rideId: string): string[] {
+/** The first names in the car, as the state a result gives shows them. */
+function passengersOf(result: object, leg: Leg, rideId: string): string[] {
+  const state = "state" in result ? (result.state as VisibleBoard) : undefined;
   const car = state?.find((board) => board.leg === leg)?.cars.find((found) => found.id === rideId);
   if (car === undefined) throw new Error(`no car ${rideId} on the ${leg} in the state`);
   return car.passengers.map((person) => person.firstName);
@@ -74,7 +76,7 @@ describe("takeSeats", () => {
       const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id, hugo.id]);
 
       expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
-      expect(passengersOf(result?.state, "aller", r1).sort()).toEqual(["Hugo", "Léa"]);
+      expect(passengersOf(result, "aller", r1).sort()).toEqual(["Hugo", "Léa"]);
       const after = await placementsOf(trx, eventId);
       const placed = new Set([lea.id, hugo.id]);
       expect(after.filter((row) => row.leg === "aller" && placed.has(row.person_id)).map((row) => row.ride_id)).toEqual([
@@ -257,12 +259,18 @@ describe("takeSeats", () => {
     });
   });
 
-  it("gives nothing for an unknown event, and never looks up a malformed id", async () => {
+  it("refuses an unknown event as eventNotFound, forged request or not, and never looks up a malformed id", async () => {
+    const eventNotFound = { ok: false, error: "eventNotFound" };
     await withRollback(async (trx) => {
-      const { lea, r1 } = await seedScene(trx);
-      expect(await takeSeats(trx, "Zz9yXw8v", lea.token, r1, "aller", [lea.id])).toBeUndefined();
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const before = await placementsOf(trx, eventId);
+      expect(await takeSeats(trx, "Zz9yXw8v", lea.token, r1, "aller", [lea.id])).toEqual(eventNotFound);
+      expect(await takeSeats(trx, "Zz9yXw8v", lea.token, "r1", "aller", [])).toEqual(eventNotFound);
+      expect(await placementsOf(trx, eventId)).toEqual(before);
     });
-    expect(await takeSeats(untouchable, "Ab3dEf70", NOBODYS_TOKEN, randomUUID(), "aller", [randomUUID()])).toBeUndefined();
+    expect(await takeSeats(untouchable, "Ab3dEf70", NOBODYS_TOKEN, randomUUID(), "aller", [randomUUID()])).toEqual(
+      eventNotFound,
+    );
   });
 
   // readEventState refuses to read in READ COMMITTED (#126): on the connection, the write
@@ -276,7 +284,7 @@ describe("takeSeats", () => {
       const result = await takeSeats(db, eventId, lea.token, rideId, "aller", [lea.id]);
 
       expect(result).toMatchObject({ ok: true });
-      expect(passengersOf(result?.state, "aller", rideId)).toEqual(["Léa"]);
+      expect(passengersOf(result, "aller", rideId)).toEqual(["Léa"]);
       expect(await ridePassengers(db, { id: rideId, eventId, leg: "aller" })).toEqual([
         expect.objectContaining({ personId: lea.id }),
       ]);
@@ -341,7 +349,7 @@ describe("takeSeats", () => {
         );
 
         expect(second).toMatchObject({ ok: false, error: "seatTaken" });
-        expect(passengersOf(second?.state, "aller", rideId)).toEqual(["Léa"]);
+        expect(passengersOf(second, "aller", rideId)).toEqual(["Léa"]);
         expect(await ridePassengers(db, { id: rideId, eventId, leg: "aller" })).toEqual([
           expect.objectContaining({ personId: lea.id }),
         ]);

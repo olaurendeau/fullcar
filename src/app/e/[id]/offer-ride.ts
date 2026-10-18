@@ -1,5 +1,5 @@
 import type { Kysely } from "kysely";
-import { insertPerson, lockPerson, readTokenHolders } from "@/db/persons";
+import { insertPerson, lockPersons, readTokenHolders } from "@/db/persons";
 import { deletePlacement, findPlacement } from "@/db/placements";
 import { findDrivenRide, insertRide, lockRide } from "@/db/rides";
 import type { Database } from "@/db/schema";
@@ -81,6 +81,9 @@ class DriverMoved extends Error {
   }
 }
 
+const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" } as const;
+const INVALID = { ok: false, error: "invalid" } as const;
+
 /** Attempts, on the connection, before a driver moving every time is a failure. */
 const ATTEMPTS = 3;
 
@@ -130,12 +133,18 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
  * 2. she leaves her seat, or the list of persons without a car, on this leg (C4.5);
  * 3. the Ride is inserted, on this leg only (C4.2).
  *
- * Sent again, the same offer writes nothing more and succeeds (C4.10). A refusal after a
- * write throws inside the transaction, which `atomically` rolls back: given a transaction,
- * the caller rolls it back. Written in the transaction `atomically` opens, under READ
- * COMMITTED, where the triggers of C12.8 see a write committed while they wait: the state
- * of the event is read after the commit, never inside it. The token is only hashed and
- * compared, never logged nor kept.
+ * `eventNotFound` for an unknown event, forged request or not; a malformed id is never
+ * looked up. Sent again, the same offer writes nothing more and succeeds (C4.10).
+ *
+ * The application passes the connection: a refusal after a write throws inside the
+ * transaction `atomically` opens, which rolls it back, and that transaction is READ
+ * COMMITTED, where the triggers of C12.8 see a write committed while they wait; the state
+ * of the event is read after the commit, never inside it. A transaction passed in is for
+ * tests only, and loses those guarantees: a refusal after a write returns without undoing
+ * it, for the caller to roll back; a driver who moved is not tried again; and in
+ * REPEATABLE READ, the reads after the lock of her Person keep the snapshot taken before
+ * it, so a seat she took while it waited is not seen (C12.8). The token is only hashed
+ * and compared, never logged nor kept.
  */
 export async function offerRide(
   db: Kysely<Database>,
@@ -143,12 +152,14 @@ export async function offerRide(
   token: unknown,
   input: unknown,
 ): Promise<OfferRideResult> {
+  if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
   const offer = readOffer(input, token);
-  if (offer === undefined) return { ok: false, error: "invalid" };
+  // What no form sends: invalid for a known event, as for the other writes.
+  if (offer === undefined) return (await findPublicEvent(db, eventId)) ? INVALID : EVENT_NOT_FOUND;
   if (!("rideId" in offer)) return offer;
-  if (!isPublicId(eventId)) return { ok: false, error: "eventNotFound" };
   for (let attempt = 1; ; attempt++) {
     try {
+      // Given a transaction (tests only), a refusal leaves what was written in it.
       return await atomically(db, (trx) => offerOnce(trx, eventId, token, offer));
     } catch (error) {
       if (error instanceof Refused) return { ok: false, error: error.refusal };
@@ -182,7 +193,7 @@ async function offerOnce(
   const placement = { personId: driverId, eventId, leg };
   const seat = (await findPlacement(trx, placement))?.rideId ?? null;
   if (seat !== null) await lockRide(trx, { id: seat, eventId, leg });
-  await lockPerson(trx, { id: driverId, eventId });
+  await lockPersons(trx, eventId, [driverId]);
   // Her Person locked, only a write that holds her Ride can move her: locked if it was hers.
   const seatNow = (await findPlacement(trx, placement))?.rideId ?? null;
   if (seatNow !== null && seatNow !== seat) throw new DriverMoved();
