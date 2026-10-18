@@ -305,9 +305,22 @@ Poser un cookie dans une action fait rendre la page courante à nouveau par Next
 rendu, déjà dans la nouvelle langue, arrive dans la réponse de l'action. Le client
 l'applique sur place : pas de rechargement du document, pas de `router.refresh()`, pas de
 navigation. Le fragment (`#{jeton}`) et ce qui est saisi restent, et le jeton n'est pas
-revérifié. Jamais de `redirect()` ni de langue dans l'URL. Une action qui échoue (hors
-ligne, erreur serveur) laisse la page telle quelle et rend le bouton de nouveau actif. Si
-le re-rendu échoue après la pose du cookie, le cookie reste posé : cas accepté dans #113.
+revérifié. Jamais de `redirect()` ni de langue dans l'URL.
+
+**Quand le changement échoue** (`src/components/i18n/language-switch.tsx`, #129). Un
+message s'affiche au-dessus de la ligne du bas de page, en `role="alert"`, dans la langue
+demandée et avec son `lang` (les messages `LanguageSwitch` sont écrits dans l'autre
+langue, décision 4 de #113) :
+- hors ligne, ou quand le serveur échoue, l'appel à `setLocale` lève une erreur, que le
+  composant attrape : il affiche `LanguageSwitch.failed` ;
+- si `navigator.cookieEnabled` vaut `false`, il affiche `LanguageSwitch.cookiesBlocked`
+  sans appeler `setLocale` : aucune requête ne part.
+
+Dans les deux cas, la page reste telle quelle et le bouton redevient actif (sans cookies,
+il le reste, puisque rien n'est parti). Chaque tap efface le message précédent et reçoit un
+numéro, qui sert de `key` à l'alerte : un second échec pour la même raison est un nouveau
+nœud, qu'un lecteur d'écran annonce de nouveau. Si le re-rendu échoue après la pose du
+cookie, le cookie reste posé : cas accepté dans #113.
 
 `experimental.useOffline` doit rester désactivé (sa valeur par défaut, `next.config.ts` ne
 le pose pas). Activé, une action lancée hors ligne attendrait le réseau puis serait rejouée,
