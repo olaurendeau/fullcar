@@ -193,6 +193,13 @@ describe("seatReduction (C8.4, C8.5)", () => {
     expect(reduce(2, ["chloe"], ["anna", "chloe", "dan"], ["anna", "ben", "chloe"])).toEqual(changed);
   });
 
+  // The swap above is the test that proves C8.5. This one keeps the size in the
+  // comparison of the passengers: without it, the passengers now, all among those seen,
+  // would pass for them.
+  it("C8.5: refuses when someone seen left during the step, the one chosen still a passenger", () => {
+    expect(reduce(2, ["ben"], ["anna", "ben", "dan"], passengers)).toEqual(changed);
+  });
+
   it("C8.5: refuses when the one chosen to leave left during the step", () => {
     expect(reduce(1, ["chloe"], ["anna", "ben"], ["anna", "ben", "chloe"])).toEqual(changed);
   });
