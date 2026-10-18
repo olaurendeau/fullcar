@@ -57,7 +57,13 @@ export function EventView({ title, location, allerAt, retourAt, board }: EventVi
       {retourAt ? (
         <LegTabs allerAt={allerAt} retourAt={retourAt} aller={legOf(board, "aller")} retour={legOf(board, "retour")} />
       ) : (
-        <LegPanel at={allerAt} board={legOf(board, "aller")} />
+        <section aria-labelledby="leg-aller" className="flex flex-col gap-4">
+          {/* Shown by the dates above already: a heading for the outline alone, above the h3s. */}
+          <h2 id="leg-aller" className="sr-only">
+            {t("aller")}
+          </h2>
+          <LegPanel at={allerAt} board={legOf(board, "aller")} />
+        </section>
       )}
     </div>
   );
