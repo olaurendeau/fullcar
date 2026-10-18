@@ -1,10 +1,12 @@
+import { randomUUID } from "node:crypto";
 import type { Kysely, Transaction } from "kysely";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { loadEventState, takeSeats } from "./actions";
+import { addPerson, loadEventState, setPersonLeg, takeSeats, updatePerson } from "./actions";
 import { readEventState } from "./event-state";
 
 // The action reaches the database through getDb(): here, the test's transaction,
@@ -178,6 +180,119 @@ describe("takeSeats", () => {
       }
       expect(cause).toBeUndefined();
       expect(log.mock.calls).toEqual([["takeSeats: the seats could not be taken (SQLSTATE 57P01)"]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe("the person actions", () => {
+  const TOKEN = "q3Vx9kLmN2pR7sT1uW4yZQ";
+  const registration = (fields: object = {}) => ({ id: randomUUID(), firstName: "Zoé", phone: "", bothLegs: true, leg: "aller", ...fields });
+  const kinds = (state: unknown, personId: string) =>
+    (state as { leg: string; device: { id: string; state: { kind: string } }[] }[]).map((leg) => [
+      leg.leg,
+      leg.device.find((person) => person.id === personId)?.state.kind,
+    ]);
+
+  it("C1.3: addPerson, « Aller et retour » checked, gives the state with her without a car on both legs", async () => {
+    await inTransaction(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const sent = registration();
+      const outcome = await addPerson(eventId, TOKEN, sent);
+      expect(outcome).toEqual({ ok: true, state: await readEventState(trx, eventId, TOKEN) });
+      expect(kinds(outcome.ok && outcome.state, sent.id)).toEqual([["aller", "withoutCar"], ["retour", "withoutCar"]]);
+      expect(JSON.parse(JSON.stringify(outcome))).toStrictEqual(outcome);
+    });
+  });
+
+  it("C1.3: addPerson, unchecked, leaves her not concerned on the other leg", async () => {
+    await inTransaction(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const sent = registration({ bothLegs: false });
+      const outcome = await addPerson(eventId, TOKEN, sent);
+      expect(kinds(outcome.ok && outcome.state, sent.id)).toEqual([["aller", "withoutCar"], ["retour", "notConcerned"]]);
+    });
+  });
+
+  it("C1.4: addPerson, without a retour, leaves her without a car at the aller", async () => {
+    await inTransaction(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { retourAt: null });
+      const sent = registration({ bothLegs: true });
+      const outcome = await addPerson(eventId, TOKEN, sent);
+      expect(kinds(outcome.ok && outcome.state, sent.id)).toEqual([["aller", "withoutCar"]]);
+    });
+  });
+
+  it("C1.8: addPerson with an empty first name and a malformed number creates nothing, with an error per field", async () => {
+    await inTransaction(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const outcome = await addPerson(eventId, TOKEN, registration({ firstName: " ", phone: "06" }));
+      expect(outcome).toEqual({ ok: false, errors: { firstName: "required", phone: "invalid" }, first: "firstName" });
+      expect(await readTokenHolders(trx, eventId)).toEqual([]);
+    });
+  });
+
+  it("updatePerson and setPersonLeg give the state after the change", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea } = await seedScene(trx);
+      const renamed = await updatePerson(eventId, lea.token, { personId: lea.id, firstName: "Léonie", phone: "" });
+      expect(renamed).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
+      const out = await setPersonLeg(eventId, lea.token, { personId: lea.id, leg: "aller", kind: "notConcerned" });
+      expect(kinds(out.ok && out.state, lea.id)).toEqual([["aller", "notConcerned"], ["retour", "notConcerned"]]);
+    });
+  });
+
+  it.each<[string, unknown]>([
+    ["nothing", undefined],
+    ["null", null],
+    ["a number", 42],
+    ["a string", "Zoé"],
+    ["a list", ["Zoé"]],
+    ["fields of the wrong type", { id: 1, personId: [], firstName: { x: 1 }, phone: 6, bothLegs: "yes", leg: 0, kind: {} }],
+  ])("reads %s as fields without throwing", async (_, input) => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea } = await seedScene(trx);
+      for (const action of [addPerson, updatePerson, setPersonLeg]) {
+        await expect(action(eventId, lea.token, input)).resolves.toEqual(expect.objectContaining({ ok: false }));
+      }
+    });
+  });
+
+  it.each<[string, unknown]>([
+    ["a malformed id", "Ab3dEf70"],
+    ["an id that is not a string", { id: "Ab3dEf7h" }],
+  ])("reads nothing for %s as the event", async (_, id) => {
+    connection.current = untouchable;
+    for (const action of [addPerson, updatePerson, setPersonLeg]) {
+      await expect(action(id, TOKEN, registration())).resolves.toEqual({ ok: false, error: "eventNotFound" });
+    }
+  });
+
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const actions = [
+        ["addPerson", addPerson],
+        ["updatePerson", updatePerson],
+        ["setPersonLeg", setPersonLeg],
+      ] as const;
+      for (const [name, action] of actions) {
+        const fields = { ...registration(), personId: randomUUID(), kind: "withoutCar" };
+        const failure = await action("Ab3dEf7h", TOKEN, fields).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(failure).toBeInstanceOf(Error);
+        const { message, stack, cause } = failure as Error;
+        for (const text of [message, stack]) {
+          expect(text).not.toContain("06 22");
+          expect(text).not.toContain(TOKEN);
+        }
+        expect(cause).toBeUndefined();
+        expect(log).toHaveBeenLastCalledWith(`${name}: the change could not be written (SQLSTATE 57P01)`);
+      }
     } finally {
       log.mockRestore();
     }

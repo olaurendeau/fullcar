@@ -27,20 +27,21 @@ describe("insertPerson", () => {
       const { id: eventId } = await seedEvent(trx);
       const id = randomUUID();
       const stored = await insertPerson(trx, { id, eventId, firstName: "Léa", phone: "06 12 34 56 78", tokenHash: HASH_A });
-      expect(stored).toEqual({ id, eventId, firstName: "Léa", tokenHash: HASH_A });
+      expect(stored).toEqual({ id, eventId, firstName: "Léa", tokenHash: HASH_A, created: true });
       expect(await personsOf(trx, eventId)).toEqual([
         { id, first_name: "Léa", phone: "06 12 34 56 78", token_hash: Buffer.from(HASH_A, "hex") },
       ]);
     });
   });
 
-  it("inserts the same id once, and returns the row already stored", async () => {
+  it("inserts the same id once, and returns the row already stored, saying it created nothing", async () => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       const id = randomUUID();
       const first = await insertPerson(trx, { id, eventId, firstName: "Léa", phone: null, tokenHash: HASH_A });
       const again = await insertPerson(trx, { id, eventId, firstName: "Paul", phone: "0612345678", tokenHash: HASH_B });
-      expect(again).toEqual(first);
+      expect(first?.created).toBe(true);
+      expect(again).toEqual({ ...first, created: false });
       expect(await personsOf(trx, eventId)).toEqual([
         { id, first_name: "Léa", phone: null, token_hash: Buffer.from(HASH_A, "hex") },
       ]);

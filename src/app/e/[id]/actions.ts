@@ -4,6 +4,7 @@ import { getDb } from "@/db/client";
 import { databaseFailure } from "@/db/failure";
 import { isPublicId } from "@/domain/public-id";
 import { readEventState, type EventState } from "./event-state";
+import * as persons from "./persons";
 import { takeSeats as takeSeatsInRide, type TakeSeatsResult } from "./seats";
 
 /**
@@ -40,4 +41,41 @@ export async function takeSeats(
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("takeSeats: the seats could not be taken", error);
   }
+}
+
+/**
+ * The person actions (R1 to R3, R7) run a use case of persons.ts: the state after the
+ * change, field errors, or a refusal key. Anything is read as input without throwing; the
+ * token arrives in the body, and is only hashed or compared, never logged. A malformed
+ * event id reads nothing.
+ */
+async function changePerson(
+  name: string,
+  change: typeof persons.addPerson,
+  id: unknown,
+  token: unknown,
+  fields: unknown,
+): Promise<persons.PersonOutcome> {
+  if (!isPublicId(id)) return { ok: false, error: "eventNotFound" };
+  try {
+    return await change(getDb(), id, token, fields);
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure(`${name}: the change could not be written`, error);
+  }
+}
+
+/** Registers a person: first name, number, « Aller et retour », the tab's leg, and the creation id. */
+export async function addPerson(id: unknown, token: unknown, fields: unknown): Promise<persons.PersonOutcome> {
+  return changePerson("addPerson", persons.addPerson, id, token, fields);
+}
+
+/** Changes the first name and the number of one of the device's persons. */
+export async function updatePerson(id: unknown, token: unknown, fields: unknown): Promise<persons.PersonOutcome> {
+  return changePerson("updatePerson", persons.updatePerson, id, token, fields);
+}
+
+/** Without a car, or not concerned, on one leg, for one of the device's persons. */
+export async function setPersonLeg(id: unknown, token: unknown, fields: unknown): Promise<persons.PersonOutcome> {
+  return changePerson("setPersonLeg", persons.setPersonLeg, id, token, fields);
 }
