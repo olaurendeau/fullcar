@@ -3,7 +3,7 @@
  * (R6). Pure decisions on the leg's device section (`LegBoard.device`): the view asks,
  * the server still decides at the write (C5.7, C6.5).
  */
-import type { DevicePerson } from "./board";
+import type { BoardPerson, DevicePerson } from "./board";
 
 /**
  * What the page knows of the device's persons on this event.
@@ -87,4 +87,21 @@ export function sheetSubmit(checked: number, freeSeats: number): SheetSubmit {
   if (checked === 0) return { kind: "noneChecked", count: 0 };
   if (checked > freeSeats) return { kind: "notEnoughSeats", count: checked, freeSeats };
   return { kind: "ready", count: checked };
+}
+
+/** The choice « Une nouvelle personne »: no person's id, which is a UUID. */
+export const NEW_DRIVER = "new";
+
+/**
+ * « Qui conduit ? » (R4): the device's persons who do not drive on the leg already (C4.6), in
+ * its order, then « Une nouvelle personne ». `chosen` is the choice before any tap: the only
+ * person who can drive, or a new person when none can; nobody among several.
+ */
+export function driverChoice(device: readonly DevicePerson[]): {
+  candidates: BoardPerson[];
+  chosen: string | undefined;
+} {
+  const candidates = device.flatMap(({ id, firstName, state }) => (state.kind === "driver" ? [] : [{ id, firstName }]));
+  const chosen = candidates.length === 0 ? NEW_DRIVER : candidates.length === 1 ? candidates[0].id : undefined;
+  return { candidates, chosen };
 }

@@ -49,7 +49,7 @@ test.describe("event page, with a retour", () => {
     await expect(legs.locator("dd")).toHaveText([FR.aller, FR.retour]);
   });
 
-  test("C5.2, C9.6: Aller is selected first, with its empty state, « Ajouter une personne » and no date line", async ({ page, seededEvent }) => {
+  test("C5.2, C9.6: Aller is selected first, with its empty state, both actions and no date line", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await expect(page.getByRole("tablist")).toBeVisible();
     await expect(page.getByRole("tab")).toHaveText(["Aller", "Retour"]);
@@ -62,8 +62,9 @@ test.describe("event page, with a retour", () => {
     await expect(panel.getByText(FR.noCarAller)).toBeVisible();
     await expect(panel.getByText(FR.nobody)).toBeVisible();
     // C9.6, in place of C5.3's « no button »: an empty event can be joined from its empty state.
-    await expect(panel.getByRole("button")).toHaveText(["Ajouter une personne"]);
+    await expect(panel.getByRole("button")).toHaveText(["Ajouter une personne", "Proposer une voiture"]);
     await expect(panel.getByRole("button", { name: "Ajouter une personne" })).toBeEnabled();
+    await expect(panel.getByRole("button", { name: "Proposer une voiture" })).toBeEnabled();
   });
 
   test("C5.2, C5.3: Retour shows its own empty state, no date line, without reload nor URL change", async ({

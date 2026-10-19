@@ -93,6 +93,22 @@ test("« Vos inscriptions », unfolded then folded", async ({ db, page, seededEv
   await shoot(page, testInfo, "vos-inscriptions-repliee");
 });
 
+// C4.7: Claire and Léa on the device, none chosen to drive, the place left empty, too many seats.
+test("« Proposer une voiture » with errors", async ({ db, page, seededEvent }, testInfo) => {
+  const token = newToken();
+  for (const firstName of ["Claire", "Léa"]) await seedPerson(db, seededEvent.id, { firstName }, token);
+  await holdToken(page, seededEvent.id, token);
+  await page.goto(`/e/${seededEvent.id}`, { waitUntil: "networkidle" });
+  await page.getByRole("tabpanel").getByRole("button", { name: "Proposer une voiture" }).click();
+  const sheet = page.getByRole("dialog", { name: "Proposer une voiture" });
+  await sheet.getByLabel("Places, sans compter qui conduit").fill("9");
+  await sheet.getByRole("button", { name: "Valider" }).click();
+  await expect(sheet.getByRole("radiogroup", { name: "Qui conduit ?" })).toHaveAccessibleDescription(
+    "Choisissez qui conduit.",
+  );
+  await shoot(page, testInfo, "proposer-voiture-erreurs");
+});
+
 test.describe("without a retour", () => {
   test.use({ eventFields: { retourAt: null } });
 

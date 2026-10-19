@@ -1,5 +1,5 @@
 import { useFormatter, useTranslations } from "next-intl";
-import { coverage, hasBanner } from "@/domain/coverage";
+import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
@@ -8,6 +8,7 @@ import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
 import { AddPersonButton, type AddPerson } from "./person-form";
 import { RideCard } from "./ride-card";
+import { OfferRideButton, type OfferRide } from "./ride-form";
 import { WithoutCarList } from "./without-car-list";
 
 /** What the page knows of the device's persons, and how to read them again after a failure. */
@@ -20,6 +21,8 @@ export interface BoardDevice {
   addPerson: AddPerson;
   /** Without a car, or not concerned, on a leg, for one of the device's persons (#89). */
   setPersonLeg: SetPersonLeg;
+  /** Offers a car on a leg (R4), with the device's token. */
+  offerRide: OfferRide;
 }
 
 /**
@@ -37,7 +40,8 @@ export function LegTime({ at }: { at: WallClock }) {
 }
 
 /**
- * One leg (#86): its coverage first, then its actions, side by side (v4-12), its cars, and
+ * One leg (#86): its coverage first, then its actions, side by side (v4-12), « Proposer une
+ * voiture » the main one where seats are missing (C9.7), its cars, and
  * its persons without a car. A leg with neither a car nor a person shows the empty state of
  * #3 instead, without a banner, under the same actions (C9.6). The actions come before the
  * cars, however many there are (C1.1), and are inactive until the device's persons are
@@ -68,6 +72,14 @@ export function LegPanel({
           hasRetour={hasRetour}
           disabled={!deviceKnown(device.status)}
           addPerson={device.addPerson}
+        />
+        <OfferRideButton
+          leg={leg}
+          at={at}
+          persons={board.device}
+          main={coverageBanner(coverage(board)).kind === "missingSeats"}
+          disabled={!deviceKnown(device.status)}
+          offerRide={device.offerRide}
         />
       </div>
       <noscript>

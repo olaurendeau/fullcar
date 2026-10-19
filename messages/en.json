@@ -68,6 +68,7 @@
     "withoutCar": "Without a car",
     "call": "Call {firstName} on {phone}",
     "addPerson": "Add a person",
+    "offerRide": "Offer a car",
     "needsJavaScript": "Signing up, offering a car or taking a seat needs JavaScript: turn it on, then reload the page."
   },
   "DevicePersons": {
@@ -118,11 +119,35 @@
       "body": "Your browser blocks storage: once this page is closed, these sign-ups can no longer be changed from this device."
     }
   },
+  "RideForm": {
+    "title": {
+      "offer": "Offer a car"
+    },
+    "storage": {
+      "title": "This device will not remember it",
+      "body": "Your browser blocks storage: once this page is closed, this car and its driver can no longer be changed from this device."
+    },
+    "driver": "Who drives?",
+    "newDriver": "Someone new",
+    "location": {
+      "aller": "Departure place",
+      "retour": "Drop-off place"
+    },
+    "time": "Departure time",
+    "timeHint": "On {date}",
+    "seats": "Seats, driver not included",
+    "seatsHint": "From 1 to 8.",
+    "note": "Note (optional)",
+    "noteHint": "What passengers should know."
+  },
   "FormErrors": {
     "required": "Required.",
     "tooLong": "{max} characters at most.",
     "invalidText": "This text contains a character that is not allowed.",
-    "invalidPhone": "Not a valid number: 6 to 15 digits, with only spaces and + . - ( )"
+    "invalidPhone": "Not a valid number: 6 to 15 digits, with only spaces and + . - ( )",
+    "invalidTime": "Not a valid time.",
+    "seats": "From 1 to 8 seats.",
+    "chooseDriver": "Choose who drives."
   },
   "Actions": {
     "submit": "Confirm",

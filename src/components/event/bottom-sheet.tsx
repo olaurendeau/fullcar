@@ -51,7 +51,8 @@ export function BottomSheet({
         // Without a description, Radix would warn of a missing one; with it, Radix links it.
         {...(description ? {} : { "aria-describedby": undefined })}
         onCloseAutoFocus={onCloseAutoFocus}
-        className="mx-auto max-w-md gap-0 rounded-t-xl pb-[env(safe-area-inset-bottom)]"
+        // Taller than the screen (« Proposer une voiture » with a new driver), it scrolls inside it.
+        className="mx-auto max-h-dvh max-w-md gap-0 overflow-y-auto rounded-t-xl pb-[env(safe-area-inset-bottom)]"
       >
         <HidesPage />
         <SheetHeader className="pb-0">

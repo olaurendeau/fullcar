@@ -1,0 +1,514 @@
+import type { Locator, Page, Request } from "@playwright/test";
+import type { Kysely } from "kysely";
+import type { Database } from "@/db/schema";
+import { seedEvent } from "@/db/test-events";
+import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import type { Leg } from "@/domain/leg";
+import { isPersonalToken } from "@/domain/personal-token";
+import { failActions, holdActions, holdToken, newToken } from "./device";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
+
+// #90: « Proposer une voiture » on each leg, its form in a bottom sheet (R4).
+
+type Db = Kysely<Database>;
+
+const FR = {
+  offer: "Proposer une voiture",
+  add: "Ajouter une personne",
+  driver: "Qui conduit ?",
+  newDriver: "Une nouvelle personne",
+  firstName: "Prénom",
+  location: { aller: "Lieu de départ", retour: "Lieu de dépose" },
+  time: "Heure de départ",
+  timeHint: "Le samedi 12 décembre 2026",
+  seats: "Places, sans compter qui conduit",
+  seatsHint: "De 1 à 8.",
+  note: "Note (facultatif)",
+  noteHint: "Ce que les personnes à bord doivent savoir.",
+  storageTitle: "Cet appareil ne pourra pas s’en souvenir",
+  storageBody:
+    "Votre navigateur bloque le stockage : après la fermeture de la page, cette voiture et la personne qui conduit ne pourront plus être modifiées depuis cet appareil.",
+  required: "Champ requis.",
+  seatsError: "De 1 à 8 places.",
+  chooseDriver: "Choisissez qui conduit.",
+  failed: "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
+  offline: "Action impossible, vérifiez la connexion",
+};
+
+async function selectTab(page: Page, name: string) {
+  const tab = page.getByRole("tab", { name: new RegExp(`^${name}`) });
+  await expect(async () => {
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 500 });
+  }).toPass();
+}
+
+const panel = (page: Page) => page.getByRole("tabpanel");
+const offerButton = (scope: Page | Locator) => scope.getByRole("button", { name: FR.offer, exact: true });
+const form = (page: Page) => page.getByRole("dialog", { name: FR.offer });
+const submit = (page: Page) => form(page).getByRole("button", { name: "Valider" });
+const field = (page: Page, label: string) => form(page).getByLabel(label, { exact: true });
+const section = (page: Page) => page.getByRole("region", { name: "Vos inscriptions" });
+const toggle = (page: Page) => section(page).getByRole("button", { name: /^Vos inscriptions/ });
+/** The choices of « Qui conduit ? », as their labels read: the radios' own text is empty. */
+const radioNames = (scope: Locator) =>
+  scope.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.closest("label")?.textContent ?? ""));
+const car = (scope: Page | Locator, driver: string) => scope.getByRole("article", { name: `Voiture de ${driver}` });
+const freeSeats = (scope: Page | Locator) => scope.getByRole("button", { name: /^Place libre : / });
+const withoutCar = (scope: Locator) => scope.getByRole("region", { name: "Sans voiture" }).getByRole("listitem");
+/** A failure while the form is open is said in the form, which stays open. */
+const failure = (page: Page) => form(page).getByRole("alert");
+/** The message bar's alert, found by its CSS: Radix hides the page while a sheet is mounted. */
+const bar = (page: Page) => page.locator('[role="status"] + [role="alert"]');
+const alerts = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
+
+/** Records, as each alert fills, whether it was in a sheet, and whether the bar had an ancestor hidden. */
+async function watchAlerts(page: Page) {
+  await page.evaluate(() => {
+    const seen = ((window as unknown as { seenAlerts: object }).seenAlerts = { inSheet: false, barHidden: false });
+    new MutationObserver(() => {
+      for (const alert of document.querySelectorAll('[role="alert"]')) {
+        if (!alert.textContent?.trim()) continue;
+        if (alert.closest('[role="dialog"]')) seen.inSheet = true;
+        else if (alert.closest('[aria-hidden="true"]')) seen.barHidden = true;
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  return () => page.evaluate(() => (window as unknown as { seenAlerts: object }).seenAlerts);
+}
+
+
+/** « Vos inscriptions » with `firstName` alone, who drives: folded, nothing to do (v4-3), then unfolded to read it. */
+async function unfold(page: Page, firstName: string) {
+  await expect(toggle(page)).toContainText("1 personne · tout le monde a une place");
+  await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
+  await toggle(page).click();
+  await expect(section(page).getByRole("rowheader")).toHaveText([firstName]);
+}
+
+/** Opens the form from the active tab: the button waits, inactive, until the device is known (C5.9). */
+async function openForm(page: Page) {
+  await offerButton(panel(page)).click();
+  await expect(form(page)).toBeVisible();
+}
+
+/** The offers the page sends: server actions whose body carries `marker`. */
+function offers(page: Page, marker: string): Request[] {
+  const sent: Request[] = [];
+  page.on("request", (request) => {
+    if (request.headers()["next-action"] && request.postData()?.includes(marker)) sent.push(request);
+  });
+  return sent;
+}
+
+const rides = async (db: Db, eventId: string) =>
+  db.selectFrom("ride").select(["leg", "location"]).where("event_id", "=", eventId).execute();
+
+/** The device holds `names`, with their token in the page's `localStorage`. */
+async function device(db: Db, page: Page, eventId: string, names: string[]) {
+  const token = newToken();
+  const ids: Record<string, string> = {};
+  for (const firstName of names) ids[firstName] = (await seedPerson(db, eventId, { firstName }, token)).id;
+  await holdToken(page, eventId, token);
+  return ids;
+}
+
+const place = (db: Db, eventId: string, personId: string, leg: Leg, rideId: string | null) =>
+  seedPlacement(db, { personId, eventId, leg, rideId });
+
+/** Where `names` are in the active tab's panel: buttons by their text, cars by « car ». */
+async function order(page: Page): Promise<string[]> {
+  return panel(page).evaluate((root) =>
+    Array.from(root.querySelectorAll("button, article"), (node) => (node.tagName === "ARTICLE" ? "car" : node.textContent ?? "")),
+  );
+}
+
+test.describe("offer a car", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("C1.1, C9.6: both actions on each leg, before 15 cars, with no person on the device", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    for (let at = 0; at < 15; at++) {
+      const driver = await seedPerson(db, id, { firstName: `Pilote ${at}` });
+      await seedRide(db, id, driver.id);
+    }
+    await page.goto(`/e/${id}`);
+    await expect(offerButton(panel(page))).toBeEnabled();
+    const actions = await order(page);
+    expect(actions.slice(0, 2)).toEqual([FR.add, FR.offer]);
+    expect(actions.filter((name) => name === "car")).toHaveLength(15);
+    expect((await offerButton(panel(page)).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    // The empty Retour: its empty state, under both actions.
+    await selectTab(page, "Retour");
+    await expect(panel(page).getByRole("button")).toHaveText([FR.add, FR.offer]);
+    await expect(offerButton(panel(page))).toBeEnabled();
+  });
+
+  test("C4.1, C4.2, C4.4: four actions, a car with 3 free seats on this leg only, a driver of the device", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const seen = { stored: false, carried: false, inUrl: true };
+    await page.route("**/e/**", async (route) => {
+      const request = route.request();
+      if (request.headers()["next-action"] && request.postData()?.includes("Mairie de Vitré")) {
+        const stored = await page.evaluate((key) => localStorage.getItem(key) ?? "", `fullcar:personal-token:${id}`);
+        seen.stored = isPersonalToken(stored);
+        seen.carried = seen.stored && (request.postData() ?? "").includes(stored);
+        seen.inUrl = seen.stored && request.url().includes(stored);
+      }
+      await route.continue();
+    });
+    await page.goto(`/e/${id}`);
+
+    // « Proposer une voiture », the first name, the place, « Valider ».
+    await openForm(page);
+    // Without a person on the device: no choice, the new person's fields directly.
+    await expect(form(page).getByRole("radio")).toHaveCount(0);
+    await expect(form(page).getByRole("group", { name: FR.driver })).toBeVisible();
+    await expect(form(page)).not.toContainText(FR.storageTitle);
+    await field(page, FR.firstName).fill("Marc");
+    await field(page, FR.location.aller).fill("Mairie de Vitré");
+    await submit(page).click();
+
+    await expect(form(page)).toHaveCount(0);
+    await expect(offerButton(panel(page))).toBeFocused();
+    await expect(freeSeats(car(panel(page), "Marc"))).toHaveCount(3);
+    // The token was stored before the request left, which carried it in its body, not its URL (C1.5).
+    expect(seen).toEqual({ stored: true, carried: true, inUrl: false });
+    // Marc is the device's, and not concerned by the retour (C4.4).
+    await unfold(page, "Marc");
+    expect(await section(page).locator("tbody td").allTextContents()).toEqual(["Conduit", "Ne fait pas le retour"]);
+    // C4.2: on this leg only.
+    await selectTab(page, "Retour");
+    await expect(panel(page).getByRole("article")).toHaveCount(0);
+    expect(await rides(db, id)).toEqual([{ leg: "aller", location: "Mairie de Vitré" }]);
+
+    await page.reload();
+    await unfold(page, "Marc");
+  });
+
+  test("R4, C4.3, C1.14: without localStorage, a warning, the fields, then a card with all they say", async ({ page, seededEvent }) => {
+    await page.addInitScript(() =>
+      Object.defineProperty(window, "localStorage", {
+        get() {
+          throw new DOMException("The operation is insecure.", "SecurityError");
+        },
+      }),
+    );
+    await page.goto(`/e/${seededEvent.id}`);
+    await selectTab(page, "Retour");
+    await openForm(page);
+    await expect(form(page)).toContainText(FR.storageTitle);
+    await expect(form(page)).toContainText(FR.storageBody);
+    await expect(field(page, FR.firstName)).toBeFocused();
+    await expect(field(page, FR.location.retour)).toBeVisible();
+    await expect(field(page, FR.time)).toHaveValue("18:00");
+    await expect(field(page, FR.time)).toHaveAccessibleDescription(FR.timeHint);
+    await expect(field(page, FR.seats)).toHaveValue("3");
+    await expect(field(page, FR.seats)).toHaveAccessibleDescription(FR.seatsHint);
+    await expect(field(page, FR.note)).toHaveAccessibleDescription(FR.noteHint);
+
+    await field(page, FR.firstName).fill("Karim");
+    await field(page, FR.location.retour).fill("Place des Lices");
+    await field(page, FR.time).fill("18:30");
+    await field(page, FR.seats).fill("2");
+    await field(page, FR.note).fill("Coffre plein, pas de gros sac.");
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+
+    const karim = car(panel(page), "Karim");
+    await expect(karim).toContainText("Place des Lices");
+    await expect(karim.locator("time")).toHaveText("18:30");
+    await expect(karim).toContainText("Coffre plein, pas de gros sac.");
+    await expect(freeSeats(karim)).toHaveCount(2);
+    // For this page only: Karim is the device's until it closes.
+    await unfold(page, "Karim");
+  });
+
+  test("C4.5, C4.6, C9.4: a passenger who drives frees her seat, one without a car leaves the list", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const marc = await seedPerson(db, id, { firstName: "Marc" });
+    const marcsCar = await seedRide(db, id, marc.id);
+    const { Léa: lea, Tom: tom } = await device(db, page, id, ["Léa", "Tom"]);
+    await place(db, id, lea, "aller", marcsCar);
+    await place(db, id, tom, "aller", null);
+    await page.goto(`/e/${id}`);
+    await expect(freeSeats(car(panel(page), "Marc"))).toHaveCount(2);
+
+    // Two persons can drive: none is chosen.
+    await openForm(page);
+    const choices = form(page).getByRole("radiogroup", { name: FR.driver });
+    expect(await radioNames(choices)).toEqual(["Léa", "Tom", FR.newDriver]);
+    for (const radio of await choices.getByRole("radio").all()) await expect(radio).not.toBeChecked();
+    await expect(field(page, FR.firstName)).toHaveCount(0);
+    await choices.getByRole("radio", { name: "Léa" }).check();
+    await field(page, FR.location.aller).fill("Gare de Vitré");
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    await expect(freeSeats(car(panel(page), "Marc"))).toHaveCount(3);
+    await expect(freeSeats(car(panel(page), "Léa"))).toHaveCount(3);
+
+    // Léa drives on this leg: Tom alone can, and is chosen (C4.6).
+    await openForm(page);
+    expect(await radioNames(choices)).toEqual(["Tom", FR.newDriver]);
+    await expect(choices.getByRole("radio", { name: "Tom" })).toBeChecked();
+    await field(page, FR.location.aller).fill("Église");
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    await expect(withoutCar(panel(page))).toHaveCount(0);
+    // The banner and the pill follow (C9.4).
+    await expect(page.getByRole("tab", { name: /^Aller/ })).toHaveText("Aller");
+    await expect(panel(page).getByRole("status")).toHaveText("Tout le monde a une place · 9 places libres");
+
+    // Everyone drives on this leg: only a new person.
+    await openForm(page);
+    await expect(form(page).getByRole("radio")).toHaveCount(0);
+    await expect(field(page, FR.firstName)).toBeVisible();
+  });
+
+  test("C4.7: errors by field, the focus on the first, values kept; nothing sent", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    await device(db, page, id, ["Claire", "Léa"]);
+    const sent = offers(page, "Laisser la place");
+    await page.goto(`/e/${id}`);
+    await openForm(page);
+    await field(page, FR.seats).fill("");
+    await field(page, FR.note).fill("Laisser la place");
+    await submit(page).click();
+
+    const choices = form(page).getByRole("radiogroup", { name: FR.driver });
+    await expect(choices).toHaveAccessibleDescription(FR.chooseDriver);
+    await expect(choices.getByRole("radio", { name: "Claire" })).toBeFocused();
+    await expect(field(page, FR.location.aller)).toHaveAccessibleDescription(FR.required);
+    await expect(field(page, FR.location.aller)).toHaveAttribute("aria-invalid", "true");
+    await expect(field(page, FR.seats)).toHaveAccessibleDescription(`${FR.required} ${FR.seatsHint}`);
+    await expect(field(page, FR.note)).toHaveValue("Laisser la place");
+
+    // A new person, without a first name; too many seats.
+    await choices.getByRole("radio", { name: FR.newDriver }).check();
+    await field(page, FR.location.aller).fill("Gare");
+    await field(page, FR.seats).fill("9");
+    await submit(page).click();
+    await expect(choices).not.toHaveAttribute("aria-invalid");
+    await expect(field(page, FR.firstName)).toHaveAccessibleDescription(FR.required);
+    await expect(field(page, FR.firstName)).toBeFocused();
+    await expect(field(page, FR.seats)).toHaveAccessibleDescription(`${FR.seatsError} ${FR.seatsHint}`);
+    await expect(field(page, FR.location.aller)).not.toHaveAttribute("aria-invalid");
+    // Taller than the screen, the sheet scrolls inside it: its title is never out of reach.
+    const sheet = (await form(page).boundingBox())!;
+    expect(sheet.y).toBeGreaterThanOrEqual(0);
+    expect(sheet.y + sheet.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    await form(page).getByRole("heading", { name: FR.offer }).scrollIntoViewIfNeeded();
+    await expect(form(page).getByRole("heading", { name: FR.offer })).toBeInViewport();
+
+    await field(page, FR.firstName).fill("Marc");
+    await submit(page).click();
+    await expect(field(page, FR.seats)).toBeFocused();
+    await expect(field(page, FR.firstName)).toHaveValue("Marc");
+    await expect(field(page, FR.location.aller)).toHaveValue("Gare");
+    expect(sent).toHaveLength(0);
+    expect(await rides(db, id)).toEqual([]);
+  });
+
+  test("C4.8: two quick taps send one request, and « Valider » is inactive meanwhile", async ({ db, page, seededEvent }) => {
+    const sent = offers(page, "Mairie de Vitré");
+    await page.goto(`/e/${seededEvent.id}`);
+    await openForm(page);
+    await field(page, FR.firstName).fill("Marc");
+    await field(page, FR.location.aller).fill("Mairie de Vitré");
+    const release = await holdActions(page);
+    await submit(page).dblclick();
+    await expect(submit(page)).toBeDisabled();
+    release();
+    await expect(form(page)).toHaveCount(0);
+    await expect(car(panel(page), "Marc")).toBeVisible();
+    expect(sent).toHaveLength(1);
+    expect(await rides(db, seededEvent.id)).toHaveLength(1);
+  });
+
+  test("C4.10: a response lost after the write, sent again, makes one car and one person, the device's", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    let lost = false;
+    await page.route("**/e/**", async (route) => {
+      const request = route.request();
+      if (!lost && request.headers()["next-action"] && request.postData()?.includes("Mairie de Vitré")) {
+        lost = true;
+        // The request reaches the server and writes; its answer never reaches the page.
+        await route.fetch();
+        return route.abort();
+      }
+      return route.continue();
+    });
+    await page.goto(`/e/${id}`);
+    await openForm(page);
+    await field(page, FR.firstName).fill("Marc");
+    await field(page, FR.location.aller).fill("Mairie de Vitré");
+    await submit(page).click();
+    await expect(failure(page)).toHaveText(FR.failed);
+    await expect(field(page, FR.location.aller)).toHaveValue("Mairie de Vitré");
+
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    await expect(alerts(page)).toHaveCount(0);
+    await expect(car(panel(page), "Marc")).toBeVisible();
+    expect(await rides(db, id)).toHaveLength(1);
+    expect(await db.selectFrom("person").select("first_name").where("event_id", "=", id).execute()).toEqual([{ first_name: "Marc" }]);
+    await page.reload();
+    await unfold(page, "Marc");
+  });
+
+  test("offline, then a refusal in the open sheet: said there alone, « Valider » keeps the focus", async ({ context, page, seededEvent }) => {
+    const sent = offers(page, "Mairie de Vitré");
+    await page.goto(`/e/${seededEvent.id}`);
+    await openForm(page);
+    await field(page, FR.firstName).fill("Marc");
+    await field(page, FR.location.aller).fill("Mairie de Vitré");
+    await context.setOffline(true);
+    await submit(page).click();
+    await expect(failure(page)).toHaveText(FR.offline);
+    // Nothing sent, and no token drawn nor stored (C1.13).
+    expect(sent).toHaveLength(0);
+    const keys = await page.evaluate((event) => Object.keys(localStorage).filter((key) => key.includes(event)), seededEvent.id);
+    expect(keys).toEqual([]);
+
+    await context.setOffline(false);
+    await failActions(page);
+    await submit(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(failure(page)).toHaveText(FR.failed);
+    await expect(submit(page)).toBeFocused();
+    await expect(field(page, FR.firstName)).toHaveValue("Marc");
+    await expect(bar(page)).toBeEmpty();
+  });
+
+  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
+  // meanwhile. Reopened, the sheet shows a new form: the one that sent is gone.
+  for (const when of ["closed", "closing", "reopened"] as const) {
+    test(`a refusal once the sheet is ${when}: said in the bar`, async ({ page, seededEvent }) => {
+      let answer = () => {};
+      const answered = new Promise<void>((resolve) => (answer = resolve));
+      await page.route("**/e/**", async (route) => {
+        if (!(await route.request().headerValue("next-action"))) return route.continue();
+        await answered;
+        await route.fulfill({ status: 500, body: "" });
+      });
+      await page.goto(`/e/${seededEvent.id}`);
+      const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+      if (when === "closing") await page.addStyleTag({ content: slowClose });
+      await openForm(page);
+      await field(page, FR.firstName).fill("Marc");
+      await field(page, FR.location.aller).fill("Mairie de Vitré");
+      await submit(page).click();
+      await expect(submit(page)).toBeDisabled();
+      await page.keyboard.press("Escape");
+      if (when === "closing") await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+      else await expect(form(page)).toHaveCount(0);
+      if (when === "reopened") await openForm(page);
+      const seen = await watchAlerts(page);
+      const responded = page.waitForResponse((response) => response.status() === 500);
+      answer();
+      await responded;
+      if (when === "closing") expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      await expect(bar(page)).toHaveText(FR.failed);
+      if (when === "reopened") {
+        // The new form says nothing, and keeps its own values.
+        await expect(failure(page)).toHaveCount(0);
+        await expect(field(page, FR.location.aller)).toHaveValue("");
+        return;
+      }
+      expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+      await expect(alerts(page)).toHaveText([FR.failed]);
+      await expect(offerButton(panel(page))).toBeFocused();
+    });
+  }
+
+  test("C5.9: inactive while the read is delayed, then failed, until « Réessayer » succeeds", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Claire: claire } = await device(db, page, id, ["Claire"]);
+    await seedRide(db, id, claire);
+    const marc = await seedPerson(db, id, { firstName: "Marc" });
+    await seedRide(db, id, marc.id, { leg: "retour" });
+    let release = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const failing = { on: true };
+    await page.route("**/e/**", async (route) => {
+      if (!failing.on || !(await route.request().headerValue("next-action"))) return route.continue();
+      await released;
+      await route.fulfill({ status: 500, body: "" });
+    });
+
+    /** On each tab: the free seats and both actions inactive, and a click opens no sheet; or all active. */
+    async function everyTab(active: boolean) {
+      for (const leg of ["Retour", "Aller"]) {
+        await selectTab(page, leg);
+        const add = panel(page).getByRole("button", { name: FR.add, exact: true });
+        const controls = [...(await freeSeats(panel(page)).all()), add, offerButton(panel(page))];
+        expect(controls).toHaveLength(5);
+        for (const control of controls) {
+          await (active ? expect(control).toBeEnabled() : expect(control).toBeDisabled());
+          if (!active) await control.click({ force: true });
+        }
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+      }
+    }
+
+    await page.goto(`/e/${id}`);
+    await expect(page.getByRole("status").filter({ hasText: "Chargement de vos inscriptions…" })).toBeVisible();
+    await everyTab(false);
+    release();
+    const retry = page.getByRole("button", { name: "Réessayer" });
+    await expect(retry).toBeVisible();
+    await everyTab(false);
+    failing.on = false;
+    await retry.click();
+    await expect(section(page)).toBeVisible();
+    await everyTab(true);
+  });
+
+  test("C9.7, C9.4: the main button where seats are missing, then the banner and the pill follow", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Léa: lea } = await device(db, page, id, ["Léa"]);
+    await place(db, id, lea, "aller", null);
+    await place(db, id, (await seedPerson(db, id, { firstName: "Tom" })).id, "aller", null);
+    await page.goto(`/e/${id}`);
+    // C1.1 with a person on the device: the actions, then the cars.
+    expect((await order(page)).slice(0, 2)).toEqual([FR.add, FR.offer]);
+    const aller = page.getByRole("tab", { name: /^Aller/ });
+    await expect(aller).toHaveText("Aller 2 sans voiture");
+    await expect(panel(page).getByRole("status")).toHaveText("2 sans voiture · il manque 2 places");
+    await expect(offerButton(panel(page))).toHaveAttribute("data-variant", "default");
+    await selectTab(page, "Retour");
+    await expect(offerButton(panel(page))).toHaveAttribute("data-variant", "outline");
+
+    // Léa, the only person of the device, is chosen.
+    await selectTab(page, "Aller");
+    await openForm(page);
+    await expect(form(page).getByRole("radio", { name: "Léa" })).toBeChecked();
+    await field(page, FR.location.aller).fill("Gare de Vitré");
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    await expect(aller).toHaveText("Aller 1 sans voiture");
+    await expect(panel(page).getByRole("status")).toHaveText("1 sans voiture · 3 places libres");
+    await expect(offerButton(panel(page))).toHaveAttribute("data-variant", "outline");
+    await expect(withoutCar(panel(page))).toHaveText(["Tom"]);
+  });
+
+  test("C4.9: with the three options on, the form is the same as without", async ({ db, page, seededEvent }) => {
+    const options = await seedEvent(db, { boostersEnabled: true, participationEnabled: true, stopsEnabled: true });
+    try {
+      const shown: string[][] = [];
+      for (const id of [seededEvent.id, options.id]) {
+        await page.goto(`/e/${id}`);
+        await openForm(page);
+        shown.push([
+          await form(page).innerText(),
+          String(await form(page).locator("input, textarea, select, [role=radio], [role=checkbox]").count()),
+        ]);
+      }
+      expect(shown[1]).toEqual(shown[0]);
+    } finally {
+      await db.deleteFrom("event").where("id", "=", options.id).execute();
+    }
+  });
+});
