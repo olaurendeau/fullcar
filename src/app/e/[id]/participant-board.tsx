@@ -4,14 +4,21 @@ import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
 import { focusLandmark } from "@/components/event/focus";
-import { messageWaits, type FromSheet } from "@/components/event/hidden-page";
+import type { FromSheet } from "@/components/event/hidden-page";
 import { MessageBar } from "@/components/event/message-bar";
-import type { AddPerson } from "@/components/event/person-form";
+import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
 import type { OfferRide } from "@/components/event/ride-form";
 import type { Leg } from "@/domain/leg";
-import { addPerson as storePerson, loadEventState, offerRide as storeRideOffer, setPersonLeg as storePersonLeg } from "./actions";
+import {
+  addPerson as storePerson,
+  loadEventState,
+  offerRide as storeRideOffer,
+  setPersonLeg as storePersonLeg,
+  updatePerson as storePersonFields,
+} from "./actions";
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
+import type { PersonOutcome } from "./persons";
 import { actionRunner, sendAction, type ActionProblem, type Sent } from "./run-action";
 
 /**
@@ -63,38 +70,57 @@ export function ParticipantBoard({
     setBoard,
   );
 
-  // The token is drawn and stored only once the request is about to leave: offline, nothing is (C1.5, C1.13).
-  const addPerson: AddPerson = async ({ person, creationId, sending, inSheet, whenClosed }) => {
-    const sent = await runAction(
-      "addPerson",
-      () => storePerson(id, ensureDeviceToken(id), { ...person, id: creationId() }),
-      sending,
-    );
+  // What became of a person's form, sent from `sheet`.
+  function personFormOutcome(sent: Sent<PersonOutcome> | undefined, sheet: FromSheet): Registration | undefined {
     if (sent === undefined) return undefined;
+    sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
-    if (outcome?.ok) {
-      device.registered();
-      return { kind: "done" };
-    }
+    if (outcome?.ok) return { kind: "done" };
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     // A refusal has no words of its own: the generic message, and the page shows the state it carries.
     const problem = sent.ok ? "failed" : sent.problem;
-    failedIn({ inSheet, whenClosed }, problem);
+    failedIn(sheet, problem);
     return { kind: "problem", problem };
+  }
+
+  // Each action runs once per sheet (`FromSheet.key`): one on its way never drops the action
+  // of a sheet opened since, which Next sends once the first has its answer (#167).
+  // The token is drawn and stored only once the request is about to leave: offline, nothing is (C1.5, C1.13).
+  const addPerson: AddPerson = async ({ person, creationId, sending, ...sheet }) => {
+    const sent = await runAction(
+      `addPerson:${sheet.key}`,
+      () => storePerson(id, ensureDeviceToken(id), { ...person, id: creationId() }),
+      sending,
+    );
+    const outcome = personFormOutcome(sent, sheet);
+    if (outcome?.kind === "done") device.registered();
+    return outcome;
+  };
+
+  const updatePerson: UpdatePerson = async ({ personId, person, sending, ...sheet }) => {
+    const sent = await runAction(
+      `updatePerson:${sheet.key}`,
+      () => storePersonFields(id, readDeviceToken(id), { ...person, personId }),
+      sending,
+    );
+    return personFormOutcome(sent, sheet);
   };
 
   // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
   // hides the page: until then, it would be neither seen nor announced. Written after what the
-  // actions ending meanwhile write there, it is not cleared by them; nor replaced, one at a time.
+  // actions ending meanwhile write there, it is not cleared by them. Every failure waits, each
+  // withdrawn alone by a send or answer from any sheet about its subject that carries all its
+  // fields; a cell has none, only its subject (#167, #208).
   function failedIn(sheet: FromSheet, problem: ActionProblem) {
     setProblem(null);
-    if (!sheet.inSheet() && !messageWaits()) sheet.whenClosed(() => setProblem(problem));
+    if (!sheet.inSheet()) sheet.whenClosed(() => setProblem(problem));
   }
 
   // The page takes the state a refusal carries too (C11.6).
   const setPersonLeg: SetPersonLeg = async (change, sheet) => {
-    const sent = await runAction("setPersonLeg", () => storePersonLeg(id, readDeviceToken(id), change));
+    const sent = await runAction(`setPersonLeg:${sheet.key}`, () => storePersonLeg(id, readDeviceToken(id), change));
     if (sent === undefined) return undefined;
+    sheet.answered();
     if (sent.ok && sent.value.ok) return null;
     // A refusal has no words of its own (`drives`, `forbidden`…): the generic message.
     const failure = sent.ok ? "failed" : sent.problem;
@@ -109,8 +135,9 @@ export function ParticipantBoard({
       const token = driver.kind === "new" ? ensureDeviceToken(id) : readDeviceToken(id);
       return storeRideOffer(id, token, { ...ride, rideId, driver: driver.kind === "new" ? { ...driver, personId } : driver });
     };
-    const sent = await runAction("offerRide", send, sending);
+    const sent = await runAction(`offerRide:${sheet.key}`, send, sending);
     if (sent === undefined) return undefined;
+    sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
     if (outcome?.ok) {
       device.registered();
@@ -136,6 +163,7 @@ export function ParticipantBoard({
         },
         refocus: focusLandmark,
         addPerson,
+        updatePerson,
         setPersonLeg,
         offerRide,
       }}

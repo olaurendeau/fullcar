@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIRST_NAME_MAX, PERSON_FIELDS, validatePerson, type PersonFields } from "./person";
+import { FIRST_NAME_MAX, PERSON_FIELDS, validatePerson, validatePersonChange, type PersonFields } from "./person";
 
 function personOf(fields: PersonFields) {
   const result = validatePerson(fields);
@@ -165,5 +165,22 @@ describe("validatePerson", () => {
     const phoneOnly = failureOf({ firstName: "Louise", phone: "123" });
     expect(phoneOnly.errors).toEqual({ phone: "invalid" });
     expect(phoneOnly.first).toBe("phone");
+  });
+});
+
+describe("validatePersonChange (C2.3)", () => {
+  it("leaves out a field not sent, and reads the others as validatePerson does", () => {
+    expect(validatePersonChange({})).toEqual({ ok: true, change: {} });
+    expect(validatePersonChange({ phone: " 07 12 12 12 12 " })).toEqual({ ok: true, change: { phone: "07 12 12 12 12" } });
+    expect(validatePersonChange({ firstName: " Clara ", phone: null })).toEqual({
+      ok: true,
+      change: { firstName: "Clara", phone: null },
+    });
+    expect(validatePersonChange({ firstName: null, phone: "12" })).toEqual({
+      ok: false,
+      errors: { firstName: "required", phone: "invalid" },
+      first: "firstName",
+    });
+    expect(validatePersonChange({ phone: "12" })).toEqual({ ok: false, errors: { phone: "invalid" }, first: "phone" });
   });
 });

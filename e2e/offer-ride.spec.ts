@@ -400,7 +400,8 @@ test.describe("offer a car", () => {
         await page.keyboard.press("Enter");
         await expect(form(page)).toHaveAttribute("data-state", "open");
         await expect(field(page, FR.location.aller)).toHaveValue("Mairie de Vitré");
-        await (when.endsWith("again") ? submit(page).click() : page.keyboard.press("Escape"));
+        // From the keyboard: the overlay of the reopened sheet may lie over the form for a moment.
+        await (when.endsWith("again") ? field(page, FR.location.aller).press("Enter") : page.keyboard.press("Escape"));
       }
       await expect(form(page)).toHaveCount(0);
       if (when.endsWith("again")) {
@@ -424,13 +425,16 @@ test.describe("offer a car", () => {
     await page.keyboard.press("Escape");
     await expect(form(page)).toHaveCount(0);
     await openForm(page);
+    const second = await holdFirst(page, "Gare", false);
+    await field(page, FR.firstName).fill("Léa");
+    await field(page, FR.location.aller).fill("Gare");
+    await submit(page).click();
+    await expect(submit(page)).toBeDisabled(); // Sent after the first, not dropped (#208).
     answer();
     // Marc's car is behind the sheet, which stays open.
     await expect(page.locator("article", { hasText: "Mairie de Vitré" })).toHaveCount(1);
     await expect(form(page)).toHaveAttribute("data-state", "open");
-    await field(page, FR.firstName).fill("Léa");
-    await field(page, FR.location.aller).fill("Gare");
-    await submit(page).click();
+    second();
     await expect(panel(page).getByRole("article")).toHaveCount(2);
   });
 

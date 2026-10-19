@@ -6,7 +6,7 @@ import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-cl
 import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
-import { AddPersonButton, type AddPerson } from "./person-form";
+import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import { OfferRideButton, type OfferRide } from "./ride-form";
 import { WithoutCarList } from "./without-car-list";
@@ -19,6 +19,8 @@ export interface BoardDevice {
   refocus: () => void;
   /** Registers a person on this device (R1), with the device's token. */
   addPerson: AddPerson;
+  /** Changes the first name and the number of one of the device's persons (C2.3). */
+  updatePerson: UpdatePerson;
   /** Without a car, or not concerned, on a leg, for one of the device's persons (#89). */
   setPersonLeg: SetPersonLeg;
   /** Offers a car on a leg (R4), with the device's token. */

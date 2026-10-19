@@ -66,14 +66,15 @@ export async function insertPerson(db: Kysely<Database>, person: NewPerson): Pro
   );
 }
 
-/** Whether a person of that event had that id, and now has these first name and number. */
+/** Whether a person of that event had that id, and now has these first name and number; one left out stays. */
 export async function updatePerson(
   db: Kysely<Database>,
   person: PersonRef,
-  fields: Pick<NewPerson, "firstName" | "phone">,
+  fields: Partial<Pick<NewPerson, "firstName" | "phone">>,
 ): Promise<boolean> {
   const result = await db
     .updateTable("person")
+    // Kysely leaves out a column set to `undefined`; at least one must be given.
     .set({ first_name: fields.firstName, phone: fields.phone })
     .where("id", "=", person.id)
     .where("event_id", "=", person.eventId)

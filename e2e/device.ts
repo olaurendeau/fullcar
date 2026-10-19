@@ -50,18 +50,28 @@ export async function watchAlerts(page: Page) {
   return () => page.evaluate(() => (window as unknown as { seenAlerts: object }).seenAlerts);
 }
 
-/** Holds the first server action whose body carries `text` until `answer`, then fails it (500) or lets it through. */
+/**
+ * Holds the first server action whose body carries `text` until `answer`, then fails it (500) or
+ * lets it through. Any other request goes on to the routes set before, so that two can be held.
+ */
 export async function holdFirst(page: Page, text: string, fails: boolean) {
   let answer = () => {};
   const answered = new Promise<void>((resolve) => (answer = resolve));
   let held = false;
   await page.route("**/e/**", async (route) => {
-    if (held || !route.request().postData()?.includes(text)) return route.continue();
+    if (held || !route.request().postData()?.includes(text)) return route.fallback();
     held = true;
     await answered;
     return fails ? route.fulfill({ status: 500, body: "" }) : route.continue();
   });
   return answer;
+}
+
+/** Lets the action `holdFirst` holds fail, and waits for its 500. */
+export async function failHeld(page: Page, answer: () => void) {
+  const responded = page.waitForResponse((response) => response.status() === 500);
+  answer();
+  await responded;
 }
 
 /** Answers every server action with a 500 while `failing.on`; the page and its scripts load. */

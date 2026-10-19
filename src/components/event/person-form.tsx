@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Leg } from "@/domain/leg";
-import { validatePerson, type PersonErrors, type PersonField } from "@/domain/person";
+import { PERSON_FIELDS, validatePerson, type PersonErrors, type PersonField } from "@/domain/person";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./create-event-form";
-import { whenPageShown, type FromSheet } from "./hidden-page";
+import { useSends, type FromSheet } from "./hidden-page";
 import { personErrorMessage } from "./person-error";
 
 /** What the form sends, before its creation id: the person, « Aller et retour », and the tab's leg. */
@@ -30,7 +30,7 @@ export interface Registering extends FromSheet {
   sending: (sending: boolean) => void;
 }
 
-/** What became of a registration, for its form. A second tap while one is sent gets nothing. */
+/** What became of a registration or a change, for its form. A second tap while one is sent gets nothing. */
 export type Registration =
   | { kind: "done" }
   | { kind: "errors"; errors: PersonErrors; first: PersonField }
@@ -39,6 +39,25 @@ export type Registration =
 
 /** Registers a person (R1): the device's token, then the form's creation id, then the request. */
 export type AddPerson = (registering: Registering) => Promise<Registration | undefined>;
+
+/**
+ * A change of one of the device's persons, as the form sends it (C2.3): an empty number removes
+ * it. Only the fields changed since the form showed: one left out stays as it is (#208).
+ */
+export interface Updating extends FromSheet {
+  personId: string;
+  person: Partial<Record<PersonField, string>>;
+  /** True until the answer: « Valider » is inactive meanwhile (C1.9). */
+  sending: (sending: boolean) => void;
+}
+
+/** Changes the first name and the number of one of the device's persons, with the device's token. */
+export type UpdatePerson = (updating: Updating) => Promise<Registration | undefined>;
+
+/** What the form does: register a person on a leg, or change one of the device's persons. */
+export type PersonFormMode =
+  | { kind: "add"; leg: Leg; hasRetour: boolean; addPerson: AddPerson }
+  | { kind: "edit"; person: { id: string; firstName: string; phone: string | null }; updatePerson: UpdatePerson };
 
 /** Before « Valider », when this device cannot keep what it registers (C1.14, D5). */
 export function StorageNotice({ title, body }: { title: string; body: string }) {
@@ -96,9 +115,7 @@ export function AddPersonButton({
     >
       {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
       <PersonForm
-        leg={leg}
-        hasRetour={hasRetour}
-        addPerson={addPerson}
+        mode={{ kind: "add", leg, hasRetour, addPerson }}
         open={() => isOpen.current}
         onDone={() => toggle(false)}
       />
@@ -114,26 +131,21 @@ export function AddPersonButton({
  * is said in the form, above « Valider », which keeps the focus, and the form stays open.
  * The creation id is drawn at the first send and kept until one succeeds: sent again after
  * a lost answer, the same creation creates nothing more (C1.12).
+ *
+ * In `edit` mode (C2.3), the first name and the number are filled with the person's, under the
+ * same rules, without « Aller et retour »; the first name has the focus as the form shows.
  */
-function PersonForm({
-  leg,
-  hasRetour,
-  addPerson,
-  open,
-  onDone,
-}: {
-  leg: Leg;
-  hasRetour: boolean;
-  addPerson: AddPerson;
-  open: () => boolean;
-  onDone: () => void;
-}) {
+export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open: () => boolean; onDone: () => void }) {
   const t = useTranslations("PersonForm");
   const tErrors = useTranslations("FormErrors");
   const tActions = useTranslations("Actions");
   const ids = useId();
   const idOf = (name: string) => `${ids}-${name}`;
-  const [values, setValues] = useState<Record<PersonField, string>>({ firstName: "", phone: "" });
+  // What the form showed: in `edit` mode, a field the user left as it was is not sent.
+  const [shown] = useState<Record<PersonField, string>>(() =>
+    mode.kind === "edit" ? { firstName: mode.person.firstName, phone: mode.person.phone ?? "" } : { firstName: "", phone: "" },
+  );
+  const [values, setValues] = useState(shown);
   const [bothLegs, setBothLegs] = useState(true);
   const [errors, setErrors] = useState<PersonErrors>({});
   const [sending, setSending] = useState(false);
@@ -141,17 +153,15 @@ function PersonForm({
   const creationId = useRef<string | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
   // Each form its own: a sheet reopened during a send shows a new form, and the sending one is gone.
-  const mounted = useRef(false);
-  // Withdraws the failure this form left for the bar: sent again, the form says what comes of it.
-  const closed = useRef<(() => void) | undefined>(undefined);
-  const inForm = () => open() && mounted.current;
+  // A change is about its person, whichever form sends it; a registration, about its form.
+  const sends = useSends(open, mode.kind === "edit" ? `person:${mode.person.id}` : undefined);
+  const editing = mode.kind === "edit";
+  const { leg, hasRetour } = mode.kind === "add" ? mode : { leg: "aller" as const, hasRetour: false };
 
+  // « Modifier » is gone as the form takes its place: the focus goes to the first name.
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+    if (editing) document.getElementById(`${ids}-firstName`)?.focus();
+  }, [editing, ids]);
 
   // « Valider » lost the focus while it was inactive: after a refusal, it gets it back
   // (« refus dans une feuille : ne bouge pas »).
@@ -171,21 +181,30 @@ function PersonForm({
     if (!checked.ok) return showErrors(checked.errors, checked.first);
     setErrors({});
     setProblem(null);
-    closed.current?.();
-    closed.current = undefined;
-    const answer = await addPerson({
-      person: { ...values, bothLegs: hasRetour && bothLegs, leg },
-      creationId: () => (creationId.current ??= newCreationId()),
-      sending: setSending,
-      inSheet: inForm,
-      whenClosed: (then) => (closed.current = whenPageShown(then)),
-    });
+    // In `edit` mode, only what changed is sent. Withdraws a failure any form about this person
+    // left for the bar, if this send carries all its fields.
+    const changed = PERSON_FIELDS.filter((name) => values[name] !== shown[name]);
+    const sheet = sends(mode.kind === "edit" ? changed : []);
+    const answer =
+      mode.kind === "add"
+        ? await mode.addPerson({
+            person: { ...values, bothLegs: hasRetour && bothLegs, leg },
+            creationId: () => (creationId.current ??= newCreationId()),
+            sending: setSending,
+            ...sheet,
+          })
+        : await mode.updatePerson({
+            personId: mode.person.id,
+            person: Object.fromEntries(changed.map((name) => [name, values[name]])),
+            sending: setSending,
+            ...sheet,
+          });
     if (answer?.kind === "done") {
       creationId.current = undefined;
       // Not the sheet opened since: it shows another form.
-      if (inForm()) onDone();
+      if (sheet.inSheet()) onDone();
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
-    else if (answer?.kind === "problem" && inForm()) setProblem(answer.problem);
+    else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
   }
 
   const field = (name: PersonField, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {

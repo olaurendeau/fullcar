@@ -16,7 +16,7 @@ import { driverChoice, NEW_DRIVER } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
-import { whenPageShown } from "./hidden-page";
+import { useSends, type FromSheet } from "./hidden-page";
 import { personErrorMessage } from "./person-error";
 import { StorageNotice, type Registering, type Registration } from "./person-form";
 import { rideErrorMessage } from "./ride-error";
@@ -28,7 +28,7 @@ export interface RideDraft extends Record<"location" | "time" | "seats" | "note"
 }
 
 /** An offer as the form sends it; sending, and where a failure is said, as for a registration. */
-export interface Offering extends Pick<Registering, "sending" | "inSheet" | "whenClosed"> {
+export interface Offering extends FromSheet, Pick<Registering, "sending"> {
   offer: RideDraft;
   /** The form's creation ids, the car's and a new driver's, drawn at its first send and kept until one succeeds. */
   creationIds: () => { rideId: string; personId: string };
@@ -126,18 +126,9 @@ function RideForm({ leg, at, persons, offerRide, open, onDone }: FormProps & { o
   const [problem, setProblem] = useState<"offline" | "failed" | null>(null);
   const creationIds = useRef<{ rideId: string; personId: string } | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
-  // Each form its own, as in « Ajouter une personne »; the failure it left for the bar is withdrawn when it sends again.
-  const mounted = useRef(false);
-  const closed = useRef<(() => void) | undefined>(undefined);
-  const inSheet = () => open() && mounted.current;
+  // Each form its own, and its own subject, as in « Ajouter une personne »: an offer is a new car.
+  const sends = useSends(open);
   const isNew = driver === NEW_DRIVER;
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   // « Valider » lost the focus while it was inactive: after a refusal, it gets it back.
   useEffect(() => {
@@ -161,21 +152,20 @@ function RideForm({ leg, at, persons, offerRide, open, onDone }: FormProps & { o
       return showErrors(found, driver === undefined, person?.ok === false ? person.first : !ride.ok ? ride.first : undefined);
     }
     showErrors({}, false, undefined);
-    closed.current?.();
+    const sheet = sends();
     const { firstName, phone, ...car } = values;
     const answer = await offerRide({
       offer: { leg, ...car, driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver } },
       creationIds: () => (creationIds.current ??= { rideId: newCreationId(), personId: newCreationId() }),
       sending: setSending,
-      inSheet,
-      whenClosed: (then) => (closed.current = whenPageShown(then)),
+      ...sheet,
     });
     if (answer?.kind === "done") {
       creationIds.current = undefined;
       // Not the sheet opened since: it shows another form.
-      if (inSheet()) onDone();
+      if (sheet.inSheet()) onDone();
     } else if (answer?.kind === "errors") showErrors(answer.errors, false, answer.first);
-    else if (answer?.kind === "problem" && inSheet()) setProblem(answer.problem);
+    else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
   }
 
   const field = (name: PersonField | RideField, label: string, control: Control, hint?: string) => {

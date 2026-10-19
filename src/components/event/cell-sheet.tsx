@@ -8,13 +8,13 @@ import type { Leg } from "@/domain/leg";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { focusCarTitle, focusCell } from "./focus";
-import { whenPageShown, type FromSheet } from "./hidden-page";
+import { useSends, type FromSheet } from "./hidden-page";
 import type { BarProblem } from "./message-bar";
 
 /**
  * Declares one of the device's persons without a car, or not concerned, on a leg
  * (`setPersonLeg`). `null` once done; the problem to show otherwise; `undefined` when a change
- * of any cell is already on its way (#167). A problem the sheet no longer shows goes to the bar.
+ * from this sheet is already on its way (#167). A problem the sheet no longer shows goes to the bar.
  */
 export type SetPersonLeg = (
   change: { personId: string; leg: Leg; kind: "withoutCar" | "notConcerned" },
@@ -55,18 +55,11 @@ export function CellSheet({
   const afterClose = useRef(() => focusCell(person.id, leg));
   const first = useRef<HTMLButtonElement>(null);
   const isOpen = useRef(open);
-  // Each opening is a new sheet: the one that sent may be gone.
-  const mounted = useRef(false);
-  const inSheet = () => isOpen.current && mounted.current;
+  // Each opening is a new sheet (`key`): the one that sent may be gone. What it says is about the cell.
+  const sends = useSends(() => isOpen.current, `cell:${person.id}:${leg}`);
   useEffect(() => {
     isOpen.current = open;
   }, [open]);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   // A refusal can change the actions (`drives`: « Voir la voiture » alone). Radix then puts the
   // focus on the sheet itself, and it goes to the first action.
@@ -77,9 +70,10 @@ export function CellSheet({
 
   async function declare(action: Exclude<CellAction, "seeCar">) {
     const change = { personId: person.id, leg, kind: declaredBy(action) };
-    const outcome = await setPersonLeg(change, { inSheet, whenClosed: (then) => void whenPageShown(then) });
+    const sheet = sends();
+    const outcome = await setPersonLeg(change, sheet);
     if (outcome === undefined) return;
-    if (inSheet()) setProblem(outcome);
+    if (sheet.inSheet()) setProblem(outcome);
     if (outcome === null) onOpenChange(false);
   }
 
