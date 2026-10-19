@@ -14,9 +14,10 @@ import { ReadButton } from "./read-button";
  * The organiser's panel (#3, R4), the same at every visit (C4.7), in the order of C4.1:
  * the link to share, the organiser's own link as personal, then why to keep it; under it, a
  * section per leg (#179). Under 1024 px, a tile per leg comes first (#180); from 1024 px,
- * the panel widens, the links take two columns and the sections two more (O4.1). It receives the organiser's link ready-made: reading the token is
- * admin-link.ts's alone. Its title takes the focus after « Réessayer » (O5.8), through
- * `titleRef`. Which lists are unfolded is kept here, by leg and list (O5.6).
+ * the panel widens, the links take two columns and the sections two more (O4.1). It
+ * receives the organiser's link ready-made: reading the token is admin-link.ts's alone. Its
+ * title takes the focus after « Réessayer » (O5.8), through `titleRef`. Which lists are
+ * unfolded is kept here, by leg and list (O5.6).
  */
 export function AdminPanel({
   publicUrl,

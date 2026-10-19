@@ -173,9 +173,11 @@ test.describe("the tiles", () => {
     await expect(tiles(page)).toHaveCount(2);
     for (const each of await tiles(page).all()) await expect(each).toBeVisible();
 
+    // Hidden, the tiles leave the accessibility tree: none is found by its role any more.
     for (const width of [1024, 1280]) {
       await page.setViewportSize({ width, height: 800 });
-      for (const each of await tiles(page).all()) await expect(each).toBeHidden();
+      await expect(tiles(page)).toHaveCount(0);
+      await expect(panel(page).locator("button").filter({ hasText: /^Aller/ })).toBeHidden();
     }
   });
 
@@ -211,36 +213,48 @@ test.describe("the tiles", () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
   });
 
-  test.describe("at 1280 × 800", () => {
-    test.use({ viewport: { width: 1280, height: 800 } });
+  // From 1024 px, the very width where the tiles go (O1.3), not only on a wide screen.
+  for (const width of [1024, 1280]) {
+    test.describe(`at ${width} × 800`, () => {
+      test.use({ viewport: { width, height: 800 } });
 
-    test("O1.2, O4.1: both links in two columns, then the sections side by side, Aller on the left and first", async ({
-      page,
-      seededEvent,
-    }) => {
-      await page.goto(organiserPath(seededEvent));
-      await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
-      const [share, admin, warning, aller, retour] = await Promise.all(
-        [
-          linkGroup(page, FR.shareLink),
-          linkGroup(page, FR.adminLink),
-          panel(page).getByRole("note"),
-          section(page, "Aller"),
-          section(page, "Retour"),
-        ].map(box),
-      );
-      expect(Math.abs(share.y - admin.y)).toBeLessThanOrEqual(1);
-      expect(share.x + share.width).toBeLessThanOrEqual(admin.x);
-      expect(Math.abs(warning.x - admin.x)).toBeLessThanOrEqual(1);
-      expect(warning.y).toBeGreaterThan(admin.y);
+      test("O1.2, O4.1: both links in two columns, one separator, then the sections side by side, Aller on the left and first", async ({
+        page,
+        seededEvent,
+      }) => {
+        await page.goto(organiserPath(seededEvent));
+        await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
+        await expect(tiles(page)).toHaveCount(0);
+        const [share, admin, warning, aller, retour] = await Promise.all(
+          [
+            linkGroup(page, FR.shareLink),
+            linkGroup(page, FR.adminLink),
+            panel(page).getByRole("note"),
+            section(page, "Aller"),
+            section(page, "Retour"),
+          ].map(box),
+        );
+        expect(Math.abs(share.y - admin.y)).toBeLessThanOrEqual(1);
+        expect(share.x + share.width).toBeLessThanOrEqual(admin.x);
+        expect(Math.abs(warning.x - admin.x)).toBeLessThanOrEqual(1);
+        expect(warning.y).toBeGreaterThan(admin.y);
 
-      expect(Math.abs(aller.y - retour.y)).toBeLessThanOrEqual(1);
-      expect(aller.x + aller.width).toBeLessThanOrEqual(retour.x);
-      expect(Math.abs(aller.x - share.x)).toBeLessThanOrEqual(1);
-      expect(aller.y).toBeGreaterThan(Math.max(share.y + share.height, warning.y + warning.height));
-      await expect(section(page, "Aller")).toHaveCSS("border-top-width", "0px");
+        // A single line between the links and the sections: the one between the links is gone.
+        const separators = panel(page).locator("hr:visible");
+        await expect(separators).toHaveCount(1);
+        const line = await box(separators);
+        expect(line.y).toBeGreaterThanOrEqual(Math.max(share.y + share.height, warning.y + warning.height));
+        expect(line.y).toBeLessThanOrEqual(aller.y);
+
+        expect(Math.abs(aller.y - retour.y)).toBeLessThanOrEqual(1);
+        expect(aller.x + aller.width).toBeLessThanOrEqual(retour.x);
+        expect(Math.abs(aller.x - share.x)).toBeLessThanOrEqual(1);
+        expect(aller.y).toBeGreaterThan(Math.max(share.y + share.height, warning.y + warning.height));
+        await expect(section(page, "Aller")).toHaveCSS("border-top-width", "0px");
+        expect(await horizontalOverflow(page)).toBe(0);
+      });
     });
-  });
+  }
 });
 
 test("O1.3, O1.5: everyone seated, and an empty leg beside: its name and « Personne… » without a pill, at 4.5:1 at least", async ({
@@ -271,7 +285,7 @@ test("O1.3: no tile on an event with neither car nor person", async ({ page, see
 test.describe("without a retour", () => {
   test.use({ eventFields: { retourAt: null } });
 
-  test("O1.7: a single tile, the panel's whole width; at 1280 px, the section in the left column", async ({
+  test("O1.7: a single tile, the panel's whole width; at 1024 and 1280 px, the section in the left column", async ({
     db,
     page,
     seededEvent,
@@ -283,13 +297,15 @@ test.describe("without a retour", () => {
     expect(Math.abs(only.x - share.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(only.width - share.width)).toBeLessThanOrEqual(1);
 
-    await page.setViewportSize({ width: 1280, height: 800 });
-    const [aller, left, right] = await Promise.all(
-      [section(page, "Aller"), linkGroup(page, FR.shareLink), linkGroup(page, FR.adminLink)].map(box),
-    );
-    expect(Math.abs(aller.x - left.x)).toBeLessThanOrEqual(1);
-    expect(aller.x + aller.width).toBeLessThanOrEqual(right.x);
-    await expect(panel(page).getByRole("region")).toHaveCount(1);
+    for (const width of [1024, 1280]) {
+      await page.setViewportSize({ width, height: 800 });
+      const [aller, left, right] = await Promise.all(
+        [section(page, "Aller"), linkGroup(page, FR.shareLink), linkGroup(page, FR.adminLink)].map(box),
+      );
+      expect(Math.abs(aller.x - left.x), `at ${width} px, the section's left edge`).toBeLessThanOrEqual(1);
+      expect(aller.x + aller.width, `at ${width} px, the section's right edge`).toBeLessThanOrEqual(right.x);
+      await expect(panel(page).getByRole("region")).toHaveCount(1);
+    }
   });
 });
 
