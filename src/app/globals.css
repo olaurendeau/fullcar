@@ -4,6 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+    /* The column of /e/{id}: a max-w-md main, less its p-4 on each side. `max-w-board` keeps
+       /e/{id}/admin's narrow parts that wide under a main that takes the page's width (O7.5). */
+    --container-board: 26rem;
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

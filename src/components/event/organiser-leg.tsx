@@ -12,10 +12,14 @@ import { OrganiserCarsWithoutPhone, OrganiserWithoutCar } from "./organiser-list
 type OrganiserList = "withoutCar" | "carsWithoutPhone";
 const foldKey = (leg: Leg, list: OrganiserList) => `${leg}:${list}`;
 
+/** The id of a leg's title (h3), where its tile puts the focus (#180). */
+export const legHeadingId = (leg: Leg) => `organiser-leg-${leg}`;
+
 /**
  * The organiser area's sections, one per leg, under the warning (README, « Ordre sous
- * 1024 px », point 5). One block, so that it can be hidden while it stays mounted. The legs'
- * dates come from the page, not from the panel's answer.
+ * 1024 px », point 5); from 1024 px, side by side, Aller on the left, and alone in the left
+ * column without a retour (O1.2, O1.7). One block, so that it can be hidden while it stays
+ * mounted. The legs' dates come from the page, not from the panel's answer.
  */
 export function OrganiserLegs({
   legs,
@@ -31,7 +35,7 @@ export function OrganiserLegs({
   onToggle: (key: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
       {legs.map((board) => {
         const at = board.leg === "aller" ? allerAt : retourAt;
         return (
@@ -61,14 +65,14 @@ function OrganiserLegSection({
 }) {
   const t = useTranslations("Event");
   const { leg } = board;
-  const headingId = `organiser-leg-${leg}`;
+  const headingId = legHeadingId(leg);
   const fold = (list: OrganiserList) => ({
     expanded: expanded.has(foldKey(leg, list)),
     onToggle: () => onToggle(foldKey(leg, list)),
   });
 
   return (
-    <section aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3 border-t pt-4">
+    <section aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3 border-t pt-4 lg:border-t-0 lg:pt-0">
       <div className="flex flex-col gap-1">
         <h3 id={headingId} tabIndex={-1} className="self-start font-semibold outline-none">
           {t(`legs.${leg}`)}

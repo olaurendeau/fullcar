@@ -7,14 +7,17 @@ import type { OrganiserLeg } from "@/domain/organiser-panel";
 import type { WallClock } from "@/domain/wall-clock";
 import { CopyableLink, ShareButton } from "./copyable-link";
 import { OrganiserLegs } from "./organiser-leg";
+import { OrganiserTiles } from "./organiser-tiles";
 import { ReadButton } from "./read-button";
 
 /**
  * The organiser's panel (#3, R4), the same at every visit (C4.7), in the order of C4.1:
  * the link to share, the organiser's own link as personal, then why to keep it; under it, a
- * section per leg (#179). It receives the organiser's link ready-made: reading the token is
- * admin-link.ts's alone. Its title takes the focus after « Réessayer » (O5.8), through
- * `titleRef`. Which lists are unfolded is kept here, by leg and list (O5.6).
+ * section per leg (#179). Under 1024 px, a tile per leg comes first (#180); from 1024 px,
+ * the panel widens, the links take two columns and the sections two more (O4.1). It
+ * receives the organiser's link ready-made: reading the token is admin-link.ts's alone. Its
+ * title takes the focus after « Réessayer » (O5.8), through `titleRef`. Which lists are
+ * unfolded is kept here, by leg and list (O5.6).
  */
 export function AdminPanel({
   publicUrl,
@@ -45,31 +48,40 @@ export function AdminPanel({
   );
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-xl border p-4">
+    <section
+      aria-labelledby={titleId}
+      className="mx-auto flex w-full max-w-board flex-col gap-4 rounded-xl border p-4 lg:max-w-5xl"
+    >
       <h2 id={titleId} ref={titleRef} tabIndex={-1} className="font-semibold outline-none">
         {t("title")}
       </h2>
-      <LinkGroup label={t("shareLink.label")} hint={t("shareLink.hint")}>
-        <CopyableLink url={publicUrl}>
-          <ShareButton url={publicUrl} />
-        </CopyableLink>
-      </LinkGroup>
-      <hr />
-      <LinkGroup
-        label={
-          <>
-            {t("adminLink.label")}
-            <span className="inline-flex h-5 items-center gap-1 rounded-full border bg-muted px-2 text-xs font-medium text-foreground/80">
-              <Lock className="size-3" />
-              {t("adminLink.badge")}
-            </span>
-          </>
-        }
-        hint={t("adminLink.hint")}
-      >
-        <CopyableLink url={adminUrl} />
-      </LinkGroup>
-      <Notice title={t("keep.title")} body={t("keep.body")} />
+      <OrganiserTiles legs={legs} />
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+        <LinkGroup label={t("shareLink.label")} hint={t("shareLink.hint")}>
+          <CopyableLink url={publicUrl}>
+            <ShareButton url={publicUrl} />
+          </CopyableLink>
+        </LinkGroup>
+        <hr className="lg:hidden" />
+        <div className="flex flex-col gap-4 lg:gap-3">
+          <LinkGroup
+            label={
+              <>
+                {t("adminLink.label")}
+                <span className="inline-flex h-5 items-center gap-1 rounded-full border bg-muted px-2 text-xs font-medium text-foreground/80">
+                  <Lock className="size-3" />
+                  {t("adminLink.badge")}
+                </span>
+              </>
+            }
+            hint={t("adminLink.hint")}
+          >
+            <CopyableLink url={adminUrl} />
+          </LinkGroup>
+          <Notice title={t("keep.title")} body={t("keep.body")} />
+        </div>
+      </div>
+      <hr className="hidden lg:block" />
       <OrganiserLegs legs={legs} allerAt={allerAt} retourAt={retourAt} expanded={expanded} onToggle={toggle} />
     </section>
   );
@@ -91,8 +103,9 @@ function LinkGroup({ label, hint, children }: { label: ReactNode; hint: string; 
 }
 
 // Untinted (O7.7): the frame in the destructive colour on the background, as #66's alerts.
+// The board's width, centred, where the panel would be (O7.5).
 const PROBLEM_FRAME =
-  "mx-auto grid w-full max-w-md grid-cols-[1rem_1fr] gap-x-2.5 rounded-lg border border-destructive bg-background p-3 text-sm outline-none";
+  "mx-auto grid w-full max-w-board grid-cols-[1rem_1fr] gap-x-2.5 rounded-lg border border-destructive bg-background p-3 text-sm outline-none";
 
 /**
  * Instead of the panel, when the link is not the organiser's (C6.5), or when the check

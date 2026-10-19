@@ -44,7 +44,7 @@ export function AdminArrival({ id, allerAt, retourAt }: { id: string; allerAt: W
     return (
       <p
         role="status"
-        className="mx-auto flex w-full max-w-md items-center gap-2 text-sm text-muted-foreground noscript:hidden"
+        className="mx-auto flex w-full max-w-board items-center gap-2 text-sm text-muted-foreground noscript:hidden"
       >
         <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
         {t("loading")}
