@@ -536,6 +536,12 @@ describe("offerRide", () => {
         errors: { phone: "invalid", note: "tooLong", otherTime: "required", passengers: "tooMany" },
         first: "phone",
       });
+      // The other leg's fields come before the passengers in the form.
+      expect(await offerTo({ otherLeg: aDrive({ time: "" }) })).toEqual({
+        ok: false,
+        errors: { otherTime: "required", passengers: "tooMany" },
+        first: "otherTime",
+      });
       // Without a number of seats, there is nothing to count the passengers against.
       expect(await offerTo({ seats: "0" })).toEqual({ ok: false, errors: { seats: "outOfRange" }, first: "seats" });
     });
@@ -554,15 +560,23 @@ describe("offerRide", () => {
       });
     });
 
-    it.each<[string, (scene: Awaited<ReturnType<typeof aDeviceScene>>) => string]>([
-      ["of another device", (scene) => scene.tom.id],
+    type Scene = Awaited<ReturnType<typeof aDeviceScene>>;
+    it.each<[string, (trx: Db, scene: Scene) => string | Promise<string>]>([
+      ["of another device", (_trx, scene) => scene.tom.id],
       ["nobody is", () => randomUUID()],
+      // Not a person of this event, though her token is the same: refused before the
+      // foreign key of her placement would fail.
+      [
+        "of another event, with the same token",
+        async (trx, scene) => (await seedPerson(trx, (await seedEvent(trx)).id, { firstName: "Bea" }, scene.token)).id,
+      ],
     ])("C2.4: a passenger %s is refused as forbidden, and nothing changes", async (_, passengerOf) => {
       await withRollback(async (trx) => {
         const { id: eventId } = await seedEvent(trx);
         const scene = await aDeviceScene(trx, eventId);
+        const stranger = await passengerOf(trx, scene);
         const before = await rowsOf(trx, eventId);
-        const passengerIds = [scene.bea.id, passengerOf(scene)];
+        const passengerIds = [scene.bea.id, stranger];
         const offer = anOffer("aller", scene.driver, { passengerIds });
         expect(await offerRide(trx, eventId, scene.token, offer)).toEqual({ ok: false, error: "forbidden" });
         // Refused before the newcomer is written: even a transaction passed in is left as it was.
@@ -720,7 +734,14 @@ describe("offerRide", () => {
             offered.catch(() => {});
             await blockedBy(db, rows[0].pid);
             const persons = sql`select id from person where id in (${lea.id}, ${tom.id}) for update nowait`.execute(db);
-            personsFree = await persons.then(() => true, (error: { code?: string }) => error.code !== "55P03");
+            // Locked is false; any other failure is no answer, and fails the test.
+            personsFree = await persons.then(
+              () => true,
+              (error: { code?: string }) => {
+                if (error.code === "55P03") return false;
+                throw error;
+              },
+            );
             await holder.commit().execute();
           } finally {
             try {

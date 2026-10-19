@@ -189,9 +189,11 @@ croissant (`lockPersons`, `src/db/persons.ts`). Ainsi, proposer une voiture sur 
 legs (`offerRide`, `src/app/e/[id]/offer-ride.ts`) verrouille les Rides que qui conduit
 quitte, sur ce leg et sur l'autre, puis sa Person et celles des personnes qui montent avec
 elle. Verrouillés par leg, deux propositions qui quittent les deux mêmes Rides dans des
-rôles inverses tiendraient chacune l'un et attendraient l'autre. Une écriture qui ne verrouille qu'un Ride, comme une prise de place,
-suit déjà cet ordre. Les Rides qu'une écriture crée ne sont pas verrouillés : personne ne
-les voit avant la validation.
+rôles inverses tiendraient chacune l'un et attendraient l'autre. Une écriture qui ne
+verrouille qu'un Ride, comme une prise de place, suit déjà cet ordre. Les Rides qu'une
+écriture crée ne sont pas verrouillés avant les Persons : personne ne les voit avant la
+validation. Y placer des passagers (`setPlacement`) les verrouille ensuite, après les
+Persons, sans attente possible pour la même raison.
 
 Le déclencheur `placement_driver_on_leg` tient lui-même cet ordre : quand `ride_id` est
 renseigné, il prend le Ride `FOR KEY SHARE`, le verrou que la clé `placement → ride`
