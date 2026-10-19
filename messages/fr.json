@@ -70,13 +70,21 @@
     "needsJavaScript": "S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page."
   },
   "DevicePersons": {
-    "title": "Personnes de l’appareil",
-    "hint": "Inscrites depuis cet appareil : vous pouvez les modifier.",
+    "title": "Vos inscriptions",
+    "summary": "{persons, plural, one {# personne} other {# personnes}} · {withoutCar, plural, =0 {tout le monde a une place} other {# sans voiture}}",
+    "colName": "Prénom",
+    "cell": {
+      "passenger": "Avec {driver}"
+    },
+    "cellLabel": "{firstName}, {leg} : {cell}",
     "state": {
       "passenger": "Dans la voiture de {driver}",
       "driver": "Conduit",
       "withoutCar": "Sans voiture",
-      "notConcerned": "Pas concernée"
+      "notConcerned": {
+        "aller": "Ne fait pas l’aller",
+        "retour": "Ne fait pas le retour"
+      }
     },
     "loading": "Chargement de vos inscriptions…",
     "failed": "Vos inscriptions n’ont pas pu être chargées",

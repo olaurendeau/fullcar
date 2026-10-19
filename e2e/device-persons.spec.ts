@@ -1,19 +1,15 @@
-import { randomBytes } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
+import { failActions, holdActions, holdToken, newToken } from "./device";
 import { expect, test } from "./fixtures";
 
-// #87: the device's persons on the page. The device's token is seeded with its persons, then set
-// in `localStorage` before the page's scripts run, under the event's own key.
+// #87, #162: « Vos inscriptions », the device's persons above the tabs, one row each, one cell per leg.
 
 type Db = Kysely<Database>;
-
-const newToken = () => personalTokenFromBytes(randomBytes(PERSONAL_TOKEN_BYTES));
 
 const PHONES = {
   claire: "06 11 22 33 44",
@@ -57,33 +53,6 @@ async function seedScene(db: Db, eventId: string, token: string) {
   await place(claire, "retour", null);
 }
 
-/** Puts the device's token for event `id` in `localStorage` before any script of the page runs. */
-async function holdToken(page: Page, id: string, token: string) {
-  await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [`fullcar:personal-token:${id}`, token]);
-}
-
-/** Holds back every server action until `release` is called. */
-async function holdActions(page: Page) {
-  let release = () => {};
-  const released = new Promise<void>((resolve) => (release = resolve));
-  await page.route("**/e/**", async (route) => {
-    if (await route.request().headerValue("next-action")) await released;
-    await route.continue();
-  });
-  return release;
-}
-
-/** Answers every server action with a 500 while `failing.on`; the page and its scripts load. */
-async function failActions(page: Page) {
-  const failing = { on: true };
-  await page.route("**/e/**", async (route) =>
-    failing.on && (await route.request().headerValue("next-action"))
-      ? route.fulfill({ status: 500, body: "" })
-      : route.continue(),
-  );
-  return failing;
-}
-
 async function selectTab(page: Page, name: string) {
   const tab = page.getByRole("tab", { name });
   await expect(async () => {
@@ -92,19 +61,36 @@ async function selectTab(page: Page, name: string) {
   }).toPass();
 }
 
-const section = (scope: Page | Locator) => scope.getByRole("region", { name: "Personnes de l’appareil" });
+const section = (scope: Page | Locator) => scope.getByRole("region", { name: "Vos inscriptions" });
+const toggle = (scope: Page | Locator) => section(scope).getByRole("button", { name: /^Vos inscriptions/ });
+const nameButton = (scope: Page | Locator, firstName: string) =>
+  section(scope).getByRole("button", { name: firstName, exact: true });
 const car = (scope: Page | Locator, driver: string) => scope.getByRole("article", { name: `Voiture de ${driver}` });
 const freeSeats = (scope: Page | Locator) => scope.getByRole("button", { name: /^Place libre : / });
 const call = (scope: Page | Locator, firstName: string) => scope.getByRole("link", { name: `Appeler ${firstName} au`, exact: false });
+const loadingLine = (page: Page) => page.getByRole("status").filter({ hasText: "Chargement de vos inscriptions…" });
 
-/** The device's persons on the aller, with their state there. */
-const ALLER = ["Claire: Conduit", "Léa: Dans la voiture de Marc", "Tom: Sans voiture", "Hugo: Pas concernée"];
+/** The matrix of the scene: each person's cells, aller then retour. */
+const MATRIX = [
+  ["Conduit", "Sans voiture"],
+  ["Avec Marc", "Ne fait pas le retour"],
+  ["Sans voiture", "Avec Zoé"],
+  ["Ne fait pas l’aller", "Ne fait pas le retour"],
+];
 
-/** Each of the device's persons in the section, as « first name: state ». */
-async function states(scope: Locator): Promise<string[]> {
-  return scope.getByRole("group").evaluateAll((groups) =>
-    groups.map((group) => Array.from(group.querySelectorAll("[data-slot]"), (slot) => slot.textContent).join(": ")),
-  );
+/** Each row's cells, as their text reads. */
+async function cells(scope: Page | Locator): Promise<string[][]> {
+  return section(scope)
+    .locator("tbody tr")
+    .evaluateAll((rows) => rows.map((row) => Array.from(row.querySelectorAll("td"), (cell) => cell.textContent ?? "")));
+}
+
+async function height(locator: Locator): Promise<number> {
+  return (await locator.boundingBox())?.height ?? 0;
+}
+
+function overflow(page: Page) {
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
 test.describe("device persons", () => {
@@ -116,24 +102,74 @@ test.describe("device persons", () => {
     await holdToken(page, seededEvent.id, token);
   });
 
-  test("C2.2: the device's persons, their state on each leg, their own number", async ({ page, seededEvent }) => {
+  // No tab is clicked: both legs are read from the matrix, above the tabs.
+  test("C2.2, C3.7: each person's state on both legs, in a table", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
-    const panel = page.getByRole("tabpanel");
-    await expect(section(panel).getByText("Inscrites depuis cet appareil : vous pouvez les modifier.")).toBeVisible();
-    expect(await states(section(panel))).toEqual(ALLER);
-    const own = call(section(panel), "Claire");
+    await expect(section(page).getByRole("columnheader")).toHaveText(["Prénom", "Aller", "Retour"]);
+    await expect(section(page).getByRole("rowheader")).toHaveText(["Claire", "Léa", "Tom", "Hugo"]);
+    expect(await cells(page)).toEqual(MATRIX);
+    for (const firstName of ["Claire", "Léa", "Tom", "Hugo"]) {
+      await expect(nameButton(page, firstName)).toHaveAttribute("aria-haspopup", "dialog");
+      expect(await height(nameButton(page, firstName))).toBeGreaterThanOrEqual(44);
+    }
+    // Above the tabs, and the Aller tab still the active one.
+    const tab = page.getByRole("tab", { name: /^Aller/ });
+    expect((await section(page).boundingBox())!.y).toBeLessThan((await tab.boundingBox())!.y);
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("C3.3: a person not concerned shows in the matrix alone", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(section(page)).toBeVisible();
+    // Both legs are in the DOM, the inactive one hidden: Hugo is in no car and no list of either.
+    await expect(page.getByRole("main").getByText("Hugo", { exact: true })).toHaveCount(1);
+    await expect(section(page).getByText("Hugo", { exact: true })).toHaveCount(1);
+  });
+
+  test("C3.6: unfolded with a cell « Sans voiture », folded and unfolded by its button", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    const button = toggle(page);
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+    await expect(button).toContainText("4 personnes · 2 sans voiture");
+    expect(await height(button)).toBeGreaterThanOrEqual(44);
+    const table = page.locator(`#${await button.getAttribute("aria-controls")}`);
+    await expect(table).toBeVisible();
+    expect(await overflow(page)).toBe(0);
+
+    // From the keyboard: the focus stays on the button.
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect(button).toHaveAttribute("aria-expanded", "false");
+    await expect(table).toBeHidden();
+    await expect(button).toBeFocused();
+    expect(await overflow(page)).toBe(0);
+    await button.click();
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+    await expect(table).toBeVisible();
+  });
+
+  test("C10.1: a person's sheet shows their own number, as a tel: link", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await nameButton(page, "Claire").click();
+    const claire = page.getByRole("dialog", { name: "Claire" });
+    const own = call(claire, "Claire");
     await expect(own).toHaveText(PHONES.claire);
     await expect(own).toHaveAccessibleName(`Appeler Claire au ${PHONES.claire}`);
     await expect(own).toHaveAttribute("href", "tel:0611223344");
-    await expect(call(section(panel), "Léa")).toHaveCount(0);
+    expect(await height(own)).toBeGreaterThanOrEqual(44);
+    // « Fermer » gives the focus back to the first name.
+    await claire.getByRole("button", { name: "Fermer" }).click();
+    await expect(claire).toHaveCount(0);
+    await expect(nameButton(page, "Claire")).toBeFocused();
 
-    await selectTab(page, "Retour");
-    expect(await states(section(panel))).toEqual([
-      "Claire: Sans voiture",
-      "Léa: Pas concernée",
-      "Tom: Dans la voiture de Zoé",
-      "Hugo: Pas concernée",
-    ]);
+    // Without a number, no link; Escape closes it as well.
+    await nameButton(page, "Léa").click();
+    const lea = page.getByRole("dialog", { name: "Léa" });
+    await expect(lea.getByRole("button", { name: "Fermer" })).toBeVisible();
+    await expect(lea.getByRole("link")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(lea).toHaveCount(0);
+    await expect(nameButton(page, "Léa")).toBeFocused();
   });
 
   // A link on the cards the device shares; none elsewhere, nor for a driver without a number.
@@ -147,7 +183,7 @@ test.describe("device persons", () => {
     });
     await page.goto(`/e/${seededEvent.id}`);
     const panel = page.getByRole("tabpanel");
-    await expect(section(panel)).toBeVisible();
+    await expect(section(page)).toBeVisible();
     // Paul's car shares nothing with the device: no link, and his number is neither sent nor shown.
     await expect(car(panel, "Paul").getByRole("listitem")).toHaveText(["Nina"]);
     await expect(car(panel, "Paul").getByRole("link")).toHaveCount(0);
@@ -193,21 +229,21 @@ test.describe("device persons", () => {
 
   test("C11.7: the same section on the organiser's page", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}/admin`);
-    await expect(section(page.getByRole("tabpanel"))).toBeVisible();
-    expect(await states(section(page.getByRole("tabpanel")))).toEqual(ALLER);
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
+    expect(await cells(page)).toEqual(MATRIX);
   });
 
   test("C5.9: while the device's persons load, the free seats are inactive", async ({ page, seededEvent }) => {
     const release = await holdActions(page);
     await page.goto(`/e/${seededEvent.id}`);
     const panel = page.getByRole("tabpanel");
-    await expect(panel.getByRole("status").filter({ hasText: "Chargement de vos inscriptions…" })).toBeVisible();
+    await expect(loadingLine(page)).toBeVisible();
     await expect(freeSeats(panel)).toHaveCount(4);
     for (const seat of await freeSeats(panel).all()) await expect(seat).toBeDisabled();
 
     release();
-    await expect(section(panel)).toBeVisible();
-    await expect(panel.getByText("Chargement de vos inscriptions…")).toHaveCount(0);
+    await expect(section(page)).toBeVisible();
+    await expect(page.getByText("Chargement de vos inscriptions…")).toHaveCount(0);
     for (const seat of await freeSeats(panel).all()) await expect(seat).toBeEnabled();
   });
 
@@ -216,9 +252,9 @@ test.describe("device persons", () => {
     const failing = await failActions(page);
     await page.goto(`/e/${seededEvent.id}`);
     const panel = page.getByRole("tabpanel");
-    const retry = panel.getByRole("button", { name: "Réessayer" });
-    await expect(panel.getByRole("alert")).toContainText("Vos inscriptions n’ont pas pu être chargées");
-    await expect(panel.getByRole("alert")).toContainText(
+    const retry = page.getByRole("button", { name: "Réessayer" });
+    const alert = page.getByRole("alert").filter({ hasText: "Vos inscriptions n’ont pas pu être chargées" });
+    await expect(alert).toContainText(
       "Rien ne peut être ajouté ni modifié tant qu’elles ne sont pas chargées. Vérifiez la connexion, puis réessayez.",
     );
     await expect(freeSeats(panel).first()).toBeDisabled();
@@ -246,19 +282,88 @@ test.describe("device persons", () => {
     await expect(offline).toHaveCount(0);
     await expect(page.getByRole("tab", { name: /^Aller/ })).toBeFocused();
 
-    // Read at last: the focus on the section's title, the seats active.
+    // Read at last: the focus on the loading line meanwhile, then on the section's button.
     await context.setOffline(false);
     failing.on = false;
+    const release = await holdActions(page);
     await retry.focus();
     await page.keyboard.press("Enter");
-    await expect(section(panel).getByRole("heading", { name: "Personnes de l’appareil" })).toBeFocused();
-    await expect(panel.getByRole("alert")).toHaveCount(0);
+    await expect(loadingLine(page)).toBeFocused();
+    release();
+    await expect(toggle(page)).toBeFocused();
+    await expect(alert).toHaveCount(0);
     await expect(freeSeats(panel).first()).toBeEnabled();
+  });
+
+  test("a focus moved away during the read stays where it was put", async ({ page, seededEvent }) => {
+    const failing = await failActions(page);
+    await page.goto(`/e/${seededEvent.id}`);
+    const retry = page.getByRole("button", { name: "Réessayer" });
+    await expect(retry).toBeVisible();
+    failing.on = false;
+    const release = await holdActions(page);
+    await retry.click();
+    await expect(loadingLine(page)).toBeFocused();
+    const tab = page.getByRole("tab", { name: /^Aller/ });
+    await tab.focus();
+    release();
+    await expect(toggle(page)).toBeVisible();
+    await expect(tab).toBeFocused();
+  });
+});
+
+test.describe("device persons, nobody without a car", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("C3.6: folded into its summary", async ({ db, page, seededEvent }) => {
+    const token = newToken();
+    const lea = await seedPerson(db, seededEvent.id, { firstName: "Léa" }, token);
+    const marc = await seedPerson(db, seededEvent.id, { firstName: "Marc" });
+    const marcsCar = await seedRide(db, seededEvent.id, marc.id);
+    await seedPlacement(db, { personId: lea.id, eventId: seededEvent.id, leg: "aller", rideId: marcsCar });
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const button = toggle(page);
+    await expect(button).toHaveAttribute("aria-expanded", "false");
+    await expect(button).toContainText("1 personne · tout le monde a une place");
+    await expect(page.locator(`#${await button.getAttribute("aria-controls")}`)).toBeHidden();
+    expect(await overflow(page)).toBe(0);
+    await button.click();
+    expect(await cells(page)).toEqual([["Avec Marc", "Ne fait pas le retour"]]);
+  });
+});
+
+test.describe("device persons, a first name of 40 characters", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("C11.3: wraps inside its column, nothing scrolls sideways", async ({ db, page, seededEvent }) => {
+    const token = newToken();
+    const firstName = "Marie".repeat(8);
+    const marie = await seedPerson(db, seededEvent.id, { firstName }, token);
+    await seedPlacement(db, { personId: marie.id, eventId: seededEvent.id, leg: "aller", rideId: null });
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const header = section(page).getByRole("rowheader");
+    await expect(header).toHaveText(firstName);
+    expect(await overflow(page)).toBe(0);
+    const column = (await header.boundingBox())!;
+    const name = (await nameButton(page, firstName).boundingBox())!;
+    expect(name.x + name.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
   });
 });
 
 test.describe("device persons, without a retour", () => {
   test.use({ locale: "fr-FR", eventFields: { retourAt: null } });
+
+  test("C2.2: a single column of leg", async ({ db, page, seededEvent }) => {
+    const token = newToken();
+    const paul = await seedPerson(db, seededEvent.id, { firstName: "Paul" }, token);
+    await seedPlacement(db, { personId: paul.id, eventId: seededEvent.id, leg: "aller", rideId: null });
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(section(page).getByRole("columnheader")).toHaveText(["Prénom", "Aller"]);
+    expect(await cells(page)).toEqual([["Sans voiture"]]);
+  });
 
   test("without tabs, « Fermer » gives the focus to the event's title", async ({ db, page, seededEvent }) => {
     const token = newToken();
@@ -294,11 +399,12 @@ test.describe("device persons, a token no person holds", () => {
 test.describe("device persons, JavaScript disabled", () => {
   test.use({ locale: "fr-FR", javaScriptEnabled: false });
 
-  test("the seats are inactive, and a sentence says why", async ({ db, page, seededEvent }) => {
+  test("no section, the seats inactive, and a sentence says why", async ({ db, page, seededEvent }) => {
     await seedScene(db, seededEvent.id, newToken());
     await page.goto(`/e/${seededEvent.id}`);
     // getByText skips what a <noscript> holds: its paragraph is reached by CSS. One per leg.
     await expect(page.locator("main noscript > p")).toHaveText(Array(2).fill("S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page."));
+    await expect(section(page)).toHaveCount(0);
     // Both legs, one under the other: Claire's and Marc's cars, then Zoé's.
     await expect(freeSeats(page)).toHaveCount(6);
     for (const seat of await freeSeats(page).all()) await expect(seat).toBeDisabled();

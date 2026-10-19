@@ -70,13 +70,21 @@
     "needsJavaScript": "Signing up, offering a car or taking a seat needs JavaScript: turn it on, then reload the page."
   },
   "DevicePersons": {
-    "title": "People on this device",
-    "hint": "Signed up from this device: you can change them.",
+    "title": "Your sign-ups",
+    "summary": "{persons, plural, one {# person} other {# people}} · {withoutCar, plural, =0 {everyone has a seat} other {# without a car}}",
+    "colName": "First name",
+    "cell": {
+      "passenger": "With {driver}"
+    },
+    "cellLabel": "{firstName}, {leg}: {cell}",
     "state": {
       "passenger": "In {driver}’s car",
       "driver": "Driving",
       "withoutCar": "Without a car",
-      "notConcerned": "Not on this trip"
+      "notConcerned": {
+        "aller": "Not on the outbound trip",
+        "retour": "Not on the return trip"
+      }
     },
     "loading": "Loading your sign-ups…",
     "failed": "Your sign-ups could not be loaded",
