@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
+import { leaveNoToken } from "./fixtures";
 import {
   digitsOf,
   expect,
@@ -19,6 +20,8 @@ import {
  * browser holds no personal token. The fixture `organiserTraffic` checks every test for the
  * token (O6.1) and the storage for the token and the numbers (O2.10).
  */
+
+leaveNoToken();
 
 const FR = { panel: "Espace organisateur", invalid: "Ce lien d’organisateur n’est pas valide." };
 

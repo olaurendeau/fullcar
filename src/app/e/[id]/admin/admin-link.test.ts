@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkFromAnswer, goToAdminLink, organiserLinks, tokenInFragment } from "./admin-link";
+import {
+  type AdminLinkCheck,
+  checkFromAnswer,
+  goToAdminLink,
+  organiserLinks,
+  retryFrom,
+  tokenInFragment,
+} from "./admin-link";
 
 const TOKEN = "q3Vx9kLmN2pR7sT1uW4yZa";
 
@@ -81,5 +88,26 @@ describe("organiserLinks", () => {
       publicUrl: "https://fullcar.example/e/Ab3dEf7h",
       adminUrl: `https://fullcar.example/e/Ab3dEf7h/admin#${TOKEN}`,
     });
+  });
+});
+
+describe("retryFrom", () => {
+  // O5.3: « Réessayer » reads again after a failed check, and the alert stays while it does.
+  it("keeps the failed check, retrying, after a failed check", () => {
+    expect(retryFrom({ state: "failed" })).toStrictEqual({ state: "failed", retrying: true });
+    expect(retryFrom({ state: "failed", retrying: false })).toStrictEqual({ state: "failed", retrying: true });
+  });
+
+  // O5.8: a second press while the read runs sends nothing.
+  it("starts nothing while a retry runs", () => {
+    expect(retryFrom({ state: "failed", retrying: true })).toBeUndefined();
+  });
+
+  it.each<[string, AdminLinkCheck]>([
+    ["while the first check runs", { state: "checking" }],
+    ["on an invalid link", { state: "invalid" }],
+    ["on the panel", { state: "valid", publicUrl: "", adminUrl: "", legs: [] }],
+  ])("starts nothing %s", (_, check) => {
+    expect(retryFrom(check)).toBeUndefined();
   });
 });

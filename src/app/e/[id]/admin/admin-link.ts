@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
 import { loadOrganiserPanel } from "./actions";
 
@@ -31,7 +31,7 @@ export type AdminLinkCheck =
   | { state: "checking" }
   | { state: "valid"; publicUrl: string; adminUrl: string; legs: OrganiserLeg[] }
   | { state: "invalid" }
-  | { state: "failed" };
+  | { state: "failed"; retrying?: boolean };
 
 /**
  * What the server's answer means: the panel with its legs (C4.9 amended), or "not valid"
@@ -49,12 +49,24 @@ export function checkFromAnswer(answer: unknown, origin: string, id: string, tok
 }
 
 /**
+ * What « Réessayer » shows while it reads again (O5.3): the failed check, retrying, so that
+ * the alert and its button stay. Nothing to start otherwise: a retry already running (O5.8),
+ * or a check that has not failed.
+ */
+export function retryFrom(check: AdminLinkCheck): AdminLinkCheck | undefined {
+  return check.state === "failed" && !check.retrying ? { state: "failed", retrying: true } : undefined;
+}
+
+/**
  * Whether the page's fragment holds the organiser's token of event `id`, as the server
  * answers (C4.9). Checked again when only the fragment changes, which does not reload the
  * page: pasting the right link over a wrong one. A failed check is not an invalid link.
+ * `retry()` checks again after a failure, with the token read again from the fragment,
+ * without reloading the page (O5.3).
  */
-export function useAdminLinkCheck(id: string): AdminLinkCheck {
+export function useAdminLinkCheck(id: string): { check: AdminLinkCheck; retry: () => void } {
   const [check, setCheck] = useState<AdminLinkCheck>({ state: "checking" });
+  const verifyAgain = useRef(() => {});
 
   useEffect(() => {
     let latest = 0;
@@ -74,12 +86,21 @@ export function useAdminLinkCheck(id: string): AdminLinkCheck {
       );
     }
     verify();
+    verifyAgain.current = verify;
     window.addEventListener("hashchange", verify);
     return () => {
       latest = -1;
+      verifyAgain.current = () => {};
       window.removeEventListener("hashchange", verify);
     };
   }, [id]);
 
-  return check;
+  const retry = useCallback(() => {
+    const retrying = retryFrom(check);
+    if (!retrying) return;
+    setCheck(retrying);
+    verifyAgain.current();
+  }, [check]);
+
+  return { check, retry };
 }

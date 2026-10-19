@@ -2,22 +2,31 @@
 
 import { Lock, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useId, type ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { useId, type ReactNode, type Ref } from "react";
 import { CopyableLink, ShareButton } from "./copyable-link";
+import { ReadButton } from "./read-button";
 
 /**
  * The organiser's panel (#3, R4), the same at every visit (C4.7), in the order of C4.1:
  * the link to share, the organiser's own link as personal, then why to keep it. It
  * receives the organiser's link ready-made: reading the token is admin-link.ts's alone.
+ * Its title takes the focus after « Réessayer » (O5.8), through `titleRef`.
  */
-export function AdminPanel({ publicUrl, adminUrl }: { publicUrl: string; adminUrl: string }) {
+export function AdminPanel({
+  publicUrl,
+  adminUrl,
+  titleRef,
+}: {
+  publicUrl: string;
+  adminUrl: string;
+  titleRef?: Ref<HTMLHeadingElement>;
+}) {
   const t = useTranslations("Admin");
   const titleId = useId();
 
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-xl border p-4">
-      <h2 id={titleId} className="font-semibold">
+      <h2 id={titleId} ref={titleRef} tabIndex={-1} className="font-semibold outline-none">
         {t("title")}
       </h2>
       <LinkGroup label={t("shareLink.label")} hint={t("shareLink.hint")}>
@@ -40,7 +49,7 @@ export function AdminPanel({ publicUrl, adminUrl }: { publicUrl: string; adminUr
       >
         <CopyableLink url={adminUrl} />
       </LinkGroup>
-      <Notice role="note" title={t("keep.title")} body={t("keep.body")} />
+      <Notice title={t("keep.title")} body={t("keep.body")} />
     </section>
   );
 }
@@ -60,37 +69,74 @@ function LinkGroup({ label, hint, children }: { label: ReactNode; hint: string; 
   );
 }
 
+// Untinted (O7.7): the frame in the destructive colour on the background, as #66's alerts.
+const PROBLEM_FRAME =
+  "mx-auto grid w-full max-w-md grid-cols-[1rem_1fr] gap-x-2.5 rounded-lg border border-destructive bg-background p-3 text-sm outline-none";
+
 /**
  * Instead of the panel, when the link is not the organiser's (C6.5), or when the check
- * could not be made: then nothing says the link is wrong.
+ * could not be made: then nothing says the link is wrong, and « Réessayer » reads again
+ * (O5.3). Its alert region holds the text alone, and is emptied while « Réessayer » reads,
+ * then filled again on a failure, so that it is announced again; the text stays on screen
+ * meanwhile, out of the region. The button is next to the region, never in it: it stays,
+ * and keeps the focus. `ref` is the invalid link's alert, the focus's place should the
+ * retry find the link invalid.
  */
-export function AdminLinkProblem({ problem }: { problem: "invalid" | "failed" }) {
+export function AdminLinkProblem({
+  problem,
+  retrying = false,
+  onRetry,
+  ref,
+}: {
+  problem: "invalid" | "failed";
+  retrying?: boolean;
+  onRetry?: () => void;
+  ref?: Ref<HTMLDivElement>;
+}) {
   const t = useTranslations("Admin");
-  return <Notice role="alert" destructive title={t(`${problem}.title`)} body={t(`${problem}.body`)} />;
+  const text = (
+    <div className="flex flex-col gap-0.5">
+      <p className="font-semibold text-destructive">{t(`${problem}.title`)}</p>
+      <p className="text-muted-foreground">{t(`${problem}.body`)}</p>
+    </div>
+  );
+  const icon = <TriangleAlert aria-hidden className="mt-0.5 size-4 text-destructive" />;
+
+  if (problem === "invalid") {
+    return (
+      <div ref={ref} role="alert" tabIndex={-1} className={PROBLEM_FRAME}>
+        {icon}
+        {text}
+      </div>
+    );
+  }
+  return (
+    <div className={PROBLEM_FRAME}>
+      {icon}
+      <div role="alert" className="col-start-2 row-start-1">
+        {!retrying && text}
+      </div>
+      {retrying && <div className="col-start-2 row-start-1">{text}</div>}
+      <p role="status" className="sr-only">
+        {retrying ? t("loading") : ""}
+      </p>
+      <ReadButton
+        reading={retrying}
+        onRead={() => onRetry?.()}
+        className="col-start-2 row-start-2 mt-2 justify-self-start"
+      >
+        {t("retry")}
+      </ReadButton>
+    </div>
+  );
 }
 
-function Notice({
-  role,
-  title,
-  body,
-  destructive = false,
-}: {
-  role: "note" | "alert";
-  title: string;
-  body: string;
-  destructive?: boolean;
-}) {
+function Notice({ title, body }: { title: string; body: string }) {
   return (
-    <div
-      role={role}
-      className={cn(
-        "grid grid-cols-[1rem_1fr] gap-x-2.5 gap-y-0.5 rounded-lg border p-3 text-sm",
-        destructive && "border-destructive/30 bg-destructive/5 text-destructive",
-      )}
-    >
+    <div role="note" className="grid grid-cols-[1rem_1fr] gap-x-2.5 gap-y-0.5 rounded-lg border p-3 text-sm">
       <TriangleAlert className="row-span-2 mt-0.5 size-4" />
       <p className="font-semibold">{title}</p>
-      <p className={destructive ? "text-destructive/90" : "text-muted-foreground"}>{body}</p>
+      <p className="text-muted-foreground">{body}</p>
     </div>
   );
 }
