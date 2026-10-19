@@ -159,6 +159,8 @@ describe("sensitive patterns: tokens", () => {
     // A header or a key that names the token.
     'headers.set("x-admin-token", token);',
     'const value = request.headers.get("x_personal_token");',
+    "headers.set(`x-${role}-token`, token);",
+    'headers.set("x.admin-token", token);',
     "const value = body['token'];",
     "const fragment = location.hash;",
     "const fragment = url.hash;",
@@ -183,6 +185,18 @@ describe("sensitive patterns: tokens", () => {
     "const link = `${origin}/e/${id}/moi#${personalToken}`;",
     "redirect(`/e/${id}/admin#${created.adminToken}`);",
     'const url = "/e/" + id + "/admin#" + adminToken;',
+    // A URL built without a literal before the token (#191).
+    "router.push(adminPath + adminToken);",
+    "window.location.assign(base + personalToken);",
+    "path += adminToken;",
+    // A log call split over several lines: the token, alone on its own line, is not
+    // flagged, so the call that opens is (#191).
+    "console.error(",
+    "  logger.warn(",
+    // A token stored in a cookie through Next's API (#191).
+    'response.cookies.set("admin", adminToken);',
+    'response.cookies.delete("admin");',
+    'cookieStore.set("admin", adminToken);',
     // A query string, under any name.
     'url.searchParams.set("t", token);',
     'url.searchParams.append("t", secret);',
