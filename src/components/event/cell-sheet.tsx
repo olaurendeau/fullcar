@@ -8,17 +8,17 @@ import type { Leg } from "@/domain/leg";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { focusCarTitle, focusCell } from "./focus";
+import { whenPageShown, type FromSheet } from "./hidden-page";
 import type { BarProblem } from "./message-bar";
 
 /**
  * Declares one of the device's persons without a car, or not concerned, on a leg
- * (`setPersonLeg`). `null` once done; the problem to show otherwise; `undefined` when the
- * same change is already on its way. `open` says whether the sheet still shows: a problem
- * goes to the bar once it is closed.
+ * (`setPersonLeg`). `null` once done; the problem to show otherwise; `undefined` when a change
+ * of any cell is already on its way (#167). A problem the sheet no longer shows goes to the bar.
  */
 export type SetPersonLeg = (
   change: { personId: string; leg: Leg; kind: "withoutCar" | "notConcerned" },
-  open: () => boolean,
+  sheet: FromSheet,
 ) => Promise<BarProblem | null | undefined>;
 
 /**
@@ -26,8 +26,8 @@ export type SetPersonLeg = (
  * the person's state on that leg in a box, amber without a car, then its actions in the
  * README's order. An action that succeeds closes it, and the focus goes to the cell, which
  * reads its new state; one refused keeps it open with its message, over the page's current
- * state. « Voir la voiture » makes the leg's tab active and gives the focus to the car's title.
- * Closed by « Fermer » or Escape, it gives the focus back to the cell.
+ * state, and the focus on the first action if the one it was on is gone. « Voir la voiture »
+ * makes the leg's tab active and gives the focus to the car's title. Closed by « Fermer » or Escape, it gives the focus back to the cell.
  */
 export function CellSheet({
   person,
@@ -53,16 +53,33 @@ export function CellSheet({
   const tActions = useTranslations("Actions");
   const [problem, setProblem] = useState<BarProblem | null>(null);
   const afterClose = useRef(() => focusCell(person.id, leg));
+  const first = useRef<HTMLButtonElement>(null);
   const isOpen = useRef(open);
+  // Each opening is a new sheet: the one that sent may be gone.
+  const mounted = useRef(false);
+  const inSheet = () => isOpen.current && mounted.current;
   useEffect(() => {
     isOpen.current = open;
   }, [open]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // A refusal can change the actions (`drives`: « Voir la voiture » alone). Radix then puts the
+  // focus on the sheet itself, and it goes to the first action.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (problem && (active === document.body || active?.getAttribute("role") === "dialog")) first.current?.focus();
+  }, [problem, state.kind]);
 
   async function declare(action: Exclude<CellAction, "seeCar">) {
     const change = { personId: person.id, leg, kind: declaredBy(action) };
-    const outcome = await setPersonLeg(change, () => isOpen.current);
+    const outcome = await setPersonLeg(change, { inSheet, whenClosed: (then) => void whenPageShown(then) });
     if (outcome === undefined) return;
-    setProblem(outcome);
+    if (inSheet()) setProblem(outcome);
     if (outcome === null) onOpenChange(false);
   }
 
@@ -110,9 +127,10 @@ export function CellSheet({
           {tActions(problem)}
         </p>
       )}
-      {cellActions(state).map((action) => (
+      {cellActions(state).map((action, index) => (
         <Button
           key={action}
+          ref={index === 0 ? first : undefined}
           variant="outline"
           className="h-auto min-h-11 w-full whitespace-normal"
           onClick={() => {

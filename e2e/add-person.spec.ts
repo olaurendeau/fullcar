@@ -3,8 +3,10 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import { isPersonalToken } from "@/domain/personal-token";
-import { failActions, holdActions, holdToken, newToken } from "./device";
-import { expect, test } from "./fixtures";
+import { bar, failActions, holdActions, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 // #88: « Ajouter une personne » on each leg, its form in a bottom sheet, and the device it makes.
 
@@ -45,28 +47,7 @@ const toggle = (page: Page) => section(page).getByRole("button", { name: /^Vos i
 const withoutCar = (panel: Locator) => panel.getByRole("region", { name: "Sans voiture" }).getByRole("listitem");
 /** A failure while the form is open is said in the form, which stays open. */
 const failure = (page: Page) => form(page).getByRole("alert");
-/**
- * The message bar's alert, after its status region, where a failure goes once the form is closed
- * or closing. Found by its CSS, as Radix hides the page from the accessibility tree while a sheet
- * is mounted: it proves the message is shown, not that it is announced (see `watchAlerts`).
- */
-const bar = (page: Page) => page.locator('[role="status"] + [role="alert"]');
 const alerts = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
-
-/** Records, as each alert fills, whether it was in a sheet, and whether the bar had an ancestor hidden. */
-async function watchAlerts(page: Page) {
-  await page.evaluate(() => {
-    const seen = ((window as unknown as { seenAlerts: object }).seenAlerts = { inSheet: false, barHidden: false });
-    new MutationObserver(() => {
-      for (const alert of document.querySelectorAll('[role="alert"]')) {
-        if (!alert.textContent?.trim()) continue;
-        if (alert.closest('[role="dialog"]')) seen.inSheet = true;
-        else if (alert.closest('[aria-hidden="true"]')) seen.barHidden = true;
-      }
-    }).observe(document.body, { childList: true, subtree: true, characterData: true });
-  });
-  return () => page.evaluate(() => (window as unknown as { seenAlerts: object }).seenAlerts);
-}
 
 /** Each row of « Vos inscriptions », as its cells read. */
 async function cells(page: Page): Promise<string[][]> {
@@ -385,18 +366,12 @@ test.describe("add a person", () => {
   });
 
   // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
-  // meanwhile. Reopened, the sheet shows a new form: the one that sent is gone.
+  // meanwhile. Reopened once closed, the sheet shows a new form: the one that sent is gone.
+  const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
   for (const when of ["closed", "closing", "reopened"] as const) {
-    test(`a refusal once the sheet is ${when}: said in the bar`, async ({ page, seededEvent }) => {
-      let answer = () => {};
-      const answered = new Promise<void>((resolve) => (answer = resolve));
-      await page.route("**/e/**", async (route) => {
-        if (!(await route.request().headerValue("next-action"))) return route.continue();
-        await answered;
-        await route.fulfill({ status: 500, body: "" });
-      });
+    test(`a refusal once the sheet is ${when}: said in the bar, once no sheet hides the page`, async ({ page, seededEvent }) => {
+      const answer = await holdFirst(page, "Léa", true);
       await page.goto(`/e/${seededEvent.id}`);
-      const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
       if (when === "closing") await page.addStyleTag({ content: slowClose });
       await openForm(page);
       await form(page).getByLabel(FR.firstName).fill("Léa");
@@ -412,13 +387,77 @@ test.describe("add a person", () => {
       await responded;
       // Still closing at the answer: it came during the animation.
       if (when === "closing") expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      if (when === "reopened") {
+        // Marc registered once Léa's answer has come: his success neither clears nor replaces it.
+        await form(page).getByLabel(FR.firstName).fill("Marc");
+        await expect(async () => {
+          const sent = page.waitForRequest((request) => !!request.postData()?.includes("Marc"), { timeout: 1000 });
+          await submit(page).click();
+          await sent;
+        }).toPass();
+        await expect(form(page)).toHaveCount(0);
+      }
       await expect(bar(page)).toHaveText(FR.failed);
-      if (when === "reopened") return;
-      // Closing, the sheet says nothing, and the bar fills only once the page is no longer hidden.
+      // The sheet that sent says nothing, and the bar fills only once the page is no longer hidden.
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
       await expect(alerts(page)).toHaveText([FR.failed]);
     });
   }
+
+  // Reopened while it closes, the sheet shows the same form, which keeps what was typed.
+  for (const sentAgain of [false, true]) {
+    const outcome = sentAgain ? "sent again and done, nothing left to say" : "said once it closes";
+    test(`a refusal while the sheet closes, reopened before it has: ${outcome}`, async ({ page, seededEvent }) => {
+      const answer = await holdFirst(page, "Léa", true);
+      await page.goto(`/e/${seededEvent.id}`);
+      await page.addStyleTag({ content: slowClose });
+      await openForm(page);
+      await form(page).getByLabel(FR.firstName).fill("Léa");
+      await submit(page).click();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+      const seen = await watchAlerts(page);
+      const responded = page.waitForResponse((response) => response.status() === 500);
+      answer();
+      await responded;
+      // Hidden from role queries while the sheet is mounted.
+      await page.locator('[role="tabpanel"][data-state="active"] button', { hasText: FR.add }).focus();
+      await page.keyboard.press("Enter");
+      await expect(form(page)).toHaveAttribute("data-state", "open");
+      await expect(form(page).getByLabel(FR.firstName)).toHaveValue("Léa");
+      if (sentAgain) {
+        await submit(page).click();
+        await expect(form(page)).toHaveCount(0);
+        await expect(section(page).getByRole("rowheader")).toHaveText(["Léa"]);
+        await openForm(page);
+        await expect(bar(page)).toBeEmpty();
+      } else {
+        await page.keyboard.press("Escape");
+        await expect(form(page)).toHaveCount(0);
+        await expect(bar(page)).toHaveText(FR.failed);
+      }
+      expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+    });
+  }
+
+  test("a success from a form closed since leaves the form opened meanwhile open", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, "Léa", false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await openForm(page);
+    await form(page).getByLabel(FR.firstName).fill("Léa");
+    await submit(page).click();
+    await page.keyboard.press("Escape");
+    await expect(form(page)).toHaveCount(0);
+    await openForm(page);
+    answer();
+    // Léa is the device's, behind the sheet, which stays open.
+    await expect(page.locator("tbody th", { hasText: "Léa" })).toHaveCount(1);
+    await expect(form(page)).toHaveAttribute("data-state", "open");
+    await form(page).getByLabel(FR.firstName).fill("Marc");
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    await expect(section(page).getByRole("rowheader")).toHaveText(["Léa", "Marc"]);
+  });
 
   test("C1.14: without localStorage, a warning, then a person for this page only", async ({ page, seededEvent }) => {
     await page.addInitScript(() =>

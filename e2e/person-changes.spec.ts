@@ -3,10 +3,14 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { holdToken, newToken } from "./device";
-import { expect, test } from "./fixtures";
+import { bar, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 // #89: acting from « Vos inscriptions », each cell a button that opens its sheet.
+
+const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
 
 type Db = Kysely<Database>;
 
@@ -77,6 +81,10 @@ async function selectTab(page: Page, leg: "Aller" | "Retour") {
     await expect(tab(page, leg)).toHaveAttribute("aria-selected", "true", { timeout: 500 });
   }).toPass();
 }
+
+/** A cell, found while a sheet hides the page from role queries. */
+const hiddenCell = (page: Page, name: string) => page.locator(`button[aria-label="${name}"]`);
+const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
 
 /** The sheet's actions, « Fermer » last. */
 async function actions(dialog: Locator) {
@@ -290,9 +298,10 @@ test.describe("person changes", () => {
     await seedRide(db, seededEvent.id, scene.persons.tom);
 
     await tom.getByRole("button", { name: "Ne fait pas l’aller" }).click();
-    await expect(alerts(tom)).toHaveText("Une erreur est survenue et rien n’a changé. Réessayez dans un instant.");
+    await expect(alerts(tom)).toHaveText(FAILED);
     await expect(tom.getByText("Conduit", { exact: true })).toBeVisible();
-    await expect(tom.getByRole("button", { name: "Voir la voiture" })).toBeVisible();
+    // The action that had the focus is gone: the first one has it.
+    await expect(tom.getByRole("button", { name: "Voir la voiture" })).toBeFocused();
 
     // The page shows the state the refusal carried; the message was the sheet's, not the bar's.
     await page.keyboard.press("Escape");
@@ -315,5 +324,62 @@ test.describe("person changes", () => {
     await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
     await expect(alerts(page)).toHaveCount(0);
     expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: scene.cars.zoe });
+  });
+
+  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
+  // meanwhile. Reopened, even while the first one closes, the sheet is a new one.
+  for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
+    test(`a failure once the sheet is ${when}: in the bar, once no sheet hides the page`, async ({ page, seededEvent }) => {
+      const answer = await holdFirst(page, scene.persons.tom, true);
+      await page.goto(`/e/${seededEvent.id}`);
+      const closing = when.endsWith("closing");
+      if (closing) await page.addStyleTag({ content: slowClose });
+      await cell(page, "Tom", "Aller").click();
+      await sheet(page, "Tom · Aller").getByRole("button", { name: "Ne fait pas l’aller" }).click();
+      await page.keyboard.press("Escape");
+      if (closing) await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+      else await expect(page.getByRole("dialog")).toHaveCount(0);
+      const lea = sheet(page, "Léa · Aller");
+      if (when.startsWith("reopened")) {
+        await hiddenCell(page, "Léa, Aller : Avec Marc").focus();
+        await page.keyboard.press("Enter");
+        await expect(lea).toBeVisible();
+      }
+      const seen = await watchAlerts(page);
+      const responded = page.waitForResponse((response) => response.status() === 500);
+      answer();
+      await responded;
+      if (when === "closing") expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      if (when.startsWith("reopened")) {
+        // Léa's change succeeds once Tom's has failed: it neither clears nor replaces that message.
+        await expect(async () => {
+          const sent = page.waitForRequest((request) => !!request.postData()?.includes(scene.persons.lea), { timeout: 1000 });
+          await lea.getByRole("button", { name: "Sortir de la voiture" }).click();
+          await sent;
+        }).toPass();
+        await expect(lea).toHaveCount(0);
+      }
+      await expect(bar(page)).toHaveText(FAILED);
+      expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+      await expect(alerts(page)).toHaveText([FAILED]);
+    });
+  }
+
+  test("a success from a sheet closed since leaves the sheet opened meanwhile open", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, scene.persons.tom, false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await cell(page, "Tom", "Aller").click();
+    await sheet(page, "Tom · Aller").getByRole("button", { name: "Ne fait pas l’aller" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await cell(page, "Léa", "Aller").click();
+    const lea = sheet(page, "Léa · Aller");
+    await expect(lea).toBeVisible();
+    answer();
+
+    await expect(hiddenCell(page, "Tom, Aller : Ne fait pas l’aller")).toHaveCount(1);
+    await expect(lea).toHaveAttribute("data-state", "open");
+    await lea.getByRole("button", { name: "Sortir de la voiture" }).click();
+    await expect(section(page).getByRole("button", { name: "Léa, Aller : Sans voiture", exact: true })).toBeFocused();
   });
 });

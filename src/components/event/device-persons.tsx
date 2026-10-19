@@ -167,7 +167,10 @@ export function DevicePersons({
           leg={cell.leg}
           state={cell.state}
           open={cellSheet.open}
-          onOpenChange={(isOpen) => setCellSheet({ ...cellSheet, open: isOpen })}
+          // A success comes after the sheet that sent it: it closes that one, not one opened since.
+          onOpenChange={(isOpen) =>
+            setCellSheet((current) => (current?.opened === cellSheet.opened ? { ...current, open: isOpen } : current))
+          }
           setPersonLeg={setPersonLeg}
           showLeg={showLeg}
         />
