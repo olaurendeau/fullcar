@@ -147,8 +147,11 @@ function FoldList({
               type="button"
               variant="outline"
               className="h-11 w-full"
-              onClick={() => {
+              onClick={(event) => {
                 focusSixth.current = !expanded;
+                // Safari does not focus a button it clicks: folding would leave the focus on a
+                // line it removes, so on <body>.
+                if (expanded) event.currentTarget.focus();
                 fold.onToggle();
               }}
             >

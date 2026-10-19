@@ -295,10 +295,9 @@ test("O5.6, O5.8, O7.4: five lines, then « Afficher… »; each list and each l
   await expect(rows(cars)).toHaveCount(5);
   await expect(rows(back)).toHaveCount(5);
 
-  // « Réduire la liste »: back to five, the focus kept.
-  const less = aller.getByRole("button", { name: FR.less, exact: true });
-  await less.focus();
-  await page.keyboard.press("Enter");
+  // « Réduire la liste »: back to five, the focus on the button. Clicked as Safari does, which
+  // does not focus a button it clicks: the focus is still on the 6th line, which goes away.
+  await aller.getByRole("button", { name: FR.less, exact: true }).evaluate((button: HTMLElement) => button.click());
   await expect(rows(persons)).toHaveCount(5);
   await expect(more).toBeFocused();
 
