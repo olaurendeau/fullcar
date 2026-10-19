@@ -1,4 +1,4 @@
-import { test as base } from "@playwright/test";
+import { test as base, type TestInfoError } from "@playwright/test";
 import type { Kysely } from "kysely";
 import { createDb } from "@/db/client";
 import type { Database } from "@/db/schema";
@@ -58,17 +58,22 @@ export const test = base.extend<
 });
 
 /**
- * For a file that opens the organiser's page with a valid token, called at its top: nothing
- * Playwright writes when a test fails may carry the token (#158). No trace, and every page
- * of the test's context leaves for about:blank before the context closes, when Playwright
- * takes the page snapshot it writes into error-context.md. A page that cannot leave (crashed,
- * stuck) is closed instead: it neither stays where it was nor fails a test that passed.
+ * For a file that opens a page with a valid token, the organiser's or a device's personal one,
+ * called at its top: nothing Playwright writes when a test fails may carry the token (#158).
+ * No trace. No aria snapshot of a failed `expect` on a locator: taken when it fails, it shows
+ * the organiser's link. And every page of the test's context leaves for about:blank before
+ * the context closes, when Playwright takes the page snapshot it then writes into
+ * error-context.md. A page that cannot leave (crashed, stuck) is closed instead: it neither
+ * stays where it was nor fails a test that passed.
  * The test's own context only: one the test opens itself, by browser.newContext(), is not
- * cleared, and none opens the organiser's page today.
+ * cleared, and none opens a page with a valid token today.
  */
 export function leaveNoToken() {
   test.use({ trace: "off" });
-  test.afterEach(async ({ context }) => {
+  test.afterEach(async ({ context }, testInfo) => {
+    for (const error of testInfo.errors) {
+      for (let each: TestInfoError | undefined = error; each; each = each.cause) delete each.errorContext;
+    }
     for (const page of context.pages()) {
       await page.goto("about:blank", { timeout: 5_000 }).catch(() => page.close());
     }
