@@ -5,7 +5,7 @@ import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { isPersonalToken } from "@/domain/personal-token";
-import { failActions, holdActions, holdToken, newToken } from "./device";
+import { bar, failActions, holdActions, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -60,25 +60,7 @@ const freeSeats = (scope: Page | Locator) => scope.getByRole("button", { name: /
 const withoutCar = (scope: Locator) => scope.getByRole("region", { name: "Sans voiture" }).getByRole("listitem");
 /** A failure while the form is open is said in the form, which stays open. */
 const failure = (page: Page) => form(page).getByRole("alert");
-/** The message bar's alert, found by its CSS: Radix hides the page while a sheet is mounted. */
-const bar = (page: Page) => page.locator('[role="status"] + [role="alert"]');
 const alerts = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
-
-/** Records, as each alert fills, whether it was in a sheet, and whether the bar had an ancestor hidden. */
-async function watchAlerts(page: Page) {
-  await page.evaluate(() => {
-    const seen = ((window as unknown as { seenAlerts: object }).seenAlerts = { inSheet: false, barHidden: false });
-    new MutationObserver(() => {
-      for (const alert of document.querySelectorAll('[role="alert"]')) {
-        if (!alert.textContent?.trim()) continue;
-        if (alert.closest('[role="dialog"]')) seen.inSheet = true;
-        else if (alert.closest('[aria-hidden="true"]')) seen.barHidden = true;
-      }
-    }).observe(document.body, { childList: true, subtree: true, characterData: true });
-  });
-  return () => page.evaluate(() => (window as unknown as { seenAlerts: object }).seenAlerts);
-}
-
 
 /** « Vos inscriptions » with `firstName` alone, who drives: folded, nothing to do (v4-3), then unfolded to read it. */
 async function unfold(page: Page, firstName: string) {
@@ -92,6 +74,13 @@ async function unfold(page: Page, firstName: string) {
 async function openForm(page: Page) {
   await offerButton(panel(page)).click();
   await expect(form(page)).toBeVisible();
+}
+
+/** Opens the form, and fills it for Marc's car from the Mairie de Vitré. */
+async function fillOffer(page: Page) {
+  await openForm(page);
+  await field(page, FR.firstName).fill("Marc");
+  await field(page, FR.location.aller).fill("Mairie de Vitré");
 }
 
 /** The offers the page sends: server actions whose body carries `marker`. */
@@ -314,9 +303,7 @@ test.describe("offer a car", () => {
   test("C4.8: two quick taps send one request, and « Valider » is inactive meanwhile", async ({ db, page, seededEvent }) => {
     const sent = offers(page, "Mairie de Vitré");
     await page.goto(`/e/${seededEvent.id}`);
-    await openForm(page);
-    await field(page, FR.firstName).fill("Marc");
-    await field(page, FR.location.aller).fill("Mairie de Vitré");
+    await fillOffer(page);
     const release = await holdActions(page);
     await submit(page).dblclick();
     await expect(submit(page)).toBeDisabled();
@@ -341,9 +328,7 @@ test.describe("offer a car", () => {
       return route.continue();
     });
     await page.goto(`/e/${id}`);
-    await openForm(page);
-    await field(page, FR.firstName).fill("Marc");
-    await field(page, FR.location.aller).fill("Mairie de Vitré");
+    await fillOffer(page);
     await submit(page).click();
     await expect(failure(page)).toHaveText(FR.failed);
     await expect(field(page, FR.location.aller)).toHaveValue("Mairie de Vitré");
@@ -361,9 +346,7 @@ test.describe("offer a car", () => {
   test("offline, then a refusal in the open sheet: said there alone, « Valider » keeps the focus", async ({ context, page, seededEvent }) => {
     const sent = offers(page, "Mairie de Vitré");
     await page.goto(`/e/${seededEvent.id}`);
-    await openForm(page);
-    await field(page, FR.firstName).fill("Marc");
-    await field(page, FR.location.aller).fill("Mairie de Vitré");
+    await fillOffer(page);
     await context.setOffline(true);
     await submit(page).click();
     await expect(failure(page)).toHaveText(FR.offline);
@@ -383,45 +366,75 @@ test.describe("offer a car", () => {
   });
 
   // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
-  // meanwhile. Reopened, the sheet shows a new form: the one that sent is gone.
-  for (const when of ["closed", "closing", "reopened"] as const) {
-    test(`a refusal once the sheet is ${when}: said in the bar`, async ({ page, seededEvent }) => {
-      let answer = () => {};
-      const answered = new Promise<void>((resolve) => (answer = resolve));
-      await page.route("**/e/**", async (route) => {
-        if (!(await route.request().headerValue("next-action"))) return route.continue();
-        await answered;
-        await route.fulfill({ status: 500, body: "" });
-      });
+  // meanwhile. Reopened once closed, the sheet shows a new form, and the one that sent is gone;
+  // reopened while it closes, the same form, which keeps what was typed.
+  const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+  for (const when of ["closed", "closing", "reopened", "reopened while closing", "reopened while closing, then sent again"]) {
+    const outcome = when.endsWith("again") ? "nothing left to say" : "said in the bar, once no sheet hides the page";
+    test(`a refusal once the sheet is ${when}: ${outcome}`, async ({ page, seededEvent }) => {
+      const closing = when.includes("closing");
+      const answer = await holdFirst(page, "Mairie de Vitré", true);
       await page.goto(`/e/${seededEvent.id}`);
-      const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
-      if (when === "closing") await page.addStyleTag({ content: slowClose });
-      await openForm(page);
-      await field(page, FR.firstName).fill("Marc");
-      await field(page, FR.location.aller).fill("Mairie de Vitré");
+      if (closing) await page.addStyleTag({ content: slowClose });
+      await fillOffer(page);
       await submit(page).click();
       await expect(submit(page)).toBeDisabled();
       await page.keyboard.press("Escape");
-      if (when === "closing") await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+      if (closing) await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
       else await expect(form(page)).toHaveCount(0);
       if (when === "reopened") await openForm(page);
       const seen = await watchAlerts(page);
       const responded = page.waitForResponse((response) => response.status() === 500);
       answer();
       await responded;
-      if (when === "closing") expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
-      await expect(bar(page)).toHaveText(FR.failed);
+      if (closing) expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
       if (when === "reopened") {
-        // The new form says nothing, and keeps its own values.
+        // The new form says nothing and keeps its own values; Léa's car, offered from it, closes it.
         await expect(failure(page)).toHaveCount(0);
         await expect(field(page, FR.location.aller)).toHaveValue("");
-        return;
+        await field(page, FR.firstName).fill("Léa");
+        await field(page, FR.location.aller).fill("Gare");
+        await submit(page).click();
+      } else if (when.startsWith("reopened")) {
+        // Hidden from role queries while the sheet is mounted.
+        await page.locator('[role="tabpanel"][data-state="active"] button', { hasText: FR.offer }).focus();
+        await page.keyboard.press("Enter");
+        await expect(form(page)).toHaveAttribute("data-state", "open");
+        await expect(field(page, FR.location.aller)).toHaveValue("Mairie de Vitré");
+        await (when.endsWith("again") ? submit(page).click() : page.keyboard.press("Escape"));
+      }
+      await expect(form(page)).toHaveCount(0);
+      if (when.endsWith("again")) {
+        await expect(car(panel(page), "Marc")).toBeVisible();
+        await openForm(page);
+        await expect(bar(page)).toBeEmpty();
+      } else {
+        await expect(bar(page)).toHaveText(FR.failed);
+        await expect(alerts(page)).toHaveText([FR.failed]);
+        await expect(offerButton(panel(page))).toBeFocused();
       }
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
-      await expect(alerts(page)).toHaveText([FR.failed]);
-      await expect(offerButton(panel(page))).toBeFocused();
     });
   }
+
+  test("a success from a form closed since leaves the form opened meanwhile open", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, "Mairie de Vitré", false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await fillOffer(page);
+    await submit(page).click();
+    await page.keyboard.press("Escape");
+    await expect(form(page)).toHaveCount(0);
+    await openForm(page);
+    answer();
+    // Marc's car is behind the sheet, which stays open.
+    await expect(page.locator("article", { hasText: "Mairie de Vitré" })).toHaveCount(1);
+    await expect(form(page)).toHaveAttribute("data-state", "open");
+    await field(page, FR.firstName).fill("Léa");
+    await field(page, FR.location.aller).fill("Gare");
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    await expect(panel(page).getByRole("article")).toHaveCount(2);
+  });
 
   test("C5.9: inactive while the read is delayed, then failed, until « Réessayer » succeeds", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
@@ -429,14 +442,8 @@ test.describe("offer a car", () => {
     await seedRide(db, id, claire);
     const marc = await seedPerson(db, id, { firstName: "Marc" });
     await seedRide(db, id, marc.id, { leg: "retour" });
-    let release = () => {};
-    const released = new Promise<void>((resolve) => (release = resolve));
-    const failing = { on: true };
-    await page.route("**/e/**", async (route) => {
-      if (!failing.on || !(await route.request().headerValue("next-action"))) return route.continue();
-      await released;
-      await route.fulfill({ status: 500, body: "" });
-    });
+    // The first read, which carries the event's id, is held, then fails; the next goes through.
+    const release = await holdFirst(page, id, true);
 
     /** On each tab: the free seats and both actions inactive, and a click opens no sheet; or all active. */
     async function everyTab(active: boolean) {
@@ -460,7 +467,6 @@ test.describe("offer a car", () => {
     const retry = page.getByRole("button", { name: "Réessayer" });
     await expect(retry).toBeVisible();
     await everyTab(false);
-    failing.on = false;
     await retry.click();
     await expect(section(page)).toBeVisible();
     await everyTab(true);
