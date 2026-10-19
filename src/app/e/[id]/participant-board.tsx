@@ -129,9 +129,11 @@ export function ParticipantBoard({
   };
 
   // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
-  const offerRide: OfferRide = async ({ offer: { driver, ...ride }, creationIds, sending, ...sheet }) => {
+  const offerRide: OfferRide = async ({ offer: { driver, otherLeg, ...car }, creationIds, sending, ...sheet }) => {
     const send = () => {
-      const { rideId, personId } = creationIds();
+      const { rideId, personId, otherRideId } = creationIds();
+      // The car on the other leg has its own creation id (C4.10).
+      const ride = { ...car, otherLeg: otherLeg?.kind === "drive" ? { ...otherLeg, rideId: otherRideId } : otherLeg };
       const token = driver.kind === "new" ? ensureDeviceToken(id) : readDeviceToken(id);
       return storeRideOffer(id, token, { ...ride, rideId, driver: driver.kind === "new" ? { ...driver, personId } : driver });
     };

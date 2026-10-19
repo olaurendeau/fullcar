@@ -109,6 +109,24 @@ test("« Proposer une voiture » with errors", async ({ db, page, seededEvent },
   await shoot(page, testInfo, "proposer-voiture-erreurs");
 });
 
+// C11.2, #169: Léa, a passenger of Marc on the retour, also drives back: « Au retour » unfolded.
+test("« Proposer une voiture » with « Au retour » unfolded", async ({ db, page, seededEvent }, testInfo) => {
+  const { id } = seededEvent;
+  const token = newToken();
+  const marc = await seedPerson(db, id, { firstName: "Marc" });
+  const lea = await seedPerson(db, id, { firstName: "Léa" }, token);
+  await seedPlacement(db, { personId: lea.id, eventId: id, leg: "retour", rideId: await seedRide(db, id, marc.id, { leg: "retour" }) });
+  await holdToken(page, id, token);
+  await page.goto(`/e/${id}`, { waitUntil: "networkidle" });
+  await page.getByRole("tabpanel").getByRole("button", { name: "Proposer une voiture" }).click();
+  const sheet = page.getByRole("dialog", { name: "Proposer une voiture" });
+  await sheet.getByLabel("Lieu de départ", { exact: true }).fill("Église de Saint-Grégoire");
+  await sheet.getByRole("radio", { name: "Je ramène aussi" }).check();
+  await expect(sheet.getByLabel("Lieu de dépose", { exact: true })).toHaveValue("Église de Saint-Grégoire");
+  expect(await sheet.evaluate((element) => element.scrollWidth - element.clientWidth), "the sheet scrolls sideways").toBe(0);
+  await shoot(page, testInfo, "proposer-voiture-au-retour");
+});
+
 test.describe("without a retour", () => {
   test.use({ eventFields: { retourAt: null } });
 

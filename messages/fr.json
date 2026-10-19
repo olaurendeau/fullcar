@@ -131,6 +131,28 @@
     },
     "driver": "Qui conduit ?",
     "newDriver": "Une nouvelle personne",
+    "leavesCar": "Quittera la voiture de {driver}",
+    "otherLeg": {
+      "title": {
+        "retour": "Au retour",
+        "aller": "À l’aller"
+      },
+      "drive": {
+        "retour": "Je ramène aussi",
+        "aller": "J’emmène aussi"
+      },
+      "stay": "Je reste dans la voiture de {driver}",
+      "withoutCar": "Je cherche une place",
+      "notConcerned": {
+        "retour": "Je ne fais pas le retour",
+        "aller": "Je ne fais pas l’aller"
+      },
+      "time": {
+        "retour": "Heure de départ du retour",
+        "aller": "Heure de départ de l’aller"
+      },
+      "same": "Mêmes places et même note pour les deux voitures."
+    },
     "location": {
       "aller": "Lieu de départ",
       "retour": "Lieu de dépose"

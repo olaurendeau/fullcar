@@ -1,4 +1,5 @@
 import { useFormatter, useTranslations } from "next-intl";
+import type { DevicePerson } from "@/domain/board";
 import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
@@ -54,11 +55,14 @@ export function LegPanel({
   board,
   device,
   hasRetour,
+  other,
 }: {
   at: WallClock;
   board: VisibleLegBoard;
   device: BoardDevice;
   hasRetour: boolean;
+  /** The other leg's date and time, and the device's persons there, for « Proposer une voiture » (#169). */
+  other?: { at: WallClock; persons: readonly DevicePerson[] };
 }) {
   const t = useTranslations("Event");
   const tBoard = useTranslations("Board");
@@ -79,6 +83,7 @@ export function LegPanel({
           leg={leg}
           at={at}
           persons={board.device}
+          other={other}
           main={coverageBanner(coverage(board)).kind === "missingSeats"}
           disabled={!deviceKnown(device.status)}
           offerRide={device.offerRide}
