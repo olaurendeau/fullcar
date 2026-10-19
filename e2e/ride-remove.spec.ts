@@ -209,20 +209,25 @@ test.describe("remove a car", () => {
     expect(await rides(db, seededEvent.id)).toHaveLength(4);
   });
 
-  // Radix keeps a closing confirmation mounted until its animation ends: slowed here, the answer comes meanwhile.
-  for (const when of ["closed", "closing", "reopened"] as const) {
+  // Radix keeps a closing confirmation mounted until its animation ends: slowed here, the answer
+  // comes meanwhile. Reopened, even while the first one closes, the confirmation is a new one.
+  for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
     test(`a failure once the confirmation is ${when}: in the bar, once nothing hides the page`, async ({ page, seededEvent }) => {
       const answer = await holdFirst(page, scene.cars.claire, true);
       await page.goto(`/e/${seededEvent.id}`);
-      if (when === "closing") await page.addStyleTag({ content: slowClose });
+      const closing = when.endsWith("closing");
+      if (closing) await page.addStyleTag({ content: slowClose });
       const trigger = removeButton(car(panel(page), "Claire"));
       await trigger.click();
       await confirm(page).click();
       await page.keyboard.press("Escape");
-      if (when === "closing") await expect(page.locator('[role="alertdialog"]')).toHaveAttribute("data-state", "closed");
+      if (closing) await expect(page.locator('[role="alertdialog"]')).toHaveAttribute("data-state", "closed");
       else await expect(trigger).toBeFocused();
-      if (when === "reopened") {
-        await trigger.click();
+      if (when.startsWith("reopened")) {
+        // Hidden from role queries while the first one closes: found by its card.
+        await page.locator(`article[aria-labelledby="car-${scene.cars.claire}"] button`, { hasText: REMOVE }).focus();
+        await page.keyboard.press("Enter");
+        await expect(confirmation(page)).toHaveAttribute("data-state", "open");
         // Still on its way: the new confirmation cannot send it again.
         await expect(confirm(page)).toBeDisabled();
       }
@@ -230,7 +235,7 @@ test.describe("remove a car", () => {
       const responded = page.waitForResponse((response) => response.status() === 500);
       answer();
       await responded;
-      if (when === "reopened") {
+      if (when.startsWith("reopened")) {
         await expect(alerts(confirmation(page))).toHaveCount(0);
         await confirmation(page).getByRole("button", { name: "Annuler" }).click();
       }
