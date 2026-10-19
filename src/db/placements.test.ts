@@ -1,6 +1,13 @@
 import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
-import { deletePlacement, findPlacement, removePassengers, seatedOnLeg, setPlacement } from "./placements";
+import {
+  deletePlacement,
+  dropPassengers,
+  findPlacement,
+  removePassengers,
+  seatedOnLeg,
+  setPlacement,
+} from "./placements";
 import type { Database } from "./schema";
 import { atomically } from "./transaction";
 import { withCommittedEvent } from "./test-committed";
@@ -186,6 +193,56 @@ describe("removePassengers", () => {
       expect(await removePassengers(trx, { id: rideA, eventId, leg: "aller" }, [])).toEqual([]);
       expect(await removePassengers(trx, { id: rideA, eventId, leg: "retour" }, [personId])).toEqual([]);
       expect(await placementsOf(trx, eventId)).toEqual([expect.objectContaining({ ride_id: rideA })]);
+    });
+  });
+});
+
+describe("dropPassengers", () => {
+  it("deletes the Placement of the persons given who are in the Ride, on its leg only, and no one else's", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, rideA, rideB, rideRetour, personId } = await aCrowd(trx);
+      const { id: stays } = await seedPerson(trx, eventId);
+      const { id: elsewhere } = await seedPerson(trx, eventId);
+      const { id: withoutCar } = await seedPerson(trx, eventId);
+      await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA });
+      await setPlacement(trx, { personId, eventId, leg: "retour", rideId: rideRetour });
+      await setPlacement(trx, { personId: stays, eventId, leg: "aller", rideId: rideA });
+      await setPlacement(trx, { personId: elsewhere, eventId, leg: "aller", rideId: rideB });
+      await setPlacement(trx, { personId: withoutCar, eventId, leg: "aller", rideId: null });
+      const before = await placementsOf(trx, eventId);
+
+      const dropped = await dropPassengers(trx, { id: rideA, eventId, leg: "aller" }, [personId, elsewhere, withoutCar]);
+
+      expect(dropped).toEqual([personId]);
+      const gone = (row: (typeof before)[number]) => row.person_id === personId && row.leg === "aller";
+      expect(await placementsOf(trx, eventId)).toEqual(before.filter((row) => !gone(row)));
+    });
+  });
+
+  it("deletes nothing for an empty list, from another leg, or through another event", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, rideA, personId } = await aCrowd(trx);
+      const { id: otherId } = await seedEvent(trx);
+      await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA });
+      const before = await placementsOf(trx, eventId);
+      expect(await dropPassengers(trx, { id: rideA, eventId, leg: "aller" }, [])).toEqual([]);
+      expect(await dropPassengers(trx, { id: rideA, eventId, leg: "retour" }, [personId])).toEqual([]);
+      expect(await dropPassengers(trx, { id: rideA, eventId: otherId, leg: "aller" }, [personId])).toEqual([]);
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("takes the Ride FOR UPDATE first", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const { id: driverId } = await seedPerson(db, eventId);
+      const { id: personId } = await seedPerson(db, eventId);
+      const rideId = await seedRide(db, eventId, driverId);
+      await setPlacement(db, { personId, eventId, leg: "aller", rideId });
+      const keyShare = () => sql`select id from ride where id = ${rideId} for key share nowait`.execute(db);
+      await atomically(db, async (trx) => {
+        await dropPassengers(trx, { id: rideId, eventId, leg: "aller" }, [personId]);
+        await expect(keyShare()).rejects.toMatchObject({ code: "55P03" });
+      });
     });
   });
 });
