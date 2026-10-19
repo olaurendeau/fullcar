@@ -46,12 +46,27 @@ const withoutCar = (panel: Locator) => panel.getByRole("region", { name: "Sans v
 /** A failure while the form is open is said in the form, which stays open. */
 const failure = (page: Page) => form(page).getByRole("alert");
 /**
- * The message bar's alert, after its status region, where a failure goes once the form is
- * closed or closing. Found by its CSS: while a sheet is mounted, Radix hides the rest of the
- * page from the accessibility tree.
+ * The message bar's alert, after its status region, where a failure goes once the form is closed
+ * or closing. Found by its CSS, as Radix hides the page from the accessibility tree while a sheet
+ * is mounted: it proves the message is shown, not that it is announced (see `watchAlerts`).
  */
 const bar = (page: Page) => page.locator('[role="status"] + [role="alert"]');
 const alerts = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
+
+/** Records, as each alert fills, whether it was in a sheet, and whether the bar had an ancestor hidden. */
+async function watchAlerts(page: Page) {
+  await page.evaluate(() => {
+    const seen = ((window as unknown as { seenAlerts: object }).seenAlerts = { inSheet: false, barHidden: false });
+    new MutationObserver(() => {
+      for (const alert of document.querySelectorAll('[role="alert"]')) {
+        if (!alert.textContent?.trim()) continue;
+        if (alert.closest('[role="dialog"]')) seen.inSheet = true;
+        else if (alert.closest('[aria-hidden="true"]')) seen.barHidden = true;
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  return () => page.evaluate(() => (window as unknown as { seenAlerts: object }).seenAlerts);
+}
 
 /** Each row of « Vos inscriptions », as its cells read. */
 async function cells(page: Page): Promise<string[][]> {
@@ -369,8 +384,9 @@ test.describe("add a person", () => {
     await expect(bar(page)).toBeEmpty();
   });
 
-  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes meanwhile.
-  for (const when of ["closed", "closing"] as const) {
+  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
+  // meanwhile. Reopened, the sheet shows a new form: the one that sent is gone.
+  for (const when of ["closed", "closing", "reopened"] as const) {
     test(`a refusal once the sheet is ${when}: said in the bar`, async ({ page, seededEvent }) => {
       let answer = () => {};
       const answered = new Promise<void>((resolve) => (answer = resolve));
@@ -387,12 +403,19 @@ test.describe("add a person", () => {
       await submit(page).click();
       await expect(submit(page)).toBeDisabled();
       await page.keyboard.press("Escape");
-      if (when === "closed") await expect(form(page)).toHaveCount(0);
-      else await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+      if (when === "closing") await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+      else await expect(form(page)).toHaveCount(0);
+      if (when === "reopened") await openForm(page);
+      const seen = await watchAlerts(page);
+      const responded = page.waitForResponse((response) => response.status() === 500);
       answer();
-      await expect(bar(page)).toHaveText(FR.failed);
-      // Still closing when the bar speaks: the answer came during the animation.
+      await responded;
+      // Still closing at the answer: it came during the animation.
       if (when === "closing") expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      await expect(bar(page)).toHaveText(FR.failed);
+      if (when === "reopened") return;
+      // Closing, the sheet says nothing, and the bar fills only once the page is no longer hidden.
+      expect(await seen()).toEqual({ inSheet: false, barHidden: false });
       await expect(alerts(page)).toHaveText([FR.failed]);
     });
   }

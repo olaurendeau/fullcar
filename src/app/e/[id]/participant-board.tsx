@@ -41,7 +41,7 @@ export function ParticipantBoard({
   );
 
   // The token is drawn and stored only once the request is about to leave: offline, nothing is (C1.5, C1.13).
-  const addPerson: AddPerson = async ({ person, creationId, sending, open }) => {
+  const addPerson: AddPerson = async ({ person, creationId, sending, inForm, whenClosed }) => {
     const sent = await runAction(
       "addPerson",
       () => storePerson(id, ensureDeviceToken(id), { ...person, id: creationId() }),
@@ -56,8 +56,10 @@ export function ParticipantBoard({
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     // A refusal has no words of its own: the generic message, and the page shows the state it carries.
     const problem = sent.ok ? "failed" : sent.problem;
-    // In the form while its sheet is open, in the bar once it is closed or closing.
-    setProblem(open() ? null : problem);
+    // In the form while its sheet is open. Otherwise in the bar, once the sheet has closed:
+    // while it closes, the page is still hidden from screen readers and would announce nothing.
+    setProblem(null);
+    if (!inForm()) whenClosed(() => setProblem(problem));
     return { kind: "problem", problem };
   };
 

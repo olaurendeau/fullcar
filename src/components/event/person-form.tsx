@@ -27,8 +27,10 @@ export interface Registering {
   creationId: () => string;
   /** True until the answer: « Valider » is inactive meanwhile (C1.9). */
   sending: (sending: boolean) => void;
-  /** Whether the sheet is still open at the answer: a failure is said there; closed or closing, in the bar. */
-  open: () => boolean;
+  /** Whether a failure is said in the form: its sheet is open and this form is the one it shows. */
+  inForm: () => boolean;
+  /** Runs `then` once the sheet has closed, and with it the rest of the page is no longer hidden: at once if it has. */
+  whenClosed: (then: () => void) => void;
 }
 
 /** What became of a registration, for its form. A second tap while one is sent gets nothing. */
@@ -141,6 +143,19 @@ function PersonForm({
   const [problem, setProblem] = useState<"offline" | "failed" | null>(null);
   const creationId = useRef<string | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
+  // Each form its own: a sheet reopened during a send shows a new form, and the sending one is gone.
+  const mounted = useRef(false);
+  const closed = useRef<(() => void) | undefined>(undefined);
+  const inForm = () => open() && mounted.current;
+
+  // Radix unmounts the form once the sheet has closed, and lifts its `aria-hidden` from the page then.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      closed.current?.();
+    };
+  }, []);
 
   // « Valider » lost the focus while it was inactive: after a refusal, it gets it back
   // (« refus dans une feuille : ne bouge pas »).
@@ -164,13 +179,14 @@ function PersonForm({
       person: { ...values, bothLegs: hasRetour && bothLegs, leg },
       creationId: () => (creationId.current ??= newCreationId()),
       sending: setSending,
-      open,
+      inForm,
+      whenClosed: (then) => (mounted.current ? (closed.current = then) : then()),
     });
     if (answer?.kind === "done") {
       creationId.current = undefined;
       onDone();
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
-    else if (answer?.kind === "problem" && open()) setProblem(answer.problem);
+    else if (answer?.kind === "problem" && inForm()) setProblem(answer.problem);
   }
 
   const field = (name: PersonField, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {
