@@ -3,9 +3,50 @@
 - Artifact : https://claude.ai/artifact/RV9ktAqKxrgzmumgn22AEj
 - Epic : https://github.com/olaurendeau/fullcar/issues/66
 - Décision de l’humain pour la v4 : https://github.com/olaurendeau/fullcar/issues/66#issuecomment-6250124984
-- Tâches : #86 (PR #141), #87 (PR #152, adaptée ensuite), #88 à #93, #95
+- Tâches : #86 (PR #141), #87 (PR #152, adaptée ensuite), #88 à #93, #95, #216 (la barre
+  de messages, v4.2)
+- Décision de l’humain pour la v4.2 : https://github.com/olaurendeau/fullcar/issues/216
+  (option (a))
 - Hors de cette maquette : la vue organisateur, epic #154
 - Page : `index.html` (autonome, maquettes à 360 px de large)
+
+## Ce qui change en v4.2 (#216)
+
+Seules la barre de messages et ses mots changent ; aucun autre écran n’est redessiné.
+
+1. **Une réussite ne remplace jamais un échec.** La barre garde ensemble la dernière réussite
+   et tous les échecs en attente. Un échec ne part que par l’envoi d’une action sur le même
+   sujet (le mécanisme de #208), ou par « Fermer » / Échap.
+2. **Un échec nomme ce qui n’a pas été fait**, puis dit pourquoi et quoi faire : « Tom et
+   Léa n’ont pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis
+   réessayez. »
+3. **Plusieurs prénoms** : « Tom et Léa », « Tom, Léa et Hugo », puis « Tom, Léa et
+   2 autres ».
+4. **Lecteurs d’écran** : un message qui arrive ne réécrit jamais l’autre région vivante, et
+   un deuxième échec ne fait pas relire le premier.
+
+Le détail est dans « La barre de messages », les mots dans « Les mots », les critères dans
+« Critères de l’epic à amender ».
+
+**v4.2.1**, après la revue de design de la v4.2 :
+- le focus à la fermeture ne vise qu’un repère affiché (les panneaux de leg sont toujours
+  montés) ;
+- chaque message a son repère ;
+- chaque sujet a sa paire de tests ;
+- `alreadyInCar` nomme les personnes, et « Réessayer » nomme ce qui n’a pas été chargé ;
+- la liste visible n’est pas vivante : deux régions masquées n’annoncent que le nouveau
+  message ;
+- un « Annuler » qui échoue porte son propre « Annuler ».
+
+**v4.2.2**, après la revue de design de la v4.2.1 :
+- une seule règle de sortie du focus, pour tout élément de la barre qui disparaît (règle 8) ;
+- les régions d’annonce écrivent toujours en deux temps (vider, puis écrire 100 ms plus
+  tard), et une écriture plus récente annule celle en attente ;
+- « Aucune place libre » est une information, qui ne retire ni une réussite, ni son
+  « Annuler », ni un échec ;
+- la raison d’un « Annuler » qui échoue nomme le bouton ;
+- l’échec de « Modifier » une personne nomme les champs envoyés ;
+- le sujet de « Proposer une voiture » couvre chaque leg de l’offre.
 
 ## Ce qui change en v4
 
@@ -195,8 +236,9 @@ indisponible garde son avertissement en tête (C1.14, D5).
 
 ## Un tap, et « Annuler »
 
-- Le tap reste immédiat (C5.2). La **barre de réussite reste** jusqu’à l’action suivante,
-  « Fermer » ou Échap ; elle ne s’efface plus après 6 s (WCAG 2.2.1).
+- Le tap reste immédiat (C5.2). La **barre de réussite reste** jusqu’à l’action suivante qui
+  réussit, « Fermer » ou Échap ; elle ne s’efface plus après 6 s (WCAG 2.2.1). Depuis v4.2, un
+  échec qui arrive entre-temps s’y ajoute sans l’effacer.
 - Après **tout placement réussi** (un tap, la feuille, « Qui monte avec vous ? »), la barre
   porte un bouton « Annuler » (`Seat.undo`, 44 px, contour clair sur le fond sombre), entre
   le message et la croix, **hors** de la région `status`.
@@ -204,16 +246,322 @@ indisponible garde son avertissement en tête (C1.14, D5).
   fait pas ce leg si elle avait été cochée dans la feuille). Une personne qui n’est plus dans
   cette voiture n’est pas touchée (comme C7.4). Ensuite la barre dit `Seat.undone`, sans
   « Annuler ». « Annuler » ne défait pas la voiture proposée elle-même.
-- « Annuler » disparaît à l’action suivante, avec le message qu’il accompagne.
+- « Annuler » disparaît à l’action suivante qui réussit, avec le message qu’il accompagne ;
+  un échec ne l’emporte pas (v4.2).
 
 ## La barre de messages
 
-Inchangée sinon : une seule pour la page, dans le DOM après l’en-tête ; affichée en bas,
-marges de 12 px plus la zone sûre ; deux régions vivantes (`status`, `alert`) qui ne
-contiennent que le texte, toujours montées, vides sans message ; icône, « Annuler » et
-« Fermer » hors des régions ; Échap la ferme ; 112 px réservés en bas tant qu’elle est
-affichée. Le bandeau est aussi un `status` : les tests filtrent `getByRole("status")` par
-texte.
+Ce qui ne change pas :
+
+- une seule barre pour la page, placée dans le DOM après l’en-tête et affichée en bas, avec
+  des marges de 12 px plus la zone sûre ;
+- deux régions vivantes (`status`, `alert`), toujours montées et vides sans message, qui ne
+  contiennent que du texte ;
+- « Annuler » et « Fermer » hors des régions ;
+- le bandeau est aussi un `status` : les tests filtrent `getByRole("status")` par texte.
+
+Ce qui change en v4.2 (#216) : la barre peut porter **plusieurs messages à la fois**. En
+v4.2.1, après la revue : le focus à la fermeture, un repère pour chaque message, un test par
+ligne de la table des sujets, et des régions vivantes qui n’annoncent que le nouveau message.
+
+### La règle (v4.2, précisée en v4.2.1 et v4.2.2)
+
+Décision de l’humain sur #216, option (a) : une réussite ne remplace jamais un échec en
+attente ; seul un envoi sur le même sujet le retire ; le message d’échec nomme ce qui n’a pas
+été fait. Sans exception : dans la barre, tout échec nomme ce qui n’a pas été fait.
+
+Une **action** est un envoi au serveur. La barre porte trois sortes de messages :
+
+- la **réussite** d’une action ;
+- l’**échec** d’une action ;
+- l’**information**, qui ne vient d’aucun envoi. Aujourd’hui, il n’y en a qu’une : « Aucune
+  place libre à l’aller / au retour pour l’instant. », écrite par « Trouver une place ».
+
+1. **Ce que la barre contient** : **au plus une réussite** (la dernière), **au plus une
+   information** (la dernière) et **tous les échecs en attente**. De haut en bas : les
+   échecs, du plus récent au plus ancien, puis l’information, puis la réussite. « Récent »
+   se mesure au moment où le message est **écrit dans la barre**, ni à l’envoi ni à la
+   réponse : un échec qui attendait la fermeture d’une feuille prend son rang à cette
+   fermeture.
+2. **Une action qui réussit** remplace la réussite affichée par la sienne (« Hugo est dans la
+   voiture de Marc »). Si elle n’a pas de message, elle la retire : c’est le cas d’une action
+   de cellule, d’« Ajouter une personne », de « Modifier », de « Proposer une voiture » sans
+   passager et de « Retirer la voiture ». Elle retire aussi l’information, qui ne décrit plus
+   l’état de la page. Elle ne retire **aucun échec**.
+3. **Une action qui échoue** ajoute son échec et retire l’information. Elle ne retire **ni la
+   réussite, ni les autres échecs**.
+4. **Une information** (v4.2.2) remplace l’information d’avant. Elle ne retire **rien
+   d’autre** : ni la réussite, ni son « Annuler », ni aucun échec. Elle part à la fin de
+   l’action suivante, réussie ou non, ou par « Fermer » / Échap. « Trouver une place » qui
+   trouve une place libre n’écrit rien dans la barre et n’y touche pas.
+
+   Exemple : Tom est placé, avec son « Annuler » ; « Trouver une place » pour Léa ne retire
+   ni l’un ni l’autre, qu’il y ait une place libre ou non.
+5. **Ce qui retire un échec** :
+   - l’envoi d’une action sur **le même sujet** (table « Le sujet d’un échec »), **dès
+     l’envoi**. Ce que devient ce nouvel envoi est dit par son propre message, dans sa
+     feuille ou dans la barre ;
+   - « Fermer », ou Échap.
+
+   Rien d’autre ne le retire : ni une réussite, ni une information, ni un autre échec, ni le
+   temps, ni l’ouverture d’une feuille, ni le retour du réseau.
+6. **« Annuler »** : un seul par placement.
+   - Il est sur la réussite du placement.
+   - Si cet « Annuler » échoue, le placement tient : la réussite reste, et l’échec s’ajoute
+     **avec son propre « Annuler »**, que la réussite perd tant que cet échec est là. Sa
+     raison nomme le bouton (`Actions.why.retryUndo`) : « Tom et Léa n’ont pas pu sortir de
+     la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ». »
+   - **Pendant l’envoi d’un « Annuler »**, aucun « Annuler » n’est affiché pour ce
+     placement : ni sur l’échec, parti à l’envoi, ni sur la réussite. À la réponse, la
+     réussite « … ne sont plus… » remplace celle du placement, ou un nouvel échec arrive avec
+     son « Annuler ».
+   - Si une réussite ultérieure remplace celle du placement, l’échec et son « Annuler »
+     restent : la raison désigne toujours un bouton présent dans la même ligne.
+   - Le bouton a pour nom « Annuler » et `aria-describedby` vers le texte de sa ligne.
+7. **« Fermer », ou Échap** avec le focus dans la barre, retire **tous** les messages,
+   réussite, information et échecs. Rien n’est envoyé ni défait. Le focus suit la règle 8.
+   Échap avec le focus ailleurs ferme la barre sans déplacer le focus.
+8. **Le focus qui quitte la barre** (v4.2.2). Quand l’élément de la barre qui a le focus
+   disparaît ou cesse d’être focalisable, quelle qu’en soit la raison, le focus va au **premier repère affiché** de cette
+   liste (table « Le repère de chaque message ») :
+   1. le repère du message auquel appartenait l’élément (« Fermer » n’appartient à aucun) ;
+   2. les repères des autres messages, encore là ou qui viennent de partir, du plus récent
+      au plus ancien ;
+   3. l’onglet actif ; sans onglets, le titre de l’événement.
+
+   Les raisons de disparaître sont :
+   - « Fermer », ou Échap ;
+   - l’« Annuler » de la réussite, activé : il disparaît dès l’envoi (règle 6). Le focus va
+     au titre de la carte, la même cible qu’à la réponse (v4.2.3) ;
+   - l’« Annuler » d’un échec, activé : sa ligne part dès l’envoi (règles 5 et 6) ;
+   - une réponse tardive qui remplace la réussite dont l’« Annuler » a le focus, comme dans
+     le cas de #216, où une feuille a été fermée avant la réponse ;
+   - une action sans message qui vide la barre alors que le focus est sur « Fermer » ;
+   - la liste qui cesse de déborder. Elle garde pourtant `tabIndex={0}` tant qu’elle a le
+     focus (v4.2.3) : le cas ne se produit donc pas, et la règle reste le garde-fou.
+
+   « Affiché » veut dire visible (`toBeVisible()`) : dans le panneau de l’onglet actif, ou
+   hors des onglets, et pas dans une section repliée. Les deux panneaux de leg sont toujours
+   montés (`forceMount` dans `leg-tab-panel.tsx`) : un repère de l’autre onglet existe, mais
+   `focus()` n’y fait rien, et le focus tomberait sur `<body>`.
+
+   Le focus ne tombe jamais sur `<body>`. La règle ne change jamais d’onglet et ne déplie
+   rien.
+9. **Inchangé** :
+   - un échec dit dans la feuille qui l’a envoyé, tant qu’elle est ouverte, n’entre pas dans
+     la barre ;
+   - un message attend qu’aucune feuille ne cache la page (#167, #208).
+
+**Le cas de #216.** On envoie Tom et Léa dans la voiture de Sophie, et l’on ferme la feuille
+avant la réponse ; on fait de même avec Hugo dans la voiture de Marc. L’envoi pour Sophie
+échoue, celui pour Hugo réussit. Quel que soit l’ordre des réponses, la barre montre :
+
+1. « Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue :
+   réessayez dans un instant. »
+2. « Hugo est dans la voiture de Marc », avec « Annuler ».
+
+### Le repère de chaque message
+
+C’est l’élément qui reçoit le focus quand l’élément de la barre qui l’avait disparaît, s’il
+est affiché (règle 8).
+
+| message | repère |
+|---|---|
+| un placement (tap, feuille, « Qui monte avec vous ? »), réussi ou non ; « Annuler », réussi ou non | le titre de la carte de cette voiture, sur l’onglet de son leg ; si la voiture a disparu, le bandeau de ce leg |
+| « Modifier » la voiture ou « Retirer la voiture », en échec | le titre de la carte ; si la voiture a disparu, le bandeau de ce leg |
+| une action de cellule, en échec | la cellule ; section repliée : le bouton « Vos inscriptions » |
+| « Modifier » une personne, en échec | son prénom dans la matrice ; section repliée : le bouton « Vos inscriptions » |
+| « Ajouter une personne », en échec | envoyé depuis le tableau : le bouton « Ajouter une personne » du leg d’où il est parti ; depuis une place ou la feuille : le titre de la carte de cette voiture |
+| « Proposer une voiture », en échec | le bouton « Proposer une voiture » du leg d’où il est parti |
+| « Réessayer » de « Vos inscriptions », en échec | le bouton « Réessayer » de l’alerte de la section, hors des onglets, affiché tant que « Vos inscriptions » est en échec |
+| « Aucune place libre à l’aller / au retour pour l’instant. » | le bouton « Proposer une voiture » de ce leg |
+
+### Le sujet d’un échec
+
+Un échec porte sur le sujet de l’envoi qui a échoué. Un envoi ne le retire que s’il porte sur
+le même sujet **et** qu’il couvre tout ce que l’envoi échoué portait. C’est le mécanisme de
+#208 : un envoi du seul téléphone ne retire pas un prénom refusé.
+
+La clé de `useSends` est indicative ; le comportement fait foi. Chaque ligne a sa paire de
+tests Playwright (C11.10) :
+
+- **« retire »** : l’échec disparaît dès l’envoi, avant la réponse, retenue par `page.route` ;
+- **« ne retire pas »** : l’échec reste après la réponse de cet envoi.
+
+| action | sujet (clé `useSends`) | test « retire » | test « ne retire pas » |
+|---|---|---|---|
+| un tap ; la feuille « Qui monte… ? » | la voiture et chaque personne envoyée (`seats:{rideId}` + personnes) | après l’échec de Tom et Léa dans la voiture de Sophie, la feuille y renvoie Tom et Léa | Hugo dans la voiture de Sophie ; Tom seul dans cette voiture ; « Annuler » d’un placement dans cette voiture |
+| « Annuler » | la voiture et chaque personne (`undo:{rideId}` + personnes) | l’« Annuler » de la ligne d’échec | Tom et Léa placés de nouveau dans la voiture de Sophie ; « Sortir de la voiture » depuis la cellule de Tom |
+| une action de cellule (« Ne fait pas l’aller / le retour », « Je cherche une place », « Sortir de la voiture ») | la cellule (`cell:{personId}:{leg}`) | après l’échec de « Ne fait pas l’aller » pour Tom · Aller, « Ne fait pas l’aller » depuis la même cellule, rouverte | une action depuis Tom · Retour ; une place prise pour Tom par un tap |
+| « Ajouter une personne » (depuis le tableau, une place ou la feuille) | le prénom envoyé, espaces de début et de fin retirés (`person:new:{prénom}`) | « Inès » échoue depuis le bouton de l’onglet Aller ; « Inès » (avec des espaces autour) est renvoyé depuis la feuille d’une place de l’onglet Retour | « Hugo » envoyé depuis le même bouton |
+| « Modifier » une personne | la personne et chaque champ envoyé (`person:{personId}` + champs) | après l’échec du prénom et du téléphone de Tom, un « Modifier » de Tom qui envoie les deux | un « Modifier » de Tom qui n’envoie que le téléphone ; un « Modifier » de Léa |
+| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi » depuis l’onglet Aller, Marc avec « J’emmène aussi » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs |
+| « Modifier » la voiture (#93) | la modification de cette voiture (`ride:{rideId}:edit`, comme PR #218) | un nouveau « Modifier » de la même voiture | « Retirer la voiture » de cette voiture ; « Modifier » d’une autre voiture |
+| « Retirer la voiture » | le retrait de cette voiture (`ride:{rideId}`, comme PR #213) | un nouveau « Retirer la voiture » de la même voiture | « Modifier » de cette voiture |
+| « Réessayer » de « Vos inscriptions » | la lecture de « Vos inscriptions » (`device:read`) | le « Réessayer » suivant | le retour du réseau (`setOffline(false)`, évènement `online`) |
+
+Pour « Ajouter une personne » et « Proposer une voiture », le sujet n’est plus la feuille
+qui envoie (le défaut de `useSends`). Raison : chaque ouverture est une nouvelle feuille. Un
+échec venu d’une feuille fermée ne serait donc jamais retiré par le renvoi fait depuis la
+feuille rouverte. Le test « retire » de ces deux lignes échoue avec le sujet par défaut.
+
+Un renvoi partiel de « Modifier » une personne (le téléphone seul, après l’échec du prénom et
+du téléphone) ne retire pas le premier échec. Les deux lignes restent différentes, puisque
+chacune nomme les champs envoyés (`Actions.notDone.editPerson`).
+
+### Ce que dit un échec
+
+Un échec dit **ce qui n’a pas été fait**, puis **pourquoi et quoi faire**, en deux phrases :
+`Actions.failure` = « {notDone} {why} ».
+
+- **Il parle de l’envoi, au passé**, jamais de l’état présent : « n’a pas pu monter », « n’a
+  pas été retirée », jamais « n’est pas dans la voiture ». Le message reste vrai si l’état
+  change ensuite, depuis une autre feuille ou un autre appareil.
+- **Épicène** (C11.9) : « n’a pas pu monter » est invariable. L’exemple de #216, « Tom et Léa
+  n’ont pas été placés », s’accorde au genre (« Léa n’a pas été placée ») : il n’est pas
+  repris.
+- **Les prénoms et la voiture sont ceux de l’envoi**, tels qu’affichés au moment de l’envoi.
+  Pour « Modifier » une personne, c’est le prénom d’avant le changement, puisque rien n’a
+  changé.
+- **Une action de cellule** reprend le titre de sa feuille (`DevicePersons.sheetTitle`, « Tom ·
+  Aller ») et le libellé du bouton touché. « Sortir de la voiture » nomme plutôt la voiture
+  (`Actions.notDone.leave`).
+- **`alreadyInCar` nomme qui** :
+  - après un tap, la personne (« Tom est déjà dans une voiture. ») ;
+  - après la feuille, « Une de ces personnes… », juste après la phrase qui les nomme ;
+  - après « Proposer une voiture », les personnes cochées dans « Qui monte avec vous ? »,
+    que rien d’autre ne nomme : « Parmi Inès et Hugo, une personne au moins est déjà dans
+    une voiture. » (`Actions.why.passengerInCar`).
+  
+  Le serveur ne dit pas laquelle ; la page montre l’état qu’il renvoie.
+- **La raison** vient de la réponse : hors ligne (rien n’est parti), erreur serveur, ou le
+  refus du serveur. `invalid` et `idTaken`, que seule une requête forgée ou une collision
+  d’identifiants produit, prennent la raison générique `Actions.why.failed`.
+- **Les clés génériques `Actions.offline` et `Actions.failed` ne restent que dans une feuille,
+  un formulaire ou une confirmation ouverts** qui ont envoyé : leur titre et leurs champs
+  disent déjà ce qui n’a pas été fait. C’est inchangé, comme pour `Actions.rideGone`,
+  `Actions.alreadyInCar`, `Sheet.notEnoughSeats` et `RideChanges.leaving.changed`. Dans la
+  barre, aucun échec n’est générique, « Réessayer » compris (`Actions.notDone.readDevice`).
+- **Icônes** (Lucide, `aria-hidden`) : un échec, `WifiOff` hors ligne et `TriangleAlert` sinon
+  (inchangé) ; une réussite, `CircleCheck` ; une information, `Users`, comme le bandeau de
+  couverture (v4.2.3).
+
+Toutes les combinaisons, mot pour mot, sont dans « Chaque échec, mot pour mot » (section « Les
+mots »).
+
+### Plusieurs prénoms
+
+Cette règle vaut pour `{names}`, dans `Actions.notDone.seats`, `Actions.notDone.leave`,
+`Actions.why.alreadyInCar`, `Actions.why.passengerInCar`, `Sheet.placed` et `Seat.undone`.
+
+| personnes | fr | en | comment |
+|---|---|---|---|
+| 1 | Tom | Tom | le prénom |
+| 2 | Tom et Léa | Tom and Léa | `format.list`, `type: "conjunction"` (comme `Sheet.placed` aujourd’hui) |
+| 3 | Tom, Léa et Hugo | Tom, Léa and Hugo | idem |
+| 4 et plus | Tom, Léa et 2 autres | Tom, Léa and 2 others | `Actions.names.andOthers`, avec les deux premiers prénoms |
+
+- **Ordre** : celui de « Vos inscriptions » (`LegBoard.device`), pas celui des cases cochées.
+- **`count`**, qui accorde « n’a pas pu » / « n’ont pas pu » et « est » / « sont », compte
+  toutes les personnes, nommées ou non.
+- **Au-delà de trois prénoms**, la phrase passerait à 360 px à une ligne de plus avant même
+  le verbe. « Vos inscriptions » dit qui, cellule par cellule.
+- **Un prénom n’est jamais tronqué** ni remplacé par une ellipse : il passe à la ligne, coupé
+  n’importe où s’il le faut (`wrap-anywhere`, C11.3).
+
+### À 360 px
+
+Mesuré au rendu de la maquette (Chrome headless, police de 14 px sur 20 px de ligne), dans un
+téléphone de 360 × 780 :
+
+- **Largeurs** : la barre fait 336 px. Le texte d’un échec dispose de 232 px, soit environ
+  32 caractères par ligne. Celui d’une ligne qui porte « Annuler » dispose de 145 px (161 px
+  en anglais, avec « Undo »).
+- **Une ligne de la barre par message**, séparée de la suivante par un filet de 1 px.
+- **Style** :
+  - avec au moins un échec, toute la barre prend le style d’erreur de v2 (`bg-background`,
+    `border-destructive`, `text-foreground`) ; la ligne de réussite y garde son icône, et
+    « Annuler » passe en contour (`outline`) ;
+  - sans échec, la réussite garde le fond `primary`, comme en v4.
+- **Hauteurs mesurées** :
+
+  | ce que porte la barre | hauteur de la barre |
+  |---|---|
+  | un échec de 3 lignes (« Tom n’a pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez. ») | 90 px |
+  | un échec de 4 lignes (une action de cellule, erreur serveur) | 110 px |
+  | le cas de #216 : un échec de 4 lignes, et une réussite de 2 lignes avec « Annuler » | 171 px |
+  | « Annuler » qui échoue : l’échec de 6 lignes avec son « Annuler » (145 px de texte, la raison nomme le bouton), et la réussite sans « Annuler » | 211 px |
+  | quatre échecs (dont « Tom, Léa et 2 autres » et un prénom de 40 caractères sans espace, qui prend 2 lignes à lui seul) et une réussite : 424 px de contenu | 322 px, la liste plafonnée à 312 px |
+
+- **La liste des messages** est un `role="group"` nommé `Actions.messages` (« Messages »).
+  - Elle ne dépasse pas **40 % de la hauteur visible** : `max-height: 40dvh`, soit 312 px à
+    780 px ; `dvh` suit la barre d’adresse du navigateur mobile.
+  - Au-delà, elle défile (`overflow-y: auto`). Aucun échec n’est retiré pour faire de la
+    place, puisque seuls un envoi sur le même sujet ou « Fermer » le retirent.
+  - Quand elle déborde, elle devient focalisable (`tabIndex={0}`) pour défiler au clavier.
+    Elle garde `tabIndex={0}` tant qu’elle a le focus, même si elle cesse de déborder : sinon
+    Chrome ferait tomber le focus sur `<body>` (v4.2.3).
+  - Un **nouvel échec** ramène la liste en haut, où il s’affiche.
+  - Une **nouvelle réussite** fait défiler sa ligne en vue (`scrollIntoView({ block:
+    "nearest" })`), en bas de la liste.
+  - « Fermer » reste visible en haut à droite.
+- **Espace réservé en bas de la page**, mesuré (`ResizeObserver`) : le `1rem` de marge de la
+  page, plus la hauteur de la barre, plus 12 px, plus `env(safe-area-inset-bottom)`. Les
+  112 px fixes ne tenaient qu’un message.
+
+### Lecteurs d’écran
+
+`aria-atomic="false"` sur une région qui garde tous les échecs ne suffit pas partout :
+TalkBack, et VoiceOver dans certains cas, relisent toute la région à chaque changement. La
+v4.2.1 retient donc la solution la plus robuste : **une région ne contient jamais que le
+message à annoncer**. La v4.2.2 en fixe le moment d’écriture.
+
+1. **La liste visible n’est pas vivante** : ni `role="alert"`, ni `role="status"`, ni
+   `aria-live`. Ses icônes sont `aria-hidden`.
+2. **Deux régions masquées visuellement** (`sr-only`), dans la barre, après « Fermer »,
+   toujours montées, annoncent les messages :
+   - `role="alert"` ne contient que le texte du **dernier échec écrit dans la barre** ;
+   - `role="status"` ne contient que le texte du **dernier message poli écrit**, réussite ou
+     information.
+   
+   Chacune se vide quand son message quitte la barre.
+3. **Le moment d’écriture** (v4.2.2). Chaque écriture dans une région suit ces trois temps :
+   1. la région est vidée aussitôt ;
+   2. le texte est écrit **100 ms plus tard**, par une minuterie ;
+   3. une écriture plus récente dans cette région, son vidage (son message quitte la barre),
+      ou « Fermer » / Échap, **annulent l’écriture en attente**.
+
+   On ne compare pas les textes. Puisque toute écriture passe par « vide, puis texte » dans
+   une tâche ultérieure, le DOM change toujours, même pour un texte identique. C’est vrai
+   même quand le vidage et le nouvel échec tombent dans le même rendu React : c’est le cas
+   d’un renvoi hors ligne, auquel `sendAction` répond sans appel réseau.
+   
+   Deux échecs écrits dans le même passage : le second annule l’écriture du premier, et seul
+   le second est annoncé. Le premier reste dans la liste visible.
+4. **Aucune écriture n’écrit de texte dans l’autre région.** Un échec n’écrit rien dans la
+   région `status` : il peut seulement la vider, quand il retire l’information qu’elle annonce
+   (règle 3). Une réussite ou une information n’écrit rien dans la région `alert`. Un deuxième échec
+   remplace le texte du premier dans la région `alert` : seul le deuxième est lu, et le
+   premier reste dans la liste visible, où on le relit.
+5. **Réussite, puis échec.** La réussite est polie, l’échec assertif, et il peut couper sa
+   lecture. La réussite reste alors dans la liste visible, où on la relit.
+6. **Échec, puis réussite** (le cas de #216 dans son ordre). La réussite, polie, attend la fin
+   de l’échec, et la région `alert` n’est pas touchée.
+7. **Une réussite et un échec dans le même passage**, comme deux feuilles fermées qui
+   attendent le même `whenPageShown` : l’échec est écrit en premier, la réussite ensuite.
+8. **Les tests** : la liste visible étant doublée par les régions, ils visent les messages
+   par la liste (`getByRole("group", { name: "Messages" })`) et les annonces par les régions.
+   Ils pilotent les 100 ms avec `page.clock`.
+9. **Non prouvable par un test** : ce qu’un lecteur d’écran prononce réellement.
+   - Les points 1 à 4 et 7 se prouvent dans le DOM, avec un `MutationObserver` sur chaque
+     région.
+   - La lecture se vérifie en revue avec VoiceOver (iOS, Safari), TalkBack (Android, Chrome)
+     et NVDA (Windows, Chrome), sur le cas de #216 dans les deux ordres d’arrivée : chaque
+     message est annoncé une fois, et aucun n’est relu quand un autre arrive.
+   - **En mode navigation** (NVDA, rotor VoiceOver), chaque message se lit deux fois : dans
+     la liste, puis dans sa région masquée. C’est le prix des régions d’annonce ; elles sont
+     placées après « Fermer », pour que la liste se lise d’abord. La revue vérifie que cette
+     double lecture reste compréhensible.
 
 ## Contraste
 
@@ -238,11 +586,11 @@ rendu focalisable par `tabIndex={-1}` ; feuille et confirmation passent par leur
 | « Modifier » depuis la feuille du prénom, puis « Valider » | le prénom |
 | bouton de la section (déplier, replier) | ne bouge pas |
 | un tap qui place, la feuille validée, « Proposer une voiture » validé avec des passagers | le titre de la carte |
-| « Annuler » dans la barre | le titre de la carte d’où les personnes sont sorties |
+| « Annuler » dans la barre | le titre de la carte d’où les personnes sont sorties, s’il est affiché ; sinon la règle 8 de la barre (v4.2.2) |
 | « Retirer la voiture » confirmé | la cellule du conducteur pour ce leg, désormais « Ne fait pas… » ; section repliée : son bouton « Vos inscriptions » |
 | **toute règle qui vise une cellule ou un prénom alors que la section est repliée** | le bouton « Vos inscriptions », qui reste replié (v4-3) ; son nom accessible porte le résumé à jour |
 | un refus qui supprime la cible (place prise, voiture retirée) | le titre de la carte si elle existe encore, sinon le bandeau du leg |
-| croix « Fermer » de la barre, ou Échap avec le focus dans la barre | le repère de l’action qui a produit le message, s’il existe encore ; sinon l’onglet actif ; sans onglets, le titre de l’événement |
+| croix « Fermer » de la barre, ou Échap avec le focus dans la barre (tous les messages partent) ; et tout élément de la barre qui a le focus et disparaît : « Annuler » d’un échec envoyé, réussite remplacée par une réponse tardive, barre vidée par une action sans message | la règle 8 de la barre : le premier repère affiché parmi celui du message de l’élément, puis ceux des autres messages, du plus récent au plus ancien ; sinon l’onglet actif ; sans onglets, le titre de l’événement. Jamais `<body>`, jamais de changement d’onglet (v4.2.2) |
 | Échap avec le focus ailleurs | ne bouge pas ; la barre se ferme |
 | feuille fermée sans effet ; ajouter, proposer, modifier validés sans passager | le bouton qui l’a ouverte (défaut de Radix) |
 | « Valider » dans la feuille après « Ajouter une personne » | la case de la nouvelle personne, cochée |
@@ -258,7 +606,8 @@ passagers (sauf les états sous les prénoms, « Ne fait pas l’aller »), modi
 l’étape « qui sort » et son refus (sauf « personnes » au lieu de « passagers »), la
 confirmation de retrait (`AlertDialogPrimitive.Action asChild` autour d’un `Button`
 `bg-destructive text-white`, sauf son texte épicène), hors ligne, erreur serveur, envoi en
-cours, 15 voitures. Leurs détails sont dans les sections correspondantes de la page.
+cours, 15 voitures. Leurs détails sont dans les sections correspondantes de la page. Depuis
+v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n’a pas été fait.
 
 ## États couverts
 
@@ -288,6 +637,18 @@ cours, 15 voitures. Leurs détails sont dans les sections correspondantes de la 
 | un tap, « Annuler », après « Annuler », place prise | Un tap et « Annuler » | C5.2, C5.7, C7.4 |
 | « qui sort », confirmation de retrait, après confirmation (section repliée, section dépliée) | Modifier, retirer | C8.4, C8.6 |
 | hors ligne, 15 voitures avec la barre | Erreurs et chargement | C11.4 |
+| la barre : un échec et une réussite ensemble (le cas de #216) | La barre de messages | C11.10, C11.11, C5.10 |
+| la barre : hors ligne, un tap | La barre de messages | C11.11 |
+| la barre : « Annuler » qui échoue, un seul « Annuler », sur l’échec | La barre de messages | C5.10, C11.10 |
+| la barre : action de cellule, feuille fermée | La barre de messages | C3.1, C11.11 |
+| la barre : quatre échecs, prénoms longs, plafond de 312 px | La barre de messages | C11.4, C11.11, C11.3 |
+| la barre : après « Fermer », repère sur l’onglet actif | La barre de messages | C11.10 |
+| la barre : après « Fermer », repère sur l’autre onglet | La barre de messages | C11.10 |
+| la barre : « Réessayer » qui échoue | La barre de messages | C5.9, C11.11 |
+| aucune place libre : l’information au-dessus de la réussite de Tom et de son « Annuler » | Trouver une place | C3.8, C11.10 |
+| la barre avec une réussite seule (après le tap, après « Annuler », 15 voitures, en anglais) | Un tap et « Annuler », Erreurs et chargement, En anglais | C5.2, C5.10, C11.4, C11.1 |
+| la barre en anglais | La barre de messages | C11.1, C11.11 |
+| place prise, le message amendé | Un tap et « Annuler » | C5.7 |
 | la page en anglais | En anglais | C11.1 |
 
 ## Les mots
@@ -396,11 +757,10 @@ ou changé dans cette version.
 | `Sheet.nobody.aller` | Toutes vos personnes sont déjà dans une voiture pour l’aller. | All your people are already in a car for the outbound trip. | C6.7 | #91 |
 | `Sheet.nobody.retour` | Toutes vos personnes sont déjà dans une voiture pour le retour. | All your people are already in a car for the return trip. | C6.7 | #91 |
 | `Sheet.notEnoughSeats` | Il n’y a plus assez de places : personne n’a été placé. | There are no longer enough seats: nobody was seated. | C6.5 | #91 |
-| `Sheet.placed` | {names} sont dans la voiture de {driver} | {names} are in {driver}’s car | nouveau (pluriel de C5.2) | #91 |
+| `Sheet.placed` | {names} sont dans la voiture de {driver} | {names} are in {driver}’s car | nouveau (pluriel de C5.2) ; {names} suit la règle des prénoms — v4.2 | #91, #216 |
 | `Seat.placed` | {firstName} est dans la voiture de {driver} | {firstName} is in {driver}’s car | C5.2 | #92 |
 | `Seat.undo` | Annuler | Undo | revue (WCAG 2.2.1) — v4 | #92 |
-| `Seat.undone` | {names} {count, plural, one {n’est plus} other {ne sont plus}} dans la voiture de {driver} | {names} {count, plural, one {is} other {are}} no longer in {driver}’s car | nouveau — v4 | #92 |
-| `Seat.seatTaken` | Cette place vient d’être prise | This seat has just been taken | C5.7 | #92 |
+| `Seat.undone` | {names} {count, plural, one {n’est plus} other {ne sont plus}} dans la voiture de {driver} | {names} {count, plural, one {is} other {are}} no longer in {driver}’s car | nouveau — v4 ; {names} suit la règle des prénoms — v4.2 | #92, #216 |
 | `RideChanges.leaving.title` | Qui sort de la voiture ? | Who leaves the car? | C8.4 | #93 |
 | `RideChanges.leaving.body` | {passengers, plural, one {# personne} other {# personnes}} pour {seats, plural, one {# place} other {# places}} : cochez {leaving, plural, one {la personne qui sort} other {les # personnes qui sortent}}. | {passengers, plural, one {# passenger} other {# passengers}} for {seats, plural, one {# seat} other {# seats}}: tick {leaving, plural, one {the person who leaves} other {the # people who leave}}. | C8.4, épicène (FR seulement) — v4 | #93 |
 | `RideChanges.leaving.rule` | Les personnes qui sortent redeviennent sans voiture. | Those who leave are without a car again. | C8.4 | #93 |
@@ -412,10 +772,124 @@ ou changé dans cette version.
 | `Actions.submit` | Valider | Confirm | C1.9, C1.10 | #87 |
 | `Actions.close` | Fermer | Close | C6.9 ; aussi nom de la croix de la barre du bas | #87 |
 | `Actions.cancel` | Annuler | Cancel | C8.7 | #87 |
-| `Actions.offline` | Action impossible, vérifiez la connexion | Action failed, check your connection | état « hors ligne » | #87 |
-| `Actions.failed` | Une erreur est survenue et rien n’a changé. Réessayez dans un instant. | Something went wrong and nothing has changed. Try again in a moment. | état « erreur serveur » | #87 |
+| `Actions.offline` | Action impossible, vérifiez la connexion | Action failed, check your connection | état « hors ligne » ; depuis v4.2, seulement dans une feuille, un formulaire ou une confirmation ouverts ; jamais dans la barre (v4.2.1) | #87 |
+| `Actions.failed` | Une erreur est survenue et rien n’a changé. Réessayez dans un instant. | Something went wrong and nothing has changed. Try again in a moment. | état « erreur serveur » ; mêmes usages que `Actions.offline` depuis v4.2 | #87 |
 | `Actions.rideGone` | Cette voiture n’est plus proposée | This car is no longer offered | C6.8 | #87 |
 | `Actions.alreadyInCar` | {count, plural, one {Cette personne est déjà dans une voiture} other {Une de ces personnes est déjà dans une voiture}} : rien n’a changé. | {count, plural, one {This person is already in a car} other {One of these people is already in a car}}: nothing has changed. | décision « alreadyInCar » de la conception | #87 |
+| `Actions.failure` | {notDone} {why} | {notDone} {why} | un échec dans la barre : ce qui n’a pas été fait, puis pourquoi (C11.11) — v4.2 | #216 |
+| `Actions.notDone.seats` | {names} {count, plural, one {n’a pas pu monter} other {n’ont pas pu monter}} dans la voiture de {driver}. | {names} could not be seated in {driver}’s car. | un tap, la feuille, première inscription par une place (C5.2, C5.7, C6.4, C11.11) — v4.2 | #216 |
+| `Actions.notDone.leave` | {names} {count, plural, one {n’a pas pu sortir} other {n’ont pas pu sortir}} de la voiture de {driver}. | {names} could not leave {driver}’s car. | « Annuler », « Sortir de la voiture » (C5.10, C7.1, C11.11) — v4.2 | #216 |
+| `Actions.notDone.choice` | {person} : « {choice} » n’a pas été enregistré. | {person}: “{choice}” was not saved. | « Ne fait pas l’aller / le retour », « Je cherche une place » ; {person} = `DevicePersons.sheetTitle`, {choice} = le libellé du bouton (C3.1, C3.2, C11.11) — v4.2 | #216 |
+| `Actions.notDone.addPerson` | {firstName} n’a pas pu rejoindre vos inscriptions. | {firstName} could not be added to your sign-ups. | « Ajouter une personne » (C1.10, C6.6, C11.11) — v4.2 | #216 |
+| `Actions.notDone.editPerson` | {fields, select, firstName {Le prénom de {firstName} n’a pas été enregistré.} phone {Le téléphone de {firstName} n’a pas été enregistré.} other {Le prénom et le téléphone de {firstName} n’ont pas été enregistrés.}} | {fields, select, firstName {{firstName}’s first name was not saved.} phone {{firstName}’s phone number was not saved.} other {{firstName}’s first name and phone number were not saved.}} | « Modifier » une personne ; {fields} = les champs envoyés (`firstName`, `phone`, `both`) ; {firstName} = le prénom d’avant (C2.3, C11.11) — v4.2, champs en v4.2.2 | #216 |
+| `Actions.notDone.offerRide` | {legs, select, both {Les voitures de {driver} pour l’aller et le retour n’ont pas été proposées.} aller {La voiture de {driver} pour l’aller n’a pas été proposée.} other {La voiture de {driver} pour le retour n’a pas été proposée.}} | {legs, select, both {{driver}’s cars for the outbound and return trips were not offered.} aller {{driver}’s car for the outbound trip was not offered.} other {{driver}’s car for the return trip was not offered.}} | « Proposer une voiture » ; `both` avec « Je ramène aussi » / « J’emmène aussi » (C4.1, C4.11, C11.11) — v4.2 | #216 |
+| `Actions.notDone.removeRide` | {leg, select, aller {La voiture de {driver} pour l’aller n’a pas été retirée.} other {La voiture de {driver} pour le retour n’a pas été retirée.}} | {leg, select, aller {{driver}’s car for the outbound trip was not removed.} other {{driver}’s car for the return trip was not removed.}} | « Retirer la voiture » (C8.6, C11.11) — v4.2 | #216 |
+| `Actions.notDone.editRide` | {leg, select, aller {Les changements de la voiture de {driver} pour l’aller n’ont pas été enregistrés.} other {Les changements de la voiture de {driver} pour le retour n’ont pas été enregistrés.}} | {leg, select, aller {The changes to {driver}’s car for the outbound trip were not saved.} other {The changes to {driver}’s car for the return trip were not saved.}} | « Modifier » la voiture, #93 (C8.2, C11.11) — v4.2 | #216 |
+| `Actions.notDone.readDevice` | Vos inscriptions n’ont pas pu être chargées. | Your sign-ups could not be loaded. | « Réessayer » de « Vos inscriptions » (C5.9, C11.11) — v4.2.1 | #216 |
+| `Actions.why.offline` | Vérifiez la connexion, puis réessayez. | Check your connection, then try again. | hors ligne : rien n’est parti (= `CreateEvent.failed`, `Admin.failed.body`) — v4.2 | #216 |
+| `Actions.why.failed` | Une erreur est survenue : réessayez dans un instant. | Something went wrong: try again in a moment. | erreur serveur, erreur réseau en ligne, `invalid`, `idTaken` — v4.2 | #216 |
+| `Actions.why.retryUndo` | {problem, select, offline {Vérifiez la connexion, puis utilisez de nouveau « Annuler ».} other {Une erreur est survenue : dans un instant, utilisez de nouveau « Annuler ».}} | {problem, select, offline {Check your connection, then use “Undo” again.} other {Something went wrong: use “Undo” again in a moment.}} | un « Annuler » hors ligne ou en erreur : la raison nomme le bouton de sa ligne (C5.10) — v4.2.2 | #216 |
+| `Actions.why.seatTaken` | Cette place vient d’être prise. | This seat has just been taken. | `seatTaken` (C5.7) ; remplace `Seat.seatTaken` — v4.2 | #216 |
+| `Actions.why.notEnoughSeats` | {free, plural, =0 {Il ne reste plus de place.} one {Il ne reste plus qu’une place.} other {Il ne reste plus que # places.}} | {free, plural, =0 {No seats are left.} one {Only one seat is left.} other {Only # seats are left.}} | `notEnoughSeats`, {free} = `freeSeats` (C6.5) — v4.2 | #216 |
+| `Actions.why.alreadyInCar` | {count, plural, one {{names} est déjà dans une voiture.} other {Une de ces personnes est déjà dans une voiture.}} | {count, plural, one {{names} is already in a car.} other {One of these people is already in a car.}} | `alreadyInCar` d’un tap ou de la feuille ; {names} et {count} = les personnes envoyées, que la phrase d’avant nomme déjà (décision « alreadyInCar ») — v4.2, prénom en v4.2.1 | #216 |
+| `Actions.why.passengerInCar` | {count, plural, one {{names} est déjà dans une voiture.} other {Parmi {names}, une personne au moins est déjà dans une voiture.}} | {count, plural, one {{names} is already in a car.} other {Of {names}, at least one is already in a car.}} | `alreadyInCar` de « Proposer une voiture » ; {names} = les personnes cochées dans « Qui monte avec vous ? » (C4.13) — v4.2.1 | #216 |
+| `Actions.why.rideGone` | Cette voiture n’est plus proposée. | This car is no longer offered. | `rideGone` (C6.8) — v4.2 | #216 |
+| `Actions.why.drives` | {firstName} conduit {leg, select, aller {à l’aller} other {au retour}}. | {firstName} is driving on the {leg, select, aller {outbound} other {return}} trip. | `drives`, action de cellule — v4.2 | #216 |
+| `Actions.why.alreadyDriving` | {driver} conduit déjà une voiture. | {driver} is already driving a car. | `alreadyDriving` (C4.6) — v4.2 | #216 |
+| `Actions.why.passengersChanged` | Quelqu’un a pris ou libéré une place entre-temps : modifiez la voiture de nouveau. | Someone took or left a seat in the meantime: edit the car again. | `passengersChanged`, l’étape « qui sort » fermée (C8.5) — v4.2 | #216 |
+| `Actions.why.forbidden` | Cet appareil ne peut pas faire ce changement : rechargez la page. | This device cannot make this change: reload the page. | `forbidden` (C2.4, C7.3, C8.1) — v4.2 | #216 |
+| `Actions.why.eventNotFound` | Cet événement est introuvable : il a peut-être été supprimé. | This event can no longer be found: it may have been deleted. | `eventNotFound` (mots de `EventNotFound`) — v4.2 | #216 |
+| `Actions.names.andOthers` | {first}, {second} et {others, plural, one {# autre} other {# autres}} | {first}, {second} and {others, plural, one {# other} other {# others}} | 4 personnes et plus ; jusqu’à 3, `format.list` (C11.11) — v4.2 | #216 |
+| `Actions.messages` | Messages | Messages | nom du groupe `role="group"` de la liste de la barre quand elle défile (C11.4) — v4.2 | #216 |
+
+### Chaque échec, mot pour mot (v4.2)
+
+Le texte exact de la barre, pour chaque action du tableau et chaque échec possible
+(`Actions.failure` = « {notDone} {why} »). Les exemples sont ceux de l’événement de la
+maquette ; les prénoms suivent « Plusieurs prénoms ». Dans une feuille ou un formulaire
+ouverts qui ont envoyé, les messages restent ceux de v4.1.
+
+| action (exemple) | échec | texte de la barre, fr | texte de la barre, en | clés | critères |
+|---|---|---|---|---|---|
+| Un tap sur une place : Tom, voiture de Sophie | hors ligne | Tom n’a pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez. | Tom could not be seated in Sophie’s car. Check your connection, then try again. | `Actions.notDone.seats` + `Actions.why.offline` | C5.2, C5.7, C11.11 |
+| Un tap sur une place : Tom, voiture de Sophie | erreur serveur (500, réseau), `invalid`, `idTaken` | Tom n’a pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant. | Tom could not be seated in Sophie’s car. Something went wrong: try again in a moment. | `Actions.notDone.seats` + `Actions.why.failed` | C5.2, C5.7, C11.11 |
+| Un tap sur une place : Tom, voiture de Sophie | `seatTaken` | Tom n’a pas pu monter dans la voiture de Sophie. Cette place vient d’être prise. | Tom could not be seated in Sophie’s car. This seat has just been taken. | `Actions.notDone.seats` + `Actions.why.seatTaken` | C5.2, C5.7, C11.11 |
+| Un tap sur une place : Tom, voiture de Sophie | `alreadyInCar` | Tom n’a pas pu monter dans la voiture de Sophie. Tom est déjà dans une voiture. | Tom could not be seated in Sophie’s car. Tom is already in a car. | `Actions.notDone.seats` + `Actions.why.alreadyInCar` | C5.2, C5.7, C11.11 |
+| Un tap sur une place : Tom, voiture de Sophie | `rideGone` | Tom n’a pas pu monter dans la voiture de Sophie. Cette voiture n’est plus proposée. | Tom could not be seated in Sophie’s car. This car is no longer offered. | `Actions.notDone.seats` + `Actions.why.rideGone` | C5.2, C5.7, C11.11 |
+| Un tap sur une place : Tom, voiture de Sophie | `forbidden` | Tom n’a pas pu monter dans la voiture de Sophie. Cet appareil ne peut pas faire ce changement : rechargez la page. | Tom could not be seated in Sophie’s car. This device cannot make this change: reload the page. | `Actions.notDone.seats` + `Actions.why.forbidden` | C5.2, C5.7, C11.11 |
+| Un tap sur une place : Tom, voiture de Sophie | `eventNotFound` | Tom n’a pas pu monter dans la voiture de Sophie. Cet événement est introuvable : il a peut-être été supprimé. | Tom could not be seated in Sophie’s car. This event can no longer be found: it may have been deleted. | `Actions.notDone.seats` + `Actions.why.eventNotFound` | C5.2, C5.7, C11.11 |
+| La feuille, plusieurs personnes : Tom et Léa, voiture de Sophie | hors ligne | Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez. | Tom and Léa could not be seated in Sophie’s car. Check your connection, then try again. | `Actions.notDone.seats` + `Actions.why.offline` | C6.4, C6.5, C6.8, C11.11 |
+| La feuille, plusieurs personnes : Tom et Léa, voiture de Sophie | erreur serveur (500, réseau), `invalid`, `idTaken` | Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant. | Tom and Léa could not be seated in Sophie’s car. Something went wrong: try again in a moment. | `Actions.notDone.seats` + `Actions.why.failed` | C6.4, C6.5, C6.8, C11.11 |
+| La feuille, plusieurs personnes : Tom et Léa, voiture de Sophie | `notEnoughSeats` (`freeSeats: 1`) | Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Il ne reste plus qu’une place. | Tom and Léa could not be seated in Sophie’s car. Only one seat is left. | `Actions.notDone.seats` + `Actions.why.notEnoughSeats` | C6.4, C6.5, C6.8, C11.11 |
+| La feuille, plusieurs personnes : Tom et Léa, voiture de Sophie | `alreadyInCar` | Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une de ces personnes est déjà dans une voiture. | Tom and Léa could not be seated in Sophie’s car. One of these people is already in a car. | `Actions.notDone.seats` + `Actions.why.alreadyInCar` | C6.4, C6.5, C6.8, C11.11 |
+| La feuille, plusieurs personnes : Tom et Léa, voiture de Sophie | `rideGone` | Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Cette voiture n’est plus proposée. | Tom and Léa could not be seated in Sophie’s car. This car is no longer offered. | `Actions.notDone.seats` + `Actions.why.rideGone` | C6.4, C6.5, C6.8, C11.11 |
+| La feuille, plusieurs personnes : Tom et Léa, voiture de Sophie | `forbidden` | Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Cet appareil ne peut pas faire ce changement : rechargez la page. | Tom and Léa could not be seated in Sophie’s car. This device cannot make this change: reload the page. | `Actions.notDone.seats` + `Actions.why.forbidden` | C6.4, C6.5, C6.8, C11.11 |
+| La feuille, plusieurs personnes : Tom et Léa, voiture de Sophie | `eventNotFound` | Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Cet événement est introuvable : il a peut-être été supprimé. | Tom and Léa could not be seated in Sophie’s car. This event can no longer be found: it may have been deleted. | `Actions.notDone.seats` + `Actions.why.eventNotFound` | C6.4, C6.5, C6.8, C11.11 |
+| Première inscription depuis une place, inscription faite, place refusée : Inès, voiture de Marc | `seatTaken` | Inès n’a pas pu monter dans la voiture de Marc. Cette place vient d’être prise. | Inès could not be seated in Marc’s car. This seat has just been taken. | `Actions.notDone.seats` + `Actions.why.seatTaken` | C5.4, C11.11 |
+| « Annuler » : Tom et Léa, voiture de Sophie | hors ligne | Tom et Léa n’ont pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ». | Tom and Léa could not leave Sophie’s car. Check your connection, then use “Undo” again. | `Actions.notDone.leave` + `Actions.why.retryUndo` | C5.10, C11.11 |
+| « Annuler » : Tom et Léa, voiture de Sophie | erreur serveur (500, réseau), `invalid` | Tom et Léa n’ont pas pu sortir de la voiture de Sophie. Une erreur est survenue : dans un instant, utilisez de nouveau « Annuler ». | Tom and Léa could not leave Sophie’s car. Something went wrong: use “Undo” again in a moment. | `Actions.notDone.leave` + `Actions.why.retryUndo` | C5.10, C11.11 |
+| « Annuler » : Tom et Léa, voiture de Sophie | `forbidden` | Tom et Léa n’ont pas pu sortir de la voiture de Sophie. Cet appareil ne peut pas faire ce changement : rechargez la page. | Tom and Léa could not leave Sophie’s car. This device cannot make this change: reload the page. | `Actions.notDone.leave` + `Actions.why.forbidden` | C5.10, C11.11 |
+| « Annuler » : Tom et Léa, voiture de Sophie | `eventNotFound` | Tom et Léa n’ont pas pu sortir de la voiture de Sophie. Cet événement est introuvable : il a peut-être été supprimé. | Tom and Léa could not leave Sophie’s car. This event can no longer be found: it may have been deleted. | `Actions.notDone.leave` + `Actions.why.eventNotFound` | C5.10, C11.11 |
+| Cellule, « Ne fait pas l’aller » : Tom · Aller | hors ligne | Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez. | Tom · Outbound: “Not on the outbound trip” was not saved. Check your connection, then try again. | `Actions.notDone.choice` + `Actions.why.offline` | C3.1, C7.2, C11.11 |
+| Cellule, « Ne fait pas l’aller » : Tom · Aller | erreur serveur (500, réseau), `invalid`, `idTaken` | Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant. | Tom · Outbound: “Not on the outbound trip” was not saved. Something went wrong: try again in a moment. | `Actions.notDone.choice` + `Actions.why.failed` | C3.1, C7.2, C11.11 |
+| Cellule, « Ne fait pas l’aller » : Tom · Aller | `drives` | Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Tom conduit à l’aller. | Tom · Outbound: “Not on the outbound trip” was not saved. Tom is driving on the outbound trip. | `Actions.notDone.choice` + `Actions.why.drives` | C3.1, C7.2, C11.11 |
+| Cellule, « Ne fait pas l’aller » : Tom · Aller | `forbidden` | Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Cet appareil ne peut pas faire ce changement : rechargez la page. | Tom · Outbound: “Not on the outbound trip” was not saved. This device cannot make this change: reload the page. | `Actions.notDone.choice` + `Actions.why.forbidden` | C3.1, C7.2, C11.11 |
+| Cellule, « Ne fait pas l’aller » : Tom · Aller | `eventNotFound` | Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Cet événement est introuvable : il a peut-être été supprimé. | Tom · Outbound: “Not on the outbound trip” was not saved. This event can no longer be found: it may have been deleted. | `Actions.notDone.choice` + `Actions.why.eventNotFound` | C3.1, C7.2, C11.11 |
+| Cellule, « Je cherche une place » : Tom · Retour | hors ligne | Tom · Retour : « Je cherche une place » n’a pas été enregistré. Vérifiez la connexion, puis réessayez. | Tom · Return: “I need a seat” was not saved. Check your connection, then try again. | `Actions.notDone.choice` + `Actions.why.offline` | C3.2, C11.11 |
+| Cellule, « Je cherche une place » : Tom · Retour | erreur serveur (500, réseau), `invalid`, `idTaken` | Tom · Retour : « Je cherche une place » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant. | Tom · Return: “I need a seat” was not saved. Something went wrong: try again in a moment. | `Actions.notDone.choice` + `Actions.why.failed` | C3.2, C11.11 |
+| Cellule, « Je cherche une place » : Tom · Retour | `drives` | Tom · Retour : « Je cherche une place » n’a pas été enregistré. Tom conduit au retour. | Tom · Return: “I need a seat” was not saved. Tom is driving on the return trip. | `Actions.notDone.choice` + `Actions.why.drives` | C3.2, C11.11 |
+| Cellule, « Je cherche une place » : Tom · Retour | `forbidden` | Tom · Retour : « Je cherche une place » n’a pas été enregistré. Cet appareil ne peut pas faire ce changement : rechargez la page. | Tom · Return: “I need a seat” was not saved. This device cannot make this change: reload the page. | `Actions.notDone.choice` + `Actions.why.forbidden` | C3.2, C11.11 |
+| Cellule, « Je cherche une place » : Tom · Retour | `eventNotFound` | Tom · Retour : « Je cherche une place » n’a pas été enregistré. Cet événement est introuvable : il a peut-être été supprimé. | Tom · Return: “I need a seat” was not saved. This event can no longer be found: it may have been deleted. | `Actions.notDone.choice` + `Actions.why.eventNotFound` | C3.2, C11.11 |
+| Cellule, « Sortir de la voiture » : Léa, voiture de Claire | hors ligne | Léa n’a pas pu sortir de la voiture de Claire. Vérifiez la connexion, puis réessayez. | Léa could not leave Claire’s car. Check your connection, then try again. | `Actions.notDone.leave` + `Actions.why.offline` | C7.1, C11.11 |
+| Cellule, « Sortir de la voiture » : Léa, voiture de Claire | erreur serveur (500, réseau), `invalid`, `idTaken` | Léa n’a pas pu sortir de la voiture de Claire. Une erreur est survenue : réessayez dans un instant. | Léa could not leave Claire’s car. Something went wrong: try again in a moment. | `Actions.notDone.leave` + `Actions.why.failed` | C7.1, C11.11 |
+| Cellule, « Sortir de la voiture » : Léa, voiture de Claire | `drives` | Léa n’a pas pu sortir de la voiture de Claire. Léa conduit à l’aller. | Léa could not leave Claire’s car. Léa is driving on the outbound trip. | `Actions.notDone.leave` + `Actions.why.drives` | C7.1, C11.11 |
+| Cellule, « Sortir de la voiture » : Léa, voiture de Claire | `forbidden` | Léa n’a pas pu sortir de la voiture de Claire. Cet appareil ne peut pas faire ce changement : rechargez la page. | Léa could not leave Claire’s car. This device cannot make this change: reload the page. | `Actions.notDone.leave` + `Actions.why.forbidden` | C7.1, C11.11 |
+| Cellule, « Sortir de la voiture » : Léa, voiture de Claire | `eventNotFound` | Léa n’a pas pu sortir de la voiture de Claire. Cet événement est introuvable : il a peut-être été supprimé. | Léa could not leave Claire’s car. This event can no longer be found: it may have been deleted. | `Actions.notDone.leave` + `Actions.why.eventNotFound` | C7.1, C11.11 |
+| « Ajouter une personne » : Inès | hors ligne | Inès n’a pas pu rejoindre vos inscriptions. Vérifiez la connexion, puis réessayez. | Inès could not be added to your sign-ups. Check your connection, then try again. | `Actions.notDone.addPerson` + `Actions.why.offline` | C1.10, C2.1, C6.6, C11.11 |
+| « Ajouter une personne » : Inès | erreur serveur (500, réseau), `invalid`, `idTaken` | Inès n’a pas pu rejoindre vos inscriptions. Une erreur est survenue : réessayez dans un instant. | Inès could not be added to your sign-ups. Something went wrong: try again in a moment. | `Actions.notDone.addPerson` + `Actions.why.failed` | C1.10, C2.1, C6.6, C11.11 |
+| « Ajouter une personne » : Inès | `forbidden` | Inès n’a pas pu rejoindre vos inscriptions. Cet appareil ne peut pas faire ce changement : rechargez la page. | Inès could not be added to your sign-ups. This device cannot make this change: reload the page. | `Actions.notDone.addPerson` + `Actions.why.forbidden` | C1.10, C2.1, C6.6, C11.11 |
+| « Ajouter une personne » : Inès | `eventNotFound` | Inès n’a pas pu rejoindre vos inscriptions. Cet événement est introuvable : il a peut-être été supprimé. | Inès could not be added to your sign-ups. This event can no longer be found: it may have been deleted. | `Actions.notDone.addPerson` + `Actions.why.eventNotFound` | C1.10, C2.1, C6.6, C11.11 |
+| « Modifier » une personne, prénom et téléphone : Tom (prénom affiché avant le changement) | hors ligne | Le prénom et le téléphone de Tom n’ont pas été enregistrés. Vérifiez la connexion, puis réessayez. | Tom’s first name and phone number were not saved. Check your connection, then try again. | `Actions.notDone.editPerson` + `Actions.why.offline` | C2.3, C11.11 |
+| « Modifier » une personne, prénom et téléphone : Tom (prénom affiché avant le changement) | erreur serveur (500, réseau), `invalid`, `idTaken` | Le prénom et le téléphone de Tom n’ont pas été enregistrés. Une erreur est survenue : réessayez dans un instant. | Tom’s first name and phone number were not saved. Something went wrong: try again in a moment. | `Actions.notDone.editPerson` + `Actions.why.failed` | C2.3, C11.11 |
+| « Modifier » une personne, prénom et téléphone : Tom (prénom affiché avant le changement) | `forbidden` | Le prénom et le téléphone de Tom n’ont pas été enregistrés. Cet appareil ne peut pas faire ce changement : rechargez la page. | Tom’s first name and phone number were not saved. This device cannot make this change: reload the page. | `Actions.notDone.editPerson` + `Actions.why.forbidden` | C2.3, C11.11 |
+| « Modifier » une personne, prénom et téléphone : Tom (prénom affiché avant le changement) | `eventNotFound` | Le prénom et le téléphone de Tom n’ont pas été enregistrés. Cet événement est introuvable : il a peut-être été supprimé. | Tom’s first name and phone number were not saved. This event can no longer be found: it may have been deleted. | `Actions.notDone.editPerson` + `Actions.why.eventNotFound` | C2.3, C11.11 |
+| « Modifier » une personne, le téléphone seul : Tom | hors ligne | Le téléphone de Tom n’a pas été enregistré. Vérifiez la connexion, puis réessayez. | Tom’s phone number was not saved. Check your connection, then try again. | `Actions.notDone.editPerson` + `Actions.why.offline` | C2.3, C11.11 |
+| « Modifier » une personne, le téléphone seul : Tom | erreur serveur (500, réseau), `invalid`, `idTaken` | Le téléphone de Tom n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant. | Tom’s phone number was not saved. Something went wrong: try again in a moment. | `Actions.notDone.editPerson` + `Actions.why.failed` | C2.3, C11.11 |
+| « Proposer une voiture », ce leg seulement : Marc, aller | hors ligne | La voiture de Marc pour l’aller n’a pas été proposée. Vérifiez la connexion, puis réessayez. | Marc’s car for the outbound trip was not offered. Check your connection, then try again. | `Actions.notDone.offerRide` + `Actions.why.offline` | C4.1, C4.6, C4.13, C11.11 |
+| « Proposer une voiture », ce leg seulement : Marc, aller | erreur serveur (500, réseau), `invalid`, `idTaken` | La voiture de Marc pour l’aller n’a pas été proposée. Une erreur est survenue : réessayez dans un instant. | Marc’s car for the outbound trip was not offered. Something went wrong: try again in a moment. | `Actions.notDone.offerRide` + `Actions.why.failed` | C4.1, C4.6, C4.13, C11.11 |
+| « Proposer une voiture », ce leg seulement : Marc, aller | `alreadyDriving` | La voiture de Marc pour l’aller n’a pas été proposée. Marc conduit déjà une voiture. | Marc’s car for the outbound trip was not offered. Marc is already driving a car. | `Actions.notDone.offerRide` + `Actions.why.alreadyDriving` | C4.1, C4.6, C4.13, C11.11 |
+| « Proposer une voiture », ce leg seulement : Marc, aller | `alreadyInCar` (passagers cochés) | La voiture de Marc pour l’aller n’a pas été proposée. Parmi Inès et Hugo, une personne au moins est déjà dans une voiture. | Marc’s car for the outbound trip was not offered. Of Inès and Hugo, at least one is already in a car. | `Actions.notDone.offerRide` + `Actions.why.passengerInCar` | C4.1, C4.6, C4.13, C11.11 |
+| « Proposer une voiture », ce leg seulement : Marc, aller | `forbidden` | La voiture de Marc pour l’aller n’a pas été proposée. Cet appareil ne peut pas faire ce changement : rechargez la page. | Marc’s car for the outbound trip was not offered. This device cannot make this change: reload the page. | `Actions.notDone.offerRide` + `Actions.why.forbidden` | C4.1, C4.6, C4.13, C11.11 |
+| « Proposer une voiture », ce leg seulement : Marc, aller | `eventNotFound` | La voiture de Marc pour l’aller n’a pas été proposée. Cet événement est introuvable : il a peut-être été supprimé. | Marc’s car for the outbound trip was not offered. This event can no longer be found: it may have been deleted. | `Actions.notDone.offerRide` + `Actions.why.eventNotFound` | C4.1, C4.6, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi » : Claire | hors ligne | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Vérifiez la connexion, puis réessayez. | Claire’s cars for the outbound and return trips were not offered. Check your connection, then try again. | `Actions.notDone.offerRide` + `Actions.why.offline` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi » : Claire | erreur serveur (500, réseau), `invalid`, `idTaken` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Une erreur est survenue : réessayez dans un instant. | Claire’s cars for the outbound and return trips were not offered. Something went wrong: try again in a moment. | `Actions.notDone.offerRide` + `Actions.why.failed` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi » : Claire | `alreadyDriving` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture. | Claire’s cars for the outbound and return trips were not offered. Claire is already driving a car. | `Actions.notDone.offerRide` + `Actions.why.alreadyDriving` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi » : Claire | `alreadyInCar` (passagers cochés) | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Léa est déjà dans une voiture. | Claire’s cars for the outbound and return trips were not offered. Léa is already in a car. | `Actions.notDone.offerRide` + `Actions.why.passengerInCar` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi » : Claire | `forbidden` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet appareil ne peut pas faire ce changement : rechargez la page. | Claire’s cars for the outbound and return trips were not offered. This device cannot make this change: reload the page. | `Actions.notDone.offerRide` + `Actions.why.forbidden` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi » : Claire | `eventNotFound` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet événement est introuvable : il a peut-être été supprimé. | Claire’s cars for the outbound and return trips were not offered. This event can no longer be found: it may have been deleted. | `Actions.notDone.offerRide` + `Actions.why.eventNotFound` | C4.11, C4.12, C4.13, C11.11 |
+| « Réessayer » de « Vos inscriptions » | hors ligne | Vos inscriptions n’ont pas pu être chargées. Vérifiez la connexion, puis réessayez. | Your sign-ups could not be loaded. Check your connection, then try again. | `Actions.notDone.readDevice` + `Actions.why.offline` | C5.9, C11.11 |
+| « Réessayer » de « Vos inscriptions » | erreur serveur (500, réseau), `invalid`, `idTaken` | Vos inscriptions n’ont pas pu être chargées. Une erreur est survenue : réessayez dans un instant. | Your sign-ups could not be loaded. Something went wrong: try again in a moment. | `Actions.notDone.readDevice` + `Actions.why.failed` | C5.9, C11.11 |
+| « Retirer la voiture » : Claire, aller | hors ligne | La voiture de Claire pour l’aller n’a pas été retirée. Vérifiez la connexion, puis réessayez. | Claire’s car for the outbound trip was not removed. Check your connection, then try again. | `Actions.notDone.removeRide` + `Actions.why.offline` | C8.6, C11.11 |
+| « Retirer la voiture » : Claire, aller | erreur serveur (500, réseau), `invalid`, `idTaken` | La voiture de Claire pour l’aller n’a pas été retirée. Une erreur est survenue : réessayez dans un instant. | Claire’s car for the outbound trip was not removed. Something went wrong: try again in a moment. | `Actions.notDone.removeRide` + `Actions.why.failed` | C8.6, C11.11 |
+| « Retirer la voiture » : Claire, aller | `forbidden` | La voiture de Claire pour l’aller n’a pas été retirée. Cet appareil ne peut pas faire ce changement : rechargez la page. | Claire’s car for the outbound trip was not removed. This device cannot make this change: reload the page. | `Actions.notDone.removeRide` + `Actions.why.forbidden` | C8.6, C11.11 |
+| « Retirer la voiture » : Claire, aller | `eventNotFound` | La voiture de Claire pour l’aller n’a pas été retirée. Cet événement est introuvable : il a peut-être été supprimé. | Claire’s car for the outbound trip was not removed. This event can no longer be found: it may have been deleted. | `Actions.notDone.removeRide` + `Actions.why.eventNotFound` | C8.6, C11.11 |
+| « Modifier » la voiture (#93) : Claire, aller | hors ligne | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Vérifiez la connexion, puis réessayez. | The changes to Claire’s car for the outbound trip were not saved. Check your connection, then try again. | `Actions.notDone.editRide` + `Actions.why.offline` | C8.2, C8.5, C11.11 |
+| « Modifier » la voiture (#93) : Claire, aller | erreur serveur (500, réseau), `invalid`, `idTaken` | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Une erreur est survenue : réessayez dans un instant. | The changes to Claire’s car for the outbound trip were not saved. Something went wrong: try again in a moment. | `Actions.notDone.editRide` + `Actions.why.failed` | C8.2, C8.5, C11.11 |
+| « Modifier » la voiture (#93) : Claire, aller | `rideGone` | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Cette voiture n’est plus proposée. | The changes to Claire’s car for the outbound trip were not saved. This car is no longer offered. | `Actions.notDone.editRide` + `Actions.why.rideGone` | C8.2, C8.5, C11.11 |
+| « Modifier » la voiture (#93) : Claire, aller | `passengersChanged` | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Quelqu’un a pris ou libéré une place entre-temps : modifiez la voiture de nouveau. | The changes to Claire’s car for the outbound trip were not saved. Someone took or left a seat in the meantime: edit the car again. | `Actions.notDone.editRide` + `Actions.why.passengersChanged` | C8.2, C8.5, C11.11 |
+| « Modifier » la voiture (#93) : Claire, aller | `forbidden` | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Cet appareil ne peut pas faire ce changement : rechargez la page. | The changes to Claire’s car for the outbound trip were not saved. This device cannot make this change: reload the page. | `Actions.notDone.editRide` + `Actions.why.forbidden` | C8.2, C8.5, C11.11 |
+| « Modifier » la voiture (#93) : Claire, aller | `eventNotFound` | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Cet événement est introuvable : il a peut-être été supprimé. | The changes to Claire’s car for the outbound trip were not saved. This event can no longer be found: it may have been deleted. | `Actions.notDone.editRide` + `Actions.why.eventNotFound` | C8.2, C8.5, C11.11 |
+
+### Clés nouvelles en v4.2
+
+`Actions.failure`, `Actions.notDone.seats`, `Actions.notDone.leave`, `Actions.notDone.choice`, `Actions.notDone.addPerson`, `Actions.notDone.editPerson`, `Actions.notDone.offerRide`, `Actions.notDone.removeRide`, `Actions.notDone.editRide`, `Actions.notDone.readDevice`, `Actions.why.offline`, `Actions.why.failed`, `Actions.why.retryUndo`, `Actions.why.seatTaken`, `Actions.why.notEnoughSeats`, `Actions.why.alreadyInCar`, `Actions.why.passengerInCar`, `Actions.why.rideGone`, `Actions.why.drives`, `Actions.why.alreadyDriving`, `Actions.why.passengersChanged`, `Actions.why.forbidden`, `Actions.why.eventNotFound`, `Actions.names.andOthers`, `Actions.messages`. En v4.2.1 : `Actions.notDone.readDevice` et `Actions.why.passengerInCar` ; `Actions.why.alreadyInCar` nomme la personne d’un tap. En v4.2.2 : `Actions.why.retryUndo` ; `Actions.notDone.editPerson` nomme les champs envoyés.
+
+### Clés retirées en v4.2
+
+`Seat.seatTaken`, remplacée par `Actions.notDone.seats` suivi de `Actions.why.seatTaken`
+(« Tom n’a pas pu monter dans la voiture de Marc. Cette place vient d’être prise. »). Changées
+en v4.2 : `Sheet.placed` et `Seat.undone` gardent leur texte, mais `{names}` suit la règle des
+prénoms (au-delà de trois, « Tom, Léa et 2 autres »).
 
 ### Clés nouvelles en v4
 
@@ -534,6 +1008,74 @@ v4-16. Décision : la matrice est un composant qui reçoit une liste de personne
 états par leg, sans rien supposer de l’appareil. — Raison : la vue organisateur (#154) pourra
 l’afficher pour tout l’événement.
 
+v4.2-1. Décision : la barre porte ensemble la dernière réussite et tous les échecs en attente, les échecs en haut. — Raison : option (a) de #216 ; un échec est ce qui demande d’agir.
+
+v4.2-2. Décision : un échec ne retire pas la réussite affichée. — Raison : sinon, le défaut de #216 revient dans l’autre ordre d’arrivée (la réussite d’Hugo, puis l’échec pour Sophie). Après un « Annuler » qui échoue, le placement tient, et « Annuler » reste utile.
+
+v4.2-3. Décision : une seule croix « Fermer » pour toute la barre ; elle, ou Échap, retire tous les messages. — Raison : la barre unique de v3 (« Fermer », Échap) ; une seule cible de 44 px ; fermer est un geste fait après avoir lu.
+
+v4.2-4. Décision : un échec dit l’envoi au passé (« n’a pas pu », « n’a pas été »), puis la raison et quoi faire. — Raison : il reste vrai quand l’état change ailleurs, puisqu’il ne part que par un envoi sur le même sujet ou par « Fermer ».
+
+v4.2-5. Décision : « n’ont pas pu monter » au lieu de l’exemple de #216, « n’ont pas été placés ». — Raison : C11.9 (D7) : aucun texte ne s’accorde au genre (« Léa n’a pas été placée »).
+
+v4.2-6. Décision : le sujet d’« Ajouter une personne » est le prénom envoyé ; celui de « Proposer une voiture », le leg et la personne qui conduit ; ce n’est plus la feuille. — Raison : une feuille rouverte est une nouvelle feuille, et le renvoi ne retirerait jamais l’échec.
+
+v4.2-7. Décision : pour une action de cellule, le message reprend le titre de la feuille et le libellé du bouton, mot pour mot ; « Sortir de la voiture » nomme la voiture. — Raison : ce sont les mots que la personne a touchés.
+
+v4.2-8. Décision : trois prénoms au plus, puis « et N autres », dans l’ordre de « Vos inscriptions », pour les échecs comme pour les réussites. — Raison : à 360 px, un quatrième prénom ajoute une ligne avant même le verbe ; la matrice dit qui.
+
+v4.2-9. Décision : la liste de la barre s’arrête à 40 % de la hauteur et défile au-delà. Aucun échec n’est retiré pour faire de la place, et l’espace réservé en bas suit la hauteur mesurée. — Raison : option (a) : seuls un envoi sur le même sujet ou « Fermer » retirent un échec.
+
+v4.2-10. Décision : aucune écriture dans l’autre région vivante, et un deuxième échec ne fait pas relire le premier. — Raison : sans cela, une réussite réécrirait l’échec. (Amendée en v4.2.1 : des régions d’annonce, v4.2.1-6, au lieu d’`aria-atomic="false"`.)
+
+v4.2-11. Décision : les messages d’une feuille, d’un formulaire ou d’une confirmation ouverts restent génériques. — Raison : leur titre dit déjà ce qui n’a pas été fait ; #216 porte sur la barre. (Amendée en v4.2.1 : « Réessayer » n’est plus une exception dans la barre, décision de la revue.)
+
+v4.2-12. Décision : `Seat.seatTaken` est retirée, remplacée par `Actions.notDone.seats` suivi de `Actions.why.seatTaken`. — Raison : une place prise est un échec comme les autres, et le message dit désormais qui n’est pas monté.
+
+v4.2.1-1. Décision : à la fermeture, le focus va au repère du message le plus récent seulement s’il est affiché (onglet actif, section dépliée), sinon à celui du message d’avant en remontant tous les messages, puis à l’onglet actif ; la fermeture ne change jamais d’onglet. — Raison : les panneaux de leg sont toujours montés (`forceMount`) ; `focus()` sur un repère de l’autre onglet ne fait rien, et le focus tombait sur `<body>` (revue, bloquant 1). Changer d’onglet à la fermeture déplacerait la page sous les yeux de la personne qui ferme un message.
+
+v4.2.1-2. Décision : chaque message a son repère, dans une table, y compris « Ajouter une personne », « Proposer une voiture » et « Réessayer ». — Raison : revue, bloquant 2.
+
+v4.2.1-3. Décision : chaque ligne de la table des sujets a un test « retire » et un test « ne retire pas ». — Raison : revue, bloquant 3 ; le test « retire » d’« Ajouter » et de « Proposer » échoue avec le sujet par défaut de `useSends`.
+
+v4.2.1-4. Décision : `alreadyInCar` nomme qui. Pour « Proposer une voiture », `Actions.why.passengerInCar` nomme les personnes cochées. Pour un tap, la personne : « Tom est déjà dans une voiture. » — Raison : revue, bloquant 4 et suggestion ; « cette personne » se lisait comme qui conduit.
+
+v4.2.1-5. Décision : « Réessayer » nomme ce qui n’a pas été fait : « Vos inscriptions n’ont pas pu être chargées. » (`Actions.notDone.readDevice`), suivi de la raison. — Raison : revue, bloquant 5 : l’option (a) ne souffre pas d’exception dans la barre.
+
+v4.2.1-6. Décision : la liste visible n’est pas vivante. Deux régions masquées visuellement annoncent, et ne contiennent que le message à annoncer : le dernier échec pour `alert`, la réussite pour `status`. Un même texte est vidé puis réécrit 100 ms plus tard. — Raison : suggestion de la revue, retenue comme conception plutôt que comme repli. TalkBack, et VoiceOver dans certains cas, relisent toute une région qui change, quel que soit `aria-atomic` : une région qui ne contient que le nouveau message se lit de la même façon partout.
+
+v4.2.1-7. Décision : un « Annuler » qui échoue porte son propre « Annuler », que la réussite perd tant que l’échec est là. Il reste si une réussite ultérieure remplace celle du placement. — Raison : suggestion de la revue ; « réessayez » désigne toujours un bouton présent.
+
+v4.2.1-8. Décision : des sujets séparés pour une place et pour « Annuler » (`seats:` / `undo:`), et pour « Modifier » et « Retirer la voiture » (`ride:{id}:edit` / `ride:{id}`). — Raison : suggestion de la revue ; aucun ne retire l’échec de l’autre, comme PR #218 et #213.
+
+v4.2.1-9. Décision : la liste est un `role="group"` nommé « Messages », plafonnée à `40dvh`. Un nouvel échec la ramène en haut, et une nouvelle réussite défile en vue. L’espace réservé compte le `1rem` de la page et `env(safe-area-inset-bottom)`. — Raison : suggestions de la revue ; un nouvel échec doit se voir là où il s’affiche.
+
+v4.2.1-10. Décision : « plus récent » se mesure au moment où le message est écrit dans la barre. — Raison : suggestion de la revue ; c’est l’ordre que la personne voit arriver.
+
+v4.2.1-11. Décision : « modifiez la voiture de nouveau » / « edit the car again » ; « could not be seated in {driver}’s car » ; « No seats are left. » — Raison : suggestions de la revue.
+
+v4.2.1-12. Décision : « Place prise entre-temps » et « Hors ligne sur la page » sont redessinées avec la barre de v4.2. — Raison : suggestion de la revue, cohérence.
+
+v4.2.2-1. Décision : une seule règle de sortie du focus. Quand l’élément de la barre qui a le focus disparaît, quelle qu’en soit la raison (« Fermer », Échap, l’« Annuler » d’un échec envoyé, une réponse tardive qui remplace la réussite, une action sans message qui vide la barre), le focus va au premier repère affiché : celui du message de cet élément, puis ceux des autres messages, du plus récent au plus ancien, puis l’onglet actif, puis le titre de l’événement. — Raison : revue, bloquant 1 ; la règle ne couvrait que « Fermer » et Échap, et quatre chemins menaient à `<body>`.
+
+v4.2.2-2. Décision : après un « Annuler » réussi, le focus va au titre de la carte s’il est affiché, sinon il suit la règle de sortie. — Raison : revue, bloquant 1 ; l’onglet a pu changer depuis le placement.
+
+v4.2.2-3. Décision : pendant l’envoi d’un « Annuler », aucun « Annuler » n’est affiché pour ce placement. — Raison : revue, bloquant 1 ; un seul envoi à la fois pour un placement, et rien à toucher qui enverrait deux fois.
+
+v4.2.2-4. Décision : chaque écriture dans une région d’annonce la vide aussitôt, puis écrit le texte 100 ms plus tard. Une écriture plus récente, le vidage de la région ou « Fermer » / Échap annulent l’écriture en attente. On ne compare pas les textes. — Raison : revue, bloquant 2. Puisque toute écriture passe par « vide, puis texte » dans une tâche ultérieure, le DOM change toujours, même texte compris, et même quand le vidage et le nouvel échec tombent dans le même rendu (un renvoi hors ligne). Comparer au dernier texte écrit devient inutile : la règle « toujours » couvre ce cas.
+
+v4.2.2-5. Décision : un message qui ne vient d’aucun envoi est une information (aujourd’hui, « Aucune place libre… »). Il ne retire ni une réussite, ni son « Annuler », ni un échec. Il remplace l’information d’avant, part à la fin de l’action suivante ou par « Fermer » / Échap, et s’annonce dans la région `status`. « Trouver une place » qui trouve une place n’écrit rien dans la barre. — Raison : revue, bloquant 3, avec la préférence du relecteur, la plus proche de l’option (a).
+
+v4.2.2-6. Décision : la raison d’un « Annuler » qui échoue nomme le bouton : « Vérifiez la connexion, puis utilisez de nouveau « Annuler ». » (`Actions.why.retryUndo`, d’après « utilisez de nouveau « Actualiser » » de l’espace organisateur). — Raison : suggestion de la revue ; « réessayez » à côté d’un bouton « Annuler » pouvait se lire « fermer ce message ».
+
+v4.2.2-7. Décision : l’échec de « Modifier » une personne nomme les champs envoyés : « Le prénom de Tom… », « Le téléphone de Tom… », « Le prénom et le téléphone de Tom… ». — Raison : suggestion de la revue ; un renvoi partiel donnait deux lignes identiques.
+
+v4.2.2-8. Décision : le sujet de « Proposer une voiture » est chaque leg de l’offre, et qui conduit. — Raison : suggestion de la revue ; une offre sur les deux legs refaite depuis l’autre onglet couvre les deux legs et retire l’échec, ce qu’une offre d’un seul leg ne fait pas.
+
+v4.2.2-9. Décision : les cinq maquettes qui gardaient la barre de v4 sont redessinées, dont une barre avec une réussite seule ; « Aucune place libre » montre l’information au-dessus de la réussite de Tom et de son « Annuler ». — Raison : suggestion de la revue, cohérence.
+
+v4.2.2-10. Décision : le repère de « Réessayer » est le bouton de la section tant que « Vos inscriptions » est en échec ; le contrôle manuel couvre la double lecture en mode navigation (la liste, puis la région masquée). — Raison : suggestions de la revue. La double lecture est le prix des régions d’annonce : elles sont placées après « Fermer », pour que la liste se lise d’abord.
+
 ## Écarts par rapport à la revue
 
 1. « Chaque personne sur une ligne (prénom, état, menu) » : dans la matrice, le « menu » est
@@ -593,6 +1135,23 @@ l’afficher pour tout l’événement.
   pastille ; `leg-panel.tsx` perd la ligne de date. `run-action.ts`, `phone-link.tsx`, le
   chargement et l’échec sont repris tels quels.
 
+- **v4.2, la barre (#216)** : rien côté serveur. Chaque refus porte déjà sa raison
+  (`seatTaken`, `notEnoughSeats` avec `freeSeats`, `alreadyInCar`, `rideGone`, `drives`,
+  `alreadyDriving`, `passengersChanged`, `forbidden`, `eventNotFound`). Le client connaît, au
+  moment de l’envoi, les prénoms, la voiture et le leg qu’il nomme. Côté client :
+  - `run-action.ts` ne vide plus la barre à chaque réussite (règle 2 : il remplace la
+    réussite) ;
+  - `useSends` (#208) retire aussi un échec déjà affiché, pas seulement un échec qui attend ;
+  - « Ajouter une personne » et « Proposer une voiture » prennent leur sujet (le prénom ; le
+    leg et qui conduit), et « Annuler » le sien (`undo:{rideId}`) ;
+  - `message-bar.tsx` porte une liste d’échecs, une information et une réussite, non vivante, et deux régions
+    d’annonce masquées (v4.2.1) ;
+  - le focus de fermeture vérifie qu’un repère est affiché avant de le viser (v4.2.1), et
+    la même règle sert à tout élément focalisé qui quitte la barre (v4.2.2) ;
+  - les régions d’annonce passent par une minuterie de 100 ms, annulable (v4.2.2) ;
+  - « Trouver une place » écrit une information, et non plus une réussite (v4.2.2) ;
+  - PR #209 et #213, ouvertes, écrivent encore `Actions.failed` dans la barre : à aligner.
+
 ## Critères de l’epic à amender
 
 - **C2.2** : « chaque leg affiche une section » devient « une matrice “Vos inscriptions” au-
@@ -614,18 +1173,75 @@ l’afficher pour tout l’événement.
 - **Hors périmètre de l’epic** : la ligne « Proposer une voiture sur les deux legs en une fois :
   on la propose sur chaque onglet » sort de la liste, par la décision de l’humain du
   18 octobre (« Au retour : Je ramène aussi »).
-- **C5.2** : la barre de réussite porte « Annuler » et reste jusqu’à l’action suivante.
+- **C5.2** : la barre de réussite porte « Annuler » et reste jusqu’à l’action suivante qui réussit (v4.2).
 - **C9.3** : le nombre est visible, « N sans voiture », en pastille ambre.
 - **C11.2** : la capture « section des personnes de l’appareil » devient « Vos inscriptions »,
   dépliée et repliée ; ajouter « Proposer une voiture » avec « Au retour » déplié et « Qui
   monte avec vous ? ».
+
+### v4.2 (#216), la barre de messages
+
+- **C5.7** : le message devient « {prénom} n’a pas pu monter dans la voiture de {conducteur}. Cette place vient d’être prise. » Le reste est inchangé.
+- **C5.10** : « jusqu’à l’action suivante » devient « jusqu’à l’action suivante qui réussit ». Un échec ou une information qui arrive entre-temps s’ajoute sans retirer la réussite ni son « Annuler » (C11.10).
+  - Un « Annuler » qui échoue laisse le placement. Son échec porte son propre « Annuler », que la réussite perd tant que l’échec est là, et sa raison nomme ce bouton (« … utilisez de nouveau « Annuler ». »).
+  - Pendant l’envoi d’un « Annuler », aucun « Annuler » n’est affiché pour ce placement.
+  - Si une réussite ultérieure remplace celle du placement, l’échec et son « Annuler » restent.
+
+  Playwright :
+  - le test attend 10 s, fait échouer une autre action, et retrouve la réussite et « Annuler » ;
+  - un « Annuler » hors ligne : un seul bouton « Annuler », sur la ligne de l’échec ;
+  - ce bouton, réponse retenue : aucun bouton « Annuler » dans la barre pendant l’envoi ;
+  - une place prise ensuite pour Hugo : l’échec et son « Annuler » restent, et ce bouton, de retour en ligne, fait sortir Tom et Léa.
+- **C11.4** : ajouter : avec quatre échecs et une réussite dans la barre, à 360 × 780 :
+  - aucun débordement horizontal ;
+  - la liste, `role="group"` nommée « Messages », fait au plus `40dvh` (312 px) et défile ; elle est focalisable quand elle déborde, et le reste tant qu’elle a le focus ;
+  - un nouvel échec la ramène en haut ; une nouvelle réussite défile en vue ;
+  - l’espace réservé en bas de la page vaut `1rem` + la hauteur de la barre + 12 px + `env(safe-area-inset-bottom)`, et « Nous contacter » défile entièrement au-dessus de la barre.
+- **États à concevoir, « hors ligne » et « erreur serveur »** : dans la barre, le message nomme ce qui n’a pas été fait, puis donne la raison, par exemple « Tom n’a pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez. » Dans une feuille ou un formulaire ouverts, rien ne change (« Action impossible, vérifiez la connexion »). La colonne « critère » de ces deux lignes renvoie à C11.10 et C11.11.
+- **Nouveau C11.10** (#216) La barre de messages montre ensemble au plus une réussite (la dernière), au plus une information (la dernière) et tous les échecs en attente. De haut en bas : les échecs, du plus récent au plus ancien, puis l’information, puis la réussite. « Récent » se mesure au moment où le message est écrit dans la barre. Une action est un envoi au serveur.
+  - Une action qui réussit remplace ou retire la réussite, retire l’information, et ne retire aucun échec.
+  - Une action qui échoue ajoute son échec, retire l’information, et rien d’autre.
+  - Une information (« Aucune place libre… ») ne vient d’aucun envoi : elle remplace l’information d’avant et ne retire ni la réussite, ni son « Annuler », ni aucun échec. « Trouver une place » qui trouve une place ne touche pas à la barre.
+  - Un échec n’est retiré que de deux façons : dès l’envoi d’une action sur le même sujet qui couvre au moins ce qu’il portait (table « Le sujet d’un échec » du README), ou par « Fermer » / Échap, qui retirent tous les messages et n’envoient rien.
+  - Quand l’élément de la barre qui a le focus disparaît, quelle qu’en soit la raison, le focus va au premier repère affiché (sur l’onglet actif ou hors des onglets, et pas dans une section repliée) dans cet ordre : celui du message de cet élément ; ceux des autres messages, encore là ou qui viennent de partir, du plus récent au plus ancien ; l’onglet actif ; sans onglets, le titre de l’événement. Jamais `<body>`, et jamais de changement d’onglet.
+
+  Playwright :
+  - le cas de #216, dans les deux ordres d’arrivée (réponses retardées par `page.route`) : les deux messages sont visibles ensemble, et le sont encore après 10 s ;
+  - pour chaque ligne de la table des sujets, l’envoi « retire » efface l’échec avant sa réponse, et l’envoi « ne retire pas » le laisse après la sienne ;
+  - trois échecs écrits dans l’ordre A, B, C s’affichent C, B, A ; un échec qui attendait la fermeture d’une feuille prend son rang à cette fermeture ;
+  - un échec hors ligne reste après `context.setOffline(false)` et l’évènement `online` ;
+  - Tom placé, puis « Trouver une place » pour Léa : avec une place libre, la barre ne change pas ; sans place libre, l’information s’ajoute, et la réussite de Tom et son « Annuler » restent ; l’action suivante retire l’information ;
+  - le focus ne tombe jamais sur `<body>`, et va au repère attendu, dans six cas : « Fermer » avec le repère le plus récent sur l’autre onglet ; « Fermer » sur un échec d’« Ajouter une personne », de « Proposer une voiture » et de « Réessayer » ; l’« Annuler » d’un échec, activé au clavier ; une réponse tardive qui remplace la réussite dont l’« Annuler » a le focus ; une action sans message qui vide la barre, le focus sur « Fermer » ; un « Annuler » réussi après un changement d’onglet.
+- **Nouveau C11.11** (#216) Un échec dit dans la barre ce qui n’a pas été fait, puis pourquoi et quoi faire, mot pour mot comme la table « Chaque échec, mot pour mot » du README. Aucun échec de la barre n’est générique, « Réessayer » compris.
+  - `alreadyInCar` nomme les personnes : la personne d’un tap, et les personnes cochées de « Qui monte avec vous ? ».
+  - « Modifier » une personne nomme les champs envoyés.
+  - Un « Annuler » qui échoue nomme son bouton.
+  - Les prénoms : un seul ; deux (« Tom et Léa ») ; trois (« Tom, Léa et Hugo ») ; au-delà, les deux premiers et « et N autres » ; toujours dans l’ordre de « Vos inscriptions ». La même règle vaut pour « {prénoms} sont dans la voiture de… » et « … ne sont plus… ».
+  - Vitest : la fonction qui compose le texte, sur chaque ligne de cette table, en français et en anglais, et pour 1 à 5 personnes.
+  - Playwright : le texte exact hors ligne (`setOffline`), sur une erreur serveur (réponse 500 par `page.route`), sur `alreadyInCar` (un tap, et « Proposer une voiture » avec deux personnes cochées) et sur une place prise, pour un tap et pour une feuille fermée avant la réponse ; « Réessayer » hors ligne ; un renvoi partiel de « Modifier » qui donne deux lignes différentes.
+- **Nouveau C11.12** (#216) La liste visible de la barre n’est pas une région vivante. Deux régions masquées visuellement, toujours montées, placées après « Fermer », annoncent :
+  - `role="alert"` ne contient que le texte du dernier échec écrit dans la barre ;
+  - `role="status"` ne contient que celui du dernier message poli écrit, réussite ou information.
+
+  Chacune se vide quand son message quitte la barre. Chaque écriture vide la région aussitôt, puis écrit le texte 100 ms plus tard ; une écriture plus récente, le vidage de la région ou « Fermer » / Échap annulent l’écriture en attente. Playwright, avec `page.clock` et un `MutationObserver` sur chaque région :
+  - la liste visible n’a ni `role="alert"`, ni `role="status"`, ni `aria-live` ;
+  - un échec : la région `alert` est vide aussitôt, et contient son texte à +100 ms ;
+  - deux échecs écrits dans le même passage : à +100 ms, la région `alert` ne contient que le second, et l’observateur n’a jamais vu le texte du premier ;
+  - « Fermer » moins de 100 ms après un échec : la région reste vide ;
+  - un renvoi hors ligne qui échoue de la même façon : l’observateur voit la région vide, puis le même texte ;
+  - une réussite ne modifie pas la région `alert` ; un échec n’écrit aucun texte dans la région `status` (sans information affichée, il ne la modifie pas ; avec « Aucune place libre » affichée, il la vide) ; une information s’écrit dans la région `status` ;
+  - un échec et une réussite libérés à la fermeture d’une même feuille : l’échec est écrit d’abord.
+
+  *Non prouvable par un test* : ce que prononce un lecteur d’écran. Revue avec VoiceOver (iOS, Safari), TalkBack (Android, Chrome) et NVDA (Windows, Chrome), sur le cas de #216 dans les deux ordres d’arrivée : chaque message est annoncé une fois, et aucun n’est relu quand un autre arrive. En mode navigation (NVDA, rotor VoiceOver), chaque message se lit deux fois, dans la liste puis dans sa région : on vérifie que cette lecture reste compréhensible.
+- Aucun critère de l’epic ne disait ce que fait la barre d’un échec : C11.10 à C11.12 sont les seuls nouveaux. Le reste amende C5.7, C5.10, C11.4 et les deux lignes d’états. C11.9 ne change pas : les nouvelles clés sont dans `Actions`, déjà vérifié.
 
 ## Hors périmètre
 
 La vue organisateur (epic #154), le lien perso et son QR code, la fraîcheur, supprimer une
 personne, les options à l’écran, changer de voiture en un geste, faire sortir un passager
 sans réduire ses places, une liste d’attente, distinguer deux personnes de même prénom, les
-notifications.
+notifications. En v4.2 : les messages dans les feuilles, formulaires et confirmations ouverts
+(inchangés), et tout autre écran que la barre.
 
 ## Révisions
 
@@ -712,3 +1328,114 @@ notifications.
   page dans un cadre de 360 px et à 1280 px : aucun débordement, aucune cible sous 44 px,
   aucun libellé coupé. Toutes les remarques appliquées, aucune contestée. Republiée à la même
   URL.
+- v4.2 (2026-10-19) : #216, décision de l’humain, option (a). Partie de v4.1 : la copie
+  locale, celle de `origin/main` (`docs/design/event-board/`, #161) et l’artifact publié
+  étaient identiques. Seules la barre de messages et ses mots changent.
+  - Règle : une réussite ne remplace jamais un échec, et un échec ne retire pas la réussite.
+    Un échec ne part que dès l’envoi d’une action sur le même sujet (#208), ou par « Fermer »
+    / Échap, qui retire tout. Les sujets sont donnés action par action ; ceux d’« Ajouter une
+    personne » et de « Proposer une voiture » ne sont plus la feuille.
+  - Mots : chaque échec nomme ce qui n’a pas été fait, puis la raison (`Actions.failure`,
+    `Actions.notDone.*`, `Actions.why.*`), avec la table complète action par raison, en
+    français et en anglais. Épicène : « n’ont pas pu monter », pas l’exemple « n’ont pas été
+    placés ». Règle des prénoms : trois, puis « et N autres » (`Actions.names.andOthers`).
+    `Seat.seatTaken` retirée.
+  - Lecteurs d’écran : `aria-atomic="false"` sur la région `alert`, un `<p>` par échec,
+    aucune écriture dans l’autre région.
+  - 360 px : liste plafonnée à 40 % de la hauteur et qui défile, espace réservé mesuré.
+  - Critères : C5.7, C5.10, C11.4 et les états « hors ligne » / « erreur serveur » amendés ;
+    C11.10 à C11.12 nouveaux.
+  - Maquettes : le cas de #216, hors ligne, « Annuler » qui échoue, action de cellule, plafond,
+    après « Fermer », en anglais ; « Place prise » et « Hors ligne » existantes mises à jour.
+  - Rendu vérifié avec Chrome headless (`chrome`), dans des cadres de 360 px : 48 téléphones,
+    aucun débordement horizontal, aucune cible sous 44 px dans la barre. Hauteurs de barre :
+    90, 110 et 171 px ; 322 px au plafond, pour 424 px de contenu. Un défaut corrigé au
+    rendu : « Undo », de 44 px dans une ligne de 41 px, faisait défiler la liste de 2 px.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.2 (suite) : revue de design : changements demandés. Cinq bloquants :
+  1. le focus de « Fermer » visait un repère de l’autre onglet, monté mais caché ;
+  2. aucun repère pour « Ajouter », « Proposer » et « Réessayer », et la remontée des messages
+     n’était pas définie ;
+  3. pas de test pour les sujets autres que les places ;
+  4. `alreadyInCar` après « Proposer une voiture » ne nommait personne ;
+  5. « Réessayer » restait générique.
+
+  S’y ajoutent des suggestions : régions vivantes et TalkBack ; rôle, défilement, `dvh` et
+  espace réservé de la liste ; « plus récent » ; sujets séparés ; « Annuler » orphelin ;
+  mots ; maquettes à redessiner. Réglés, à ne pas rouvrir : « n’ont pas pu monter », une
+  seule croix, les sujets d’« Ajouter » et de « Proposer », Échap qui retire tout.
+- v4.2.1 (2026-10-20) : les cinq bloquants corrigés, toutes les suggestions appliquées, aucune
+  refusée. Pour les régions vivantes, le repli proposé est retenu comme conception : une
+  région masquée qui ne contient que le nouveau message, et une liste visible non vivante.
+  - Focus : un repère n’est visé que s’il est affiché (onglet actif, section dépliée) ;
+    sinon, on remonte tous les messages, puis l’onglet actif, sans changer d’onglet.
+    Nouvelle table « Le repère de chaque message » ; maquette « repère sur l’autre onglet ».
+  - Sujets : une paire de tests « retire » / « ne retire pas » par ligne. Lignes séparées pour
+    « Annuler » (`undo:`) et pour « Modifier » / « Retirer la voiture » (`ride:{id}:edit` /
+    `ride:{id}`).
+  - Mots : `Actions.why.passengerInCar` (« Parmi Inès et Hugo, une personne au moins est déjà
+    dans une voiture. ») ; `Actions.why.alreadyInCar` nomme la personne d’un tap ;
+    `Actions.notDone.readDevice` (« Vos inscriptions n’ont pas pu être chargées. ») ;
+    « modifiez la voiture de nouveau » ; « could not be seated in » ; « No seats are left. ».
+    Décision v4.2-11 amendée, sans exception dans la barre.
+  - « Annuler » : un seul par placement. Un « Annuler » qui échoue porte le sien, et il reste
+    si une autre réussite remplace celle du placement (C5.10).
+  - Liste : `role="group"` « Messages », `40dvh`. Un nouvel échec la ramène en haut ; une
+    nouvelle réussite défile en vue. Espace réservé : `1rem` + barre + 12 px + zone sûre.
+  - « Plus récent » : le moment où le message est écrit dans la barre. Tests de l’ordre et du
+    retour du réseau.
+  - Maquettes « Place prise entre-temps » et « Hors ligne sur la page » redessinées avec la
+    barre de v4.2 ; maquette « Réessayer qui échoue » ajoutée.
+  - C5.10, C11.4, C11.10, C11.11 et C11.12 réécrits.
+  - Rendu vérifié avec Chrome headless (`chrome`), dans des cadres de 360 px : aucun
+    débordement horizontal, aucune cible sous 44 px dans la barre, aucune liste qui défile
+    hors du plafond. Republiée à la même URL.
+- v4.2.1 (suite) : revue de design : changements demandés. Les cinq bloquants de la v4.2 sont
+  confirmés corrigés, et le rendu est confirmé : 50 maquettes, aucun débordement, cibles de
+  44 px au moins. Trois nouveaux bloquants :
+  1. le focus pouvait tomber sur `<body>` quand un élément focalisé quitte la barre sans
+     « Fermer » (« Annuler » d’un échec, réponse tardive, barre vidée, « Annuler » après un
+     changement d’onglet), et rien ne disait si la réussite récupère son « Annuler » pendant
+     un nouvel envoi ;
+  2. l’écriture différée de 100 ms : son déclencheur n’était pas défini, et elle n’était jamais
+     annulée ;
+  3. « Aucune place libre » et « Trouver une place » étaient hors de la règle.
+
+  S’y ajoutent sept suggestions.
+- v4.2.2 (2026-10-20) : les trois bloquants corrigés, les sept suggestions appliquées, aucune
+  refusée.
+  - Focus : une seule règle de sortie (règle 8), pour « Fermer », Échap et tout élément
+    focalisé qui disparaît. Le focus d’un « Annuler » réussi vérifie que le repère est
+    affiché. Aucun « Annuler » pendant l’envoi d’un « Annuler ».
+  - Annonces : chaque écriture vide la région, puis écrit 100 ms plus tard ; une écriture
+    plus récente, le vidage ou « Fermer » annulent l’écriture en attente. On ne compare pas
+    les textes, puisque le DOM change toujours (C11.12 réécrit, tests avec `page.clock`).
+  - Information : « Aucune place libre » ne retire ni une réussite, ni son « Annuler », ni un
+    échec ; elle part à la fin de l’action suivante ou par « Fermer ». « Trouver une place »
+    qui trouve une place ne touche pas à la barre (préférence du relecteur ; test dans
+    C11.10).
+  - Mots : `Actions.why.retryUndo` (« … utilisez de nouveau « Annuler ». ») ;
+    `Actions.notDone.editPerson` nomme les champs envoyés.
+  - Sujet de « Proposer une voiture » : chaque leg de l’offre, avec un test sur les deux legs.
+  - Repère de « Réessayer » : affiché tant que « Vos inscriptions » est en échec. Contrôle
+    manuel : la double lecture en mode navigation.
+  - Maquettes : les cinq barres de v4 redessinées (« Aucune place libre », « Après le tap »,
+    « Après « Annuler » », « 15 voitures », la barre en anglais), dont des réussites seules,
+    et le texte de l’espace réservé corrigé. Carte de la règle : « sans onglets, le titre de
+    l’événement ».
+  - C5.10, C11.10, C11.11 et C11.12 réécrits.
+  - Rendu vérifié avec Chrome headless (`chrome`), dans des cadres de 360 px : aucun
+    débordement horizontal, aucune cible sous 44 px dans la barre, plus aucune barre de v4
+    dans la page. Republiée à la même URL.
+- v4.2.2 (suite) : revue de design : **approuvée**, sans bloquant ; six suggestions.
+- v4.2.3 (2026-10-20) : les six suggestions appliquées, rien d’autre ne change.
+  - C11.12 et « Lecteurs d’écran » (point 4) : un échec n’écrit rien dans la région `status`,
+    mais peut la vider quand il retire l’information.
+  - « au-dessus de la réussite », et non « sous », dans « États couverts » et la décision
+    v4.2.2-9.
+  - L’information figure dans la structure de la barre (région `status` : dernier message
+    poli) et dans « Impact serveur ».
+  - La règle 8 nomme l’« Annuler » de la réussite, et couvre un élément qui cesse d’être
+    focalisable. La liste garde `tabIndex={0}` tant qu’elle a le focus (C11.4).
+  - Icônes nommées : `CircleCheck` pour une réussite, `Users` pour une information.
+  - Republiée à la même URL.
