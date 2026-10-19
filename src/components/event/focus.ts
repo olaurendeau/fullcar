@@ -15,14 +15,25 @@ export function focusLandmark() {
   target?.focus();
 }
 
+/**
+ * A first name or a cell of « Vos inscriptions »; while the section is folded, its button,
+ * which stays folded and whose name carries the summary (v4-3, v4.1).
+ */
+function focusInSection(selector: string) {
+  const target = document.querySelector<HTMLElement>(selector);
+  const folded = target?.closest<HTMLElement>("[hidden]");
+  const toggle = folded && document.querySelector<HTMLElement>(`[aria-controls="${CSS.escape(folded.id)}"]`);
+  (toggle || target)?.focus();
+}
+
 /** The first name of person `id` in « Vos inscriptions », a button that never goes away. */
 export function focusName(id: string) {
-  document.querySelector<HTMLElement>(`[data-person-name="${CSS.escape(id)}"]`)?.focus();
+  focusInSection(`[data-person-name="${CSS.escape(id)}"]`);
 }
 
 /** The cell of person `id` on `leg` in « Vos inscriptions », a button that never goes away either. */
 export function focusCell(id: string, leg: Leg) {
-  document.querySelector<HTMLElement>(`[data-person-cell="${CSS.escape(id)}"][data-leg="${leg}"]`)?.focus();
+  focusInSection(`[data-person-cell="${CSS.escape(id)}"][data-leg="${leg}"]`);
 }
 
 /** Focuses what `selector` finds, and says whether the focus is there: not in the hidden tab's panel, which stays mounted. */

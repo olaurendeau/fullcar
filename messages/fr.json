@@ -63,7 +63,8 @@
       "full": "Complet",
       "seats": "Places",
       "freeSeat": "Place libre",
-      "takeSeat": "Place libre : prendre une place dans la voiture de {driver}"
+      "takeSeat": "Place libre : prendre une place dans la voiture de {driver}",
+      "remove": "Retirer la voiture"
     },
     "withoutCar": "Sans voiture",
     "call": "Appeler {firstName} au {phone}",
@@ -195,6 +196,13 @@
   },
   "Seat": {
     "placed": "{firstName} est dans la voiture de {driver}"
+  },
+  "RideChanges": {
+    "remove": {
+      "title": "Retirer la voiture ?",
+      "body": "{passengers, plural, =0 {Personne ne redeviendra sans voiture.} one {# personne redeviendra sans voiture.} other {# personnes redeviendront sans voiture.}}",
+      "notified": "Personne n’est prévenu : pensez à le leur dire."
+    }
   },
   "Admin": {
     "title": "Espace organisateur",

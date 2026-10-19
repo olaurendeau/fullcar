@@ -7,6 +7,7 @@ import { focusLandmark } from "@/components/event/focus";
 import type { FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, type BarMessage } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
+import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
 import type { Leg } from "@/domain/leg";
@@ -14,6 +15,7 @@ import {
   addPerson as storePerson,
   loadEventState,
   offerRide as storeRideOffer,
+  removeRide as storeRideRemoval,
   setPersonLeg as storePersonLeg,
   takeSeats as storeSeats,
   updatePerson as storePersonFields,
@@ -169,6 +171,25 @@ export function ParticipantBoard({
     return taken;
   };
 
+  // The car's id and leg, and the device's token, in the body; the page takes the state a refusal carries too.
+  // Once per car, not per confirmation: removing it is the same whichever sends, and one reopened meanwhile waits.
+  const removeRide: RemoveRide = async ({ rideId, leg, sending, removed }, confirmation) => {
+    const remove = async () => {
+      const answer = await storeRideRemoval(id, readDeviceToken(id), rideId, leg);
+      // Known before the page takes the state without the car, whenever React renders it.
+      if (answer.ok) removed();
+      return answer;
+    };
+    const sent = await runAction(`removeRide:${rideId}`, remove, sending);
+    if (sent === undefined) return undefined;
+    confirmation.answered();
+    if (sent.ok && sent.value.ok) return null;
+    // A refusal has no words of its own (`forbidden`, `invalid`…): the generic message.
+    const failure = sent.ok ? "failed" : sent.problem;
+    failedIn(confirmation, failure);
+    return failure;
+  };
+
   return (
     <EventView
       {...event}
@@ -187,6 +208,7 @@ export function ParticipantBoard({
         setPersonLeg,
         offerRide,
         takeSeats,
+        removeRide,
       }}
       messageBar={<MessageBar message={message} onClose={() => setMessage(null)} refocus={focusLandmark} />}
     />
