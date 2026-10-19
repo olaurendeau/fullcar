@@ -67,6 +67,7 @@
     },
     "withoutCar": "Without a car",
     "call": "Call {firstName} on {phone}",
+    "addPerson": "Add a person",
     "needsJavaScript": "Signing up, offering a car or taking a seat needs JavaScript: turn it on, then reload the page."
   },
   "DevicePersons": {
@@ -90,6 +91,30 @@
     "failed": "Your sign-ups could not be loaded",
     "failedBody": "Nothing can be added or changed until they are loaded. Check your connection, then try again.",
     "retry": "Try again"
+  },
+  "PersonForm": {
+    "title": {
+      "add": "Add a person"
+    },
+    "remember": "No account, no e-mail: this device will remember it for this event.",
+    "firstName": "First name",
+    "phone": "Phone (optional)",
+    "phoneHint": "Only visible to the organiser and to the people in the same car.",
+    "both": "Outbound and return",
+    "bothHint": {
+      "aller": "Untick if this person only makes the outbound trip.",
+      "retour": "Untick if this person only makes the return trip."
+    },
+    "storage": {
+      "title": "This device will not remember it",
+      "body": "Your browser blocks storage: once this page is closed, these sign-ups can no longer be changed from this device."
+    }
+  },
+  "FormErrors": {
+    "required": "Required.",
+    "tooLong": "{max} characters at most.",
+    "invalidText": "This text contains a character that is not allowed.",
+    "invalidPhone": "Not a valid number: 6 to 15 digits, with only spaces and + . - ( )"
   },
   "Actions": {
     "submit": "Confirm",

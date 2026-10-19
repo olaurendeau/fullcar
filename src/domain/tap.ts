@@ -23,6 +23,15 @@ export function deviceKnown(status: DeviceStatus): boolean {
   return status === "none" || status === "ready";
 }
 
+/**
+ * The device's status once one of its persons is registered: a device without a key has one
+ * now, and the answer carries its persons. It is ready with no reload, so that the next tap
+ * on a free seat does not open the first registration again (C2.2, C3.6). Nothing else changes.
+ */
+export function afterRegistration(status: DeviceStatus): DeviceStatus {
+  return status === "none" ? "ready" : status;
+}
+
 export type TapOutcome =
   /** The device's persons are not known yet: the seat does nothing (C5.9). */
   | { kind: "wait" }

@@ -175,7 +175,7 @@ export function CreateEventForm() {
  * A box with its name and a one-line explanation. The whole row is its label, a target of
  * 44 px at least; its accessible name is the name alone, the explanation its description.
  */
-function Box({
+export function Box({
   id,
   label,
   hint,
