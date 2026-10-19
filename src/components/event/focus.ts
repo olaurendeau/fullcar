@@ -25,10 +25,23 @@ export function focusCell(id: string, leg: Leg) {
   document.querySelector<HTMLElement>(`[data-person-cell="${CSS.escape(id)}"][data-leg="${leg}"]`)?.focus();
 }
 
+/** Focuses what `selector` finds, and says whether there was anything to focus. */
+function focusOn(selector: string): boolean {
+  const target = document.querySelector<HTMLElement>(selector);
+  target?.focus();
+  return target !== null;
+}
+
 /**
  * The title of car `rideId` on `leg`, focusable by `tabIndex={-1}`. The leg's tab is the
  * page's state: it is made active before, so that the title is shown when it is focused.
+ * False when the car is not shown.
  */
-export function focusCarTitle(leg: Leg, rideId: string) {
-  document.querySelector<HTMLElement>(`[data-car-title="${CSS.escape(rideId)}"][data-leg="${leg}"]`)?.focus();
+export function focusCarTitle(leg: Leg, rideId: string): boolean {
+  return focusOn(`[data-car-title="${CSS.escape(rideId)}"][data-leg="${leg}"]`);
+}
+
+/** The coverage banner of `leg`, focusable by `tabIndex={-1}`; false when the leg shows none. */
+export function focusBanner(leg: Leg): boolean {
+  return focusOn(`[data-leg-banner="${leg}"]`);
 }

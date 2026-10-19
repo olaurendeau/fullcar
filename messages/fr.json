@@ -182,6 +182,20 @@
     "rideGone": "Cette voiture n’est plus proposée",
     "alreadyInCar": "{count, plural, one {Cette personne est déjà dans une voiture} other {Une de ces personnes est déjà dans une voiture}} : rien n’a changé."
   },
+  "Sheet": {
+    "title": "Qui monte dans la voiture de {driver} ?",
+    "remaining": "{count, plural, =0 {Il ne reste aucune place dans cette voiture} one {Il reste # place dans cette voiture} other {Il reste # places dans cette voiture}}",
+    "submit": "{count, plural, =0 {Placer} one {Placer # personne} other {Placer # personnes}}",
+    "nobody": {
+      "aller": "Toutes vos personnes sont déjà dans une voiture pour l’aller.",
+      "retour": "Toutes vos personnes sont déjà dans une voiture pour le retour."
+    },
+    "notEnoughSeats": "Il n’y a plus assez de places : personne n’a été placé.",
+    "placed": "{names} sont dans la voiture de {driver}"
+  },
+  "Seat": {
+    "placed": "{firstName} est dans la voiture de {driver}"
+  },
   "Admin": {
     "title": "Espace organisateur",
     "shareLink": {

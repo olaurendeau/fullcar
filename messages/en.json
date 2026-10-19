@@ -182,6 +182,20 @@
     "rideGone": "This car is no longer offered",
     "alreadyInCar": "{count, plural, one {This person is already in a car} other {One of these people is already in a car}}: nothing has changed."
   },
+  "Sheet": {
+    "title": "Who gets in {driver}’s car?",
+    "remaining": "{count, plural, =0 {No seat left in this car} one {# seat left in this car} other {# seats left in this car}}",
+    "submit": "{count, plural, =0 {Seat} one {Seat # person} other {Seat # people}}",
+    "nobody": {
+      "aller": "All your people are already in a car for the outbound trip.",
+      "retour": "All your people are already in a car for the return trip."
+    },
+    "notEnoughSeats": "There are no longer enough seats: nobody was seated.",
+    "placed": "{names} are in {driver}’s car"
+  },
+  "Seat": {
+    "placed": "{firstName} is in {driver}’s car"
+  },
   "Admin": {
     "title": "Organiser area",
     "shareLink": {

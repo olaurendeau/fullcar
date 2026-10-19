@@ -10,6 +10,7 @@ import { EmptyLeg } from "./empty-leg";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import { OfferRideButton, type OfferRide } from "./ride-form";
+import { useSeatSheet, type TakeSeats } from "./seat-sheet";
 import { WithoutCarList } from "./without-car-list";
 
 /** What the page knows of the device's persons, and how to read them again after a failure. */
@@ -26,6 +27,8 @@ export interface BoardDevice {
   setPersonLeg: SetPersonLeg;
   /** Offers a car on a leg (R4), with the device's token. */
   offerRide: OfferRide;
+  /** Seats in a car for persons of the device, from the sheet (#91). */
+  takeSeats: TakeSeats;
 }
 
 /**
@@ -68,10 +71,11 @@ export function LegPanel({
   const tBoard = useTranslations("Board");
   const { leg, cars, withoutCar } = board;
   const legDate = wallClockParts(at).date;
+  const seats = useSeatSheet(board, device, hasRetour);
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {hasBanner(board) && <CoverageBanner coverage={coverage(board)} />}
+      {hasBanner(board) && <CoverageBanner coverage={coverage(board)} leg={leg} />}
       <div className="grid grid-cols-2 gap-2">
         <AddPersonButton
           leg={leg}
@@ -96,7 +100,13 @@ export function LegPanel({
         <>
           {cars.length > 0 ? (
             cars.map((car) => (
-              <RideCard key={car.id} car={car} date={legDate} seatsActive={deviceKnown(device.status)} />
+              <RideCard
+                key={car.id}
+                car={car}
+                date={legDate}
+                seatsActive={deviceKnown(device.status)}
+                onTakeSeat={(seat) => seats.openFor(car, seat)}
+              />
             ))
           ) : (
             <p className="text-sm text-muted-foreground">{t(`noCar.${leg}`)}</p>
@@ -106,6 +116,7 @@ export function LegPanel({
       ) : (
         <EmptyLeg leg={leg} />
       )}
+      {seats.sheet}
     </div>
   );
 }

@@ -5,15 +5,17 @@ import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
 import { focusLandmark } from "@/components/event/focus";
 import type { FromSheet } from "@/components/event/hidden-page";
-import { MessageBar } from "@/components/event/message-bar";
+import { MessageBar, type BarMessage } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
 import type { OfferRide } from "@/components/event/ride-form";
+import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
 import type { Leg } from "@/domain/leg";
 import {
   addPerson as storePerson,
   loadEventState,
   offerRide as storeRideOffer,
   setPersonLeg as storePersonLeg,
+  takeSeats as storeSeats,
   updatePerson as storePersonFields,
 } from "./actions";
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
@@ -52,10 +54,10 @@ export function ParticipantBoard({
     [id],
   );
   const [tab, setTab] = useState<Leg>("aller");
-  const [problem, setProblem] = useState<ActionProblem | null>(null);
+  const [message, setMessage] = useState<BarMessage | null>(null);
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
-  const [runAction] = useState(() => actionRunner({ problem: setProblem, state: setBoard }));
+  const [runAction] = useState(() => actionRunner({ message: setMessage, state: setBoard }));
 
   const device = useDevice(
     id,
@@ -112,8 +114,8 @@ export function ParticipantBoard({
   // withdrawn alone by a send or answer from any sheet about its subject that carries all its
   // fields; a cell has none, only its subject (#167, #208).
   function failedIn(sheet: FromSheet, problem: ActionProblem) {
-    setProblem(null);
-    if (!sheet.inSheet()) sheet.whenClosed(() => setProblem(problem));
+    setMessage(null);
+    if (!sheet.inSheet()) sheet.whenClosed(() => setMessage({ kind: "problem", problem }));
   }
 
   // The page takes the state a refusal carries too (C11.6).
@@ -151,6 +153,19 @@ export function ParticipantBoard({
     return { kind: "problem", problem };
   };
 
+  // A success waits for the page to show, as a failure does, and goes to the bar; a refusal or a
+  // failure is said in the sheet that sent while it shows it, in the bar otherwise.
+  const takeSeats: TakeSeats = async ({ rideId, leg, personIds }, { sending, said, ...sheet }) => {
+    const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, personIds);
+    const sent = await runAction(`takeSeats:${sheet.key}`, send, sending);
+    if (sent === undefined) return undefined;
+    sheet.answered();
+    const taken = sent.ok ? seatsTaken(sent.value) : ({ kind: "problem", problem: sent.problem } as const);
+    setMessage(null);
+    if (taken.kind === "done" || !sheet.inSheet()) sheet.whenClosed(() => setMessage(said(taken)));
+    return taken;
+  };
+
   return (
     <EventView
       {...event}
@@ -168,8 +183,9 @@ export function ParticipantBoard({
         updatePerson,
         setPersonLeg,
         offerRide,
+        takeSeats,
       }}
-      messageBar={<MessageBar problem={problem} onClose={() => setProblem(null)} refocus={focusLandmark} />}
+      messageBar={<MessageBar message={message} onClose={() => setMessage(null)} refocus={focusLandmark} />}
     />
   );
 }
