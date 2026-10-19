@@ -144,6 +144,24 @@ test("« Retirer la voiture ? »", async ({ db, page, seededEvent }, testInfo) =
   await shoot(page, testInfo, "retirer-voiture");
 });
 
+// C11.2, C8.4: Claire, of the device, drives Nina and Paul, and goes down to one seat.
+test("« Qui sort de la voiture ? »", async ({ db, page, seededEvent }, testInfo) => {
+  const { id } = seededEvent;
+  const token = newToken();
+  const claire = await seedPerson(db, id, { firstName: "Claire" }, token);
+  const rideId = await seedRide(db, id, claire.id);
+  for (const firstName of ["Nina", "Paul"]) {
+    await seedPlacement(db, { personId: (await seedPerson(db, id, { firstName })).id, eventId: id, leg: "aller", rideId });
+  }
+  await holdToken(page, id, token);
+  await page.goto(`/e/${id}`, { waitUntil: "networkidle" });
+  await page.getByRole("article", { name: "Voiture de Claire" }).getByRole("button", { name: "Modifier" }).click();
+  await page.getByLabel("Places, sans compter qui conduit").fill("1");
+  await page.getByRole("button", { name: "Valider" }).click();
+  await expect(page.getByRole("dialog", { name: "Qui sort de la voiture ?" }).getByRole("checkbox", { name: "Nina" })).toBeFocused();
+  await shoot(page, testInfo, "qui-sort");
+});
+
 test.describe("without a retour", () => {
   test.use({ eventFields: { retourAt: null } });
 
