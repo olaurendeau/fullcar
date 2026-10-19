@@ -440,6 +440,26 @@ test.describe("add a person", () => {
     });
   }
 
+  // Next sends one server action at a time: the second waits for the first's answer, then goes.
+  test("#167: a form opened while another's registration is on its way sends after it", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, "Léa", false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await openForm(page);
+    await form(page).getByLabel(FR.firstName).fill("Léa");
+    await submit(page).click();
+    await page.keyboard.press("Escape");
+    await expect(form(page)).toHaveCount(0);
+
+    await openForm(page);
+    await form(page).getByLabel(FR.firstName).fill("Marc");
+    await submit(page).click();
+    // Sent, not dropped: inactive until its answer (C1.9).
+    await expect(submit(page)).toBeDisabled();
+    answer();
+    await expect(form(page)).toHaveCount(0);
+    await expect(section(page).getByRole("rowheader")).toHaveText(["Léa", "Marc"]);
+  });
+
   test("a success from a form closed since leaves the form opened meanwhile open", async ({ page, seededEvent }) => {
     const answer = await holdFirst(page, "Léa", false);
     await page.goto(`/e/${seededEvent.id}`);

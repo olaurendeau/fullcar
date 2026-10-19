@@ -89,6 +89,7 @@
       }
     },
     "sheetTitle": "{firstName} · {leg}",
+    "edit": "Edit",
     "seeCar": "See the car",
     "leaveCar": "Leave the car",
     "lookingForSeat": "I need a seat",
@@ -103,7 +104,8 @@
   },
   "PersonForm": {
     "title": {
-      "add": "Add a person"
+      "add": "Add a person",
+      "edit": "Edit {firstName}"
     },
     "remember": "No account, no e-mail: this device will remember it for this event.",
     "firstName": "First name",

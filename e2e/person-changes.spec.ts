@@ -370,6 +370,80 @@ test.describe("person changes", () => {
     });
   }
 
+  // Next sends one server action at a time: the second waits for the first's answer, then goes.
+  test("#167: an action in a sheet opened while another's change is on its way is sent after it", async ({
+    page,
+    seededEvent,
+  }) => {
+    const answer = await holdFirst(page, scene.persons.tom, false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await cell(page, "Tom", "Aller").click();
+    await sheet(page, "Tom · Aller").getByRole("button", { name: "Ne fait pas l’aller" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await cell(page, "Léa", "Aller").click();
+    await sheet(page, "Léa · Aller").getByRole("button", { name: "Sortir de la voiture" }).click();
+    answer();
+    await expect(sheet(page, "Léa · Aller")).toHaveCount(0);
+    await expect(section(page).getByRole("button", { name: "Léa, Aller : Sans voiture", exact: true })).toBeFocused();
+    await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Ne fait pas l’aller");
+  });
+
+  // Zed's registration fails while the form closes, then Tom's change, sent from his cell's
+  // sheet meanwhile; the form, reopened before it has closed, sends again: that withdraws its
+  // own waiting message, not Tom's.
+  test("#167: two failures wait for the page together, and sending one again withdraws its own alone", async ({
+    page,
+    seededEvent,
+  }) => {
+    const zed = await holdFirst(page, "Zed", true);
+    const tom = await holdFirst(page, scene.persons.tom, true);
+    await page.goto(`/e/${seededEvent.id}`);
+    // Slow enough for all that follows; removed once the form is open again.
+    const slow = await page.addStyleTag({ content: slowClose.replace("2s", "30s") });
+    await page.getByRole("tabpanel").getByRole("button", { name: "Ajouter une personne", exact: true }).click();
+    const form = sheet(page, "Ajouter une personne");
+    await form.getByLabel("Prénom").fill("Zed");
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(form.getByRole("button", { name: "Valider" })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(form).toHaveAttribute("data-state", "closed");
+
+    await hiddenCell(page, "Tom, Aller : Sans voiture").focus();
+    await page.keyboard.press("Enter");
+    const tomsSheet = sheet(page, "Tom · Aller");
+    await tomsSheet.getByRole("button", { name: "Ne fait pas l’aller" }).click();
+    await page.keyboard.press("Escape");
+    await expect(tomsSheet).toHaveAttribute("data-state", "closed");
+    const seen = await watchAlerts(page);
+    for (const answer of [zed, tom]) {
+      const responded = page.waitForResponse((response) => response.status() === 500);
+      answer();
+      await responded;
+    }
+    expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(2);
+
+    // Reopened while it closes: the same form, sent again, and Zed is registered.
+    await page.locator('[role="tabpanel"][data-state="active"] button', { hasText: "Ajouter une personne" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator('[role="dialog"][data-state="open"]')).toHaveCount(1);
+    // Tom's sheet, opened after the form, hides it from role queries until it has closed.
+    await slow.evaluate((style) => style.parentNode?.removeChild(style));
+    await expect(form).toHaveAttribute("data-state", "open");
+    await expect(form.getByLabel("Prénom")).toHaveValue("Zed");
+    // From the keyboard: an overlay of the two sheets may lie over the form for a moment.
+    await form.getByLabel("Prénom").press("Enter");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(section(page).getByRole("rowheader")).toHaveText(["Claire", "Léa", "Tom", "Hugo", "Zed"]);
+
+    // Tom's failure is not lost: said once the page shows, and Tom is still without a car.
+    await expect(bar(page)).toHaveText(FAILED);
+    expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+    await expect(alerts(page)).toHaveText([FAILED]);
+    await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
+  });
+
   test("a success from a sheet closed since leaves the sheet opened meanwhile open", async ({ page, seededEvent }) => {
     const answer = await holdFirst(page, scene.persons.tom, false);
     await page.goto(`/e/${seededEvent.id}`);

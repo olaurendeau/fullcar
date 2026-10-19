@@ -37,7 +37,7 @@ function personOf(board: readonly VisibleLegBoard[], id: string) {
  */
 export function DevicePersons({
   board,
-  device: { status, retry, refocus, setPersonLeg },
+  device: { status, retry, refocus, setPersonLeg, updatePerson },
   showLeg,
 }: {
   board: readonly VisibleLegBoard[];
@@ -48,8 +48,8 @@ export function DevicePersons({
   const t = useTranslations("DevicePersons");
   const rows = deviceMatrix(board);
   const [expanded, setExpanded] = useState<boolean | null>(null);
-  const [sheet, setSheet] = useState<{ id: string; open: boolean } | null>(null);
-  // `opened` counts the openings: each one is a new sheet, without the last one's message.
+  // `opened` counts the openings: each one is a new sheet, without the last one's message or form.
+  const [sheet, setSheet] = useState<{ id: string; open: boolean; opened: number } | null>(null);
   const [cellSheet, setCellSheet] = useState<{ id: string; leg: Leg; open: boolean; opened: number } | null>(null);
   const retried = useRef(false);
   const focusTarget = useRef<HTMLElement>(null);
@@ -149,15 +149,20 @@ export function DevicePersons({
         <PersonsMatrix
           legs={board.map((leg) => leg.leg)}
           rows={rows}
-          onName={(id) => setSheet({ id, open: true })}
+          onName={(id) => setSheet({ id, open: true, opened: (sheet?.opened ?? 0) + 1 })}
           onCell={(id, leg) => setCellSheet({ id, leg, open: true, opened: (cellSheet?.opened ?? 0) + 1 })}
         />
       </div>
       {person && (
         <PersonSheet
+          key={sheet.opened}
           person={person}
           open={sheet.open}
-          onOpenChange={(isOpen) => setSheet({ id: person.id, open: isOpen })}
+          // A success comes after the sheet that sent it: it closes that one, not one opened since.
+          onOpenChange={(isOpen) =>
+            setSheet((current) => (current?.opened === sheet.opened ? { ...current, open: isOpen } : current))
+          }
+          updatePerson={updatePerson}
         />
       )}
       {cellSheet && cellRow && cell && (
