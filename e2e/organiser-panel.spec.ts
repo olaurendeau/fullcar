@@ -115,6 +115,7 @@ test.describe("the scene of O2.5", () => {
     await expect(rows(persons)).toHaveCount(2);
     await expect(rows(persons).first()).toContainText("Chloé");
     await expect(rows(persons).nth(1)).toContainText("Dylan");
+  await expect(aller.getByText(/^Aucune voiture proposée/)).toHaveCount(0);
 
     const link = rows(persons).first().locator(tel);
     await expect(link).toHaveCount(1);
