@@ -68,6 +68,7 @@
     "withoutCar": "Sans voiture",
     "call": "Appeler {firstName} au {phone}",
     "addPerson": "Ajouter une personne",
+    "offerRide": "Proposer une voiture",
     "needsJavaScript": "S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page."
   },
   "DevicePersons": {
@@ -118,11 +119,35 @@
       "body": "Votre navigateur bloque le stockage : après la fermeture de la page, ces inscriptions ne pourront plus être modifiées depuis cet appareil."
     }
   },
+  "RideForm": {
+    "title": {
+      "offer": "Proposer une voiture"
+    },
+    "storage": {
+      "title": "Cet appareil ne pourra pas s’en souvenir",
+      "body": "Votre navigateur bloque le stockage : après la fermeture de la page, cette voiture et la personne qui conduit ne pourront plus être modifiées depuis cet appareil."
+    },
+    "driver": "Qui conduit ?",
+    "newDriver": "Une nouvelle personne",
+    "location": {
+      "aller": "Lieu de départ",
+      "retour": "Lieu de dépose"
+    },
+    "time": "Heure de départ",
+    "timeHint": "Le {date}",
+    "seats": "Places, sans compter qui conduit",
+    "seatsHint": "De 1 à 8.",
+    "note": "Note (facultatif)",
+    "noteHint": "Ce que les personnes à bord doivent savoir."
+  },
   "FormErrors": {
     "required": "Champ requis.",
     "tooLong": "{max} caractères au maximum.",
     "invalidText": "Ce texte contient un caractère non autorisé.",
-    "invalidPhone": "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )"
+    "invalidPhone": "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )",
+    "invalidTime": "Heure non valide.",
+    "seats": "De 1 à 8 places.",
+    "chooseDriver": "Choisissez qui conduit."
   },
   "Actions": {
     "submit": "Valider",

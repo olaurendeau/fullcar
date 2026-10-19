@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DevicePerson, DeviceState } from "./board";
-import { afterRegistration, deviceKnown, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
+import { afterRegistration, deviceKnown, driverChoice, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
 
 function of(id: string, state: DeviceState): DevicePerson {
   return { id, firstName: id.toUpperCase(), state };
@@ -112,5 +112,22 @@ describe("sheetSubmit", () => {
   it("C6.3: is inactive with more persons checked than free seats, and gives the seats left", () => {
     expect(sheetSubmit(4, 3)).toEqual({ kind: "notEnoughSeats", count: 4, freeSeats: 3 });
     expect(sheetSubmit(1, 0)).toEqual({ kind: "notEnoughSeats", count: 1, freeSeats: 0 });
+  });
+});
+
+describe("driverChoice (R4, C4.6)", () => {
+  it("lists the device's persons who do not drive on the leg, in their order, and chooses none of several", () => {
+    const device = [withoutCar("lea"), driver("marc"), notConcerned("tom"), passenger("zoe")];
+    const candidates = ["lea", "tom", "zoe"].map((id) => ({ id, firstName: id.toUpperCase() }));
+    expect(driverChoice(device)).toEqual({ candidates, chosen: undefined });
+  });
+
+  it("chooses the only person who can drive", () => {
+    expect(driverChoice([driver("marc"), passenger("zoe")])).toEqual({ candidates: [{ id: "zoe", firstName: "ZOE" }], chosen: "zoe" });
+  });
+
+  it("without a person who can drive, only a new person: none on the device, or all of them driving", () => {
+    expect(driverChoice([])).toEqual({ candidates: [], chosen: "new" });
+    expect(driverChoice([driver("marc")])).toEqual({ candidates: [], chosen: "new" });
   });
 });

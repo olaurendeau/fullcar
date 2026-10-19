@@ -25,6 +25,6 @@ describe("C11.9: the screen's French words are epicene", () => {
   });
 
   it("reads the namespaces of the screen that exist", () => {
-    expect(Object.keys(messages)).toEqual(expect.arrayContaining(["Board", "DevicePersons", "PersonForm", "FormErrors", "Actions"]));
+    expect(Object.keys(messages)).toEqual(expect.arrayContaining(["Board", "DevicePersons", "PersonForm", "RideForm", "FormErrors", "Actions"]));
   });
 });

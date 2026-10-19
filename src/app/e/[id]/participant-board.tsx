@@ -7,8 +7,9 @@ import { focusLandmark } from "@/components/event/focus";
 import { messageWaits, type FromSheet } from "@/components/event/hidden-page";
 import { MessageBar } from "@/components/event/message-bar";
 import type { AddPerson } from "@/components/event/person-form";
+import type { OfferRide } from "@/components/event/ride-form";
 import type { Leg } from "@/domain/leg";
-import { addPerson as storePerson, loadEventState, setPersonLeg as storePersonLeg } from "./actions";
+import { addPerson as storePerson, loadEventState, offerRide as storeRideOffer, setPersonLeg as storePersonLeg } from "./actions";
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import { actionRunner, sendAction, type ActionProblem } from "./run-action";
@@ -83,6 +84,26 @@ export function ParticipantBoard({
     return failure;
   };
 
+  // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
+  const offerRide: OfferRide = async ({ offer: { driver, ...ride }, creationIds, sending, ...sheet }) => {
+    const send = () => {
+      const { rideId, personId } = creationIds();
+      const token = driver.kind === "new" ? ensureDeviceToken(id) : readDeviceToken(id);
+      return storeRideOffer(id, token, { ...ride, rideId, driver: driver.kind === "new" ? { ...driver, personId } : driver });
+    };
+    const sent = await runAction("offerRide", send, sending);
+    if (sent === undefined) return undefined;
+    const outcome = sent.ok ? sent.value : undefined;
+    if (outcome?.ok) {
+      device.registered();
+      return { kind: "done" };
+    }
+    if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
+    const problem = sent.ok ? "failed" : sent.problem;
+    failedIn(sheet, problem);
+    return { kind: "problem", problem };
+  };
+
   return (
     <EventView
       {...event}
@@ -98,6 +119,7 @@ export function ParticipantBoard({
         refocus: focusLandmark,
         addPerson,
         setPersonLeg,
+        offerRide,
       }}
       messageBar={<MessageBar problem={problem} onClose={() => setProblem(null)} refocus={focusLandmark} />}
     />
