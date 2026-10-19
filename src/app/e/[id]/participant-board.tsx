@@ -1,12 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
 import { focusLandmark } from "@/components/event/focus";
 import { MessageBar } from "@/components/event/message-bar";
 import type { AddPerson } from "@/components/event/person-form";
-import { addPerson as storePerson, loadEventState } from "./actions";
-import { ensureDeviceToken, useDevice } from "./device-token";
+import type { Leg } from "@/domain/leg";
+import { addPerson as storePerson, loadEventState, setPersonLeg as storePersonLeg } from "./actions";
+import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import { actionRunner, sendAction, type ActionProblem } from "./run-action";
 
@@ -20,8 +22,9 @@ export function ParticipantBoard({
   id,
   board: rendered,
   ...event
-}: { id: string; board: EventState } & Omit<EventViewProps, "board" | "device" | "messageBar">) {
+}: { id: string; board: EventState } & Omit<EventViewProps, "board" | "device" | "messageBar" | "tab" | "onTab">) {
   const [board, setBoard] = useState(rendered);
+  const [tab, setTab] = useState<Leg>("aller");
   const [problem, setProblem] = useState<ActionProblem | null>(null);
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
@@ -63,10 +66,23 @@ export function ParticipantBoard({
     return { kind: "problem", problem };
   };
 
+  // The page takes the state a refusal carries too (C11.6). A problem shows in the sheet while it is open.
+  const setPersonLeg: SetPersonLeg = async (change, open) => {
+    const sent = await runAction("setPersonLeg", () => storePersonLeg(id, readDeviceToken(id), change));
+    if (sent === undefined) return undefined;
+    if (sent.ok && sent.value.ok) return null;
+    // A refusal has no words of its own (`drives`, `forbidden`…): the generic message.
+    const failure = sent.ok ? "failed" : sent.problem;
+    setProblem(open() ? null : failure);
+    return failure;
+  };
+
   return (
     <EventView
       {...event}
       board={board}
+      tab={tab}
+      onTab={setTab}
       device={{
         status: device.status,
         retry: () => {
@@ -75,6 +91,7 @@ export function ParticipantBoard({
         },
         refocus: focusLandmark,
         addPerson,
+        setPersonLeg,
       }}
       messageBar={<MessageBar problem={problem} onClose={() => setProblem(null)} refocus={focusLandmark} />}
     />

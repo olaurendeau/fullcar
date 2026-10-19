@@ -34,7 +34,8 @@ function LegTrigger({ leg, withoutCar, tall }: { leg: Leg; withoutCar: number; t
 
 /**
  * Aller and Retour side by side, Aller first (#3, C5.2). Switching is local to the page:
- * no reload, no URL change. Each tab is at least 44 px high (C5.5).
+ * no reload, no URL change. Each tab is at least 44 px high (C5.5). The active tab is the
+ * page's (`tab`), so that an action elsewhere can make another one active (#89).
  *
  * Both legs are in the HTML: without JavaScript, where tabs cannot switch, they are shown
  * one under the other, each under its name (C3.4). That name is the leg's h2, always there
@@ -46,6 +47,8 @@ export function LegTabs(props: {
   aller: VisibleLegBoard;
   retour: VisibleLegBoard;
   device: BoardDevice;
+  tab: Leg;
+  onTab: (leg: Leg) => void;
 }) {
   const t = useTranslations("Event.legs");
   const legs = [
@@ -56,7 +59,11 @@ export function LegTabs(props: {
   const tall = counts.some((count) => count > 0);
 
   return (
-    <Tabs defaultValue="aller" className="gap-4">
+    <Tabs
+      value={props.tab}
+      onValueChange={(value) => props.onTab(value === "retour" ? "retour" : "aller")}
+      className="gap-4"
+    >
       <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto noscript:hidden">
         {legs.map(({ leg }, index) => (
           <LegTrigger key={leg} leg={leg} withoutCar={counts[index]} tall={tall} />
