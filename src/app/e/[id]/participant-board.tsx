@@ -109,7 +109,7 @@ export function ParticipantBoard({
   // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
   // hides the page: until then, it would be neither seen nor announced. Written after what the
   // actions ending meanwhile write there, it is not cleared by them. Every failure waits, each
-  // withdrawn alone by the next send or answer about its subject, from any sheet (#167, #208).
+  // withdrawn alone by a send or answer, from any sheet, that carries all its fields (#167, #208).
   function failedIn(sheet: FromSheet, problem: ActionProblem) {
     setProblem(null);
     if (!sheet.inSheet()) sheet.whenClosed(() => setProblem(problem));

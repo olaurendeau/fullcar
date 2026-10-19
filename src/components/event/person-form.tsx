@@ -182,7 +182,7 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
     setProblem(null);
     // In `edit` mode, only what changed is sent: a failure is withdrawn by a send that carries all it did.
     const changed = PERSON_FIELDS.filter((name) => values[name] !== shown[name]);
-    // Withdraws the failure this form left for the bar: sent again, the form says what comes of it.
+    // Withdraws a failure any form about this person left for the bar, if this send carries all its fields.
     const sheet = sends(mode.kind === "edit" ? changed : []);
     const answer =
       mode.kind === "add"
