@@ -142,7 +142,7 @@
     "adminLink": {
       "label": "Lien d’organisateur",
       "badge": "Personnel",
-      "hint": "Ne le partagez pas : il montre des numéros de téléphone et permet de tout modifier."
+      "hint": "Ne le partagez pas : il montre des numéros de téléphone et permet de tout modifier."
     },
     "keep": {
       "title": "Gardez ce lien",

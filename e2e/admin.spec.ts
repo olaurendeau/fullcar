@@ -10,7 +10,7 @@ const FR = {
   adminLink: "Lien d’organisateur",
   keep: "Gardez ce lien",
   keepWhy: "C’est le seul moyen de modifier l’événement. Sans compte ni e-mail, nous ne pouvons pas vous le renvoyer.",
-  doNotShare: "Ne le partagez pas : il montre des numéros de téléphone et permet de tout modifier.",
+  doNotShare: "Ne le partagez pas : il montre des numéros de téléphone et permet de tout modifier.",
   copy: "Copier",
   copied: "Copié",
   copyFailed: "Copie impossible : sélectionnez le lien et copiez-le à la main.",
@@ -61,7 +61,8 @@ test.describe("organiser's arrival", () => {
     await expect(share.getByTestId("link")).toHaveText(`${origin}/e/${seededEvent.id}`);
     await expect(admin.getByTestId("link")).toHaveText(`${origin}/e/${seededEvent.id}/admin#${seededEvent.token}`);
     await expect(admin).toContainText("Personnel");
-    await expect(admin).toContainText(FR.doNotShare);
+    // Its exact text: `toContainText` takes a non-breaking space for the README's plain one.
+    expect(await admin.getByText(/^Ne le partagez pas/).textContent()).toBe(FR.doNotShare);
     await expect(warning).toContainText(FR.keep);
     await expect(warning).toContainText(FR.keepWhy);
 
