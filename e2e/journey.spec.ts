@@ -321,23 +321,83 @@ test.describe("an event with its three options", () => {
     return page.url();
   }
 
-  /** The page's markup on each tab, its event's id and token replaced, the organiser's page first. */
+  /**
+   * React's flight data written into the page by `self.__next_f.push(…)`, as a sorted list
+   * of rows: what client components receive, rendered or not.
+   * Its order is not the page's: rows come out as their data resolves, so `IconMark`
+   * (metadata) and `ParticipantBoard` (the event's read) swap from one render to the next,
+   * and the ids rows get as they are first met swap with them. Hence each row loses its id,
+   * every reference to a row (`"$4"`, `"$L23"`, `"$@1f"`, `"$c:props:children"`) becomes
+   * `"$…{ref}"`, and the rows are sorted. What a row holds is still compared, a prop
+   * included. `"$undefined"`, `"$Sreact.fragment"` or a text written `"$$…"` are no references.
+   * A text row (`id:T<hex length>,…`) has no line end and its length is in bytes: rows are
+   * split before `normalise` changes any length.
+   */
+  function flightRows(pushes: string[], normalise: (text: string) => string): string[] {
+    let flight = "";
+    // `(self.__next_f=self.__next_f||[]).push([0])`, then `self.__next_f.push([1,"…"])`.
+    for (const push of pushes) {
+      const [kind, data] = JSON.parse(push.slice(push.indexOf(".push(") + ".push(".length, -1)) as [number, unknown];
+      if (kind === 1 && typeof data === "string") flight += data;
+      else if (kind !== 0) throw new Error(`C3.4: a flight chunk of kind ${kind}`);
+    }
+    const bytes = Buffer.from(flight, "utf8");
+    const rows: string[] = [];
+    for (let at = 0; at < bytes.length; ) {
+      const colon = bytes.indexOf(":", at);
+      if (colon < 0) throw new Error("C3.4: a flight row without its id");
+      if (bytes.toString("utf8", colon + 1, colon + 2) === "T") {
+        const comma = bytes.indexOf(",", colon);
+        const end = comma + 1 + parseInt(bytes.toString("utf8", colon + 2, comma), 16);
+        rows.push(`T${bytes.toString("utf8", comma + 1, end)}`);
+        at = end;
+      } else {
+        const newline = bytes.indexOf("\n", colon);
+        const end = newline < 0 ? bytes.length : newline;
+        rows.push(bytes.toString("utf8", colon + 1, end));
+        at = end + 1;
+      }
+    }
+    return rows.map((row) => normalise(row.replace(/"\$([A-Z@]?)[0-9a-f]+(:[^"]*)?"/g, '"$$$1{ref}$2"'))).sort();
+  }
+
+  /**
+   * The page's markup on each tab, its event's id and token replaced, the organiser's page
+   * first. On the event's page, the DOM is compared in full without its scripts, then its
+   * other scripts and its flight rows, both sorted.
+   */
   async function markup(page: Page, adminUrl: string): Promise<string[]> {
     const { pathname, hash } = new URL(adminUrl);
     const id = pathname.split("/")[2];
     // React's generated ids too: the panel mounts after `router.push`, and its ids follow
     // whatever was rendered on `/` before, ticking the options included.
+    // Radix's mounted tab panel too: it holds `animation-duration: 0s` until a render after
+    // the next frame, which may or may not have come yet. It shows nothing.
     const normalise = (html: string) =>
       html
         .replaceAll(hash.slice(1), "{token}")
         .replaceAll(id, "{id}")
-        .replace(/_r_\w+_/g, "{useId}");
+        .replace(/_r_\w+_/g, "{useId}")
+        .replaceAll('style="animation-duration: 0s;"', 'style=""');
+    const withoutScripts = () =>
+      page.locator("body").evaluate((body) => {
+        const copy = body.cloneNode(true) as HTMLElement;
+        for (const script of copy.querySelectorAll("script")) script.remove();
+        return copy.innerHTML;
+      });
     const seen = [normalise(await page.locator("main").innerHTML())];
     await page.goto(`/e/${id}`, { waitUntil: "networkidle" });
-    seen.push(normalise(await page.locator("body").innerHTML()));
+    seen.push(normalise(await withoutScripts()));
+    const scripts = await page
+      .locator("script")
+      .evaluateAll((all) => all.map(({ outerHTML, textContent }) => ({ outerHTML, text: textContent ?? "" })));
+    const isFlight = ({ text }: { text: string }) => text.includes("self.__next_f");
+    const others = scripts.filter((script) => !isFlight(script)).map(({ outerHTML }) => normalise(outerHTML));
+    const pushes = scripts.filter(isFlight).map(({ text }) => text);
+    seen.push(...others.sort(), ...flightRows(pushes, normalise));
     await page.getByRole("tab", { name: WORDS.fr.retour }).click();
     await expect(page.getByRole("tab", { name: WORDS.fr.retour })).toHaveAttribute("aria-selected", "true");
-    seen.push(normalise(await page.locator("body").innerHTML()));
+    seen.push(normalise(await withoutScripts()));
     return seen;
   }
 
@@ -365,6 +425,9 @@ test.describe("an event with its three options", () => {
       stops_enabled: true,
     });
     const withOptions = await markup(page, withOptionsUrl);
+    // The flight rows are read: the props the board receives are among them.
+    const boardProps = plain.some((text) => text.includes('{"id":"{id}","title":"Sortie ski du club",'));
+    expect(boardProps).toBe(true);
     expect(withOptions).toEqual(plain);
   });
 });
