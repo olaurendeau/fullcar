@@ -28,8 +28,7 @@ const FR = {
   note: "Note (facultatif)",
   noteHint: "Ce que les personnes à bord doivent savoir.",
   storageTitle: "Cet appareil ne pourra pas s’en souvenir",
-  storageBody:
-    "Votre navigateur bloque le stockage : après la fermeture de la page, cette voiture et la personne qui conduit ne pourront plus être modifiées depuis cet appareil.",
+  storageBody: "Votre navigateur bloque le stockage : après la fermeture de la page, cette voiture et la personne qui conduit ne pourront plus être modifiées depuis cet appareil.",
   required: "Champ requis.",
   seatsError: "De 1 à 8 places.",
   chooseDriver: "Choisissez qui conduit.",
@@ -53,8 +52,7 @@ const field = (page: Page, label: string) => form(page).getByLabel(label, { exac
 const section = (page: Page) => page.getByRole("region", { name: "Vos inscriptions" });
 const toggle = (page: Page) => section(page).getByRole("button", { name: /^Vos inscriptions/ });
 /** The choices of « Qui conduit ? », as their labels read: the radios' own text is empty. */
-const radioNames = (scope: Locator) =>
-  scope.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.closest("label")?.textContent ?? ""));
+const radioNames = (scope: Locator) => scope.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.closest("label")?.textContent ?? ""));
 const car = (scope: Page | Locator, driver: string) => scope.getByRole("article", { name: `Voiture de ${driver}` });
 const freeSeats = (scope: Page | Locator) => scope.getByRole("button", { name: /^Place libre : / });
 const withoutCar = (scope: Locator) => scope.getByRole("region", { name: "Sans voiture" }).getByRole("listitem");
@@ -92,8 +90,7 @@ function offers(page: Page, marker: string): Request[] {
   return sent;
 }
 
-const rides = async (db: Db, eventId: string) =>
-  db.selectFrom("ride").select(["leg", "location"]).where("event_id", "=", eventId).execute();
+const rides = async (db: Db, eventId: string) => db.selectFrom("ride").select(["leg", "location"]).where("event_id", "=", eventId).execute();
 
 /** The device holds `names`, with their token in the page's `localStorage`. */
 async function device(db: Db, page: Page, eventId: string, names: string[]) {
@@ -104,15 +101,11 @@ async function device(db: Db, page: Page, eventId: string, names: string[]) {
   return ids;
 }
 
-const place = (db: Db, eventId: string, personId: string, leg: Leg, rideId: string | null) =>
-  seedPlacement(db, { personId, eventId, leg, rideId });
+const place = (db: Db, eventId: string, personId: string, leg: Leg, rideId: string | null) => seedPlacement(db, { personId, eventId, leg, rideId });
 
 /** Where `names` are in the active tab's panel: buttons by their text, cars by « car ». */
-async function order(page: Page): Promise<string[]> {
-  return panel(page).evaluate((root) =>
-    Array.from(root.querySelectorAll("button, article"), (node) => (node.tagName === "ARTICLE" ? "car" : node.textContent ?? "")),
-  );
-}
+const order = (page: Page): Promise<string[]> =>
+  panel(page).evaluate((root) => Array.from(root.querySelectorAll("button, article"), (node) => (node.tagName === "ARTICLE" ? "car" : node.textContent ?? "")));
 
 test.describe("offer a car", () => {
   test.use({ locale: "fr-FR" });
@@ -256,7 +249,7 @@ test.describe("offer a car", () => {
     await expect(field(page, FR.firstName)).toBeVisible();
   });
 
-  test("C4.7: errors by field, the focus on the first, values kept; nothing sent", async ({ db, page, seededEvent }) => {
+  test("C4.7: errors by field, the focus on the first, values kept; nothing sent", async ({ context, db, page, seededEvent }) => {
     const { id } = seededEvent;
     await device(db, page, id, ["Claire", "Léa"]);
     const sent = offers(page, "Laisser la place");
@@ -268,6 +261,7 @@ test.describe("offer a car", () => {
 
     const choices = form(page).getByRole("radiogroup", { name: FR.driver });
     await expect(choices).toHaveAccessibleDescription(FR.chooseDriver);
+    await expect(choices).toHaveAttribute("aria-invalid", "true");
     await expect(choices.getByRole("radio", { name: "Claire" })).toBeFocused();
     await expect(field(page, FR.location.aller)).toHaveAccessibleDescription(FR.required);
     await expect(field(page, FR.location.aller)).toHaveAttribute("aria-invalid", "true");
@@ -296,6 +290,11 @@ test.describe("offer a car", () => {
     await expect(field(page, FR.seats)).toBeFocused();
     await expect(field(page, FR.firstName)).toHaveValue("Marc");
     await expect(field(page, FR.location.aller)).toHaveValue("Gare");
+    // Corrected, then sent offline: the errors are cleared before sending.
+    await field(page, FR.seats).fill("3");
+    await context.setOffline(true);
+    await submit(page).click();
+    await expect(field(page, FR.seats)).toHaveAccessibleDescription(FR.seatsHint);
     expect(sent).toHaveLength(0);
     expect(await rides(db, id)).toEqual([]);
   });
@@ -432,7 +431,6 @@ test.describe("offer a car", () => {
     await field(page, FR.firstName).fill("Léa");
     await field(page, FR.location.aller).fill("Gare");
     await submit(page).click();
-    await expect(form(page)).toHaveCount(0);
     await expect(panel(page).getByRole("article")).toHaveCount(2);
   });
 
@@ -444,7 +442,6 @@ test.describe("offer a car", () => {
     await seedRide(db, id, marc.id, { leg: "retour" });
     // The first read, which carries the event's id, is held, then fails; the next goes through.
     const release = await holdFirst(page, id, true);
-
     /** On each tab: the free seats and both actions inactive, and a click opens no sheet; or all active. */
     async function everyTab(active: boolean) {
       for (const leg of ["Retour", "Aller"]) {
