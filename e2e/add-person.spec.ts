@@ -45,6 +45,13 @@ const toggle = (page: Page) => section(page).getByRole("button", { name: /^Vos i
 const withoutCar = (panel: Locator) => panel.getByRole("region", { name: "Sans voiture" }).getByRole("listitem");
 /** A failure while the form is open is said in the form, which stays open. */
 const failure = (page: Page) => form(page).getByRole("alert");
+/**
+ * The message bar's alert, after its status region, where a failure goes once the form is
+ * closed or closing. Found by its CSS: while a sheet is mounted, Radix hides the rest of the
+ * page from the accessibility tree.
+ */
+const bar = (page: Page) => page.locator('[role="status"] + [role="alert"]');
+const alerts = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
 
 /** Each row of « Vos inscriptions », as its cells read. */
 async function cells(page: Page): Promise<string[][]> {
@@ -96,6 +103,8 @@ test.describe("add a person", () => {
       await selectTab(page, leg);
       const panel = page.getByRole("tabpanel");
       await expect(addButton(panel)).toBeEnabled();
+      // The design's « userplus » icon, before the words.
+      await expect(addButton(panel).locator('svg[aria-hidden="true"]')).toHaveCount(1);
       expect((await addButton(panel).boundingBox())!.height).toBeGreaterThanOrEqual(44);
       // In the document's order: the button, then the cars.
       const order = await panel.evaluate((root) =>
@@ -175,7 +184,7 @@ test.describe("add a person", () => {
     expect(await cells(page)).toEqual([["Sans voiture", "Sans voiture"]]);
   });
 
-  test("C2.2, C3.6: after a first registration, the free seats are those of a ready device", async ({
+  test("C2.2, C3.6: after a first registration, the device is ready, and the free seats stay active", async ({
     db,
     page,
     seededEvent,
@@ -184,6 +193,7 @@ test.describe("add a person", () => {
     await seedRide(db, seededEvent.id, marc.id);
     await page.goto(`/e/${seededEvent.id}`);
     await register(page, "Léa");
+    // Only a ready device shows its section: still `none`, it would not. Active seats hold for both.
     await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
     const seats = page.getByRole("tabpanel").getByRole("button", { name: /^Place libre : / });
     await expect(seats).toHaveCount(3);
@@ -331,11 +341,61 @@ test.describe("add a person", () => {
     expect(sent).toHaveLength(0);
     expect(await keysOf(page, seededEvent.id)).toEqual([]);
 
+    // A field error replaces the message: the two are never shown together.
+    await form(page).getByLabel(FR.firstName).clear();
+    await submit(page).click();
+    await expect(form(page).getByLabel(FR.firstName)).toHaveAccessibleDescription(FR.required);
+    await expect(failure(page)).toHaveCount(0);
+    await form(page).getByLabel(FR.firstName).fill("Léa");
+
     await context.setOffline(false);
     await submit(page).click();
     await expect(form(page)).toHaveCount(0);
     await expect(section(page).getByRole("rowheader")).toHaveText(["Léa"]);
   });
+
+  test("a refusal in the open sheet: said there alone, and « Valider » keeps the focus", async ({
+    page,
+    seededEvent,
+  }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await openForm(page);
+    await form(page).getByLabel(FR.firstName).fill("Léa");
+    await failActions(page);
+    await submit(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(failure(page)).toHaveText(FR.failed);
+    await expect(submit(page)).toBeFocused();
+    await expect(bar(page)).toBeEmpty();
+  });
+
+  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes meanwhile.
+  for (const when of ["closed", "closing"] as const) {
+    test(`a refusal once the sheet is ${when}: said in the bar`, async ({ page, seededEvent }) => {
+      let answer = () => {};
+      const answered = new Promise<void>((resolve) => (answer = resolve));
+      await page.route("**/e/**", async (route) => {
+        if (!(await route.request().headerValue("next-action"))) return route.continue();
+        await answered;
+        await route.fulfill({ status: 500, body: "" });
+      });
+      await page.goto(`/e/${seededEvent.id}`);
+      const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+      if (when === "closing") await page.addStyleTag({ content: slowClose });
+      await openForm(page);
+      await form(page).getByLabel(FR.firstName).fill("Léa");
+      await submit(page).click();
+      await expect(submit(page)).toBeDisabled();
+      await page.keyboard.press("Escape");
+      if (when === "closed") await expect(form(page)).toHaveCount(0);
+      else await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+      answer();
+      await expect(bar(page)).toHaveText(FR.failed);
+      // Still closing when the bar speaks: the answer came during the animation.
+      if (when === "closing") expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      await expect(alerts(page)).toHaveText([FR.failed]);
+    });
+  }
 
   test("C1.14: without localStorage, a warning, then a person for this page only", async ({ page, seededEvent }) => {
     await page.addInitScript(() =>

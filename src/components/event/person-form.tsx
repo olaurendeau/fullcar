@@ -1,4 +1,4 @@
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { newCreationId, storageAvailable } from "@/app/e/[id]/device-token";
@@ -27,7 +27,7 @@ export interface Registering {
   creationId: () => string;
   /** True until the answer: « Valider » is inactive meanwhile (C1.9). */
   sending: (sending: boolean) => void;
-  /** Whether the form is still open when the answer comes: a failure is said there, or in the bar. */
+  /** Whether the sheet is still open at the answer: a failure is said there; closed or closing, in the bar. */
   open: () => boolean;
 }
 
@@ -71,16 +71,24 @@ export function AddPersonButton({
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [kept, setKept] = useState(true);
+  // Read when an answer comes. Radix keeps the form mounted while the sheet closes: once
+  // « Fermer » or Escape is pressed, a failure goes to the bar.
+  const isOpen = useRef(false);
+  const toggle = (next: boolean) => {
+    isOpen.current = next;
+    setOpen(next);
+  };
 
   return (
     <BottomSheet
       open={open}
-      onOpenChange={(isOpen) => {
-        if (isOpen) setKept(storageAvailable());
-        setOpen(isOpen);
+      onOpenChange={(next) => {
+        if (next) setKept(storageAvailable());
+        toggle(next);
       }}
       trigger={
         <Button variant="outline" disabled={disabled} className="h-auto min-h-11 whitespace-normal">
+          <UserPlus aria-hidden />
           {t("Board.addPerson")}
         </Button>
       }
@@ -88,7 +96,13 @@ export function AddPersonButton({
       description={kept ? t("PersonForm.remember") : undefined}
     >
       {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
-      <PersonForm leg={leg} hasRetour={hasRetour} addPerson={addPerson} onDone={() => setOpen(false)} />
+      <PersonForm
+        leg={leg}
+        hasRetour={hasRetour}
+        addPerson={addPerson}
+        open={() => isOpen.current}
+        onDone={() => toggle(false)}
+      />
     </BottomSheet>
   );
 }
@@ -97,19 +111,22 @@ export function AddPersonButton({
  * The fields of R1: first name, number with who will see it (D2), and « Aller et retour »,
  * checked, absent without a retour (C1.3, C1.4). The browser checks them as the server does;
  * either way, each error shows under its field, the focus goes to the first, and what was
- * typed stays (C1.8). Offline or a failure is said in the form, above « Valider », and it
- * stays open. The creation id is drawn at the first send and kept until one succeeds: sent
- * again after a lost answer, the same creation creates nothing more (C1.12).
+ * typed stays (C1.8), and a field error replaces a failure's message. Offline or a failure
+ * is said in the form, above « Valider », which keeps the focus, and the form stays open.
+ * The creation id is drawn at the first send and kept until one succeeds: sent again after
+ * a lost answer, the same creation creates nothing more (C1.12).
  */
 function PersonForm({
   leg,
   hasRetour,
   addPerson,
+  open,
   onDone,
 }: {
   leg: Leg;
   hasRetour: boolean;
   addPerson: AddPerson;
+  open: () => boolean;
   onDone: () => void;
 }) {
   const t = useTranslations("PersonForm");
@@ -123,15 +140,16 @@ function PersonForm({
   const [sending, setSending] = useState(false);
   const [problem, setProblem] = useState<"offline" | "failed" | null>(null);
   const creationId = useRef<string | undefined>(undefined);
-  const open = useRef(false);
+  const submitButton = useRef<HTMLButtonElement>(null);
+
+  // « Valider » lost the focus while it was inactive: after a refusal, it gets it back
+  // (« refus dans une feuille : ne bouge pas »).
   useEffect(() => {
-    open.current = true;
-    return () => {
-      open.current = false;
-    };
-  }, []);
+    if (problem && !sending && document.activeElement === document.body) submitButton.current?.focus();
+  }, [problem, sending]);
 
   function showErrors(found: PersonErrors, first: PersonField) {
+    setProblem(null);
     setErrors(found);
     document.getElementById(idOf(first))?.focus();
   }
@@ -146,13 +164,13 @@ function PersonForm({
       person: { ...values, bothLegs: hasRetour && bothLegs, leg },
       creationId: () => (creationId.current ??= newCreationId()),
       sending: setSending,
-      open: () => open.current,
+      open,
     });
     if (answer?.kind === "done") {
       creationId.current = undefined;
       onDone();
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
-    else if (answer?.kind === "problem") setProblem(answer.problem);
+    else if (answer?.kind === "problem" && open()) setProblem(answer.problem);
   }
 
   const field = (name: PersonField, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {
@@ -199,7 +217,7 @@ function PersonForm({
           {tActions(problem)}
         </p>
       )}
-      <Button type="submit" className="h-11 w-full" disabled={sending}>
+      <Button ref={submitButton} type="submit" className="h-11 w-full" disabled={sending}>
         {tActions("submit")}
       </Button>
     </form>

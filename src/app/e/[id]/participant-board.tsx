@@ -56,7 +56,7 @@ export function ParticipantBoard({
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     // A refusal has no words of its own: the generic message, and the page shows the state it carries.
     const problem = sent.ok ? "failed" : sent.problem;
-    // In the form while it is open, in the bar once it is closed.
+    // In the form while its sheet is open, in the bar once it is closed or closing.
     setProblem(open() ? null : problem);
     return { kind: "problem", problem };
   };
