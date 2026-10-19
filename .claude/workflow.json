@@ -73,7 +73,7 @@
         ]
       },
       {
-        "regex": "(?i)token_?hash|newAdminToken|hashAdminToken|adminTokenMatches|hashToken|tokenMatches|devicePersonIds|personalTokenFromBytes|tokenInFragment|readDeviceToken|ensureDeviceToken|\\b(get|set|remove)Item\\s*\\(|[\"'`]token[\"'`]|\\$\\{\\s*token\\s*\\}|\\$\\{[^}]*\\btoken\\b[^}]*\\}|[\"'`]\\s*\\+\\s*(\\w+\\.)*token\\b|\\b(console|logger|log)\\.\\w+\\s*\\(.*\\btoken\\b|localStorage|sessionStorage|location\\.hash|location\\.href|split\\(\\s*[\"'`]#|\\.hash\\b|\\breferrer|Referrer-Policy|cookies\\(\\)|document\\.cookie|Set-Cookie",
+        "regex": "(?i)token_?hash|newAdminToken|hashAdminToken|adminTokenMatches|hashToken|tokenMatches|personalTokenFromBytes|tokenInFragment|readDeviceToken|ensureDeviceToken|\\binsertEvent\\s*\\(|\\b(get|set|remove)Item\\s*\\(|[\"'`]token[\"'`]|[\"'`][\\w-]*[-_]token[\"'`]|\\$\\{[^}]*token\\b[^}]*\\}|[\"'`]\\s*\\+\\s*[\\w.]*token\\b|\\b(console|logger|log)\\.\\w+\\s*\\(.*token\\b|URLSearchParams|searchParams\\.(set|append)|localStorage|sessionStorage|location\\.hash|location\\.href|split\\(\\s*[\"'`]#|\\.hash\\b|\\breferrer|Referrer-Policy|cookies\\(\\)|document\\.cookie|Set-Cookie",
         "exclude": [
           "docs/design/**",
           "e2e/**",

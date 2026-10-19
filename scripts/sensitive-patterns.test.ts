@@ -144,15 +144,21 @@ describe("sensitive patterns: tokens", () => {
     "admin_token_hash: Buffer;",
     'table.addColumn("token_hash", "bytea");',
     // The project's own functions that draw, hash, compare, read or store a token (#189).
+    // Each on a line no other alternative takes, so that removing it goes red here.
     "const hash = hashToken(secret);",
-    "if (!tokenMatches(secret, stored.tokenHash)) return FORBIDDEN;",
-    "const ids = devicePersonIds(secret, holders);",
+    "if (!tokenMatches(given, stored)) return;",
     "const fresh = personalTokenFromBytes(bytes);",
-    "const secret = tokenInFragment(window.location.hash);",
-    "const mine = readDeviceToken(id) ?? ensureDeviceToken(id);",
+    "const secret = tokenInFragment(hash);",
+    "readDeviceToken(id);",
+    "ensureDeviceToken(id);",
+    // Storing the organiser's token: in clear, it would be one argument away (#191).
+    "id = await insertEvent(getDb(), validation.event, token);",
     "storage().setItem(storageKey(id), secret);",
     "const kept = storage().getItem(key);",
     'const value = formData.get("token");',
+    // A header or a key that names the token.
+    'headers.set("x-admin-token", token);',
+    'const value = request.headers.get("x_personal_token");',
     "const value = body['token'];",
     "const fragment = location.hash;",
     "const fragment = url.hash;",
@@ -170,6 +176,17 @@ describe("sensitive patterns: tokens", () => {
     "const link = `/e/${id}/admin#${encodeURIComponent(value.token)}`;",
     "const link = `/e/${id}/admin#` + token;",
     "await page.goto(`/e/${seeded.id}/admin#${seeded.token}`);",
+    // Whatever its name: the project's tokens are adminToken and personalToken (#191).
+    'console.log("created", adminToken);',
+    'logger.info({ adminToken }, "created");',
+    "router.push(`/e/${id}/admin#${adminToken}`);",
+    "const link = `${origin}/e/${id}/moi#${personalToken}`;",
+    "redirect(`/e/${id}/admin#${created.adminToken}`);",
+    'const url = "/e/" + id + "/admin#" + adminToken;',
+    // A query string, under any name.
+    'url.searchParams.set("t", token);',
+    'url.searchParams.append("t", secret);',
+    "const qs = new URLSearchParams({ token }).toString();",
     'const [, token] = page.url().split("#");',
     "localStorage.setItem(key, value);",
     'headers.set("Referrer-Policy", "no-referrer");',
@@ -218,6 +235,11 @@ describe("sensitive patterns: tokens", () => {
     "const { id, token } = await seedEvent(db);",
     "expect(request.url()).not.toContain(token);",
     "// The token arrives in the body, never in the URL.",
+    // A module whose name ends in -token is not a header that carries one.
+    'import { isPersonalToken } from "@/domain/personal-token";',
+    'import { useDevice } from "./device-token";',
+    // Decision (#191): a new rights check on the personal token is the coordinator's to merge.
+    "const ids = devicePersonIds(secret, holders);",
   ])("ignores %s", (line) => {
     expect(isSensitive(line)).toBe(false);
   });
