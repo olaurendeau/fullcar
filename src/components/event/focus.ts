@@ -25,11 +25,11 @@ export function focusCell(id: string, leg: Leg) {
   document.querySelector<HTMLElement>(`[data-person-cell="${CSS.escape(id)}"][data-leg="${leg}"]`)?.focus();
 }
 
-/** Focuses what `selector` finds, and says whether there was anything to focus. */
+/** Focuses what `selector` finds, and says whether the focus is there: not in the hidden tab's panel, which stays mounted. */
 function focusOn(selector: string): boolean {
   const target = document.querySelector<HTMLElement>(selector);
   target?.focus();
-  return target !== null;
+  return target !== null && document.activeElement === target;
 }
 
 /**

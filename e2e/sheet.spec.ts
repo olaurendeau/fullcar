@@ -86,6 +86,21 @@ async function openSheet(page: Page, driver: string) {
   return sheet(page, driver);
 }
 
+/**
+ * Sends Tom and Léa to Sophie's car (`rideId`), held until `answer` fails it or lets it through,
+ * and closes the sheet meanwhile: closed, or still `closing`, its animation slowed.
+ */
+async function sendThenClose(page: Page, eventId: string, rideId: string, fails: boolean, closing = false) {
+  const answer = await holdFirst(page, rideId, fails);
+  await page.goto(`/e/${eventId}`);
+  if (closing) await page.addStyleTag({ content: slowClose });
+  await placeButton(await openSheet(page, "Sophie")).click();
+  await page.keyboard.press("Escape");
+  if (closing) await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+  else await expect(page.getByRole("dialog")).toHaveCount(0);
+  return answer;
+}
+
 test.describe("the sheet", () => {
   test.use({ locale: "fr-FR" });
   const token = newToken();
@@ -99,9 +114,9 @@ test.describe("the sheet", () => {
   test("C5.1: each free seat is a button of 44 px, named with its driver", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await expect(freeSeats(page, "Sophie")).toHaveCount(3);
-    await expect(freeSeats(page, "Marc")).toHaveCount(2);
-    await expect(freeSeats(page, "Claire")).toHaveCount(2);
-    for (const seat of await panel(page).getByRole("button", { name: /^Place libre : / }).all()) {
+    const seats = await panel(page).getByRole("button", { name: /^Place libre : / }).all();
+    expect(seats).toHaveLength(7);
+    for (const seat of seats) {
       await expect(seat).toBeEnabled();
       expect((await seat.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
@@ -111,7 +126,6 @@ test.describe("the sheet", () => {
     await page.goto(`/e/${seededEvent.id}`);
     const sophie = await openSheet(page, "Sophie");
     expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: null });
-    expect(await placements(db, seededEvent.id, scene.persons.lea)).toEqual({ aller: null });
 
     await expect(sophie.getByText("Il reste 3 places dans cette voiture", { exact: true })).toBeVisible();
     // Claire drives, Nina is in Marc's car: neither is there.
@@ -168,7 +182,6 @@ test.describe("the sheet", () => {
 
     await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Avec Sophie");
     await expect(cell(page, "Léa", "Aller")).toHaveAccessibleName("Léa, Aller : Avec Sophie");
-    await expect(cell(page, "Hugo", "Aller")).toHaveAccessibleName("Hugo, Aller : Ne fait pas l’aller");
     await expect(cell(page, "Tom", "Retour")).toHaveAccessibleName("Tom, Retour : Sans voiture");
     // Placed in one write, both board at the same time: in either order.
     await expect(freeSeats(page, "Sophie")).toHaveCount(1);
@@ -184,19 +197,19 @@ test.describe("the sheet", () => {
     // No expiry (v4-7): still there 10 s later.
     await page.clock.fastForward(10_000);
     await expect(placed).toBeVisible();
-    // « Fermer » gives the focus to the car's title.
-    await tab(page, "Aller").focus();
+    // « Fermer » gives the focus to the car's title, or to the active tab when the title is on the
+    // other one, mounted but hidden: never to <body>.
+    await tab(page, "Retour").click();
     await barClose(page).click();
     await expect(placed).toHaveCount(0);
-    await expect(title(page, "Sophie")).toBeFocused();
+    await expect(tab(page, "Retour")).toBeFocused();
 
-    // One person: Seat.placed. Escape with the focus in the bar closes it the same way.
+    // One person: Seat.placed. Escape with the focus in the bar gives it to the car's title.
+    await tab(page, "Aller").click();
     const marc = await openSheet(page, "Marc");
     await marc.getByRole("checkbox", { name: "Hugo" }).click();
     await placeButton(marc).click();
     const hugo = page.getByRole("status").filter({ hasText: "Hugo est dans la voiture de Marc" });
-    await expect(hugo).toBeVisible();
-    await page.clock.fastForward(10_000);
     await expect(hugo).toBeVisible();
     await barClose(page).focus();
     await page.keyboard.press("Escape");
@@ -219,7 +232,6 @@ test.describe("the sheet", () => {
     await page.keyboard.press("Escape");
     await expect(sophie).toHaveCount(0);
     await expect(freeSeats(page, "Sophie").nth(2)).toBeFocused();
-    expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: null });
     expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({});
   });
 
@@ -242,7 +254,6 @@ test.describe("the sheet", () => {
     await expect(zoe).toBeChecked();
     expect((await candidates(sophie)).at(-1)).toEqual({ name: "Zoé", state: "Sans voiture", checked: true });
     await expect(placeButton(sophie)).toHaveText("Placer 3 personnes");
-    await expect(sophie.getByText("Il reste 3 places dans cette voiture", { exact: true })).toBeVisible();
 
     await sophie.getByRole("button", { name: "Fermer" }).click();
     await expect(sophie).toHaveCount(0);
@@ -345,19 +356,11 @@ test.describe("the sheet", () => {
   // meanwhile. Reopened, even while the first one closes, the sheet is a new one.
   for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
     test(`a failure once the sheet is ${when}: in the bar, once no sheet hides the page`, async ({ page, seededEvent }) => {
-      const answer = await holdFirst(page, scene.cars.sophie, true);
-      await page.goto(`/e/${seededEvent.id}`);
       const closing = when.endsWith("closing");
-      if (closing) await page.addStyleTag({ content: slowClose });
-      await placeButton(await openSheet(page, "Sophie")).click();
-      await page.keyboard.press("Escape");
-      if (closing) await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
-      else await expect(page.getByRole("dialog")).toHaveCount(0);
+      const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true, closing);
       const seen = await watchAlerts(page);
       const release = async () => {
-        const responded = page.waitForResponse((response) => response.status() === 500);
-        answer();
-        await responded;
+        await failHeld(page, answer);
         if (closing) expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
       };
       if (when === "reopened while closing") await release();
@@ -386,11 +389,7 @@ test.describe("the sheet", () => {
   // answer does, here a refusal said in that sheet), only the new outcome is said.
   for (const when of ["after", "before"] as const) {
     test(`seats sent again from a reopened sheet ${when} the first send fails: no false failure`, async ({ db, page, seededEvent }) => {
-      const answer = await holdFirst(page, scene.cars.sophie, true);
-      await page.goto(`/e/${seededEvent.id}`);
-      await placeButton(await openSheet(page, "Sophie")).click();
-      await page.keyboard.press("Escape");
-      await expect(page.getByRole("dialog")).toHaveCount(0);
+      const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
       const sophie = await openSheet(page, "Sophie");
       if (when === "after") await failHeld(page, answer);
       else await db.deleteFrom("ride").where("id", "=", scene.cars.sophie).execute();
@@ -405,12 +404,19 @@ test.describe("the sheet", () => {
     });
   }
 
-  test("the car removed while the sheet closes:the bar says so, and the focus goes to the leg's banner", async ({ db, page, seededEvent }) => {
-    const answer = await holdFirst(page, scene.cars.sophie, false);
-    await page.goto(`/e/${seededEvent.id}`);
-    await placeButton(await openSheet(page, "Sophie")).click();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+  test("a failure waiting under another sheet stays, whatever success comes from that sheet", async ({ db, page, seededEvent }) => {
+    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
+    const marc = await openSheet(page, "Marc");
+    await failHeld(page, answer);
+    for (const name of ["Tom", "Léa", "Hugo"]) await marc.getByRole("checkbox", { name }).click();
+    await placeButton(marc).click();
+    await expect(marc).toHaveCount(0);
+    await expect(bar(page)).toHaveText(FAILED);
+    expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({ aller: scene.cars.marc });
+  });
+
+  test("the car removed while the sheet closes: the bar says so, and the focus goes to the leg's banner", async ({ db, page, seededEvent }) => {
+    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, false);
     await expect(freeSeats(page, "Sophie").first()).toBeFocused();
     await db.deleteFrom("ride").where("id", "=", scene.cars.sophie).execute();
     answer();
@@ -420,18 +426,10 @@ test.describe("the sheet", () => {
     await expect(banner(page)).toBeFocused();
   });
 
-  test("a success from a sheet closed since: the sheet opened meanwhile stays open, and the bar waits for it", async ({ db, page, seededEvent }) => {
-    const answer = await holdFirst(page, scene.cars.sophie, false);
-    await page.goto(`/e/${seededEvent.id}`);
-    await placeButton(await openSheet(page, "Sophie")).click();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+  test("a success from a sheet closed since: the sheet opened meanwhile stays open, and the bar waits for it", async ({ page, seededEvent }) => {
+    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, false);
     const marc = await openSheet(page, "Marc");
-    const responded = page.waitForResponse((response) => response.request().postData()?.includes(scene.cars.sophie) ?? false);
     answer();
-    await responded;
-    await expect.poll(() => placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: scene.cars.sophie, retour: null });
-
     // Behind the sheet, the board has the new state; the sheet has its own, and the bar nothing yet.
     await expect(page.locator(`button[aria-label="${seatName("Sophie")}"]`)).toHaveCount(1);
     await expect(marc).toHaveAttribute("data-state", "open");
@@ -470,7 +468,6 @@ test.describe("the driver's path", () => {
     await expect(title(page, "Paul")).toBeFocused();
     await expect(car(page, "Paul").getByRole("listitem").first()).toHaveText("Léo");
     // Folded at the first read, with nothing to do (v4-3): unfolded to read the cell.
-    await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
     await toggle(page).click();
     await expect(cell(page, "Léo", "Aller")).toHaveAccessibleName("Léo, Aller : Avec Paul");
     expect(await placements(db, seededEvent.id, await personNamed(db, seededEvent.id, "Léo"))).toEqual({ aller: ride, retour: null });

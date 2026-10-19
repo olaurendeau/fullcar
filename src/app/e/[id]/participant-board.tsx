@@ -153,8 +153,9 @@ export function ParticipantBoard({
     return { kind: "problem", problem };
   };
 
-  // A success waits for the page to show, as a failure does, and goes to the bar; a refusal or a
-  // failure is said in the sheet that sent while it shows it, in the bar otherwise.
+  // A success waits for the page to show, as a failure does, and goes to the bar, where it does not
+  // replace a failure said since this action ended (one that waited too); a refusal or a failure is
+  // said in the sheet that sent while it shows it, in the bar otherwise.
   const takeSeats: TakeSeats = async ({ rideId, leg, personIds }, { sending, said, ...sheet }) => {
     const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, personIds);
     const sent = await runAction(`takeSeats:${sheet.key}`, send, sending);
@@ -162,7 +163,9 @@ export function ParticipantBoard({
     sheet.answered();
     const taken = sent.ok ? seatsTaken(sent.value) : ({ kind: "problem", problem: sent.problem } as const);
     setMessage(null);
-    if (taken.kind === "done" || !sheet.inSheet()) sheet.whenClosed(() => setMessage(said(taken)));
+    const message = said(taken);
+    const shown = (current: BarMessage | null) => (message.kind === "done" && current && current.kind !== "done" ? current : message);
+    if (taken.kind === "done" || !sheet.inSheet()) sheet.whenClosed(() => setMessage(shown));
     return taken;
   };
 
