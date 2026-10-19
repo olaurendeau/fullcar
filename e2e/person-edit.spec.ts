@@ -2,7 +2,7 @@ import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -244,13 +244,6 @@ test.describe("edit a person", () => {
     else await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  /** Lets the held change through as a 500, once it has failed. */
-  async function fail(page: Page, answer: () => void) {
-    const responded = page.waitForResponse((response) => response.status() === 500);
-    answer();
-    await responded;
-  }
-
   // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
   // meanwhile. Reopened, even while the first one closes, the sheet is a new one.
   for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
@@ -260,14 +253,14 @@ test.describe("edit a person", () => {
       if (when.endsWith("closing")) await page.addStyleTag({ content: slowClose });
       await sendThenClose(page, when.endsWith("closing"));
       const seen = await watchAlerts(page);
-      if (when !== "reopened") await fail(page, answer);
+      if (when !== "reopened") await failHeld(page, answer);
       if (when.endsWith("closing")) expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
       if (when.startsWith("reopened")) {
         // Hidden from role queries while a sheet is mounted.
         await page.locator(`[data-person-name="${scene.claire}"]`).focus();
         await page.keyboard.press("Enter");
         await expect(page.locator('[role="dialog"][data-state="open"]')).toHaveCount(1);
-        if (when === "reopened") await fail(page, answer);
+        if (when === "reopened") await failHeld(page, answer);
         await page.keyboard.press("Escape");
       }
       await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -297,13 +290,13 @@ test.describe("edit a person", () => {
         await nameButton(page, "Claire").click();
         // Failed while the reopened sheet hides the page: the message waits.
         await expect(dialog(page, "Claire")).toBeVisible();
-        if (when === "after") await fail(page, answer);
+        if (when === "after") await failHeld(page, answer);
         await dialog(page, "Claire").getByRole("button", { name: "Modifier", exact: true }).click();
         const form = dialog(page, "Modifier Claire");
         await form.getByLabel("Prénom").fill(after.firstName);
         await form.getByLabel("Téléphone (facultatif)").fill(after.phone);
         await form.getByRole("button", { name: "Valider" }).click();
-        if (when === "before") await fail(page, answer);
+        if (when === "before") await failHeld(page, answer);
         await expect(page.getByRole("dialog")).toHaveCount(0);
 
         // Once more around a sheet: a message left waiting would show by now.

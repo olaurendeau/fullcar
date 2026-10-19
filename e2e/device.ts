@@ -67,6 +67,13 @@ export async function holdFirst(page: Page, text: string, fails: boolean) {
   return answer;
 }
 
+/** Lets the action `holdFirst` holds fail, and waits for its 500. */
+export async function failHeld(page: Page, answer: () => void) {
+  const responded = page.waitForResponse((response) => response.status() === 500);
+  answer();
+  await responded;
+}
+
 /** Answers every server action with a 500 while `failing.on`; the page and its scripts load. */
 export async function failActions(page: Page) {
   const failing = { on: true };

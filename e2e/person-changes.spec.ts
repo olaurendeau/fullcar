@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { bar, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -417,11 +417,7 @@ test.describe("person changes", () => {
     await page.keyboard.press("Escape");
     await expect(tomsSheet).toHaveAttribute("data-state", "closed");
     const seen = await watchAlerts(page);
-    for (const answer of [zed, tom]) {
-      const responded = page.waitForResponse((response) => response.status() === 500);
-      answer();
-      await responded;
-    }
+    for (const answer of [zed, tom]) await failHeld(page, answer);
     expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(2);
 
     // Reopened while it closes: the same form, sent again, and Zed is registered.
@@ -453,11 +449,6 @@ test.describe("person changes", () => {
       seededEvent,
     }) => {
       const answer = await holdFirst(page, scene.persons.lea, true);
-      const fail = async () => {
-        const responded = page.waitForResponse((response) => response.status() === 500);
-        answer();
-        await responded;
-      };
       await page.goto(`/e/${seededEvent.id}`);
       await cell(page, "Léa", "Aller").click();
       await sheet(page, "Léa · Aller").getByRole("button", { name: "Sortir de la voiture" }).click();
@@ -466,9 +457,9 @@ test.describe("person changes", () => {
       await cell(page, "Léa", "Aller").click();
       // Failed while the reopened sheet hides the page: the message waits.
       await expect(sheet(page, "Léa · Aller")).toBeVisible();
-      if (when === "after") await fail();
+      if (when === "after") await failHeld(page, answer);
       await sheet(page, "Léa · Aller").getByRole("button", { name: "Sortir de la voiture" }).click();
-      if (when === "before") await fail();
+      if (when === "before") await failHeld(page, answer);
       await expect(sheet(page, "Léa · Aller")).toHaveCount(0);
       await expect(section(page).getByRole("button", { name: "Léa, Aller : Sans voiture", exact: true })).toBeFocused();
 

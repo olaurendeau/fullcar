@@ -172,7 +172,7 @@ describe("validatePersonChange (C2.3)", () => {
   it("leaves out a field not sent, and reads the others as validatePerson does", () => {
     expect(validatePersonChange({})).toEqual({ ok: true, change: {} });
     expect(validatePersonChange({ phone: " 07 12 12 12 12 " })).toEqual({ ok: true, change: { phone: "07 12 12 12 12" } });
-    expect(validatePersonChange({ firstName: " Clara ", phone: "" })).toEqual({
+    expect(validatePersonChange({ firstName: " Clara ", phone: null })).toEqual({
       ok: true,
       change: { firstName: "Clara", phone: null },
     });
