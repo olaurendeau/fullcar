@@ -49,7 +49,7 @@ test.describe("event page, with a retour", () => {
     await expect(legs.locator("dd")).toHaveText([FR.aller, FR.retour]);
   });
 
-  test("C5.2, C5.3: Aller is selected first, with its date and its empty state", async ({ page, seededEvent }) => {
+  test("C5.2, C5.3: Aller is selected first, with its empty state and no date line", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await expect(page.getByRole("tablist")).toBeVisible();
     await expect(page.getByRole("tab")).toHaveText(["Aller", "Retour"]);
@@ -57,14 +57,15 @@ test.describe("event page, with a retour", () => {
     await expect(page.getByRole("tab", { name: "Retour" })).toHaveAttribute("aria-selected", "false");
 
     const panel = page.getByRole("tabpanel");
-    await expect(panel.locator("time")).toHaveText(FR.aller);
+    // v4.1: the header's line « Aller » says it already.
+    await expect(panel.locator("time")).toHaveCount(0);
     await expect(panel.getByText(FR.noCarAller)).toBeVisible();
     await expect(panel.getByText(FR.nobody)).toBeVisible();
     // Nothing to do yet on an empty event (#3, "États à concevoir").
     await expect(panel.getByRole("button")).toHaveCount(0);
   });
 
-  test("C5.2, C5.3: Retour shows its own date and empty state, without reload nor URL change", async ({
+  test("C5.2, C5.3: Retour shows its own empty state, no date line, without reload nor URL change", async ({
     page,
     seededEvent,
   }) => {
@@ -75,7 +76,7 @@ test.describe("event page, with a retour", () => {
     await selectTab(page, "Retour");
     await expect(page.getByRole("tab", { name: "Aller" })).toHaveAttribute("aria-selected", "false");
     const panel = page.getByRole("tabpanel");
-    await expect(panel.locator("time")).toHaveText(FR.retour);
+    await expect(panel.locator("time")).toHaveCount(0);
     await expect(panel.getByText(FR.noCarRetour)).toBeVisible();
     await expect(panel.getByText(FR.nobody)).toBeVisible();
 
@@ -125,6 +126,10 @@ test.describe("event page, without retour", () => {
 
     await expect(page.getByText(FR.noCarAller)).toBeVisible();
     await expect(page.getByText(FR.nobody)).toBeVisible();
+    // v4.1: no date line under the header's, without a retour either.
+    const aller = page.getByRole("region", { name: "Aller", exact: true });
+    await expect(aller.getByText(FR.noCarAller)).toBeVisible();
+    await expect(aller.locator("time")).toHaveCount(0);
     await expect(page.getByRole("tab")).toHaveCount(0);
     await expect(page.getByRole("tablist")).toHaveCount(0);
     await expect(page.getByText("Retour")).toHaveCount(0);
@@ -154,9 +159,6 @@ for (const timezoneId of ["America/New_York", "Europe/Paris"]) {
     test("C1.12: shows the times of the event's place, unchanged", async ({ page, seededEvent }) => {
       await page.goto(`/e/${seededEvent.id}`, { waitUntil: "networkidle" });
       await expect(page.locator("header dd")).toHaveText([FR.aller, FR.retour]);
-      await expect(page.getByRole("tabpanel").locator("time")).toHaveText(FR.aller);
-      await selectTab(page, "Retour");
-      await expect(page.getByRole("tabpanel").locator("time")).toHaveText(FR.retour);
     });
   });
 }

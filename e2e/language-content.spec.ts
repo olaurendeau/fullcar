@@ -55,8 +55,9 @@ async function switchLanguage(page: Page, from: Lang, to: Lang) {
 }
 
 /**
- * L1.4: the header's two dates, then each tab's own date line, as `lang` writes them, the
- * `datetime` unchanged; the title and the place are the organiser's words, never translated.
+ * L1.4: the header's two dates as `lang` writes them, the `datetime` unchanged, and each tab
+ * named in `lang` (v4.1: no date line of its own); the title and the place are the
+ * organiser's words, never translated.
  */
 async function expectEventIn(page: Page, lang: Lang) {
   const { legs, dates } = LANGUAGES[lang];
@@ -70,9 +71,7 @@ async function expectEventIn(page: Page, lang: Lang) {
 
   for (const leg of ["aller", "retour"] as const) {
     await selectTab(page, legs[leg]);
-    const line = page.getByRole("tabpanel", { name: legs[leg] }).locator("time");
-    await expect(line).toHaveText(dates[leg]);
-    await expect(line).toHaveAttribute("datetime", DATETIME[leg]);
+    await expect(page.getByRole("tabpanel", { name: legs[leg] }).locator("time")).toHaveCount(0);
   }
 }
 

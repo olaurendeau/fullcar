@@ -1,4 +1,4 @@
-import { Car, Clock } from "lucide-react";
+import { Car } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { hasBanner } from "@/domain/coverage";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
@@ -45,10 +45,6 @@ export function LegPanel({ at, board, device }: { at: WallClock; board: VisibleL
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {hasBanner(board) && <CoverageBanner board={board} />}
-      <p className="flex items-center gap-2 text-sm text-foreground/80">
-        <Clock className="size-4 shrink-0 text-muted-foreground" />
-        <LegTime at={at} />
-      </p>
       <noscript>
         <p className="text-sm text-muted-foreground">{tBoard("needsJavaScript")}</p>
       </noscript>

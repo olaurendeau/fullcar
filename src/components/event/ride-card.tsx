@@ -5,8 +5,9 @@ import { wallClockAsUtc, type WallDate } from "@/domain/wall-clock";
 import { PhoneLink } from "./phone-link";
 
 /**
- * A car of the leg (C4.3): its driver, place, time and note, then a line per passenger
- * and one per free seat; with none left, « Complet ». The numbers the state carries are
+ * A car of the leg (C4.3): its driver, with its time on the right of that line, then
+ * « Complet » when no seat is left (v4-13); under it, its place and note, then a line per
+ * passenger and one per free seat. The numbers the state carries are
  * `tel:` links (C10.1). A free seat is a button, inactive until the device's persons are
  * known (C5.9) and without JavaScript; the tap itself comes with #92. Long values wrap
  * anywhere rather than scrolling sideways (C11.3).
@@ -25,21 +26,21 @@ export function RideCard({ car, date, seatsActive }: { car: VisibleCar; date: Wa
         <h3 id={headingId} className="min-w-0 font-semibold wrap-anywhere">
           {t("title", { driver })}
         </h3>
-        {car.full && (
-          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{t("full")}</span>
-        )}
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="flex items-center gap-1.5">
+            <Clock aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            <time dateTime={`${date}T${car.departureTime.slice(0, 5)}`}>
+              {format.dateTime(departure, { timeStyle: "short" })}
+            </time>
+          </span>
+          {car.full && <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{t("full")}</span>}
+        </span>
       </div>
       {car.driver.phone && <PhoneLink firstName={driver} phone={car.driver.phone} icon className="-my-2" />}
       <div className="flex flex-col gap-1 text-sm">
         <p className="flex items-start gap-2">
           <MapPin aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <span className="min-w-0 wrap-anywhere">{car.location}</span>
-        </p>
-        <p className="flex items-center gap-2">
-          <Clock aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <time dateTime={`${date}T${car.departureTime.slice(0, 5)}`}>
-            {format.dateTime(departure, { timeStyle: "short" })}
-          </time>
         </p>
         {car.note && <p className="text-muted-foreground wrap-anywhere">{car.note}</p>}
       </div>
