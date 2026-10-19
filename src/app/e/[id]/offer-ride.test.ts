@@ -10,6 +10,7 @@ import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
+import { offerRide as offerRideAction } from "./actions";
 import { readEventState } from "./event-state";
 import { offerRide, type RideOffer } from "./offer-ride";
 
@@ -105,6 +106,27 @@ async function seedScene(db: Db, eventId: string) {
 async function aScene(db: Db) {
   const { id: eventId } = await seedEvent(db);
   return seedScene(db, eventId);
+}
+
+/**
+ * One device: Ana and Bea without a car on the aller, Cleo not concerned by it, Dan in
+ * Marc's car r1 there, Eve driving there; all of them without a car on the retour. Marc
+ * and Tom have their own devices.
+ */
+async function aDeviceScene(db: Db, eventId: string) {
+  const token = newToken();
+  const marc = await seedPerson(db, eventId, { firstName: "Marc" });
+  const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+  const r1 = await seedRide(db, eventId, marc.id, { leg: "aller" });
+  const device = [];
+  for (const firstName of ["Ana", "Bea", "Cleo", "Dan", "Eve"]) device.push(await seedPerson(db, eventId, { firstName }, token));
+  const [ana, bea, cleo, dan, eve] = device;
+  await seedRide(db, eventId, eve.id, { leg: "aller" });
+  for (const person of [ana, bea]) await seedPlacement(db, { personId: person.id, eventId, leg: "aller", rideId: null });
+  await seedPlacement(db, { personId: dan.id, eventId, leg: "aller", rideId: r1 });
+  for (const person of device) await seedPlacement(db, { personId: person.id, eventId, leg: "retour", rideId: null });
+  const driver = { kind: "device" as const, personId: ana.id };
+  return { token, tom, r1, ana, bea, cleo, dan, eve, driver };
 }
 
 function legOf(state: Awaited<ReturnType<typeof readEventState>>, leg: Leg) {
@@ -280,6 +302,10 @@ describe("offerRide", () => {
     ["another leg that is not an object", (offer) => ({ ...offer, otherLeg: "keep" })],
     ["a car on the other leg without a uuid", (offer) => ({ ...offer, otherLeg: { ...aDrive(), rideId: "r2" } })],
     ["a car on the other leg with this leg's id", (offer) => ({ ...offer, otherLeg: { ...aDrive(), rideId: offer.rideId } })],
+    ["passengers that are not a list", (offer) => ({ ...offer, passengerIds: randomUUID() })],
+    ["a passenger id that is not a uuid", (offer) => ({ ...offer, passengerIds: [randomUUID(), "p1"] })],
+    ["a passenger ticked twice", (offer) => ({ ...offer, passengerIds: Array<string>(2).fill(randomUUID()) })],
+    ["the driver as a passenger", (offer) => ({ ...offer, passengerIds: [(offer.driver as { personId: string }).personId] })],
   ])("refuses %s as invalid, as eventNotFound on an unknown event, and changes nothing", async (_, forge) => {
     await withRollback(async (trx) => {
       const { eventId, lea } = await aScene(trx);
@@ -462,14 +488,121 @@ describe("offerRide", () => {
     );
   });
 
+  describe("the passengers", () => {
+    it("C4.13: those ticked are in the new car on this leg, one not concerned too, and the other leg does not change", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const { token, bea, cleo, driver } = await aDeviceScene(trx, eventId);
+        const retourOf = async () => (await rowsOf(trx, eventId)).placements.filter((row) => row.leg === "retour");
+        const retour = await retourOf();
+        const offer = anOffer("aller", driver, { passengerIds: [bea.id, cleo.id] });
+
+        expect(await offerRide(trx, eventId, token, offer)).toEqual({ ok: true, rideId: offer.rideId, driverId: driver.personId });
+
+        const car = legOf(await readEventState(trx, eventId, token), "aller").cars.find((found) => found.id === offer.rideId);
+        expect(car?.passengers.map((person) => person.id).sort()).toEqual([bea.id, cleo.id].sort());
+        expect(car?.freeSeats).toBe(1);
+        expect(await retourOf()).toEqual(retour);
+      });
+    });
+
+    it("C4.13: as many ticked as seats fill the car", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const { token, bea, cleo, driver } = await aDeviceScene(trx, eventId);
+        const offer = anOffer("aller", driver, { seats: "2", passengerIds: [bea.id, cleo.id] });
+        expect(await offerRide(trx, eventId, token, offer)).toMatchObject({ ok: true });
+        const car = legOf(await readEventState(trx, eventId, token), "aller").cars.find((found) => found.id === offer.rideId);
+        expect(car).toMatchObject({ freeSeats: 0, full: true });
+      });
+    });
+
+    // The server's own limit, whatever the browser sends: refused before anything is read.
+    it("C4.13: more ticked than seats is a field error, the last of the form, and nothing is read", async () => {
+      const untouchable = new Proxy({} as Db, {
+        get(_target, property) {
+          throw new Error(`the database was used (${String(property)})`);
+        },
+      });
+      const driver = { kind: "device" as const, personId: randomUUID() };
+      const passengerIds = [randomUUID(), randomUUID()];
+      const offerTo = (fields: Partial<RideOffer>, who: RideOffer["driver"] = driver) =>
+        offerRide(untouchable, "Ab3dEf7h", newToken(), anOffer("aller", who, { seats: "1", passengerIds, ...fields }));
+
+      expect(await offerTo({})).toEqual({ ok: false, errors: { passengers: "tooMany" }, first: "passengers" });
+      const newcomer = { ...aNewDriver(), phone: "06" };
+      expect(await offerTo({ note: "n".repeat(201), otherLeg: aDrive({ time: "" }) }, newcomer)).toEqual({
+        ok: false,
+        errors: { phone: "invalid", note: "tooLong", otherTime: "required", passengers: "tooMany" },
+        first: "phone",
+      });
+      // Without a number of seats, there is nothing to count the passengers against.
+      expect(await offerTo({ seats: "0" })).toEqual({ ok: false, errors: { seats: "outOfRange" }, first: "seats" });
+    });
+
+    it.each([
+      ["in another car on this leg", "dan"],
+      ["driving on this leg", "eve"],
+    ] as const)("C4.13: a passenger %s is refused as alreadyInCar, and nothing changes", async (_, who) => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const scene = await aDeviceScene(trx, eventId);
+        const before = await rowsOf(trx, eventId);
+        const offer = anOffer("aller", scene.driver, { passengerIds: [scene.bea.id, scene[who].id] });
+        expect(await offerRide(trx, eventId, scene.token, offer)).toEqual({ ok: false, error: "alreadyInCar" });
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+      });
+    });
+
+    it.each<[string, (scene: Awaited<ReturnType<typeof aDeviceScene>>) => string]>([
+      ["of another device", (scene) => scene.tom.id],
+      ["nobody is", () => randomUUID()],
+    ])("C2.4: a passenger %s is refused as forbidden, and nothing changes", async (_, passengerOf) => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const scene = await aDeviceScene(trx, eventId);
+        const before = await rowsOf(trx, eventId);
+        const passengerIds = [scene.bea.id, passengerOf(scene)];
+        const offer = anOffer("aller", scene.driver, { passengerIds });
+        expect(await offerRide(trx, eventId, scene.token, offer)).toEqual({ ok: false, error: "forbidden" });
+        // Refused before the newcomer is written: even a transaction passed in is left as it was.
+        const asNewcomer = anOffer("aller", aNewDriver(), { passengerIds });
+        expect(await offerRide(trx, eventId, scene.token, asNewcomer)).toEqual({ ok: false, error: "forbidden" });
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+      });
+    });
+
+    it("C4.10: sent again, the offer places each passenger once, and not again one who left", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const { token, bea, cleo, driver } = await aDeviceScene(trx, eventId);
+        const offer = anOffer("aller", driver, { passengerIds: [bea.id, cleo.id], otherLeg: aDrive() });
+        const first = await offerRide(trx, eventId, token, offer);
+        const once = await rowsOf(trx, eventId);
+        expect(once.placements.filter((row) => row.ride_id === offer.rideId).map((row) => row.person_id).sort()).toEqual(
+          [bea.id, cleo.id].sort(),
+        );
+
+        expect(await offerRide(trx, eventId, token, offer)).toEqual(first);
+        expect(await rowsOf(trx, eventId)).toEqual(once);
+
+        await setPlacement(trx, { personId: bea.id, eventId, leg: "aller", rideId: null });
+        const left = await rowsOf(trx, eventId);
+        expect(await offerRide(trx, eventId, token, offer)).toEqual(first);
+        expect(await rowsOf(trx, eventId)).toEqual(left);
+        expect(await findPlacement(trx, { personId: bea.id, eventId, leg: "aller" })).toEqual({ rideId: null });
+      });
+    });
+  });
+
   describe("on committed data", () => {
-    /** A plugin whose inserts into `ride` fail from the `nth` on, as if the database broke at that moment. */
-    function failingRideInsert(nth = 1): KyselyPlugin {
+    /** A plugin whose inserts into `table` fail from the `nth` on, as if the database broke at that moment. */
+    function failingInsert(nth = 1, table = "ride"): KyselyPlugin {
       let inserts = 0;
       return {
         transformQuery({ node }) {
           const into = node.kind === "InsertQueryNode" ? node.into : undefined;
-          if (into && TableNode.is(into) && into.table.identifier.name === "ride" && ++inserts >= nth) {
+          if (into && TableNode.is(into) && into.table.identifier.name === table && ++inserts >= nth) {
             throw new Error("injected failure");
           }
           return node;
@@ -484,7 +617,7 @@ describe("offerRide", () => {
       await withCommittedEvent(async (db, eventId) => {
         const { lea } = await seedScene(db, eventId);
         const before = await rowsOf(db, eventId);
-        const failing = db.withPlugin(failingRideInsert());
+        const failing = db.withPlugin(failingInsert());
 
         const asPassenger = anOffer("aller", { kind: "device", personId: lea.id });
         await expect(offerRide(failing, eventId, lea.token, asPassenger)).rejects.toThrow("injected failure");
@@ -504,11 +637,106 @@ describe("offerRide", () => {
         const { lea } = await seedScene(db, eventId);
         const before = await rowsOf(db, eventId);
         const offer = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg: aDrive() });
-        const failing = db.withPlugin(failingRideInsert(nth));
+        const failing = db.withPlugin(failingInsert(nth));
         await expect(offerRide(failing, eventId, lea.token, offer)).rejects.toThrow("injected failure");
         expect(await rowsOf(db, eventId)).toEqual(before);
       });
     });
+
+    // The passengers are placed last, after both cars: the second one fails after every other write.
+    it("C4.5: one write: a failure at the placement of the second passenger leaves no car, no person, no placement", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { token, bea, cleo } = await aDeviceScene(db, eventId);
+        const before = await rowsOf(db, eventId);
+        const offer = anOffer("aller", aNewDriver(), { passengerIds: [bea.id, cleo.id], otherLeg: aDrive() });
+        await expect(offerRide(db.withPlugin(failingInsert(2, "placement")), eventId, token, offer)).rejects.toThrow(
+          "injected failure",
+        );
+        expect(await rowsOf(db, eventId)).toEqual(before);
+      });
+    });
+
+    // Under READ COMMITTED: Bea takes a seat in Marc's car while the offer waits for her
+    // Person. Once it gets her, it sees that seat, and refuses before writing anything.
+    it("C4.13: a passenger who takes a seat elsewhere while the offer waits for her is refused, with that seat in the state", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { token, bea, r1, driver } = await aDeviceScene(db, eventId);
+        const before = await rowsOf(db, eventId);
+
+        const taker = await db.startTransaction().setIsolationLevel("read committed").execute();
+        let offered: ReturnType<typeof offerRideAction> | undefined;
+        const offer = anOffer("aller", driver, { passengerIds: [bea.id] });
+        try {
+          await setPlacement(taker, { personId: bea.id, eventId, leg: "aller", rideId: r1 });
+          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(taker);
+          offered = offerRideAction(eventId, token, offer);
+          offered.catch(() => {});
+          await blockedBy(db, rows[0].pid);
+          await taker.commit().execute();
+        } finally {
+          try {
+            await taker.rollback().execute();
+          } catch {
+            // Committed.
+          }
+        }
+
+        const result = await offered;
+        expect(result).toMatchObject({ ok: false, error: "alreadyInCar" });
+        const aller = legOf(result && "state" in result ? result.state : undefined, "aller");
+        expect(aller.cars.find((car) => car.id === r1)?.passengers.map((person) => person.id)).toContain(bea.id);
+        const after = await rowsOf(db, eventId);
+        expect(after.rides).toEqual(before.rides);
+        expect(after.persons).toEqual(before.persons);
+        expect(await findPlacement(db, { personId: driver.personId, eventId, leg: "aller" })).toEqual({ rideId: null });
+      });
+    });
+
+    // Léa leaves A on the aller and B on the retour. A transaction that holds B alone keeps
+    // the offer waiting, before it locks any Person (lock order: Rides, then Persons).
+    it.each(["withoutCar", "notConcerned", "drive"] as const)(
+      "locks: with %s on the retour, the offer waits for the car it leaves there, before any Person",
+      async (choice) => {
+        await withCommittedEvent(async (db, eventId) => {
+          const marc = await seedPerson(db, eventId, { firstName: "Marc" });
+          const ines = await seedPerson(db, eventId, { firstName: "Inès" });
+          const a = await seedRide(db, eventId, marc.id, { leg: "aller" });
+          const b = await seedRide(db, eventId, ines.id, { leg: "retour" });
+          const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+          const tom = await seedPerson(db, eventId, { firstName: "Tom" }, lea.token);
+          await seedPlacement(db, { personId: lea.id, eventId, leg: "aller", rideId: a });
+          await seedPlacement(db, { personId: lea.id, eventId, leg: "retour", rideId: b });
+          await seedPlacement(db, { personId: tom.id, eventId, leg: "aller", rideId: null });
+
+          const holder = await db.startTransaction().setIsolationLevel("read committed").execute();
+          let offered: ReturnType<typeof offerRide> | undefined;
+          let personsFree: boolean | undefined;
+          try {
+            await sql`select id from ride where id = ${b} for update`.execute(holder);
+            const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
+            const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
+            const offer = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg, passengerIds: [tom.id] });
+            offered = offerRide(db, eventId, lea.token, offer);
+            offered.catch(() => {});
+            await blockedBy(db, rows[0].pid);
+            const persons = sql`select id from person where id in (${lea.id}, ${tom.id}) for update nowait`.execute(db);
+            personsFree = await persons.then(() => true, (error: { code?: string }) => error.code !== "55P03");
+            await holder.commit().execute();
+          } finally {
+            try {
+              await holder.rollback().execute();
+            } catch {
+              // Committed.
+            }
+          }
+
+          expect(await offered).toMatchObject({ ok: true });
+          expect(personsFree).toBe(true);
+          const retour = legOf(await readEventState(db, eventId, lea.token), "retour");
+          expect(retour.cars.find((car) => car.id === b)?.passengers).toEqual([]);
+        });
+      },
+    );
 
     // Known only once the insert does nothing, after the seat is freed: the refusal rolls it back.
     it("a ride id held by another event is refused, and the driver keeps her seat", async () => {

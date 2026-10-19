@@ -1,7 +1,7 @@
 /**
  * The rules of a Ride (epic #66): the form "Proposer une voiture" (R4), reducing the
- * seats (R8, C8.4 and C8.5), and the all-or-nothing decision of taking seats (C5.7, C5.8,
- * C6.5). Pure functions: the caller reads the Ride under its lock, then writes what they
+ * seats (R8, C8.4 and C8.5), the all-or-nothing decision of taking seats (C5.7, C5.8,
+ * C6.5), and who boards a car as it is offered (C4.13). Pure functions: the caller reads the Ride under its lock, then writes what they
  * decide.
  */
 import { optionalText, text, type TextError } from "./text";
@@ -95,7 +95,21 @@ export function validateRide(fields: RideFields): RideValidation {
   return { ok: true, ride: { location: location.value, time: at.value, seats: count.value, note: note.value } };
 }
 
-export type SeatReduction = { ok: true; leaving: string[] } | { ok: false; error: "passengersChanged" };
+/**
+ * C4.13: those ticked in « Qui monte avec vous ? » board the new car, so at most as many
+ * as its seats. The form and the server both apply it.
+ */
+export function passengersFit(count: number, seats: number): boolean {
+  return count <= seats;
+}
+
+/** The seats as R4 reads them, whatever the other fields; nothing when they are in error. */
+export function validSeats(value: unknown): number | undefined {
+  const checked = seats(value);
+  return "value" in checked ? checked.value : undefined;
+}
+
+export type SeatReduction ={ ok: true; leaving: string[] } | { ok: false; error: "passengersChanged" };
 
 /** A seat reduction as the driver sent it, and the Ride's passengers as read under its lock. */
 export interface SeatReductionRequest {

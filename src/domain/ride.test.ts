@@ -6,9 +6,11 @@ import {
   RIDE_SEATS_DEFAULT,
   RIDE_SEATS_MAX,
   RIDE_SEATS_MIN,
+  passengersFit,
   seatReduction,
   seatsDecision,
   validateRide,
+  validSeats,
   type RideFields,
 } from "./ride";
 
@@ -285,5 +287,26 @@ describe("seatsDecision", () => {
       ok: true,
       place: ["chloe"],
     });
+  });
+});
+
+describe("passengersFit", () => {
+  it.each([
+    ["no one ticked", 0, 3, true],
+    ["as many ticked as seats", 3, 3, true],
+    ["one more than the seats", 4, 3, false],
+    ["one more than a single seat", 2, 1, false],
+  ])("C4.13: %s, %i for %i seats, fits: %s", (_, count, seats, fits) => {
+    expect(passengersFit(count, seats)).toBe(fits);
+  });
+
+  it("counts against the seats R4 accepts, and none it refuses", () => {
+    expect([validSeats("3"), validSeats(8), validSeats("9"), validSeats("deux"), validSeats(undefined)]).toEqual([
+      3,
+      8,
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 });
