@@ -68,7 +68,7 @@ export function LegTabs(props: {
           <LegTrigger key={leg} leg={leg} withoutCar={counts[index]} tall={tall} />
         ))}
       </TabsList>
-      {legs.map(({ leg, at, board }) => (
+      {legs.map(({ leg, at, board }, index) => (
         <LegTabPanel
           key={leg}
           leg={leg}
@@ -78,7 +78,13 @@ export function LegTabs(props: {
           <h2 id={`leg-${leg}`} className="sr-only text-lg font-semibold noscript:not-sr-only">
             {t(leg)}
           </h2>
-          <LegPanel at={at} board={board} device={props.device} hasRetour />
+          <LegPanel
+            at={at}
+            board={board}
+            device={props.device}
+            hasRetour
+            other={{ at: legs[1 - index].at, persons: legs[1 - index].board.device }}
+          />
         </LegTabPanel>
       ))}
     </Tabs>

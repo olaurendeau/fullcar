@@ -131,6 +131,28 @@
     },
     "driver": "Who drives?",
     "newDriver": "Someone new",
+    "leavesCar": "Will leave {driver}’s car",
+    "otherLeg": {
+      "title": {
+        "retour": "On the return trip",
+        "aller": "On the outbound trip"
+      },
+      "drive": {
+        "retour": "I drive back too",
+        "aller": "I drive there too"
+      },
+      "stay": "I stay in {driver}’s car",
+      "withoutCar": "I need a seat",
+      "notConcerned": {
+        "retour": "I’m not doing the return trip",
+        "aller": "I’m not doing the outbound trip"
+      },
+      "time": {
+        "retour": "Return departure time",
+        "aller": "Outbound departure time"
+      },
+      "same": "Same seats and note for both cars."
+    },
     "location": {
       "aller": "Departure place",
       "retour": "Drop-off place"

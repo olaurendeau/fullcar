@@ -105,3 +105,13 @@ export function driverChoice(device: readonly DevicePerson[]): {
   const chosen = candidates.length === 0 ? NEW_DRIVER : candidates.length === 1 ? candidates[0].id : undefined;
   return { candidates, chosen };
 }
+
+/**
+ * Who drives, as the sheet shows it now: the choice made, while it still is one. A person
+ * who drives on the leg since, from another tab, is not (#169): the sheet goes back to how it
+ * opens, nobody chosen among those left, or a new person when nobody else can drive.
+ */
+export function currentDriver(candidates: readonly BoardPerson[], picked: string | undefined): string | undefined {
+  if (picked === NEW_DRIVER || candidates.some((candidate) => candidate.id === picked)) return picked;
+  return candidates.length === 0 ? NEW_DRIVER : undefined;
+}

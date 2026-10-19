@@ -146,7 +146,7 @@ test.describe("offer a car", () => {
     // « Proposer une voiture », the first name, the place, « Valider ».
     await openForm(page);
     // Without a person on the device: no choice, the new person's fields directly.
-    await expect(form(page).getByRole("radio")).toHaveCount(0);
+    await expect(form(page).getByRole("radiogroup", { name: FR.driver })).toHaveCount(0);
     await expect(form(page).getByRole("group", { name: FR.driver })).toBeVisible();
     await expect(form(page)).not.toContainText(FR.storageTitle);
     await field(page, FR.firstName).fill("Marc");
@@ -215,6 +215,7 @@ test.describe("offer a car", () => {
     const { Léa: lea, Tom: tom } = await device(db, page, id, ["Léa", "Tom"]);
     await place(db, id, lea, "aller", marcsCar);
     await place(db, id, tom, "aller", null);
+    await place(db, id, lea, "retour", null);
     await page.goto(`/e/${id}`);
     await expect(freeSeats(car(panel(page), "Marc"))).toHaveCount(2);
 
@@ -230,6 +231,9 @@ test.describe("offer a car", () => {
     await expect(form(page)).toHaveCount(0);
     await expect(freeSeats(car(panel(page), "Marc"))).toHaveCount(3);
     await expect(freeSeats(car(panel(page), "Léa"))).toHaveCount(3);
+    // Her retour is as it was: without a car (review of #200).
+    const retour = db.selectFrom("placement").select("ride_id").where("person_id", "=", lea).where("leg", "=", "retour");
+    expect(await retour.execute()).toEqual([{ ride_id: null }]);
 
     // Léa drives on this leg: Tom alone can, and is chosen (C4.6).
     await openForm(page);
@@ -245,8 +249,48 @@ test.describe("offer a car", () => {
 
     // Everyone drives on this leg: only a new person.
     await openForm(page);
-    await expect(form(page).getByRole("radio")).toHaveCount(0);
+    await expect(form(page).getByRole("radiogroup", { name: FR.driver })).toHaveCount(0);
     await expect(field(page, FR.firstName)).toBeVisible();
+  });
+
+  test("Léa, the only person of the device, drives on this leg from another tab: the sheet unblocks", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Léa: lea } = await device(db, page, id, ["Léa"]);
+    await page.goto(`/e/${id}`);
+    await openForm(page);
+    await expect(form(page).getByRole("radio", { name: "Léa" })).toBeChecked();
+    await field(page, FR.location.aller).fill("Gare");
+    await seedRide(db, id, lea);
+    await submit(page).click();
+    await expect(failure(page)).toHaveText(FR.failed);
+    await expect(submit(page)).toBeFocused();
+    // Nobody else can drive: a new person, and her fields.
+    await expect(form(page).getByRole("radiogroup", { name: FR.driver })).toHaveCount(0);
+    await field(page, FR.firstName).fill("Marc");
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    await expect(car(panel(page), "Marc")).toContainText("Gare");
+  });
+
+  test("Léa, chosen, drives on this leg from another tab while Tom can still: nobody is chosen, as on opening", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Léa: lea } = await device(db, page, id, ["Léa", "Tom"]);
+    await page.goto(`/e/${id}`);
+    await openForm(page);
+    const choices = form(page).getByRole("radiogroup", { name: FR.driver });
+    await choices.getByRole("radio", { name: "Léa" }).check();
+    await field(page, FR.location.aller).fill("Gare");
+    await seedRide(db, id, lea);
+    await submit(page).click();
+    await expect(failure(page)).toHaveText(FR.failed);
+    expect(await radioNames(choices)).toEqual(["Tom", FR.newDriver]);
+    for (const radio of await choices.getByRole("radio").all()) await expect(radio).not.toBeChecked();
+    await expect(choices).not.toHaveAttribute("aria-invalid");
+    // At the next « Valider », as on opening: the choice is asked for, nothing is sent.
+    await submit(page).click();
+    await expect(choices).toHaveAccessibleDescription(FR.chooseDriver);
+    await expect(choices.getByRole("radio", { name: "Tom" })).toBeFocused();
+    expect((await rides(db, id)).filter((ride) => ride.location === "Gare")).toEqual([]);
   });
 
   test("C4.7: errors by field, the focus on the first, values kept; nothing sent", async ({ context, db, page, seededEvent }) => {

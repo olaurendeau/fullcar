@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DevicePerson, DeviceState } from "./board";
-import { afterRegistration, deviceKnown, driverChoice, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
+import { afterRegistration, currentDriver, deviceKnown, driverChoice, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
 
 function of(id: string, state: DeviceState): DevicePerson {
   return { id, firstName: id.toUpperCase(), state };
@@ -129,5 +129,25 @@ describe("driverChoice (R4, C4.6)", () => {
   it("without a person who can drive, only a new person: none on the device, or all of them driving", () => {
     expect(driverChoice([])).toEqual({ candidates: [], chosen: "new" });
     expect(driverChoice([driver("marc")])).toEqual({ candidates: [], chosen: "new" });
+  });
+});
+
+describe("currentDriver (#169, review of #200)", () => {
+  const candidates = [{ id: "tom", firstName: "TOM" }];
+
+  it("keeps a choice that still is one: a candidate, or a new person", () => {
+    expect(currentDriver(candidates, "tom")).toBe("tom");
+    expect(currentDriver(candidates, "new")).toBe("new");
+    expect(currentDriver([], "new")).toBe("new");
+  });
+
+  it("goes back to the sheet as it opens when the choice is gone: nobody among those left", () => {
+    expect(currentDriver(candidates, "lea")).toBeUndefined();
+    expect(currentDriver(candidates, undefined)).toBeUndefined();
+  });
+
+  it("goes back to a new person when nobody is left who can drive", () => {
+    expect(currentDriver([], "lea")).toBe("new");
+    expect(currentDriver([], undefined)).toBe("new");
   });
 });
