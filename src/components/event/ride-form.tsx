@@ -126,9 +126,8 @@ function RideForm({ leg, at, persons, offerRide, open, onDone }: FormProps & { o
   const [problem, setProblem] = useState<"offline" | "failed" | null>(null);
   const creationIds = useRef<{ rideId: string; personId: string } | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
-  // Each form its own, as in « Ajouter une personne »: reopened during a send, the sheet shows a new form.
+  // Each form its own, as in « Ajouter une personne »; the failure it left for the bar is withdrawn when it sends again.
   const mounted = useRef(false);
-  // Withdraws the failure this form left for the bar: sent again, the form says what comes of it.
   const closed = useRef<(() => void) | undefined>(undefined);
   const inSheet = () => open() && mounted.current;
   const isNew = driver === NEW_DRIVER;
