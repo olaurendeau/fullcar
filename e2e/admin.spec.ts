@@ -18,6 +18,7 @@ const FR = {
   invalid: "Ce lien d’organisateur n’est pas valide.",
   invalidWhy: "Vérifiez qu’il a été copié en entier.",
   checkFailed: "Le lien d’organisateur n’a pas pu être vérifié.",
+  checkFailedWhy: "Vérifiez la connexion, puis réessayez.",
 };
 
 /** A well-formed id that no test stores. */
@@ -311,6 +312,7 @@ test.describe("organiser's link, not valid", () => {
       );
       await page.goto(adminPath(seededEvent));
       await expect(alert(page)).toContainText(FR.checkFailed);
+      await expect(alert(page)).toContainText(FR.checkFailedWhy);
       await expect(page.getByText(FR.invalid)).toHaveCount(0);
       await expect(panel(page)).toHaveCount(0);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");

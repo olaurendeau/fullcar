@@ -150,8 +150,11 @@
     },
     "failed": {
       "title": "Le lien d’organisateur n’a pas pu être vérifié.",
-      "body": "Vérifiez la connexion, puis rechargez la page."
-    }
+      "body": "Vérifiez la connexion, puis réessayez."
+    },
+    "loading": "Chargement de l’espace organisateur…",
+    "retry": "Réessayer",
+    "needsJavaScript": "L’espace organisateur nécessite JavaScript : activez-le, puis rechargez la page."
   },
   "EventNotFound": {
     "title": "Événement introuvable",

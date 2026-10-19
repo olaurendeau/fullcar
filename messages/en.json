@@ -150,8 +150,11 @@
     },
     "failed": {
       "title": "The organiser link could not be checked.",
-      "body": "Check your connection, then reload the page."
-    }
+      "body": "Check your connection, then try again."
+    },
+    "loading": "Loading the organiser area…",
+    "retry": "Try again",
+    "needsJavaScript": "The organiser area needs JavaScript: turn it on, then reload the page."
   },
   "EventNotFound": {
     "title": "Event not found",

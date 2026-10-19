@@ -1,5 +1,7 @@
+import { TriangleAlert } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { ContactFooter } from "@/components/contact/contact-footer";
 import { eventMetadata, loadEvent, loadPublicState } from "../load-event";
 import { ParticipantBoard } from "../participant-board";
@@ -18,13 +20,23 @@ export async function generateMetadata({ params }: PageProps<"/e/[id]/admin">): 
  */
 export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) {
   const { id } = await params;
-  const [event, board] = await Promise.all([loadEvent(id), loadPublicState(id)]);
+  const [event, board, t] = await Promise.all([loadEvent(id), loadPublicState(id), getTranslations("Admin")]);
   if (!event || !board) notFound();
 
   // While the bar of messages shows, 112 px more below: nothing stays under it (C11.4).
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 p-4 has-data-[message-bar=open]:pb-[calc(1rem+112px+env(safe-area-inset-bottom))]">
       <AdminArrival id={event.id} />
+      {/* Without JavaScript, the token cannot be checked: the panel's place says so (O5.5). */}
+      <noscript>
+        <p
+          role="note"
+          className="mx-auto grid w-full max-w-md grid-cols-[1rem_1fr] gap-x-2.5 rounded-lg border p-3 text-sm font-semibold"
+        >
+          <TriangleAlert aria-hidden className="mt-0.5 size-4" />
+          {t("needsJavaScript")}
+        </p>
+      </noscript>
       <ParticipantBoard
         id={event.id}
         title={event.title}
