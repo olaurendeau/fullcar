@@ -2,7 +2,7 @@ import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { holdToken, newToken } from "./device";
+import { bar, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -17,6 +17,8 @@ const NEW_PHONE = "07 12 12 12 12";
 const REQUIRED = "Champ requis.";
 const INVALID_PHONE = "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )";
 const PHONE_HINT = "Visible seulement par l’organisateur et par les personnes de la même voiture.";
+const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
 
 /**
  * The device holds Claire, with a number, and Léa, without one. Aller: Claire drives; Marc,
@@ -230,5 +232,95 @@ test.describe("edit a person", () => {
     await expect(nameButton(page, "Clara")).toBeFocused();
     await expect(alerts(page)).toHaveCount(0);
     expect(await stored(db, scene.claire)).toEqual({ first_name: "Clara", phone: CLAIRE_PHONE });
+  });
+
+  /** Sends « Clara » for Claire, then closes the sheet with Escape: closed, or still closing. */
+  async function sendThenClose(page: Page, closing = false) {
+    const form = await openForm(page, "Claire");
+    await form.getByLabel("Prénom").fill("Clara");
+    await form.getByRole("button", { name: "Valider" }).click();
+    await page.keyboard.press("Escape");
+    if (closing) await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+    else await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+
+  /** Lets the held change through as a 500, once it has failed. */
+  async function fail(page: Page, answer: () => void) {
+    const responded = page.waitForResponse((response) => response.status() === 500);
+    answer();
+    await responded;
+  }
+
+  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
+  // meanwhile. Reopened, even while the first one closes, the sheet is a new one.
+  for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
+    test(`a failure once the sheet is ${when}: in the bar, once no sheet hides the page`, async ({ db, page, seededEvent }) => {
+      const answer = await holdFirst(page, "Clara", true);
+      await page.goto(`/e/${seededEvent.id}`);
+      if (when.endsWith("closing")) await page.addStyleTag({ content: slowClose });
+      await sendThenClose(page, when.endsWith("closing"));
+      const seen = await watchAlerts(page);
+      if (when !== "reopened") await fail(page, answer);
+      if (when.endsWith("closing")) expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      if (when.startsWith("reopened")) {
+        // Hidden from role queries while a sheet is mounted.
+        await page.locator(`[data-person-name="${scene.claire}"]`).focus();
+        await page.keyboard.press("Enter");
+        await expect(page.locator('[role="dialog"][data-state="open"]')).toHaveCount(1);
+        if (when === "reopened") await fail(page, answer);
+        await page.keyboard.press("Escape");
+      }
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(bar(page)).toHaveText(FAILED);
+      expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+      await expect(alerts(page)).toHaveText([FAILED]);
+      expect(await stored(db, scene.claire)).toEqual({ first_name: "Claire", phone: CLAIRE_PHONE });
+    });
+  }
+
+  // The failure is about Claire, not about the sheet that sent it (#208).
+  test("a change that failed, sent again from a reopened sheet and done: nothing left to say", async ({ db, page, seededEvent }) => {
+    const answer = await holdFirst(page, "Clara", true);
+    await page.goto(`/e/${seededEvent.id}`);
+    await sendThenClose(page);
+    await nameButton(page, "Claire").click();
+    // Failed while the reopened sheet hides the page: the message waits.
+    await expect(dialog(page, "Claire")).toBeVisible();
+    await fail(page, answer);
+    await dialog(page, "Claire").getByRole("button", { name: "Modifier", exact: true }).click();
+    const form = dialog(page, "Modifier Claire");
+    await form.getByLabel("Prénom").fill("Clara");
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(nameButton(page, "Clara")).toBeFocused();
+
+    // Once more around a sheet: a message left waiting would show by now.
+    await nameButton(page, "Clara").click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(bar(page)).toBeEmpty();
+    expect(await stored(db, scene.claire)).toEqual({ first_name: "Clara", phone: CLAIRE_PHONE });
+  });
+
+  // Next sends one server action at a time: the second, from a form filled before the first's
+  // answer, goes once it has come, with only what it changed (#208).
+  test("a form filled before another change's answer sends only what it changed: it undoes nothing", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    const answer = await holdFirst(page, "Clara", false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await sendThenClose(page);
+    const form = await openForm(page, "Claire");
+    await expect(form.getByLabel("Prénom")).toHaveValue("Claire");
+    await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
+    await form.getByRole("button", { name: "Valider" }).click();
+    // Sent, not dropped: inactive until its answer (C1.9).
+    await expect(form.getByRole("button", { name: "Valider" })).toBeDisabled();
+    answer();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(nameButton(page, "Clara")).toBeFocused();
+    expect(await stored(db, scene.claire)).toEqual({ first_name: "Clara", phone: NEW_PHONE });
   });
 });

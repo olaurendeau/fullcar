@@ -235,6 +235,23 @@ describe("updatePerson", () => {
     });
   });
 
+  // A form filled before another change landed sends only what it changed: it undoes nothing (#208).
+  it("C2.3: a field left out stays as it is; with none, nothing changes, and only for the device", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, tom } = await seedScene(trx);
+      await updatePerson(trx, eventId, lea.token, { personId: lea.id, firstName: "Clara" });
+      const phoneOnly = { personId: lea.id, phone: "07 12 12 12 12" };
+      const [person] = legOf(stateOf(await updatePerson(trx, eventId, lea.token, phoneOnly)), "retour").device;
+      expect(person).toEqual(expect.objectContaining({ firstName: "Clara", phone: "07 12 12 12 12" }));
+      const before = await readEventState(trx, eventId, lea.token);
+      expect(stateOf(await updatePerson(trx, eventId, lea.token, { personId: lea.id }))).toEqual(before);
+      for (const fields of [{ personId: lea.id }, phoneOnly]) {
+        expect(await updatePerson(trx, eventId, tom.token, fields)).toEqual(expect.objectContaining({ error: "forbidden" }));
+      }
+      expect(await readEventState(trx, eventId, lea.token)).toEqual(before);
+    });
+  });
+
   it("C1.8: refuses an empty first name and a malformed number, with an error per field, and changes nothing", async () => {
     await withRollback(async (trx) => {
       const { eventId, lea } = await seedScene(trx);

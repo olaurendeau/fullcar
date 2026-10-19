@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Leg } from "@/domain/leg";
-import { validatePerson, type PersonErrors, type PersonField } from "@/domain/person";
+import { PERSON_FIELDS, validatePerson, type PersonErrors, type PersonField } from "@/domain/person";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./create-event-form";
@@ -40,10 +40,13 @@ export type Registration =
 /** Registers a person (R1): the device's token, then the form's creation id, then the request. */
 export type AddPerson = (registering: Registering) => Promise<Registration | undefined>;
 
-/** A change of one of the device's persons, as the form sends it (C2.3): an empty number removes it. */
+/**
+ * A change of one of the device's persons, as the form sends it (C2.3): an empty number removes
+ * it. Only the fields changed since the form showed: one left out stays as it is (#208).
+ */
 export interface Updating extends FromSheet {
   personId: string;
-  person: Record<PersonField, string>;
+  person: Partial<Record<PersonField, string>>;
   /** True until the answer: « Valider » is inactive meanwhile (C1.9). */
   sending: (sending: boolean) => void;
 }
@@ -138,9 +141,11 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
   const tActions = useTranslations("Actions");
   const ids = useId();
   const idOf = (name: string) => `${ids}-${name}`;
-  const [values, setValues] = useState<Record<PersonField, string>>(() =>
+  // What the form showed: in `edit` mode, a field the user left as it was is not sent.
+  const [shown] = useState<Record<PersonField, string>>(() =>
     mode.kind === "edit" ? { firstName: mode.person.firstName, phone: mode.person.phone ?? "" } : { firstName: "", phone: "" },
   );
+  const [values, setValues] = useState(shown);
   const [bothLegs, setBothLegs] = useState(true);
   const [errors, setErrors] = useState<PersonErrors>({});
   const [sending, setSending] = useState(false);
@@ -148,7 +153,8 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
   const creationId = useRef<string | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
   // Each form its own: a sheet reopened during a send shows a new form, and the sending one is gone.
-  const sends = useSends(open);
+  // A change is about its person, whichever form sends it; a registration, about its form.
+  const sends = useSends(open, mode.kind === "edit" ? `person:${mode.person.id}` : undefined);
   const editing = mode.kind === "edit";
 
   // « Modifier » is gone as the form takes its place: the focus goes to the first name.
@@ -184,7 +190,12 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
             sending: setSending,
             ...sheet,
           })
-        : await mode.updatePerson({ personId: mode.person.id, person: values, sending: setSending, ...sheet });
+        : await mode.updatePerson({
+            personId: mode.person.id,
+            person: Object.fromEntries(PERSON_FIELDS.filter((name) => values[name] !== shown[name]).map((name) => [name, values[name]])),
+            sending: setSending,
+            ...sheet,
+          });
     if (answer?.kind === "done") {
       creationId.current = undefined;
       // Not the sheet opened since: it shows another form.

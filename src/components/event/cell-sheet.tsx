@@ -55,8 +55,8 @@ export function CellSheet({
   const afterClose = useRef(() => focusCell(person.id, leg));
   const first = useRef<HTMLButtonElement>(null);
   const isOpen = useRef(open);
-  // Each opening is a new sheet (`key`): the one that sent may be gone.
-  const sends = useSends(() => isOpen.current);
+  // Each opening is a new sheet (`key`): the one that sent may be gone. What it says is about the cell.
+  const sends = useSends(() => isOpen.current, `cell:${person.id}:${leg}`);
   useEffect(() => {
     isOpen.current = open;
   }, [open]);

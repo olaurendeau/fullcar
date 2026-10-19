@@ -73,21 +73,35 @@ export interface FromSheet {
   key: string;
   /** Whether a failure is said in the sheet: it is open, and it is the one that sent. */
   inSheet: () => boolean;
-  /** Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn if the sheet sends again. */
+  /** Its answer came: withdraws what an earlier send about the same subject left for the bar. */
+  answered: () => void;
+  /** Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn by the next send or answer about the subject. */
   whenClosed: (then: () => void) => void;
 }
 
+/** The message each subject's last failure left waiting for the bar (#208). */
+const left = new Map<string, () => void>();
+
+function withdraw(subject: string) {
+  left.get(subject)?.();
+  left.delete(subject);
+}
+
 /**
- * For the content of a sheet that sends actions: call what it returns at each send, for that
- * send's `FromSheet`. Sending again withdraws the message this sheet's last send left waiting
- * for the bar, since the sheet says what comes of the new one; no other sheet's. Each mount is
- * a sheet of its own (`useId` draws a new id at each mount once the page is hydrated): one
- * reopened once closed is a new one, and the sheet that sent is gone.
+ * For the content of a sheet that sends actions, under `SheetContent`: call what it returns at
+ * each send, for that send's `FromSheet`. Each mount is a sheet of its own (`useId` draws a new
+ * id at each mount once the page is hydrated): one reopened once closed is a new one, and the
+ * sheet that sent is gone. Above the content, `key` would outlive the sheet's openings.
+ *
+ * A failure is about its `subject` (a person, a cell; the sheet itself by default), whichever
+ * sheet sent it. Sending about it again, or an answer about it, withdraws the message an earlier
+ * send left waiting for the bar: the page, or the sheet, says what comes of the new one. No other
+ * subject's (#208).
  */
-export function useSends(isOpen: () => boolean): () => FromSheet {
+export function useSends(isOpen: () => boolean, subject?: string): () => FromSheet {
   const key = useId();
+  const about = subject ?? key;
   const mounted = useRef(false);
-  const withdraw = useRef(() => {});
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -96,13 +110,14 @@ export function useSends(isOpen: () => boolean): () => FromSheet {
   }, []);
 
   return () => {
-    withdraw.current();
-    withdraw.current = () => {};
+    withdraw(about);
     return {
       key,
       inSheet: () => isOpen() && mounted.current,
+      answered: () => withdraw(about),
       whenClosed: (then) => {
-        withdraw.current = whenPageShown(then);
+        withdraw(about);
+        left.set(about, whenPageShown(then));
       },
     };
   };

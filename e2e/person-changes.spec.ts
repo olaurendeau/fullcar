@@ -444,6 +444,43 @@ test.describe("person changes", () => {
     await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
   });
 
+  // The failure is about Léa on the aller, not about the sheet that sent it (#208). Sent again
+  // before it comes, the change goes once it has: its answer withdraws the failure.
+  for (const when of ["after", "before"] as const) {
+    test(`a change sent again from a reopened sheet ${when} the first one fails, and done: nothing left to say`, async ({
+      db,
+      page,
+      seededEvent,
+    }) => {
+      const answer = await holdFirst(page, scene.persons.lea, true);
+      const fail = async () => {
+        const responded = page.waitForResponse((response) => response.status() === 500);
+        answer();
+        await responded;
+      };
+      await page.goto(`/e/${seededEvent.id}`);
+      await cell(page, "Léa", "Aller").click();
+      await sheet(page, "Léa · Aller").getByRole("button", { name: "Sortir de la voiture" }).click();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await cell(page, "Léa", "Aller").click();
+      // Failed while the reopened sheet hides the page: the message waits.
+      await expect(sheet(page, "Léa · Aller")).toBeVisible();
+      if (when === "after") await fail();
+      await sheet(page, "Léa · Aller").getByRole("button", { name: "Sortir de la voiture" }).click();
+      if (when === "before") await fail();
+      await expect(sheet(page, "Léa · Aller")).toHaveCount(0);
+      await expect(section(page).getByRole("button", { name: "Léa, Aller : Sans voiture", exact: true })).toBeFocused();
+
+      // Once more around a sheet: a message left waiting would show by now.
+      await cell(page, "Léa", "Aller").click();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(bar(page)).toBeEmpty();
+      expect(await placements(db, seededEvent.id, scene.persons.lea)).toEqual({ aller: null });
+    });
+  }
+
   test("a success from a sheet closed since leaves the sheet opened meanwhile open", async ({ page, seededEvent }) => {
     const answer = await holdFirst(page, scene.persons.tom, false);
     await page.goto(`/e/${seededEvent.id}`);

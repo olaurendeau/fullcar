@@ -7,7 +7,7 @@ import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
 import { devicePersonIds } from "@/domain/device";
 import { eventLegs, initialLegs, type Leg } from "@/domain/leg";
-import { validatePerson, type PersonErrors, type PersonField } from "@/domain/person";
+import { validatePerson, validatePersonChange, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
 import { hashToken, tokenMatches } from "@/domain/token-hash";
 import { findPublicEvent } from "./event";
@@ -115,7 +115,10 @@ export async function addPerson(
   });
 }
 
-/** Changes the first name and the number of one of the device's persons (C2.3): an empty number removes it. */
+/**
+ * Changes the first name and the number of one of the device's persons (C2.3): an empty number
+ * removes it, and a field left out stays as it is (`validatePersonChange`).
+ */
 export async function updatePerson(
   db: Kysely<Database>,
   eventId: string,
@@ -123,13 +126,13 @@ export async function updatePerson(
   input: unknown,
 ): Promise<PersonOutcome> {
   const fields = fieldsOf(input);
-  const validation = validatePerson({ firstName: fields.firstName, phone: fields.phone });
+  const validation = validatePersonChange({ firstName: fields.firstName, phone: fields.phone });
   if (!validation.ok) return validation;
   const { personId } = fields;
   return writeThenRead(db, eventId, token, async (trx) => {
     if (!isCreationId(personId)) return INVALID;
     if (!(await isDevicePerson(trx, eventId, token, personId))) return FORBIDDEN;
-    await storePersonFields(trx, { id: personId, eventId }, validation.person);
+    if (Object.keys(validation.change).length > 0) await storePersonFields(trx, { id: personId, eventId }, validation.change);
     return { ok: true };
   });
 }

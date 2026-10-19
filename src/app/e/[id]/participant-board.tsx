@@ -73,6 +73,7 @@ export function ParticipantBoard({
   // What became of a person's form, sent from `sheet`.
   function personFormOutcome(sent: Sent<PersonOutcome> | undefined, sheet: FromSheet): Registration | undefined {
     if (sent === undefined) return undefined;
+    sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
     if (outcome?.ok) return { kind: "done" };
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
@@ -108,7 +109,7 @@ export function ParticipantBoard({
   // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
   // hides the page: until then, it would be neither seen nor announced. Written after what the
   // actions ending meanwhile write there, it is not cleared by them. Every failure waits, each
-  // withdrawn alone when its sheet sends again (#167).
+  // withdrawn alone by the next send or answer about its subject, from any sheet (#167, #208).
   function failedIn(sheet: FromSheet, problem: ActionProblem) {
     setProblem(null);
     if (!sheet.inSheet()) sheet.whenClosed(() => setProblem(problem));
@@ -118,6 +119,7 @@ export function ParticipantBoard({
   const setPersonLeg: SetPersonLeg = async (change, sheet) => {
     const sent = await runAction(`setPersonLeg:${sheet.key}`, () => storePersonLeg(id, readDeviceToken(id), change));
     if (sent === undefined) return undefined;
+    sheet.answered();
     if (sent.ok && sent.value.ok) return null;
     // A refusal has no words of its own (`drives`, `forbidden`…): the generic message.
     const failure = sent.ok ? "failed" : sent.problem;
