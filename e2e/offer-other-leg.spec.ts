@@ -169,6 +169,30 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     expect((await rides(db, id)).map((ride) => ride.leg)).toEqual(["aller", "aller"]);
   });
 
+  test("C4.11: « Je ramène aussi » checked before anyone drives is kept once someone does (review of #212)", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    await device(db, page, id, ["Léa", "Tom"]);
+    await page.goto(`/e/${id}`);
+    await openForm(page);
+    const group = otherLeg(page, FR.title.retour);
+    await field(page, FR.location.aller).fill("Gare");
+    await radio(group, FR.drive.retour).check();
+    await submit(page).click();
+    const drivers = form(page).getByRole("radiogroup", { name: "Qui conduit ?" });
+    await expect(drivers).toHaveAccessibleDescription("Choisissez qui conduit.");
+    await radio(drivers, "Léa").check();
+    expect((await radios(group)).checked).toEqual([FR.drive.retour]);
+    await expect(field(page, FR.location.retour)).toHaveValue("Gare");
+    // Léa's from now on: Tom has his own default, and Léa gets hers back.
+    await radio(drivers, "Tom").check();
+    expect((await radios(group)).checked).toEqual([FR.notConcerned.retour]);
+    await radio(drivers, "Léa").check();
+    expect((await radios(group)).checked).toEqual([FR.drive.retour]);
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    expect((await rides(db, id)).map((ride) => ride.leg)).toEqual(["aller", "retour"]);
+  });
+
   test("C4.11, C4.6: absent once she drives on the other leg, from another tab: « Valider » keeps the focus", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     const { Léa: lea } = await device(db, page, id, ["Léa"]);

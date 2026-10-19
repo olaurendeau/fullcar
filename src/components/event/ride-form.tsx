@@ -147,6 +147,7 @@ function RideForm({ leg, at, persons, other, offerRide, open, onDone }: FormProp
   // The other leg follows who drives, from her state there (v4-8).
   const there = driver === NEW_DRIVER ? undefined : other?.persons.find((person) => person.id === driver)?.state;
   const otherField = other && otherLegField(there ?? "new");
+  // One made for a driver is hers alone; one made with nobody chosen goes to whoever is chosen next.
   const [otherPick, setOtherPick] = useState<{ driver: string | undefined; choice: OtherLegChoice }>();
   const kept = otherPick && otherPick.driver === driver && otherField?.choices.includes(otherPick.choice);
   const otherChoice = kept ? otherPick.choice : otherField?.chosen;
@@ -263,6 +264,7 @@ function RideForm({ leg, at, persons, other, offerRide, open, onDone }: FormProp
             onValueChange={(next) => {
               setDriver(next);
               setNoDriver(false);
+              setOtherPick((pick) => (pick && pick.driver === undefined ? { ...pick, driver: next } : pick));
             }}
             aria-labelledby={idOf("driver")}
             aria-invalid={noDriver || undefined}

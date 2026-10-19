@@ -272,6 +272,27 @@ test.describe("offer a car", () => {
     await expect(car(panel(page), "Marc")).toContainText("Gare");
   });
 
+  test("Léa, chosen, drives on this leg from another tab while Tom can still: nobody is chosen, as on opening", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Léa: lea } = await device(db, page, id, ["Léa", "Tom"]);
+    await page.goto(`/e/${id}`);
+    await openForm(page);
+    const choices = form(page).getByRole("radiogroup", { name: FR.driver });
+    await choices.getByRole("radio", { name: "Léa" }).check();
+    await field(page, FR.location.aller).fill("Gare");
+    await seedRide(db, id, lea);
+    await submit(page).click();
+    await expect(failure(page)).toHaveText(FR.failed);
+    expect(await radioNames(choices)).toEqual(["Tom", FR.newDriver]);
+    for (const radio of await choices.getByRole("radio").all()) await expect(radio).not.toBeChecked();
+    await expect(choices).not.toHaveAttribute("aria-invalid");
+    // At the next « Valider », as on opening: the choice is asked for, nothing is sent.
+    await submit(page).click();
+    await expect(choices).toHaveAccessibleDescription(FR.chooseDriver);
+    await expect(choices.getByRole("radio", { name: "Tom" })).toBeFocused();
+    expect((await rides(db, id)).filter((ride) => ride.location === "Gare")).toEqual([]);
+  });
+
   test("C4.7: errors by field, the focus on the first, values kept; nothing sent", async ({ context, db, page, seededEvent }) => {
     const { id } = seededEvent;
     await device(db, page, id, ["Claire", "Léa"]);
