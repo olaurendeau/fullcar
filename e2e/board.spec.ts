@@ -269,8 +269,8 @@ test.describe("board without a retour, JavaScript disabled", () => {
  * or without the organiser's link, with or without JavaScript, but in one answer: with a valid
  * organiser's link and JavaScript, `loadOrganiserPanel` sends the numbers of the persons
  * without a car, Tom's and Léa's, never those of Marc and Zoé, who drive. Searched in every
- * answer the page receives (HTML, RSC, scripts, the link's check) and in its final DOM, which
- * shows none until the panel lists them (#179). A body that cannot be read fails the test.
+ * answer the page receives (HTML, RSC, scripts, the link's check) and in its final DOM, where
+ * only the panel lists them (#179). A body that cannot be read fails the test.
  * This browser holds no personal token: e2e/device-persons.spec.ts covers one that does,
  * whose cards show numbers.
  */
@@ -356,7 +356,16 @@ for (const javaScriptEnabled of [true, false]) {
 
         const dom = await page.content();
         expect(dom).toContain("Marc");
-        expectNoNumber("the DOM", dom);
+        if (javaScriptEnabled && organiser) {
+          // The panel lists Tom's and Léa's numbers (#179, DO1): no driver's there, none elsewhere.
+          const [shown, outside] = await page
+            .getByRole("region", { name: "Espace organisateur" })
+            .evaluate((panel) => [panel.outerHTML, document.documentElement.outerHTML.replace(panel.outerHTML, "")]);
+          expectNoNumber("the panel's DOM", shown, DRIVERS_NUMBERS);
+          expectNoNumber("the DOM outside the panel", outside);
+        } else {
+          expectNoNumber("the DOM", dom);
+        }
         const received = await Promise.all(bodies);
         expect(received.length).toBeGreaterThan(0);
         for (const read of received) expectNoNumber(read.url, readText(read));

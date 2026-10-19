@@ -46,6 +46,14 @@ async function dom(page: Page): Promise<[string, string]> {
   return ["the DOM", await page.content()];
 }
 
+/** The DOM without the organiser's panel: what the board and the rest of the page show. */
+async function domOutsidePanel(page: Page): Promise<[string, string]> {
+  const outside = await page
+    .getByRole("region", { name: FR.panel })
+    .evaluate((panel) => document.documentElement.outerHTML.replace(panel.outerHTML, ""));
+  return ["the DOM outside the panel", outside];
+}
+
 /** The request that carries the admin token in its body: the panel's read. */
 function carrying(exchanges: Exchange[], token: string): Exchange[] {
   return exchanges.filter(({ requestBody }) => requestBody.includes(token));
@@ -81,7 +89,8 @@ test("O2.5, O6.1, O6.3: with the right link, B's and C's numbers in the panel's 
   expect(numbersIn([...answers(exchanges, seededEvent), await dom(page)], phones, ["a", "e"])).toEqual([]);
   expect(panelRead.answer.includes(phones.b), "B's number in the panel's answer").toBe(true);
   expect(panelRead.answer.includes(phones.c), "C's number in the panel's answer").toBe(true);
-  expect(numbersIn([...answers(others, seededEvent), await dom(page)], phones, ["b", "c"])).toEqual([]);
+  // B's and C's numbers are shown in the panel's sections (#179), and nowhere else on the page.
+  expect(numbersIn([...answers(others, seededEvent), await domOutsidePanel(page)], phones, ["b", "c"])).toEqual([]);
 
   // O6.3: nothing touched the fragment.
   expect(await hashChanges()).toBe(0);
@@ -115,10 +124,11 @@ test("O2.9: the HTML of /e/{id}/admin holds no number of the scene, nor the pane
   const html = exchanges.filter((each) => each.html && each.path === `/e/${seededEvent.id}/admin`);
   expect(html.length, "HTML documents of /e/{id}/admin").toBe(1);
   expect(numbersIn(answers(html, seededEvent), phones, WITH_A_NUMBER)).toEqual([]);
-  expect(html[0].answer.includes("carsWithoutPhone"), "the panel's answer in the HTML").toBe(false);
-  // The witness: the word is the panel's, in its answer.
+  expect(html[0].answer.includes("carCount"), "the panel's answer in the HTML").toBe(false);
+  // The witness: a field of the panel's answer only, in its answer. Not « carsWithoutPhone »,
+  // which is also a message key since #179, and the messages are in the HTML.
   const [panelRead] = carrying(exchanges, seededEvent.token);
-  expect(panelRead?.answer.includes("carsWithoutPhone"), "the word in the panel's answer").toBe(true);
+  expect(panelRead?.answer.includes("carCount"), "the word in the panel's answer").toBe(true);
 });
 
 test("O7.6, O2.8: /e/{id} sends no number of the scene, and shows nothing of the organiser area", async ({

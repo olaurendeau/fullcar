@@ -26,7 +26,7 @@ export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) 
   // While the bar of messages shows, 112 px more below: nothing stays under it (C11.4).
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 p-4 has-data-[message-bar=open]:pb-[calc(1rem+112px+env(safe-area-inset-bottom))]">
-      <AdminArrival id={event.id} />
+      <AdminArrival id={event.id} allerAt={event.aller_at} retourAt={event.retour_at} />
       {/* Without JavaScript, the token cannot be checked: the panel's place says so (O5.5). */}
       <noscript>
         <p
