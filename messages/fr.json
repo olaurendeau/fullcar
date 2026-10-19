@@ -67,6 +67,7 @@
     },
     "withoutCar": "Sans voiture",
     "call": "Appeler {firstName} au {phone}",
+    "addPerson": "Ajouter une personne",
     "needsJavaScript": "S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page."
   },
   "DevicePersons": {
@@ -90,6 +91,30 @@
     "failed": "Vos inscriptions n’ont pas pu être chargées",
     "failedBody": "Rien ne peut être ajouté ni modifié tant qu’elles ne sont pas chargées. Vérifiez la connexion, puis réessayez.",
     "retry": "Réessayer"
+  },
+  "PersonForm": {
+    "title": {
+      "add": "Ajouter une personne"
+    },
+    "remember": "Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.",
+    "firstName": "Prénom",
+    "phone": "Téléphone (facultatif)",
+    "phoneHint": "Visible seulement par l’organisateur et par les personnes de la même voiture.",
+    "both": "Aller et retour",
+    "bothHint": {
+      "aller": "Décochez si cette personne ne fait que l’aller.",
+      "retour": "Décochez si cette personne ne fait que le retour."
+    },
+    "storage": {
+      "title": "Cet appareil ne pourra pas s’en souvenir",
+      "body": "Votre navigateur bloque le stockage : après la fermeture de la page, ces inscriptions ne pourront plus être modifiées depuis cet appareil."
+    }
+  },
+  "FormErrors": {
+    "required": "Champ requis.",
+    "tooLong": "{max} caractères au maximum.",
+    "invalidText": "Ce texte contient un caractère non autorisé.",
+    "invalidPhone": "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )"
   },
   "Actions": {
     "submit": "Valider",

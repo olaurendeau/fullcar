@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { uuidV4FromBytes } from "@/domain/creation-id";
 import { isPersonalToken, PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
-import type { DeviceStatus } from "@/domain/tap";
+import { afterRegistration, type DeviceStatus } from "@/domain/tap";
 
 /*
  * The only browser code that touches the personal token (docs/agents/architecture.md,
@@ -151,13 +151,15 @@ export function startDevice<T>(
 /**
  * The device's state on event `id` (`DeviceStatus`): `pending` until the browser has read
  * its key, then as `startDevice` says. `load` reads the device's persons with the token, and
- * `loaded` receives its answer. `retry` loads again, after a failure. Writes nothing (C1.13).
+ * `loaded` receives its answer. `retry` loads again, after a failure. `registered` says a
+ * person was just registered: a device without one is ready, with no reload (C2.2, C3.6).
+ * Writes nothing (C1.13).
  */
 export function useDevice<T>(
   id: string,
   load: (token: string) => Promise<T>,
   loaded: (value: T) => void,
-): { status: DeviceStatus; retry: () => void } {
+): { status: DeviceStatus; retry: () => void; registered: () => void } {
   const [status, setStatus] = useState<DeviceStatus>("pending");
   const [attempt, setAttempt] = useState(0);
   const onLoad = useEffectEvent(load);
@@ -168,5 +170,9 @@ export function useDevice<T>(
     [id, attempt],
   );
 
-  return { status, retry: () => setAttempt((count) => count + 1) };
+  return {
+    status,
+    retry: () => setAttempt((count) => count + 1),
+    registered: () => setStatus(afterRegistration),
+  };
 }

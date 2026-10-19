@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DevicePerson, DeviceState } from "./board";
-import { deviceKnown, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
+import { afterRegistration, deviceKnown, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
 
 function of(id: string, state: DeviceState): DevicePerson {
   return { id, firstName: id.toUpperCase(), state };
@@ -16,6 +16,20 @@ describe("deviceKnown (C5.9)", () => {
   it("is true once the device's persons are known: none, or read", () => {
     const known = (["pending", "none", "loading", "ready", "failed"] as const).filter(deviceKnown);
     expect(known).toEqual(["none", "ready"]);
+  });
+});
+
+describe("afterRegistration (C2.2, C3.6)", () => {
+  // The answer carries the device's persons: the next tap on a seat no longer opens the first registration.
+  it("makes a device without a person ready, with no reload", () => {
+    expect(afterRegistration("none")).toBe("ready");
+    expect(tapOutcome(afterRegistration("none"), [withoutCar("lea")])).toEqual({ kind: "place", personId: "lea" });
+  });
+
+  it("changes no other status", () => {
+    for (const status of ["pending", "loading", "ready", "failed"] as const) {
+      expect(afterRegistration(status)).toBe(status);
+    }
   });
 });
 

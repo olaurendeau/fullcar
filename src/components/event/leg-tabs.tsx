@@ -72,7 +72,7 @@ export function LegTabs(props: {
           <h2 id={`leg-${leg}`} className="sr-only text-lg font-semibold noscript:not-sr-only">
             {t(leg)}
           </h2>
-          <LegPanel at={at} board={board} device={props.device} />
+          <LegPanel at={at} board={board} device={props.device} hasRetour />
         </LegTabPanel>
       ))}
     </Tabs>

@@ -5,6 +5,7 @@ import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { CoverageBanner } from "./coverage-banner";
+import { AddPersonButton, type AddPerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import { WithoutCarList } from "./without-car-list";
 
@@ -14,6 +15,8 @@ export interface BoardDevice {
   retry: () => void;
   /** Gives the focus to a stable landmark, when what had it is gone. */
   refocus: () => void;
+  /** Registers a person on this device (R1), with the device's token. */
+  addPerson: AddPerson;
 }
 
 /**
@@ -31,11 +34,23 @@ export function LegTime({ at }: { at: WallClock }) {
 }
 
 /**
- * One leg (#86): its coverage first, then its cars, and its persons without a car. A leg
- * with neither a car nor a person shows the empty state of #3 instead, without a banner
- * (C9.6). The device's persons are above the tabs (`DevicePersons`, #162).
+ * One leg (#86): its coverage first, then its actions, side by side (v4-12), its cars, and
+ * its persons without a car. A leg with neither a car nor a person shows the empty state of
+ * #3 instead, without a banner, under the same actions (C9.6). The actions come before the
+ * cars, however many there are (C1.1), and are inactive until the device's persons are
+ * known (C5.9). The device's persons are above the tabs (`DevicePersons`, #162).
  */
-export function LegPanel({ at, board, device }: { at: WallClock; board: VisibleLegBoard; device: BoardDevice }) {
+export function LegPanel({
+  at,
+  board,
+  device,
+  hasRetour,
+}: {
+  at: WallClock;
+  board: VisibleLegBoard;
+  device: BoardDevice;
+  hasRetour: boolean;
+}) {
   const t = useTranslations("Event");
   const tBoard = useTranslations("Board");
   const { leg, cars, withoutCar } = board;
@@ -44,6 +59,14 @@ export function LegPanel({ at, board, device }: { at: WallClock; board: VisibleL
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {hasBanner(board) && <CoverageBanner board={board} />}
+      <div className="grid grid-cols-2 gap-2">
+        <AddPersonButton
+          leg={leg}
+          hasRetour={hasRetour}
+          disabled={!deviceKnown(device.status)}
+          addPerson={device.addPerson}
+        />
+      </div>
       <noscript>
         <p className="text-sm text-muted-foreground">{tBoard("needsJavaScript")}</p>
       </noscript>
