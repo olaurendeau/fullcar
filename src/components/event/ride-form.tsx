@@ -213,7 +213,6 @@ function RideForm({
   const ids = useId();
   const idOf = (name: string) => `${ids}-${name}`;
   const editing = mode.kind === "edit" ? mode : undefined;
-  const isEdit = editing !== undefined;
   const { persons, other } = mode.kind === "offer" ? mode : { persons: [], other: undefined };
   // What the form showed, in `edit` mode: a field left as it was is not sent (#208).
   const [shown] = useState(() => {
@@ -247,7 +246,10 @@ function RideForm({
   // In `edit` mode: the step shown, by its round, a new one at each refusal (C8.5), and that refusal said.
   const [step, setStep] = useState<number | null>(null);
   const [changed, setChanged] = useState(false);
-  const alert = problem ? tActions(problem) : changed ? tChanges("changed") : null;  const creationIds = useRef<CreationIds | undefined>(undefined);
+  const alert = problem ? tActions(problem) : changed ? tChanges("changed") : null;
+  // « Annuler » pressed in the step: the seats take the focus once the form shows again, and only then.
+  const backFromStep = useRef(false);
+  const creationIds = useRef<CreationIds | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
   // Each form its own, and its own subject, as in « Ajouter une personne »: an offer is a new car.
   // A change is about its car, whichever form sends it, apart from its removal (`ride:{id}`, #213):
@@ -258,13 +260,16 @@ function RideForm({
   useEffect(() => onStep?.(step !== null), [step, onStep]);
 
   // What had the focus is gone or inactive (« Valider » while it sent, the step left): « Valider »
-  // after a refusal, the seats once back from the step.
+  // after a refusal, the seats once back from the step. Not as the form mounts: a browser that
+  // does not focus a button on a click (Safari) opens it from <body>, and Radix gives its first field the focus.
   useEffect(() => {
+    const back = backFromStep.current;
+    if (step === null) backFromStep.current = false;
     const active = document.activeElement;
     if (sending || step !== null || (active !== null && active !== document.body)) return;
     if (problem || changed) submitButton.current?.focus();
-    else if (isEdit) document.getElementById(`${ids}-seats`)?.focus();
-  }, [problem, changed, sending, step, isEdit, ids]);
+    else if (back) document.getElementById(`${ids}-seats`)?.focus();
+  }, [problem, changed, sending, step, ids]);
 
   function showErrors(found: OfferErrors, missing: boolean, first: OfferField | undefined) {
     setProblem(null);
@@ -400,6 +405,7 @@ function RideForm({
         sending={sending}
         onSubmit={(seen, leaving) => void change(seen, leaving, stepSeats)}
         onCancel={() => {
+          backFromStep.current = true;
           setStep(null);
           setChanged(false);
           setProblem(null);

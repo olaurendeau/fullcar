@@ -163,6 +163,8 @@ describe("validateRideChange (C8.2)", () => {
     expect(validateRideChange({})).toEqual({ ok: true, change: {} });
     expect(validateRideChange({ note: " Coffre plein " })).toEqual({ ok: true, change: { note: "Coffre plein" } });
     expect(validateRideChange({ seats: "2", note: "" })).toEqual({ ok: true, change: { seats: 2, note: null } });
+    // A forged null is sent, not left out: an empty place is refused, not kept.
+    expect(validateRideChange({ location: null })).toEqual({ ok: false, errors: { location: "required" }, first: "location" });
     expect(validateRideChange({ location: " ", time: "25:00" })).toEqual({
       ok: false,
       errors: { location: "required", time: "invalid" },

@@ -85,6 +85,16 @@ test.describe("edit a car", () => {
     await expect(card(page, "Marc").getByRole("button", { name: "Modifier", exact: true })).toHaveCount(0);
   });
 
+  // Safari, and Firefox on macOS, do not focus a button on a click: the sheet opens from <body>.
+  test("opened without the focus on « Modifier », the sheet gives it to its first field", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await editButton(page).evaluate((button: HTMLElement) => {
+      button.blur();
+      button.click();
+    });
+    await expect(dialog(page, "Modifier la voiture").getByLabel("Lieu de départ")).toBeFocused();
+  });
+
   test("C8.2, C9.4: place, time, note and more seats; the card and the banner follow, the focus is back on « Modifier »", async ({ db, page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await expect(panel(page).getByRole("status")).toHaveText("1 sans voiture · 4 places libres");
