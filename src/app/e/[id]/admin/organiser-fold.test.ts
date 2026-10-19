@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { browserUnsafe } from "@/domain/test-browser-safe";
 import { keepFolded, organiserFold, readFolded, type FoldStorage } from "./organiser-fold";
 
 /** A `localStorage` in memory, whose every call is a spy. */
@@ -33,6 +35,8 @@ const full = () => {
 const A = "Ab3dEf7h";
 const B = "Xy4zWv9k";
 const KEY_A = `fullcar:organiser-folded:${A}`;
+/** Shaped as the organiser's token (22 base64url characters): never part of a key. */
+const TOKEN = "kP3x-Vb7_Zq9Lt2Wn8Rc4g";
 
 describe("readFolded", () => {
   // O8.5: folded only when the event's key holds exactly "1".
@@ -134,11 +138,88 @@ describe("per event", () => {
   });
 });
 
+describe("only for an event's public id", () => {
+  // O2.10 amended: a token passed by mistake never reaches the storage, nor does anything
+  // else that is not a public id. It reads as unfolded and nothing is written.
+  it.each([
+    ["the organiser's token", TOKEN],
+    ["the token behind a #", `#${TOKEN}`],
+    ["an empty string", ""],
+    ["an id with a path after it", `${A}/admin`],
+    ["an id with a newline after it", `${A}\n`],
+    ["an id one symbol short", A.slice(1)],
+  ])("%s reads unfolded and never reaches the storage", (_, id) => {
+    const key = `fullcar:organiser-folded:${id}`;
+    const storage = fakeStorage({ [key]: "1" });
+    const reach = vi.fn(() => storage);
+    const fold = organiserFold({ storage: reach });
+    expect(fold.readFolded(id)).toBe(false);
+    fold.keepFolded(id, true);
+    fold.keepFolded(id, false);
+    expect(reach).not.toHaveBeenCalled();
+    expect(keysPassed(storage)).toEqual([]);
+    expect([...storage.items]).toEqual([[key, "1"]]);
+  });
+});
+
+describe("console", () => {
+  const methods = ["log", "info", "warn", "error", "debug", "trace"] as const;
+  const throwing = (method: "getItem" | "setItem" | "removeItem", error: () => never) => () =>
+    organiserFold({ storage: () => ({ ...fakeStorage({ [KEY_A]: "1" }), [method]: error }) });
+
+  // O8.5: a storage that fails is dropped with no message and no log.
+  it.each<[string, () => void]>([
+    ["getItem throws", () => throwing("getItem", insecure)().readFolded(A)],
+    ["setItem throws", () => throwing("setItem", full)().keepFolded(A, true)],
+    ["removeItem throws", () => throwing("removeItem", insecure)().keepFolded(A, false)],
+    ["localStorage cannot be reached, on a read", () => organiserFold({ storage: insecure }).readFolded(A)],
+    ["localStorage cannot be reached, on a write", () => organiserFold({ storage: insecure }).keepFolded(A, true)],
+    ["the id is a token", () => foldWith(fakeStorage()).keepFolded(TOKEN, true)],
+  ])("receives nothing when %s", (_, act) => {
+    const spies = methods.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+    try {
+      act();
+      expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+});
+
 describe("bound to window.localStorage", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // O8.5: the bound functions read, write and remove in `window.localStorage`, and in no
+  // other storage of the window.
+  it("reads, writes and removes the event's key in window.localStorage only", () => {
+    const local = fakeStorage();
+    const session = fakeStorage();
+    vi.stubGlobal("window", { localStorage: local, sessionStorage: session });
+    keepFolded(A, true);
+    expect([...local.items]).toEqual([[KEY_A, "1"]]);
+    expect(readFolded(A)).toBe(true);
+    keepFolded(A, false);
+    expect(local.items.size).toBe(0);
+    expect(readFolded(A)).toBe(false);
+    expect(keysPassed(session)).toEqual([]);
+  });
+
   // Under Node there is no `window`: reaching it throws, which reads as unfolded.
   it("reads unfolded, and throws nothing, without a window", () => {
     expect(readFolded(A)).toBe(false);
     expect(() => keepFolded(A, true)).not.toThrow();
     expect(() => keepFolded(A, false)).not.toThrow();
+  });
+});
+
+describe("organiser-fold module", () => {
+  const source = readFileSync(new URL("./organiser-fold.ts", import.meta.url), "utf8");
+
+  // The browser loads it: its id check comes from public-id-format, not from public-id.
+  it("uses no Node built-in, nor the module that draws ids", () => {
+    expect(browserUnsafe(source)).toEqual([]);
+    expect(source).not.toMatch(/["']@\/domain\/public-id["']/);
   });
 });
