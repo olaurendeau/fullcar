@@ -1,7 +1,9 @@
 import type { Page, TestInfo } from "@playwright/test";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 /*
  * #3, C7.2: the pages of an event at WIDTH px (360 by default), without scrolling sideways.

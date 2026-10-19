@@ -1,5 +1,7 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 const FR = {
   title: "Titre",
@@ -452,8 +454,9 @@ test.describe("the date and time fields side by side (#114)", () => {
           await fillDatesAndTimes(page);
           await expectDateAndTimeSideBySide(page);
         } finally {
-          // The project's trace covers this context too, but is only kept when the context
-          // itself closes: closing the browser alone would lose it.
+          // No trace of this context: leaveNoToken() turns traces off for the whole file,
+          // whose creations reach the organiser's page, and Playwright takes a trace
+          // setting per file, not per describe.
           await context.close();
         }
       } finally {

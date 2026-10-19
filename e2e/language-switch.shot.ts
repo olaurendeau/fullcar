@@ -1,6 +1,8 @@
 import type { Page, TestInfo } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 /*
  * #113, #132: the pages of the footer's language button at WIDTH px (360 by default), in
@@ -41,13 +43,7 @@ const PAGES: [string, string, (event: SeededEvent) => string, string, Arrival][]
   ["the organiser's page, no token", "admin-sans-jeton", ({ id }) => `/e/${id}/admin`, "Tournoi de Rennes", "alert"],
 ];
 
-// The organiser's page shows its own link, fragment included: nothing written on failure
-// may carry it. Neither a trace, nor the page snapshot Playwright puts in error-context.md
-// when the context closes: the page is left before.
-test.use({ locale: "fr-FR", trace: "off" });
-test.afterEach(async ({ page }) => {
-  await page.goto("about:blank");
-});
+test.use({ locale: "fr-FR" });
 
 /** Hydrated: the button active, and on the organiser's page the panel or the alert, in that language. */
 async function settled(page: Page, words: Words, arrival: Arrival) {

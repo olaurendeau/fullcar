@@ -5,7 +5,9 @@ import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { failActions, holdActions, holdToken, newToken } from "./device";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 // #87, #162: « Vos inscriptions », the device's persons above the tabs, one row each, one cell per leg.
 
