@@ -1,6 +1,6 @@
 import type { Kysely } from "kysely";
 import { insertPerson, lockPersons, readTokenHolders } from "@/db/persons";
-import { deletePlacement, findPlacement, setPlacement, type PlacementRef } from "@/db/placements";
+import { deletePlacement, findPlacement, seatedOnLeg, setPlacement, type PlacementRef } from "@/db/placements";
 import { findDrivenRide, insertRide, lockRides, type RideRef } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
@@ -10,7 +10,16 @@ import { eventLegs, LEGS, otherLeg as otherLegOf, type Leg } from "@/domain/leg"
 import { validatePerson, type NewPerson, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
 import { isPublicId } from "@/domain/public-id";
-import { validateRide, type NewRide, type RideError, type RideErrors, type RideField } from "@/domain/ride";
+import {
+  passengersFit,
+  seatsDecision,
+  validateRide,
+  validSeats,
+  type NewRide,
+  type RideError,
+  type RideErrors,
+  type RideField,
+} from "@/domain/ride";
 import { hashToken, tokenMatches } from "@/domain/token-hash";
 import { findPublicEvent } from "./event";
 import type { EventState } from "./event-state";
@@ -25,6 +34,9 @@ import type { EventState } from "./event-state";
  * `otherLeg` is what becomes of the driver on the other leg, `keep` when absent (C4.11):
  * `{ kind: "keep" }`, `{ kind: "withoutCar" }`, `{ kind: "notConcerned" }`, or
  * `{ kind: "drive", rideId, location, time }`, a second car with this one's seats and note.
+ *
+ * `passengerIds` are those ticked in « Qui monte avec vous ? » (C4.13), none when absent:
+ * persons of the device, each once, not the driver, at most as many as the seats.
  */
 export interface RideOffer {
   rideId?: unknown;
@@ -36,26 +48,31 @@ export interface RideOffer {
   seats?: unknown;
   note?: unknown;
   otherLeg?: unknown;
+  passengerIds?: unknown;
 }
 
 /** The place and time of the car on the other leg, after this car's fields in the form. */
 const OTHER_LEG_FIELDS = ["otherLocation", "otherTime"] as const;
 type OtherLegField = (typeof OTHER_LEG_FIELDS)[number];
 
-export type OfferField = PersonField | RideField | OtherLegField;
-export type OfferErrors = PersonErrors & RideErrors & Partial<Record<OtherLegField, RideError>>;
+/** More ticked in « Qui monte avec vous ? » than the car has seats: the last field of the form. */
+type PassengersErrors = { passengers?: "tooMany" };
+
+export type OfferField = PersonField | RideField | OtherLegField | "passengers";
+export type OfferErrors = PersonErrors & RideErrors & Partial<Record<OtherLegField, RideError>> & PassengersErrors;
 
 /**
  * - `eventNotFound`: no such event (or a malformed id, never looked up);
  * - `invalid`: what no form sends (an id or a leg malformed, a leg the event does
  *   not have, a new driver without a well-formed token, another leg than `keep` on an
- *   event without a retour, one id for both cars);
- * - `forbidden`: the driver is not a person of this device;
+ *   event without a retour, one id for both cars, a passenger ticked twice, the driver ticked);
+ * - `forbidden`: the driver, or a passenger, is not a person of this device;
  * - `alreadyDriving`: she drives another car on this leg, or drives on the other leg and
  *   the offer would change it (C4.6);
+ * - `alreadyInCar`: a passenger is in another car on this leg, or drives on it (C4.13);
  * - `idTaken`: a Ride's id, or the new driver's, is held by someone else.
  */
-export type OfferRefusal = "invalid" | "eventNotFound" | "forbidden" | "alreadyDriving" | "idTaken";
+export type OfferRefusal = "invalid" | "eventNotFound" | "forbidden" | "alreadyDriving" | "alreadyInCar" | "idTaken";
 
 export type OfferRideResult =
   | { ok: true; rideId: string; driverId: string }
@@ -93,6 +110,7 @@ interface Offer {
   driver: Driver;
   ride: NewRide;
   otherLeg: OtherLeg;
+  passengerIds: string[];
 }
 
 /** Thrown inside the transaction, so that what was written before it is rolled back. */
@@ -145,9 +163,19 @@ function readOtherLeg(offer: Record<string, unknown>): OtherLegRead | undefined 
   return { kind, rideId, ride: ride.ok ? ride.ride : undefined, errors };
 }
 
+/** Those ticked, none when absent; nothing for a list no form sends. */
+function readPassengers(value: unknown, driverId: string): string[] | undefined {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || !value.every(isCreationId)) return undefined;
+  const ids: string[] = value;
+  if (new Set(ids).size !== ids.length || ids.includes(driverId)) return undefined;
+  return ids;
+}
+
 /**
  * The offer checked against the rules of R1 and R4, in the order of the form: the
- * driver's fields, this car's, then the other leg's. Nothing for what no form sends.
+ * driver's fields, this car's, the other leg's, then the passengers (C4.13), counted
+ * against the seats whenever these are right. Nothing for what no form sends.
  */
 function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefined {
   const offer = fieldsOf(input);
@@ -159,16 +187,22 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
   const newcomer = kind === "new" && isPersonalToken(token);
   if (kind !== "device" && !newcomer) return undefined;
   const other = readOtherLeg(offer);
-  if (other === undefined) return undefined;
+  const passengerIds = readPassengers(offer.passengerIds, personId);
+  if (other === undefined || passengerIds === undefined) return undefined;
 
   const person = kind === "new" ? validatePerson({ firstName: driver.firstName, phone: driver.phone }) : undefined;
   const ride = validateRide({ location: offer.location, time: offer.time, seats: offer.seats, note: offer.note });
-  const otherFirst = OTHER_LEG_FIELDS.find((field) => other.errors[field] !== undefined);
-  if (person?.ok === false || !ride.ok || otherFirst !== undefined) {
+  const seats = validSeats(offer.seats);
+  const passengers: PassengersErrors =
+    seats !== undefined && !passengersFit(passengerIds.length, seats) ? { passengers: "tooMany" } : {};
+  const lastFirst =
+    OTHER_LEG_FIELDS.find((field) => other.errors[field] !== undefined) ??
+    (passengers.passengers ? "passengers" : undefined);
+  if (person?.ok === false || !ride.ok || lastFirst !== undefined) {
     // In the order of the form: the first one in error gets the focus.
     const failures = [person, ride].flatMap((check) => (check?.ok === false ? [check] : []));
-    const errors: OfferErrors = Object.assign({}, ...failures.map((failure) => failure.errors), other.errors);
-    return { ok: false, errors, first: failures[0]?.first ?? otherFirst ?? "otherLocation" };
+    const errors: OfferErrors = Object.assign({}, ...failures.map((failure) => failure.errors), other.errors, passengers);
+    return { ok: false, errors, first: failures[0]?.first ?? lastFirst ?? "otherLocation" };
   }
   // This car's seats and note checked, and the other's place and time: so is the other car.
   const otherLeg: OtherLeg | undefined =
@@ -181,6 +215,7 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
       newcomer && person?.ok ? { kind: "new", personId, person: person.person, token } : { kind: "device", personId },
     ride: ride.ride,
     otherLeg,
+    passengerIds,
   };
 }
 
@@ -192,13 +227,15 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
  * 3. on the other leg, as `otherLeg` says: unchanged, without a car, not concerned, or
  *    driving a second car with the same seats and note (C4.2, C4.11), leaving her seat
  *    there unless she keeps it (C4.12);
- * 4. the Ride is inserted on this leg.
+ * 4. the Ride is inserted on this leg;
+ * 5. those ticked board it, on this leg only, unless one of them is in another car or
+ *    drives there (C4.13); one not concerned by the leg is placed too, as in the sheet.
  *
  * A malformed id is refused as `eventNotFound` before anything, field errors included, and
  * never looked up. A well-formed offer with field errors gets them, on an unknown event
  * too, as updateRide does; what no form sends is `invalid` for a known event, and
  * `eventNotFound` for an unknown one. Sent again, the same offer writes nothing more and
- * succeeds (C4.10).
+ * succeeds (C4.10): no passenger is placed twice, nor again once she left.
  *
  * The application passes the connection: a refusal after a write throws inside the
  * transaction `atomically` opens, which rolls it back, and that transaction is READ
@@ -249,7 +286,7 @@ async function offerOnce(
   trx: Kysely<Database>,
   eventId: string,
   token: unknown,
-  { rideId, leg, driver, ride, otherLeg }: Offer,
+  { rideId, leg, driver, ride, otherLeg, passengerIds }: Offer,
 ): Promise<OfferRideResult> {
   const event = await findPublicEvent(trx, eventId);
   if (event === undefined) throw new Refused("eventNotFound");
@@ -258,11 +295,14 @@ async function offerOnce(
   if (!legs.includes(leg) || (otherLeg.kind !== "keep" && !legs.includes(other))) throw new Refused("invalid");
 
   const driverId = driver.personId;
+  const device = devicePersonIds(token, await readTokenHolders(trx, eventId));
+  // Before any write, so that a transaction passed in is left as it was.
+  if (!passengerIds.every((id) => device.includes(id))) throw new Refused("forbidden");
   if (driver.kind === "new") {
     const tokenHash = hashToken(driver.token);
     const stored = await insertPerson(trx, { id: driverId, eventId, ...driver.person, tokenHash });
     if (stored === undefined || !tokenMatches(token, stored.tokenHash)) throw new Refused("idTaken");
-  } else if (!devicePersonIds(token, await readTokenHolders(trx, eventId)).includes(driverId)) {
+  } else if (!device.includes(driverId)) {
     throw new Refused("forbidden");
   }
 
@@ -270,9 +310,9 @@ async function offerOnce(
   const here = { personId: driverId, eventId, leg };
   const there = { personId: driverId, eventId, leg: other };
   const leaving = otherLeg.kind === "keep" ? [here] : [here, there];
-  // Lock order: the Rides she sits in, by ascending id, then her Person, which the triggers
-  // on ride lock too. By leg, two offers leaving the same two Rides in reverse roles would
-  // each hold one and wait for the other.
+  // Lock order: the Rides she sits in, by ascending id, then her Person and her passengers',
+  // by ascending id, which the triggers on ride and placement lock too. By leg, two offers
+  // leaving the same two Rides in reverse roles would each hold one and wait for the other.
   const seats = await seatsOf(trx, leaving);
   await lockRides(
     trx,
@@ -281,7 +321,7 @@ async function offerOnce(
       return id === null ? [] : [{ id, eventId, leg: placement.leg }];
     }),
   );
-  await lockPersons(trx, eventId, [driverId]);
+  await lockPersons(trx, eventId, [driverId, ...passengerIds]);
   // Her Person locked, only a write that holds her Ride can move her: locked if it was hers.
   const seatsNow = await seatsOf(trx, leaving);
   if (seatsNow.some((seat, at) => seat !== null && seat !== seats[at])) throw new DriverMoved();
@@ -293,6 +333,15 @@ async function offerOnce(
   if (otherLeg.kind !== "keep" && (await findDrivenRide(trx, { driverId, eventId, leg: other })) !== undefined) {
     throw new Refused("alreadyDriving");
   }
+  // Their Persons locked, no other write can seat them on this leg meanwhile. The new car
+  // is empty, and passengersFit counted them against its seats: none is short.
+  const boarding = seatsDecision({
+    seats: ride.seats,
+    passengerIds: [],
+    personIds: passengerIds,
+    elsewhereIds: await seatedOnLeg(trx, eventId, leg),
+  });
+  if (!boarding.ok) throw new Refused(boarding.error === "alreadyInCar" ? "alreadyInCar" : "invalid");
 
   // Her Placements before the Rides she drives: the trigger of C12.8 refuses a Ride whose
   // driver is still placed on its leg.
@@ -301,5 +350,6 @@ async function offerOnce(
   if (otherLeg.kind === "notConcerned" || otherLeg.kind === "drive") await deletePlacement(trx, there);
   if (otherLeg.kind === "drive") await storeRide(trx, { id: otherLeg.rideId, eventId, leg: other }, driverId, otherLeg.ride);
   await storeRide(trx, { id: rideId, eventId, leg }, driverId, ride);
+  for (const personId of boarding.place) await setPlacement(trx, { personId, eventId, leg, rideId });
   return { ok: true, rideId, driverId };
 }
