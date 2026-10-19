@@ -26,30 +26,51 @@ describe("tokenInFragment", () => {
 });
 
 describe("checkFromAnswer", () => {
-  // C4.9: the panel only on the server's `true`.
-  it("shows the panel when the server answers true", () => {
-    expect(checkFromAnswer(true, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toEqual({
+  const legs = [
+    { leg: "aller", coverage: { withoutCar: 0, freeSeats: 0 }, carCount: 0, withoutCar: [], carsWithoutPhone: [] },
+  ];
+
+  // C4.9 as amended by #154: the panel only on the server's panel, with its legs.
+  it("shows the panel, with its legs, when the server answers the panel", () => {
+    expect(checkFromAnswer({ state: "panel", legs }, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toStrictEqual({
       state: "valid",
       ...organiserLinks("https://fullcar.example", "Ab3dEf7h", TOKEN),
+      legs,
+    });
+    expect(checkFromAnswer({ state: "panel", legs: [] }, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toMatchObject({
+      state: "valid",
+      legs: [],
     });
   });
 
-  // C6.5: "not valid" only on the server's `false`.
-  it("calls the link invalid when the server answers false", () => {
-    expect(checkFromAnswer(false, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toEqual({ state: "invalid" });
+  // C6.5: "not valid" only on the server's invalid.
+  it("calls the link invalid when the server answers invalid", () => {
+    expect(checkFromAnswer({ state: "invalid" }, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toStrictEqual({
+      state: "invalid",
+    });
+  });
+
+  it("says the check failed on the panel without a token to make the links of", () => {
+    expect(checkFromAnswer({ state: "panel", legs }, "https://fullcar.example", "Ab3dEf7h", "")).toEqual({
+      state: "failed",
+    });
   });
 
   // A good link must never read "not valid": Next resolves an action with undefined on
   // an `x-action-redirect` response, for one.
   it.each([
+    ["true", true],
+    ["false", false],
     ["undefined", undefined],
     ["null", null],
-    ["the string true", "true"],
-    ["the string false", "false"],
+    ["the string invalid", "invalid"],
     ["0", 0],
     ["an object", { ok: true }],
+    ["the panel without legs", { state: "panel" }],
+    ["the panel with legs that are not a list", { state: "panel", legs: {} }],
+    ["another state", { state: "other" }],
   ])("says the check failed when the server answers %s", (_, answer) => {
-    expect(checkFromAnswer(answer, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toEqual({ state: "failed" });
+    expect(checkFromAnswer(answer, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toStrictEqual({ state: "failed" });
   });
 });
 

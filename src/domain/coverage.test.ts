@@ -79,6 +79,12 @@ describe.each([
   });
 });
 
+// O1.1: the organiser area's legs have no device section; the same count serves them.
+it("counts a leg given by its cars and its persons without a car alone", () => {
+  const { cars, withoutCar } = aller([ride("r1", "marc", 3)], [placed("lea", "r1"), placed("tom", null)]);
+  expect(coverage({ cars, withoutCar })).toEqual({ withoutCar: 1, freeSeats: 2 });
+});
+
 describe("C9.1: coverageBanner chooses the form of the banner", () => {
   it("N = 0 and M = 0: everybody has a seat, no free seat to mention", () => {
     expect(coverageBanner({ withoutCar: 0, freeSeats: 0 })).toEqual({ kind: "everyoneSeated", freeSeats: 0 });

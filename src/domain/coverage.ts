@@ -12,7 +12,8 @@ export interface Coverage {
   freeSeats: number;
 }
 
-export function coverage(leg: LegBoard): Coverage {
+/** Of a leg of the board, or of the organiser area: its cars and its persons without a car are enough. */
+export function coverage(leg: Pick<LegBoard, "cars" | "withoutCar">): Coverage {
   return {
     withoutCar: leg.withoutCar.length,
     freeSeats: leg.cars.reduce((sum, car) => sum + car.freeSeats, 0),
