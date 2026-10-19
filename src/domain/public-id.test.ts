@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { generatePublicId, isPublicId, PUBLIC_ID_ALPHABET } from "./public-id";
+import { browserUnsafe } from "./test-browser-safe";
 
 // Spies on the real CSPRNG, so the default byte source is proven, not assumed.
 vi.mock("node:crypto", async (importOriginal) => {
@@ -100,5 +102,14 @@ describe("isPublicId", () => {
 
   it("refuses a valid id followed by a newline", () => {
     expect(isPublicId("23456789\n")).toBe(false);
+  });
+});
+
+describe("public-id-format module", () => {
+  const source = readFileSync(new URL("./public-id-format.ts", import.meta.url), "utf8");
+
+  // The browser checks an id before keying anything with it (organiser-fold.ts).
+  it("uses no Node built-in, with or without node:, nor Buffer, so the browser can load it", () => {
+    expect(browserUnsafe(source)).toEqual([]);
   });
 });
