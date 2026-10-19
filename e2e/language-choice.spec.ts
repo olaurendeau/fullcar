@@ -1,6 +1,8 @@
 import type { BrowserContext, Page, Request } from "@playwright/test";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
 
 /*
  * #113, #130: the language chosen is kept by the device, in the cookie NEXT_LOCALE, and
