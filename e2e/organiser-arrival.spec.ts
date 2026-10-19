@@ -264,7 +264,10 @@ test("O5.8: « Réessayer » clicked, then the panel: the focus goes to its titl
   await page.goto(organiserPath(seededEvent));
   await expect(alert(page)).toContainText(FR.failed);
 
-  // Read as soon as the page has changed: before the browser paints, and before React's passive effects.
+  // Read as soon as the page has changed, before the browser paints. This does not tell
+  // useLayoutEffect from useEffect: the screen's state comes from a dispatch in a layout
+  // effect, and on React 19.3 that render runs its passive effects before control returns.
+  // What it catches is a focus set in a later task, after <body> has had it.
   await page.evaluate(() => {
     const seen: string[] = [];
     Object.assign(window, { focusSeen: seen });

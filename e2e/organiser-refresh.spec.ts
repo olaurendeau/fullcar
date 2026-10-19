@@ -205,8 +205,9 @@ for (const failing of ["board", "panel"] as const) {
       await expect(refresh(page)).not.toHaveAttribute("aria-disabled");
       expect(reads).toEqual({ panel: 1, board: 1 });
 
-      expect(await panelText(page)).toBe(panelBefore);
-      expect(await board(page).innerText()).toBe(boardBefore);
+      // Compared, never printed: the panel holds the admin link and numbers.
+      expect((await panelText(page)) === panelBefore, "the panel's text is the same").toBe(true);
+      expect((await board(page).innerText()) === boardBefore, "the board's text is the same").toBe(true);
       await expect(page.getByText(NEWCOMER)).toHaveCount(0);
       await expect(status(page)).toHaveText("");
     });
@@ -280,7 +281,8 @@ test("O2.7: once C has a seat at the aller, the answers to « Actualiser » hold
   const after = (await answers()).slice(before.length);
   expect(after.length, "answers to « Actualiser »").toBe(2);
   expect(after.filter(holdsHers).length, "answers with C's number").toBe(0);
-  await expect(allerSection(page)).not.toContainText("Chloé");
+  // A count, not the section's text, which holds numbers.
+  await expect(allerSection(page).getByText("Chloé")).toHaveCount(0);
 });
 
 test("O5.4: a read that ends under a sheet writes nothing there; its alert comes once the sheet is closed", async ({
