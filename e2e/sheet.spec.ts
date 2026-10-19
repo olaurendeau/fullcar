@@ -254,6 +254,7 @@ test.describe("the sheet", () => {
     await expect(zoe).toBeChecked();
     expect((await candidates(sophie)).at(-1)).toEqual({ name: "Zoé", state: "Sans voiture", checked: true });
     await expect(placeButton(sophie)).toHaveText("Placer 3 personnes");
+    await expect(sophie.getByText("Il reste 3 places dans cette voiture", { exact: true })).toBeVisible();
 
     await sophie.getByRole("button", { name: "Fermer" }).click();
     await expect(sophie).toHaveCount(0);
