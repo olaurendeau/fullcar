@@ -142,7 +142,7 @@
     "adminLink": {
       "label": "Organiser link",
       "badge": "Personal",
-      "hint": "Do not share it: it lets anyone change everything."
+      "hint": "Do not share it: it shows phone numbers and lets anyone change everything."
     },
     "keep": {
       "title": "Keep this link",
@@ -162,7 +162,25 @@
     },
     "loading": "Loading the organiser area…",
     "retry": "Try again",
-    "needsJavaScript": "The organiser area needs JavaScript: turn it on, then reload the page."
+    "needsJavaScript": "The organiser area needs JavaScript: turn it on, then reload the page.",
+    "withoutCar": {
+      "title": "Without a car ({count})",
+      "hint": "These numbers are shown to you to arrange the cars: do not pass them on.",
+      "empty": "Nobody is without a car."
+    },
+    "noPhone": "No number",
+    "carsWithoutPhone": {
+      "title": "Cars without a number ({count})",
+      "hint": "The people on board cannot call the driver. Ask the driver to add a number.",
+      "empty": "Every car has a number."
+    },
+    "car": {
+      "summary": "{taken, plural, =0 {No seat taken} one {# seat taken} other {# seats taken}} · {free, plural, =0 {Full} one {# free seat} other {# free seats}}"
+    },
+    "list": {
+      "more": "{count, plural, one {Show the other one} other {Show the # others}}",
+      "less": "Show fewer"
+    }
   },
   "EventNotFound": {
     "title": "Event not found",

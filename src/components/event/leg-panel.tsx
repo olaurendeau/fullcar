@@ -1,11 +1,11 @@
-import { Car } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
-import { hasBanner } from "@/domain/coverage";
+import { coverage, hasBanner } from "@/domain/coverage";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
+import { EmptyLeg } from "./empty-leg";
 import { AddPersonButton, type AddPerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import { WithoutCarList } from "./without-car-list";
@@ -61,7 +61,7 @@ export function LegPanel({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {hasBanner(board) && <CoverageBanner board={board} />}
+      {hasBanner(board) && <CoverageBanner coverage={coverage(board)} />}
       <div className="grid grid-cols-2 gap-2">
         <AddPersonButton
           leg={leg}
@@ -85,13 +85,7 @@ export function LegPanel({
           {withoutCar.length > 0 && <WithoutCarList leg={leg} persons={withoutCar} />}
         </>
       ) : (
-        <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed px-4 py-7 text-center">
-          <div className="mb-1.5 grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground">
-            <Car className="size-5" />
-          </div>
-          <p className="font-semibold">{t(`noCar.${leg}`)}</p>
-          <p className="text-sm text-muted-foreground">{t("nobody")}</p>
-        </div>
+        <EmptyLeg leg={leg} />
       )}
     </div>
   );

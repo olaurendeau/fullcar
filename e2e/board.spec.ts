@@ -5,6 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { htmlByLegSection } from "./organiser";
 
 leaveNoToken();
 
@@ -269,8 +270,8 @@ test.describe("board without a retour, JavaScript disabled", () => {
  * or without the organiser's link, with or without JavaScript, but in one answer: with a valid
  * organiser's link and JavaScript, `loadOrganiserPanel` sends the numbers of the persons
  * without a car, Tom's and Léa's, never those of Marc and Zoé, who drive. Searched in every
- * answer the page receives (HTML, RSC, scripts, the link's check) and in its final DOM, which
- * shows none until the panel lists them (#179). A body that cannot be read fails the test.
+ * answer the page receives (HTML, RSC, scripts, the link's check) and in its final DOM, where
+ * only the panel lists them (#179). A body that cannot be read fails the test.
  * This browser holds no personal token: e2e/device-persons.spec.ts covers one that does,
  * whose cards show numbers.
  */
@@ -356,7 +357,25 @@ for (const javaScriptEnabled of [true, false]) {
 
         const dom = await page.content();
         expect(dom).toContain("Marc");
-        expectNoNumber("the DOM", dom);
+        if (javaScriptEnabled && organiser) {
+          // The panel's sections list Tom's and Léa's numbers (#179, DO1), each in its own leg's
+          // only, visible or hidden: Tom's at the aller, Léa's at the retour. No driver's, and
+          // none elsewhere on the page.
+          const { sections, rest } = await htmlByLegSection(page);
+          expect(Object.keys(sections)).toEqual(["aller", "retour"]);
+          for (const [leg, own] of [
+            ["aller", PHONES.tom],
+            ["retour", PHONES.lea],
+          ] as const) {
+            expect(sections[leg].includes(own), `the ${leg} section shows its own number`).toBe(true);
+            const others = digitsToo(Object.values(PHONES).filter((phone) => phone !== own));
+            const shown = others.filter((form) => sections[leg].includes(form));
+            expect(shown.length, `other numbers in the ${leg} section`).toBe(0);
+          }
+          expect(LEAKS.filter((form) => rest.includes(form)).length, "numbers outside the sections").toBe(0);
+        } else {
+          expectNoNumber("the DOM", dom);
+        }
         const received = await Promise.all(bodies);
         expect(received.length).toBeGreaterThan(0);
         for (const read of received) expectNoNumber(read.url, readText(read));

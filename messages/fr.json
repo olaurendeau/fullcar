@@ -142,7 +142,7 @@
     "adminLink": {
       "label": "Lien d’organisateur",
       "badge": "Personnel",
-      "hint": "Ne le partagez pas : il permet de tout modifier."
+      "hint": "Ne le partagez pas : il montre des numéros de téléphone et permet de tout modifier."
     },
     "keep": {
       "title": "Gardez ce lien",
@@ -162,7 +162,25 @@
     },
     "loading": "Chargement de l’espace organisateur…",
     "retry": "Réessayer",
-    "needsJavaScript": "L’espace organisateur nécessite JavaScript : activez-le, puis rechargez la page."
+    "needsJavaScript": "L’espace organisateur nécessite JavaScript : activez-le, puis rechargez la page.",
+    "withoutCar": {
+      "title": "Sans voiture ({count})",
+      "hint": "Ces numéros vous sont montrés pour organiser les voitures : ne les diffusez pas.",
+      "empty": "Personne n’est sans voiture."
+    },
+    "noPhone": "Pas de numéro",
+    "carsWithoutPhone": {
+      "title": "Voitures sans numéro ({count})",
+      "hint": "Les personnes à bord ne peuvent pas appeler la personne qui conduit. Demandez-lui d’ajouter son numéro.",
+      "empty": "Toutes les voitures ont un numéro."
+    },
+    "car": {
+      "summary": "{taken, plural, =0 {Aucune place prise} one {# place prise} other {# places prises}} · {free, plural, =0 {Complet} one {# place libre} other {# places libres}}"
+    },
+    "list": {
+      "more": "{count, plural, one {Afficher l’autre} other {Afficher les # autres}}",
+      "less": "Réduire la liste"
+    }
   },
   "EventNotFound": {
     "title": "Événement introuvable",

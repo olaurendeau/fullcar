@@ -2,27 +2,47 @@
 
 import { Lock, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useId, type ReactNode, type Ref } from "react";
+import { useCallback, useId, useState, type ReactNode, type Ref } from "react";
+import type { OrganiserLeg } from "@/domain/organiser-panel";
+import type { WallClock } from "@/domain/wall-clock";
 import { CopyableLink, ShareButton } from "./copyable-link";
+import { OrganiserLegs } from "./organiser-leg";
 import { ReadButton } from "./read-button";
 
 /**
  * The organiser's panel (#3, R4), the same at every visit (C4.7), in the order of C4.1:
- * the link to share, the organiser's own link as personal, then why to keep it. It
- * receives the organiser's link ready-made: reading the token is admin-link.ts's alone.
- * Its title takes the focus after « Réessayer » (O5.8), through `titleRef`.
+ * the link to share, the organiser's own link as personal, then why to keep it; under it, a
+ * section per leg (#179). It receives the organiser's link ready-made: reading the token is
+ * admin-link.ts's alone. Its title takes the focus after « Réessayer » (O5.8), through
+ * `titleRef`. Which lists are unfolded is kept here, by leg and list (O5.6).
  */
 export function AdminPanel({
   publicUrl,
   adminUrl,
   titleRef,
+  legs,
+  allerAt,
+  retourAt,
 }: {
   publicUrl: string;
   adminUrl: string;
   titleRef?: Ref<HTMLHeadingElement>;
+  legs: OrganiserLeg[];
+  allerAt: WallClock;
+  retourAt: WallClock | null;
 }) {
   const t = useTranslations("Admin");
   const titleId = useId();
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = useCallback(
+    (key: string) =>
+      setExpanded((was) => {
+        const next = new Set(was);
+        if (!next.delete(key)) next.add(key);
+        return next;
+      }),
+    [],
+  );
 
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-xl border p-4">
@@ -50,6 +70,7 @@ export function AdminPanel({
         <CopyableLink url={adminUrl} />
       </LinkGroup>
       <Notice title={t("keep.title")} body={t("keep.body")} />
+      <OrganiserLegs legs={legs} allerAt={allerAt} retourAt={retourAt} expanded={expanded} onToggle={toggle} />
     </section>
   );
 }

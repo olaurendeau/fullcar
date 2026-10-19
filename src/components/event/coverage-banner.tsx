@@ -1,16 +1,16 @@
 import { CircleCheck, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { LegBoard } from "@/domain/board";
-import { coverage, coverageBanner } from "@/domain/coverage";
+import { coverageBanner, type Coverage } from "@/domain/coverage";
 import { cn } from "@/lib/utils";
 
 /**
  * How many persons are still without a car on the leg, against its free seats (C9.1).
- * The form is the domain's; the words and the plurals are the locale's.
+ * The form is the domain's; the words and the plurals are the locale's. It is a live region
+ * unless `live` is false: the organiser area shows it again, and the board announces it already.
  */
-export function CoverageBanner({ board }: { board: LegBoard }) {
+export function CoverageBanner({ coverage, live = true }: { coverage: Coverage; live?: boolean }) {
   const t = useTranslations("Board.banner");
-  const banner = coverageBanner(coverage(board));
+  const banner = coverageBanner(coverage);
   const text =
     banner.kind === "everyoneSeated"
       ? banner.freeSeats > 0
@@ -23,7 +23,7 @@ export function CoverageBanner({ board }: { board: LegBoard }) {
 
   return (
     <p
-      role="status"
+      role={live ? "status" : undefined}
       className={cn(
         "flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm font-medium",
         banner.kind === "missingSeats" ? "bg-amber-100 text-amber-950" : "bg-muted",
