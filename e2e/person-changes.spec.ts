@@ -339,17 +339,22 @@ test.describe("person changes", () => {
       await page.keyboard.press("Escape");
       if (closing) await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
       else await expect(page.getByRole("dialog")).toHaveCount(0);
+      const seen = await watchAlerts(page);
+      const release = async () => {
+        const responded = page.waitForResponse((response) => response.status() === 500);
+        answer();
+        await responded;
+        if (closing) expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      };
+      // Answered while the first sheet closes, then reopened: the new one takes its place in one commit.
+      if (when === "reopened while closing") await release();
       const lea = sheet(page, "Léa · Aller");
       if (when.startsWith("reopened")) {
         await hiddenCell(page, "Léa, Aller : Avec Marc").focus();
         await page.keyboard.press("Enter");
         await expect(lea).toBeVisible();
       }
-      const seen = await watchAlerts(page);
-      const responded = page.waitForResponse((response) => response.status() === 500);
-      answer();
-      await responded;
-      if (when === "closing") expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      if (when !== "reopened while closing") await release();
       if (when.startsWith("reopened")) {
         // Léa's change succeeds once Tom's has failed: it neither clears nor replaces that message.
         await expect(async () => {
