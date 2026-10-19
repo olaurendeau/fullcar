@@ -278,29 +278,40 @@ test.describe("edit a person", () => {
     });
   }
 
-  // The failure is about Claire, not about the sheet that sent it (#208).
-  test("a change that failed, sent again from a reopened sheet and done: nothing left to say", async ({ db, page, seededEvent }) => {
-    const answer = await holdFirst(page, "Clara", true);
-    await page.goto(`/e/${seededEvent.id}`);
-    await sendThenClose(page);
-    await nameButton(page, "Claire").click();
-    // Failed while the reopened sheet hides the page: the message waits.
-    await expect(dialog(page, "Claire")).toBeVisible();
-    await fail(page, answer);
-    await dialog(page, "Claire").getByRole("button", { name: "Modifier", exact: true }).click();
-    const form = dialog(page, "Modifier Claire");
-    await form.getByLabel("Prénom").fill("Clara");
-    await form.getByRole("button", { name: "Valider" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(nameButton(page, "Clara")).toBeFocused();
+  // The failure is about Claire's first name, not about the sheet that sent it (#208). Sent
+  // again before it comes, the change goes once it has: its answer withdraws the failure, if it
+  // carries the first name. The number alone leaves it to say.
+  for (const when of ["after", "before"] as const) {
+    for (const resent of ["Clara", "the number alone"] as const) {
+      const title = `a change that failed, then ${resent} sent from a reopened sheet ${when} the failure, and done`;
+      test(`${title}: ${resent === "Clara" ? "nothing left to say" : "the failure is said"}`, async ({ db, page, seededEvent }) => {
+        const answer = await holdFirst(page, "Clara", true);
+        await page.goto(`/e/${seededEvent.id}`);
+        await sendThenClose(page);
+        await nameButton(page, "Claire").click();
+        // Failed while the reopened sheet hides the page: the message waits.
+        await expect(dialog(page, "Claire")).toBeVisible();
+        if (when === "after") await fail(page, answer);
+        await dialog(page, "Claire").getByRole("button", { name: "Modifier", exact: true }).click();
+        const form = dialog(page, "Modifier Claire");
+        if (resent === "Clara") await form.getByLabel("Prénom").fill("Clara");
+        else await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
+        await form.getByRole("button", { name: "Valider" }).click();
+        if (when === "before") await fail(page, answer);
+        await expect(page.getByRole("dialog")).toHaveCount(0);
 
-    // Once more around a sheet: a message left waiting would show by now.
-    await nameButton(page, "Clara").click();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(bar(page)).toBeEmpty();
-    expect(await stored(db, scene.claire)).toEqual({ first_name: "Clara", phone: CLAIRE_PHONE });
-  });
+        // Once more around a sheet: a message left waiting would show by now.
+        const firstName = resent === "Clara" ? "Clara" : "Claire";
+        await nameButton(page, firstName).click();
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        if (resent === "Clara") await expect(bar(page)).toBeEmpty();
+        else await expect(bar(page)).toHaveText(FAILED);
+        const phone = resent === "Clara" ? CLAIRE_PHONE : NEW_PHONE;
+        expect(await stored(db, scene.claire)).toEqual({ first_name: firstName, phone });
+      });
+    }
+  }
 
   // Next sends one server action at a time: the second, from a form filled before the first's
   // answer, goes once it has come, with only what it changed (#208).

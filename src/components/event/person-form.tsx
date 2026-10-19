@@ -180,8 +180,10 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
     if (!checked.ok) return showErrors(checked.errors, checked.first);
     setErrors({});
     setProblem(null);
+    // In `edit` mode, only what changed is sent: a failure is withdrawn by a send that carries all it did.
+    const changed = PERSON_FIELDS.filter((name) => values[name] !== shown[name]);
     // Withdraws the failure this form left for the bar: sent again, the form says what comes of it.
-    const sheet = sends();
+    const sheet = sends(mode.kind === "edit" ? changed : []);
     const answer =
       mode.kind === "add"
         ? await mode.addPerson({
@@ -192,7 +194,7 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
           })
         : await mode.updatePerson({
             personId: mode.person.id,
-            person: Object.fromEntries(PERSON_FIELDS.filter((name) => values[name] !== shown[name]).map((name) => [name, values[name]])),
+            person: Object.fromEntries(changed.map((name) => [name, values[name]])),
             sending: setSending,
             ...sheet,
           });

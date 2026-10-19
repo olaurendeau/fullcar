@@ -73,18 +73,22 @@ export interface FromSheet {
   key: string;
   /** Whether a failure is said in the sheet: it is open, and it is the one that sent. */
   inSheet: () => boolean;
-  /** Its answer came: withdraws what an earlier send about the same subject left for the bar. */
+  /** Its answer came: withdraws what an earlier send it covers left for the bar. */
   answered: () => void;
-  /** Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn by the next send or answer about the subject. */
+  /** Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn by the next send or answer that covers it. */
   whenClosed: (then: () => void) => void;
 }
 
-/** The message each subject's last failure left waiting for the bar (#208). */
-const left = new Map<string, () => void>();
+/** The failures waiting for the bar, each with what its send was about (#208). */
+const left = new Set<{ about: readonly string[]; withdraw: () => void }>();
 
-function withdraw(subject: string) {
-  left.get(subject)?.();
-  left.delete(subject);
+/** Withdraws each waiting failure a send about `about` covers: all it was about. */
+function withdraw(about: readonly string[]) {
+  for (const entry of left) {
+    if (!entry.about.every((subject) => about.includes(subject))) continue;
+    entry.withdraw();
+    left.delete(entry);
+  }
 }
 
 /**
@@ -94,13 +98,13 @@ function withdraw(subject: string) {
  * sheet that sent is gone. Above the content, `key` would outlive the sheet's openings.
  *
  * A failure is about its `subject` (a person, a cell; the sheet itself by default), whichever
- * sheet sent it. Sending about it again, or an answer about it, withdraws the message an earlier
- * send left waiting for the bar: the page, or the sheet, says what comes of the new one. No other
- * subject's (#208).
+ * sheet sent it, and about the `fields` its send carried, if given. A send, or an answer, that
+ * covers all of that withdraws the message an earlier send left waiting for the bar: the page,
+ * or the sheet, says what comes of the new one. A send of the number alone does not withdraw a
+ * failed first name (#208).
  */
-export function useSends(isOpen: () => boolean, subject?: string): () => FromSheet {
+export function useSends(isOpen: () => boolean, subject?: string): (fields?: readonly string[]) => FromSheet {
   const key = useId();
-  const about = subject ?? key;
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
@@ -109,15 +113,20 @@ export function useSends(isOpen: () => boolean, subject?: string): () => FromShe
     };
   }, []);
 
-  return () => {
+  return (fields = []) => {
+    const about = [subject ?? key, ...fields.map((field) => `${subject ?? key}:${field}`)];
     withdraw(about);
     return {
       key,
       inSheet: () => isOpen() && mounted.current,
       answered: () => withdraw(about),
       whenClosed: (then) => {
-        withdraw(about);
-        left.set(about, whenPageShown(then));
+        const entry = { about, withdraw: () => {} };
+        left.add(entry);
+        entry.withdraw = whenPageShown(() => {
+          left.delete(entry);
+          then();
+        });
       },
     };
   };
