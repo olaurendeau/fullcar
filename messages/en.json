@@ -180,6 +180,10 @@
     "list": {
       "more": "{count, plural, one {Show the other one} other {Show the # others}}",
       "less": "Show fewer"
+    },
+    "tile": {
+      "free": "{free, plural, one {# free seat} other {# free seats}}",
+      "missing": "{missing, plural, one {# seat missing} other {# seats missing}}"
     }
   },
   "EventNotFound": {

@@ -7,6 +7,7 @@ import type { WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabPanel } from "./leg-tab-panel";
+import { NoCarPill } from "./no-car-pill";
 
 /**
  * A tab's label, then, under it, an amber pill with its persons without a car when there are
@@ -23,9 +24,7 @@ function LegTrigger({ leg, withoutCar, tall }: { leg: Leg; withoutCar: number; t
       {withoutCar > 0 && (
         <>
           {" "}
-          <span className="rounded-full bg-amber-100 px-2 text-xs leading-[18px] text-amber-950">
-            {t("Board.tabCount", { count: withoutCar })}
-          </span>
+          <NoCarPill count={withoutCar} />
         </>
       )}
     </TabsTrigger>

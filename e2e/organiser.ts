@@ -4,6 +4,7 @@ import { readEventRows } from "@/db/event-rows";
 import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import type { Leg } from "@/domain/leg";
 import { expect, test as base } from "./fixtures";
 
 /*
@@ -38,14 +39,17 @@ export function digitsOf(phone: string): string[] {
 /**
  * The page's HTML cut where the organiser area may show a number (#179, DO1): each leg's
  * section of the panel, by its leg, and the rest of the page without them. The whole HTML,
- * so that a number in a `hidden` element is found as well as a visible one.
+ * so that a number in a `hidden` element is found as well as a visible one. Throws on two
+ * sections of the same leg: the second would replace the first, and go unchecked.
  */
 export async function htmlByLegSection(page: Page): Promise<{ sections: Record<string, string>; rest: string }> {
   return page.evaluate(() => {
     const sections: Record<string, string> = {};
     let rest = document.documentElement.outerHTML;
     for (const section of document.querySelectorAll('section[aria-labelledby^="organiser-leg-"]')) {
-      sections[section.getAttribute("aria-labelledby")!.slice("organiser-leg-".length)] = section.outerHTML;
+      const leg = section.getAttribute("aria-labelledby")!.slice("organiser-leg-".length);
+      if (leg in sections) throw new Error(`htmlByLegSection: two sections for the leg ${leg}`);
+      sections[leg] = section.outerHTML;
       rest = rest.replace(section.outerHTML, "");
     }
     return { sections, rest };
@@ -86,6 +90,35 @@ export async function seedOrganiserScene(db: Kysely<Database>, eventId: string):
   }
   await seedPlacement(db, { personId: b, eventId, leg: "retour", rideId: null });
   return SCENE_PHONES;
+}
+
+/**
+ * The crowd of O5.9, for event `eventId`: 15 cars and 60 persons. 8 cars at the aller, one
+ * of them driven by a person with a number, and 7 at the retour, none: 7 cars without a
+ * number on each leg. Of the 45 others, 13 ride at the aller and 14 are without a car there;
+ * 15 ride at the retour and 20 are without a car there. The rest are not concerned. Every
+ * list of the panel has more than 5 lines.
+ */
+export async function seedCrowd(db: Kysely<Database>, eventId: string): Promise<void> {
+  const cars: Record<Leg, string[]> = { aller: [], retour: [] };
+  for (let n = 0; n < 15; n++) {
+    const leg = n < 8 ? "aller" : "retour";
+    const phone = n === 0 ? "06 90 00 00 00" : null;
+    const { id } = await seedPerson(db, eventId, { firstName: `Driver ${n + 1}`, phone });
+    cars[leg].push(await seedRide(db, eventId, id, { leg }));
+  }
+  for (let n = 0; n < 45; n++) {
+    const phone = n % 3 === 0 ? null : `07 ${10 + n} 20 30 40`;
+    const personId = (await seedPerson(db, eventId, { firstName: `Guest ${n + 1}`, phone })).id;
+    for (const [leg, riding, without] of [
+      ["aller", 13, 27],
+      ["retour", 15, 35],
+    ] as const) {
+      if (n >= without) continue;
+      const rideId = n < riding ? cars[leg][n % cars[leg].length] : null;
+      await seedPlacement(db, { personId, eventId, leg, rideId });
+    }
+  }
 }
 
 /**
