@@ -35,6 +35,23 @@ export function digitsOf(phone: string): string[] {
   return [phone, phone.replace(/\D/g, "")];
 }
 
+/**
+ * The page's HTML cut where the organiser area may show a number (#179, DO1): each leg's
+ * section of the panel, by its leg, and the rest of the page without them. The whole HTML,
+ * so that a number in a `hidden` element is found as well as a visible one.
+ */
+export async function htmlByLegSection(page: Page): Promise<{ sections: Record<string, string>; rest: string }> {
+  return page.evaluate(() => {
+    const sections: Record<string, string> = {};
+    let rest = document.documentElement.outerHTML;
+    for (const section of document.querySelectorAll('section[aria-labelledby^="organiser-leg-"]')) {
+      sections[section.getAttribute("aria-labelledby")!.slice("organiser-leg-".length)] = section.outerHTML;
+      rest = rest.replace(section.outerHTML, "");
+    }
+    return { sections, rest };
+  });
+}
+
 /** The numbers of the scene; D has none. */
 export const SCENE_PHONES = {
   a: "06 31 52 74 96",

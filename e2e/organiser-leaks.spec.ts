@@ -6,6 +6,7 @@ import {
   expect,
   type Exchange,
   hideToken,
+  htmlByLegSection,
   oneCharOff,
   organiserPath,
   type ScenePhones,
@@ -46,14 +47,6 @@ async function dom(page: Page): Promise<[string, string]> {
   return ["the DOM", await page.content()];
 }
 
-/** The DOM without the organiser's panel: what the board and the rest of the page show. */
-async function domOutsidePanel(page: Page): Promise<[string, string]> {
-  const outside = await page
-    .getByRole("region", { name: FR.panel })
-    .evaluate((panel) => document.documentElement.outerHTML.replace(panel.outerHTML, ""));
-  return ["the DOM outside the panel", outside];
-}
-
 /** The request that carries the admin token in its body: the panel's read. */
 function carrying(exchanges: Exchange[], token: string): Exchange[] {
   return exchanges.filter(({ requestBody }) => requestBody.includes(token));
@@ -89,8 +82,21 @@ test("O2.5, O6.1, O6.3: with the right link, B's and C's numbers in the panel's 
   expect(numbersIn([...answers(exchanges, seededEvent), await dom(page)], phones, ["a", "e"])).toEqual([]);
   expect(panelRead.answer.includes(phones.b), "B's number in the panel's answer").toBe(true);
   expect(panelRead.answer.includes(phones.c), "C's number in the panel's answer").toBe(true);
-  // B's and C's numbers are shown in the panel's sections (#179), and nowhere else on the page.
-  expect(numbersIn([...answers(others, seededEvent), await domOutsidePanel(page)], phones, ["b", "c"])).toEqual([]);
+  // #179, DO1: a leg's section shows the numbers of its own persons without a car, and no
+  // other, visible or hidden: C's at the aller, B's at the retour. None elsewhere on the page.
+  const { sections, rest } = await htmlByLegSection(page);
+  expect(Object.keys(sections)).toEqual(["aller", "retour"]);
+  for (const [leg, own] of [
+    ["aller", "c"],
+    ["retour", "b"],
+  ] as const) {
+    const section: [string, string] = [`the ${leg} section`, sections[leg]];
+    expect(numbersIn([section], phones, [own])).toEqual([`${own.toUpperCase()} in the ${leg} section`]);
+    expect(numbersIn([section], phones, WITH_A_NUMBER.filter((letter) => letter !== own))).toEqual([]);
+  }
+  expect(
+    numbersIn([...answers(others, seededEvent), ["the DOM outside the sections", rest]], phones, ["b", "c"]),
+  ).toEqual([]);
 
   // O6.3: nothing touched the fragment.
   expect(await hashChanges()).toBe(0);

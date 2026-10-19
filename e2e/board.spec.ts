@@ -5,6 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { htmlByLegSection } from "./organiser";
 
 leaveNoToken();
 
@@ -357,12 +358,21 @@ for (const javaScriptEnabled of [true, false]) {
         const dom = await page.content();
         expect(dom).toContain("Marc");
         if (javaScriptEnabled && organiser) {
-          // The panel lists Tom's and Léa's numbers (#179, DO1): no driver's there, none elsewhere.
-          const [shown, outside] = await page
-            .getByRole("region", { name: "Espace organisateur" })
-            .evaluate((panel) => [panel.outerHTML, document.documentElement.outerHTML.replace(panel.outerHTML, "")]);
-          expectNoNumber("the panel's DOM", shown, DRIVERS_NUMBERS);
-          expectNoNumber("the DOM outside the panel", outside);
+          // The panel's sections list Tom's and Léa's numbers (#179, DO1), each in its own leg's
+          // only, visible or hidden: Tom's at the aller, Léa's at the retour. No driver's, and
+          // none elsewhere on the page.
+          const { sections, rest } = await htmlByLegSection(page);
+          expect(Object.keys(sections)).toEqual(["aller", "retour"]);
+          for (const [leg, own] of [
+            ["aller", PHONES.tom],
+            ["retour", PHONES.lea],
+          ] as const) {
+            expect(sections[leg].includes(own), `the ${leg} section shows its own number`).toBe(true);
+            const others = digitsToo(Object.values(PHONES).filter((phone) => phone !== own));
+            const shown = others.filter((form) => sections[leg].includes(form));
+            expect(shown.length, `other numbers in the ${leg} section`).toBe(0);
+          }
+          expect(LEAKS.filter((form) => rest.includes(form)).length, "numbers outside the sections").toBe(0);
         } else {
           expectNoNumber("the DOM", dom);
         }
