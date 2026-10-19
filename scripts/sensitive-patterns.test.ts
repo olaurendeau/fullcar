@@ -143,17 +143,30 @@ describe("sensitive patterns: tokens", () => {
     "if (!adminTokenMatches(token, stored)) return;",
     "admin_token_hash: Buffer;",
     'table.addColumn("token_hash", "bytea");',
-    "const ADMIN_TOKEN = read();",
-    "const personalToken = read();",
-    "const persoToken = read();",
-    "const personal_token = read();",
+    // The project's own functions that draw, hash, compare, read or store a token (#189).
+    // Each on a line no other alternative takes, so that removing it goes red here.
+    "const hash = hashToken(secret);",
+    "if (!tokenMatches(given, stored)) return;",
+    "const fresh = personalTokenFromBytes(bytes);",
+    "const secret = tokenInFragment(hash);",
+    "readDeviceToken(id);",
+    "ensureDeviceToken(id);",
+    // Storing the organiser's token: in clear, it would be one argument away (#191).
+    "id = await insertEvent(getDb(), validation.event, token);",
+    "storage().setItem(storageKey(id), secret);",
+    "const kept = storage().getItem(key);",
     'const value = formData.get("token");',
+    // A header or a key that names the token.
+    'headers.set("x-admin-token", token);',
+    'const value = request.headers.get("x_personal_token");',
+    "headers.set(`x-${role}-token`, token);",
+    'headers.set("x.admin-token", token);',
     "const value = body['token'];",
     "const fragment = location.hash;",
     "const fragment = url.hash;",
     "const link = `/e/${id}/admin#${token}`;",
     "const link = `/e/${id}/moi#${ token }`;",
-    // A token named `token` outside a string: logged, in a URL, returned, read, typed.
+    // A token named `token` outside a string, logged or in a URL.
     'console.info("event created", { id, token });',
     'console.log("event created", token);',
     'logger.info({ token }, "created");',
@@ -165,16 +178,30 @@ describe("sensitive patterns: tokens", () => {
     "const link = `/e/${id}/admin#${encodeURIComponent(value.token)}`;",
     "const link = `/e/${id}/admin#` + token;",
     "await page.goto(`/e/${seeded.id}/admin#${seeded.token}`);",
-    "return { ok: true, id, token };",
-    "| { ok: true; id: string; token: string }",
-    "return { ok: true, id: event.id, token: newToken };",
-    "body: JSON.stringify({ token }),",
-    "const { token } = await request.json();",
-    "const schema = z.object({ token: z.string() });",
-    "const { id, token } = await seedEvent(db);",
+    // Whatever its name: the project's tokens are adminToken and personalToken (#191).
+    'console.log("created", adminToken);',
+    'logger.info({ adminToken }, "created");',
+    "router.push(`/e/${id}/admin#${adminToken}`);",
+    "const link = `${origin}/e/${id}/moi#${personalToken}`;",
+    "redirect(`/e/${id}/admin#${created.adminToken}`);",
+    'const url = "/e/" + id + "/admin#" + adminToken;',
+    // A URL built without a literal before the token (#191).
+    "router.push(adminPath + adminToken);",
+    "window.location.assign(base + personalToken);",
+    "path += adminToken;",
+    // A log call split over several lines: the token, alone on its own line, is not
+    // flagged, so the call that opens is (#191).
+    "console.error(",
+    "  logger.warn(",
+    // A token stored in a cookie through Next's API (#191).
+    'response.cookies.set("admin", adminToken);',
+    'response.cookies.delete("admin");',
+    'cookieStore.set("admin", adminToken);',
+    // A query string, under any name.
+    'url.searchParams.set("t", token);',
+    'url.searchParams.append("t", secret);',
+    "const qs = new URLSearchParams({ token }).toString();",
     'const [, token] = page.url().split("#");',
-    "expect(request.url()).not.toContain(token);",
-    "const csrfToken = read();",
     "localStorage.setItem(key, value);",
     'headers.set("Referrer-Policy", "no-referrer");',
     "const jar = await cookies();",
@@ -205,17 +232,70 @@ describe("sensitive patterns: tokens", () => {
     "const href = link.href;",
     'const parts = line.split(",");',
     'const [path] = url.split("?");',
+    // The word alone, a variable's name, a key or a parameter (#189): what carries the
+    // token somewhere is what is flagged, above.
+    "const ADMIN_TOKEN = read();",
+    "const personalToken = read();",
+    "const persoToken = read();",
+    "const personal_token = read();",
+    "const csrfToken = read();",
+    "export async function addPerson(id: unknown, token: unknown, fields: unknown) {",
+    "return { ok: true, id, token };",
+    "| { ok: true; id: string; token: string }",
+    "return { ok: true, id: event.id, token: newToken };",
+    "body: JSON.stringify({ token }),",
+    "const { token } = await request.json();",
+    "const schema = z.object({ token: z.string() });",
+    "const { id, token } = await seedEvent(db);",
+    "expect(request.url()).not.toContain(token);",
+    "// The token arrives in the body, never in the URL.",
+    // A module whose name ends in -token is not a header that carries one.
+    'import { isPersonalToken } from "@/domain/personal-token";',
+    'import { useDevice } from "./device-token";',
+    // Decision (#191): a new rights check on the personal token is the coordinator's to merge.
+    "const ids = devicePersonIds(secret, holders);",
   ])("ignores %s", (line) => {
     expect(isSensitive(line)).toBe(false);
+  });
+});
+
+// Copies of approved designs, and tests, which carry test tokens, ids and cleanup (#189).
+describe("sensitive patterns: design copies and tests", () => {
+  const designs = ["docs/design/event-board/index.html", "docs/design/event-board/README.md"];
+  const tests = ["src/app/actions.test.ts", "src/components/event/ride-card.test.tsx", "e2e/admin.spec.ts"];
+
+  it.each(designs)("no pattern applies to the design copy %s", (path) => {
+    for (const p of all) expect(appliesTo(p, path)).toBe(false);
+  });
+
+  // Random draws and hashes, tokens and their storage, deletion.
+  const subjects = [
+    "const id = randomBytes(16);",
+    "localStorage.setItem(key, TOKEN);",
+    "await page.goto(`/e/${seeded.id}/admin#${seeded.token}`);",
+    'await db.deleteFrom("person").execute();',
+  ];
+
+  it.each(subjects)("ignores %s in a test", (line) => {
+    for (const path of tests) expect(isSensitive(line, path)).toBe(false);
+  });
+
+  it.each(subjects)("still flags %s outside the tests", (line) => {
+    expect(isSensitive(line, "src/app/e/[id]/actions.ts")).toBe(true);
+    expect(isSensitive(line, "scripts/seed.ts")).toBe(true);
+  });
+
+  it("leaves a test helper without a .test suffix to the patterns", () => {
+    expect(isSensitive("tokenHash: hashToken(token),", "src/db/test-participants.ts")).toBe(true);
   });
 });
 
 describe("sensitive patterns: disabled or focused tests", () => {
   const quality = patternWith("@ts-nocheck");
 
-  it("apply to every file, test files included", () => {
+  it("apply to every file but the design copies, test files included", () => {
     expect(quality.file).toBeUndefined();
-    expect(quality.exclude).toBeUndefined();
+    expect(quality.exclude).toEqual(["docs/design/**"]);
   });
 
   // Checked in test files, where they are written: a pattern excluding them would go red here.
