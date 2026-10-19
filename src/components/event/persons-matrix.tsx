@@ -13,9 +13,8 @@ const CELL: Record<DeviceState["kind"], string> = {
   notConcerned: "bg-background font-normal text-muted-foreground",
 };
 
-function CellText({ cell }: { cell: MatrixCell }) {
-  const t = useTranslations("DevicePersons");
-  const { state, leg } = cell;
+/** A cell's visible text: « Avec Claire », « Ne fait pas le retour »… */
+function cellText(t: ReturnType<typeof useTranslations<"DevicePersons">>, { state, leg }: MatrixCell): string {
   if (state.kind === "passenger") return t("cell.passenger", { driver: state.driver.firstName });
   if (state.kind === "notConcerned") return t(`state.notConcerned.${leg}`);
   return t(`state.${state.kind}`);
@@ -23,18 +22,21 @@ function CellText({ cell }: { cell: MatrixCell }) {
 
 /**
  * The matrix of « Vos inscriptions » (v4-2): a table, a column per leg and a row per person,
- * their first name as the row's header. The first name is a button that calls `onName`. It
- * receives rows and callbacks alone, and knows nothing of the device (v4-16). The cells are
- * text; they become buttons with #89.
+ * their first name as the row's header. The first name is a button that calls `onName`, and
+ * each cell one that calls `onCell`, named by its person, its leg and its visible text
+ * (C3.7, WCAG 2.5.3). It receives rows and callbacks alone, and knows nothing of the device
+ * (v4-16).
  */
 export function PersonsMatrix({
   legs,
   rows,
   onName,
+  onCell,
 }: {
   legs: readonly Leg[];
   rows: readonly MatrixRow[];
   onName: (id: string) => void;
+  onCell: (id: string, leg: Leg) => void;
 }) {
   const t = useTranslations("DevicePersons");
   const tLegs = useTranslations("Event.legs");
@@ -74,20 +76,27 @@ export function PersonsMatrix({
                 <ChevronDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
               </button>
             </th>
-            {row.cells.map((cell) => (
-              <td key={cell.leg} className="pl-1 align-middle">
-                <div
-                  className={cn(
-                    "flex min-h-11 items-center rounded-lg border px-2 py-1 text-[13px] leading-4 font-medium wrap-break-word",
-                    CELL[cell.state.kind],
-                  )}
-                >
-                  <span className="min-w-0">
-                    <CellText cell={cell} />
-                  </span>
-                </div>
-              </td>
-            ))}
+            {row.cells.map((cell) => {
+              const text = cellText(t, cell);
+              return (
+                <td key={cell.leg} className="pl-1 align-middle">
+                  <button
+                    type="button"
+                    data-person-cell={row.id}
+                    data-leg={cell.leg}
+                    aria-haspopup="dialog"
+                    aria-label={t("cellLabel", { firstName: row.firstName, leg: tLegs(cell.leg), cell: text })}
+                    onClick={() => onCell(row.id, cell.leg)}
+                    className={cn(
+                      "flex min-h-11 w-full items-center rounded-lg border px-2 py-1 text-left text-[13px] leading-4 font-medium wrap-break-word outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                      CELL[cell.state.kind],
+                    )}
+                  >
+                    <span className="min-w-0">{text}</span>
+                  </button>
+                </td>
+              );
+            })}
           </tr>
         ))}
       </tbody>

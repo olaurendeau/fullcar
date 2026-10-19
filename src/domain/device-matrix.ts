@@ -62,3 +62,28 @@ export function matrixSummary(rows: readonly MatrixRow[]): { persons: number; wi
 export function startsExpanded(rows: readonly MatrixRow[]): boolean {
   return rows.some(waits);
 }
+
+/**
+ * What a cell's sheet offers (« Les cellules », #89): « Voir la voiture », and the changes
+ * `setPersonLeg` makes on the cell's leg. A driver's car is managed on its card (C8.1).
+ * « Trouver une place » comes first for a person without a car with #172.
+ */
+export type CellAction = "seeCar" | "leaveCar" | "notConcerned" | "lookingForSeat";
+
+export function cellActions(state: DeviceState): CellAction[] {
+  switch (state.kind) {
+    case "withoutCar":
+      return ["notConcerned"];
+    case "passenger":
+      return ["seeCar", "leaveCar", "notConcerned"];
+    case "driver":
+      return ["seeCar"];
+    case "notConcerned":
+      return ["lookingForSeat"];
+  }
+}
+
+/** What `setPersonLeg` is asked: « Sortir de la voiture » and « Je cherche une place » are both without a car. */
+export function declaredBy(action: Exclude<CellAction, "seeCar">): "withoutCar" | "notConcerned" {
+  return action === "notConcerned" ? "notConcerned" : "withoutCar";
+}

@@ -23,7 +23,14 @@ export function RideCard({ car, date, seatsActive }: { car: VisibleCar; date: Wa
   return (
     <article aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-2">
-        <h3 id={headingId} className="min-w-0 font-semibold wrap-anywhere">
+        {/* Focusable by script alone: « Voir la voiture » leads here (focusCarTitle). */}
+        <h3
+          id={headingId}
+          tabIndex={-1}
+          data-car-title={car.id}
+          data-leg={car.leg}
+          className="min-w-0 rounded-sm font-semibold wrap-anywhere outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
           {t("title", { driver })}
         </h3>
         <span className="flex shrink-0 items-center gap-2">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceState, LegBoard } from "./board";
-import { deviceMatrix, matrixSummary, startsExpanded, type MatrixRow } from "./device-matrix";
+import { cellActions, declaredBy, deviceMatrix, matrixSummary, startsExpanded, type CellAction, type MatrixRow } from "./device-matrix";
 import type { Leg } from "./leg";
 
 const WITHOUT_CAR: DeviceState = { kind: "withoutCar" };
@@ -41,6 +41,16 @@ describe("deviceMatrix (C2.2): a row per person of the device, a cell per leg", 
         row("Claire", [["aller", DRIVER], ["retour", WITHOUT_CAR]]),
         row("Léa", [["aller", WITH_MARC], ["retour", NOT_CONCERNED]]),
       ],
+    ],
+    [
+      "a person a leg's section does not list: not concerned there",
+      [leg("aller", { Tom: WITHOUT_CAR }), leg("retour", {})],
+      [row("Tom", [["aller", WITHOUT_CAR], ["retour", NOT_CONCERNED]])],
+    ],
+    [
+      "listed on the retour alone: not concerned on the aller, the aller's cell first",
+      [leg("aller", {}), leg("retour", { Tom: WITH_MARC })],
+      [row("Tom", [["aller", NOT_CONCERNED], ["retour", WITH_MARC]])],
     ],
     ["no person on the device", [leg("aller", {}), leg("retour", {})], []],
   ])("%s", (_, board, expected) => {
@@ -85,5 +95,22 @@ describe("matrixSummary and startsExpanded (C3.6)", () => {
   ])("%s", (_, rows, summary, expanded) => {
     expect(matrixSummary(rows)).toEqual(summary);
     expect(startsExpanded(rows)).toBe(expanded);
+  });
+});
+
+describe("cellActions (C3.1, C3.2, C7.1, C7.2): a cell's sheet, its actions in the README's order", () => {
+  it.each<[string, DeviceState, CellAction[]]>([
+    ["without a car: not on this leg (« Trouver une place » comes with #172)", WITHOUT_CAR, ["notConcerned"]],
+    ["a passenger: see the car, leave it, not on this leg", WITH_MARC, ["seeCar", "leaveCar", "notConcerned"]],
+    ["a driver: see the car, managed on its card", DRIVER, ["seeCar"]],
+    ["not concerned: looking for a seat", NOT_CONCERNED, ["lookingForSeat"]],
+  ])("%s", (_, state, actions) => {
+    expect(cellActions(state)).toEqual(actions);
+  });
+
+  it("« Sortir de la voiture » and « Je cherche une place » declare without a car, « Ne fait pas… » not concerned", () => {
+    expect(declaredBy("leaveCar")).toBe("withoutCar");
+    expect(declaredBy("lookingForSeat")).toBe("withoutCar");
+    expect(declaredBy("notConcerned")).toBe("notConcerned");
   });
 });

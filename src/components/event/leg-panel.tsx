@@ -4,6 +4,7 @@ import { hasBanner } from "@/domain/coverage";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
+import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
 import { AddPersonButton, type AddPerson } from "./person-form";
 import { RideCard } from "./ride-card";
@@ -17,6 +18,8 @@ export interface BoardDevice {
   refocus: () => void;
   /** Registers a person on this device (R1), with the device's token. */
   addPerson: AddPerson;
+  /** Without a car, or not concerned, on a leg, for one of the device's persons (#89). */
+  setPersonLeg: SetPersonLeg;
 }
 
 /**

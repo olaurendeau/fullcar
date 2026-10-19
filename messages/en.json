@@ -87,6 +87,14 @@
         "retour": "Not on the return trip"
       }
     },
+    "sheetTitle": "{firstName} · {leg}",
+    "seeCar": "See the car",
+    "leaveCar": "Leave the car",
+    "lookingForSeat": "I need a seat",
+    "notConcerned": {
+      "aller": "Not on the outbound trip",
+      "retour": "Not on the return trip"
+    },
     "loading": "Loading your sign-ups…",
     "failed": "Your sign-ups could not be loaded",
     "failedBody": "Nothing can be added or changed until they are loaded. Check your connection, then try again.",

@@ -19,6 +19,9 @@ export interface EventViewProps {
   device: BoardDevice;
   /** The page's bar of messages: in the DOM after the header, before the legs. */
   messageBar: ReactNode;
+  /** The active tab, the page's: « Voir la voiture » makes its leg's active (#89). */
+  tab: Leg;
+  onTab: (leg: Leg) => void;
 }
 
 /** A leg's state; one the board does not have is empty. */
@@ -33,7 +36,7 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
  * and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
  */
-export function EventView({ title, location, allerAt, retourAt, board, device, messageBar }: EventViewProps) {
+export function EventView({ title, location, allerAt, retourAt, board, device, messageBar, tab, onTab }: EventViewProps) {
   const t = useTranslations("Event.legs");
   const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
 
@@ -63,7 +66,7 @@ export function EventView({ title, location, allerAt, retourAt, board, device, m
         </dl>
       </header>
       {messageBar}
-      <DevicePersons board={legs.map((leg) => legOf(board, leg))} device={device} />
+      <DevicePersons board={legs.map((leg) => legOf(board, leg))} device={device} showLeg={onTab} />
       {retourAt ? (
         <LegTabs
           allerAt={allerAt}
@@ -71,6 +74,8 @@ export function EventView({ title, location, allerAt, retourAt, board, device, m
           aller={legOf(board, "aller")}
           retour={legOf(board, "retour")}
           device={device}
+          tab={tab}
+          onTab={onTab}
         />
       ) : (
         <section aria-labelledby="leg-aller" className="flex flex-col gap-4">

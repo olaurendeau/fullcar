@@ -3,8 +3,10 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { deviceMatrix, matrixSummary, startsExpanded } from "@/domain/device-matrix";
+import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { cn } from "@/lib/utils";
+import { CellSheet } from "./cell-sheet";
 import type { BoardDevice } from "./leg-panel";
 import { PersonSheet } from "./person-sheet";
 import { PersonsMatrix } from "./persons-matrix";
@@ -23,7 +25,9 @@ function personOf(board: readonly VisibleLegBoard[], id: string) {
  * one cell per leg of `board`, the event's legs in their order. Absent without a person, and
  * without JavaScript. Its title is the button that folds it, with its summary. Unfolded when
  * it first has rows if a cell is « Sans voiture », folded otherwise; then only that button
- * changes it, and nothing keeps it (v4-3). While the persons are read, a line in its place
+ * changes it, and nothing keeps it (v4-3): an action of a cell's sheet that empties the last
+ * cell « Sans voiture » does not fold it. A first name opens the person's sheet, a cell the
+ * sheet of that person on that leg (#89). While the persons are read, a line in its place
  * (C5.9); if the read fails, an alert with « Réessayer ».
  *
  * « Réessayer » goes away as it is pressed: the focus follows what takes its place (the
@@ -31,11 +35,22 @@ function personOf(board: readonly VisibleLegBoard[], id: string) {
  * and goes to `device.refocus()` when there is no section to show (decision 18). It moves
  * only while nobody has put it elsewhere: on what it was given, or on nothing.
  */
-export function DevicePersons({ board, device: { status, retry, refocus } }: { board: readonly VisibleLegBoard[]; device: BoardDevice }) {
+export function DevicePersons({
+  board,
+  device: { status, retry, refocus, setPersonLeg },
+  showLeg,
+}: {
+  board: readonly VisibleLegBoard[];
+  device: BoardDevice;
+  /** Makes a leg's tab the active one (« Voir la voiture »). */
+  showLeg: (leg: Leg) => void;
+}) {
   const t = useTranslations("DevicePersons");
   const rows = deviceMatrix(board);
   const [expanded, setExpanded] = useState<boolean | null>(null);
   const [sheet, setSheet] = useState<{ id: string; open: boolean } | null>(null);
+  // `opened` counts the openings: each one is a new sheet, without the last one's message.
+  const [cellSheet, setCellSheet] = useState<{ id: string; leg: Leg; open: boolean; opened: number } | null>(null);
   const retried = useRef(false);
   const focusTarget = useRef<HTMLElement>(null);
   const focused = useRef<HTMLElement>(null);
@@ -104,6 +119,8 @@ export function DevicePersons({ board, device: { status, retry, refocus } }: { b
   const open = expanded ?? startsExpanded(rows);
   const Chevron = open ? ChevronUp : ChevronDown;
   const person = sheet && personOf(board, sheet.id);
+  const cellRow = cellSheet && rows.find((row) => row.id === cellSheet.id);
+  const cell = cellRow && cellRow.cells.find((candidate) => candidate.leg === cellSheet.leg);
 
   return (
     <section
@@ -133,6 +150,7 @@ export function DevicePersons({ board, device: { status, retry, refocus } }: { b
           legs={board.map((leg) => leg.leg)}
           rows={rows}
           onName={(id) => setSheet({ id, open: true })}
+          onCell={(id, leg) => setCellSheet({ id, leg, open: true, opened: (cellSheet?.opened ?? 0) + 1 })}
         />
       </div>
       {person && (
@@ -140,6 +158,21 @@ export function DevicePersons({ board, device: { status, retry, refocus } }: { b
           person={person}
           open={sheet.open}
           onOpenChange={(isOpen) => setSheet({ id: person.id, open: isOpen })}
+        />
+      )}
+      {cellSheet && cellRow && cell && (
+        <CellSheet
+          key={cellSheet.opened}
+          person={cellRow}
+          leg={cell.leg}
+          state={cell.state}
+          open={cellSheet.open}
+          // A success comes after the sheet that sent it: it closes that one, not one opened since.
+          onOpenChange={(isOpen) =>
+            setCellSheet((current) => (current?.opened === cellSheet.opened ? { ...current, open: isOpen } : current))
+          }
+          setPersonLeg={setPersonLeg}
+          showLeg={showLeg}
         />
       )}
     </section>

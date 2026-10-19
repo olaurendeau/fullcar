@@ -10,6 +10,7 @@ import { validatePerson, type PersonErrors, type PersonField } from "@/domain/pe
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./create-event-form";
+import { whenPageShown, type FromSheet } from "./hidden-page";
 import { personErrorMessage } from "./person-error";
 
 /** What the form sends, before its creation id: the person, « Aller et retour », and the tab's leg. */
@@ -21,16 +22,12 @@ export interface PersonDraft {
 }
 
 /** A registration as the form sends it. */
-export interface Registering {
+export interface Registering extends FromSheet {
   person: PersonDraft;
   /** The form's creation id, drawn at its first send and kept until one succeeds. */
   creationId: () => string;
   /** True until the answer: « Valider » is inactive meanwhile (C1.9). */
   sending: (sending: boolean) => void;
-  /** Whether a failure is said in the form: its sheet is open and this form is the one it shows. */
-  inForm: () => boolean;
-  /** Runs `then` once the sheet has closed, and with it the rest of the page is no longer hidden: at once if it has. */
-  whenClosed: (then: () => void) => void;
 }
 
 /** What became of a registration, for its form. A second tap while one is sent gets nothing. */
@@ -145,15 +142,14 @@ function PersonForm({
   const submitButton = useRef<HTMLButtonElement>(null);
   // Each form its own: a sheet reopened during a send shows a new form, and the sending one is gone.
   const mounted = useRef(false);
+  // Withdraws the failure this form left for the bar: sent again, the form says what comes of it.
   const closed = useRef<(() => void) | undefined>(undefined);
   const inForm = () => open() && mounted.current;
 
-  // Radix unmounts the form once the sheet has closed, and lifts its `aria-hidden` from the page then.
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      closed.current?.();
     };
   }, []);
 
@@ -175,16 +171,19 @@ function PersonForm({
     if (!checked.ok) return showErrors(checked.errors, checked.first);
     setErrors({});
     setProblem(null);
+    closed.current?.();
+    closed.current = undefined;
     const answer = await addPerson({
       person: { ...values, bothLegs: hasRetour && bothLegs, leg },
       creationId: () => (creationId.current ??= newCreationId()),
       sending: setSending,
-      inForm,
-      whenClosed: (then) => (mounted.current ? (closed.current = then) : then()),
+      inSheet: inForm,
+      whenClosed: (then) => (closed.current = whenPageShown(then)),
     });
     if (answer?.kind === "done") {
       creationId.current = undefined;
-      onDone();
+      // Not the sheet opened since: it shows another form.
+      if (inForm()) onDone();
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
     else if (answer?.kind === "problem" && inForm()) setProblem(answer.problem);
   }

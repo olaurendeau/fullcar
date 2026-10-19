@@ -11,13 +11,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { HidesPage } from "./hidden-page";
 
 /**
  * The page's sheet, opened from the bottom of the screen: its title, its content, then
  * « Fermer », translated, in place of the sheet's own cross. Escape closes it too. Every
  * sheet of the event's page goes through here, so that they all look and close alike.
  * Given a `trigger`, the button that opens it, Radix gives that button the focus back once
- * it is closed.
+ * it is closed. While its content is mounted, closing included, the page counts as hidden
+ * (`whenPageShown`).
  */
 export function BottomSheet({
   open,
@@ -51,6 +53,7 @@ export function BottomSheet({
         onCloseAutoFocus={onCloseAutoFocus}
         className="mx-auto max-w-md gap-0 rounded-t-xl pb-[env(safe-area-inset-bottom)]"
       >
+        <HidesPage />
         <SheetHeader className="pb-0">
           <SheetTitle className="wrap-anywhere">{title}</SheetTitle>
           {description && <SheetDescription>{description}</SheetDescription>}
