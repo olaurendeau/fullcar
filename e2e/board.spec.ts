@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
@@ -263,15 +263,50 @@ test.describe("board without a retour, JavaScript disabled", () => {
 });
 
 /*
- * C10.2, C10.6: no number reaches a browser, on the public page or the organiser's, with or
- * without the organiser's link, with or without JavaScript. Searched in every answer the
- * page receives (HTML, RSC, scripts, the link's check) and in its final DOM. This browser holds
- * no personal token: e2e/device-persons.spec.ts covers one that does, whose cards show numbers.
+ * C10.2, C10.6, DO1: no number reaches a browser, on the public page or the organiser's, with
+ * or without the organiser's link, with or without JavaScript, but in one answer: with a valid
+ * organiser's link and JavaScript, `loadOrganiserPanel` sends the numbers of the persons
+ * without a car, Tom's and Léa's, never those of Marc and Zoé, who drive. Searched in every
+ * answer the page receives (HTML, RSC, scripts, the link's check) and in its final DOM, which
+ * shows none until the panel lists them (#179). A body that cannot be read fails the test.
+ * This browser holds no personal token: e2e/device-persons.spec.ts covers one that does,
+ * whose cards show numbers.
  */
-const LEAKS = Object.values(PHONES).flatMap((phone) => [phone, phone.replace(/\D/g, "")]);
+const digitsToo = (phones: string[]) => phones.flatMap((phone) => [phone, phone.replace(/\D/g, "")]);
+const LEAKS = digitsToo(Object.values(PHONES));
+/** What the panel's answer never holds: the drivers' numbers (DO1). */
+const DRIVERS_NUMBERS = digitsToo([PHONES.marc, PHONES.zoe]);
 
-function expectNoNumber(where: string, text: string) {
-  for (const leak of LEAKS) expect(text, `${where} holds ${leak}`).not.toContain(leak);
+function expectNoNumber(where: string, text: string, leaks = LEAKS) {
+  for (const leak of leaks) expect(text, `${where} holds ${leak}`).not.toContain(leak);
+}
+
+/** `loadOrganiserPanel`: a server action, posted to the organiser's page of event `id`. */
+function isPanelRead(request: Request, id: string): boolean {
+  return (
+    request.method() === "POST" &&
+    new URL(request.url()).pathname === `/e/${id}/admin` &&
+    request.headers()["next-action"] !== undefined
+  );
+}
+
+/** A body, or why it could not be read: never an empty one in its place. */
+interface Body {
+  url: string;
+  text?: string;
+  unreadable?: string;
+}
+
+function body(url: string, text: Promise<string>): Promise<Body> {
+  return text.then(
+    (text) => ({ url, text }),
+    (error: unknown) => ({ url, unreadable: String(error) }),
+  );
+}
+
+function readText({ url, text, unreadable }: Body): string {
+  if (text === undefined) throw new Error(`The body of ${url} could not be read: ${unreadable}`);
+  return text;
 }
 
 const PAGES = [
@@ -294,9 +329,22 @@ for (const javaScriptEnabled of [true, false]) {
 
     for (const { name, path, organiser } of PAGES) {
       test(`C10.2, C10.6: no digit of a seeded number on ${name}`, async ({ page, seededEvent }) => {
-        const bodies: Promise<[string, string]>[] = [];
+        const { id } = seededEvent;
+        // The panel's answer is read as Playwright fetches it: Chromium may drop the body of an
+        // action's answer before `response.text()` asks for it.
+        const panelReads: Promise<Body>[] = [];
+        await page.route(
+          (url) => url.pathname === `/e/${id}/admin`,
+          async (route) => {
+            if (!isPanelRead(route.request(), id)) return route.fallback();
+            const answer = route.fetch();
+            panelReads.push(body(route.request().url(), answer.then((response) => response.text())));
+            await route.fulfill({ response: await answer });
+          },
+        );
+        const bodies: Promise<Body>[] = [];
         page.on("response", (response) => {
-          bodies.push(response.text().then((text) => [response.url(), text], () => [response.url(), ""]));
+          if (!isPanelRead(response.request(), id)) bodies.push(body(response.url(), response.text()));
         });
         await page.goto(path(seededEvent), { waitUntil: "networkidle" });
         // With JavaScript, the link's check answered: its panel shows.
@@ -309,7 +357,16 @@ for (const javaScriptEnabled of [true, false]) {
         expectNoNumber("the DOM", dom);
         const received = await Promise.all(bodies);
         expect(received.length).toBeGreaterThan(0);
-        for (const [url, text] of received) expectNoNumber(url, text);
+        for (const read of received) expectNoNumber(read.url, readText(read));
+
+        const panels = await Promise.all(panelReads);
+        expect(panels).toHaveLength(javaScriptEnabled && organiser ? 1 : 0);
+        for (const read of panels) {
+          const text = readText(read);
+          expect(text, "the panel holds Tom's number").toContain(PHONES.tom);
+          expect(text, "the panel holds Léa's number").toContain(PHONES.lea);
+          expectNoNumber(`the panel at ${read.url}`, text, DRIVERS_NUMBERS);
+        }
       });
     }
   });
