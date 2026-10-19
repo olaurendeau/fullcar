@@ -255,9 +255,8 @@ test("O5.3, O5.8: while « Réessayer » reads, its label stays, it is aria-disa
   expect(reads.sent(), "reads of the panel").toBe(2);
 });
 
-test("O5.8: when « Réessayer » finds the link no longer valid, the focus goes to the alert that says so", async ({
+test("O5.8: « Réessayer » clicked, then the panel: the focus goes to its title, never by <body>", async ({
   page,
-  db,
   seededEvent,
 }) => {
   let first = true;
@@ -265,7 +264,36 @@ test("O5.8: when « Réessayer » finds the link no longer valid, the focus goes
   await page.goto(organiserPath(seededEvent));
   await expect(alert(page)).toContainText(FR.failed);
 
-  // The event is gone meanwhile: the server answers « invalid ».
+  // Read as soon as the page has changed: before the browser paints, and before React's passive effects.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    Object.assign(window, { focusSeen: seen });
+    new MutationObserver(() => seen.push(document.activeElement?.tagName ?? "none")).observe(
+      document.querySelector("main")!,
+      { subtree: true, childList: true },
+    );
+  });
+  await retry(page).click();
+  await expect(panel(page).getByRole("heading", { level: 2, name: FR.panel })).toBeFocused();
+  const seen = await page.evaluate(() => (window as unknown as { focusSeen: string[] }).focusSeen);
+  expect(seen.length).toBeGreaterThan(0);
+  expect(seen).not.toContain("BODY");
+});
+
+test("O5.8: when « Réessayer » finds the link no longer valid, the focus goes to the alert that says so", async ({
+  page,
+  db,
+  seededEvent,
+  organiserTraffic,
+}) => {
+  let first = true;
+  await readsOf(page, seededEvent, () => (first ? ((first = false), "abort") : "pass"));
+  await page.goto(organiserPath(seededEvent));
+  await expect(alert(page)).toContainText(FR.failed);
+
+  // The event is gone meanwhile: the server answers « invalid ». Its numbers are taken
+  // before, for the storage check (O2.10): once it is gone, no query gives them.
+  await organiserTraffic.keepNumbers();
   await db.deleteFrom("event").where("id", "=", seededEvent.id).execute();
   await retry(page).focus();
   await page.keyboard.press("Enter");

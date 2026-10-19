@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
 import { focusLandmark } from "@/components/event/focus";
@@ -11,20 +11,38 @@ import type { Leg } from "@/domain/leg";
 import { addPerson as storePerson, loadEventState, setPersonLeg as storePersonLeg } from "./actions";
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
-import { actionRunner, sendAction, type ActionProblem } from "./run-action";
+import { actionRunner, sendAction, type ActionProblem, type Sent } from "./run-action";
 
 /**
- * The event's board on `/e/{id}` and `/e/{id}/admin` (C11.7), as `admin-arrival.tsx` is for
- * the organiser's panel. It starts from the state the server rendered, with no device and no
+ * What the organiser's screen asks of the board (#182): `read()` reads the state this device
+ * sees and applies nothing, `apply(state)` shows it. The personal token stays in this file.
+ */
+export interface BoardHandle {
+  read(): Promise<Sent<EventState | undefined>>;
+  apply(state: EventState): void;
+}
+
+/**
+ * The event's board on `/e/{id}` and `/e/{id}/admin` (C11.7), under `organiser-screen.tsx`
+ * there. It starts from the state the server rendered, with no device and no
  * number, then reads the device's persons with its token (`useDevice`) and takes the state
  * the server answers, which carries the numbers this device may see (C10.1).
  */
 export function ParticipantBoard({
   id,
   board: rendered,
+  ref,
   ...event
-}: { id: string; board: EventState } & Omit<EventViewProps, "board" | "device" | "messageBar" | "tab" | "onTab">) {
+}: { id: string; board: EventState; ref?: Ref<BoardHandle> } & Omit<
+  EventViewProps,
+  "board" | "device" | "messageBar" | "tab" | "onTab"
+>) {
   const [board, setBoard] = useState(rendered);
+  useImperativeHandle(
+    ref,
+    () => ({ read: () => sendAction(() => loadEventState(id, readDeviceToken(id))), apply: setBoard }),
+    [id],
+  );
   const [tab, setTab] = useState<Leg>("aller");
   const [problem, setProblem] = useState<ActionProblem | null>(null);
   const retrying = useRef(false);

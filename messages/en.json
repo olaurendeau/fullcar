@@ -162,6 +162,13 @@
     },
     "loading": "Loading the organiser area…",
     "retry": "Try again",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "refreshed": "Organiser area refreshed.",
+    "refreshFailed": {
+      "title": "The organiser area could not be refreshed.",
+      "body": "What you see dates from the last load. Check your connection, then use “Refresh” again."
+    },
     "needsJavaScript": "The organiser area needs JavaScript: turn it on, then reload the page.",
     "withoutCar": {
       "title": "Without a car ({count})",

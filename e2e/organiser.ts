@@ -159,6 +159,11 @@ export interface OrganiserTraffic {
    * a body that is not searched cannot pass for one without a leak.
    */
   exchanges(): Promise<Exchange[]>;
+  /**
+   * Takes the event's numbers now, for the storage check (O2.10), which also takes them once
+   * the test is over: a test that deletes its event calls it before, or no number is checked.
+   */
+  keepNumbers(): Promise<void>;
 }
 
 /** Path and query string of a URL. */
@@ -317,7 +322,22 @@ export const test = base.extend<{ organiserTraffic: OrganiserTraffic }>({
       const { token, id } = seededEvent;
       const hide = (text: string) => hideToken(text, token);
       const recorded = await record(context, hide);
-      await provide({ exchanges: recorded.exchanges });
+      // Every number of the event, by the only query that reads them, named by its person's
+      // rank in the event, as the scene names them by letter: never shown.
+      const numbersNow = async () => {
+        const { persons, phonesById } = await readEventRows(db, id);
+        return persons.flatMap(({ id: personId }, n): [string, string][] => {
+          const phone = phonesById.get(personId);
+          return phone ? digitsOf(phone).map((form) => [`the number of person ${n + 1}`, form]) : [];
+        });
+      };
+      const kept: [string, string][] = [];
+      await provide({
+        exchanges: recorded.exchanges,
+        keepNumbers: async () => {
+          kept.push(...(await numbersNow()));
+        },
+      });
 
       await recorded.stop();
       const settled = await recorded.settled();
@@ -342,16 +362,10 @@ export const test = base.extend<{ organiserTraffic: OrganiserTraffic }>({
       ];
       const leaks = findings(places, [["the admin token", token]]);
 
-      // Every number of the event, by the only query that reads them, named by its person's
-      // rank in the event, as the scene names them by letter: never shown.
-      const { persons, phonesById } = await readEventRows(db, id);
-      const numbers = persons.flatMap(({ id: personId }, n): [string, string][] => {
-        const phone = phonesById.get(personId);
-        return phone ? digitsOf(phone).map((form) => [`the number of person ${n + 1}`, form]) : [];
-      });
       const stored = findings(await storageOf(context, new URL(baseURL!).origin), [
         ["the admin token", token],
-        ...numbers,
+        ...kept,
+        ...(await numbersNow()),
       ]);
 
       // Only now, the pages on /icon.svg: the snapshot of a failure holds no admin link.

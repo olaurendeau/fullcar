@@ -4,8 +4,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { ContactFooter } from "@/components/contact/contact-footer";
 import { eventMetadata, loadEvent, loadPublicState } from "../load-event";
-import { ParticipantBoard } from "../participant-board";
-import { AdminArrival } from "./admin-arrival";
+import { OrganiserScreen } from "./organiser-screen";
 
 // No loading.tsx here either: an unknown id answers a real 404 (C6.4).
 
@@ -27,7 +26,6 @@ export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) 
   // /e/{id}, centred. While the bar of messages shows, 112 px more below: nothing stays under it (C11.4).
   return (
     <main className="flex w-full flex-1 flex-col gap-6 p-4 has-data-[message-bar=open]:pb-[calc(1rem+112px+env(safe-area-inset-bottom))]">
-      <AdminArrival id={event.id} allerAt={event.aller_at} retourAt={event.retour_at} />
       {/* Without JavaScript, the token cannot be checked: the panel's place says so (O5.5). */}
       <noscript>
         <p
@@ -38,17 +36,16 @@ export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) 
           {t("needsJavaScript")}
         </p>
       </noscript>
-      <div className="mx-auto flex w-full max-w-board flex-col gap-6">
-        <ParticipantBoard
-          id={event.id}
-          title={event.title}
-          location={event.location}
-          allerAt={event.aller_at}
-          retourAt={event.retour_at}
-          board={board}
-        />
+      <OrganiserScreen
+        id={event.id}
+        title={event.title}
+        location={event.location}
+        allerAt={event.aller_at}
+        retourAt={event.retour_at}
+        board={board}
+      >
         <ContactFooter />
-      </div>
+      </OrganiserScreen>
     </main>
   );
 }
