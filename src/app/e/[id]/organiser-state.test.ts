@@ -182,28 +182,24 @@ describe("readOrganiserState", () => {
   it("O2.10: writes nothing", async () => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
-      const count = async () => {
-        const counts: Record<string, unknown> = {
-          event: await trx
-            .selectFrom("event")
-            .select((eb) => eb.fn.countAll<string>().as("n"))
-            .where("id", "=", scene.eventId)
-            .executeTakeFirstOrThrow(),
-        };
-        for (const table of ["person", "ride", "placement"] as const) {
-          counts[table] = await trx
-            .selectFrom(table)
-            .select((eb) => eb.fn.countAll<string>().as("n"))
-            .where("event_id", "=", scene.eventId)
-            .executeTakeFirstOrThrow();
-        }
-        return counts;
-      };
-      const before = await count();
-      expect(before).toEqual({ event: { n: "1" }, person: { n: "5" }, ride: { n: "1" }, placement: { n: "5" } });
+      // Every column of every row the panel reads: any write to them, an UPDATE included, shows.
+      const rows = async () => ({
+        event: await trx.selectFrom("event").selectAll().where("id", "=", scene.eventId).execute(),
+        person: await trx.selectFrom("person").selectAll().where("event_id", "=", scene.eventId).orderBy("id").execute(),
+        ride: await trx.selectFrom("ride").selectAll().where("event_id", "=", scene.eventId).orderBy("id").execute(),
+        placement: await trx
+          .selectFrom("placement")
+          .selectAll()
+          .where("event_id", "=", scene.eventId)
+          .orderBy("person_id")
+          .orderBy("leg")
+          .execute(),
+      });
+      const before = await rows();
+      expect(Object.values(before).map((table) => table.length)).toEqual([1, 5, 1, 5]);
       await readOrganiserState(trx, scene.eventId, scene.token);
       await readOrganiserState(trx, scene.eventId, oneCharOff(scene.token));
-      expect(await count()).toEqual(before);
+      expect(await rows()).toStrictEqual(before);
     });
   });
 
