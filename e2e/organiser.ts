@@ -135,7 +135,9 @@ function isAction(request: Request): boolean {
 interface Sent {
   method: string;
   path: string;
+  action: boolean;
   headers: Record<string, string>;
+  body: string;
 }
 
 /**
@@ -185,7 +187,14 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
   }
 
   context.on("request", (request) => {
-    if (state.on) sent.push({ method: request.method(), path: pathOf(request.url()), headers: request.headers() });
+    if (!state.on) return;
+    sent.push({
+      method: request.method(),
+      path: pathOf(request.url()),
+      action: isAction(request),
+      headers: request.headers(),
+      body: request.postData() ?? "",
+    });
   });
   context.on("response", (response) => {
     if (state.on) exchanges.push(exchange(response));
@@ -199,8 +208,12 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
 
   return {
     sent,
+    /** Every response recorded so far: all of them once `stop()` has returned. */
     exchanges: () => Promise.all(exchanges),
+    /** The same, each read or not: a body that could not be read does not hide the others. */
+    settled: () => Promise.allSettled(exchanges),
     consoleLines,
+    /** Ends the recording: no list above grows after it. */
     async stop() {
       state.on = false;
       await context.unrouteAll({ behavior: "ignoreErrors" });
@@ -208,11 +221,12 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
   };
 }
 
-/** Where each secret appears among `places`, by the place's name: never the text itself. */
+/** Where each secret appears among `places`, by the secret's and the place's names: never the text itself. */
 function findings(places: [string, string][], secrets: [string, string][]): string[] {
-  return places.flatMap(([where, text]) =>
+  const found = places.flatMap(([where, text]) =>
     secrets.filter(([, secret]) => text.includes(secret)).map(([what]) => `${what} in ${where}`),
   );
+  return [...new Set(found)];
 }
 
 /**
@@ -240,10 +254,12 @@ async function storageOf(context: BrowserContext, origin: string): Promise<[stri
 
 /**
  * `test`, with `organiserTraffic`, automatic: once the test is over, the admin token of
- * `seededEvent` is in no path, query string, header, body received or console message
- * (O6.1), and neither the token nor any number of the event is in the origin's
- * `localStorage`, `sessionStorage` or cookies (O2.10). It runs after the test's `afterEach`
- * hooks, `leaveNoToken()` (#160) included, and leaves the pages on `/icon.svg`.
+ * `seededEvent` is in no path, query string, header, body received or console message, nor
+ * in any request body but a server action's posted to `/e/{id}/admin` (O6.1); neither the
+ * token nor any number of the event is in the origin's `localStorage`, `sessionStorage` or
+ * cookies (O2.10). It runs after the test's `afterEach` hooks, `leaveNoToken()` (#160)
+ * included, and takes the pages to `/icon.svg` before it checks anything: the snapshot of a
+ * failure never holds the admin link. Both checks report, whichever fails.
  */
 export const test = base.extend<{ organiserTraffic: OrganiserTraffic }>({
   organiserTraffic: [
@@ -253,14 +269,19 @@ export const test = base.extend<{ organiserTraffic: OrganiserTraffic }>({
       const recorded = await record(context, hide);
       await provide({ exchanges: recorded.exchanges });
 
-      const exchanges = await recorded.exchanges();
       await recorded.stop();
+      const settled = await recorded.settled();
+      const exchanges = settled.flatMap((each) => (each.status === "fulfilled" ? [each.value] : []));
+      const unread = settled.flatMap((each) => (each.status === "rejected" ? [hide(String(each.reason))] : []));
       const named = (what: string, { method, path }: Pick<Sent, "method" | "path">) =>
         `${what} (${method} ${hide(path)})`;
+      // The only body the token may be in: a server action posted to the organiser's page.
+      const pageAction = ({ action, path }: Sent) => action && path === `/e/${id}/admin`;
       const places: [string, string][] = [
         ...recorded.sent.flatMap((each): [string, string][] => [
           [named("the path or query of a request", each), each.path],
           [named("the headers of a request", each), JSON.stringify(each.headers)],
+          [named("the body of a request", each), pageAction(each) ? "" : each.body],
         ]),
         ...exchanges.flatMap((each): [string, string][] => [
           [named("the headers of a request", each), JSON.stringify(each.requestHeaders)],
@@ -269,18 +290,25 @@ export const test = base.extend<{ organiserTraffic: OrganiserTraffic }>({
         ]),
         ...recorded.consoleLines.map((line, n): [string, string] => [`console message ${n}`, line]),
       ];
-      expect(exchanges.length, "requests recorded").toBeGreaterThan(0);
-      expect(findings(places, [["the admin token", token]]), "O6.1").toEqual([]);
+      const leaks = findings(places, [["the admin token", token]]);
 
-      // Every number of the event, by the only query that reads them.
-      const { phonesById } = await readEventRows(db, id);
-      const numbers = [...phonesById.values()].flatMap((phone) => (phone ? digitsOf(phone) : []));
-      const secrets: [string, string][] = [
+      // Every number of the event, by the only query that reads them, named by its person's
+      // rank in the event, as the scene names them by letter: never shown.
+      const { persons, phonesById } = await readEventRows(db, id);
+      const numbers = persons.flatMap(({ id: personId }, n): [string, string][] => {
+        const phone = phonesById.get(personId);
+        return phone ? digitsOf(phone).map((form) => [`the number of person ${n + 1}`, form]) : [];
+      });
+      const stored = findings(await storageOf(context, new URL(baseURL!).origin), [
         ["the admin token", token],
-        ...numbers.map((number): [string, string] => [`the number ${number}`, number]),
-      ];
-      const stored = await storageOf(context, new URL(baseURL!).origin);
-      expect(findings(stored, secrets), "O2.10").toEqual([]);
+        ...numbers,
+      ]);
+
+      // Only now, the pages on /icon.svg: the snapshot of a failure holds no admin link.
+      expect.soft(unread, "answers that could not be read").toEqual([]);
+      expect.soft(exchanges.length, "requests recorded").toBeGreaterThan(0);
+      expect.soft(leaks, "O6.1").toEqual([]);
+      expect(stored, "O2.10").toEqual([]);
     },
     { auto: true },
   ],
