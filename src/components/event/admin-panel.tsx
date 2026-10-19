@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useId, useState, type ReactNode, type Ref } from "react";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
 import type { WallClock } from "@/domain/wall-clock";
+import { cn } from "@/lib/utils";
 import { CopyableLink, ShareButton } from "./copyable-link";
 import { OrganiserLegs } from "./organiser-leg";
 import { OrganiserTiles } from "./organiser-tiles";
@@ -17,7 +18,8 @@ import { ReadButton } from "./read-button";
  * the panel widens, the links take two columns and the sections two more (O4.1). It
  * receives the organiser's link ready-made: reading the token is admin-link.ts's alone. Its
  * title takes the focus after « Réessayer » (O5.8), through `titleRef`. Which lists are
- * unfolded is kept here, by leg and list (O5.6).
+ * unfolded is kept here, by leg and list (O5.6). « Actualiser », right of the title, reads
+ * the screen again (O1.8); `said` is what the title line's live regions say of it (O1.9, O5.4).
  */
 export function AdminPanel({
   publicUrl,
@@ -26,6 +28,9 @@ export function AdminPanel({
   legs,
   allerAt,
   retourAt,
+  refreshing,
+  said,
+  onRefresh,
 }: {
   publicUrl: string;
   adminUrl: string;
@@ -33,6 +38,9 @@ export function AdminPanel({
   legs: OrganiserLeg[];
   allerAt: WallClock;
   retourAt: WallClock | null;
+  refreshing: boolean;
+  said: "" | "refreshing" | "refreshed" | "failed";
+  onRefresh: () => void;
 }) {
   const t = useTranslations("Admin");
   const titleId = useId();
@@ -52,9 +60,33 @@ export function AdminPanel({
       aria-labelledby={titleId}
       className="mx-auto flex w-full max-w-board flex-col gap-4 rounded-xl border p-4 lg:max-w-5xl"
     >
-      <h2 id={titleId} ref={titleRef} tabIndex={-1} className="font-semibold outline-none">
-        {t("title")}
-      </h2>
+      {/* The title line, then its alert: what stays when the panel folds (#204). */}
+      <div className="flex flex-col">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
+          <h2 id={titleId} ref={titleRef} tabIndex={-1} className="min-w-0 flex-auto font-semibold outline-none">
+            {t("title")}
+          </h2>
+          <ReadButton reading={refreshing} onRead={onRefresh} className="-my-1.5 ml-auto">
+            {t("refresh")}
+          </ReadButton>
+          <p role="status" className="sr-only">
+            {said === "refreshing" || said === "refreshed" ? t(said) : ""}
+          </p>
+        </div>
+        {/* The panel's width, framed on a failure only. Its alert region holds text alone, is always
+            there, and is emptied while a read runs: two failures in a row are announced twice (O5.4). */}
+        <div className={cn(said === "failed" && cn(ALERT_FRAME, "mt-4"))}>
+          {said === "failed" && <TriangleAlert aria-hidden className="mt-0.5 size-4 text-destructive" />}
+          <div role="alert" className="flex max-w-prose flex-col gap-0.5">
+            {said === "failed" && (
+              <>
+                <p className="font-semibold text-destructive">{t("refreshFailed.title")}</p>
+                <p className="text-muted-foreground">{t("refreshFailed.body")}</p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
       <OrganiserTiles legs={legs} />
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
         <LinkGroup label={t("shareLink.label")} hint={t("shareLink.hint")}>
@@ -103,9 +135,10 @@ function LinkGroup({ label, hint, children }: { label: ReactNode; hint: string; 
 }
 
 // Untinted (O7.7): the frame in the destructive colour on the background, as #66's alerts.
+const ALERT_FRAME =
+  "grid grid-cols-[1rem_1fr] gap-x-2.5 rounded-lg border border-destructive bg-background p-3 text-sm";
 // The board's width, centred, where the panel would be (O7.5).
-const PROBLEM_FRAME =
-  "mx-auto grid w-full max-w-board grid-cols-[1rem_1fr] gap-x-2.5 rounded-lg border border-destructive bg-background p-3 text-sm outline-none";
+const PROBLEM_FRAME = cn(ALERT_FRAME, "mx-auto w-full max-w-board outline-none");
 
 /**
  * Instead of the panel, when the link is not the organiser's (C6.5), or when the check

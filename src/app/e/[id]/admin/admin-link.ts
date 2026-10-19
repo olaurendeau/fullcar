@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import { sendAction, type Sent } from "../run-action";
 import { loadOrganiserPanel } from "./actions";
 
 /*
@@ -62,9 +63,14 @@ export function retryFrom(check: AdminLinkCheck): AdminLinkCheck | undefined {
  * answers (C4.9). Checked again when only the fragment changes, which does not reload the
  * page: pasting the right link over a wrong one. A failed check is not an invalid link.
  * `retry()` checks again after a failure, with the token read again from the fragment,
- * without reloading the page (O5.3).
+ * without reloading the page (O5.3). `read()` reads the panel again with the token of the
+ * fragment, and applies nothing (#182).
  */
-export function useAdminLinkCheck(id: string): { check: AdminLinkCheck; retry: () => void } {
+export function useAdminLinkCheck(id: string): {
+  check: AdminLinkCheck;
+  retry: () => void;
+  read: () => Promise<Sent<OrganiserPanelAnswer>>;
+} {
   const [check, setCheck] = useState<AdminLinkCheck>({ state: "checking" });
   const verifyAgain = useRef(() => {});
 
@@ -102,5 +108,12 @@ export function useAdminLinkCheck(id: string): { check: AdminLinkCheck; retry: (
     verifyAgain.current();
   }, [check]);
 
-  return { check, retry };
+  const read = useCallback(() => {
+    const token = tokenInFragment(window.location.hash);
+    return sendAction<OrganiserPanelAnswer>(() =>
+      token ? loadOrganiserPanel(id, token) : Promise.resolve({ state: "invalid" }),
+    );
+  }, [id]);
+
+  return { check, retry, read };
 }

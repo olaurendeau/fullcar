@@ -187,6 +187,13 @@
     },
     "loading": "Chargement de l’espace organisateur…",
     "retry": "Réessayer",
+    "refresh": "Actualiser",
+    "refreshing": "Actualisation…",
+    "refreshed": "Espace organisateur actualisé.",
+    "refreshFailed": {
+      "title": "L’espace organisateur n’a pas pu être actualisé.",
+      "body": "Ce qui est affiché date du dernier chargement. Vérifiez la connexion, puis utilisez de nouveau « Actualiser »."
+    },
     "needsJavaScript": "L’espace organisateur nécessite JavaScript : activez-le, puis rechargez la page.",
     "withoutCar": {
       "title": "Sans voiture ({count})",
