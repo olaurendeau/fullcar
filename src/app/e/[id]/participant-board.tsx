@@ -109,7 +109,8 @@ export function ParticipantBoard({
   // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
   // hides the page: until then, it would be neither seen nor announced. Written after what the
   // actions ending meanwhile write there, it is not cleared by them. Every failure waits, each
-  // withdrawn alone by a send or answer, from any sheet, that carries all its fields (#167, #208).
+  // withdrawn alone by a send or answer from any sheet about its subject that carries all its
+  // fields; a cell has none, only its subject (#167, #208).
   function failedIn(sheet: FromSheet, problem: ActionProblem) {
     setProblem(null);
     if (!sheet.inSheet()) sheet.whenClosed(() => setProblem(problem));
@@ -134,8 +135,9 @@ export function ParticipantBoard({
       const token = driver.kind === "new" ? ensureDeviceToken(id) : readDeviceToken(id);
       return storeRideOffer(id, token, { ...ride, rideId, driver: driver.kind === "new" ? { ...driver, personId } : driver });
     };
-    const sent = await runAction("offerRide", send, sending);
+    const sent = await runAction(`offerRide:${sheet.key}`, send, sending);
     if (sent === undefined) return undefined;
+    sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
     if (outcome?.ok) {
       device.registered();

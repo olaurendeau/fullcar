@@ -156,6 +156,7 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
   // A change is about its person, whichever form sends it; a registration, about its form.
   const sends = useSends(open, mode.kind === "edit" ? `person:${mode.person.id}` : undefined);
   const editing = mode.kind === "edit";
+  const { leg, hasRetour } = mode.kind === "add" ? mode : { leg: "aller" as const, hasRetour: false };
 
   // « Modifier » is gone as the form takes its place: the focus goes to the first name.
   useEffect(() => {
@@ -180,14 +181,14 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
     if (!checked.ok) return showErrors(checked.errors, checked.first);
     setErrors({});
     setProblem(null);
-    // In `edit` mode, only what changed is sent: a failure is withdrawn by a send that carries all it did.
+    // In `edit` mode, only what changed is sent. Withdraws a failure any form about this person
+    // left for the bar, if this send carries all its fields.
     const changed = PERSON_FIELDS.filter((name) => values[name] !== shown[name]);
-    // Withdraws a failure any form about this person left for the bar, if this send carries all its fields.
     const sheet = sends(mode.kind === "edit" ? changed : []);
     const answer =
       mode.kind === "add"
         ? await mode.addPerson({
-            person: { ...values, bothLegs: mode.hasRetour && bothLegs, leg: mode.leg },
+            person: { ...values, bothLegs: hasRetour && bothLegs, leg },
             creationId: () => (creationId.current ??= newCreationId()),
             sending: setSending,
             ...sheet,
@@ -242,14 +243,8 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
     <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       {field("firstName", { type: "text", autoComplete: "given-name" })}
       {field("phone", { type: "tel", autoComplete: "tel" }, t("phoneHint"))}
-      {mode.kind === "add" && mode.hasRetour && (
-        <Box
-          id={idOf("both")}
-          label={t("both")}
-          hint={t(`bothHint.${mode.leg}`)}
-          checked={bothLegs}
-          onChange={setBothLegs}
-        />
+      {hasRetour && (
+        <Box id={idOf("both")} label={t("both")} hint={t(`bothHint.${leg}`)} checked={bothLegs} onChange={setBothLegs} />
       )}
       {problem && (
         <p role="alert" className="text-sm text-destructive">

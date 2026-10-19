@@ -64,33 +64,29 @@ function phone(value: unknown): { value: string | null } | { error: PersonError 
   return read;
 }
 
-/** A new person: a field left out, or `null`, is empty. */
 export function validatePerson(fields: PersonFields): PersonValidation {
-  const checked = validatePersonChange({ firstName: fields.firstName ?? null, phone: fields.phone ?? null });
-  return checked.ok ? { ok: true, person: checked.change as NewPerson } : checked;
-}
+  const firstName = text(fields.firstName, FIRST_NAME_MAX);
+  const checkedPhone = phone(fields.phone);
 
-export type PersonChangeValidation =
-  | { ok: true; change: Partial<NewPerson> }
-  | { ok: false; errors: PersonErrors; first: PersonField };
+  if ("error" in firstName || "error" in checkedPhone) {
+    const errors: PersonErrors = {};
+    if ("error" in firstName) errors.firstName = firstName.error;
+    if ("error" in checkedPhone) errors.phone = checkedPhone.error;
+    // In the order of PERSON_FIELDS.
+    return { ok: false, errors, first: "error" in firstName ? "firstName" : "phone" };
+  }
+  return { ok: true, person: { firstName: firstName.value, phone: checkedPhone.value } };
+}
 
 /**
  * A change of a person (C2.3): a field left out (`undefined`) stays as it is, so that a form
  * filled before another change landed does not undo it; the others follow `validatePerson`.
  */
-export function validatePersonChange(fields: PersonFields): PersonChangeValidation {
-  const read = {
-    firstName: fields.firstName === undefined ? undefined : text(fields.firstName, FIRST_NAME_MAX),
-    phone: fields.phone === undefined ? undefined : phone(fields.phone),
-  };
-  const errors: PersonErrors = {};
-  const change: Partial<NewPerson> = {};
-  for (const name of PERSON_FIELDS) {
-    const value = read[name];
-    if (value !== undefined && "error" in value) errors[name] = value.error;
-    else if (value !== undefined) Object.assign(change, { [name]: value.value });
-  }
-  // In the order of PERSON_FIELDS.
-  const first = PERSON_FIELDS.find((name) => errors[name] !== undefined);
-  return first === undefined ? { ok: true, change } : { ok: false, errors, first };
+export function validatePersonChange(fields: PersonFields) {
+  // A first name left out is read as a valid one, then left out of the change.
+  const checked = validatePerson({ ...fields, firstName: fields.firstName === undefined ? "-" : fields.firstName });
+  if (!checked.ok) return checked;
+  const given = PERSON_FIELDS.filter((name) => fields[name] !== undefined);
+  const change: Partial<NewPerson> = Object.fromEntries(given.map((name) => [name, checked.person[name]]));
+  return { ok: true as const, change };
 }

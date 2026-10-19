@@ -6,8 +6,8 @@ import { useEffect, useId, useRef, useSyncExternalStore } from "react";
  * message bar is under the sheet: a message written there meanwhile is neither seen nor heard.
  */
 let sheets = 0;
-/** What waits for the page to show, in the order it came: each entry is its own (#167). */
-const waiting = new Set<{ then: () => void }>();
+/** What waits for the page to show, in the order it came (#167). */
+const waiting = new Set<() => void>();
 const watchers = new Set<() => void>();
 const changed = () => watchers.forEach((watcher) => watcher());
 
@@ -23,7 +23,7 @@ export function coverPage(): () => void {
       changed();
       const due = [...waiting];
       waiting.clear();
-      for (const entry of due) entry.then();
+      for (const then of due) then();
     });
   };
 }
@@ -50,18 +50,11 @@ export function usePageHidden(): boolean {
   );
 }
 
-/**
- * Runs `then` once no sheet hides the page, at once if none does. Every message that waits is
- * kept, and runs in turn. Returns what withdraws this one alone while it waits.
- */
+/** Runs `then` once no sheet hides the page, at once if none does, each in turn. Returns what withdraws it alone while it waits. */
 export function whenPageShown(then: () => void): () => void {
-  if (sheets === 0) {
-    then();
-    return () => {};
-  }
-  const entry = { then };
-  waiting.add(entry);
-  return () => void waiting.delete(entry);
+  if (sheets === 0) then();
+  else waiting.add(then);
+  return () => void waiting.delete(then);
 }
 
 /** What an action sent from a sheet is given to say its failure, in the sheet or in the bar. */
