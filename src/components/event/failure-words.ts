@@ -34,10 +34,11 @@ export type Why =
 
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
- * only a forged request or a collision of ids gives, take the generic one.
+ * only a forged request or a collision of ids gives, take the generic one; so does `noRetour`,
+ * the retour removed meanwhile, until #265 gives it its own words.
  */
-export function whyOf(error: Plain | "invalid" | "idTaken"): Why {
-  return { kind: error === "invalid" || error === "idTaken" ? "failed" : error };
+export function whyOf(error: Plain | "invalid" | "idTaken" | "noRetour"): Why {
+  return { kind: error === "invalid" || error === "idTaken" || error === "noRetour" ? "failed" : error };
 }
 
 /** The page's words: a translator from the root of the messages, and a list in its language. */
