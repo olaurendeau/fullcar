@@ -444,7 +444,7 @@ test.describe("offer a car", () => {
         await page.keyboard.press("Enter");
         await expect(form(page)).toHaveAttribute("data-state", "open");
         await expect(field(page, FR.location.aller)).toHaveValue("Mairie de Vitré");
-        // From the keyboard: the overlay of the reopened sheet may lie over the form for a moment.
+        // From the keyboard: a click on « Valider » here was flaky in CI.
         await (when.endsWith("again") ? field(page, FR.location.aller).press("Enter") : page.keyboard.press("Escape"));
       }
       await expect(form(page)).toHaveCount(0);

@@ -134,8 +134,9 @@ export function AddPersonButton({
  *
  * In `edit` mode (C2.3), the first name and the number are filled with the person's, under the
  * same rules, without « Aller et retour »; the first name has the focus as the form shows.
+ * Opened from the sheet of a free seat, « Annuler » under « Valider » goes back to its list (C6.6).
  */
-export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open: () => boolean; onDone: () => void }) {
+export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormMode; open: () => boolean; onDone: (personId: string) => void; onCancel?: () => void }) {
   const t = useTranslations("PersonForm");
   const tErrors = useTranslations("FormErrors");
   const tActions = useTranslations("Actions");
@@ -200,9 +201,11 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
             ...sheet,
           });
     if (answer?.kind === "done") {
+      // A registration's creation id is the person's.
+      const personId = mode.kind === "add" ? creationId.current : mode.person.id;
       creationId.current = undefined;
       // Not the sheet opened since: it shows another form.
-      if (sheet.inSheet()) onDone();
+      if (sheet.inSheet() && personId) onDone(personId);
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
   }
@@ -254,6 +257,11 @@ export function PersonForm({ mode, open, onDone }: { mode: PersonFormMode; open:
       <Button ref={submitButton} type="submit" className="h-11 w-full" disabled={sending}>
         {tActions("submit")}
       </Button>
+      {onCancel && (
+        <Button type="button" variant="outline" className="h-11 w-full" onClick={onCancel}>
+          {tActions("cancel")}
+        </Button>
+      )}
     </form>
   );
 }

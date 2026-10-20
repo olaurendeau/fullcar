@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import type { BarMessage } from "@/components/event/message-bar";
 import type { EventState } from "./event-state";
-import { actionRunner, sendAction, stateOf, type ActionProblem } from "./run-action";
+import { actionRunner, sendAction, stateOf } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -44,15 +45,15 @@ describe("stateOf", () => {
 describe("actionRunner", () => {
   const state: EventState = [{ leg: "aller", cars: [], withoutCar: [], device: [] }];
 
-  /** A page that records what the runner tells it, and a connection that can be cut. */
+  /** A page that records the bar's messages and the states the runner gives it, and a connection that can be cut. */
   function page() {
-    const told: { problems: (ActionProblem | null)[]; states: EventState[]; connected: boolean } = {
-      problems: [],
+    const told: { messages: (BarMessage | null)[]; states: EventState[]; connected: boolean } = {
+      messages: [],
       states: [],
       connected: true,
     };
     const run = actionRunner(
-      { problem: (problem) => told.problems.push(problem), state: (next) => told.states.push(next) },
+      { message: (message) => told.messages.push(message), state: (next) => told.states.push(next) },
       () => told.connected,
     );
     return { told, run };
@@ -62,18 +63,37 @@ describe("actionRunner", () => {
     const { told, run } = page();
     told.connected = false;
     await run("seat", async () => ({ ok: true, state }));
-    expect(told.problems).toEqual(["offline"]);
+    expect(told.messages).toEqual([{ kind: "problem", problem: "offline" }]);
     told.connected = true;
     await run("seat", async () => {
       throw new Error("500");
     });
-    expect(told.problems).toEqual(["offline", "failed"]);
+    expect(told.messages).toEqual([
+      { kind: "problem", problem: "offline" },
+      { kind: "problem", problem: "failed" },
+    ]);
+  });
+
+  it("a success message stays while the next action is sent, however long, and is replaced as it ends (v4-7)", async () => {
+    vi.useFakeTimers();
+    const { told, run } = page();
+    // The page says a success; the runner only replaces the bar's message when an action ends.
+    const placed: BarMessage = { kind: "done", text: "Tom et Léa sont dans la voiture de Sophie" };
+    told.messages.push(placed);
+    let answer: (value: unknown) => void = () => {};
+    const next = run("seat", () => new Promise((resolve) => (answer = resolve)));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(told.messages).toEqual([placed]);
+    answer({ ok: false, error: "rideGone", state });
+    await next;
+    expect(told.messages).toEqual([placed, null]);
+    vi.useRealTimers();
   });
 
   it("an answer closes the message and gives the page the state the server sends, refusal included", async () => {
     const { told, run } = page();
     await run("seat", async () => ({ ok: false, error: "seatTaken", state }));
-    expect(told.problems).toEqual([null]);
+    expect(told.messages).toEqual([null]);
     expect(told.states).toEqual([state]);
   });
 

@@ -28,6 +28,8 @@ export function BottomSheet({
   title,
   description,
   onCloseAutoFocus,
+  actions,
+  closable = true,
   children,
 }: {
   open: boolean;
@@ -38,6 +40,10 @@ export function BottomSheet({
   description?: ReactNode;
   /** Where the focus goes once it is closed: Radix's default is the trigger, when it has one. */
   onCloseAutoFocus?: ComponentProps<typeof SheetContent>["onCloseAutoFocus"];
+  /** At the bottom, above « Fermer »: the sheet's own action and its message. */
+  actions?: ReactNode;
+  /** False while a form takes the sheet's place, with its own way back: no « Fermer » then (Escape still closes). */
+  closable?: boolean;
   children: ReactNode;
 }) {
   const t = useTranslations("Actions");
@@ -60,12 +66,15 @@ export function BottomSheet({
           {description && <SheetDescription>{description}</SheetDescription>}
         </SheetHeader>
         <div className="flex flex-col gap-3.5 p-4">{children}</div>
-        <SheetFooter className="pt-0">
-          <SheetClose asChild>
-            <Button variant="outline" className="h-11 w-full">
-              {t("close")}
-            </Button>
-          </SheetClose>
+        <SheetFooter className="pt-0 empty:hidden">
+          {actions}
+          {closable && (
+            <SheetClose asChild>
+              <Button variant="outline" className="h-11 w-full">
+                {t("close")}
+              </Button>
+            </SheetClose>
+          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>

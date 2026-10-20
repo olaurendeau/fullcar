@@ -9,10 +9,10 @@ import { PhoneLink } from "./phone-link";
  * « Complet » when no seat is left (v4-13); under it, its place and note, then a line per
  * passenger and one per free seat. The numbers the state carries are
  * `tel:` links (C10.1). A free seat is a button, inactive until the device's persons are
- * known (C5.9) and without JavaScript; the tap itself comes with #92. Long values wrap
- * anywhere rather than scrolling sideways (C11.3).
+ * known (C5.9) and without JavaScript; its tap opens the sheet (`onTakeSeat`, #91). Long
+ * values wrap anywhere rather than scrolling sideways (C11.3).
  */
-export function RideCard({ car, date, seatsActive }: { car: VisibleCar; date: WallDate; seatsActive: boolean }) {
+export function RideCard({ car, date, seatsActive, onTakeSeat }: { car: VisibleCar; date: WallDate; seatsActive: boolean; onTakeSeat: (seat: HTMLElement) => void }) {
   const t = useTranslations("Board.car");
   const format = useFormatter();
   const headingId = `car-${car.id}`;
@@ -68,6 +68,7 @@ export function RideCard({ car, date, seatsActive }: { car: VisibleCar; date: Wa
               type="button"
               disabled={!seatsActive}
               aria-label={t("takeSeat", { driver })}
+              onClick={(event) => onTakeSeat(event.currentTarget)}
               className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-dashed border-foreground/25 bg-background px-3 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
             >
               <Plus aria-hidden className="size-4 shrink-0 text-muted-foreground" />
