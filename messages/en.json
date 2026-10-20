@@ -288,5 +288,8 @@
   "Contact": {
     "link": "Contact us",
     "newTab": "(opens in a new tab)"
+  },
+  "NewEvent": {
+    "title": "Create an event"
   }
 }

@@ -31,15 +31,15 @@ async function shoot(page: Page, testInfo: TestInfo, name: string) {
 
 test.use({ locale: "fr-FR" });
 
-test("home, every error shown", async ({ page }, testInfo) => {
-  await page.goto("/");
+test("the creation form, every error shown", async ({ page }, testInfo) => {
+  await page.goto("/nouveau");
   // Inactive until hydrated.
   await expect(page.getByRole("button", { name: "Créer" })).toBeEnabled({ timeout: 15_000 });
   await page.getByRole("button", { name: "Créer" }).click();
   for (const label of FIELDS) {
     await expect(page.getByLabel(label, { exact: true })).toHaveAccessibleDescription("Champ requis.");
   }
-  await shoot(page, testInfo, "home-errors");
+  await shoot(page, testInfo, "new-event-errors");
 });
 
 test("organiser's page, with a retour", async ({ page, seededEvent }, testInfo) => {

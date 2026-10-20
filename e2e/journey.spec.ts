@@ -5,7 +5,7 @@ import { expect, leaveNoToken, test } from "./fixtures";
 leaveNoToken();
 
 /*
- * The organiser's whole journey (#3, #24): from `/` to the link to share, against the
+ * The organiser's whole journey (#3, #24): from `/nouveau` to the link to share, against the
  * production build served in UTC+14 (the Makefile's E2E_TZ), from browsers in other zones.
  */
 
@@ -100,7 +100,7 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
   test.describe(`the organiser's journey, ${name}`, () => {
     test.use({ locale, timezoneId });
 
-    test("C1.4, C1.12, C5.9, C7.1: at most six actions to the link to share, in less than 30 s, in one language", async ({
+    test("C1.4, C1.12, C5.9, C7.1: at most six actions from /nouveau to the link to share, in less than 30 s, in one language", async ({
       page,
       baseURL,
     }) => {
@@ -114,7 +114,7 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
       const title = lang === "fr" ? "Sortie ski du club" : "Club ski trip";
 
       const start = Date.now();
-      await page.goto("/");
+      await page.goto("/nouveau");
       // Hydrated: "Créer" stays inactive until then. Waiting is not an action.
       await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
       const allerDate = await deviceDate(page, 7);
@@ -224,7 +224,7 @@ test.describe("the organiser's token on the network", () => {
     const words = WORDS.fr;
     const traffic = await recordTraffic(context);
 
-    await page.goto("/");
+    await page.goto("/nouveau");
     await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
     await field(page, words.title).fill("Sortie ski du club");
     await field(page, words.location).fill("La Clusaz");
@@ -256,12 +256,12 @@ test.describe("the organiser's token on the network", () => {
         .filter(([, text]) => text.includes(token))
         .map(([part]) => `${at} ${part}`),
     );
-    expect(where).toEqual(["POST / responseBody", `POST ${admin} requestBody`, `POST ${admin} requestBody`]);
+    expect(where).toEqual(["POST /nouveau responseBody", `POST ${admin} requestBody`, `POST ${admin} requestBody`]);
 
     // Everything was watched: the creation, the App Router's fetch of the organiser's page
     // (`router.push`, its RSC payload), the check, and the page's HTML.
     const ats = traffic.map(({ at }) => at.replace(/\?_rsc=.*$/, "?_rsc="));
-    expect(ats).toEqual(expect.arrayContaining(["POST /", `GET ${admin}?_rsc=`, `POST ${admin}`, `GET ${admin}`]));
+    expect(ats).toEqual(expect.arrayContaining(["POST /nouveau", `GET ${admin}?_rsc=`, `POST ${admin}`, `GET ${admin}`]));
     expect(JSON.stringify(await context.cookies())).not.toContain(token);
   });
 
@@ -307,7 +307,7 @@ test.describe("an event with its three options", () => {
   /** Creates the same event by the form, with or without its options: its organiser's URL. */
   async function create(page: Page, withOptions: boolean): Promise<string> {
     const words = WORDS.fr;
-    await page.goto("/");
+    await page.goto("/nouveau");
     await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
     await field(page, words.title).fill("Sortie ski du club");
     await field(page, words.location).fill("La Clusaz");

@@ -121,6 +121,48 @@ test.describe("the bar's messages", () => {
     await expect(tab(page, "Retour")).toHaveAttribute("aria-selected", "true");
   });
 
+  // #222: a line moves the focus only when the element that had it is gone (« Le focus après une
+  // action », rule 8); a focus put on nothing, as a tap on the page's text does on a phone, stays.
+  test("a cell's failure from a sheet closed since, the focus put on nothing: it stays there, and the page does not scroll", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, scene.persons.tom, true);
+    await page.goto(`/e/${seededEvent.id}`);
+    const tomAller = page.getByRole("region", { name: "Vos inscriptions" }).getByRole("button", { name: /^Tom, Aller : / });
+    await tomAller.click();
+    await page.getByRole("dialog", { name: "Tom · Aller" }).getByRole("button", { name: "Ne fait pas l’aller" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(tomAller).toBeFocused();
+    await page.evaluate(() => {
+      (document.activeElement as HTMLElement).blur();
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    const scrolled = await page.evaluate(() => window.scrollY);
+
+    await failHeld(page, answer);
+    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(bar(page)).toHaveText(FAILED);
+    expect(await page.evaluate(() => [document.activeElement === document.body, window.scrollY])).toEqual([true, scrolled]);
+  });
+
+  // #222: the second tap sends nothing while the first is on its way, so it covers nothing either.
+  test("a cell's action tapped twice before its answer, the sheet closed, the first send failing: the failure is said", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, scene.persons.tom, true);
+    const sent: string[] = [];
+    page.on("request", (request) => void (request.postData()?.includes(scene.persons.tom) && sent.push(request.method())));
+    await page.goto(`/e/${seededEvent.id}`);
+    await page.getByRole("region", { name: "Vos inscriptions" }).getByRole("button", { name: /^Tom, Aller : / }).click();
+    const action = page.getByRole("dialog", { name: "Tom · Aller" }).getByRole("button", { name: "Ne fait pas l’aller" });
+    await action.click();
+    await action.click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await failHeld(page, answer);
+    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(bar(page)).toHaveText(FAILED);
+    expect(sent).toEqual(["POST"]);
+  });
+
   test("C11.10: a failure offline stays once the connection and the `online` event are back", async ({ context, page, seededEvent }) => {
     let lose = () => {};
     const lost = new Promise<void>((resolve) => (lose = resolve));
