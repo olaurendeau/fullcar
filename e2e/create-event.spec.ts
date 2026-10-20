@@ -25,7 +25,11 @@ const FR = {
   failed: "Impossible de créer l’événement. Vérifiez la connexion, puis réessayez.",
   needsJavaScript: "La création d’un événement nécessite JavaScript : activez-le, puis rechargez la page.",
   panel: "Espace organisateur",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
 };
+
+/** Where the form is (#245, A2.1): `/` is to be the home page. */
+const NEW_EVENT = "/nouveau";
 
 /** Where a new event lands: its organiser's link, the secret in the fragment only (C1.5). */
 const ARRIVAL = /\/e\/[2-9A-HJ-NP-Za-km-z]{8}\/admin#[A-Za-z0-9_-]{22}$/;
@@ -40,7 +44,7 @@ const alert = (page: Page) => page.getByRole("main").getByRole("alert");
  * longer than an assertion, since a loaded machine slows it and nothing here measures it.
  */
 async function openForm(page: Page) {
-  await page.goto("/");
+  await page.goto(NEW_EVENT);
   await expect(createButton(page)).toBeEnabled({ timeout: 15_000 });
 }
 
@@ -54,11 +58,15 @@ function deviceDate(page: Page, days = 0): Promise<string> {
   }, days);
 }
 
-/** The creation requests: a server action posted to the home page. */
+/** The creation requests: a server action posted to the form's page. */
 function creations(page: Page): Request[] {
   const sent: Request[] = [];
   page.on("request", (request) => {
-    if (request.method() === "POST" && new URL(request.url()).pathname === "/" && request.headers()["next-action"]) {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === NEW_EVENT &&
+      request.headers()["next-action"]
+    ) {
       sent.push(request);
     }
   });
@@ -80,8 +88,26 @@ async function height(locator: Locator): Promise<number> {
   return (await locator.boundingBox())!.height;
 }
 
-test.describe("creating an event from the home page", () => {
+test.describe("creating an event from /nouveau", () => {
   test.use({ locale: "fr-FR" });
+
+  test("A2.1: /nouveau answers 200, titled Créer un événement, its h1 before the form", async ({ page }) => {
+    const response = await page.goto(NEW_EVENT);
+    expect(response?.status()).toBe(200);
+    await expect(page).toHaveTitle("Créer un événement");
+    const heading = page.getByRole("heading", { level: 1 });
+    await expect(heading).toHaveText("Créer un événement");
+    // The format of « Événement introuvable », and no tagline: it is the home page's.
+    await expect(heading).toHaveCSS("font-size", "24px");
+    await expect(heading).toHaveCSS("font-weight", "700");
+    await expect(page.getByText(FR.tagline)).toHaveCount(0);
+    const order = await heading.evaluate((h1) => {
+      const after = (node: Element | null) =>
+        node !== null && (h1.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+      return { form: after(document.querySelector("form")), footer: after(document.querySelector("footer")) };
+    });
+    expect(order).toEqual({ form: true, footer: true });
+  });
 
   test("C1.1, C1.2, C3.1: every field has a label, Retour is checked with its fields, the options are off", async ({
     page,
@@ -119,7 +145,7 @@ test.describe("creating an event from the home page", () => {
     await expect(field(page, FR.retourDate)).toHaveValue(inThreeWeeks);
   });
 
-  test("C1.4, C1.5, C4.6: six actions from / to the organiser's arrival, in less than 30 s", async ({ page }) => {
+  test("C1.4, C1.5, C4.6: six actions from /nouveau to the organiser's arrival, in less than 30 s", async ({ page }) => {
     const sent = creations(page);
     const start = Date.now();
     await openForm(page);
@@ -153,7 +179,7 @@ test.describe("creating an event from the home page", () => {
     // The creation's body is read here, in Node: the browser navigates away at once and may
     // already have dropped it when a `response` handler asks for it.
     await page.route(
-      (url) => url.pathname === "/",
+      (url) => url.pathname === NEW_EVENT,
       async (route) => {
         if (route.request().method() !== "POST") return route.continue();
         const response = await route.fetch();
@@ -221,7 +247,7 @@ test.describe("creating an event from the home page", () => {
     await expect(field(page, FR.location)).toHaveValue("Chalet des Écureuils");
     await expect(field(page, FR.allerTime)).toHaveValue("07:30");
     await expect(field(page, FR.location)).not.toHaveAttribute("aria-invalid", "true");
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/nouveau$/);
     expect(sent).toHaveLength(0);
   });
 
@@ -278,7 +304,7 @@ test.describe("creating an event from the home page", () => {
     await expect(field(page, FR.allerDate)).toBeFocused();
     await expect(field(page, FR.title)).toHaveValue("Sortie ski du club");
     await expect(createButton(page)).toBeEnabled();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/nouveau$/);
     expect(sent).toHaveLength(1);
   });
 
@@ -303,7 +329,7 @@ test.describe("creating an event from the home page", () => {
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));
     await page.route(
-      (url) => url.pathname === "/",
+      (url) => url.pathname === NEW_EVENT,
       async (route) => {
         if (route.request().method() === "POST") await released;
         await route.continue();
@@ -360,7 +386,7 @@ test.describe("creating an event from the home page", () => {
     await expect(page.getByText(FR.required)).toHaveCount(0);
     const alertBox = (await alert(page).boundingBox())!;
     expect(alertBox.y + alertBox.height).toBeLessThanOrEqual((await createButton(page).boundingBox())!.y);
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/nouveau$/);
     await expect(field(page, FR.title)).toHaveValue("Sortie ski du club");
     await expect(field(page, FR.retourTime)).toHaveValue("18:00");
 
@@ -371,7 +397,7 @@ test.describe("creating an event from the home page", () => {
 
   test("server error: the same alert, with no technical detail, and the values kept", async ({ page }) => {
     await page.route(
-      (url) => url.pathname === "/",
+      (url) => url.pathname === NEW_EVENT,
       (route) =>
         route.request().method() === "POST"
           ? route.fulfill({ status: 500, body: "Internal Server Error: relation event" })
@@ -469,10 +495,10 @@ test.describe("the date and time fields side by side (#114)", () => {
 test.describe("creating an event without JavaScript", () => {
   test.use({ locale: "fr-FR", javaScriptEnabled: false });
 
-  test("says creation needs JavaScript, keeps Créer inactive, and sends nothing", async ({ page }) => {
+  test("A1.4: /nouveau says creation needs JavaScript, keeps Créer inactive, and sends nothing", async ({ page }) => {
     const sent: Request[] = [];
     page.on("request", (request) => request.method() !== "GET" && sent.push(request));
-    await page.goto("/");
+    await page.goto(NEW_EVENT);
     // getByText skips what a <noscript> holds: its paragraph is reached by CSS.
     const message = page.locator("form noscript > p");
     await expect(message).toBeVisible();
@@ -481,7 +507,7 @@ test.describe("creating an event without JavaScript", () => {
 
     await field(page, FR.title).fill("Sortie ski du club");
     await field(page, FR.title).press("Enter");
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/nouveau$/);
     expect(sent).toEqual([]);
   });
 });
@@ -489,8 +515,15 @@ test.describe("creating an event without JavaScript", () => {
 test.describe("creating an event in a browser set to English", () => {
   test.use({ locale: "en-GB" });
 
+  test("A2.1: /nouveau answers 200, titled Create an event", async ({ page }) => {
+    const response = await page.goto(NEW_EVENT);
+    expect(response?.status()).toBe(200);
+    await expect(page).toHaveTitle("Create an event");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Create an event");
+  });
+
   test("C7.1: speaks English", async ({ page }) => {
-    await page.goto("/");
+    await page.goto(NEW_EVENT);
     await expect(page.getByRole("button", { name: "Create" })).toBeEnabled({ timeout: 15_000 });
     await page.getByRole("button", { name: "Create" }).click();
     await expect(page.getByLabel("Title", { exact: true })).toHaveAccessibleDescription("Required.");
