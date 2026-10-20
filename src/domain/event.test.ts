@@ -4,11 +4,14 @@ import {
   LOCATION_MAX,
   TITLE_MAX,
   deviceBounds,
+  eventFieldsOf,
   firstInvalidField,
   serverBounds,
   validateEvent,
+  validateEventChange,
   type DateBounds,
   type EventFields,
+  type EventHeader,
 } from "./event";
 
 const bounds: DateBounds = { min: "2026-10-13", max: "2027-10-13" };
@@ -205,6 +208,150 @@ describe("validateEvent", () => {
     ["stops", { boostersEnabled: false, participationEnabled: false, stopsEnabled: true }],
   ] as const)("C3.3: enabling %s enables it alone", (option, expected) => {
     expect(eventOf({ ...valid, [option]: true })).toMatchObject(expected);
+  });
+});
+
+describe("validateEventChange", () => {
+  /** What the page loaded: an event whose dates are both yesterday, before `bounds.min`. */
+  const before: EventHeader = {
+    title: "Match à Lyon",
+    location: "Gymnase Jean Macé",
+    allerAt: "2026-10-12 07:30:00",
+    retourAt: "2026-10-12 18:00:00",
+  };
+  const kept: EventFields = {
+    title: before.title,
+    location: before.location,
+    allerDate: "2026-10-12",
+    allerTime: "07:30",
+    retour: true,
+    retourDate: "2026-10-12",
+    retourTime: "18:00",
+  };
+
+  function changeErrors(fields: EventFields, from: EventHeader = before) {
+    const result = validateEventChange(fields, bounds, from);
+    if (result.ok) throw new Error("expected errors, got a valid change");
+    return result.errors;
+  }
+
+  function changed(fields: EventFields, from: EventHeader = before) {
+    const result = validateEventChange(fields, bounds, from);
+    if (!result.ok) throw new Error(`expected a change, got ${JSON.stringify(result.errors)}`);
+    return result.event;
+  }
+
+  describe("M2.3: the rules of the creation", () => {
+    // `valid` has dates within the bounds: the dates of `before` play no part here.
+    it.each<[string, EventFields, Record<string, string>]>([
+      ["an empty title", { ...valid, title: "" }, { title: "required" }],
+      ["a title of 81 characters", { ...valid, title: "a".repeat(81) }, { title: "tooLong" }],
+      ["an end an hour before the start, the same day", { ...valid, retourTime: "06:30" }, { retourTime: "notAfterAller" }],
+      ["an end a day before", { ...valid, retourDate: "2026-12-11" }, { retourDate: "notAfterAller" }],
+      ["an empty form", { retour: true }, errorsOf({ retour: true })],
+    ])("refuses %s with the keys of the creation", (_, fields, expected) => {
+      expect(changeErrors(fields)).toEqual(expected);
+      expect(changeErrors(fields)).toEqual(errorsOf(fields));
+    });
+
+    it("refuses an end before the start even with both dates kept", () => {
+      expect(changeErrors({ ...kept, retourTime: "07:00" })).toEqual({ retourTime: "notAfterAller" });
+    });
+
+    it("returns the header, trimmed, and no option: a change does not touch them", () => {
+      expect(changed({ ...valid, title: " Tournoi de Rennes U13 ", boosters: true, stops: true })).toEqual({
+        title: "Tournoi de Rennes U13",
+        location: "Gymnase Jean Macé",
+        allerAt: "2026-12-12 07:30:00",
+        retourAt: "2026-12-12 18:00:00",
+      });
+    });
+
+    it("returns no retour without the retour box", () => {
+      expect(changed({ ...kept, retour: false, retourDate: "2020-01-01" }).retourAt).toBeNull();
+    });
+  });
+
+  describe("M2.4: a date kept as it was may be past, a changed date is bounded", () => {
+    it("accepts both past dates kept, with another location", () => {
+      expect(changed({ ...kept, location: "Salle B" })).toEqual({
+        ...before,
+        location: "Salle B",
+      });
+    });
+
+    it("keeps a date when only its time changes", () => {
+      expect(changed({ ...kept, allerTime: "06:00", retourTime: "20:00" })).toMatchObject({
+        allerAt: "2026-10-12 06:00:00",
+        retourAt: "2026-10-12 20:00:00",
+      });
+    });
+
+    it("refuses a start moved to the day before yesterday", () => {
+      expect(changeErrors({ ...kept, allerDate: "2026-10-11" })).toEqual({ allerDate: "tooEarly" });
+    });
+
+    it("refuses a start moved to today + 366 days", () => {
+      expect(changeErrors({ ...kept, allerDate: "2027-10-14", retourDate: "2027-10-15" })).toEqual({
+        allerDate: "tooLate",
+        retourDate: "tooLate",
+      });
+    });
+
+    it("bounds the end by itself: a changed end is refused, a kept start is not", () => {
+      expect(changeErrors({ ...kept, retourDate: "2026-10-11" })).toEqual({ retourDate: "tooEarly" });
+      expect(changed({ ...kept, retourDate: "2026-10-13" }).retourAt).toBe("2026-10-13 18:00:00");
+    });
+
+    it("compares the end with the saved end, not with the saved start", () => {
+      const from = { ...before, retourAt: "2026-10-14 18:00:00" };
+      expect(changeErrors({ ...kept, retourDate: "2026-10-12" }, from)).toEqual({ retourDate: "tooEarly" });
+    });
+
+    it("bounds an end added to an event that had none", () => {
+      expect(changeErrors({ ...kept, retourDate: "2026-10-12" }, { ...before, retourAt: null })).toEqual({
+        retourDate: "tooEarly",
+      });
+    });
+
+    it("still bounds a start that matches nothing saved", () => {
+      expect(changeErrors({ ...kept, allerDate: "2026-10-12" }, { ...before, allerAt: "2026-12-12 07:30:00" })).toEqual({
+        allerDate: "tooEarly",
+      });
+    });
+  });
+});
+
+describe("eventFieldsOf: a forged request", () => {
+  it("reads the fields of the form", () => {
+    expect(eventFieldsOf({ ...valid, boosters: true, participation: true, stops: true, extra: "x" })).toEqual({
+      ...valid,
+      boosters: true,
+      participation: true,
+      stops: true,
+    });
+  });
+
+  it.each([null, undefined, "title", 42, true])("reads %s as an empty form", (input) => {
+    expect(eventFieldsOf(input)).toEqual({ retour: false, boosters: false, participation: false, stops: false });
+  });
+
+  it("reads a field that is not a string as missing", () => {
+    expect(eventFieldsOf({ title: 42, location: ["a"], allerDate: { d: 1 }, allerTime: null, retour: true })).toEqual({
+      retour: true,
+      boosters: false,
+      participation: false,
+      stops: false,
+    });
+  });
+
+  it("enables a box only for a true boolean", () => {
+    expect(eventFieldsOf({ retour: "true", boosters: 1, participation: "on", stops: {} })).toMatchObject({
+      retour: false,
+      boosters: false,
+      participation: false,
+      stops: false,
+    });
   });
 });
 
