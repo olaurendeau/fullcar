@@ -222,39 +222,20 @@ function scrubContexts(contexts: Record<string, unknown>): ErrorEvent["contexts"
   const kept: Record<string, Record<string, unknown>> = {};
   for (const name of SYSTEM_CONTEXTS) if (contexts[name]) kept[name] = record(contexts[name]);
   const { trace, nextjs, response } = contexts as Record<string, Record<string, unknown> | undefined>;
-  if (trace) {
-    kept.trace = compact({
-      trace_id: stringOr(trace.trace_id),
-      span_id: stringOr(trace.span_id),
-      parent_span_id: stringOr(trace.parent_span_id),
-      op: stringOr(trace.op, scrubText),
-      status: stringOr(trace.status, scrubText),
-      origin: stringOr(trace.origin, scrubText),
-    });
-  }
-  if (nextjs) {
-    kept.nextjs = compact({
-      request_path: stringOr(nextjs.request_path, scrubUrl),
-      router_kind: stringOr(nextjs.router_kind, scrubText),
-      router_path: stringOr(nextjs.router_path, scrubUrl),
-      route_type: stringOr(nextjs.route_type, scrubText),
-    });
-  }
+  const ids = { trace_id: asIs, span_id: asIs, parent_span_id: asIs };
+  if (trace) kept.trace = pick(trace, { ...ids, op: scrubText, status: scrubText, origin: scrubText });
+  if (nextjs) kept.nextjs = pick(nextjs, { request_path: scrubUrl, router_kind: scrubText, router_path: scrubUrl, route_type: scrubText });
   if (response) kept.response = compact({ status_code: finite(response.status_code) });
   return kept;
 }
-
-const DSC_KEYS = ["trace_id", "public_key", "sample_rate", "release", "environment", "sampled", "sample_rand", "org_id"];
 
 /**
  * The dynamic sampling context, which becomes the envelope's `trace` header: its
  * `transaction` may be the raw URL of the page.
  */
 export function scrubDsc(dsc: Record<string, unknown>): Record<string, unknown> {
-  const kept: Record<string, unknown> = {};
-  for (const key of DSC_KEYS) if (typeof dsc[key] === "string") kept[key] = dsc[key];
-  if (typeof dsc.transaction === "string") kept.transaction = scrubText(dsc.transaction);
-  return kept;
+  const kept = { trace_id: asIs, public_key: asIs, sample_rate: asIs, release: asIs, environment: asIs, sampled: asIs };
+  return pick(dsc, { ...kept, sample_rand: asIs, org_id: asIs, transaction: scrubText });
 }
 
 /**
@@ -354,8 +335,15 @@ function method(value: unknown): string | undefined {
   return typeof value === "string" && METHOD.test(value) ? value : undefined;
 }
 
-function stringOr(value: unknown, scrub: (s: string) => string = (s) => s): string | undefined {
+const asIs = (s: string) => s;
+
+function stringOr(value: unknown, scrub: (s: string) => string = asIs): string | undefined {
   return typeof value === "string" ? scrub(value) : undefined;
+}
+
+/** The string fields of `source` that `fields` names, each through its own scrubber. */
+function pick(source: Record<string, unknown>, fields: Record<string, (s: string) => string>): Record<string, unknown> {
+  return compact(Object.fromEntries(Object.entries(fields).map(([key, scrub]) => [key, stringOr(source[key], scrub)])));
 }
 
 /** The object without its `undefined` keys, which JSON drops anyway. */

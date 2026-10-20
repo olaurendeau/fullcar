@@ -155,12 +155,8 @@ describe("scrubEvent", () => {
   }
 
   it("keeps the files of the build and of Node as they are", () => {
-    const files = [
-      "app:///_next/server/chunks/ssr/[root-of-the-server]__0f3a.js",
-      "/var/task/.next/server/app/e/[id]/admin/page.js",
-      "/var/task/node_modules/next/dist/server/base-server.js",
-      "node:internal/process/task_queues",
-    ];
+    const files = ["app:///_next/server/chunks/ssr/[root-of-the-server]__0f3a.js", "/var/task/.next/server/app/e/[id]/admin/page.js"];
+    files.push("/var/task/node_modules/next/dist/server/base-server.js", "node:internal/process/task_queues");
     same(frameFiles(files), files);
   });
 
@@ -192,14 +188,9 @@ describe("scrubEvent", () => {
   });
 
   it("keeps the function names of real frames", () => {
-    const frames = sentFrames(
-      nodeStackParser,
-      "Error: boom",
-      "    at async onSubmit (app:///_next/static/chunks/page.js:1:4410)",
-      "    at new SeatPicker (app:///_next/static/chunks/page.js:2:10)",
-      "    at Object.<anonymous> (/var/task/.next/server/app/page.js:3:7)",
-      "    at Array.map (<anonymous>)",
-    );
+    const lines = ["at async onSubmit (app:///_next/static/chunks/page.js:1:4410)", "at new SeatPicker (app:///_next/static/chunks/page.js:2:10)"];
+    lines.push("at Object.<anonymous> (/var/task/.next/server/app/page.js:3:7)", "at Array.map (<anonymous>)");
+    const frames = sentFrames(nodeStackParser, "Error: boom", ...lines.map((line) => `    ${line}`));
     same(frames.map((frame) => frame.function), ["Array.map", "Object.?", "new SeatPicker", "onSubmit"]);
   });
 

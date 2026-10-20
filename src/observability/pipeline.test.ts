@@ -1,21 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import {
-  addBreadcrumb,
-  captureEvent,
-  captureException,
-  createTransport,
-  defaultStackParser,
-  NodeClient,
-  type NodeOptions,
-  setContext,
-  setCurrentClient,
-  setExtra,
-  setTag,
-  setUser,
-  spanStreamingIntegration,
-  startSpan,
-  withIsolationScope,
-  withScope,
+  addBreadcrumb, captureEvent, captureException, createTransport, defaultStackParser, NodeClient, type NodeOptions, setContext,
+  setCurrentClient, setExtra, setTag, setUser, spanStreamingIntegration, startSpan, withIsolationScope, withScope,
 } from "@sentry/nextjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { scrubBreadcrumb, scrubCreatedDsc, scrubEvent, scrubSpan } from "./scrub";
@@ -30,17 +16,9 @@ import { actionBody, drawSecrets, leakedKinds, leakyEvent, NAMES, ORIGIN, PHONES
 
 /** Every kind of collection off: what `sendDefaultPii: false` was before v11. */
 const DATA_COLLECTION_OFF = {
-  userInfo: false,
-  cookies: false,
-  httpHeaders: false,
-  httpBodies: [],
-  urlQueryParams: false,
-  graphQL: { document: false, variables: false },
-  genAI: { inputs: false, outputs: false },
-  databaseQueryData: false,
-  queues: false,
-  stackFrameVariables: false,
-  frameContextLines: 0,
+  userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false, databaseQueryData: false,
+  graphQL: { document: false, variables: false }, genAI: { inputs: false, outputs: false },
+  queues: false, stackFrameVariables: false, frameContextLines: 0,
 } satisfies Required<NonNullable<NodeOptions["dataCollection"]>>;
 
 const HOOKS = { beforeSend: scrubEvent, beforeSendSpan: scrubSpan, beforeBreadcrumb: scrubBreadcrumb };
