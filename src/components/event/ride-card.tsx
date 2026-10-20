@@ -4,6 +4,7 @@ import type { VisibleCar } from "@/domain/phone-visibility";
 import { wallClockAsUtc, type WallDate } from "@/domain/wall-clock";
 import { PhoneLink } from "./phone-link";
 import { RemoveRideButton, type RemoveRide } from "./remove-ride-dialog";
+import { EditRideButton, type UpdateRide } from "./ride-form";
 
 /**
  * A car of the leg (C4.3): its driver, with its time on the right of that line, then
@@ -11,20 +12,23 @@ import { RemoveRideButton, type RemoveRide } from "./remove-ride-dialog";
  * passenger and one per free seat. The numbers the state carries are
  * `tel:` links (C10.1). A free seat is a button, inactive until the device's persons are
  * known (C5.9) and without JavaScript; its tap opens the sheet (`onTakeSeat`, #91). Long
- * values wrap anywhere rather than scrolling sideways (C11.3). Given `removeRide`, the car
- * is the device's: « Retirer la voiture » closes it (C8.1).
+ * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
+ * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
+ * removes it (C8.1).
  */
 export function RideCard({
   car,
   date,
   seatsActive,
   onTakeSeat,
+  updateRide,
   removeRide,
 }: {
   car: VisibleCar;
   date: WallDate;
   seatsActive: boolean;
   onTakeSeat: (seat: HTMLElement) => void;
+  updateRide?: UpdateRide;
   removeRide?: RemoveRide;
 }) {
   const t = useTranslations("Board.car");
@@ -91,12 +95,15 @@ export function RideCard({
           </li>
         ))}
       </ul>
-      {removeRide && (
+      {(updateRide || removeRide) && (
         <div className="flex gap-2">
-          <RemoveRideButton
-            car={{ id: car.id, leg: car.leg, driverId: car.driver.id, passengers: car.passengers.length }}
-            removeRide={removeRide}
-          />
+          {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} />}
+          {removeRide && (
+            <RemoveRideButton
+              car={{ id: car.id, leg: car.leg, driverId: car.driver.id, passengers: car.passengers.length }}
+              removeRide={removeRide}
+            />
+          )}
         </div>
       )}
     </article>
