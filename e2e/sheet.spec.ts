@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, messages, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -404,6 +404,28 @@ test.describe("the sheet", () => {
       await expect(bar(page)).toBeEmpty();
     });
   }
+
+  // #222: the reopened sheet closed too, its send waiting for the first one's answer (Next sends
+  // one at a time). That send withdrew the first one's failure: never shown nor announced, even
+  // before its own answer, which alone says what came of it.
+  test("seats sent again from a reopened sheet, closed too, before the first send fails: no false failure meanwhile", async ({ page, seededEvent }) => {
+    const resend = await holdFirst(page, scene.cars.sophie, false);
+    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
+    await placeButton(await openSheet(page, "Sophie")).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const record = await recordBar(page);
+    const resent = page.waitForRequest((request) => !!request.postData()?.includes(scene.cars.sophie));
+    await failHeld(page, answer);
+    await resent;
+    await expect(messages(page)).toHaveCount(0);
+    resend();
+
+    await expect(barStatus(page)).toHaveText("Tom et Léa sont dans la voiture de Sophie");
+    const { writes, lines } = await record();
+    expect(lines).not.toContain(FAILED);
+    expect(writes.map((write) => write.text)).not.toContain(FAILED);
+  });
 
   // A success never takes a failure away (#216): both are shown, the failure first.
   test("a failure waiting under another sheet stays, whatever success comes from that sheet", async ({ db, page, seededEvent }) => {
