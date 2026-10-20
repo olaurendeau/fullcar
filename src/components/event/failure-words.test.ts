@@ -1,0 +1,175 @@
+import { readFileSync } from "node:fs";
+import { createFormatter, createTranslator, type Messages } from "next-intl";
+import { describe, expect, it } from "vitest";
+import type { Leg } from "@/domain/leg";
+import en from "../../../messages/en.json";
+import fr from "../../../messages/fr.json";
+import { failureText, nameList, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
+
+// C11.11: every failure in the bar, word for word as « Chaque échec, mot pour mot » says it
+// (docs/design/event-board/README.md, v4.2), in French and in English.
+
+const LOCALES = { fr, en } as const;
+type Locale = keyof typeof LOCALES;
+
+const words = (locale: Locale) =>
+  wordsOf(createTranslator<Messages>({ locale, messages: LOCALES[locale] }), createFormatter({ locale }));
+
+/** What a row's action sends, and what its refusals need to name. */
+interface Action {
+  notDone: NotDone;
+  /** The persons sent, whom `alreadyInCar` names after a tap or the sheet. */
+  names?: string[];
+  /** The passengers ticked in « Qui monte avec vous ? », whom `alreadyInCar` names after an offer. */
+  passengers?: string[];
+  drives?: { firstName: string; leg: Leg };
+  /** « Annuler »: offline or failing, the reason names the button. */
+  undo?: boolean;
+}
+
+const seats = (names: string[], driver: string): Action => ({ notDone: { kind: "seats", names, driver }, names });
+
+/** Each action of the table, by its first column. */
+const ACTIONS: Record<string, Action> = {
+  "Un tap sur une place : Tom, voiture de Sophie": seats(["Tom"], "Sophie"),
+  "La feuille, plusieurs personnes : Tom et Léa, voiture de Sophie": seats(["Tom", "Léa"], "Sophie"),
+  "Première inscription depuis une place, inscription faite, place refusée : Inès, voiture de Marc": seats(["Inès"], "Marc"),
+  "« Annuler » : Tom et Léa, voiture de Sophie": { notDone: { kind: "leave", names: ["Tom", "Léa"], driver: "Sophie" }, undo: true },
+  "Cellule, « Ne fait pas l’aller » : Tom · Aller": {
+    notDone: { kind: "choice", firstName: "Tom", leg: "aller", choice: "notConcerned" },
+    drives: { firstName: "Tom", leg: "aller" },
+  },
+  "Cellule, « Je cherche une place » : Tom · Retour": {
+    notDone: { kind: "choice", firstName: "Tom", leg: "retour", choice: "lookingForSeat" },
+    drives: { firstName: "Tom", leg: "retour" },
+  },
+  "Cellule, « Sortir de la voiture » : Léa, voiture de Claire": {
+    notDone: { kind: "leave", names: ["Léa"], driver: "Claire" },
+    drives: { firstName: "Léa", leg: "aller" },
+  },
+  "« Ajouter une personne » : Inès": { notDone: { kind: "addPerson", firstName: "Inès" } },
+  "« Modifier » une personne, prénom et téléphone : Tom (prénom affiché avant le changement)": {
+    notDone: { kind: "editPerson", firstName: "Tom", fields: "both" },
+  },
+  "« Modifier » une personne, le téléphone seul : Tom": { notDone: { kind: "editPerson", firstName: "Tom", fields: "phone" } },
+  "« Proposer une voiture », ce leg seulement : Marc, aller": {
+    notDone: { kind: "offerRide", driver: "Marc", legs: "aller" },
+    passengers: ["Inès", "Hugo"],
+  },
+  "« Proposer une voiture » avec « Je ramène aussi » : Claire": {
+    notDone: { kind: "offerRide", driver: "Claire", legs: "both" },
+    passengers: ["Léa"],
+  },
+  "« Réessayer » de « Vos inscriptions »": { notDone: { kind: "readDevice" } },
+  "« Retirer la voiture » : Claire, aller": { notDone: { kind: "removeRide", driver: "Claire", leg: "aller" } },
+  "« Modifier » la voiture (#93) : Claire, aller": { notDone: { kind: "editRide", driver: "Claire", leg: "aller" } },
+};
+
+/** What the page knows of a failure, `source` (offline, a 500, a refusal's key), turned into its reason as the sender does. */
+function whyFor(source: string, action: Action): Why {
+  if (source === "alreadyInCar") {
+    return action.passengers ? { kind: "passengerInCar", names: action.passengers } : { kind: "alreadyInCar", names: action.names! };
+  }
+  // The table's example: one seat left.
+  if (source === "notEnoughSeats") return { kind: "notEnoughSeats", free: 1 };
+  if (source === "drives") return { kind: "drives", ...action.drives! };
+  if (source === "alreadyDriving" && action.notDone.kind === "offerRide") return { kind: "alreadyDriving", driver: action.notDone.driver };
+  const why = whyOf(source as Parameters<typeof whyOf>[0]);
+  return action.undo && (why.kind === "offline" || why.kind === "failed") ? { kind: "retryUndo", problem: why.kind } : why;
+}
+
+/** The failures of a row's second column: offline; a server error, a network one, and each refusal given the same words; a refusal. */
+function sources(failure: string): string[] {
+  const keys = [...failure.matchAll(/`(\w+)/g)].map((match) => match[1]);
+  if (failure === "hors ligne") return ["offline"];
+  if (failure.startsWith("erreur serveur")) return ["failed", ...keys];
+  return keys.slice(0, 1);
+}
+
+/** The rows of « Chaque échec, mot pour mot »: action, failure, French text, English text. */
+function rows() {
+  const readme = readFileSync(new URL("../../../docs/design/event-board/README.md", import.meta.url), "utf8").split("\n");
+  const start = readme.indexOf("### Chaque échec, mot pour mot (v4.2)");
+  const end = readme.findIndex((line, index) => index > start && line.startsWith("### "));
+  return readme
+    .slice(start, end)
+    .filter((line) => line.startsWith("| ") && !line.startsWith("| action") && !line.startsWith("|---"))
+    .map((line) => {
+      const [action, failure, fr, en] = line.slice(2, -2).split(" | ");
+      return { action, failure, fr, en };
+    });
+}
+
+describe("failureText: each failure, word for word (C11.11)", () => {
+  const table = rows();
+
+  it("reads every row, and knows every action of the table", () => {
+    expect(table.length).toBeGreaterThanOrEqual(66);
+    expect(new Set(table.map((row) => row.action))).toEqual(new Set(Object.keys(ACTIONS)));
+  });
+
+  for (const row of table) {
+    for (const source of sources(row.failure)) {
+      it(`${row.action}, ${source}`, () => {
+        const action = ACTIONS[row.action];
+        const why = whyFor(source, action);
+        expect(failureText(words("fr"), action.notDone, why)).toBe(row.fr);
+        expect(failureText(words("en"), action.notDone, why)).toBe(row.en);
+      });
+    }
+  }
+});
+
+const FIVE = ["Tom", "Léa", "Hugo", "Nina", "Zoé"];
+
+// « Plusieurs prénoms »: up to three, `format.list`; beyond, the first two and « et N autres ». In
+// English, `format.list` puts a comma before « and » (Intl.ListFormat, `en`).
+const LISTS: Record<Locale, string[]> = {
+  fr: ["Tom", "Tom et Léa", "Tom, Léa et Hugo", "Tom, Léa et 2 autres", "Tom, Léa et 3 autres"],
+  en: ["Tom", "Tom and Léa", "Tom, Léa, and Hugo", "Tom, Léa and 2 others", "Tom, Léa and 3 others"],
+};
+
+describe("nameList: from one to five persons (C11.11)", () => {
+  for (const locale of ["fr", "en"] as const) {
+    for (let count = 1; count <= 5; count++) {
+      const names = FIVE.slice(0, count);
+      const list = LISTS[locale][count - 1];
+      const one = count === 1;
+
+      it(`${locale}, ${count}: the list, and every sentence that names them agrees with all of them`, () => {
+        expect(nameList(words(locale), names)).toBe(list);
+        const say = (notDone: NotDone, why: Why) => failureText(words(locale), notDone, why);
+        if (locale === "fr") {
+          expect(say({ kind: "seats", names, driver: "Sophie" }, { kind: "offline" })).toBe(
+            `${list} ${one ? "n’a" : "n’ont"} pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez.`,
+          );
+          expect(say({ kind: "leave", names, driver: "Sophie" }, { kind: "alreadyInCar", names })).toBe(
+            `${list} ${one ? "n’a" : "n’ont"} pas pu sortir de la voiture de Sophie. ${one ? "Tom est" : "Une de ces personnes est"} déjà dans une voiture.`,
+          );
+          expect(say({ kind: "offerRide", driver: "Marc", legs: "retour" }, { kind: "passengerInCar", names })).toBe(
+            `La voiture de Marc pour le retour n’a pas été proposée. ${one ? "Tom est déjà" : `Parmi ${list}, une personne au moins est déjà`} dans une voiture.`,
+          );
+        } else {
+          expect(say({ kind: "seats", names, driver: "Sophie" }, { kind: "failed" })).toBe(
+            `${list} could not be seated in Sophie’s car. Something went wrong: try again in a moment.`,
+          );
+          expect(say({ kind: "leave", names, driver: "Sophie" }, { kind: "alreadyInCar", names })).toBe(
+            `${list} could not leave Sophie’s car. ${one ? "Tom is" : "One of these people is"} already in a car.`,
+          );
+          expect(say({ kind: "offerRide", driver: "Marc", legs: "retour" }, { kind: "passengerInCar", names })).toBe(
+            `Marc’s car for the return trip was not offered. ${one ? "Tom is already in a car" : `Of ${list}, at least one is already in a car`}.`,
+          );
+        }
+      });
+    }
+  }
+});
+
+describe("whyOf", () => {
+  it("gives `invalid` and `idTaken` the generic reason, and keeps the others", () => {
+    for (const error of ["invalid", "idTaken", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
+    for (const error of ["offline", "seatTaken", "rideGone", "forbidden", "eventNotFound", "passengersChanged"] as const) {
+      expect(whyOf(error)).toEqual({ kind: error });
+    }
+  });
+});
