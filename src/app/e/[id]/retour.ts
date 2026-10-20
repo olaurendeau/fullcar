@@ -18,7 +18,7 @@ export type LockedLegs = { ok: true; legs: Leg[] } | { ok: false; error: LegRefu
 
 /**
  * The first step of every write on a leg: the Event under `lockEvent(…, "share")`, then
- * whether every leg the write touches exists. `noRetour` comes before any other refusal,
+ * whether every leg the write touches exists. `noRetour` comes before any other refusal of the transaction,
  * `rideGone` and `forbidden` included (decision 40): the cause is the retour, not the car.
  * Gives the event's legs.
  */
@@ -41,7 +41,10 @@ export type RetourRemoval = { ok: true } | ({ ok: false; error: "confirmRetour" 
  *
  * The caller holds `lockEvent(trx, eventId, "noKeyUpdate")`, and writes `retour_at` null
  * in the same transaction (`writeEventFields`): no write on the retour can run in between,
- * and none waiting can write there after.
+ * and none waiting can write there after. That transaction must be READ COMMITTED, as
+ * `atomically` opens it: under REPEATABLE READ, the count keeps the snapshot taken before
+ * the lock, misses a write on the retour committed while it waited, finds the numbers
+ * unchanged, and leaves that write's row hidden under a `retour_at` null.
  */
 export async function removeRetour(
   trx: Kysely<Database>,

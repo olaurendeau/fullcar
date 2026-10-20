@@ -111,9 +111,13 @@ celui qui écrit le code.
   `lockEvent(trx, id, "noKeyUpdate")` ; un Ride ou une Person verrouillé avant l'Event est
   bloquant.
 - Une écriture sur un retour que l'événement n'a plus répond `noRetour` avec l'état, avant
-  tout autre refus (`rideGone` et `forbidden` compris). Une suppression du retour qui ne
-  recompte pas ses lignes sous le verrou de l'Event, ou qui supprime les Rides du retour
-  sans ses Placements, est bloquante.
+  tout autre refus de la transaction (`rideGone` et `forbidden` compris) ; seuls une
+  requête mal formée (`invalid`) et les erreurs de champs passent avant. Une suppression du
+  retour qui ne recompte pas ses lignes sous le verrou de l'Event, ou qui supprime les
+  Rides du retour sans ses Placements, est bloquante.
+- La transaction qui supprime le retour est en `READ COMMITTED`. En `REPEATABLE READ`, le
+  recomptage manque une écriture validée pendant l'attente du verrou, la suppression passe,
+  et la ligne de cette écriture reste cachée sous un `retour_at` à `null` : bloquant.
 - Aucune transaction longue autour d'une purge ou d'un import.
 - Les requêtes passent par Kysely avec des paramètres liés : aucune concaténation de SQL.
 - `sql` n'est ni passé en argument, ni rangé dans un objet, ni importé par un chemin

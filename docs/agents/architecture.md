@@ -223,8 +223,13 @@ Person**, dans tout le code :
   la même transaction.
 - Sous `READ COMMITTED`, un verrou obtenu après une attente rend la ligne validée : une
   écriture qui a attendu la suppression voit `retour_at` à `null`. Une écriture sur un leg
-  que l'événement n'a pas répond `noRetour` avec l'état, avant tout autre refus, `rideGone`
-  et `forbidden` compris.
+  que l'événement n'a pas répond `noRetour` avec l'état, avant tout autre refus de la
+  transaction, `rideGone` et `forbidden` compris. Seuls la passent une requête mal formée
+  (`invalid`, qu'aucune page n'envoie) et les erreurs de champs, lues avant la transaction.
+- La suppression tourne en `READ COMMITTED`, le niveau qu'ouvre `atomically`. En
+  `REPEATABLE READ`, le recomptage garderait l'instantané pris avant le verrou : il ne
+  verrait pas une écriture sur le retour validée pendant l'attente, trouverait les mêmes
+  nombres, et laisserait sa ligne cachée sous un `retour_at` à `null`.
 
 Ainsi, lancées ensemble, une suppression du retour et une écriture sur le retour se
 terminent de deux façons seulement : la suppression refusée parce que les nombres ont changé
