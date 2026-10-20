@@ -1,0 +1,434 @@
+<title>Fullcar, page d’accueil</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8; --card: #ffffff;
+    --accent: #2457c5; --accent-soft: #e6edfb; --note: #fff7e0; --note-line: #ecd48a;
+    /* The app's own look, light only, from src/app/globals.css (oklch converted): */
+    --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
+    --app-border: #e5e5e5; --app-primary: #171717; --app-primary-fg: #fafafa;
+    --app-destructive: #e7000b; --app-ring: #a1a1a1;
+    --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444; --fold: #2457c5; --secret: #e7000b;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  h2 { font-size: 1.3rem; margin: 48px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 75ch; }
+  a { color: var(--accent); }
+  code { font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 32px 24px; margin-top: 20px; align-items: start; }
+  .state { min-width: 0; }
+  .state > p { color: var(--muted); font-size: 0.9rem; margin: 0 0 10px; }
+  .crit { font-size: 0.8rem; color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+  /* Phone: a 360 px wide viewport inside a 6 px frame */
+  .phone { box-sizing: content-box; width: 360px; max-width: calc(100% - 12px); border: 6px solid var(--frame); border-radius: 22px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); }
+  .urlbar { background: var(--urlbar); color: var(--urlbar-fg); font: 12px ui-monospace, Menlo, monospace; padding: 7px 10px; overflow-wrap: anywhere; }
+  .urlbar b { color: var(--secret); font-weight: 600; }
+  .screen { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 24px; font-size: 14px; line-height: 1.43; }
+  .screen.full { min-height: 800px; box-sizing: border-box; }
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .stack.tight { gap: 4px; }
+  .cut { color: var(--app-muted); font-size: 11px; text-align: center; letter-spacing: .04em; }
+  .fold { position: absolute; left: 0; right: 0; top: 780px; border-top: 2px dashed var(--fold); }
+  .fold span { position: absolute; right: 6px; top: -20px; font-size: 11px; color: var(--fold); background: var(--app-bg); padding: 0 4px; }
+  .app-h1 { font-size: 30px; font-weight: 700; margin: 0; line-height: 1.2; }
+  .ev-h1 { font-size: 24px; font-weight: 700; margin: 0; line-height: 1.25; }
+  .app-h2 { font-size: 18px; font-weight: 600; margin: 0; line-height: 1.4; }
+  .app-muted { color: var(--app-muted); margin: 0; }
+  .app-p { margin: 0; }
+  .small-muted { color: var(--app-muted); font-size: 13px; line-height: 18px; display: block; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field label { font-weight: 500; font-size: 14px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .input { height: 40px; box-sizing: border-box; border: 1px solid var(--app-border); border-radius: 8px; padding: 0 10px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
+  .box { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 4px 0; }
+  .cb { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid var(--app-border); border-radius: 4px; display: grid; place-items: center; font-size: 11px; line-height: 1; }
+  .cb.on { background: var(--app-primary); border-color: var(--app-primary); color: var(--app-primary-fg); }
+  .box strong { font-weight: 500; display: block; }
+  .btn { height: 44px; border-radius: 10px; background: var(--app-primary); color: var(--app-primary-fg); display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 500; }
+  .btn.focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring) 50%, transparent); }
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; counter-reset: step; }
+  .steps li { display: grid; grid-template-columns: 28px 1fr; gap: 2px 12px; counter-increment: step; }
+  .steps li::before { content: counter(step); grid-row: span 2; width: 28px; height: 28px; border-radius: 999px; background: var(--app-muted-bg); display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+  .steps .t { font-weight: 600; margin: 0; line-height: 28px; font-size: 14px; }
+  .steps .d { color: var(--app-muted); margin: 0; }
+  .notice { color: var(--app-muted); font-size: 14px; margin: 0; }
+
+  /* The footer: the dashed frame marks what changes */
+  .foot { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 24px; margin-top: -24px; }
+  .foot.changed { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 4px; }
+  .foot-row { display: flex; justify-content: center; flex-wrap: wrap; }
+  .sw, .lnk { min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; font-size: 14px; color: var(--app-muted); }
+  .sw { gap: 6px; border-radius: 8px; }
+  .sw svg { width: 15px; height: 15px; }
+  .lnk { text-decoration: underline; text-underline-offset: 4px; border-radius: 8px; }
+  .lnk.new { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .lnk.focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring) 50%, transparent); }
+  .sw.disabled { opacity: .5; }
+  .tile { width: 48px; height: 48px; border-radius: 14px; background: var(--app-muted-bg); color: var(--app-muted); display: grid; place-items: center; margin-bottom: 16px; }
+  .tile svg { width: 24px; height: 24px; }
+  .screen.center { min-height: 780px; box-sizing: border-box; padding: 24px; justify-content: center; gap: 0; }
+  /* Desktop: a 1280 × 800 browser, shown at 50 % */
+  .desk-scroll { overflow-x: auto; margin-top: 20px; }
+  .desk { width: 1280px; zoom: .5; border: 8px solid var(--frame); border-radius: 16px; background: var(--app-bg); color: var(--app-fg); overflow: hidden; }
+  .desk .urlbar { font-size: 20px; padding: 10px 16px; }
+  .desk-vp { position: relative; height: 800px; }
+  .desk-col { box-sizing: border-box; width: 448px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 24px; font-size: 14px; line-height: 1.43; outline: 2px dashed var(--fold); outline-offset: -1px; min-height: 800px; }
+  .desk .dim { position: absolute; font-size: 22px; color: var(--fold); background: var(--app-bg); padding: 0 6px; }
+  .alert { margin: 0; color: var(--app-destructive); font-size: 14px; line-height: 20px; text-align: center; }
+
+  .anatomy { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; margin-top: 16px; }
+  .anatomy .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .anatomy .phone { border-width: 1px; border-radius: 10px; width: auto; max-width: none; }
+  .anatomy ol, .anatomy ul { margin: 6px 0 0; padding-left: 18px; }
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 80ch; }
+  .table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 0.92rem; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  ol.decisions { padding-left: 20px; max-width: 80ch; }
+  ol.decisions li { margin-bottom: 10px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="searchx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+</svg>
+
+<div class="wrap">
+  <h1>Page d’accueil et lien « Accueil »</h1>
+  <p class="lead">Version 2.1 (approuvée en v2 ; mots des étapes 1 et 3 arrêtés). Aujourd’hui, <code>/</code> est le formulaire de création. Demain, <code>/</code> dit ce que fait Fullcar et mène, en un tap, au formulaire, qui part à <code>/nouveau</code>. Le bas de page partagé gagne un lien « Accueil » vers <code>/</code>, sur toutes les pages sauf l’accueil. Maquettes à 360 px de large ; le cadre pointillé bleu marque le bas de page qui change ; <code>{hôte}</code> tient lieu du nom de domaine ; les couleurs et les tailles sont celles de <code>src/app/globals.css</code> et des pages existantes.</p>
+
+  <h2>L’accueil, <code>/</code></h2>
+  <p class="lead">Une colonne <code>max-w-md</code>, comme aujourd’hui et comme <code>/e/{id}</code>. Le titre et l’accroche ne changent pas. Un paragraphe dit à quoi ça sert, puis l’action principale, puis trois étapes. Un seul bouton « Créer un événement », au-dessus des étapes : il est visible sans défiler à 360 × 780, et la page entière tient presque dans un écran. Pas de lien « Accueil » ici : la page n’a pas de lien vers elle-même. Sur un ordinateur, voir plus bas.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>En français</h3>
+      <p>Le bouton est un lien (<code>href="/nouveau"</code>), stylé comme le bouton principal de « Événement introuvable ». Le pointillé marque le bas d’un écran de 780 px. <span class="crit">A1.1, A1.2, A1.3, A3.2</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/</div>
+        <div class="screen full">
+          <div class="stack tight"><p class="app-h1">Fullcar</p><p class="app-muted">Le covoiturage de groupe, aller et retour, sans compte.</p></div>
+          <p class="app-p">Un match, un mariage, un week-end au ski : partagez un seul lien, et chacun voit qui conduit, où il reste des places et qui n’a pas encore de voiture.</p>
+          <div class="btn">Créer un événement</div>
+          <div class="stack" style="gap:12px">
+            <p class="app-h2">Comment ça marche</p>
+            <ol class="steps">
+              <li><p class="t">Créez l’événement</p><p class="d">Un titre, un lieu, l’heure de début et, s’il y a un retour, l’heure de fin. Sans compte ni adresse e-mail.</p></li>
+              <li><p class="t">Partagez le lien</p><p class="d">Par SMS ou dans le groupe. Chacun s’inscrit, propose une voiture ou prend une place libre.</p></li>
+              <li><p class="t">Suivez qui reste sans voiture</p><p class="d">Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places.</p></li>
+            </ol>
+          </div>
+          <p class="notice">Les événements sont supprimés 30 jours après leur date.</p>
+          <div class="foot"><div class="foot-row">
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="lnk">Nous contacter</span>
+          </div></div>
+          <div class="fold"><span>780 px</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>En anglais</h3>
+      <p>Mêmes blocs, mêmes places. Le bouton de langue lit « Français ». <span class="crit">A1.5</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/</div>
+        <div class="screen full">
+          <div class="stack tight"><p class="app-h1">Fullcar</p><p class="app-muted">Group carpooling, there and back, no account needed.</p></div>
+          <p class="app-p">A match, a wedding, a ski weekend: share one link, and everyone sees who is driving, where seats are free and who still has no car.</p>
+          <div class="btn">Create an event</div>
+          <div class="stack" style="gap:12px">
+            <p class="app-h2">How it works</p>
+            <ol class="steps">
+              <li><p class="t">Create the event</p><p class="d">A title, a place, the start time and, if there is a return trip, the end time. No account, no email address.</p></li>
+              <li><p class="t">Share the link</p><p class="d">By text message or in the group chat. Everyone signs up, offers a car or takes a free seat.</p></li>
+              <li><p class="t">See who still has no car</p><p class="d">A banner shows how many people still have no car, and whether seats are missing.</p></li>
+            </ol>
+          </div>
+          <p class="notice">Events are deleted 30 days after their date.</p>
+          <div class="foot"><div class="foot-row">
+            <span class="sw" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+            <span class="lnk">Contact us</span>
+          </div></div>
+          <div class="fold"><span>780 px</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>L’accueil sur un ordinateur (1280 × 800)</h2>
+  <p class="lead">La même colonne de 448 px (<code>max-w-md</code>), centrée horizontalement, <strong>en haut</strong> de l’écran comme le formulaire d’aujourd’hui et <code>/e/{id}</code>, pas centrée verticalement comme « Événement introuvable ». Le bouton « Créer un événement » prend toute la largeur de la colonne, 416 px (448 moins 2 × 16 px), comme « Créer » dans le formulaire et le bouton d’« Événement introuvable ». Le pointillé bleu marque la colonne. Navigateur montré à 50 %. <span class="crit">A1.2</span></p>
+  <div class="desk-scroll"><div class="desk">
+    <div class="urlbar">{hôte}/</div>
+    <div class="desk-vp">
+      <span class="dim" style="left:calc(50% + 236px); top:16px">← colonne : 448 px, en haut</span>
+      <span class="dim" style="left:calc(50% + 236px); top:186px">← bouton : 416 px de large</span>
+      <span class="dim" style="left:24px; top:16px">écran : 1280 × 800</span>
+      <div class="desk-col">
+        <div class="stack tight"><p class="app-h1">Fullcar</p><p class="app-muted">Le covoiturage de groupe, aller et retour, sans compte.</p></div>
+        <p class="app-p">Un match, un mariage, un week-end au ski : partagez un seul lien, et chacun voit qui conduit, où il reste des places et qui n’a pas encore de voiture.</p>
+        <div class="btn">Créer un événement</div>
+        <div class="stack" style="gap:12px">
+          <p class="app-h2">Comment ça marche</p>
+          <ol class="steps">
+            <li><p class="t">Créez l’événement</p><p class="d">Un titre, un lieu, l’heure de début et, s’il y a un retour, l’heure de fin. Sans compte ni adresse e-mail.</p></li>
+            <li><p class="t">Partagez le lien</p><p class="d">Par SMS ou dans le groupe. Chacun s’inscrit, propose une voiture ou prend une place libre.</p></li>
+            <li><p class="t">Suivez qui reste sans voiture</p><p class="d">Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places.</p></li>
+          </ol>
+        </div>
+        <p class="notice">Les événements sont supprimés 30 jours après leur date.</p>
+        <div class="foot"><div class="foot-row">
+          <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          <span class="lnk">Nous contacter</span>
+        </div></div>
+      </div>
+    </div>
+  </div></div>
+  <p class="lead" style="margin-top:10px">Au-delà de 448 px de large, rien ne grandit : ni la colonne, ni le bouton, ni le texte. L’espace libre reste blanc, des deux côtés, à parts égales.</p>
+
+  <h2>Créer un événement, <code>/nouveau</code></h2>
+  <p class="lead">Le formulaire d’aujourd’hui, inchangé, sous un titre « Créer un événement ». Le titre du document est le même, et c’est ce que l’annonceur de route de Next lit après le tap. « Créer » mène toujours à <code>/e/{id}/admin#{jeton}</code>.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>En haut de la page</h3>
+      <p>Le titre au format de « Événement introuvable » (24 px, gras). Pas d’accroche : elle est sur l’accueil. <span class="crit">A2.1</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/nouveau</div>
+        <div class="screen">
+          <p class="ev-h1">Créer un événement</p>
+          <div class="stack">
+            <div class="field"><label>Titre</label><div class="input"></div></div>
+            <div class="field"><label>Lieu</label><div class="input"></div></div>
+            <div class="two">
+              <div class="field"><label>Date de l’aller</label><div class="input"></div></div>
+              <div class="field"><label>Heure de l’aller</label><div class="input"></div></div>
+            </div>
+            <div class="box"><span class="cb on">✓</span><span><strong>Retour</strong><span class="small-muted">Décochez s’il n’y a pas de retour organisé.</span></span></div>
+          </div>
+          <div class="cut">· · · la suite du formulaire, inchangée · · ·</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>En bas de la page</h3>
+      <p>Après « Créer », le bas de page avec « Accueil » en premier. <span class="crit">A3.1, A3.3, A3.4</span></p>
+      <div class="phone">
+        <div class="screen">
+          <div class="cut">· · ·</div>
+          <div class="btn">Créer</div>
+          <div class="foot changed"><div class="foot-row">
+            <span class="lnk new">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="lnk">Nous contacter</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Le bas de page</h2>
+  <p class="lead">Un lien de plus, au même format que « Nous contacter » : petit, gris, souligné, 44 px de haut. L’ordre de lecture, de tabulation et d’affichage est le même : « Accueil », le bouton de langue, « Nous contacter », qui reste le dernier lien de la page (K1 de #69). Le fond bleu pâle sur « Accueil » ne sert qu’à le repérer dans la maquette.</p>
+  <div class="anatomy">
+    <div class="card">
+      <h3>Toutes les pages sauf <code>/</code>, en français</h3>
+      <div class="phone"><div class="screen">
+        <div class="foot changed"><div class="foot-row">
+          <span class="lnk new">Accueil</span>
+          <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          <span class="lnk">Nous contacter</span>
+        </div></div>
+      </div></div>
+      <ul>
+        <li><code>&lt;a href="/"&gt;</code> par <code>next/link</code>, même onglet, sans <code>target</code></li>
+        <li>une seule ligne à 360 px</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>En anglais</h3>
+      <div class="phone"><div class="screen">
+        <div class="foot changed"><div class="foot-row">
+          <span class="lnk new">Home</span>
+          <span class="sw" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+          <span class="lnk">Contact us</span>
+        </div></div>
+      </div></div>
+      <ul><li>même adresse <code>/</code>, sans langue dedans</li></ul>
+    </div>
+    <div class="card">
+      <h3>Focus au clavier</h3>
+      <div class="phone"><div class="screen">
+        <div class="foot changed"><div class="foot-row">
+          <span class="lnk focus">Accueil</span>
+          <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          <span class="lnk">Nous contacter</span>
+        </div></div>
+      </div></div>
+      <ul><li>l’anneau du bouton de langue, seul : <code>outline-none focus-visible:ring-3 focus-visible:ring-ring/50</code>, coins <code>rounded-lg</code> <span class="crit">A3.5</span></li></ul>
+    </div>
+    <div class="card">
+      <h3>Sur <code>/</code></h3>
+      <div class="phone"><div class="screen">
+        <div class="foot"><div class="foot-row">
+          <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          <span class="lnk">Nous contacter</span>
+        </div></div>
+      </div></div>
+      <ul><li>pas de lien « Accueil », donc pas d’<code>aria-current</code> <span class="crit">A3.2</span></li></ul>
+    </div>
+  </div>
+
+  <h2>Depuis l’espace organisateur</h2>
+  <p class="lead">Le seul endroit où l’URL porte un secret. Rien n’est à ajouter pour lui : le lien a une adresse fixe, <code>/</code>, qui ne reprend rien de l’URL courante ; un fragment n’est jamais envoyé ni recopié dans une autre adresse ; et <code>Referrer-Policy: no-referrer</code> couvre déjà toutes les pages. Le critère A3.7 le prouve et protège la règle.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>Avant le tap, en bas de <code>/e/{id}/admin</code></h3>
+      <p>Le jeton, en rouge, est dans le fragment. <span class="crit">A3.1</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Kp7mQx3a/admin<b>#q3Vx9kLmN2pR7sT1uW4yZQ</b></div>
+        <div class="screen">
+          <div class="cut">· · · le panneau, puis l’événement · · ·</div>
+          <div class="foot changed"><div class="foot-row">
+            <span class="lnk new focus">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="lnk">Nous contacter</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+    <div class="state">
+      <h3>Après le tap</h3>
+      <p>L’adresse est exactement <code>{hôte}/</code>, sans fragment ; aucune requête ne porte le jeton ni d’en-tête <code>Referer</code>. Le bouton Retour du navigateur ramène à l’espace organisateur, jeton compris. <span class="crit">A3.7</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/</div>
+        <div class="screen">
+          <div class="stack tight"><p class="app-h1">Fullcar</p><p class="app-muted">Le covoiturage de groupe, aller et retour, sans compte.</p></div>
+          <div class="cut">· · · l’accueil · · ·</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Quand ça ne se passe pas comme prévu</h2>
+  <div class="grid">
+    <div class="state">
+      <h3>Sans JavaScript</h3>
+      <p>Le bouton de l’accueil et « Accueil » sont de vrais liens : ils mènent à leur page. À <code>/nouveau</code>, le message actuel du formulaire s’affiche, et « Créer » reste inactif. Dans le bas de page, « Accueil » et « Nous contacter » fonctionnent ; le bouton de langue est grisé, comme aujourd’hui avant l’hydratation (L4.3 de #113). <span class="crit">A1.4, A3.9</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/nouveau</div>
+        <div class="screen">
+          <p class="ev-h1">Créer un événement</p>
+          <div class="cut">· · · le formulaire · · ·</div>
+          <p class="notice">La création d’un événement nécessite JavaScript : activez-le, puis rechargez la page.</p>
+          <div class="btn" style="opacity:.5">Créer</div>
+          <div class="foot changed"><div class="foot-row">
+            <span class="lnk new">Accueil</span>
+            <span class="sw disabled" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="lnk">Nous contacter</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+    <div class="state">
+      <h3>Événement introuvable</h3>
+      <p>La page d’aujourd’hui, tuile <code>SearchX</code> et centrage vertical compris. Seuls changent l’adresse du bouton, désormais <code>/nouveau</code>, et « Accueil » dans le bas de page. Écran entier de 780 px. <span class="crit">A2.5, A3.1</span></p>
+      <div class="phone">
+        <div class="urlbar">{hôte}/e/Zz9yXw8v</div>
+        <div class="screen center">
+          <div class="tile"><svg aria-hidden="true"><use href="#searchx"/></svg></div>
+          <div class="stack" style="gap:12px">
+            <p class="ev-h1">Événement introuvable</p>
+            <p class="app-muted">Vérifiez le lien : il a peut-être été mal recopié. Les majuscules et les minuscules comptent.</p>
+            <p class="app-muted">Les événements sont supprimés 30 jours après leur date.</p>
+          </div>
+          <div class="btn" style="margin-top:24px">Créer un événement</div>
+          <div class="foot changed" style="margin-top:0"><div class="foot-row">
+            <span class="lnk new">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="lnk">Nous contacter</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+    <div class="state">
+      <h3>Le changement de langue échoue</h3>
+      <p>Inchangé (#129) : le message au-dessus de la ligne, jamais après « Nous contacter ». « Accueil » ne bouge pas.</p>
+      <div class="phone"><div class="screen">
+        <div class="cut">· · ·</div>
+        <div class="foot changed">
+          <p class="alert" lang="en">The language could not be changed. Check your connection, then try again.</p>
+          <div class="foot-row">
+            <span class="lnk new">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+  <div class="note">Hors ligne, un tap sur « Créer un événement » ou sur « Accueil » se comporte comme tout autre lien de l’application : la navigation échoue et le navigateur affiche sa propre page d’erreur. Pas de mode hors ligne en V1 (architecture) ; rien n’est ajouté ici.</div>
+
+  <h2>Les mots</h2>
+  <p class="lead">Noms de clés proposés ; le développeur peut les ranger autrement, pas changer les textes. Tout ce qui n’est pas listé ne change pas.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>clé</th><th>où</th><th><code>messages/fr.json</code></th><th><code>messages/en.json</code></th></tr></thead>
+    <tbody>
+      <tr><td><code>Home.title</code></td><td>h1 de <code>/</code> (inchangé)</td><td>Fullcar</td><td>Fullcar</td></tr>
+      <tr><td><code>Home.tagline</code></td><td>sous le h1 (inchangé)</td><td>Le covoiturage de groupe, aller et retour, sans compte.</td><td>Group carpooling, there and back, no account needed.</td></tr>
+      <tr><td><code>Home.intro</code></td><td>paragraphe</td><td>Un match, un mariage, un week-end au ski : partagez un seul lien, et chacun voit qui conduit, où il reste des places et qui n’a pas encore de voiture.</td><td>A match, a wedding, a ski weekend: share one link, and everyone sees who is driving, where seats are free and who still has no car.</td></tr>
+      <tr><td><code>Home.create</code></td><td>lien-bouton vers <code>/nouveau</code></td><td>Créer un événement</td><td>Create an event</td></tr>
+      <tr><td><code>Home.howItWorks</code></td><td>h2</td><td>Comment ça marche</td><td>How it works</td></tr>
+      <tr><td><code>Home.steps.create.title</code></td><td>étape 1, h3</td><td>Créez l’événement</td><td>Create the event</td></tr>
+      <tr><td><code>Home.steps.create.text</code></td><td>étape 1</td><td>Un titre, un lieu, l’heure de début et, s’il y a un retour, l’heure de fin. Sans compte ni adresse e-mail.</td><td>A title, a place, the start time and, if there is a return trip, the end time. No account, no email address.</td></tr>
+      <tr><td><code>Home.steps.share.title</code></td><td>étape 2, h3</td><td>Partagez le lien</td><td>Share the link</td></tr>
+      <tr><td><code>Home.steps.share.text</code></td><td>étape 2</td><td>Par SMS ou dans le groupe. Chacun s’inscrit, propose une voiture ou prend une place libre.</td><td>By text message or in the group chat. Everyone signs up, offers a car or takes a free seat.</td></tr>
+      <tr><td><code>Home.steps.follow.title</code></td><td>étape 3, h3</td><td>Suivez qui reste sans voiture</td><td>See who still has no car</td></tr>
+      <tr><td><code>Home.steps.follow.text</code></td><td>étape 3</td><td>Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places.</td><td>A banner shows how many people still have no car, and whether seats are missing.</td></tr>
+      <tr><td><code>Home.deleted</code></td><td>sous les étapes</td><td>Les événements sont supprimés 30 jours après leur date.</td><td>Events are deleted 30 days after their date.</td></tr>
+      <tr><td><code>NewEvent.title</code></td><td>h1 et titre du document de <code>/nouveau</code></td><td>Créer un événement</td><td>Create an event</td></tr>
+      <tr><td><code>Contact.home</code></td><td>bas de page, lien vers <code>/</code></td><td>Accueil</td><td>Home</td></tr>
+    </tbody>
+  </table></div>
+  <p class="lead" style="margin-top:10px">L’étape 1 suit #235 : les dates de l’événement s’appellent « Début » et « Fin », et un événement sans retour n’a pas de fin. L’étape 3 ne parle ni d’onglets ni d’aller et de retour, et elle est vraie pour chacun des quatre textes du bandeau (<code>Board.banner.*</code>) : « Tout le monde a une place » dit qu’il ne manque rien, « … · il manque N places » dit qu’il en manque. Elle ne promet pas de nombre de places libres, que deux de ces textes seulement affichent. Les mots français sont épicènes (« qui conduit », « chacun » au sens générique comme dans l’interface existante). <code>Home.deleted</code> reprend mot pour mot <code>EventNotFound.deleted</code>.</p>
+
+  <h2>Décisions</h2>
+  <ol class="decisions">
+    <li>Le formulaire part à <code>/nouveau</code>. — Raison : court, sans langue comme tous les chemins (<code>/e/{id}/moi</code> est en français), hors de <code>/e/</code>, qui désigne un événement et porte <code>noindex</code>. Aucune collision : <code>/e/nouveau</code> reste un identifiant invalide (7 caractères, il en faut 8) et répond « Événement introuvable ».</li>
+    <li>Aucune redirection. <code>/</code> devient l’accueil ; les favoris et liens vers <code>/</code> y arrivent, à un tap du formulaire, visible sans défiler. — Raison : une redirection ferait disparaître l’accueil demandé.</li>
+    <li>Sur un écran large, la colonne reste en haut, centrée horizontalement, et le bouton prend toute sa largeur (416 px). — Raison : c’est ce que font aujourd’hui le formulaire de <code>/</code> et <code>/e/{id}</code> ; l’accueil est une page qu’on lit de haut en bas, pas un message court comme « Événement introuvable » ; le h1 reste à la même place en passant de <code>/</code> à <code>/nouveau</code>.</li>
+    <li>Un seul bouton « Créer un événement », au-dessus des étapes. — Raison : la page tient presque dans un écran de 360 × 780 ; un second bouton identique charge l’interface, ce que le produit veut éviter.</li>
+    <li>Le chemin le plus court compte une action de plus depuis <code>/</code>. C1.4 de #3 est amendé : six actions depuis <code>/nouveau</code>, sept depuis <code>/</code>, et toujours moins de 30 s depuis <code>/</code>. — Raison : c’est la conséquence directe d’un accueil avec un bouton, demandé par le propriétaire.</li>
+    <li>Le lien « Accueil » est absent de <code>/</code>, pas marqué <code>aria-current</code>. — Raison : un lien vers la page où l’on est ne mène nulle part ; le bas de page de <code>/</code> reste celui d’aujourd’hui.</li>
+    <li>Il est présent sur toutes les autres pages, « Événement introuvable » comprise, malgré son bouton. — Raison : un bas de page identique partout ; les deux mènent à des pages différentes (<code>/</code> et <code>/nouveau</code>).</li>
+    <li>« Accueil », premier de la ligne : « Accueil », langue, « Nous contacter ». — Raison : on lit d’abord où aller, puis le réglage de la page ; K1 de #69 (« Nous contacter » dernier lien) tient sans retouche.</li>
+    <li>Le focus de « Accueil » est l’anneau du bouton de langue, seul : <code>outline-none focus-visible:ring-3 focus-visible:ring-ring/50</code>, coins <code>rounded-lg</code>. — Raison : un seul style de focus dans la ligne.</li>
+    <li>Pas de <code>&lt;nav&gt;</code>. — Raison : un lien interne, un bouton de langue et un lien externe ne font pas un bloc de navigation ; un repère de plus encombrerait la liste des repères pour un seul lien.</li>
+    <li>Rien de plus pour la confidentialité : pas de <code>rel</code> particulier sur un lien interne. — Raison : adresse fixe <code>/</code>, fragment jamais transmis, <code>Referrer-Policy: no-referrer</code> déjà sur toutes les pages. A3.7 en fait un test.</li>
+    <li>Le mot « Accueil » est un mot d’interface, pas un terme du domaine : le glossaire n’en a pas besoin.</li>
+  </ol>
+
+  <h2>Hors périmètre</h2>
+  <ul class="decisions">
+    <li>Un en-tête d’application, un logo cliquable, un menu.</li>
+    <li>La liste « mes événements » sur l’accueil (elle lirait ce que garde le navigateur : décision produit).</li>
+    <li>Illustrations, captures d’écran, FAQ, témoignages ; métadonnées SEO (description, Open Graph), sitemap.</li>
+    <li>Le style et le focus de « Nous contacter », le bouton de langue : inchangés.</li>
+    <li>Un chemin traduit (<code>/new</code>) ou une langue dans l’URL.</li>
+    <li>Le contenu du formulaire et l’arrivée de l’organisateur : inchangés.</li>
+  </ul>
+</div>
