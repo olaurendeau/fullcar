@@ -75,7 +75,7 @@ export function ParticipantBoard({
   // hides the page: until then, it would be neither seen nor announced. It joins the others
   // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
   function failedIn(sheet: FromSheet, said: Message & { offline?: boolean }) {
-    if (!sheet.inSheet()) sheet.whenClosed(() => messages.fail({ ...said, about: sheet.about, sent: sheet.seq }));
+    if (!sheet.inSheet()) sheet.whenClosed(() => messages.fail({ ...said, about: sheet.about, sent: sheet.seq }), true);
   }
 
   const device = useDevice(
@@ -86,7 +86,7 @@ export function ParticipantBoard({
       const read = () => loadEventState(id, token);
       const retry = retrying.current && { key: "retry", inSheet: () => false, ...sendAbout(["device:read"]) };
       retrying.current = false;
-      const sent = retry ? await runAction("retry", read) : await sendAction(read);
+      const sent = retry ? await runAction("retry", read, undefined, retry.leaves) : await sendAction(read);
       if (retry && sent) {
         retry.answered();
         if (sent.ok) messages.succeed(null);
@@ -122,6 +122,7 @@ export function ParticipantBoard({
       `addPerson:${sheet.key}`,
       () => storePerson(id, ensureDeviceToken(id), { ...person, id: creationId() }),
       sending,
+      sheet.leaves,
     );
     const outcome = personFormOutcome(sent, sheet, noLandmark);
     if (outcome?.kind === "done") device.registered();
@@ -133,13 +134,14 @@ export function ParticipantBoard({
       `updatePerson:${sheet.key}`,
       () => storePersonFields(id, readDeviceToken(id), { ...person, personId }),
       sending,
+      sheet.leaves,
     );
     return personFormOutcome(sent, sheet, () => focusName(personId));
   };
 
   // The page takes the state a refusal carries too (C11.6).
   const setPersonLeg: SetPersonLeg = async (change, sheet) => {
-    const sent = await runAction(`setPersonLeg:${sheet.key}`, () => storePersonLeg(id, readDeviceToken(id), change));
+    const sent = await runAction(`setPersonLeg:${sheet.key}`, () => storePersonLeg(id, readDeviceToken(id), change), undefined, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
     if (sent.ok && sent.value.ok) {
@@ -161,7 +163,7 @@ export function ParticipantBoard({
       const token = driver.kind === "new" ? ensureDeviceToken(id) : readDeviceToken(id);
       return storeRideOffer(id, token, { ...ride, rideId, driver: driver.kind === "new" ? { ...driver, personId } : driver });
     };
-    const sent = await runAction(`offerRide:${sheet.key}`, send, sending);
+    const sent = await runAction(`offerRide:${sheet.key}`, send, sending, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
@@ -181,7 +183,7 @@ export function ParticipantBoard({
   // while it shows it, in the bar otherwise.
   const takeSeats: TakeSeats = async ({ rideId, leg, personIds }, { sending, said, ...sheet }) => {
     const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, personIds);
-    const sent = await runAction(`takeSeats:${sheet.key}`, send, sending);
+    const sent = await runAction(`takeSeats:${sheet.key}`, send, sending, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
     const taken = sent.ok ? seatsTaken(sent.value) : ({ kind: "problem", problem: sent.problem } as const);
@@ -200,7 +202,7 @@ export function ParticipantBoard({
       if (answer.ok) removed();
       return answer;
     };
-    const sent = await runAction(`removeRide:${rideId}`, remove, sending);
+    const sent = await runAction(`removeRide:${rideId}`, remove, sending, confirmation.leaves);
     if (sent === undefined) return undefined;
     confirmation.answered();
     if (sent.ok && sent.value.ok) {
@@ -222,6 +224,7 @@ export function ParticipantBoard({
       `updateRide:${sheet.key}`,
       () => storeRideChange(id, readDeviceToken(id), rideId, leg, change),
       sending,
+      sheet.leaves,
     );
     if (sent === undefined) return undefined;
     sheet.answered();

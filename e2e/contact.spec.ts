@@ -19,6 +19,7 @@ const UNKNOWN_ID = "Zz9yXw8v";
 /** The pages the link is on: which, where, and the title that tells it is shown. */
 const PAGES: [string, (event: SeededEvent) => string, string][] = [
   ["the home page", () => "/", "Fullcar"],
+  ["the creation form", () => "/nouveau", "Créer un événement"],
   ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
   ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
   ["the organiser's page", ({ id, token }) => `/e/${id}/admin#${token}`, "Tournoi de Rennes"],
