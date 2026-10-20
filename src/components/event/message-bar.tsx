@@ -1,54 +1,62 @@
-import { CircleCheck, TriangleAlert, WifiOff, X } from "lucide-react";
+import { CircleCheck, TriangleAlert, Users, WifiOff, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import * as bar from "./bar-state";
+import { focusFirstShown } from "./focus";
+import { onWithdraw } from "./hidden-page";
 
 /** The failures an action on the page reports here (`Actions.*`). */
 export type BarProblem = "offline" | "failed";
 
 /**
- * A message of the bar (§ 2.4 of the design, #91). `landmark` gives the focus to the stable
- * landmark of the action that produced it, or to the next one when it is gone.
- * - `problem`: offline, or the generic failure;
- * - `refused`: a refusal in words of its own (`Actions.rideGone`…), once the sheet that sent
- *   no longer shows it. Decision: a kind of its own rather than `failed`. — Reason: the page
- *   says why nothing changed, as the sheet would have.
- * - `done`: a success. It stays until the next action, « Fermer » or Escape (v4-7).
+ * The page's bar (`bar-state.ts` decides what it shows): what an action says there, and what
+ * withdraws it. Each change is written at once; a failure waits for no sheet to hide the page
+ * before it calls `fail` (`Send.whenClosed`), and a send withdraws what it covers (`sendAbout`).
  */
-export type BarMessage = { kind: "problem"; problem: BarProblem } | { kind: "refused" | "done"; text: string; landmark?: () => void };
+export function useMessageBar() {
+  const [state, setState] = useState(bar.emptyBar);
+  useEffect(() => onWithdraw((withdrawal) => setState((current) => bar.withdraw(current, withdrawal))), []);
+  const [write] = useState(() => ({
+    succeed: (message: bar.Message | null) => setState((current) => bar.succeed(current, message)),
+    fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
+    ended: () => setState(bar.ended),
+    close: () => setState(bar.close),
+  }));
+  return { state, ...write };
+}
+
+const iconOf = (line: bar.Line) =>
+  line.kind === "success" ? CircleCheck : line.kind === "info" ? Users : line.offline ? WifiOff : TriangleAlert;
 
 /**
  * The page's one bar of messages, placed in the DOM before the tabs and shown fixed at the
- * bottom. Its two live regions are always there, empty without a message, and hold the
- * text alone: a success in `status`, a failure in `alert`; the icon and « Fermer » are beside
- * them. Every message stays until « Fermer », Escape or the next action: none expires.
- * Closing from inside the bar gives the focus to the message's landmark, or to `refocus`.
- * A message that comes when the focus is on nothing, its target gone, gives it to its landmark.
+ * bottom (« La barre de messages », v4.2.3): one line per message, the failures first, and one
+ * « Fermer » for them all. The list is no live region: two regions, visually hidden and always
+ * there, say the last failure written (`alert`) and the last success or information
+ * (`status`), each emptied as its line goes. Nothing expires. Closing from inside the bar
+ * gives the focus to the first landmark shown, the most recent line's first (rule 8).
  */
-export function MessageBar({
-  message,
-  onClose,
-  refocus,
-}: {
-  message: BarMessage | null;
-  onClose: () => void;
-  refocus: () => void;
-}) {
+export function MessageBar({ messages }: { messages: ReturnType<typeof useMessageBar> }) {
   const t = useTranslations("Actions");
-  const bar = useRef<HTMLDivElement>(null);
-  const open = message !== null;
-  const landmark = (message?.kind !== "problem" && message?.landmark) || refocus;
+  const element = useRef<HTMLDivElement>(null);
+  const lines = bar.lines(messages.state);
+  const { alert, status } = bar.regions(messages.state);
+  const open = lines.length > 0;
+  const failing = lines.some((line) => line.kind === "failure");
+  const newest = messages.state.lines.at(-1);
 
   function close(focusInBar: boolean) {
-    onClose();
-    if (focusInBar) landmark();
+    messages.close();
+    // « Fermer » belongs to no line: the landmarks of all, the most recent first.
+    if (focusInBar) focusFirstShown([...lines].sort((a, b) => b.id - a.id).map((line) => line.landmark));
   }
 
   const onKey = useEffectEvent((event: KeyboardEvent) => {
     // A sheet or a confirmation keeps its own Escape.
     if (event.key !== "Escape" || document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
-    close(bar.current?.contains(document.activeElement) ?? false);
+    close(element.current?.contains(document.activeElement) ?? false);
   });
 
   useEffect(() => {
@@ -58,47 +66,57 @@ export function MessageBar({
     return () => document.removeEventListener("keydown", listener);
   }, [open]);
 
-  // A seat taken from a sheet closed meanwhile can remove the seat that had the focus.
-  useEffect(() => {
+  // A seat taken from a sheet closed meanwhile can remove the seat that had the focus: a line
+  // written while the focus is on nothing gives it to its landmark.
+  const newestLandmark = useEffectEvent(() => {
     const active = document.activeElement;
-    if (message?.kind !== "problem" && (active === null || active === document.body)) message?.landmark?.();
-  }, [message]);
+    if (active === null || active === document.body) newest?.landmark();
+  });
+  useEffect(() => newestLandmark(), [newest?.id]);
 
-  const done = message?.kind === "done";
-  const text = message && (message.kind === "problem" ? t(message.problem) : message.text);
-  const Icon = done ? CircleCheck : message?.kind === "problem" && message.problem === "offline" ? WifiOff : TriangleAlert;
   return (
     <div
-      ref={bar}
+      ref={element}
       data-message-bar={open ? "open" : undefined}
       // Fixed even when empty: out of the page's flow, it adds no gap above the tabs.
       className={cn(
         "fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 mx-auto max-w-md",
-        open && "flex items-center gap-3 rounded-xl py-1 pr-1 pl-4 text-sm shadow-lg",
-        open && (done ? "bg-primary font-medium text-primary-foreground" : "border border-destructive bg-background text-foreground"),
+        open && "flex items-start gap-3 rounded-xl border py-1 pr-1 pl-4 text-sm shadow-lg",
+        // With a failure, the whole bar takes the failure's style; a success alone keeps its own (« À 360 px »).
+        open && (failing ? "border-destructive bg-background text-foreground" : "border-transparent bg-primary font-medium text-primary-foreground"),
       )}
     >
-      {open && <Icon aria-hidden className={cn("size-4 shrink-0", !done && "text-destructive")} />}
-      {/* Never `display: none`: a region hidden that way announces nothing when it fills. */}
-      <div className="min-w-0 flex-1 wrap-anywhere">
-        <div role="status" className="py-2.5 empty:p-0">
-          {done && text}
+      {open && (
+        <div role="group" aria-label={t("messages")} className="min-w-0 flex-1">
+          {lines.map((line) => {
+            const Icon = iconOf(line);
+            return (
+              <p key={line.id} className="flex items-start gap-2.5 border-t py-2.5 first:border-t-0 wrap-anywhere">
+                <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", failing && line.kind === "failure" && "text-destructive")} />
+                <span className={cn("min-w-0 flex-1", failing && line.kind === "success" && "font-medium")}>{line.text}</span>
+              </p>
+            );
+          })}
         </div>
-        <div role="alert" className="py-2.5 empty:p-0">
-          {!done && text}
-        </div>
-      </div>
+      )}
       {open && (
         <Button
           variant="ghost"
           size="icon"
-          className={cn("size-11", done && "hover:bg-primary-foreground/15 hover:text-primary-foreground")}
+          className={cn("size-11 shrink-0", !failing && "hover:bg-primary-foreground/15 hover:text-primary-foreground")}
           aria-label={t("close")}
           onClick={() => close(true)}
         >
           <X aria-hidden />
         </Button>
       )}
+      {/* Never `display: none`: a region hidden that way announces nothing when it fills. */}
+      <div role="status" className="sr-only">
+        {status}
+      </div>
+      <div role="alert" className="sr-only">
+        {alert}
+      </div>
     </div>
   );
 }

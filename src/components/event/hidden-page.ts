@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useSyncExternalStore } from "react";
+import { covers, type Sent, type Withdrawal } from "./bar-state";
 
 /*
  * Whether a sheet hides the rest of the page (#193, #195). Radix hides it from screen readers
@@ -57,8 +58,18 @@ export function whenPageShown(then: () => void): () => void {
   return () => void waiting.delete(then);
 }
 
+/** A send to the server (#208, #216): what it is about, its number, and what it is given to say what came of it. */
+export interface Send {
+  about: readonly string[];
+  seq: number;
+  /** Its answer came: withdraws what earlier sends it covers left, never what a send made since did. */
+  answered: () => void;
+  /** Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn meanwhile by a send that covers it, or with its car. */
+  whenClosed: (then: () => void) => void;
+}
+
 /** What an action sent from a sheet is given to say its failure, in the sheet or in the bar. */
-export interface FromSheet {
+export interface FromSheet extends Send {
   /**
    * The sheet that sends, one per mount: the page's actions run once per sheet (`runAction`),
    * so that one on its way never drops the action of a sheet opened since (#167).
@@ -66,22 +77,62 @@ export interface FromSheet {
   key: string;
   /** Whether a failure is said in the sheet: it is open, and it is the one that sent. */
   inSheet: () => boolean;
-  /** Its answer came: withdraws what an earlier send it covers left for the bar. */
-  answered: () => void;
-  /** Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn by the next send or answer that covers it. */
-  whenClosed: (then: () => void) => void;
 }
 
-/** The failures waiting for the bar, each with what its send was about (#208). */
-const left = new Set<{ about: readonly string[]; withdraw: () => void }>();
+let sends = 0;
+/** What waits for the bar, each with what its send was about (#208). */
+const left = new Set<Sent & { withdraw: () => void }>();
+/** The subjects of a car removed, and the first send made since: what an earlier one says, nothing says. */
+const gone = new Map<string, number>();
+/** The bar, which withdraws the failures it shows. */
+const watching = new Set<(withdrawal: Withdrawal) => void>();
 
-/** Withdraws each waiting failure a send about `about` covers: all it was about. */
-function withdraw(about: readonly string[]) {
+/** Calls `then` at each withdrawal, until the function it returns is called. */
+export function onWithdraw(then: (withdrawal: Withdrawal) => void): () => void {
+  watching.add(then);
+  return () => void watching.delete(then);
+}
+
+function withdraw(withdrawal: Withdrawal) {
+  if ("gone" in withdrawal) for (const subject of withdrawal.gone) gone.set(subject, withdrawal.before);
   for (const entry of left) {
-    if (!entry.about.every((subject) => about.includes(subject))) continue;
+    if (!covers(withdrawal, entry)) continue;
     entry.withdraw();
     left.delete(entry);
   }
+  for (const then of watching) then(withdrawal);
+}
+
+/**
+ * A send about `about`, its subject then each of its fields (`subject:field`). It withdraws at
+ * once what it covers, waiting or in the bar (rule 5): the page, or the sheet, says what comes of
+ * this one. A send of the number alone does not withdraw a failed first name (#208).
+ */
+export function sendAbout(about: readonly string[]): Send {
+  const seq = (sends += 1);
+  withdraw({ about });
+  return {
+    about,
+    seq,
+    answered: () => withdraw({ about, before: seq }),
+    whenClosed: (then) => {
+      if ((gone.get(about[0]) ?? 0) > seq) return;
+      const entry = { about, sent: seq, withdraw: () => {} };
+      left.add(entry);
+      entry.withdraw = whenPageShown(() => {
+        left.delete(entry);
+        then();
+      });
+    },
+  };
+}
+
+/**
+ * The subjects of a car just removed: everything sent about them until now, waiting, in the bar
+ * or still on its way, is withdrawn and never said (#213, #218). The car no longer exists.
+ */
+export function forget(subjects: readonly string[]) {
+  withdraw({ gone: subjects, before: sends + 1 });
 }
 
 /**
@@ -90,11 +141,8 @@ function withdraw(about: readonly string[]) {
  * id at each mount once the page is hydrated): one reopened once closed is a new one, and the
  * sheet that sent is gone. Above the content, `key` would outlive the sheet's openings.
  *
- * A failure is about its `subject` (a person, a cell; the sheet itself by default), whichever
- * sheet sent it, and about the `fields` its send carried, if given. A send, or an answer, that
- * covers all of that withdraws the message an earlier send left waiting for the bar: the page,
- * or the sheet, says what comes of the new one. A send of the number alone does not withdraw a
- * failed first name (#208).
+ * A send is about its `subject` (a person, a cell, a car; the sheet itself by default),
+ * whichever sheet sent it, and about the `fields` it carried, if given (`sendAbout`).
  */
 export function useSends(isOpen: () => boolean, subject?: string): (fields?: readonly string[]) => FromSheet {
   const key = useId();
@@ -107,20 +155,7 @@ export function useSends(isOpen: () => boolean, subject?: string): (fields?: rea
   }, []);
 
   return (fields = []) => {
-    const about = [subject ?? key, ...fields.map((field) => `${subject ?? key}:${field}`)];
-    withdraw(about);
-    return {
-      key,
-      inSheet: () => isOpen() && mounted.current,
-      answered: () => withdraw(about),
-      whenClosed: (then) => {
-        const entry = { about, withdraw: () => {} };
-        left.add(entry);
-        entry.withdraw = whenPageShown(() => {
-          left.delete(entry);
-          then();
-        });
-      },
-    };
+    const about = subject ?? key;
+    return { key, inSheet: () => isOpen() && mounted.current, ...sendAbout([about, ...fields.map((field) => `${about}:${field}`)]) };
   };
 }
