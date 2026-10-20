@@ -440,6 +440,52 @@ test.describe("add a person", () => {
     });
   }
 
+  // #276: the sheet's veil closes in 100 ms, its content in 200 ms. Reopened in between, the
+  // veil came back after the content in the page, above it, and caught every tap. Real durations.
+  test("#276: reopened 150 ms after « Fermer », its veil gone but the sheet still closing, « Valider » takes the tap", async ({
+    page,
+    seededEvent,
+  }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await openForm(page);
+    await form(page).getByLabel(FR.firstName).fill("Léa");
+    // In the page, as a user's two taps: the time between them is not Playwright's.
+    const closeThenReopen = () =>
+      page.evaluate(async () => {
+        const named = (scope: ParentNode, name: string) =>
+          Array.from(scope.querySelectorAll("button")).find((button) => button.textContent?.trim() === name)!;
+        const close = named(document.querySelector('[role="dialog"]')!, "Fermer");
+        const add = named(document.querySelector('[role="tabpanel"][data-state="active"]')!, "Ajouter une personne");
+        close.click();
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const veils = document.querySelectorAll('[data-slot="sheet-overlay"]').length;
+        const closing = document.querySelectorAll('[data-slot="sheet-content"][data-state="closed"]').length;
+        add.click();
+        return { veils, closing };
+      });
+    // A busy machine can miss the 100 ms between the two ends: the same two taps then again.
+    let reopened = await closeThenReopen();
+    for (let tries = 1; tries < 10 && !(reopened.veils === 0 && reopened.closing === 1); tries++) {
+      await expect(form(page)).toHaveAttribute("data-state", "open");
+      reopened = await closeThenReopen();
+    }
+    expect(reopened).toEqual({ veils: 0, closing: 1 });
+
+    await expect(form(page)).toHaveAttribute("data-state", "open");
+    await expect(form(page).getByLabel(FR.firstName)).toHaveValue("Léa");
+    await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished)));
+    // What a finger lands on at « Valider »'s centre: the sheet, not its veil.
+    const box = (await submit(page).boundingBox())!;
+    const under = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-slot="sheet-content"], [data-slot="sheet-overlay"]')?.getAttribute("data-slot"),
+      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+    );
+    expect(under).toBe("sheet-content");
+    await submit(page).tap({ timeout: 5000 });
+    await expect(form(page)).toHaveCount(0);
+    await expect(section(page).getByRole("rowheader")).toHaveText(["Léa"]);
+  });
+
   // Next sends one server action at a time: the second waits for the first's answer, then goes.
   test("#167: a form opened while another's registration is on its way sends after it", async ({ page, seededEvent }) => {
     const answer = await holdFirst(page, "Léa", false);
