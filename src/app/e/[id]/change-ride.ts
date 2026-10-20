@@ -10,8 +10,10 @@ import { LEGS, type Leg } from "@/domain/leg";
 import { isPublicId } from "@/domain/public-id";
 import { seatReduction, validateRideChange, type NewRide, type RideErrors, type RideField } from "@/domain/ride";
 import { readEventState, type EventState } from "./event-state";
+import { lockLegs } from "./retour";
 
 /**
+ * - `noRetour`: the car is on the retour, and the event no longer has one (decision 40).
  * - `invalid`: a request no page sends (an id, a leg or a list malformed).
  * - `forbidden`: the car is not driven by a person of the device (C8.1).
  * - `rideGone`: the car is no longer offered on that leg.
@@ -21,7 +23,7 @@ import { readEventState, type EventState } from "./event-state";
  */
 export type UpdateRideOutcome =
   | { ok: true }
-  | { ok: false; error: "invalid" | "forbidden" | "rideGone" }
+  | { ok: false; error: "noRetour" | "invalid" | "forbidden" | "rideGone" }
   | { ok: false; error: "passengersChanged"; passengerIds: string[] };
 
 /** An unknown event, or a malformed id: nothing to change, and no state to give. */
@@ -34,13 +36,14 @@ export type UpdateRideResult =
   | { ok: false; errors: RideErrors; first: RideField }
   | EventNotFound;
 
-/** Removing a car already removed is a success (C8.6). */
-export type RemoveRideOutcome = { ok: true } | { ok: false; error: "invalid" | "forbidden" };
+/** Removing a car already removed is a success (C8.6); on a retour removed, `noRetour` (decision 45). */
+export type RemoveRideOutcome = { ok: true } | { ok: false; error: "noRetour" | "invalid" | "forbidden" };
 
 export type RemoveRideResult = (RemoveRideOutcome & { state: EventState }) | EventNotFound;
 
 const INVALID = { ok: false, error: "invalid" } as const;
 const FORBIDDEN = { ok: false, error: "forbidden" } as const;
+const NO_RETOUR = { ok: false, error: "noRetour" } as const;
 
 function rideRef(eventId: string, rideId: unknown, leg: unknown): RideRef | undefined {
   if (!isCreationId(rideId) || !LEGS.some((known) => known === leg)) return undefined;
@@ -72,15 +75,19 @@ function readChange(fields: unknown): Change | { errors: RideErrors; first: Ride
 }
 
 /**
- * The Ride under its lock, if a person of the device drives it. The token's holders are
- * read first, without a lock; the Ride is the first row locked (lock order: Ride, then
- * Person), and nothing here locks a Person.
+ * The Ride under its lock, if a person of the device drives it. The Event is locked first,
+ * and its leg checked (`noRetour`, before any other refusal); the token's holders are then
+ * read, without a lock, and the Ride is locked (lock order: Event, Ride, then Person).
+ * Nothing here locks a Person.
  */
 async function lockDriversRide(
   trx: Kysely<Database>,
   token: unknown,
   ride: RideRef,
-): Promise<LockedRide | "forbidden" | "gone"> {
+): Promise<LockedRide | "noRetour" | "forbidden" | "gone"> {
+  const legs = await lockLegs(trx, ride.eventId, [ride.leg]);
+  // An event deleted meanwhile has no state to give: the caller answers eventNotFound.
+  if (!legs.ok) return legs.error === "noRetour" ? "noRetour" : "gone";
   const device = new Set(devicePersonIds(token, await readTokenHolders(trx, ride.eventId)));
   if (device.size === 0) return "forbidden";
   const locked = await lockRide(trx, ride);
@@ -90,6 +97,7 @@ async function lockDriversRide(
 
 async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, change: Change): Promise<UpdateRideOutcome> {
   const locked = await lockDriversRide(trx, token, ride);
+  if (locked === "noRetour") return NO_RETOUR;
   if (locked === "forbidden") return FORBIDDEN;
   if (locked === "gone") return { ok: false, error: "rideGone" };
   // Counted under the lock (C12.11): a seat taken meanwhile has committed, or waits.
@@ -159,6 +167,7 @@ export async function removeRide(
   const outcome: RemoveRideOutcome = ride
     ? await atomically(db, async (trx) => {
         const locked = await lockDriversRide(trx, token, ride);
+        if (locked === "noRetour") return NO_RETOUR;
         if (locked === "forbidden") return FORBIDDEN;
         if (locked !== "gone") await deleteRide(trx, ride);
         return { ok: true } as const;
