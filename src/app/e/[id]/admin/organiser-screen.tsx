@@ -85,9 +85,15 @@ export function OrganiserScreen({
     focused.current = { element, fallbacks: [list ?? null, section ?? null, title.current] };
   }
 
+  // The screen now, not when the action left: one sent during « Chargement » may end after it.
+  const current = useRef(screen);
+  useLayoutEffect(() => {
+    current.current = screen;
+  }, [screen]);
+
   // The board shows the action's outcome already: the panel alone is read again (O1.10).
   async function reread() {
-    if (screen.state !== "ready") return;
+    if (current.current.state !== "ready") return;
     const read = ++latest.current;
     const legs = panelRead(await link.read());
     if (read !== latest.current) return;

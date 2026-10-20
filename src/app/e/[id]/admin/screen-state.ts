@@ -96,12 +96,18 @@ function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean):
  * latest read counts: the end of any other changes nothing, nor does it once the link was
  * checked again. A read after an action says nothing (O1.10): a success replaces the panel, a
  * failure withdraws it and empties the alert, so that one message is left, the action's in the
- * bar. It also ends a refresh still running, whose board was read before the action.
+ * bar. It also ends a refresh still running, whose board was read before the action: the
+ * organiser who asked for it hears its outcome, « actualisé » or the alert, withdrawn.
  */
 export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenState {
   if (event.type === "checked") return fromCheck(event.check);
   if (state.state !== "ready") return state;
-  if (event.type === "reread") return applied(state, event.legs ?? null, false);
+  if (event.type === "reread") {
+    // Ending a refresh, it is that refresh's outcome, said as a refresh says it (O1.9, O5.4).
+    const refreshing = state.refreshing !== null;
+    if (event.legs || !refreshing) return applied(state, event.legs ?? null, refreshing);
+    return { ...applied(state, null, false), refreshFailed: state.refreshFailed + 1 };
+  }
   if (event.type === "listToggled") {
     const expanded = new Set(state.expanded);
     if (!expanded.delete(event.key)) expanded.add(event.key);

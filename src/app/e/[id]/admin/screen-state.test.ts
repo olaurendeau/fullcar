@@ -112,10 +112,16 @@ describe("screenReducer", () => {
       ready({ panel: withdrawn }),
     ],
     [
-      "a read after an action ends a refresh still running: that one read the board before the action",
+      "a read after an action ends a refresh still running, whose board was read before it: the refresh's success",
       ready({ refreshing: 3 }),
       { type: "reread", legs: after },
-      ready({ panel: { ...links, legs: after } }),
+      ready({ panel: { ...links, legs: after }, refreshed: true }),
+    ],
+    [
+      "a read after an action that fails ends a refresh still running: the refresh's failure, the panel withdrawn",
+      ready({ refreshing: 3, refreshFailed: 1 }),
+      { type: "reread" },
+      ready({ panel: withdrawn, refreshFailed: 2 }),
     ],
     [
       "withdrawn, a failed refresh: the panel stays withdrawn",

@@ -20,6 +20,7 @@ leaveNoToken();
 const FR = {
   panel: "Espace organisateur",
   refresh: "Actualiser",
+  refreshing: "Actualisation…",
   refreshed: "Espace organisateur actualisé.",
   failedTitle: "L’espace organisateur n’a pas pu être actualisé.",
   bodyWithdrawn: "Vérifiez la connexion, puis utilisez de nouveau « Actualiser ».",
@@ -56,12 +57,12 @@ async function takeSeat(page: Page, driver?: string) {
 
 const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
 
-/** Holds, from now on, every read of the panel (the admin token in its body) until it fails or goes through. */
-async function holdPanelReads(page: Page, { token }: SeededEvent) {
+/** Holds, from now on, every action whose body carries `text` until it fails or goes through. */
+async function holdActionsWith(page: Page, text: string) {
   const held: Route[] = [];
   await page.route(
     (url) => url.pathname.endsWith("/admin"),
-    (route) => (isAction(route.request()) && (route.request().postData() ?? "").includes(token) ? held.push(route) : route.fallback()),
+    (route) => (isAction(route.request()) && (route.request().postData() ?? "").includes(text) ? held.push(route) : route.fallback()),
   );
   return {
     held: () => held.length,
@@ -74,15 +75,35 @@ async function holdPanelReads(page: Page, { token }: SeededEvent) {
   };
 }
 
-/** The organiser's device, with Oriane without a car at the aller, then the organiser's page, its board's device known. */
-async function openAsOrganiser(page: Page, db: Kysely<Database>, event: SeededEvent) {
+/** Holds, from now on, every read of the panel (the admin token in its body). */
+const holdPanelReads = (page: Page, { token }: SeededEvent) => holdActionsWith(page, token);
+
+/** The organiser's device, with Oriane without a car at the aller: her id. */
+async function organiserDevice(page: Page, db: Kysely<Database>, event: SeededEvent) {
   const token = newToken();
   const { id } = await seedPerson(db, event.id, { firstName: ORGANISER }, token);
   await seedPlacement(db, { personId: id, eventId: event.id, leg: "aller", rideId: null });
   await holdToken(page, event.id, token);
+  return id;
+}
+
+const ownPersons = (page: Page) => page.getByRole("region", { name: "Vos inscriptions" });
+
+/** The organiser's device, then the organiser's page, its board's device known. */
+async function openAsOrganiser(page: Page, db: Kysely<Database>, event: SeededEvent) {
+  const id = await organiserDevice(page, db, event);
   await page.goto(organiserPath(event));
   await expect(refresh(page)).toBeVisible();
-  await expect(page.getByRole("region", { name: "Vos inscriptions" }).getByText(ORGANISER)).toBeVisible();
+  await expect(ownPersons(page).getByText(ORGANISER)).toBeVisible();
+  return id;
+}
+
+/** Oriane's seat in Anaïs's car sent from the sheet, then the sheet closed before the answer. */
+async function sendSeatThenClose(page: Page) {
+  await board(page).getByRole("button", { name: "Place libre : prendre une place dans la voiture de Anaïs" }).click();
+  await page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ }).getByRole("button", { name: /^Placer/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
 /** Every text the panel's live regions held, from now on. */
@@ -114,9 +135,10 @@ async function expectWithdrawn(page: Page) {
 test.use({ locale: "fr-FR" });
 
 test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
+  let oriane: string;
   test.beforeEach(async ({ db, page, seededEvent }) => {
     await seedOrganiserScene(db, seededEvent.id);
-    await openAsOrganiser(page, db, seededEvent);
+    oriane = await openAsOrganiser(page, db, seededEvent);
   });
 
   test("O1.10: a person added « Aller et retour » from the board is in both sections, N + 1 on both banners, and nothing more is announced", async ({
@@ -176,6 +198,35 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     await expectWithdrawn(page);
   });
 
+  test("O5.8: the panel withdrawn while its tile has the focus: the focus goes to the panel's title, never to <body>", async ({
+    page,
+    seededEvent,
+  }) => {
+    const reads = await holdPanelReads(page, seededEvent);
+    await takeSeat(page, "Anaïs");
+    await expect.poll(reads.held).toBe(1);
+    await tiles(page).first().focus();
+    await reads.fail();
+    await expectWithdrawn(page);
+    await expect(panel(page).getByRole("heading", { level: 2 })).toBeFocused();
+  });
+
+  // Next sends one action after the other: « Actualiser » touched while the seat is on its way reads after it.
+  test("O1.9: a read after an action that ends a running « Actualiser » says its outcome, as « Actualiser » would", async ({
+    page,
+    seededEvent,
+  }) => {
+    const seat = await holdActionsWith(page, oriane);
+    await sendSeatThenClose(page);
+    await expect.poll(seat.held).toBe(1);
+    await refresh(page).click();
+    await expect(panel(page).getByRole("status")).toHaveText(FR.refreshing);
+    await seat.release();
+    await expect(panel(page).getByRole("status")).toHaveText(FR.refreshed);
+    await expect(refresh(page)).not.toHaveAttribute("aria-disabled");
+    await expect(section(page, "Aller").getByRole("list", { name: /^Sans voiture/ }).getByText(ORGANISER)).toHaveCount(0);
+  });
+
   test("O5.4, O1.11: while the read after a failure runs, the alert stays on screen out of its emptied region, and nothing under it moves", async ({
     page,
     seededEvent,
@@ -225,25 +276,30 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     await expect(board(page).getByText("Gaspard")).toBeVisible();
   });
 
-  for (const viewport of [
-    { width: 360, height: 780 },
-    { width: 1280, height: 800 },
-  ]) {
-    test(`O1.11: at ${viewport.width} px, without scroll anchoring, the car looked at stays in place as the panel is withdrawn, then rendered again`, async ({
+  for (const [viewport, place] of [
+    [{ width: 360, height: 780 }, "mid-page"],
+    [{ width: 1280, height: 800 }, "mid-page"],
+    [{ width: 360, height: 780 }, "bottom"],
+    [{ width: 1280, height: 800 }, "bottom"],
+  ] as const) {
+    test(`O1.11: at ${viewport.width} px, ${place}, without scroll anchoring, the car looked at stays in place as the panel is withdrawn, then rendered again`, async ({
       page,
       seededEvent,
     }) => {
       await page.setViewportSize(viewport);
-      // Room under the board, in main, as a longer board has: at the end of the page, the browser clamps
-      // the scroll, which keeps the car in place by itself and hides a missing compensation.
-      await page.addStyleTag({
-        content: 'html, main { overflow-anchor: none !important; } main::after { content: ""; display: block; height: 200vh; }',
-      });
+      // Mid-page, room under the board, in main, as a longer board has: there, nothing but the
+      // compensation keeps the car in place. At the bottom of the real page, the browser pulls
+      // the scroll back itself as the page gets shorter, and the compensation must not add to it.
+      const room = place === "mid-page" ? 'main::after { content: ""; display: block; height: 200vh; }' : "";
+      await page.addStyleTag({ content: `html, main { overflow-anchor: none !important; } ${room}` });
       const title = carTitle(page, "Anaïs");
       const y = async () => (await title.boundingBox())!.y;
-      /** Scrolls the car's title to the top of the screen, the panel above it. */
+      /** Scrolls the car's title to the top of the screen, or to the end of the page; the panel above it. */
       const lookAtCar = async () => {
-        await title.evaluate((element) => element.scrollIntoView({ block: "start", behavior: "instant" }));
+        await title.evaluate((element, end) => {
+          if (end) window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+          else element.scrollIntoView({ block: "start", behavior: "instant" });
+        }, place === "bottom");
         expect(await panel(page).evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThan(0);
         await expect(title).toBeInViewport();
       };
@@ -287,6 +343,27 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
       expect(text.width).toBeLessThan(frame.width - 100);
     });
   });
+});
+
+test("O1.10: a seat taken while the area loads, answered once it is there, reads the panel again", async ({ page, db, seededEvent }) => {
+  await seedOrganiserScene(db, seededEvent.id);
+  const oriane = await organiserDevice(page, db, seededEvent);
+  const reads = await holdPanelReads(page, seededEvent);
+  const seat = await holdActionsWith(page, oriane);
+  await page.goto(organiserPath(seededEvent));
+  await expect(ownPersons(page).getByText(ORGANISER)).toBeVisible();
+  await expect(page.getByText("Chargement de l’espace organisateur…")).toBeVisible();
+  await sendSeatThenClose(page);
+
+  // The area read before the seat is taken; the seat's answer comes once it is shown.
+  await reads.release();
+  await expect(section(page, "Aller").getByText(ORGANISER)).toBeVisible();
+  await expect.poll(seat.held).toBe(1);
+  await seat.release();
+  await expect.poll(reads.held).toBe(1);
+  await reads.release();
+  await expect(section(page, "Aller").getByText(ORGANISER)).toHaveCount(0);
+  await expect(stale(page)).toHaveCount(0);
 });
 
 test.describe("the crowd of O5.9, and Oriane on the organiser's device", () => {
