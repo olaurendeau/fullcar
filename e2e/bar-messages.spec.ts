@@ -11,8 +11,8 @@ leaveNoToken();
 
 // Each failure names who could not get in, and why (C11.11, #223).
 const FAILED = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
-/** A cell's failure keeps the generic words until #224. */
-const CELL_FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+/** A cell's failure names the person, the leg and the button touched (C11.11, #224). */
+const CELL_FAILED = "Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
 const PAUL = "Tom n’a pas pu monter dans la voiture de Paul. Une erreur est survenue : réessayez dans un instant.";
 const HUGO = "Hugo est dans la voiture de Marc";
 

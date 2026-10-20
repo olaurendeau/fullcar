@@ -44,6 +44,10 @@
       "aller": "Outbound",
       "retour": "Return"
     },
+    "dates": {
+      "start": "Start",
+      "end": "End"
+    },
     "noCar": {
       "aller": "No car offered for the outbound trip",
       "retour": "No car offered for the return trip"

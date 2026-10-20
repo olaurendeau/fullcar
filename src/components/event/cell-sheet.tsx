@@ -7,9 +7,16 @@ import { cellActions, declaredBy, type CellAction } from "@/domain/device-matrix
 import type { Leg } from "@/domain/leg";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
+import { cellNotDone, type Cell, type NotDone } from "./failure-words";
 import { focusCarTitle, focusCell } from "./focus";
 import { useSends, type FromSheet } from "./hidden-page";
 import type { BarProblem } from "./message-bar";
+
+/** The cell's sheet that sends: what a failure in the bar names, as the sheet showed it at the send (C11.11). */
+export interface CellSending extends FromSheet {
+  cell: Cell;
+  notDone: NotDone;
+}
 
 /**
  * Declares one of the device's persons without a car, or not concerned, on a leg
@@ -18,7 +25,7 @@ import type { BarProblem } from "./message-bar";
  */
 export type SetPersonLeg = (
   change: { personId: string; leg: Leg; kind: "withoutCar" | "notConcerned" },
-  sheet: FromSheet,
+  sheet: CellSending,
 ) => Promise<BarProblem | null | undefined>;
 
 /**
@@ -70,7 +77,8 @@ export function CellSheet({
 
   async function declare(action: Exclude<CellAction, "seeCar">) {
     const change = { personId: person.id, leg, kind: declaredBy(action) };
-    const sheet = sends();
+    const cell = { firstName: person.firstName, leg, state };
+    const sheet = { ...sends(), cell, notDone: cellNotDone(action, cell) };
     const outcome = await setPersonLeg(change, sheet);
     if (outcome === undefined) return;
     if (sheet.inSheet()) setProblem(outcome);

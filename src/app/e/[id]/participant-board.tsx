@@ -4,7 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
-import { failureText, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
+import { cellWhy, failureText, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
 import { focusCar, focusCell, focusLandmark, focusName } from "@/components/event/focus";
 import { forget, sendAbout, type FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
@@ -74,7 +74,7 @@ export function ParticipantBoard({
   // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
   // hides the page: until then, it would be neither seen nor announced. It joins the others
   // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
-  // What was not done, then why (C11.11); without `notDone`, the generic words, until #224 to
+  // What was not done, then why (C11.11); without `notDone`, the generic words, until #225 and
   // #226 name theirs.
   function failedIn(sheet: FromSheet, { notDone, why, landmark }: { notDone?: NotDone; why: Why; landmark: () => boolean }) {
     if (sheet.inSheet()) return;
@@ -144,8 +144,9 @@ export function ParticipantBoard({
     return personFormOutcome(sent, sheet, () => focusName(personId));
   };
 
-  // The page takes the state a refusal carries too (C11.6).
-  const setPersonLeg: SetPersonLeg = async (change, sheet) => {
+  // The page takes the state a refusal carries too (C11.6). In the bar, the failure names the
+  // cell and the button touched, and says the refusal (`drives`, `forbidden`…); the sheet keeps the generic words.
+  const setPersonLeg: SetPersonLeg = async (change, { cell, notDone, ...sheet }) => {
     const sent = await runAction(`setPersonLeg:${sheet.key}`, () => storePersonLeg(id, readDeviceToken(id), change), undefined, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
@@ -153,10 +154,10 @@ export function ParticipantBoard({
       messages.succeed(null);
       return null;
     }
-    // A refusal has no words of its own (`drives`, `forbidden`…): the generic message.
-    const problem = sent.ok ? "failed" : sent.problem;
-    failedIn(sheet, failure(problem, () => focusCell(change.personId, change.leg)));
-    return problem;
+    const error = !sent.ok ? sent.problem : "error" in sent.value ? sent.value.error : "failed";
+    const landmark = () => focusCell(change.personId, change.leg);
+    failedIn(sheet, { notDone, why: cellWhy(error, cell), landmark });
+    return sent.ok ? "failed" : sent.problem;
   };
 
   // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
