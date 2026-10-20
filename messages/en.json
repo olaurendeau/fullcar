@@ -179,6 +179,7 @@
   "Actions": {
     "submit": "Confirm",
     "close": "Close",
+    "messages": "Messages",
     "cancel": "Cancel",
     "offline": "Action failed, check your connection",
     "failed": "Something went wrong and nothing has changed. Try again in a moment.",
