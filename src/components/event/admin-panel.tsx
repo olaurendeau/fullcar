@@ -2,7 +2,8 @@
 
 import { Lock, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useId, useState, type ReactNode, type Ref } from "react";
+import { useId, type ReactNode, type Ref } from "react";
+import type { Said } from "@/app/e/[id]/admin/screen-state";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
 import type { WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
@@ -18,8 +19,11 @@ import { ReadButton } from "./read-button";
  * the panel widens, the links take two columns and the sections two more (O4.1). It
  * receives the organiser's link ready-made: reading the token is admin-link.ts's alone. Its
  * title takes the focus after « Réessayer » (O5.8), through `titleRef`. Which lists are
- * unfolded is kept here, by leg and list (O5.6). « Actualiser », right of the title, reads
- * the screen again (O1.8); `said` is what the title line's live regions say of it (O1.9, O5.4).
+ * unfolded, `expanded`, the screen keeps, by leg and list (O5.6, O5.7). « Actualiser », right
+ * of the title, reads the screen again (O1.8); `said` is what the title line's live regions say
+ * of it (O1.9, O5.4), and `shown` what the alert's frame shows meanwhile. Withdrawn (`legs`
+ * null), the tiles and the sections go, the links stay, and a sentence says why, not live,
+ * unless the alert shows in its place (O1.10, O5.4).
  */
 export function AdminPanel({
   publicUrl,
@@ -30,29 +34,34 @@ export function AdminPanel({
   retourAt,
   refreshing,
   said,
+  shown,
   onRefresh,
+  expanded,
+  onToggle,
 }: {
   publicUrl: string;
   adminUrl: string;
   titleRef?: Ref<HTMLHeadingElement>;
-  legs: OrganiserLeg[];
+  legs: OrganiserLeg[] | null;
   allerAt: WallClock;
   retourAt: WallClock | null;
   refreshing: boolean;
-  said: "" | "refreshing" | "refreshed" | "failed";
+  said: Said;
+  shown: "" | "body" | "bodyWithdrawn";
   onRefresh: () => void;
+  expanded: ReadonlySet<string>;
+  onToggle: (key: string) => void;
 }) {
   const t = useTranslations("Admin");
   const titleId = useId();
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
-  const toggle = useCallback(
-    (key: string) =>
-      setExpanded((was) => {
-        const next = new Set(was);
-        if (!next.delete(key)) next.add(key);
-        return next;
-      }),
-    [],
+  // In the region once said; out of it, the same words while the next read runs (O5.4).
+  const live = said === "failed" ? "body" : said === "failedWithdrawn" ? "bodyWithdrawn" : "";
+  const framed = live !== "" || shown !== "";
+  const alertText = (body: "body" | "bodyWithdrawn") => (
+    <>
+      <p className="font-semibold text-destructive">{t("refreshFailed.title")}</p>
+      <p className="text-muted-foreground">{t(`refreshFailed.${body}`)}</p>
+    </>
   );
 
   return (
@@ -74,20 +83,17 @@ export function AdminPanel({
           </p>
         </div>
         {/* The panel's width, framed on a failure only. Its alert region holds text alone, is always
-            there, and is emptied while a read runs: two failures in a row are announced twice (O5.4). */}
-        <div className={cn(said === "failed" && cn(ALERT_FRAME, "mt-4"))}>
-          {said === "failed" && <TriangleAlert aria-hidden className="mt-0.5 size-4 text-destructive" />}
-          <div role="alert" className="flex max-w-prose flex-col gap-0.5">
-            {said === "failed" && (
-              <>
-                <p className="font-semibold text-destructive">{t("refreshFailed.title")}</p>
-                <p className="text-muted-foreground">{t("refreshFailed.body")}</p>
-              </>
-            )}
+            there, and is emptied while a read runs: two failures in a row are announced twice (O5.4).
+            Its words stay on screen meanwhile, out of it: nothing under the frame moves. */}
+        <div className={cn(framed && cn(ALERT_FRAME, "mt-4"))}>
+          {framed && <TriangleAlert aria-hidden className="mt-0.5 size-4 text-destructive" />}
+          <div role="alert" className={ALERT_TEXT}>
+            {live && alertText(live)}
           </div>
+          {!live && shown && <div className={ALERT_TEXT}>{alertText(shown)}</div>}
         </div>
       </div>
-      <OrganiserTiles legs={legs} />
+      {legs && <OrganiserTiles legs={legs} />}
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
         <LinkGroup label={t("shareLink.label")} hint={t("shareLink.hint")}>
           <CopyableLink url={publicUrl}>
@@ -113,8 +119,16 @@ export function AdminPanel({
           <Notice title={t("keep.title")} body={t("keep.body")} />
         </div>
       </div>
-      <hr className="hidden lg:block" />
-      <OrganiserLegs legs={legs} allerAt={allerAt} retourAt={retourAt} expanded={expanded} onToggle={toggle} />
+      {(legs || !framed) && <hr className="hidden lg:block" />}
+      {legs ? (
+        <OrganiserLegs legs={legs} allerAt={allerAt} retourAt={retourAt} expanded={expanded} onToggle={onToggle} />
+      ) : (
+        !framed && (
+          <p className="rounded-lg border border-dashed p-3 text-sm">
+            <span className="block max-w-prose">{t("stale")}</span>
+          </p>
+        )
+      )}
     </section>
   );
 }
@@ -134,6 +148,7 @@ function LinkGroup({ label, hint, children }: { label: ReactNode; hint: string; 
   );
 }
 
+const ALERT_TEXT = "col-start-2 row-start-1 flex max-w-prose flex-col gap-0.5";
 // Untinted (O7.7): the frame in the destructive colour on the background, as #66's alerts.
 const ALERT_FRAME =
   "grid grid-cols-[1rem_1fr] gap-x-2.5 rounded-lg border border-destructive bg-background p-3 text-sm";
