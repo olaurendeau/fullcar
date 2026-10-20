@@ -171,6 +171,24 @@ describe("updateRide", () => {
     });
   });
 
+  it("C8.2: a field left out stays as it is, so that a change does not undo another made since the form showed", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, lea, hugo, r1 } = await seedScene(trx);
+      await updateRide(trx, eventId, marc.token, r1, "aller", form({ note: "Coffre plein" }));
+      const lists = { seenPassengerIds: [lea.id, hugo.id], leaving: [] };
+
+      const result = await updateRide(trx, eventId, marc.token, r1, "aller", { location: "Gare de Cesson", ...lists });
+
+      expect(result).toMatchObject({ ok: true });
+      const car = carOf(stateOf(result), "aller", r1);
+      expect(car).toMatchObject({ location: "Gare de Cesson", departureTime: "07:15:00", note: "Coffre plein", seats: 3 });
+      // Nothing to change: a success, and the car as it was.
+      const again = await updateRide(trx, eventId, marc.token, r1, "aller", lists);
+      expect(again).toMatchObject({ ok: true });
+      expect(carOf(stateOf(again), "aller", r1)).toEqual(car);
+    });
+  });
+
   it("C4.7: refuses fields against the rules of R4, with an error per field, and nothing changes", async () => {
     await withRollback(async (trx) => {
       const { eventId, marc, r1 } = await seedScene(trx);
