@@ -4,6 +4,7 @@ import {
   isWallDate,
   isWallTime,
   localDate,
+  sameWallDate,
   toWallClock,
   utcDate,
   wallClockAsUtc,
@@ -85,6 +86,11 @@ describe.each(zones)("in $zone", ({ zone, now, local }) => {
     expect(localDate(now)).toBe(local);
   });
 
+  it("reads the same wall-clock day whatever the zone (D1.7)", () => {
+    expect(sameWallDate("2026-12-12 20:00:00", "2026-12-12 23:30:00")).toBe(true);
+    expect(sameWallDate("2026-12-12 20:00:00", "2026-12-13 00:30:00")).toBe(false);
+  });
+
   it("reads the server's date in UTC", () => {
     expect(utcDate(now)).toBe("2026-10-13");
   });
@@ -116,5 +122,28 @@ describe("wall-clock time, without a time zone", () => {
     for (const value of ["", "2026-12-12", "2026-12-12T07:30:00", "2026-12-12 07:30", "2026-12-12 07:30:00Z"]) {
       expect(() => wallClockParts(value)).toThrow("not a wall-clock timestamp");
     }
+  });
+});
+
+describe("sameWallDate", () => {
+  // D1.7: the end shows its time alone on the start's wall-clock day, read on the digits.
+  it.each([
+    { a: "2026-12-12 07:30:00", b: "2026-12-12 18:00:00", same: true },
+    { a: "2026-12-12 20:00:00", b: "2026-12-12 23:30:00", same: true },
+    { a: "2026-12-12 00:00:00", b: "2026-12-12 23:59:00", same: true },
+    { a: "2026-12-12 07:30:00", b: "2026-12-12 07:30:00", same: true },
+    { a: "2026-12-12 20:00:00", b: "2026-12-13 00:30:00", same: false },
+    { a: "2026-12-12 23:59:00", b: "2026-12-13 00:00:00", same: false },
+    { a: "2026-12-12 20:00:00", b: "2026-12-13 01:00:00", same: false },
+    { a: "2026-12-12 07:30:00", b: "2027-01-12 07:30:00", same: false },
+    { a: "2026-12-12 07:30:00", b: "2027-12-12 07:30:00", same: false },
+    { a: "2026-12-13 01:00:00", b: "2026-12-12 20:00:00", same: false },
+  ])("$a and $b: $same", ({ a, b, same }) => {
+    expect(sameWallDate(a, b)).toBe(same);
+  });
+
+  it("refuses anything but two wall-clock timestamps", () => {
+    expect(() => sameWallDate("2026-12-12T07:30:00", "2026-12-12 18:00:00")).toThrow("not a wall-clock timestamp");
+    expect(() => sameWallDate("2026-12-12 07:30:00", "2026-12-12")).toThrow("not a wall-clock timestamp");
   });
 });
