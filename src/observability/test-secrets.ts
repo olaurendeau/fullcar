@@ -34,13 +34,17 @@ export const RELEASE = "4f1e9c2ab7d3e8f05c6a9b1d2e3f4a5b6c7d8e9f";
 
 export type Secrets = ReturnType<typeof drawSecrets>;
 
-/** Bytes that `generatePublicId` maps to lowercase letters only (symbols 32 to 56). */
+/**
+ * Bytes that `generatePublicId` maps to lowercase letters only (symbols 32 to 56), and whose
+ * base64url starts with a letter and has neither `-` nor `_`.
+ */
 export const lowercaseBytes = (size: number) => Uint8Array.from({ length: size }, (_, at) => 32 + ((at * 7) % 25));
 
+/** The secrets of an event, from the application's builders; from `random` for all three if given. */
 export function drawSecrets(random?: RandomBytes) {
   const id = generatePublicId(random);
-  const adminToken = newAdminToken();
-  const personalToken = personalTokenFromBytes(new Uint8Array(randomBytes(PERSONAL_TOKEN_BYTES)));
+  const adminToken = newAdminToken(random);
+  const personalToken = personalTokenFromBytes(new Uint8Array((random ?? randomBytes)(PERSONAL_TOKEN_BYTES)));
   const { publicUrl, adminUrl } = organiserLinks(ORIGIN, id, adminToken);
   return { id, adminToken, personalToken, publicUrl, adminUrl, personalUrl: `${publicUrl}/moi#${personalToken}` };
 }
@@ -100,7 +104,7 @@ export function leakyEvent(secrets: Secrets, platform: "javascript" | "node" = "
           mechanism: { type: "auto.browser.global_handlers.onerror", handled: false, data: { url: adminUrl } },
           stacktrace: {
             frames: [
-              { filename: STATIC_FRAME, function: "onSubmit", lineno: 1, colno: 4410, in_app: true },
+              { filename: STATIC_FRAME.replace(ORIGIN, "app://"), function: "onSubmit", lineno: 1, colno: 4410, in_app: true },
               { filename: adminUrl, abs_path: adminUrl, function: "?", lineno: 12, colno: 7, in_app: true, vars: { NAMES, PHONES }, context_line: personalToken },
             ],
           },

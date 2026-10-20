@@ -142,7 +142,7 @@ describe("scrubEvent", () => {
       mechanism: { type: "auto.browser.global_handlers.onerror", handled: false },
       stacktrace: {
         frames: [
-          { filename: `${ORIGIN}/_next/static/chunks/app/e/page-3f9ac2.js`, function: "onSubmit", lineno: 1, colno: 4410, in_app: true },
+          { filename: "app:///_next/static/chunks/app/e/page-3f9ac2.js", function: "onSubmit", lineno: 1, colno: 4410, in_app: true },
           { filename: `${ORIGIN}/e/[id]/admin`, abs_path: `${ORIGIN}/e/[id]/admin`, function: "?", lineno: 12, colno: 7, in_app: true },
         ],
       },
@@ -190,10 +190,20 @@ describe("scrubEvent", () => {
     expect(leaks(frames)).toEqual([]);
   });
 
-  it("redacts an id read as a function name in a line of the message, which has no line number", () => {
+  it("scrubs what the Node parser reads as the scheme of a frame's file", () => {
+    // Secrets of letters and digits only, which always read as a scheme before a colon.
+    const fixed = drawSecrets(lowercaseBytes);
+    const lines = [fixed.personalToken, fixed.adminToken, fixed.id].map((secret) => `Could not seat ${secret}: car full`);
+    const frames = sentFrames(nodeStackParser, "Error: x", ...lines);
+    expect(frames.length).toBeGreaterThan(0);
+    expect(leakedKinds(JSON.stringify(frames), fixed)).toEqual([]);
+  });
+
+  it("redacts an id read as a function name in a line of the message, line number or not", () => {
     const lowercase = drawSecrets(lowercaseBytes);
-    const node = sentFrames(nodeStackParser, "Error: x", `no event at ${lowercase.id} (deleted)`);
-    const browser = sentFrames(browserStackParser, "Error: x", `${lowercase.id}@${ORIGIN}/_next/static/chunks/page.js`);
+    const lines = [`no event at ${lowercase.id} (deleted)`, `no event at ${lowercase.id} (since 10:30:00)`];
+    const node = sentFrames(nodeStackParser, "Error: x", ...lines);
+    const browser = sentFrames(browserStackParser, "Error: x", `${lowercase.id}@${ORIGIN}/_next/static/chunks/page.js`, `at ${lowercase.id} (since 10:30)`);
     expect(node.length * browser.length).toBeGreaterThan(0);
     expect(leakedKinds(JSON.stringify([node, browser]), lowercase)).toEqual([]);
   });

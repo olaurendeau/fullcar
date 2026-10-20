@@ -24,14 +24,16 @@ const URL_PARTS = /^([a-z][a-z\d+.-]*:)?(?:\/\/([^/?#]*))?([^?#]*)/i;
 /**
  * The scheme and the host, and of the path only the application's own segments:
  * `https://h/e/Ab3d…/admin?x#token` becomes `https://h/e/[id]/admin`. The event's id goes
- * too. Credentials before `@` go; the paths of `/_next/static/…` are kept.
+ * too. Credentials before `@` go; the paths of `/_next/static/…` are kept. The scheme and
+ * the host go through `scrubText`: from a line of a message, the Node parser makes a "URL"
+ * whose scheme is whatever came before a colon.
  */
 export function scrubUrl(url: string): string {
   const [, scheme = "", authority, path = ""] = URL_PARTS.exec(url) ?? [];
-  const host = authority === undefined ? "" : `//${authority.slice(authority.lastIndexOf("@") + 1)}`;
-  if (path.startsWith(STATIC_PATH)) return `${scheme}${host}${path}`;
+  const origin = `${scrubText(scheme)}${authority === undefined ? "" : `//${scrubText(authority.slice(authority.lastIndexOf("@") + 1))}`}`;
+  if (path.startsWith(STATIC_PATH)) return `${origin}${path}`;
   const segments = path.split("/").map((segment) => (segment === "" || LITERAL_SEGMENTS.has(segment) ? segment : ID));
-  return `${scheme}${host}${segments.join("/")}`;
+  return `${origin}${segments.join("/")}`;
 }
 
 /** Files of the build and of Node, which name code and never a person. */
@@ -44,8 +46,12 @@ const BUILD_FILE = /^node:|^(?:[a-z][\w+.-]*:\/\/)?\/_next\/|\/\.next\/|\/node_m
  * out of the rest of that line, words and all.
  */
 function scrubLocation(location: string): string {
-  const file = location.split(/[?#]/, 1)[0];
-  return !/^https?:/i.test(file) && !/\s/.test(file) && BUILD_FILE.test(file) ? file : scrubUrl(location);
+  return buildFile(location) ?? scrubUrl(location);
+}
+
+function buildFile(location: unknown): string | undefined {
+  const file = typeof location === "string" ? location.split(/[?#]/, 1)[0] : "";
+  return !/^https?:/i.test(file) && !/\s/.test(file) && BUILD_FILE.test(file) ? file : undefined;
 }
 
 /*
@@ -188,12 +194,20 @@ const ID_PART = /(?<![\w$])[2-9A-HJ-NP-Za-km-z]{8}(?![\w$])/;
  * A function's name as it is, when it reads as one: through `scrubText`, `onSubmit` would
  * read as an id. The SDK's parsers make a frame of any line of a message that looks like
  * one, and its words become the name: a name that does not read as one is not sent at all,
- * since `scrubText` cannot tell a first name from a word. Such a frame has no line number,
- * unlike a frame of code (`inCode`): there, any id-shaped part goes through `scrubText`.
+ * since `scrubText` cannot tell a first name from a word. Outside a frame of code, any
+ * id-shaped part goes through `scrubText` too.
  */
-function scrubFunctionName(name: string, inCode: boolean): string {
+function scrubFunctionName(name: string, code: boolean): string {
   if (!FUNCTION_NAME.test(name)) return REDACTED;
-  return SECRET_PART.test(name) || (!inCode && ID_PART.test(name)) ? scrubText(name) : name;
+  return SECRET_PART.test(name) || (!code && ID_PART.test(name)) ? scrubText(name) : name;
+}
+
+/**
+ * A frame of code: a line number in a file of the build or of Node. A line of a message may
+ * carry a line number (`at x (since 10:30)`), never such a file without a space in it.
+ */
+function inCode(frame: StackFrame): boolean {
+  return finite(frame.lineno) !== undefined && buildFile(frame.filename ?? frame.abs_path) !== undefined;
 }
 
 /** Where the code ran, and nothing it held: no `vars`, no lines of source. */
@@ -202,7 +216,7 @@ function scrubFrame(frame: StackFrame): StackFrame {
     filename: stringOr(frame.filename, scrubLocation),
     abs_path: stringOr(frame.abs_path, scrubLocation),
     module: stringOr(frame.module, scrubLocation),
-    function: stringOr(frame.function, (name) => scrubFunctionName(name, finite(frame.lineno) !== undefined)),
+    function: stringOr(frame.function, (name) => scrubFunctionName(name, inCode(frame))),
     lineno: finite(frame.lineno),
     colno: finite(frame.colno),
     in_app: bool(frame.in_app),
