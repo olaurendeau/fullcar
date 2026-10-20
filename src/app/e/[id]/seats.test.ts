@@ -6,7 +6,7 @@ import { deleteRide, lockRide, ridePassengers } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
-import { seedEvent } from "@/db/test-events";
+import { removeSeededRetour, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import type { VisibleBoard } from "@/domain/phone-visibility";
@@ -655,6 +655,37 @@ describe("undoSeats", () => {
         expect(result).toMatchObject({ ok: true, undoneIds: [ines.id] });
         expect(await standing(db, eventId, "aller")).toEqual({ [lea.id]: r2 });
       });
+    });
+  });
+});
+
+// M7.7, M7.10, decision 40: the page still shows the retour the organiser removed.
+describe("on a retour removed meanwhile", () => {
+  it("M7.7: takeSeats is refused by noRetour, with the state, before rideGone and forbidden, and nothing is written", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r3 } = await seedScene(trx);
+      await removeSeededRetour(trx, eventId);
+      const before = await placementsOf(trx, eventId);
+
+      const result = await takeSeats(trx, eventId, lea.token, r3, "retour", [lea.id]);
+
+      expect(result).toEqual({ ok: false, error: "noRetour", state: await readEventState(trx, eventId, lea.token) });
+      expect(await takeSeats(trx, eventId, NOBODYS_TOKEN, r3, "retour", [lea.id])).toMatchObject({ error: "noRetour" });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("M7.10: undoSeats is refused by noRetour, with the state, and nothing is written", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r3 } = await seedScene(trx);
+      expect(await takeSeats(trx, eventId, lea.token, r3, "retour", [lea.id])).toMatchObject({ ok: true });
+      await removeSeededRetour(trx, eventId);
+      const before = await placementsOf(trx, eventId);
+
+      const result = await undoSeats(trx, eventId, lea.token, r3, "retour", [{ personId: lea.id, before: "withoutCar" }]);
+
+      expect(result).toEqual({ ok: false, error: "noRetour", state: await readEventState(trx, eventId, lea.token) });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
     });
   });
 });
