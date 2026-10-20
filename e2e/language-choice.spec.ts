@@ -97,12 +97,13 @@ const LOCALE_KEY = /^(lang|language|locale|hl)$/i;
 /**
  * The app's icons, which the document's head asks for again once rendered in the new language,
  * and which Chromium may fetch at any time, the favicon included. Their one query parameter is
- * their version, which Next names after the file: `/favicon.ico?favicon.<hash>.ico`.
+ * their version, which Next names after the file: `/favicon.ico?favicon.<hash>.ico`. Its hash
+ * has 13 characters; at least 8 are asked, which no language name has.
  */
 const ICON_VERSION = new Map([
-  ["/favicon.ico", /^favicon\.[\w-]+\.ico$/],
-  ["/icon.svg", /^icon\.[\w-]+\.svg$/],
-  ["/apple-icon.png", /^apple-icon\.[\w-]+\.png$/],
+  ["/favicon.ico", /^favicon\.[\w-]{8,}\.ico$/],
+  ["/icon.svg", /^icon\.[\w-]{8,}\.svg$/],
+  ["/apple-icon.png", /^apple-icon\.[\w-]{8,}\.png$/],
 ]);
 /** Whether a query parameter is an icon's version: on the icon's own path, named after it, without a value. */
 const isIconVersion = (pathname: string, key: string, value: string) =>
@@ -376,6 +377,9 @@ test.describe("the language never in a URL", () => {
     expect(isIconVersion("/favicon.ico", "lang", "")).toBe(false);
     expect(isIconVersion("/favicon.ico", "icon.19jyq0e_4sn9e.svg", "")).toBe(false);
     expect(isIconVersion("/favicon.ico", "favicon.ico", "")).toBe(false);
+    // A language is no version: a hash has at least 8 characters.
+    expect(isIconVersion("/favicon.ico", "favicon.en.ico", "")).toBe(false);
+    expect(isIconVersion("/favicon.ico", "favicon.en-GB.ico", "")).toBe(false);
   });
 
   test("L2.7: the organiser's two links are the same after the tap, and the shared one opens in French", async ({
