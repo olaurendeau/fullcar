@@ -7,7 +7,7 @@ import { type Breadcrumb, defaultStackParser as nodeStackParser, type StackFrame
 import { beforeEach, describe, expect, it } from "vitest";
 import { scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan, scrubText, scrubUrl, type StreamedSpan } from "./scrub";
 import { actionBody, drawSecrets, leakedKinds, leakyEvent, NAMES, ORIGIN, PHONES, RELEASE, type Secrets } from "./test-secrets";
-import { lowercaseBytes, STATIC_FRAME, TRACE_ID, USER_AGENT } from "./test-secrets";
+import { lowercaseBytes, mixedBytes, STATIC_FRAME, TRACE_ID, USER_AGENT } from "./test-secrets";
 
 /*
  * No assertion here prints a secret when it fails: leaks are checked with `leakedKinds`,
@@ -208,13 +208,24 @@ describe("scrubEvent", () => {
     expect(leaks([browser, node])).toEqual([]);
   });
 
+  it("scrubs a frame's file whose scheme is not one of the build", () => {
+    const fixed = drawSecrets(lowercaseBytes);
+    const lines = [`failed at ${fixed.id}://x/node_modules/y.js`, `failed at ${fixed.adminToken}:///_next/static/a.js`];
+    lines.push(`failed at ${fixed.personalToken}://h/.next/server/a.js`);
+    const frames = [nodeStackParser, browserStackParser].map((parser) => sentFrames(parser, "Error: x", ...lines));
+    expect(frames.flat().length).toBeGreaterThan(0);
+    expect(leakedKinds(JSON.stringify(frames), fixed)).toEqual([]);
+  });
+
   /*
-   * Every value sent as it is, fed a line of a message with every kind of secret: each must
-   * go through scrubText, since a prefix or a shape proves nothing; only the whole value does.
+   * Every value sent as it is, fed a line of a message with every kind of secret, and each
+   * secret alone, with no space to give it away: each must go through scrubText unless the
+   * whole of it may be sent, since a prefix or a shape proves nothing.
    */
   it.each([
-    ["a URL's path of the build", (line: string) => scrubUrl(`/_next/static/chunks/a.js ${line}`)],
-    ["a frame's file of the build", (line: string) => frameFiles([`/var/task/node_modules/x.js ${line}`, `node:${line}`])],
+    ["a URL's path of the build", (line: string) => scrubUrl(`/_next/static/chunks/${line}`)],
+    ["a frame's file of the build", (line: string) => frameFiles([`/var/task/node_modules/${line}`, `node:${line}`])],
+    ["a frame's file, scheme included", (line: string) => frameFiles([`${line}://x/node_modules/y.js`, `${line}:///_next/static/a.js`])],
     ["a frame's function", (line: string) => sentFrames(nodeStackParser, "Error: x", `    at ${line} (app:///_next/static/a.js:1:2)`)],
     ["the event's own fields", (line: string) => verbatimEvent(line)],
     ["the browser's User-Agent", (line: string) => scrubEvent({ ...leakyEvent(secrets), request: { headers: { "User-Agent": line } } })],
@@ -224,6 +235,13 @@ describe("scrubEvent", () => {
   ])("sends %s as it is only when the whole of it may be", (_, send) => {
     const line = `Could not seat "${NAMES[0]}" (${PHONES[0]}) from ${secrets.adminUrl}, see ${secrets.personalUrl}, event ${secrets.id}`;
     expect(leaks(send(line))).toEqual([]);
+    // Secrets with an uppercase letter and a digit: a fraction of ids has neither (« Limites connues »).
+    const fixed = drawSecrets(mixedBytes);
+    const alone = [fixed.adminToken, fixed.personalToken, fixed.id, `${ORIGIN}/e/${fixed.id}/admin`];
+    expect(leakedKinds(JSON.stringify(alone.map((value) => send(value))), fixed)).toEqual([]);
+    // A URL is never a name, whatever its id looks like.
+    const lowercase = drawSecrets(lowercaseBytes);
+    expect(leakedKinds(JSON.stringify(send(`${ORIGIN}/e/${lowercase.id}/admin`)), lowercase)).toEqual([]);
   });
 
   it("redacts an id read as a function name in a line of the message, line number or not", () => {

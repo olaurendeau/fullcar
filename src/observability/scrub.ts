@@ -13,16 +13,25 @@ import type { Breadcrumb, ErrorEvent, NodeOptions, StackFrame } from "@sentry/ne
  * of such a line lands in a file, a scheme or a function's name.
  */
 
-/** Names, versions and identifiers the SDK and the build write: `sentry.javascript.node`, `11.8.0`, `errors[0]`, `npm:@scope/name`. */
+/**
+ * A run a token or an id could be: 22 base64url characters or 8 symbols of an id, with an
+ * uppercase letter, which names, versions, chunks and git SHAs written in lowercase lack.
+ */
+const SECRET_RUN = /(?<![\w-])(?=[\w-]*[A-Z])(?:[\w-]{22,}|[2-9A-HJ-NP-Za-km-z]{8})(?![\w-])/;
+
+/**
+ * Names, versions and identifiers the SDK and the build write: `sentry.javascript.node`,
+ * `11.8.0`, `errors[0]`, `npm:@scope/name`. Their characters only, no URL (`://`) and no
+ * secret's run: a field our code fills (an `error.name`) may hold anything.
+ */
 const NAME = /^[\w.$:@/+[\]-]+$/;
 const HEX = /^[\da-f]+$/i;
-const name = (value: string) => (NAME.test(value) ? value : scrubText(value));
+const name = (value: string) => (NAME.test(value) && !value.includes("://") && !SECRET_RUN.test(value) ? value : scrubText(value));
 const hex = (value: string) => (HEX.test(value) ? value : scrubText(value));
 
-/** A path of the build: its characters only, and no run a token or a mixed-case id could be. */
+/** A path of the build: its characters only, and no secret's run. */
 const PATH = /^[\w.\-/[\]()@+%~]+$/;
-const SECRET_IN_PATH = /(?<![\w-])(?=[\w-]*[A-Z])(?:[\w-]{22,}|[2-9A-HJ-NP-Za-km-z]{8})(?![\w-])/;
-const safePath = (path: string) => PATH.test(path) && !SECRET_IN_PATH.test(path);
+const safePath = (path: string) => PATH.test(path) && !SECRET_RUN.test(path);
 
 /** A span as `beforeSendSpan` receives it, with streamed spans (the default in v11). */
 export type StreamedSpan = Parameters<NonNullable<NodeOptions["beforeSendSpan"]>>[0];
@@ -53,8 +62,10 @@ export function scrubUrl(url: string): string {
   return `${origin}${segments.join("/")}`;
 }
 
-/** Files of the build and of Node, which name code and never a person. */
-const BUILD_FILE = /^node:|^(?:[a-z][\w+.-]*:\/\/)?\/_next\/|\/\.next\/|\/node_modules\//i;
+/** The schemes of the build and of Node, a fixed list: any other is checked like the rest. */
+const BUILD_SCHEME = /^(?:node:|(?:app|webpack-internal):\/\/)/i;
+/** Paths of the build and of Node, after their scheme: they name code and never a person. */
+const BUILD_PATH = /^\/_next\/|\/\.next\/|\/node_modules\//;
 
 /**
  * A frame's file: a file of the build (`app:///_next/…`, `…/.next/…`, `…/node_modules/…`,
@@ -68,8 +79,9 @@ function scrubLocation(location: string): string {
 
 function buildFile(location: unknown): string | undefined {
   const file = typeof location === "string" ? location.split(/[?#]/, 1)[0] : "";
-  const path = file.replace(/^(?:node:|[a-z][\w+.-]*:\/\/)/i, "");
-  return !/^https?:/i.test(file) && safePath(path) && BUILD_FILE.test(file) ? file : undefined;
+  const path = file.replace(BUILD_SCHEME, "");
+  const build = /^node:/i.test(file) || BUILD_PATH.test(path);
+  return safePath(path) && build ? file : undefined;
 }
 
 /*
@@ -272,6 +284,7 @@ function scrubContexts(contexts: Record<string, unknown>): ErrorEvent["contexts"
   const kept: Record<string, Record<string, unknown>> = {};
   for (const context of SYSTEM_CONTEXTS) {
     if (!contexts[context]) continue;
+    // The keys are the SDK's, and only the SDK writes them.
     const values = Object.entries(record(contexts[context])).map(([key, v]) => [key, typeof v === "string" ? name(v) : finite(v) ?? bool(v)]);
     kept[context] = compact(Object.fromEntries(values));
   }
@@ -319,10 +332,12 @@ function scrubAttribute(key: string, value: unknown): unknown {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     const { value: inner, type, unit } = value as { value?: unknown; type?: unknown; unit?: unknown };
     const scrubbed = scrubAttribute(key, inner);
+    // `type` and `unit` are the SDK's, and only the SDK writes them.
     return scrubbed === undefined ? undefined : compact({ value: scrubbed, type, unit });
   }
   const text = (each: (s: string) => string) =>
     Array.isArray(value) ? value.map((v) => (typeof v === "string" ? each(v) : v)) : typeof value === "string" ? each(value) : value;
+  // A `sentry.*` key is the SDK's, and only the SDK writes it; its value is checked.
   if (key.startsWith("sentry.")) {
     if (DROPPED_SENTRY.test(key)) return undefined;
     return text(VERBATIM_ATTRIBUTES.has(key) ? name : scrubText);
@@ -361,6 +376,7 @@ export function scrubSpan(span: StreamedSpan): StreamedSpan {
     parent_span_id: stringOr(span.parent_span_id, hex),
     span_id: stringOr(span.span_id, hex),
     name,
+    // The timestamps are the SDK's, and only the SDK writes them.
     start_timestamp: span.start_timestamp,
     end_timestamp: span.end_timestamp,
     status: span.status === "error" ? "error" : "ok",
