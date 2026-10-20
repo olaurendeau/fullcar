@@ -6,7 +6,7 @@ import { ridePassengers } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
-import { seedEvent } from "@/db/test-events";
+import { removeSeededRetour, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import type { VisibleBoard } from "@/domain/phone-visibility";
@@ -432,6 +432,37 @@ describe("at the same time as another session, on committed data", () => {
       expect((await rowsOf(db, eventId)).rides).toEqual([expect.objectContaining({ id: rideId, seats: 3 })]);
       const passengers = await ridePassengers(db, { id: rideId, eventId, leg: "aller" });
       expect(passengers.map((passenger) => passenger.personId)).toEqual([lea.id, ben.id, chloe.id]);
+    });
+  });
+});
+
+// M7.11, M7.12, decision 40: the page still shows the retour the organiser removed.
+describe("on a retour removed meanwhile", () => {
+  it("M7.11: updateRide is refused by noRetour, with the state, before rideGone and forbidden, and nothing is written", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r2 } = await seedScene(trx);
+      await removeSeededRetour(trx, eventId);
+      const before = await rowsOf(trx, eventId);
+
+      const result = await updateRide(trx, eventId, marc.token, r2, "retour", form({ time: "19:00" }));
+
+      expect(result).toEqual({ ok: false, error: "noRetour", state: await readEventState(trx, eventId, marc.token) });
+      expect(await updateRide(trx, eventId, NOBODYS_TOKEN, r2, "retour", form())).toMatchObject({ error: "noRetour" });
+      expect(await rowsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("M7.12: removeRide is refused by noRetour, with the state, and nothing is written", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r2 } = await seedScene(trx);
+      await removeSeededRetour(trx, eventId);
+      const before = await rowsOf(trx, eventId);
+
+      const result = await removeRide(trx, eventId, marc.token, r2, "retour");
+
+      expect(result).toEqual({ ok: false, error: "noRetour", state: await readEventState(trx, eventId, marc.token) });
+      expect(await removeRide(trx, eventId, NOBODYS_TOKEN, r2, "retour")).toMatchObject({ error: "noRetour" });
+      expect(await rowsOf(trx, eventId)).toEqual(before);
     });
   });
 });

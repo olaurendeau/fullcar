@@ -1,10 +1,11 @@
-import type { Transaction } from "kysely";
+import { sql, type Kysely, type Transaction } from "kysely";
 import { describe, expect, it } from "vitest";
 import { adminTokenMatches, hashAdminToken } from "@/domain/admin-token";
 import { LOCATION_MAX, TITLE_MAX, type NewEvent } from "@/domain/event";
 import { PUBLIC_ID_ALPHABET, isPublicId } from "@/domain/public-id";
-import { INSERT_ATTEMPTS, insertEvent, readAdminTokenHash } from "./events";
+import { INSERT_ATTEMPTS, findEventById, insertEvent, lockEvent, readAdminTokenHash, writeEventFields } from "./events";
 import type { Database } from "./schema";
+import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
 
@@ -164,5 +165,80 @@ describe("seedEvent", () => {
       return trx.selectFrom("event").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
     });
     expect(row).toMatchObject({ title: "Mariage", retour_at: null, stops_enabled: true });
+  });
+});
+
+describe("writeEventFields", () => {
+  it("writes the title, the place, the start and the end, and nothing else", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx, { boostersEnabled: true });
+      const hash = await readAdminTokenHash(trx, id);
+      const fields = { title: "Finale", location: "Stade", allerAt: "2026-12-13 14:00:00", retourAt: null };
+
+      expect(await writeEventFields(trx, id, fields)).toBe(true);
+
+      expect(await findEventById(trx, id)).toEqual({
+        id,
+        title: "Finale",
+        location: "Stade",
+        aller_at: "2026-12-13 14:00:00",
+        retour_at: null,
+        boosters_enabled: true,
+        participation_enabled: false,
+        stops_enabled: false,
+      });
+      expect(await readAdminTokenHash(trx, id)).toBe(hash);
+    });
+  });
+
+  it("writes nothing for an unknown id", async () => {
+    await withRollback(async (trx) => {
+      const fields = { title: "Finale", location: "Stade", allerAt: "2026-12-13 14:00:00", retourAt: null };
+      expect(await writeEventFields(trx, "Zz9yXw8v", fields)).toBe(false);
+    });
+  });
+});
+
+describe("lockEvent", () => {
+  it("gives the event's public fields, and nothing for an unknown id", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx);
+      expect(await lockEvent(trx, id, "share")).toEqual(await findEventById(trx, id));
+      expect(await lockEvent(trx, id, "noKeyUpdate")).toEqual(await findEventById(trx, id));
+      expect(await lockEvent(trx, "Zz9yXw8v", "share")).toBeUndefined();
+    });
+  });
+
+  /** Whether `lock`, taken on the connection, waits for a transaction that holds `held`. */
+  async function waits(db: Kysely<Database>, id: string, held: "share" | "noKeyUpdate", lock: "share" | "noKeyUpdate") {
+    const holder = await db.startTransaction().execute();
+    try {
+      await lockEvent(holder, id, held);
+      const other = await db.startTransaction().execute();
+      try {
+        await sql`set local lock_timeout = '200ms'`.execute(other);
+        return await lockEvent(other, id, lock).then(
+          () => false,
+          (error: { code?: string }) => {
+            if (error.code === "55P03") return true;
+            throw error;
+          },
+        );
+      } finally {
+        await other.rollback().execute();
+      }
+    } finally {
+      await holder.rollback().execute();
+    }
+  }
+
+  // Writes on the legs share the Event, and are not queued behind each other; a change of
+  // the event waits for them, and they wait for it (M3.6).
+  it("share does not wait for share; noKeyUpdate and share wait for each other", async () => {
+    await withCommittedEvent(async (db, id) => {
+      expect(await waits(db, id, "share", "share")).toBe(false);
+      expect(await waits(db, id, "share", "noKeyUpdate")).toBe(true);
+      expect(await waits(db, id, "noKeyUpdate", "share")).toBe(true);
+    });
   });
 });

@@ -2,6 +2,7 @@ import type { Kysely } from "kysely";
 import { hashAdminToken, newAdminToken } from "@/domain/admin-token";
 import type { NewEvent } from "@/domain/event";
 import { insertEvent } from "./events";
+import { deleteLegRows } from "./legs";
 import type { Database } from "./schema";
 
 const SEED: NewEvent = {
@@ -32,4 +33,10 @@ export async function seedEvent(
 ): Promise<SeededEvent> {
   const id = await insertEvent(db, { ...SEED, ...fields }, hashAdminToken(token), newId);
   return { id, token };
+}
+
+/** The retour removed by the organiser: its Rides and Placements deleted, then `retour_at` null. */
+export async function removeSeededRetour(db: Kysely<Database>, eventId: string): Promise<void> {
+  await deleteLegRows(db, eventId, "retour");
+  await db.updateTable("event").set({ retour_at: null }).where("id", "=", eventId).execute();
 }
