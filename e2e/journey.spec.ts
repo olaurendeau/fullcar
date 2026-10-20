@@ -5,7 +5,7 @@ import { expect, leaveNoToken, test } from "./fixtures";
 leaveNoToken();
 
 /*
- * The organiser's whole journey (#3, #24): from `/nouveau` to the link to share, against the
+ * The organiser's whole journey (#3, #24, #232): from `/` to the link to share, against the
  * production build served in UTC+14 (the Makefile's E2E_TZ), from browsers in other zones.
  */
 
@@ -35,6 +35,7 @@ const WORDS = {
     retourTime: "Heure de fin",
     options: ["Rehausseurs", "Participation aux frais", "Points de RDV"],
     create: "Créer",
+    newEvent: "Créer un événement",
     panel: "Espace organisateur",
     shareLink: "Lien à partager",
     aller: "Aller",
@@ -51,6 +52,7 @@ const WORDS = {
     retourTime: "End time",
     options: ["Booster seats", "Cost sharing", "Meeting points"],
     create: "Create",
+    newEvent: "Create an event",
     panel: "Organiser area",
     shareLink: "Link to share",
     aller: "Outbound",
@@ -100,7 +102,7 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
   test.describe(`the organiser's journey, ${name}`, () => {
     test.use({ locale, timezoneId });
 
-    test("C1.4, C1.12, C5.9, C7.1: at most six actions from /nouveau to the link to share, in less than 30 s, in one language", async ({
+    test("A2.2, C1.4, C1.12, C5.9, C7.1: at most seven actions from /, six of them on /nouveau, to the link to share, in less than 30 s, in one language", async ({
       page,
       baseURL,
     }) => {
@@ -114,12 +116,12 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
       const title = lang === "fr" ? "Sortie ski du club" : "Club ski trip";
 
       const start = Date.now();
-      await page.goto("/nouveau");
-      // Hydrated: "Créer" stays inactive until then. Waiting is not an action.
-      await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
+      await page.goto("/");
       const allerDate = await deviceDate(page, 7);
-      // C1.4 and C2.2: the shortest path, every action of the user in this list.
-      const actions = [
+      // A2.2: the home page's one link to the form, the first action.
+      const toForm = () => page.getByRole("link", { name: words.newEvent, exact: true }).click();
+      // C1.4 and C2.2: the shortest path, every action of the user on /nouveau in this list.
+      const onForm = [
         () => field(page, words.title).fill(title),
         () => field(page, words.location).fill("La Clusaz"),
         () => field(page, words.allerDate).fill(allerDate),
@@ -127,8 +129,13 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
         retour ? () => field(page, words.retourTime).fill("18:00") : () => field(page, words.retour).click(),
         () => page.getByRole("button", { name: words.create }).click(),
       ];
-      expect(actions.length).toBeLessThanOrEqual(6);
-      for (const action of actions) await action();
+      expect(onForm.length).toBeLessThanOrEqual(6);
+      expect([toForm, ...onForm].length).toBeLessThanOrEqual(7);
+      await toForm();
+      // Hydrated: "Créer" stays inactive until then. Waiting is not an action.
+      await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
+      await expect(page).toHaveURL(/\/nouveau$/);
+      for (const action of onForm) await action();
 
       const shareLink = page.getByRole("region", { name: words.panel }).getByRole("group", { name: words.shareLink });
       await expect(page).toHaveURL(ARRIVAL);
@@ -217,15 +224,17 @@ async function recordTraffic(context: BrowserContext): Promise<Exchange[]> {
 test.describe("the organiser's token on the network", () => {
   test.use({ locale: "fr-FR" });
 
-  test("C1.5, C4.8: from creation to the organiser's page, the token is only in the creation's answer and the check's request", async ({
+  test("A2.3, C1.5, C4.8: from / to the organiser's page, the token is only in the creation's answer and the check's request", async ({
     page,
     context,
   }) => {
     const words = WORDS.fr;
     const traffic = await recordTraffic(context);
 
-    await page.goto("/nouveau");
+    await page.goto("/");
+    await page.getByRole("link", { name: words.newEvent, exact: true }).click();
     await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/nouveau$/);
     await field(page, words.title).fill("Sortie ski du club");
     await field(page, words.location).fill("La Clusaz");
     await field(page, words.allerDate).fill(await deviceDate(page, 7));
@@ -258,10 +267,12 @@ test.describe("the organiser's token on the network", () => {
     );
     expect(where).toEqual(["POST /nouveau responseBody", `POST ${admin} requestBody`, `POST ${admin} requestBody`]);
 
-    // Everything was watched: the creation, the App Router's fetch of the organiser's page
-    // (`router.push`, its RSC payload), the check, and the page's HTML.
+    // Everything was watched: the home page, the creation, the App Router's fetch of the
+    // organiser's page (`router.push`, its RSC payload), the check, and the page's HTML.
     const ats = traffic.map(({ at }) => at.replace(/\?_rsc=.*$/, "?_rsc="));
-    expect(ats).toEqual(expect.arrayContaining(["POST /nouveau", `GET ${admin}?_rsc=`, `POST ${admin}`, `GET ${admin}`]));
+    expect(ats).toEqual(
+      expect.arrayContaining(["GET /", "POST /nouveau", `GET ${admin}?_rsc=`, `POST ${admin}`, `GET ${admin}`]),
+    );
     expect(JSON.stringify(await context.cookies())).not.toContain(token);
   });
 
