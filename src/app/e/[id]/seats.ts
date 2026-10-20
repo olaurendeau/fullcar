@@ -11,8 +11,10 @@ import { isPublicId } from "@/domain/public-id";
 import { seatsDecision } from "@/domain/ride";
 import { EVENT_NOT_FOUND, type EventNotFound } from "./change-ride";
 import { readEventState, type EventState } from "./event-state";
+import { lockLegs } from "./retour";
 
 /**
+ * - `noRetour`: the car is on the retour, and the event no longer has one (decision 40).
  * - `invalid`: a request no page sends (nobody asked, an id or a leg malformed).
  * - `forbidden`: someone asked is not a person of the device (C2.4).
  * - `rideGone`: the car is no longer offered on that leg (C6.8).
@@ -22,7 +24,7 @@ import { readEventState, type EventState } from "./event-state";
  */
 export type SeatsOutcome =
   | { ok: true }
-  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" }
+  | { ok: false; error: "noRetour" | "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number };
 
 /** The outcome, and the event's state as the device now sees it, refusal or not. */
@@ -41,17 +43,23 @@ function seatsRequest(rideId: unknown, leg: unknown, personIds: unknown): SeatsR
   return { rideId, leg: leg as Leg, personIds: [...new Set<string>(personIds)] };
 }
 
+/** What the transaction gives: an unknown event has no state to give with its outcome. */
+type Written<Outcome> = Outcome | EventNotFound;
+
 /**
- * Under the Ride's lock, then the persons' (lock order: Ride, then Person): the seats are
- * counted only once no other take can change them, and a person cannot board two cars at
- * once. All or nothing (D3); someone already in this car is placed without a write (C5.8).
+ * Under the Event's lock, the Ride's, then the persons' (lock order: Event, Ride, Person):
+ * the seats are counted only once no other take can change them, and a person cannot
+ * board two cars at once. All or nothing (D3); someone already in this car is placed
+ * without a write (C5.8).
  */
 async function placeInRide(
   trx: Kysely<Database>,
   eventId: string,
   token: unknown,
   { rideId, leg, personIds }: SeatsRequest,
-): Promise<SeatsOutcome> {
+): Promise<Written<SeatsOutcome>> {
+  const legs = await lockLegs(trx, eventId, [leg]);
+  if (!legs.ok) return legs;
   const device = new Set(devicePersonIds(token, await readTokenHolders(trx, eventId)));
   if (!personIds.every((id) => device.has(id))) return { ok: false, error: "forbidden" };
   const ride = { id: rideId, eventId, leg };
@@ -95,9 +103,10 @@ export async function takeSeats(
 ): Promise<TakeSeatsResult | EventNotFound> {
   if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
   const request = seatsRequest(rideId, leg, personIds);
-  const outcome: SeatsOutcome = request
+  const outcome: Written<SeatsOutcome> = request
     ? await atomically(db, (trx) => placeInRide(trx, eventId, token, request))
     : { ok: false, error: "invalid" };
+  if (!outcome.ok && outcome.error === "eventNotFound") return EVENT_NOT_FOUND;
   const state = await readEventState(db, eventId, token);
   return state ? { ...outcome, state } : EVENT_NOT_FOUND;
 }
@@ -111,8 +120,10 @@ type Before = (typeof BEFORE)[number];
  * - `invalid`: a request no page sends (nobody asked, someone twice, an id, a leg or a state
  *   before malformed).
  * - `forbidden`: someone asked is not a person of the device (C7.3).
+ * - `noRetour`: the car was on the retour, and the event no longer has one: nobody is
+ *   left to give back, and the page says so (decision 45).
  */
-export type UndoOutcome = { ok: true; undoneIds: string[] } | { ok: false; error: "invalid" | "forbidden" };
+export type UndoOutcome = { ok: true; undoneIds: string[] } | { ok: false; error: "noRetour" | "invalid" | "forbidden" };
 
 /** The outcome, and the event's state as the device now sees it, refusal or not. */
 export type UndoSeatsResult = UndoOutcome & { state: EventState };
@@ -141,17 +152,19 @@ function undoRequest(rideId: unknown, leg: unknown, persons: unknown): UndoReque
 }
 
 /**
- * Under the Ride's lock, then the persons' (lock order: Ride, then Person), who is still in
- * the Ride is read again: only they change, back without a car or with no Placement on the
- * leg (C5.10, as C7.4). All or nothing. Neither write fires a trigger of C12.8: an update
- * of `ride_id` alone and a delete are not among their events.
+ * Under the Event's lock, the Ride's, then the persons' (lock order: Event, Ride, Person),
+ * who is still in the Ride is read again: only they change, back without a car or with no
+ * Placement on the leg (C5.10, as C7.4). All or nothing. Neither write fires a trigger of
+ * C12.8: an update of `ride_id` alone and a delete are not among their events.
  */
 async function giveBackSeats(
   trx: Kysely<Database>,
   eventId: string,
   token: unknown,
   { rideId, leg, persons }: UndoRequest,
-): Promise<UndoOutcome> {
+): Promise<Written<UndoOutcome>> {
+  const legs = await lockLegs(trx, eventId, [leg]);
+  if (!legs.ok) return legs;
   const personIds = persons.map(({ personId }) => personId);
   const device = new Set(devicePersonIds(token, await readTokenHolders(trx, eventId)));
   if (!personIds.every((id) => device.has(id))) return { ok: false, error: "forbidden" };
@@ -186,9 +199,10 @@ export async function undoSeats(
 ): Promise<UndoSeatsResult | EventNotFound> {
   if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
   const request = undoRequest(rideId, leg, persons);
-  const outcome: UndoOutcome = request
+  const outcome: Written<UndoOutcome> = request
     ? await atomically(db, (trx) => giveBackSeats(trx, eventId, token, request))
     : { ok: false, error: "invalid" };
+  if (!outcome.ok && outcome.error === "eventNotFound") return EVENT_NOT_FOUND;
   const state = await readEventState(db, eventId, token);
   return state ? { ...outcome, state } : EVENT_NOT_FOUND;
 }
