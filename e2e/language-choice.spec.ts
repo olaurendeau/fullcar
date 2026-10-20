@@ -419,13 +419,13 @@ test.describe("the language never in a URL", () => {
 test.describe("an event created in the language chosen", () => {
   test.use({ locale: "fr-FR" });
 
-  test("L2.8: the home page turned into English, then a creation, give the organiser's page in English", async ({
+  test("L2.8: the creation form turned into English, then a creation, give the organiser's page in English", async ({
     page,
     db,
   }) => {
-    await open(page, "/", "Fullcar");
+    await open(page, "/nouveau", "Créer un événement");
     await switchTo(page, "en");
-    await expect(page.getByText(EN.tagline, { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Create an event");
 
     const field = (label: string) => page.getByLabel(label, { exact: true });
     const allerDate = await page.evaluate(() => {

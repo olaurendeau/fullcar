@@ -288,5 +288,8 @@
   "Contact": {
     "link": "Nous contacter",
     "newTab": "(s’ouvre dans un nouvel onglet)"
+  },
+  "NewEvent": {
+    "title": "Créer un événement"
   }
 }

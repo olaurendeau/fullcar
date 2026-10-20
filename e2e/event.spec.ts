@@ -197,23 +197,33 @@ test.describe("event page, in a browser set to German", () => {
 test.describe("event not found", () => {
   test.use({ locale: "fr-FR" });
 
-  test("C6.1: a well-formed unknown id answers 404, says what to check, and leads to /", async ({ page }) => {
+  test("C6.1, A2.5: a well-formed unknown id answers 404, says what to check, and leads to /nouveau", async ({
+    page,
+  }) => {
     const response = await page.goto(`/e/${UNKNOWN_ID}`);
     expect(response?.status()).toBe(404);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Événement introuvable");
     await expect(page.getByText(/Vérifiez le lien/)).toBeVisible();
     await expect(page.getByText(/Les majuscules et les minuscules comptent\./)).toBeVisible();
     await expect(page.getByText(/supprimés 30\sjours après leur date/)).toBeVisible();
-    await expect(page.getByRole("link", { name: "Créer un événement" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("link", { name: "Créer un événement" })).toHaveAttribute("href", "/nouveau");
     // Next adds its own `noindex` to a 404; ours is there as well.
     await expect(page.locator('meta[name="robots"][content="noindex, nofollow"]')).toHaveCount(1);
     expect(await horizontalOverflow(page)).toBe(0);
   });
 
-  test("C6.1: the link leads to the home page", async ({ page }) => {
+  test("C6.1, A2.5: the link leads to the creation form", async ({ page }) => {
     await page.goto(`/e/${UNKNOWN_ID}`);
     await page.getByRole("link", { name: "Créer un événement" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/nouveau");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Créer un événement");
+  });
+
+  test("A2.4: /e/nouveau is not an id, and answers 404 with Événement introuvable", async ({ page }) => {
+    const response = await page.goto("/e/nouveau");
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Événement introuvable");
+    await expect(page).toHaveTitle("Événement introuvable");
   });
 
   test("C6.2, C6.3: malformed, unknown and miscased ids get the same page and the same status", async ({
@@ -294,6 +304,6 @@ test.describe("event not found, in a browser set to English", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Event not found");
     await expect(page.getByText(/Upper and lower case matter\./)).toBeVisible();
     await expect(page.getByText(/deleted 30\sdays after their date/)).toBeVisible();
-    await expect(page.getByRole("link", { name: "Create an event" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("link", { name: "Create an event" })).toHaveAttribute("href", "/nouveau");
   });
 });

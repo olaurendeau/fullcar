@@ -109,8 +109,8 @@ for (const [from, to, locale, timezoneId] of [
 test.describe("a field's error, in a browser set to French", () => {
   test.use({ locale: "fr-FR" });
 
-  test("L3.5: on /, the title's error is said again in English", async ({ page }) => {
-    await page.goto("/", { waitUntil: "networkidle" });
+  test("L3.5: on /nouveau, the title's error is said again in English", async ({ page }) => {
+    await page.goto("/nouveau", { waitUntil: "networkidle" });
     const create = page.getByRole("button", { name: "Créer", exact: true });
     await expect(create).toBeEnabled();
     await create.click();
