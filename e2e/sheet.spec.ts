@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, messages, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -405,6 +405,7 @@ test.describe("the sheet", () => {
     });
   }
 
+  // A success never takes a failure away (#216): both are shown, the failure first.
   test("a failure waiting under another sheet stays, whatever success comes from that sheet", async ({ db, page, seededEvent }) => {
     const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
     const marc = await openSheet(page, "Marc");
@@ -412,6 +413,7 @@ test.describe("the sheet", () => {
     for (const name of ["Tom", "Léa", "Hugo"]) await marc.getByRole("checkbox", { name }).click();
     await placeButton(marc).click();
     await expect(marc).toHaveCount(0);
+    await expect(messages(page)).toHaveText([FAILED, "Hugo est dans la voiture de Marc"]);
     await expect(bar(page)).toHaveText(FAILED);
     expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({ aller: scene.cars.marc });
   });

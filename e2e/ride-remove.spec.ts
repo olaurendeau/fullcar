@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { bar, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, messages, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -15,6 +15,7 @@ type Db = Kysely<Database>;
 const REMOVE = "Retirer la voiture";
 const NOTIFIED = "Personne n’est prévenu : pensez à le leur dire.";
 const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+const GARE = "Gare de Cesson";
 
 /**
  * The device holds Claire, Léa and Tom; Nina has a device of her own, Marc another.
@@ -262,6 +263,96 @@ test.describe("remove a car", () => {
       await expect(alerts(page)).toHaveCount(0);
     });
   }
+
+  const seatTom = async (page: Page) => {
+    await car(panel(page), "Claire").getByRole("button", { name: /^Place libre/ }).click();
+    await page.getByRole("dialog", { name: "Qui monte dans la voiture de Claire ?" }).getByRole("button", { name: /^Placer/ }).click();
+  };
+  const changeClaire = async (page: Page) => {
+    await car(panel(page), "Claire").getByRole("button", { name: "Modifier", exact: true }).click();
+    const form = page.getByRole("dialog", { name: "Modifier la voiture" });
+    await form.getByLabel("Lieu de départ").fill(GARE);
+    await form.getByRole("button", { name: "Valider" }).click();
+  };
+  const removeClaire = async (page: Page) => {
+    await removeButton(car(panel(page), "Claire")).click();
+    await confirm(page).click();
+  };
+
+  // #221: the car removed, nothing sent about it says anything any more, success or failure,
+  // waiting, in the bar or still to come: a seat asked in it (`seats:{id}`), or its change
+  // (`ride:{id}:edit`). Next sends the page's actions one at a time: one sent before the removal
+  // answers while the confirmation hides the page; one sent after leaves once the car is gone.
+  const pending: Record<string, { send: (page: Page) => Promise<void>; fails?: boolean; shown?: boolean; after?: boolean }> = {
+    "a seat sent before, its success waiting under the confirmation": { send: seatTom },
+    "a seat sent before, its failure waiting under the confirmation": { send: seatTom, fails: true },
+    "a seat that failed, in the bar": { send: seatTom, fails: true, shown: true },
+    "a seat sent after, refused once the car is gone": { send: seatTom, after: true },
+    "a change sent after, refused once the car is gone": { send: changeClaire, after: true },
+  };
+  for (const [what, { send, fails = false, shown = false, after = false }] of Object.entries(pending)) {
+    test(`#221: ${what}: once the car is removed, no message about it stays in the bar`, async ({ page, seededEvent }) => {
+      const text = send === seatTom ? scene.persons.tom : GARE;
+      const answer = await holdFirst(page, after ? scene.cars.claire : text, fails);
+      await page.goto(`/e/${seededEvent.id}`);
+      if (after) {
+        await removeClaire(page);
+        await page.keyboard.press("Escape");
+      }
+      await send(page);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      if (shown) {
+        await failHeld(page, answer);
+        await expect(messages(page)).toHaveText([FAILED]);
+      }
+      if (!after) await removeClaire(page);
+      if (!shown) {
+        const answered = page.waitForResponse((response) => !!response.request().postData()?.includes(text));
+        answer();
+        await answered;
+      }
+      await expect(confirmation(page)).toHaveCount(0);
+      await expect(car(panel(page), "Claire")).toHaveCount(0);
+      // A message left would be written by now.
+      await page.waitForTimeout(500);
+      await expect(messages(page)).toHaveCount(0);
+      await expect(alerts(page)).toHaveCount(0);
+      await expect(cell(page, "Claire, Aller : Ne fait pas l’aller")).toBeFocused();
+    });
+  }
+
+  // « Le sujet d'un échec »: a change of a car and its removal are two subjects (#213, #218).
+  test("#221, C11.10: a change of the car does not withdraw its removal's failure", async ({ page, seededEvent }) => {
+    const removal = await holdFirst(page, scene.cars.claire, true);
+    await page.goto(`/e/${seededEvent.id}`);
+    await removeClaire(page);
+    await page.keyboard.press("Escape");
+    await expect(confirmation(page)).toHaveCount(0);
+    await failHeld(page, removal);
+    await expect(messages(page)).toHaveText([FAILED]);
+
+    await changeClaire(page);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(car(panel(page), "Claire")).toContainText(GARE);
+    await expect(messages(page)).toHaveText([FAILED]);
+  });
+
+  test("#221, C11.10: a removal of the car that fails does not withdraw its change's failure", async ({ page, seededEvent }) => {
+    const change = await holdFirst(page, GARE, true);
+    await page.goto(`/e/${seededEvent.id}`);
+    await changeClaire(page);
+    await page.keyboard.press("Escape");
+    await failHeld(page, change);
+    await expect(messages(page)).toHaveText([FAILED]);
+
+    const removal = await holdFirst(page, scene.cars.claire, true);
+    await removeClaire(page);
+    await failHeld(page, removal);
+    await expect(alerts(confirmation(page))).toHaveText(FAILED);
+    await confirmation(page).getByRole("button", { name: "Annuler" }).click();
+    await expect(messages(page)).toHaveText([FAILED]);
+  });
 });
 
 // The remark of 18/10 on #90: the same offer sent again once its car is removed.

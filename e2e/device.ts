@@ -35,12 +35,15 @@ export async function holdActions(page: Page) {
  */
 export const bar = (page: Page) => page.locator('[role="status"] + [role="alert"]');
 
-/** Records, as each alert fills, whether it was in a sheet or a confirmation, and whether the bar had an ancestor hidden. */
+/** The lines of the message bar, top to bottom: its list, a group named « Messages » (#216), once no sheet hides the page. */
+export const messages = (page: Page) => page.getByRole("group", { name: "Messages" }).locator("p");
+
+/** Records, as each alert or line of the bar fills, whether it was in a sheet or a confirmation, and whether the bar had an ancestor hidden. */
 export async function watchAlerts(page: Page) {
   await page.evaluate(() => {
     const seen = ((window as unknown as { seenAlerts: object }).seenAlerts = { inSheet: false, barHidden: false });
     new MutationObserver(() => {
-      for (const alert of document.querySelectorAll('[role="alert"]')) {
+      for (const alert of document.querySelectorAll('[role="alert"], [data-message-bar] [role="group"] > p')) {
         if (!alert.textContent?.trim()) continue;
         if (alert.closest('[role="dialog"], [role="alertdialog"]')) seen.inSheet = true;
         else if (alert.closest('[aria-hidden="true"]')) seen.barHidden = true;
