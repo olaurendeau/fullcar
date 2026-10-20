@@ -9,10 +9,10 @@ import { sheetCandidates, sheetSubmit } from "@/domain/tap";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./create-event-form";
-import { focusBanner, focusCarTitle, focusLandmark } from "./focus";
+import { focusCar, focusCarTitle, focusFirstShown } from "./focus";
 import { useSends, type FromSheet } from "./hidden-page";
 import type { BoardDevice } from "./leg-panel";
-import type { BarMessage, BarProblem } from "./message-bar";
+import type { BarProblem } from "./message-bar";
 import { PersonForm, StorageNotice } from "./person-form";
 
 /** A refusal said in the sheet: the car gone (C6.8), too few seats left (C6.5), someone in a car already. */
@@ -33,21 +33,14 @@ export function seatsTaken(answer: { ok: true } | { ok: false; error: string }):
 export interface SendingSheet extends FromSheet {
   /** True until the answer: « Placer » is inactive meanwhile. */
   sending: (sending: boolean) => void;
-  said: (taken: SeatsTaken) => BarMessage;
+  said: (taken: SeatsTaken) => string;
 }
 
 /** Takes seats in a car for persons of the device (R6); `undefined` when seats are already on their way. */
 export type TakeSeats = (seats: { rideId: string; leg: Leg; personIds: string[] }, sheet: SendingSheet) => Promise<SeatsTaken | undefined>;
 
 /** The car's title, or the active tab once it is gone. */
-function toCar(leg: Leg, rideId: string) {
-  if (!focusCarTitle(leg, rideId)) focusLandmark();
-}
-
-/** After a refusal that may remove the target: the car's title if it is still there, else the leg's banner (README). */
-function toCarOrBanner(leg: Leg, rideId: string) {
-  if (!focusCarTitle(leg, rideId) && !focusBanner(leg)) focusLandmark();
-}
+const toCar = (leg: Leg, rideId: string) => focusFirstShown([() => focusCarTitle(leg, rideId)]);
 
 /** The car a free seat opened the sheet for, and that seat. Each opening is a new sheet. */
 type Opening = { rideId: string; driver: string; seat: HTMLElement; open: boolean; count: number };
@@ -117,11 +110,11 @@ function SeatSheet({
   const gone = car === undefined;
   const submit = sheetSubmit(chosen.length, car?.freeSeats ?? 0);
   const [sending, setSending] = useState(false);
-  const [refused, setRefused] = useState<BarMessage | null>(null);
+  const [refused, setRefused] = useState<string | null>(null);
   const [adding, setAdding] = useState<{ kept: boolean } | null>(null);
   const body = useRef<HTMLDivElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
-  const afterClose = useRef(() => (seat.isConnected ? seat.focus() : toCarOrBanner(leg, rideId)));
+  const afterClose = useRef(() => (seat.isConnected ? seat.focus() : focusFirstShown([focusCar(leg, rideId)])));
   // What gets the focus once the sheet shows it: the form's first field, « Ajouter une personne »,
   // a new person's box, or « Fermer » when the car is gone with the button that had it.
   const focusNext = useRef<(() => HTMLElement | null | undefined) | null>(null);
@@ -140,15 +133,13 @@ function SeatSheet({
   });
 
   // What is said of an outcome, in the sheet or in the bar: the same words.
-  const said = (taken: SeatsTaken, names: string[]): BarMessage => {
-    if (taken.kind === "problem") return taken;
+  const said = (taken: SeatsTaken, names: string[]): string => {
+    if (taken.kind === "problem") return t(`Actions.${taken.problem}`);
     if (taken.kind === "refused") {
       const { refusal } = taken;
-      const text = refusal === "notEnoughSeats" ? t("Sheet.notEnoughSeats") : t(`Actions.${refusal}`, { count: names.length });
-      return { kind: "refused", text, landmark: () => toCarOrBanner(leg, rideId) };
+      return refusal === "notEnoughSeats" ? t("Sheet.notEnoughSeats") : t(`Actions.${refusal}`, { count: names.length });
     }
-    const text = names.length === 1 ? t("Seat.placed", { firstName: names[0], driver }) : t("Sheet.placed", { names: format.list(names), driver });
-    return { kind: "done", text, landmark: () => toCar(leg, rideId) };
+    return names.length === 1 ? t("Seat.placed", { firstName: names[0], driver }) : t("Sheet.placed", { names: format.list(names), driver });
   };
 
   async function place() {
@@ -171,7 +162,7 @@ function SeatSheet({
     }
   }
 
-  const message = refused ? (refused.kind === "problem" ? t(`Actions.${refused.problem}`) : refused.text) : gone && t("Actions.rideGone");
+  const message = refused ?? (gone && t("Actions.rideGone"));
   // After a refusal for want of seats, the seats left are fewer than those ticked: red too.
   const over = submit.kind === "notEnoughSeats";
 

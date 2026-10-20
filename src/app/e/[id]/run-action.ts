@@ -1,4 +1,3 @@
-import type { BarMessage } from "@/components/event/message-bar";
 import type { EventState } from "./event-state";
 
 /**
@@ -25,18 +24,16 @@ export async function sendAction<T>(
   }
 }
 
-/** What an action changes on the page: the bar's message, and the board. */
+/** What an action changes on the page: the board, and the bar's information, which goes once an action ends. */
 export interface ActionPage {
-  message: (message: BarMessage | null) => void;
   state: (state: EventState) => void;
+  ended: () => void;
 }
 
 /**
  * The page's `runAction` (#87). The control `key` is `sending` until the answer, and a second
- * run of it meanwhile sends nothing. Offline or a server error goes to the bar; an answer
- * closes it, and its state replaces the page's. The message, a success included, is replaced
- * when the action ends, never cleared before: « Fermer » stays where it is. What the page says
- * of a success is its own (#91).
+ * run of it meanwhile sends nothing. An answer's state replaces the page's. What came of the
+ * action, the page says, in the bar or in the sheet that sent it (#216): never this.
  */
 export function actionRunner(page: ActionPage, online?: () => boolean) {
   const inFlight = new Set<string>();
@@ -51,16 +48,13 @@ export function actionRunner(page: ActionPage, online?: () => boolean) {
     sending?.(true);
     try {
       const sent = await sendAction(action, online);
-      if (!sent.ok) page.message({ kind: "problem", problem: sent.problem });
-      else {
-        page.message(null);
-        const state = stateOf(sent.value);
-        if (state) page.state(state);
-      }
+      const state = sent.ok && stateOf(sent.value);
+      if (state) page.state(state);
       return sent;
     } finally {
       inFlight.delete(key);
       sending?.(false);
+      page.ended();
     }
   };
 }

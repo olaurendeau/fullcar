@@ -1,11 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useImperativeHandle, useRef, useState, type Ref } from "react";
+import type { Message } from "@/components/event/bar-state";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
-import { focusLandmark } from "@/components/event/focus";
-import type { FromSheet } from "@/components/event/hidden-page";
-import { MessageBar, type BarMessage } from "@/components/event/message-bar";
+import { focusCar, focusCell, focusLandmark, focusName } from "@/components/event/focus";
+import { forget, sendAbout, type FromSheet } from "@/components/event/hidden-page";
+import { MessageBar, useMessageBar } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
@@ -35,6 +37,9 @@ export interface BoardHandle {
   apply(state: EventState): void;
 }
 
+/** No landmark of its own yet (« Ajouter », « Proposer », « Réessayer »): rule 8 goes on to the other lines, then to the active tab. */
+const noLandmark = () => false;
+
 /**
  * The event's board on `/e/{id}` and `/e/{id}/admin` (C11.7), under `organiser-screen.tsx`
  * there. It starts from the state the server rendered, with no device and no
@@ -50,6 +55,7 @@ export function ParticipantBoard({
   EventViewProps,
   "board" | "device" | "messageBar" | "tab" | "onTab"
 >) {
+  const t = useTranslations("Actions");
   const [board, setBoard] = useState(rendered);
   useImperativeHandle(
     ref,
@@ -57,18 +63,35 @@ export function ParticipantBoard({
     [id],
   );
   const [tab, setTab] = useState<Leg>("aller");
-  const [message, setMessage] = useState<BarMessage | null>(null);
+  const messages = useMessageBar();
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
-  const [runAction] = useState(() => actionRunner({ message: setMessage, state: setBoard }));
+  const [runAction] = useState(() => actionRunner({ state: setBoard, ended: messages.ended }));
+
+  /** A failure in the generic words: offline, or anything else (#87). */
+  const failure = (problem: ActionProblem, landmark: () => boolean) => ({ text: t(problem), landmark, offline: problem === "offline" });
+
+  // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
+  // hides the page: until then, it would be neither seen nor announced. It joins the others
+  // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
+  function failedIn(sheet: FromSheet, said: Message & { offline?: boolean }) {
+    if (!sheet.inSheet()) sheet.whenClosed(() => messages.fail({ ...said, about: sheet.about, sent: sheet.seq }));
+  }
 
   const device = useDevice(
     id,
     async (token) => {
-      // The first read is not an action: its failure shows in the section alone.
+      // The first read is not an action: its failure shows in the section alone. « Réessayer »
+      // is one, about the read of « Vos inscriptions »: the next one withdraws its failure.
       const read = () => loadEventState(id, token);
-      const sent = retrying.current ? await runAction("retry", read) : await sendAction(read);
+      const retry = retrying.current && { key: "retry", inSheet: () => false, ...sendAbout(["device:read"]) };
       retrying.current = false;
+      const sent = retry ? await runAction("retry", read) : await sendAction(read);
+      if (retry && sent) {
+        retry.answered();
+        if (sent.ok) messages.succeed(null);
+        else failedIn(retry, failure(sent.problem, noLandmark));
+      }
       if (sent?.ok && sent.value) return sent.value;
       throw new Error("The device's persons could not be read.");
     },
@@ -76,15 +99,18 @@ export function ParticipantBoard({
   );
 
   // What became of a person's form, sent from `sheet`.
-  function personFormOutcome(sent: Sent<PersonOutcome> | undefined, sheet: FromSheet): Registration | undefined {
+  function personFormOutcome(sent: Sent<PersonOutcome> | undefined, sheet: FromSheet, landmark: () => boolean): Registration | undefined {
     if (sent === undefined) return undefined;
     sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
-    if (outcome?.ok) return { kind: "done" };
+    if (outcome?.ok) {
+      messages.succeed(null);
+      return { kind: "done" };
+    }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     // A refusal has no words of its own: the generic message, and the page shows the state it carries.
     const problem = sent.ok ? "failed" : sent.problem;
-    failedIn(sheet, problem);
+    failedIn(sheet, failure(problem, landmark));
     return { kind: "problem", problem };
   }
 
@@ -97,7 +123,7 @@ export function ParticipantBoard({
       () => storePerson(id, ensureDeviceToken(id), { ...person, id: creationId() }),
       sending,
     );
-    const outcome = personFormOutcome(sent, sheet);
+    const outcome = personFormOutcome(sent, sheet, noLandmark);
     if (outcome?.kind === "done") device.registered();
     return outcome;
   };
@@ -108,29 +134,22 @@ export function ParticipantBoard({
       () => storePersonFields(id, readDeviceToken(id), { ...person, personId }),
       sending,
     );
-    return personFormOutcome(sent, sheet);
+    return personFormOutcome(sent, sheet, () => focusName(personId));
   };
-
-  // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
-  // hides the page: until then, it would be neither seen nor announced. Written after what the
-  // actions ending meanwhile write there, it is not cleared by them. Every failure waits, each
-  // withdrawn alone by a send or answer from any sheet about its subject that carries all its
-  // fields; a cell has none, only its subject (#167, #208).
-  function failedIn(sheet: FromSheet, problem: ActionProblem) {
-    setMessage(null);
-    if (!sheet.inSheet()) sheet.whenClosed(() => setMessage({ kind: "problem", problem }));
-  }
 
   // The page takes the state a refusal carries too (C11.6).
   const setPersonLeg: SetPersonLeg = async (change, sheet) => {
     const sent = await runAction(`setPersonLeg:${sheet.key}`, () => storePersonLeg(id, readDeviceToken(id), change));
     if (sent === undefined) return undefined;
     sheet.answered();
-    if (sent.ok && sent.value.ok) return null;
+    if (sent.ok && sent.value.ok) {
+      messages.succeed(null);
+      return null;
+    }
     // A refusal has no words of its own (`drives`, `forbidden`…): the generic message.
-    const failure = sent.ok ? "failed" : sent.problem;
-    failedIn(sheet, failure);
-    return failure;
+    const problem = sent.ok ? "failed" : sent.problem;
+    failedIn(sheet, failure(problem, () => focusCell(change.personId, change.leg)));
+    return problem;
   };
 
   // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
@@ -147,28 +166,28 @@ export function ParticipantBoard({
     sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
     if (outcome?.ok) {
+      messages.succeed(null);
       device.registered();
       return { kind: "done" };
     }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     const problem = sent.ok ? "failed" : sent.problem;
-    failedIn(sheet, problem);
+    failedIn(sheet, failure(problem, noLandmark));
     return { kind: "problem", problem };
   };
 
-  // A success waits for the page to show, as a failure does, and goes to the bar, where it does not
-  // replace a failure said since this action ended (one that waited too); a refusal or a failure is
-  // said in the sheet that sent while it shows it, in the bar otherwise.
+  // A success waits for the page to show, as a failure does, and replaces the success alone: it
+  // never takes a failure away (#216). A refusal or a failure is said in the sheet that sent
+  // while it shows it, in the bar otherwise.
   const takeSeats: TakeSeats = async ({ rideId, leg, personIds }, { sending, said, ...sheet }) => {
     const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, personIds);
     const sent = await runAction(`takeSeats:${sheet.key}`, send, sending);
     if (sent === undefined) return undefined;
     sheet.answered();
     const taken = sent.ok ? seatsTaken(sent.value) : ({ kind: "problem", problem: sent.problem } as const);
-    setMessage(null);
-    const message = said(taken);
-    const shown = (current: BarMessage | null) => (message.kind === "done" && current && current.kind !== "done" ? current : message);
-    if (taken.kind === "done" || !sheet.inSheet()) sheet.whenClosed(() => setMessage(shown));
+    const message = { text: said(taken), landmark: focusCar(leg, rideId) };
+    if (taken.kind === "done") sheet.whenClosed(() => messages.succeed(message));
+    else failedIn(sheet, { ...message, offline: taken.kind === "problem" && taken.problem === "offline" });
     return taken;
   };
 
@@ -184,11 +203,16 @@ export function ParticipantBoard({
     const sent = await runAction(`removeRide:${rideId}`, remove, sending);
     if (sent === undefined) return undefined;
     confirmation.answered();
-    if (sent.ok && sent.value.ok) return null;
+    if (sent.ok && sent.value.ok) {
+      messages.succeed(null);
+      // The car is gone: what was sent about its seats or its change, nothing says any more (#213, #218).
+      forget([`seats:${rideId}`, `ride:${rideId}:edit`]);
+      return null;
+    }
     // A refusal has no words of its own (`forbidden`, `invalid`…): the generic message.
-    const failure = sent.ok ? "failed" : sent.problem;
-    failedIn(confirmation, failure);
-    return failure;
+    const problem = sent.ok ? "failed" : sent.problem;
+    failedIn(confirmation, failure(problem, focusCar(leg, rideId)));
+    return problem;
   };
 
   // Once per sheet, as offerRide: only the fields the form changed, its passengers and who leaves.
@@ -202,11 +226,14 @@ export function ParticipantBoard({
     if (sent === undefined) return undefined;
     sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
-    if (outcome?.ok) return { kind: "done" };
+    if (outcome?.ok) {
+      messages.succeed(null);
+      return { kind: "done" };
+    }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     // Said in the step while it is open (C8.5); any other refusal has no words of its own.
     const problem = sent.ok ? "failed" : sent.problem;
-    failedIn(sheet, problem);
+    failedIn(sheet, failure(problem, focusCar(leg, rideId)));
     if (outcome?.error === "passengersChanged") return { kind: "passengersChanged", passengers: outcome.passengerIds.length };
     return { kind: "problem", problem };
   };
@@ -232,7 +259,7 @@ export function ParticipantBoard({
         updateRide,
         removeRide,
       }}
-      messageBar={<MessageBar message={message} onClose={() => setMessage(null)} refocus={focusLandmark} />}
+      messageBar={<MessageBar messages={messages} />}
     />
   );
 }
