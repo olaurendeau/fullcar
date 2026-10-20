@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { defaultStackParser as browserStackParser } from "@sentry/browser";
 import { type Breadcrumb, defaultStackParser as nodeStackParser, type StackFrame } from "@sentry/nextjs";
 import { beforeEach, describe, expect, it } from "vitest";
-import { scrubBreadcrumb, scrubCreatedDsc, scrubEvent, scrubSpan, scrubText, scrubUrl, type StreamedSpan } from "./scrub";
+import { scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan, scrubText, scrubUrl, type StreamedSpan } from "./scrub";
 import { actionBody, drawSecrets, leakedKinds, leakyEvent, NAMES, ORIGIN, PHONES, RELEASE, type Secrets } from "./test-secrets";
 import { lowercaseBytes, STATIC_FRAME, TRACE_ID, USER_AGENT } from "./test-secrets";
 
@@ -116,7 +116,7 @@ describe("scrubEvent", () => {
   });
 
   it("rebuilds the event from its allowed keys: no user, extra, tags, fingerprint or server name", () => {
-    const kept = "breadcrumbs contexts environment event_id exception level message platform release request sdkProcessingMetadata timestamp transaction";
+    const kept = "breadcrumbs contexts debug_meta environment event_id exception level logentry message platform release request sdkProcessingMetadata timestamp transaction";
     expect(Object.keys(scrubEvent(leakyEvent(secrets))).sort()).toEqual(kept.split(" "));
   });
 
@@ -143,7 +143,7 @@ describe("scrubEvent", () => {
       stacktrace: {
         frames: [
           { filename: "app:///_next/static/chunks/app/e/page-3f9ac2.js", function: "onSubmit", lineno: 1, colno: 4410, in_app: true },
-          { filename: `${ORIGIN}/e/[id]/admin`, abs_path: `${ORIGIN}/e/[id]/admin`, function: "?", lineno: 12, colno: 7, in_app: true },
+          { filename: `${ORIGIN}/e/[id]/admin`, abs_path: `${ORIGIN}/e/[id]/admin`, function: "?", in_app: true },
         ],
       },
     });
@@ -194,9 +194,36 @@ describe("scrubEvent", () => {
     // Secrets of letters and digits only, which always read as a scheme before a colon.
     const fixed = drawSecrets(lowercaseBytes);
     const lines = [fixed.personalToken, fixed.adminToken, fixed.id].map((secret) => `Could not seat ${secret}: car full`);
+    // And the host, after `x://` (not after "seat at": "seat" already holds an "at ").
+    lines.push(`no room at x://${fixed.id}/y`, `no room at db://${fixed.adminToken}`);
     const frames = sentFrames(nodeStackParser, "Error: x", ...lines);
     expect(frames.length).toBeGreaterThan(0);
     expect(leakedKinds(JSON.stringify(frames), fixed)).toEqual([]);
+  });
+
+  it("scrubs a build path the parsers read in a line of the message, with the rest of the line", () => {
+    const browser = sentFrames(browserStackParser, "Error: x", `Chunk /_next/static/chunks/a.js failed for event ${secrets.id} ${PHONES[0]}`);
+    const node = sentFrames(nodeStackParser, "Error: x", `failed at /_next/static/chunks/a.js from ${secrets.personalUrl}`);
+    expect(browser.length * node.length).toBeGreaterThan(0);
+    expect(leaks([browser, node])).toEqual([]);
+  });
+
+  /*
+   * Every value sent as it is, fed a line of a message with every kind of secret: each must
+   * go through scrubText, since a prefix or a shape proves nothing; only the whole value does.
+   */
+  it.each([
+    ["a URL's path of the build", (line: string) => scrubUrl(`/_next/static/chunks/a.js ${line}`)],
+    ["a frame's file of the build", (line: string) => frameFiles([`/var/task/node_modules/x.js ${line}`, `node:${line}`])],
+    ["a frame's function", (line: string) => sentFrames(nodeStackParser, "Error: x", `    at ${line} (app:///_next/static/a.js:1:2)`)],
+    ["the event's own fields", (line: string) => verbatimEvent(line)],
+    ["the browser's User-Agent", (line: string) => scrubEvent({ ...leakyEvent(secrets), request: { headers: { "User-Agent": line } } })],
+    ["the trace and the system contexts", (line: string) => scrubEvent({ ...leakyEvent(secrets), contexts: { trace: { trace_id: line, span_id: line }, os: { name: line } } })],
+    ["the dynamic sampling context", (line: string) => scrubDsc(Object.fromEntries(DSC_FIELDS.map((key) => [key, line])))],
+    ["a span's ids and Sentry's own attributes", (line: string) => scrubSpan(span(line, { "sentry.release": line, "sentry.dist": line, "sentry.sdk.integrations": [line] }, line))],
+  ])("sends %s as it is only when the whole of it may be", (_, send) => {
+    const line = `Could not seat "${NAMES[0]}" (${PHONES[0]}) from ${secrets.adminUrl}, see ${secrets.personalUrl}, event ${secrets.id}`;
+    expect(leaks(send(line))).toEqual([]);
   });
 
   it("redacts an id read as a function name in a line of the message, line number or not", () => {
@@ -236,8 +263,18 @@ describe("scrubCreatedDsc", () => {
   });
 });
 
-function span(name: string, attributes: Record<string, unknown>): StreamedSpan {
-  const [trace_id, parent_span_id, span_id] = [TRACE_ID, "80751a90a011d3f8", "a6d9c73efedbf1df"];
+/** The fields of an event the SDK writes, each set to `line`. */
+function verbatimEvent(line: string) {
+  const event = { ...leakyEvent(secrets), event_id: line, platform: line, release: line, dist: line, environment: line };
+  event.sdk = { name: line, version: line, integrations: [line], packages: [{ name: line, version: line }] };
+  event.exception = { values: [{ type: line, value: "x", mechanism: { type: line, source: line } }] };
+  return scrubEvent(event);
+}
+
+const DSC_FIELDS = ["trace_id", "public_key", "sample_rate", "release", "environment", "sampled", "sample_rand", "org_id", "transaction"];
+
+function span(name: string, attributes: Record<string, unknown>, id?: string): StreamedSpan {
+  const [trace_id, parent_span_id, span_id] = id ? [id, id, id] : [TRACE_ID, "80751a90a011d3f8", "a6d9c73efedbf1df"];
   const links = [{ trace_id, span_id: parent_span_id, attributes: { "url.full": secrets.adminUrl } }];
   return { trace_id, parent_span_id, span_id, name, start_timestamp: 1792477108.149, end_timestamp: 1792477108.15, status: "ok", is_segment: false, attributes, links };
 }

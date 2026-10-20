@@ -75,6 +75,8 @@ export function leakyEvent(secrets: Secrets, platform: "javascript" | "node" = "
     server_name: `${NAMES[0]}-laptop`,
     transaction: `/e/${id}/admin`,
     message: `Seat taken by '${NAMES[1]}', call ${PHONES[1]}`,
+    logentry: { message: `No seat for '${NAMES[2]}' at ${adminUrl}`, params: [PHONES[2]] },
+    debug_meta: { images: [{ type: "sourcemap", code_file: adminUrl, debug_id: "c0ffee00-0000-4000-8000-000000000000" }] },
     user: { id: personalToken, username: NAMES[0], ip_address: "203.0.113.7" },
     extra: { body: actionBody(secrets) },
     tags: { person: NAMES[1], phone: PHONES[1] },
