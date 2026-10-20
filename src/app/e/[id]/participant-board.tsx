@@ -75,7 +75,7 @@ export function ParticipantBoard({
   // hides the page: until then, it would be neither seen nor announced. It joins the others
   // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
   function failedIn(sheet: FromSheet, said: Message & { offline?: boolean }) {
-    if (!sheet.inSheet()) sheet.whenClosed(() => messages.fail({ ...said, about: sheet.about, sent: sheet.seq }));
+    if (!sheet.inSheet()) sheet.whenClosed(() => messages.fail({ ...said, about: sheet.about, sent: sheet.seq }), true);
   }
 
   const device = useDevice(

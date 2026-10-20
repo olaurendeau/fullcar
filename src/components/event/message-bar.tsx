@@ -3,6 +3,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { createAnnouncer, type Announcer } from "./announce";
 import * as bar from "./bar-state";
 import { focusFirstShown } from "./focus";
 import { onWithdraw } from "./hidden-page";
@@ -27,6 +28,9 @@ export function useMessageBar() {
   return { state, ...write };
 }
 
+/** A new text for a region, or none: the region empties (`createAnnouncer`). */
+const announce = (announcer: Announcer | undefined, text: string) => (text ? announcer?.say(text) : announcer?.clear());
+
 const iconOf = (line: bar.Line) =>
   line.kind === "success" ? CircleCheck : line.kind === "info" ? Users : line.offline ? WifiOff : TriangleAlert;
 
@@ -35,8 +39,9 @@ const iconOf = (line: bar.Line) =>
  * bottom (« La barre de messages », v4.2.3): one line per message, the failures first, and one
  * « Fermer » for them all. The list is no live region: two regions, visually hidden and always
  * there, say the last failure written (`alert`) and the last success or information
- * (`status`), each emptied as its line goes. Nothing expires. Closing from inside the bar
- * gives the focus to the first landmark shown, the most recent line's first (rule 8).
+ * (`status`), each emptied as its line goes, and each new text written 100 ms after the region
+ * is emptied (`createAnnouncer`). Nothing expires. Closing from inside the bar gives the focus
+ * to the first landmark shown, the most recent line's first (rule 8).
  */
 export function MessageBar({ messages }: { messages: ReturnType<typeof useMessageBar> }) {
   const t = useTranslations("Actions");
@@ -45,7 +50,21 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
   const { alert, status } = bar.regions(messages.state);
   const open = lines.length > 0;
   const failing = lines.some((line) => line.kind === "failure");
-  const newest = messages.state.lines.at(-1);
+  const { next } = messages.state;
+  const written = messages.state.lines.find((line) => line.id === next - 1);
+  const alertRegion = useRef<HTMLDivElement>(null);
+  const statusRegion = useRef<HTMLDivElement>(null);
+  // Written in the DOM, never rendered: React would write a text at once, and nothing when it is the same.
+  const announcers = useRef<Record<"alert" | "status", Announcer>>(null);
+  useEffect(() => {
+    const into = (region: HTMLDivElement | null) => (text: string) => void (region && (region.textContent = text));
+    const made = { alert: createAnnouncer(into(alertRegion.current)), status: createAnnouncer(into(statusRegion.current)) };
+    announcers.current = made;
+    return () => {
+      made.alert.clear();
+      made.status.clear();
+    };
+  }, []);
 
   function close(focusInBar: boolean) {
     messages.close();
@@ -66,13 +85,27 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
     return () => document.removeEventListener("keydown", listener);
   }, [open]);
 
-  // A seat taken from a sheet closed meanwhile can remove the seat that had the focus: a line
-  // written while the focus is on nothing gives it to its landmark.
-  const newestLandmark = useEffectEvent(() => {
+  // A new line in a region: emptied, then its text 100 ms later; its line gone: emptied. The
+  // failure first, when both come in the same render (« Lecteurs d’écran », points 3 and 7).
+  useEffect(() => announce(announcers.current?.alert, alert), [messages.state.alert, alert]);
+  useEffect(() => announce(announcers.current?.status, status), [messages.state.status, status]);
+
+  // A seat taken, or a car removed, by a send from a sheet closed meanwhile can remove the
+  // element that had the focus: the line it writes then gives the focus to its landmark (« Le
+  // focus après une action »). A focus put on nothing, as a tap on the page's text does, stays.
+  const focused = useRef<Element | null>(null);
+  useEffect(() => {
+    const remember = (event: FocusEvent) => void (focused.current = event.target as Element);
+    document.addEventListener("focusin", remember);
+    return () => document.removeEventListener("focusin", remember);
+  }, []);
+  const writtenLandmark = useEffectEvent(() => {
     const active = document.activeElement;
-    if (active === null || active === document.body) newest?.landmark();
+    const lost = focused.current;
+    const fell = lost !== null && (!lost.isConnected || lost.matches(":disabled"));
+    if ((active === null || active === document.body) && fell) written?.landmark();
   });
-  useEffect(() => newestLandmark(), [newest?.id]);
+  useEffect(() => writtenLandmark(), [written?.id]);
 
   return (
     <div
@@ -111,12 +144,8 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
         </Button>
       )}
       {/* Never `display: none`: a region hidden that way announces nothing when it fills. */}
-      <div role="status" className="sr-only">
-        {status}
-      </div>
-      <div role="alert" className="sr-only">
-        {alert}
-      </div>
+      <div ref={statusRegion} role="status" className="sr-only" />
+      <div ref={alertRegion} role="alert" className="sr-only" />
     </div>
   );
 }

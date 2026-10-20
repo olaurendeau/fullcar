@@ -56,6 +56,19 @@ describe("whenPageShown (#167)", () => {
     await settled();
     expect(said).toEqual(["Tom"]);
   });
+
+  it("rule 7 of « Lecteurs d’écran »: released together, the failures run first, each lane in order", async () => {
+    const uncover = coverPage();
+    const said: string[] = [];
+    whenPageShown(() => said.push("Hugo placed"));
+    whenPageShown(() => said.push("Sophie failed"), true);
+    const withdrawn = whenPageShown(() => said.push("Paul failed"), true);
+    whenPageShown(() => said.push("Marc failed"), true);
+    withdrawn();
+    uncover();
+    await settled();
+    expect(said).toEqual(["Sophie failed", "Marc failed", "Hugo placed"]);
+  });
 });
 
 describe("sendAbout (#208, #216)", () => {
@@ -90,6 +103,23 @@ describe("sendAbout (#208, #216)", () => {
     uncover();
     await settled();
     expect(said).toEqual(["since"]);
+  });
+
+  it("a failure that comes after a send that covers it is never said; a success is, and a send of part of it does not", async () => {
+    const about = ["seats:sophie", "seats:sophie:tom", "seats:sophie:lea"];
+    const uncover = coverPage();
+    const said: string[] = [];
+    const first = sendAbout(about);
+    const partial = sendAbout(["person:tom", "person:tom:firstName", "person:tom:phone"]);
+    // The sheet reopened, and the same seats sent again: the first send's failure comes after.
+    sendAbout([...about, "seats:sophie:hugo"]);
+    sendAbout(["person:tom", "person:tom:phone"]);
+    first.whenClosed(() => said.push("first failed"), true);
+    first.whenClosed(() => said.push("first placed"));
+    partial.whenClosed(() => said.push("partial failed"), true);
+    uncover();
+    await settled();
+    expect(said).toEqual(["partial failed", "first placed"]);
   });
 
   it("a send that carries only part of a failure's fields leaves it waiting; one that carries them all withdraws it", async () => {
