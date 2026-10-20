@@ -64,6 +64,7 @@
       "seats": "Seats",
       "freeSeat": "Free seat",
       "takeSeat": "Free seat: take a seat in {driver}’s car",
+      "edit": "Edit",
       "remove": "Remove the car"
     },
     "withoutCar": "Without a car",
@@ -124,7 +125,8 @@
   },
   "RideForm": {
     "title": {
-      "offer": "Offer a car"
+      "offer": "Offer a car",
+      "edit": "Edit the car"
     },
     "storage": {
       "title": "This device will not remember it",
@@ -198,6 +200,13 @@
     "placed": "{firstName} is in {driver}’s car"
   },
   "RideChanges": {
+    "leaving": {
+      "title": "Who leaves the car?",
+      "body": "{passengers, plural, one {# passenger} other {# passengers}} for {seats, plural, one {# seat} other {# seats}}: tick {leaving, plural, one {the person who leaves} other {the # people who leave}}.",
+      "rule": "Those who leave are without a car again.",
+      "count": "{chosen} of {leaving} ticked",
+      "changed": "Someone took or left a seat in the meantime: nothing has changed. Choose again among the current passengers."
+    },
     "remove": {
       "title": "Remove the car?",
       "body": "{passengers, plural, =0 {No passenger will be left without a car.} one {# passenger will be without a car again.} other {# passengers will be without a car again.}}",

@@ -10,6 +10,7 @@ import {
   seatReduction,
   seatsDecision,
   validateRide,
+  validateRideChange,
   validSeats,
   type RideFields,
 } from "./ride";
@@ -154,6 +155,21 @@ describe("validateRide", () => {
     const failure = failureOf({ location: "Gare", time: "25:00", seats: "12", note: "a".repeat(201) });
     expect(failure.errors).toEqual({ time: "invalid", seats: "outOfRange", note: "tooLong" });
     expect(failure.first).toBe("time");
+  });
+});
+
+describe("validateRideChange (C8.2)", () => {
+  it("leaves out a field not sent, and reads the others as validateRide does", () => {
+    expect(validateRideChange({})).toEqual({ ok: true, change: {} });
+    expect(validateRideChange({ note: " Coffre plein " })).toEqual({ ok: true, change: { note: "Coffre plein" } });
+    expect(validateRideChange({ seats: "2", note: "" })).toEqual({ ok: true, change: { seats: 2, note: null } });
+    // A forged null is sent, not left out: an empty place is refused, not kept.
+    expect(validateRideChange({ location: null })).toEqual({ ok: false, errors: { location: "required" }, first: "location" });
+    expect(validateRideChange({ location: " ", time: "25:00" })).toEqual({
+      ok: false,
+      errors: { location: "required", time: "invalid" },
+      first: "location",
+    });
   });
 });
 
