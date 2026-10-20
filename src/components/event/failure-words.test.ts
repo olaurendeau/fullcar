@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { createFormatter, createTranslator, type Messages } from "next-intl";
 import { describe, expect, it } from "vitest";
+import type { DeviceState } from "@/domain/board";
+import type { CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
-import { failureText, nameList, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
+import { cellNotDone, cellWhy, failureText, nameList, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
 
 // C11.11: every failure in the bar, word for word as « Chaque échec, mot pour mot » says it
 // (docs/design/event-board/README.md, v4.2), in French and in English.
@@ -106,6 +108,8 @@ describe("failureText: each failure, word for word (C11.11)", () => {
   it("reads every row, and knows every action of the table", () => {
     expect(table.length).toBeGreaterThanOrEqual(66);
     expect(new Set(table.map((row) => row.action))).toEqual(new Set(Object.keys(ACTIONS)));
+    // A failure column of a form `sources` does not know would give no test at all.
+    for (const row of table) expect(sources(row.failure), `${row.action}, ${row.failure}`).not.toHaveLength(0);
   });
 
   for (const row of table) {
@@ -120,7 +124,48 @@ describe("failureText: each failure, word for word (C11.11)", () => {
   }
 });
 
-const FIVE = ["Tom", "Léa", "Hugo", "Nina", "Zoé"];
+/** A cell's rows, by its sheet as it was at the send: the action touched, the person, the leg and her state there (#224). */
+const CELLS: Record<string, { action: Exclude<CellAction, "seeCar">; firstName: string; leg: Leg; state: DeviceState }> = {
+  "Cellule, « Ne fait pas l’aller » : Tom · Aller": { action: "notConcerned", firstName: "Tom", leg: "aller", state: { kind: "withoutCar" } },
+  "Cellule, « Je cherche une place » : Tom · Retour": { action: "lookingForSeat", firstName: "Tom", leg: "retour", state: { kind: "notConcerned" } },
+  "Cellule, « Sortir de la voiture » : Léa, voiture de Claire": {
+    action: "leaveCar",
+    firstName: "Léa",
+    leg: "aller",
+    state: { kind: "passenger", rideId: "claire", driver: { id: "claire", firstName: "Claire" } },
+  },
+};
+
+describe("cellNotDone and cellWhy: a cell's failure names the person, the leg and the choice (C11.11)", () => {
+  const cells = rows().filter((row) => row.action in CELLS);
+
+  it("reads the rows of the three actions of a cell", () => {
+    expect(new Set(cells.map((row) => row.action))).toEqual(new Set(Object.keys(CELLS)));
+  });
+
+  for (const row of cells) {
+    for (const source of sources(row.failure)) {
+      it(`${row.action}, ${source}`, () => {
+        const { action, ...cell } = CELLS[row.action];
+        const why = cellWhy(source as Parameters<typeof cellWhy>[0], cell);
+        expect(failureText(words("fr"), cellNotDone(action, cell), why)).toBe(row.fr);
+        expect(failureText(words("en"), cellNotDone(action, cell), why)).toBe(row.en);
+      });
+    }
+  }
+
+  it("« Ne fait pas l’aller » from a passenger names the choice, not the car", () => {
+    const { state } = CELLS["Cellule, « Sortir de la voiture » : Léa, voiture de Claire"];
+    expect(cellNotDone("notConcerned", { firstName: "Léa", leg: "aller", state })).toEqual({
+      kind: "choice",
+      firstName: "Léa",
+      leg: "aller",
+      choice: "notConcerned",
+    });
+  });
+});
+
+const FIVE =["Tom", "Léa", "Hugo", "Nina", "Zoé"];
 
 // « Plusieurs prénoms »: up to three, `format.list`; beyond, the first two and « et N autres ». In
 // English, `format.list` puts a comma before « and » (Intl.ListFormat, `en`).
