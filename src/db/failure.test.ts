@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { databaseFailure } from "./failure";
+import { databaseFailure, errorCode } from "./failure";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -68,5 +68,20 @@ describe("databaseFailure", () => {
     expect(failure.message).toBe(MESSAGE);
     expect(failure.cause).toBeUndefined();
     expect(failure.stack).not.toContain(TOKEN);
+  });
+});
+
+describe("errorCode", () => {
+  it.each([
+    ["a SQLSTATE", { code: "23505" }, "SQLSTATE 23505"],
+    ["an errno", { code: "ECONNREFUSED", errno: -111 }, "errno -111"],
+    ["no code", {}, undefined],
+    ["a code that is not a SQLSTATE", { code: `E ${TOKEN}` }, undefined],
+  ])("reads %s, and nothing of the message", (_, fields, code) => {
+    expect(errorCode(postgresError(fields))).toBe(code);
+  });
+
+  it("reads nothing from a value that is not an object", () => {
+    expect(errorCode(TOKEN)).toBeUndefined();
   });
 });
