@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
-import type { Breadcrumb } from "@sentry/nextjs";
+// The parser @sentry/nextjs runs in the browser, and the one it runs on the server.
+import { defaultStackParser as browserStackParser } from "@sentry/browser";
+import { type Breadcrumb, defaultStackParser as nodeStackParser, type StackFrame } from "@sentry/nextjs";
 import { beforeEach, describe, expect, it } from "vitest";
 import { scrubBreadcrumb, scrubCreatedDsc, scrubEvent, scrubSpan, scrubText, scrubUrl, type StreamedSpan } from "./scrub";
 import { actionBody, drawSecrets, leakedKinds, leakyEvent, NAMES, ORIGIN, PHONES, RELEASE, type Secrets } from "./test-secrets";
-import { STATIC_FRAME, TRACE_ID, USER_AGENT } from "./test-secrets";
+import { lowercaseBytes, STATIC_FRAME, TRACE_ID, USER_AGENT } from "./test-secrets";
 
 /*
  * No assertion here prints a secret when it fails: leaks are checked with `leakedKinds`,
@@ -53,6 +55,16 @@ describe("scrubText", () => {
     const text = scrubText(`event ${secrets.id} not found: x is not a function (SQLSTATE 23505)`);
     same(leaks(text), []);
     same(text, "event [redacted] not found: x is not a function (SQLSTATE 23505)");
+  });
+
+  it("redacts an event's id written in lowercase letters only", () => {
+    const lowercase = drawSecrets(lowercaseBytes);
+    same(scrubText(`event ${lowercase.id} not found`), "event [redacted] not found");
+  });
+
+  it("leaves the words a message needs, and its own [redacted]", () => {
+    const text = "Function: required argument, expected Database instance, received Property (SQLSTATE 23505) [redacted]";
+    same(scrubText(text), text);
   });
 
   it("redacts a quote left open, up to the end", () => {
@@ -153,8 +165,42 @@ describe("scrubEvent", () => {
   });
 
   it("scrubs the path of a frame's file that is not an http URL", () => {
-    const files = frameFiles([`/e/${secrets.id}/admin`, `webpack-internal:///e/${secrets.id}/moi#${secrets.personalToken}`]);
-    same(files, ["/e/[id]/admin", "webpack-internal:///e/[id]/moi"]);
+    const { id, adminToken, personalToken } = secrets;
+    // `app:///…` is a page's frame in production: @sentry/nextjs rewrites the browser's origin.
+    const files = frameFiles([`/e/${id}/admin`, `webpack-internal:///e/${id}/moi#${personalToken}`, `app:///e/${id}/admin#${adminToken}`]);
+    same(files, ["/e/[id]/admin", "webpack-internal:///e/[id]/moi", "app:///e/[id]/admin"]);
+  });
+
+  /** The frames the SDK's own parsers make of a stack: a line of the message may read as one. */
+  function sentFrames(parser: (stack: string) => StackFrame[], ...lines: string[]) {
+    const event = leakyEvent(secrets);
+    event.exception = { values: [{ type: "Error", value: "boom", stacktrace: { frames: parser(lines.join("\n")) } }] };
+    return scrubEvent(event).exception?.values?.[0].stacktrace?.frames ?? [];
+  }
+
+  it("scrubs a function name the browser's parser reads in a line of the message", () => {
+    const frames = sentFrames(browserStackParser, "Error: Could not seat", `${NAMES[2]} ${PHONES[0]} ${secrets.personalUrl}`);
+    expect(frames.length).toBeGreaterThan(0);
+    expect(leaks(frames)).toEqual([]);
+  });
+
+  it("scrubs a function name the Node parser reads in a line of the message", () => {
+    const lines = [`no seat for ${NAMES[2]} ${PHONES[0]} (car full)`, `no seat ${secrets.personalToken} (car full)`];
+    const frames = sentFrames(nodeStackParser, "Error: Could not seat", ...lines);
+    expect(frames.length).toBeGreaterThan(0);
+    expect(leaks(frames)).toEqual([]);
+  });
+
+  it("keeps the function names of real frames", () => {
+    const frames = sentFrames(
+      nodeStackParser,
+      "Error: boom",
+      "    at async onSubmit (app:///_next/static/chunks/page.js:1:4410)",
+      "    at new SeatPicker (app:///_next/static/chunks/page.js:2:10)",
+      "    at Object.<anonymous> (/var/task/.next/server/app/page.js:3:7)",
+      "    at Array.map (<anonymous>)",
+    );
+    same(frames.map((frame) => frame.function), ["Array.map", "Object.?", "new SeatPicker", "onSubmit"]);
   });
 
   it("keeps only the navigations and requests among the breadcrumbs", () => {

@@ -3,7 +3,7 @@ import type { ErrorEvent } from "@sentry/nextjs";
 import { organiserLinks } from "@/app/e/[id]/admin/admin-link";
 import { newAdminToken } from "@/domain/admin-token";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
-import { generatePublicId } from "@/domain/public-id";
+import { generatePublicId, type RandomBytes } from "@/domain/public-id";
 
 /*
  * What must never reach Sentry, drawn by the application's own builders, and the one way a
@@ -34,10 +34,11 @@ export const RELEASE = "4f1e9c2ab7d3e8f05c6a9b1d2e3f4a5b6c7d8e9f";
 
 export type Secrets = ReturnType<typeof drawSecrets>;
 
-export function drawSecrets() {
-  let id = generatePublicId();
-  // 1 id in 70 000 is all lowercase, and stays in a text as a word would (scrub.ts, WORD).
-  while (/^[a-z]+$/.test(id)) id = generatePublicId();
+/** Bytes that `generatePublicId` maps to lowercase letters only (symbols 32 to 56). */
+export const lowercaseBytes = (size: number) => Uint8Array.from({ length: size }, (_, at) => 32 + ((at * 7) % 25));
+
+export function drawSecrets(random?: RandomBytes) {
+  const id = generatePublicId(random);
   const adminToken = newAdminToken();
   const personalToken = personalTokenFromBytes(new Uint8Array(randomBytes(PERSONAL_TOKEN_BYTES)));
   const { publicUrl, adminUrl } = organiserLinks(ORIGIN, id, adminToken);

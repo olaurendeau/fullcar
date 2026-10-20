@@ -72,11 +72,10 @@ const IN_TEXT =
   /([a-zA-Z][a-zA-Z\d+.-]*:\/\/[^\s"'`<>]*|(?<![^\s([{<=,;:])\/[^\s"'`<>]*)|((?<![\w-])[\w-]{22,}(?![\w-]))|((?<![\w-])[2-9A-HJ-NP-Za-km-z]{8}(?![\w-]))|(?<!\d)\+?\(?\d(?:[\d \t\u00a0\u202f.()/_-]*\d)?/gu;
 const PHONE_DIGITS = 6;
 /**
- * 8 symbols that read as a word stay: all lowercase (1 id in 70 000 is), or a word of ours.
- * Any other run is taken for an id, `Database` or `Function` included.
+ * The words of 8 letters a message needs, in any case: any other run of 8 symbols of the
+ * alphabet is taken for an id. A word with an `l` never is one: the alphabet has no `l`.
  */
-const WORD = /^[a-z]+$/;
-const KEPT_WORDS = new Set(["SQLSTATE"]);
+const KEPT_WORDS = new Set("argument database expected function instance property received redacted required sqlstate".split(" "));
 
 /**
  * A message or a span's name without what may name someone: URLs through `scrubUrl`, and
@@ -90,7 +89,7 @@ export function scrubText(text: string, kind: "text" | "db" = "text"): string {
   }
   return scrubbed.replace(IN_TEXT, (match: string, url?: string, run?: string, id?: string) => {
     if (url) return scrubUrl(url);
-    if (id) return WORD.test(id) || KEPT_WORDS.has(id) ? id : REDACTED;
+    if (id) return KEPT_WORDS.has(id.toLowerCase()) ? id : REDACTED;
     if (run || (match.match(/\d/g) ?? []).length >= PHONE_DIGITS) return REDACTED;
     return match;
   });
@@ -177,14 +176,29 @@ function scrubException(exception: Exception): Exception {
   });
 }
 
+/** What V8 and the SDK's parsers name a function: `onSubmit`, `new Seat`, `Object.?`, `a.b [as c]`. */
+const FUNCTION_NAME = /^(?:new )?[A-Za-z_$<?][\w$<>?]*(?:\.[\w$<>?]+)*(?: \[as [\w$]+\])?$/;
+/** A part of such a name that may still be a token, or an id with a digit in it. */
+const SECRET_PART = /(?<![\w$])(?:[\w$]{22,}|(?=\w*\d)[2-9A-HJ-NP-Za-km-z]{8})(?![\w$])/;
+
+/**
+ * A function's name as it is, when it reads as one: through `scrubText`, `onSubmit` would
+ * read as an id. The SDK's parsers make a frame of any line of a message that looks like
+ * one, and its words become the name: a name that does not read as one is not sent at all,
+ * since `scrubText` cannot tell a first name from a word.
+ */
+function scrubFunctionName(name: string): string {
+  if (!FUNCTION_NAME.test(name)) return REDACTED;
+  return SECRET_PART.test(name) ? scrubText(name) : name;
+}
+
 /** Where the code ran, and nothing it held: no `vars`, no lines of source. */
 function scrubFrame(frame: StackFrame): StackFrame {
   return compact({
     filename: stringOr(frame.filename, scrubLocation),
     abs_path: stringOr(frame.abs_path, scrubLocation),
     module: stringOr(frame.module, scrubLocation),
-    // A name of our code: through scrubText, `onSubmit` would read as an event's id.
-    function: stringOr(frame.function),
+    function: stringOr(frame.function, scrubFunctionName),
     lineno: finite(frame.lineno),
     colno: finite(frame.colno),
     in_app: bool(frame.in_app),
