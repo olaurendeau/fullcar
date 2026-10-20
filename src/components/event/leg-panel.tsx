@@ -9,6 +9,7 @@ import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
+import type { RemoveRide } from "./remove-ride-dialog";
 import { OfferRideButton, type OfferRide } from "./ride-form";
 import { useSeatSheet, type TakeSeats } from "./seat-sheet";
 import { WithoutCarList } from "./without-car-list";
@@ -29,6 +30,8 @@ export interface BoardDevice {
   offerRide: OfferRide;
   /** Seats in a car for persons of the device, from the sheet (#91). */
   takeSeats: TakeSeats;
+  /** Removes a car driven by one of the device's persons (C8.6), with the device's token. */
+  removeRide: RemoveRide;
 }
 
 /**
@@ -72,6 +75,8 @@ export function LegPanel({
   const { leg, cars, withoutCar } = board;
   const legDate = wallClockParts(at).date;
   const seats = useSeatSheet(board, device, hasRetour);
+  // A car is the device's when one of its persons drives it on this leg (C8.1).
+  const drivesIt = (rideId: string) => board.device.some(({ state }) => state.kind === "driver" && state.rideId === rideId);
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -106,6 +111,7 @@ export function LegPanel({
                 date={legDate}
                 seatsActive={deviceKnown(device.status)}
                 onTakeSeat={(seat) => seats.openFor(car, seat)}
+                removeRide={drivesIt(car.id) ? device.removeRide : undefined}
               />
             ))
           ) : (

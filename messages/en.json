@@ -63,7 +63,8 @@
       "full": "Full",
       "seats": "Seats",
       "freeSeat": "Free seat",
-      "takeSeat": "Free seat: take a seat in {driver}’s car"
+      "takeSeat": "Free seat: take a seat in {driver}’s car",
+      "remove": "Remove the car"
     },
     "withoutCar": "Without a car",
     "call": "Call {firstName} on {phone}",
@@ -195,6 +196,13 @@
   },
   "Seat": {
     "placed": "{firstName} is in {driver}’s car"
+  },
+  "RideChanges": {
+    "remove": {
+      "title": "Remove the car?",
+      "body": "{passengers, plural, =0 {No passenger will be left without a car.} one {# passenger will be without a car again.} other {# passengers will be without a car again.}}",
+      "notified": "Nobody is notified: remember to tell them."
+    }
   },
   "Admin": {
     "title": "Organiser area",

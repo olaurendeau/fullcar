@@ -127,6 +127,23 @@ test("« Proposer une voiture » with « Au retour » unfolded", async ({ db, pa
   await shoot(page, testInfo, "proposer-voiture-au-retour");
 });
 
+// C8.6, C11.2: Claire, of the device, drives Nina and Paul; « Retirer la voiture ? ».
+test("« Retirer la voiture ? »", async ({ db, page, seededEvent }, testInfo) => {
+  const token = newToken();
+  const eventId = seededEvent.id;
+  const claire = (await seedPerson(db, eventId, { firstName: "Claire" }, token)).id;
+  const clairesCar = await seedRide(db, eventId, claire);
+  for (const firstName of ["Nina", "Paul"]) {
+    const personId = (await seedPerson(db, eventId, { firstName })).id;
+    await seedPlacement(db, { personId, eventId, leg: "aller", rideId: clairesCar });
+  }
+  await holdToken(page, eventId, token);
+  await page.goto(`/e/${eventId}`, { waitUntil: "networkidle" });
+  await page.getByRole("tabpanel").getByRole("button", { name: "Retirer la voiture" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("2 personnes redeviendront sans voiture.");
+  await shoot(page, testInfo, "retirer-voiture");
+});
+
 test.describe("without a retour", () => {
   test.use({ eventFields: { retourAt: null } });
 

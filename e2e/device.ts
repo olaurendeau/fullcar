@@ -35,14 +35,14 @@ export async function holdActions(page: Page) {
  */
 export const bar = (page: Page) => page.locator('[role="status"] + [role="alert"]');
 
-/** Records, as each alert fills, whether it was in a sheet, and whether the bar had an ancestor hidden. */
+/** Records, as each alert fills, whether it was in a sheet or a confirmation, and whether the bar had an ancestor hidden. */
 export async function watchAlerts(page: Page) {
   await page.evaluate(() => {
     const seen = ((window as unknown as { seenAlerts: object }).seenAlerts = { inSheet: false, barHidden: false });
     new MutationObserver(() => {
       for (const alert of document.querySelectorAll('[role="alert"]')) {
         if (!alert.textContent?.trim()) continue;
-        if (alert.closest('[role="dialog"]')) seen.inSheet = true;
+        if (alert.closest('[role="dialog"], [role="alertdialog"]')) seen.inSheet = true;
         else if (alert.closest('[aria-hidden="true"]')) seen.barHidden = true;
       }
     }).observe(document.body, { childList: true, subtree: true, characterData: true });

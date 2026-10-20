@@ -3,6 +3,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import type { VisibleCar } from "@/domain/phone-visibility";
 import { wallClockAsUtc, type WallDate } from "@/domain/wall-clock";
 import { PhoneLink } from "./phone-link";
+import { RemoveRideButton, type RemoveRide } from "./remove-ride-dialog";
 
 /**
  * A car of the leg (C4.3): its driver, with its time on the right of that line, then
@@ -10,9 +11,22 @@ import { PhoneLink } from "./phone-link";
  * passenger and one per free seat. The numbers the state carries are
  * `tel:` links (C10.1). A free seat is a button, inactive until the device's persons are
  * known (C5.9) and without JavaScript; its tap opens the sheet (`onTakeSeat`, #91). Long
- * values wrap anywhere rather than scrolling sideways (C11.3).
+ * values wrap anywhere rather than scrolling sideways (C11.3). Given `removeRide`, the car
+ * is the device's: « Retirer la voiture » closes it (C8.1).
  */
-export function RideCard({ car, date, seatsActive, onTakeSeat }: { car: VisibleCar; date: WallDate; seatsActive: boolean; onTakeSeat: (seat: HTMLElement) => void }) {
+export function RideCard({
+  car,
+  date,
+  seatsActive,
+  onTakeSeat,
+  removeRide,
+}: {
+  car: VisibleCar;
+  date: WallDate;
+  seatsActive: boolean;
+  onTakeSeat: (seat: HTMLElement) => void;
+  removeRide?: RemoveRide;
+}) {
   const t = useTranslations("Board.car");
   const format = useFormatter();
   const headingId = `car-${car.id}`;
@@ -77,6 +91,14 @@ export function RideCard({ car, date, seatsActive, onTakeSeat }: { car: VisibleC
           </li>
         ))}
       </ul>
+      {removeRide && (
+        <div className="flex gap-2">
+          <RemoveRideButton
+            car={{ id: car.id, leg: car.leg, driverId: car.driver.id, passengers: car.passengers.length }}
+            removeRide={removeRide}
+          />
+        </div>
+      )}
     </article>
   );
 }
