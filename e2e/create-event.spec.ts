@@ -6,12 +6,12 @@ leaveNoToken();
 const FR = {
   title: "Titre",
   location: "Lieu",
-  allerDate: "Date de l’aller",
-  allerTime: "Heure de l’aller",
+  allerDate: "Date de début",
+  allerTime: "Heure de début",
   retour: "Retour",
   retourHint: "Décochez s’il n’y a pas de retour organisé.",
-  retourDate: "Date du retour",
-  retourTime: "Heure du retour",
+  retourDate: "Date de fin",
+  retourTime: "Heure de fin",
   options: [
     ["Rehausseurs", "Pour les enfants qui en ont besoin."],
     ["Participation aux frais", "Un montant par passager, facultatif."],
@@ -19,7 +19,7 @@ const FR = {
   ],
   create: "Créer",
   required: "Champ requis.",
-  notAfterAller: "Le retour doit être après l’aller.",
+  notAfterAller: "La fin doit être après le début.",
   tooEarly: "Cette date est déjà passée.",
   tooLate: "Pas plus d’un an à l’avance.",
   failed: "Impossible de créer l’événement. Vérifiez la connexion, puis réessayez.",
@@ -35,7 +35,7 @@ const NEW_EVENT = "/nouveau";
 const ARRIVAL = /\/e\/[2-9A-HJ-NP-Za-km-z]{8}\/admin#[A-Za-z0-9_-]{22}$/;
 
 const field = (page: Page, label: string) => page.getByLabel(label, { exact: true });
-const createButton = (page: Page) => page.getByRole("button", { name: FR.create });
+const createButton = (page: Page, name = FR.create) => page.getByRole("button", { name });
 // Within the page's content: Next's route announcer is an alert as well.
 const alert = (page: Page) => page.getByRole("main").getByRole("alert");
 
@@ -43,9 +43,9 @@ const alert = (page: Page) => page.getByRole("main").getByRole("alert");
  * The form, once hydrated: "Créer" stays inactive until then. Hydration is waited for
  * longer than an assertion, since a loaded machine slows it and nothing here measures it.
  */
-async function openForm(page: Page) {
+async function openForm(page: Page, create = FR.create) {
   await page.goto(NEW_EVENT);
-  await expect(createButton(page)).toBeEnabled({ timeout: 15_000 });
+  await expect(createButton(page, create)).toBeEnabled({ timeout: 15_000 });
 }
 
 /** The device's date, `days` from today, as an `<input type="date">` takes it. */
@@ -127,7 +127,18 @@ test.describe("creating an event from /nouveau", () => {
     }
   });
 
-  test("C1.3: the retour date follows the aller date until it is changed, the retour time is not prefilled", async ({
+  test("D2.1: the date fields are named by the start and the end, the box is still Retour", async ({ page }) => {
+    await openForm(page);
+    for (const label of [FR.allerDate, FR.allerTime, FR.retourDate, FR.retourTime]) {
+      await expect(field(page, label)).toHaveAccessibleName(label);
+    }
+    await expect(field(page, FR.retour)).toHaveAccessibleName(FR.retour);
+    await expect(field(page, FR.retour)).toHaveAccessibleDescription(FR.retourHint);
+    // The legs' names are gone from the fields.
+    await expect(page.getByLabel(/aller|du retour/i)).toHaveCount(0);
+  });
+
+  test("C1.3, D2.3: the end date follows the start date until it is changed, the end time is not prefilled", async ({
     page,
   }) => {
     await openForm(page);
@@ -145,12 +156,14 @@ test.describe("creating an event from /nouveau", () => {
     await expect(field(page, FR.retourDate)).toHaveValue(inThreeWeeks);
   });
 
-  test("C1.4, C1.5, C4.6: six actions from /nouveau to the organiser's arrival, in less than 30 s", async ({ page }) => {
+  test("C1.4, C1.5, C4.6, D2.3: six actions from /nouveau to the organiser's arrival, in less than 30 s", async ({
+    page,
+  }) => {
     const sent = creations(page);
     const start = Date.now();
     await openForm(page);
-    await fillAller(page); // title, place, date, time: 4 actions
-    await field(page, FR.retourTime).fill("18:00"); // 5
+    await fillAller(page); // title, place, start date, start time: 4 actions
+    await field(page, FR.retourTime).fill("18:00"); // end time: 5
     await createButton(page).click(); // 6
 
     await expect(page).toHaveURL(ARRIVAL);
@@ -211,7 +224,7 @@ test.describe("creating an event from /nouveau", () => {
     expect(texts.filter((text) => text.includes(token))).toEqual([]);
   });
 
-  test("C2.1, C2.2: unchecking Retour hides its fields, and six actions create an event without a retour", async ({
+  test("C2.1, C2.2, D2.3: unchecking Retour hides both end fields, and six actions create an event without a retour", async ({
     page,
   }) => {
     await openForm(page);
@@ -251,15 +264,25 @@ test.describe("creating an event from /nouveau", () => {
     expect(sent).toHaveLength(0);
   });
 
-  test("C1.7: a retour not after the aller is refused, on the retour's field", async ({ page }) => {
+  test("C1.7, D2.2: an end not after the start is refused, on the end's field, and nothing is created", async ({
+    page,
+  }) => {
     const sent = creations(page);
     await openForm(page);
     await fillAller(page);
+    // An end time before the start's, on the same day.
+    await field(page, FR.retourTime).fill("07:00");
+    await createButton(page).click();
+    await expect(field(page, FR.retourTime)).toHaveAccessibleDescription(FR.notAfterAller);
+    await expect(field(page, FR.retourTime)).toBeFocused();
+
+    // An end equal to the start.
     await field(page, FR.retourTime).fill("07:30");
     await createButton(page).click();
     await expect(field(page, FR.retourTime)).toHaveAccessibleDescription(FR.notAfterAller);
     await expect(field(page, FR.retourTime)).toBeFocused();
 
+    // An end date the day before the start date.
     await field(page, FR.retourDate).fill(await deviceDate(page, 6));
     await field(page, FR.retourTime).fill("18:00");
     await createButton(page).click();
@@ -269,7 +292,7 @@ test.describe("creating an event from /nouveau", () => {
     expect(sent).toHaveLength(0);
   });
 
-  test("C1.8: an aller before the device's today, or after today + 365 days, is refused", async ({ page }) => {
+  test("C1.8, D2.3: a start before the device's today, or after today + 365 days, is refused", async ({ page }) => {
     const sent = creations(page);
     await openForm(page);
     await fillAller(page, { days: -1 });
@@ -528,6 +551,39 @@ test.describe("creating an event in a browser set to English", () => {
     await page.getByRole("button", { name: "Create" }).click();
     await expect(page.getByLabel("Title", { exact: true })).toHaveAccessibleDescription("Required.");
     await expect(page.getByLabel("Return", { exact: true })).toBeChecked();
-    await expect(page.getByLabel("Return time", { exact: true })).toHaveAccessibleDescription("Required.");
+    await expect(page.getByLabel("End time", { exact: true })).toHaveAccessibleDescription("Required.");
+  });
+
+  test("D2.1: the date fields are Start date, Start time, End date, End time, the box is still Return", async ({
+    page,
+  }) => {
+    await openForm(page, "Create");
+    for (const label of ["Start date", "Start time", "End date", "End time"]) {
+      await expect(field(page, label)).toHaveAccessibleName(label);
+    }
+    await expect(field(page, "Return")).toBeChecked();
+    await expect(field(page, "Return")).toHaveAccessibleDescription("Untick if no return trip is organised.");
+    await expect(page.getByLabel(/outbound|return (date|time)/i)).toHaveCount(0);
+  });
+
+  test("D2.2: an end before the start says so in English, on the end's field, and nothing is created", async ({
+    page,
+  }) => {
+    const sent = creations(page);
+    await openForm(page, "Create");
+    await field(page, "Title").fill("Club ski trip");
+    await field(page, "Place").fill("La Clusaz");
+    await field(page, "Start date").fill(await deviceDate(page, 7));
+    await field(page, "Start time").fill("07:30");
+    await field(page, "End time").fill("07:00");
+    await createButton(page, "Create").click();
+    await expect(field(page, "End time")).toHaveAccessibleDescription("The end must be after the start.");
+
+    await field(page, "End date").fill(await deviceDate(page, 6));
+    await field(page, "End time").fill("18:00");
+    await createButton(page, "Create").click();
+    await expect(field(page, "End date")).toHaveAccessibleDescription("The end must be after the start.");
+    await expect(page).toHaveURL(/\/nouveau$/);
+    expect(sent).toHaveLength(0);
   });
 });
