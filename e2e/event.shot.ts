@@ -14,7 +14,7 @@ leaveNoToken();
 /** A well-formed id that no test stores. */
 const UNKNOWN_ID = "Zz9yXw8v";
 
-const FIELDS = ["Titre", "Lieu", "Date de l’aller", "Heure de l’aller", "Date du retour", "Heure du retour"];
+const FIELDS = ["Titre", "Lieu", "Date de début", "Heure de début", "Date de fin", "Heure de fin"];
 
 async function shoot(page: Page, testInfo: TestInfo, name: string) {
   const overflow = await page.evaluate(

@@ -6,12 +6,12 @@
   "CreateEvent": {
     "title": "Titre",
     "location": "Lieu",
-    "allerDate": "Date de l’aller",
-    "allerTime": "Heure de l’aller",
+    "allerDate": "Date de début",
+    "allerTime": "Heure de début",
     "retour": "Retour",
     "retourHint": "Décochez s’il n’y a pas de retour organisé.",
-    "retourDate": "Date du retour",
-    "retourTime": "Heure du retour",
+    "retourDate": "Date de fin",
+    "retourTime": "Heure de fin",
     "options": "Options",
     "boosters": {
       "label": "Rehausseurs",
@@ -36,13 +36,17 @@
       "invalidTime": "Heure non valide.",
       "tooEarly": "Cette date est déjà passée.",
       "tooLate": "Pas plus d’un an à l’avance.",
-      "notAfterAller": "Le retour doit être après l’aller."
+      "notAfterAller": "La fin doit être après le début."
     }
   },
   "Event": {
     "legs": {
       "aller": "Aller",
       "retour": "Retour"
+    },
+    "dates": {
+      "start": "Début",
+      "end": "Fin"
     },
     "noCar": {
       "aller": "Aucune voiture proposée pour l’aller",

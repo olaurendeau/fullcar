@@ -29,15 +29,18 @@ const WORDS = {
   fr: {
     title: "Titre",
     location: "Lieu",
-    allerDate: "Date de l’aller",
-    allerTime: "Heure de l’aller",
+    allerDate: "Date de début",
+    allerTime: "Heure de début",
     retour: "Retour",
-    retourTime: "Heure du retour",
+    retourTime: "Heure de fin",
     options: ["Rehausseurs", "Participation aux frais", "Points de RDV"],
     create: "Créer",
     panel: "Espace organisateur",
     shareLink: "Lien à partager",
     aller: "Aller",
+    dates: ["Début", "Fin"],
+    offer: "Proposer une voiture",
+    departure: "Heure de départ",
     at: (time: string) => `à ${time}`,
     // 07:30 and 18:00, as the language writes them.
     clock: { aller: "07:30", retour: "18:00" },
@@ -45,15 +48,18 @@ const WORDS = {
   en: {
     title: "Title",
     location: "Place",
-    allerDate: "Outbound date",
-    allerTime: "Outbound time",
+    allerDate: "Start date",
+    allerTime: "Start time",
     retour: "Return",
-    retourTime: "Return time",
+    retourTime: "End time",
     options: ["Booster seats", "Cost sharing", "Meeting points"],
     create: "Create",
     panel: "Organiser area",
     shareLink: "Link to share",
     aller: "Outbound",
+    dates: ["Start", "End"],
+    offer: "Offer a car",
+    departure: "Departure time",
     at: (time: string) => `at ${time}`,
     clock: { aller: "7:30\\sAM", retour: "6:00\\sPM" },
   },
@@ -137,8 +143,11 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
       expect(Date.now() - start).toBeLessThan(30_000);
 
       // C1.12: 07:30 and 18:00, as typed, from a server in UTC+14 to a browser elsewhere.
+      // D2.4: « Début » in full, « Fin » its time alone, the same day.
       const legs = [legText(lang, allerDate, words.clock.aller)];
-      if (retour) legs.push(legText(lang, allerDate, words.clock.retour));
+      if (retour) legs.push(new RegExp(`^${words.clock.retour}$`));
+      const dates = retour ? words.dates : words.dates.slice(0, 1);
+      await expect(page.locator("header dt")).toHaveText(dates);
       await expect(page.locator("header dd")).toHaveText(legs);
       await expectOneLanguage(page, lang, allerDate);
 
@@ -146,13 +155,18 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
       await page.goto(`${origin}/e/${id}`);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
       await expect(page.getByRole("region", { name: words.panel })).toHaveCount(0);
+      await expect(page.locator("header dt")).toHaveText(dates);
       await expect(page.locator("header dd")).toHaveText(legs);
+      // D2.4: « Proposer une voiture » starts from the start at the aller, as before.
+      await expectOfferAt(page, lang, "07:30");
       if (retour) {
         await expect(page.getByRole("tab", { name: words.aller })).toHaveAttribute("aria-selected", "true");
         await page.getByRole("tab", { name: words.retour }).click();
         await expect(page.getByRole("tab", { name: words.retour })).toHaveAttribute("aria-selected", "true");
         // v4.1: the header holds the legs' dates; a tab has no date line of its own.
         await expect(page.getByRole("tabpanel").locator("time")).toHaveCount(0);
+        // D2.4: and from the end at the retour.
+        await expectOfferAt(page, lang, "18:00");
       } else {
         await expect(page.getByRole("tab")).toHaveCount(0);
       }
@@ -166,6 +180,26 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
   });
 }
 
+/** D2.4: « Proposer une voiture » on the leg shown, its « Heure de départ » prefilled with `time`. */
+async function expectOfferAt(page: Page, lang: "fr" | "en", time: string) {
+  const words = WORDS[lang];
+  // Inactive until the device's persons are known: a click waits for it.
+  await page.getByRole("button", { name: words.offer, exact: true }).click();
+  const form = page.getByRole("dialog", { name: words.offer });
+  await expect(form.getByLabel(words.departure, { exact: true })).toHaveValue(time);
+  await page.keyboard.press("Escape");
+  await expect(form).toHaveCount(0);
+}
+
+/**
+ * Whether `text` holds `words` as words of their own: « Fin », « Start » or « End » inside a
+ * longer word (« Find », « Restart ») is not the other language's.
+ */
+function holdsWords(text: string, words: string): boolean {
+  const escaped = words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "u").test(text);
+}
+
 /** C7.1: the page's language, and not a word of the other one, dates included. */
 async function expectOneLanguage(page: Page, lang: "fr" | "en", date: string) {
   await expect(page.locator("html")).toHaveAttribute("lang", lang);
@@ -174,7 +208,7 @@ async function expectOneLanguage(page: Page, lang: "fr" | "en", date: string) {
     new Date(`${date}T00:00Z`),
   );
   const text = await page.locator("body").innerText();
-  expect([...onlyIn(other), otherDate].filter((words) => text.includes(words))).toEqual([]);
+  expect([...onlyIn(other), otherDate].filter((words) => holdsWords(text, words))).toEqual([]);
 }
 
 interface Exchange {
