@@ -304,7 +304,7 @@ test.describe("remove a car", () => {
       await expect(page.getByRole("dialog")).toHaveCount(0);
       if (shown) {
         await failHeld(page, answer);
-        await expect(messages(page)).toHaveText([FAILED]);
+        await expect(messages(page)).toHaveText(["Tom n’a pas pu monter dans la voiture de Claire. Une erreur est survenue : réessayez dans un instant."]);
       }
       if (!after) await removeClaire(page);
       if (!shown) {
