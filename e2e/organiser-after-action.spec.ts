@@ -292,7 +292,11 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
       const room = place === "mid-page" ? 'main::after { content: ""; display: block; height: 200vh; }' : "";
       await page.addStyleTag({ content: `html, main { overflow-anchor: none !important; } ${room}` });
       const title = carTitle(page, "Anaïs");
-      const y = async () => (await title.boundingBox())!.y;
+      // Where the title is painted: two frames on, once the observer has run and scrolled.
+      const y = async () => {
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        return (await title.boundingBox())!.y;
+      };
       /** Scrolls the car's title to the top of the screen, or to the end of the page; the panel above it. */
       const lookAtCar = async () => {
         await title.evaluate((element, end) => {

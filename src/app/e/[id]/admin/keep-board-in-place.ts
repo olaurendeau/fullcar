@@ -31,8 +31,8 @@ export function compensation({
  * Watches the panel's frame, `ref`, and scrolls the page by its change of height when
  * `compensation` says so: after layout and before paint, in the same frame, so that nothing
  * jumps on screen. Whatever changed it, sections withdrawn or rendered, lists, alert, tiles.
- * The scroll before the change is the last one seen while the frame kept its height: a scroll
- * event told once the height changed, before this observer has run, is the browser's clamp.
+ * The browser's clamp only pulls the scroll back, to the end of a page that got shorter: a
+ * scroll event that says so before this observer has run is not the scroll before the change.
  */
 export function useKeepBoardInPlace(ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -40,12 +40,13 @@ export function useKeepBoardInPlace(ref: RefObject<HTMLElement | null>) {
     if (!frame) return;
     let height = frame.getBoundingClientRect().height;
     let scrolled = window.scrollY;
+    const atEnd = () => window.scrollY >= document.documentElement.scrollHeight - window.innerHeight - 1;
     const onScroll = () => {
-      if (frame.getBoundingClientRect().height === height) scrolled = window.scrollY;
+      if (frame.getBoundingClientRect().height >= height || !atEnd()) scrolled = window.scrollY;
     };
     const observer = new ResizeObserver(() => {
       const { top, height: after } = frame.getBoundingClientRect();
-      const clamped = window.scrollY - scrolled;
+      const clamped = after < height && atEnd() ? Math.min(0, window.scrollY - scrolled) : 0;
       const delta = compensation({ top: top + clamped, before: height, after, clamped });
       height = after;
       if (delta !== 0) window.scrollBy({ top: delta, behavior: "instant" });
