@@ -7,8 +7,228 @@
   de messages, v4.2)
 - Décision de l’humain pour la v4.2 : https://github.com/olaurendeau/fullcar/issues/216
   (option (a))
+- v4.3 : « Début » et « Fin » dans l’en-tête et dans le formulaire de création. Epic :
+  https://github.com/olaurendeau/fullcar/issues/235 ; option (a) choisie par le propriétaire
+  le 20/10 (« Décision du propriétaire »)
 - Hors de cette maquette : la vue organisateur, epic #154
 - Page : `index.html` (autonome, maquettes à 360 px de large)
+
+## Ce qui change en v4.3 : « Début » et « Fin »
+
+Demande du propriétaire, sur une capture de `/e/{id}` en production : « Pour les dates je
+trouve que « début », « fin » seraient plus clair, puisqu’on parle d’un événement ». Epic :
+https://github.com/olaurendeau/fullcar/issues/235.
+
+L’en-tête de l’événement est redessiné, et les champs de date du formulaire de création
+changent de mots. Les onglets, la matrice et l’espace organisateur ne changent pas.
+
+1. **L’en-tête** nomme les deux heures de l’événement « Début » et « Fin » (EN « Start »,
+   « End »), au lieu de « Aller » et « Retour ». Il ne contient plus aucun nom de leg, ce
+   qui le distingue des onglets juste dessous.
+2. **Le même jour**, la fin ne montre que son heure : « Début samedi 12 décembre 2026 à
+   07:30 », puis « Fin 18:00 ». Un autre jour, elle montre sa date et son heure complètes.
+3. **Sans retour**, il n’y a pas de fin : la seule ligne est « Début ».
+4. **Le formulaire de création** dit aussi « début » et « fin » : option (a), choisie par le
+   propriétaire le 20/10 (#235). Le détail est dans « Décision du propriétaire ».
+
+### Ce que sont ces deux heures, dans le code
+
+Il n’y a ni `start_at` ni `end_at`. L’Event stocke `aller_at` (requis) et `retour_at`
+(vide sans retour), et le code s’en sert comme des heures des legs :
+
+- `retour_at` dit à la fois **si l’événement a un retour** (`eventLegs`) et à quelle heure ;
+- la date d’un Ride est celle de son leg (`departure_time` n’a pas de date) ;
+- « Heure de départ » de « Proposer une voiture » est préremplie avec l’heure du leg ;
+- la purge part de la date du dernier leg ;
+- la validation exige « retour après aller ».
+
+**« Fin » n’est donc pas le même concept que « Retour ».** La fin est une propriété de
+l’événement ; le retour est un leg. Aujourd’hui, une seule colonne porte les deux : la fin
+d’un événement est l’heure où part son retour, et un événement sans retour n’a pas de fin.
+De même, « Début » se lit comme l’heure où l’on doit être arrivé, alors que le code préremplit
+avec cette heure le **départ** des voitures de l’aller.
+
+La v4.3 n’invente pas de nouvelle donnée. Elle renomme ce que l’en-tête montre, et dit dans
+le glossaire ce que les deux colonnes signifient :
+
+- `aller_at` : le début de l’événement ;
+- `retour_at` : la fin, c’est-à-dire l’heure où part le retour, et rien sans retour.
+
+Une fin sans retour demanderait une nouvelle colonne : c’est hors périmètre, et c’est un
+changement de ce qui est stocké, qui revient à l’humain.
+
+### Décision du propriétaire (20/10, #235)
+
+**Question posée** : le formulaire de création dit-il aussi « début » et « fin » ?
+
+**Réponse : option (a), oui.** Le propriétaire l’a choisie le 20/10, et #235 l’enregistre.
+
+- Les champs s’appellent « Date de début », « Heure de début », « Date de fin », « Heure de
+  fin », et l’erreur dit « La fin doit être après le début. ».
+- La case « Retour » et sa phrase ne changent pas.
+- Rien de stocké ne change, et il n’y a aucune migration.
+- Le glossaire (`docs/agents/glossary.md`, que l’humain fusionne) décrit l’Event avec un
+  début et une fin.
+- Raison : sinon, une même valeur serait saisie « Heure de l’aller » et lue « Début ». Ce
+  seraient deux noms pour une chose, et le glossaire en fait un défaut.
+
+L’option écartée, (b), ne changeait que l’en-tête. Un organisateur qui saisit le départ de
+l’aller (07:30 pour un match à 09:00) aurait lu « Début 07:30 », ce qui est faux.
+
+### Ce qui garde « Aller » et « Retour »
+
+- Les onglets (`Event.legs.*`), et le titre masqué du leg d’un événement sans retour.
+- Les colonnes de « Vos inscriptions », les titres de feuille (« Tom · Aller ») et les états
+  (« Ne fait pas l’aller »).
+- Les sections de l’espace organisateur : leur titre de leg et la date du leg dessous.
+- « Proposer une voiture » : son heure reste préremplie avec le début à l’aller et avec la fin
+  au retour.
+- La case « Retour » du formulaire de création, et sa phrase.
+
+### Où ces deux heures sont nommées
+
+| endroit | aujourd’hui | v4.3 |
+|---|---|---|
+| en-tête de `/e/{id}` (`EventView`, `<dl>`) | `Event.legs.aller` / `.retour` : « Aller », « Retour » | `Event.dates.start` / `.end` : « Début », « Fin » |
+| en-tête sous l’espace organisateur, `/e/{id}/admin` (même `EventView`) | idem | idem |
+| sections de l’espace organisateur (`OrganiserLegSection`, h3 + `LegTime`) | « Aller » / « Retour » et la date du leg | inchangé |
+| formulaire de création (`CreateEventForm`) | `CreateEvent.allerDate`, `allerTime`, `retourDate`, `retourTime`, `errors.notAfterAller` | nouveaux textes, mêmes clés |
+| « Proposer une voiture » (`RideForm.timeHint`, `otherLeg.time.*`) | « Le {date} », « Heure de départ du retour » | inchangé |
+| titre du document (`eventMetadata`) | le titre seul | inchangé, pas de date |
+| bouton « Partager » (`navigator.share({ url })`) | l’URL seule | inchangé, pas de date |
+| page introuvable (`EventNotFound.deleted`) | « … 30 jours après leur date. » | inchangé |
+| accueil (`Home.tagline`) | « … aller et retour, sans compte. » | inchangé (ce sont les legs) |
+| étape 1 de « Comment ça marche », nouvelle page d’accueil (#232) | « Un titre, un lieu, l’heure de l’aller et celle du retour. » | déjà changée dans #232 : voir « Pour #232 » |
+
+### Pour #232 (nouvelle page d’accueil)
+
+L’étape 1 de « Comment ça marche » dit ce que demande le formulaire. Elle est déjà alignée
+dans #232 : « Un titre, un lieu, l’heure de début et, s’il y a un retour, l’heure de fin. ».
+Rien à faire ici.
+
+### Les mots de la v4.3
+
+| clé | `messages/fr.json` | `messages/en.json` | avant |
+|---|---|---|---|
+| `Event.dates.start` | Début | Start | nouvelle ; l’en-tête lisait `Event.legs.aller` |
+| `Event.dates.end` | Fin | End | nouvelle ; l’en-tête lisait `Event.legs.retour` |
+| `CreateEvent.allerDate` | Date de début | Start date | Date de l’aller / Outbound date |
+| `CreateEvent.allerTime` | Heure de début | Start time | Heure de l’aller / Outbound time |
+| `CreateEvent.retourDate` | Date de fin | End date | Date du retour / Return date |
+| `CreateEvent.retourTime` | Heure de fin | End time | Heure du retour / Return time |
+| `CreateEvent.errors.notAfterAller` | La fin doit être après le début. | The end must be after the start. | Le retour doit être après l’aller. / The return must be after the outbound trip. |
+
+Ces clés ne changent pas :
+
+| clé | fr | en |
+|---|---|---|
+| `Event.legs.aller` | Aller | Outbound |
+| `Event.legs.retour` | Retour | Return |
+| `CreateEvent.retour` | Retour | Return |
+| `CreateEvent.retourHint` | Décochez s’il n’y a pas de retour organisé. | Untick if no return trip is organised. |
+
+Les noms des clés `CreateEvent.aller*` / `retour*` restent : ce sont ceux des champs
+(`EventField`) et des colonnes, qui ne changent pas.
+
+Les valeurs ne sont pas des clés : elles passent par `useFormatter().dateTime(wallClockAsUtc(at), …)`,
+en UTC (l’heure murale).
+
+| valeur | format | fr | en |
+|---|---|---|---|
+| début, et fin d’un autre jour | `{ dateStyle: "full", timeStyle: "short" }` | samedi 12 décembre 2026 à 07:30 | Saturday, December 12, 2026 at 7:30 AM |
+| fin du même jour | `{ timeStyle: "short" }` | 18:00 | 6:00 PM |
+
+Chaque valeur reste un `<time dateTime="YYYY-MM-DDTHH:MM">` complet.
+
+### Critères de la v4.3
+
+Chaque critère est prouvé par un test. On appelle « événement amorcé » celui des fixtures
+(`allerAt` 2026-12-12 07:30, `retourAt` 2026-12-12 18:00). Les autres événements sont
+amorcés par le test.
+
+**H1. Lire quand l’événement commence et finit.** En tant que participant qui ouvre le lien,
+je lis quand l’événement commence et quand il finit, sans confondre ces heures avec les
+onglets Aller et Retour.
+
+- **D1.1** `/e/{id}` d’un événement dont la fin tombe le même jour que le début :
+  - `header dt` a exactement les textes `["Début", "Fin"]` ;
+  - `header dd` a exactement les textes `[/^samedi 12 décembre 2026 à 07:30$/, /^18:00$/]` ;
+  - les deux `header time` ont `datetime` = `2026-12-12T07:30` et `2026-12-12T18:00`.
+- **D1.2** Avec une fin le lendemain (2026-12-12 20:00 → 2026-12-13 01:00), le second `dd`
+  est `/^dimanche 13 décembre 2026 à 01:00$/`. Même chose sur plusieurs jours.
+- **D1.3** Sans retour, `header dt` a exactement `["Début"]`, et aucun texte « Fin » n’est
+  dans l’en-tête.
+- **D1.4** L’en-tête ne contient ni « Aller » ni « Retour » :
+  `expect(page.locator("header")).not.toContainText(/Aller|Retour/)`. Les onglets gardent
+  leurs noms : `getByRole("tab")` a les textes `["Aller", "Retour"]` sans pastille.
+- **D1.5** Navigateur `en-GB` :
+  - `header dt` = `["Start", "End"]` ;
+  - `header dd` = `[/^Saturday, December 12, 2026 at 7:30\sAM$/, /^6:00\sPM$/]` ;
+  - les onglets restent `["Outbound", "Return"]`.
+- **D1.6** `/e/{id}/admin`, avec un lien d’organisateur valide :
+  - le même en-tête qu’en D1.1 ;
+  - les sections de l’espace organisateur gardent leur titre « Aller » / « Retour » et leur
+    date complète (`organiser-panel.spec.ts`, inchangé, reste vert).
+- **D1.7** « Même jour » se lit sur l’heure murale, et `timezoneId` ne change rien :
+  - avec `timezoneId: "America/New_York"`, un événement 2026-12-12 20:00 → 2026-12-12 23:30
+    affiche la fin « 23:30 » ;
+  - un événement 2026-12-12 20:00 → 2026-12-13 00:30 affiche « dimanche 13 décembre 2026 à
+    00:30 ».
+- **D1.8** À 360 px, en français et en anglais, sur deux jours :
+  - aucun débordement horizontal (`scrollWidth − clientWidth = 0`) ;
+  - chaque `dt` est sur la première ligne de son `dd` : l’écart entre leurs `top` est d’au plus
+    4 px. Le `dt`, plus petit (14 px), est aligné sur la ligne de base du `dd` (16 px), donc
+    environ 3 px plus bas.
+
+**H2. Créer un événement avec un début et une fin.** En tant qu’organisateur, je saisis le
+début et la fin de mon événement avec les mots que je lirai ensuite sur sa page (option (a),
+décision du propriétaire du 20/10).
+
+- **D2.1** Sur le formulaire de création :
+  - les champs ont pour noms accessibles « Date de début », « Heure de début », « Date de
+    fin », « Heure de fin » ;
+  - la case s’appelle toujours « Retour », décrite par « Décochez s’il n’y a pas de retour
+    organisé. » ;
+  - en `en-GB` : « Start date », « Start time », « End date », « End time », « Return ».
+- **D2.2** Une fin antérieure ou égale au début :
+  - le champ « Heure de fin » a pour description accessible « La fin doit être après le
+    début. » (EN « The end must be after the start. ») ;
+  - avec une date de fin antérieure à la date de début (11/12/2026 pour un début le
+    12/12/2026), c’est le champ « Date de fin » qui a cette même description ;
+  - rien n’est créé.
+- **D2.3** Les critères de #3 amendés par la v4.3 (R1, C1.2, C1.3, C1.4, C1.7, C1.8, C1.12,
+  C2.1 et C5.1, texte dans « Critères de l’epic à amender ») sont vrais avec leurs nouveaux
+  mots. C2.2, inchangé, reste vrai. En particulier :
+  - la date de fin suit la date de début tant qu’on ne l’a pas changée (C1.3) ;
+  - le chemin le plus court tient en 6 actions : titre, lieu, date de début, heure de début,
+    heure de fin, « Créer » (C1.4) ;
+  - décocher « Retour » masque les deux champs de fin (C2.1).
+- **D2.4** Le parcours complet (`journey.spec.ts`) :
+  - on crée avec « Heure de début » 07:30 et « Heure de fin » 18:00 ;
+  - la page de l’événement affiche « Début … à 07:30 » et « Fin 18:00 » ;
+  - « Proposer une voiture » préremplit « Heure de départ » avec 07:30 à l’aller et 18:00 au
+    retour, comme aujourd’hui.
+- **D2.5** Rien de stocké ne change :
+  - test Vitest de `createEvent` : les mêmes champs écrivent les mêmes `aller_at` et
+    `retour_at` qu’avant ;
+  - aucune migration n’est ajoutée ;
+  - aucune clé n’est ajoutée ni retirée dans `CreateEvent`, et `check-i18n` passe.
+
+**Non prouvable par un test** : qu’un participant lise « Fin » comme l’heure où part le
+retour. C’est une raison de l’option (a), pas un critère.
+
+### Les états de la v4.3
+
+| état | ce qui s’affiche | critère |
+|---|---|---|
+| fin le même jour | Début complet, Fin à l’heure seule | D1.1 |
+| fin un autre jour, après minuit | deux dates complètes | D1.2, D1.7 |
+| sans retour | la seule ligne « Début » | D1.3 |
+| `/e/{id}/admin` | même en-tête ; sections organisateur inchangées | D1.6 |
+| anglais, 360 px | Start / End, pas de débordement | D1.5, D1.8 |
+| formulaire : heure de fin avant le début | erreur sous « Heure de fin » | D2.2 |
+| formulaire : date de fin avant la date de début | erreur sous « Date de fin » | D2.2 |
+| hors ligne, introuvable, chargement | inchangés : l’en-tête est rendu par le serveur avec la page, ou la page n’existe pas | — |
 
 ## Ce qui change en v4.2 (#216)
 
@@ -70,7 +290,8 @@ feuille unique, la règle du téléphone (C10.x).
 
 ## L’ordre de l’écran
 
-1. En-tête de l’événement : titre, lieu, date et heure de chaque leg.
+1. En-tête de l’événement : titre, lieu, « Début » et « Fin » (v4.3 ; la fin seulement avec
+   un retour, son heure seule le même jour).
 2. La **barre de messages**, placée ici dans le DOM (après l’en-tête, donc avant « Vos
    inscriptions » et les onglets), affichée en bas de l’écran.
 3. **« Vos inscriptions »**, absente sans personne sur l’appareil, et sans JavaScript.
@@ -212,7 +433,7 @@ indisponible garde son avertissement en tête (C1.14, D5).
     dépose » au retour, « Lieu de départ » à l’aller, prérempli avec le lieu saisi et qui le
     suit tant qu’on ne le change pas, comme la date de retour de la création d’événement)
     et son **heure** (préremplie avec l’heure de l’autre leg dans l’événement : 18:00 pour
-    « Je ramène aussi » depuis l’Aller du Tournoi de Rennes, 08:00 pour « J’emmène aussi »
+    « Je ramène aussi » depuis l’Aller du Tournoi de Rennes, 07:30 pour « J’emmène aussi »
     depuis le Retour), puis la phrase
     `RideForm.otherLeg.same`. Places et note valent pour les deux voitures. Mêmes règles
     de champ (R4).
@@ -650,6 +871,8 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | la barre en anglais | La barre de messages | C11.1, C11.11 |
 | place prise, le message amendé | Un tap et « Annuler » | C5.7 |
 | la page en anglais | En anglais | C11.1 |
+| en-tête : même jour, deux jours, après minuit, sans retour, `/admin`, en anglais (v4.3) | Début et fin | D1.1 à D1.8 |
+| formulaire de création : champs de date, fin avant le début, en anglais (v4.3) | Début et fin | D2.1, D2.2 |
 
 ## Les mots
 
@@ -1076,6 +1299,20 @@ v4.2.2-9. Décision : les cinq maquettes qui gardaient la barre de v4 sont redes
 
 v4.2.2-10. Décision : le repère de « Réessayer » est le bouton de la section tant que « Vos inscriptions » est en échec ; le contrôle manuel couvre la double lecture en mode navigation (la liste, puis la région masquée). — Raison : suggestions de la revue. La double lecture est le prix des régions d’annonce : elles sont placées après « Fermer », pour que la liste se lise d’abord.
 
+### Nouvelles en v4.3 (début et fin, #235)
+
+v4.3-1. Décision : l’en-tête dit « Début » et « Fin » (« Start », « End »), des noms, comme les autres libellés de l’écran. — Raison : ce sont les mots demandés par le propriétaire. « Commence » / « Se termine » sont des verbes, plus longs, et l’anglais n’a pas d’équivalent aussi court.
+
+v4.3-2. Décision : le même jour, la fin ne montre que son heure ; un autre jour, sa date et son heure complètes. Deux lignes dans tous les cas. — Raison : cela garde les mots demandés et une seule structure. Une ligne « samedi 12 décembre 2026, de 07:30 à 18:00 » ferait disparaître « Début » et « Fin » dans le cas le plus courant, et demanderait une phrase de plus à traduire.
+
+v4.3-3. Décision : « même jour » se compare sur l’heure murale, pas dans le fuseau du navigateur. — Raison : C1.12, tout le monde lit l’heure du lieu.
+
+v4.3-4. Décision : les onglets, la matrice, les sections organisateur et « Proposer une voiture » gardent « Aller » et « Retour ». — Raison : ce sont des legs (glossaire), et seul l’en-tête parle de l’événement. L’en-tête ne contient plus aucun nom de leg, ce qui le distingue des onglets juste dessous.
+
+v4.3-5. Décision : la fin n’existe qu’avec un retour ; sans retour, la seule ligne est « Début ». — Raison : rien de stocké ne change. `retour_at` est à la fois la fin et l’heure du retour, et il est vide sans retour.
+
+v4.3-6. Décision du propriétaire, le 20/10 (#235) : le formulaire de création dit aussi « Date de début », « Heure de début », « Date de fin », « Heure de fin », et l’erreur « La fin doit être après le début. » (option (a)). — Raison : sinon, une même valeur serait saisie « Heure de l’aller » et lue « Début », deux noms pour une chose (glossaire : « un synonyme est un défaut »).
+
 ## Écarts par rapport à la revue
 
 1. « Chaque personne sur une ligne (prénom, état, menu) » : dans la matrice, le « menu » est
@@ -1235,7 +1472,49 @@ v4.2.2-10. Décision : le repère de « Réessayer » est le bouton de la sectio
   *Non prouvable par un test* : ce que prononce un lecteur d’écran. Revue avec VoiceOver (iOS, Safari), TalkBack (Android, Chrome) et NVDA (Windows, Chrome), sur le cas de #216 dans les deux ordres d’arrivée : chaque message est annoncé une fois, et aucun n’est relu quand un autre arrive. En mode navigation (NVDA, rotor VoiceOver), chaque message se lit deux fois, dans la liste puis dans sa région : on vérifie que cette lecture reste compréhensible.
 - Aucun critère de l’epic ne disait ce que fait la barre d’un échec : C11.10 à C11.12 sont les seuls nouveaux. Le reste amende C5.7, C5.10, C11.4 et les deux lignes d’états. C11.9 ne change pas : les nouvelles clés sont dans `Actions`, déjà vérifié.
 
+### v4.3 (#235), début et fin : critères de #3 amendés
+
+- **R1**, table des champs :
+  - « date de l’aller, heure de l’aller » devient « date de début, heure de début » ;
+  - « date du retour, heure du retour » devient « date de fin, heure de fin », avec la règle
+    « requises si « Retour » est cochée ; date et heure strictement postérieures au début ;
+    même borne de + 365 jours ».
+- **C1.2** La case « Retour » est cochée au chargement, et les champs date et heure de fin
+  sont visibles.
+- **C1.3** Tant que l’utilisateur n’a pas modifié la date de fin, elle prend automatiquement
+  la valeur saisie pour la date de début. L’heure de fin n’est pas préremplie.
+- **C1.4** Les six actions deviennent : titre, lieu, date de début, heure de début, heure de
+  fin, « Créer ». Le reste ne change pas.
+- **C1.7** Une fin antérieure ou égale au début est refusée, avec l’erreur « La fin doit être
+  après le début. » sur le champ de la fin : « Heure de fin », ou « Date de fin » si c’est la
+  date qui est antérieure.
+- **C1.8** Une date de début antérieure à aujourd’hui (date de l’appareil) est refusée. Une
+  date postérieure à aujourd’hui + 365 jours est refusée.
+- **C1.12** « un événement créé avec un aller à 07:30 » devient « un événement créé avec un
+  début à 07:30 ». Le reste ne change pas.
+- **C2.1** Décocher « Retour » masque les champs date et heure de fin, et ils ne sont plus
+  requis.
+- **C5.1** `/e/{id}` affiche le titre (titre de niveau 1) et le lieu. Il affiche aussi le
+  début, sous le libellé « Début », et la fin si l’événement a un retour, sous le libellé
+  « Fin ». La fin n’affiche que son heure quand elle tombe le même jour que le début. Les
+  dates sont mises en forme par le mécanisme d’i18n selon la langue, sans concaténation.
+- **Inchangés** : C2.2 (« titre, lieu, date, heure, décocher « Retour », « Créer » »), C2.3 et
+  C8.6 (ils parlent des données, qui gardent leurs noms), C5.2 à C5.5 (les onglets sont des
+  legs).
+- **Nouveaux** : D1.1 à D1.8 et D2.1 à D2.5, dans « Critères de la v4.3 ».
+
 ## Hors périmètre
+
+En v4.3 :
+
+- la disposition du formulaire de création, qui revient à la nouvelle page d’accueil (#232) ;
+- une fin sans retour, qui demanderait une nouvelle colonne ;
+- renommer `aller_at` / `retour_at` ;
+- les sections de l’espace organisateur ;
+- l’heure préremplie de « Proposer une voiture » à l’aller, qui reste le début ;
+- un format de plage sur une ligne (« de 07:30 à 18:00 »).
+
+Avant :
 
 La vue organisateur (epic #154), le lien perso et son QR code, la fraîcheur, supprimer une
 personne, les options à l’écran, changer de voiture en un geste, faire sortir un passager
@@ -1439,3 +1718,39 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
     focalisable. La liste garde `tabIndex={0}` tant qu’elle a le focus (C11.4).
   - Icônes nommées : `CircleCheck` pour une réussite, `Users` pour une information.
   - Republiée à la même URL.
+- v4.3 (2026-10-20) : « Début » et « Fin » dans l’en-tête, à la demande du propriétaire (capture
+  de `/e/{id}` en production).
+  - Partie de v4.2.3 : la copie locale, `origin/main` (`docs/design/event-board/`) et
+    l’artifact publié étaient identiques.
+  - Nouvelle section « Début et fin (v4.3) » :
+    - le même jour (la fin à son heure seule), deux jours, après minuit, sans retour ;
+    - l’en-tête de `/e/{id}/admin` ;
+    - l’anglais ;
+    - les champs de date du formulaire et leur erreur, mots seulement.
+  - Les deux en-têtes existants passent à « Début » / « Fin ». « L’ordre de l’écran », les
+    décisions, les critères à amender et le hors-périmètre sont mis à jour.
+  - Le README dit pourquoi « Fin » n’est pas « Retour » dans les données. Il pose la question
+    du formulaire au propriétaire, avec l’option (a) recommandée, et donne la phrase de #232.
+  - Rendu vérifié avec Chrome headless (`chrome`), à 1280 et 400 px :
+    - aucun débordement horizontal dans un téléphone ni sur la page ;
+    - chaque ligne de date de 360 px tient sur une ligne, en anglais compris.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.3 (suite) : revue de design : changements demandés. Un bloquant : la page et le README
+  présentaient encore la question du formulaire comme ouverte, alors que le propriétaire a
+  choisi l’option (a) le 20/10 (#235). De plus, les sections « Décisions » et « Critères de
+  l’epic à amender » du README n’avaient pas d’entrée v4.3. S’y ajoutent cinq suggestions.
+- v4.3.1 (2026-10-20) : le bloquant est corrigé, et les cinq suggestions sont appliquées, sans
+  en refuser aucune.
+  - La décision est enregistrée comme prise par le propriétaire le 20/10, avec un lien vers
+    #235, sur la page et dans le README.
+  - Le README a ses entrées v4.3-1 à v4.3-6 sous « Décisions », et sous « Critères de l’epic
+    à amender » la liste des critères de #3 amendés : R1, C1.2, C1.3, C1.4, C1.7, C1.8, C1.12,
+    C2.1 et C5.1, avec leur nouveau texte. C1.8 et C1.12 s’ajoutent à la liste de v4.3, car
+    ils disaient « date d’aller » et « un aller à 07:30 ».
+  - D1.8 compare les `top` à 4 px près, à cause de l’alignement sur la ligne de base.
+  - D2.3 renvoie à cette liste.
+  - Le « Tournoi de Rennes » commence à 07:30 dans toutes les maquettes, l’heure des fixtures.
+  - D2.2 a sa maquette « date de fin avant la date de début ».
+  - « Pour #232 » reprend la phrase déjà retenue dans #232.
+  - Rendu vérifié avec Chrome headless (`chrome`), à 1280 et 400 px : aucun débordement
+    horizontal. Republiée à la même URL.
