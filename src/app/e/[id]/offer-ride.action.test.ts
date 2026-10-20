@@ -71,6 +71,16 @@ describe("offerRide (action)", () => {
     });
   });
 
+  it("M7.5: noRetour carries the state, and nothing is written", async () => {
+    await inTransaction(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { retourAt: null });
+      const token = newToken();
+      const result = await offerRide(eventId, token, anOffer({ leg: "retour" }));
+      expect(result).toEqual({ ok: false, error: "noRetour", state: await readEventState(trx, eventId, token) });
+      expect(await countsOf(trx, eventId)).toEqual({ rides: 0, persons: 0 });
+    });
+  });
+
   // C11.6, as takeSeats: the page shows the state after a refusal, but keeps its form on a field error.
   it("a refusal carries the state read after the commit, a field error does not", async () => {
     await withCommittedEvent(async (db, eventId) => {

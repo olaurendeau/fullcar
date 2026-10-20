@@ -184,7 +184,37 @@
     "offline": "Action impossible, vérifiez la connexion",
     "failed": "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
     "rideGone": "Cette voiture n’est plus proposée",
-    "alreadyInCar": "{count, plural, one {Cette personne est déjà dans une voiture} other {Une de ces personnes est déjà dans une voiture}} : rien n’a changé."
+    "alreadyInCar": "{count, plural, one {Cette personne est déjà dans une voiture} other {Une de ces personnes est déjà dans une voiture}} : rien n’a changé.",
+    "failure": "{notDone} {why}",
+    "notDone": {
+      "seats": "{names} {count, plural, one {n’a pas pu monter} other {n’ont pas pu monter}} dans la voiture de {driver}.",
+      "leave": "{names} {count, plural, one {n’a pas pu sortir} other {n’ont pas pu sortir}} de la voiture de {driver}.",
+      "choice": "{person} : « {choice} » n’a pas été enregistré.",
+      "addPerson": "{firstName} n’a pas pu rejoindre vos inscriptions.",
+      "editPerson": "{fields, select, firstName {Le prénom de {firstName} n’a pas été enregistré.} phone {Le téléphone de {firstName} n’a pas été enregistré.} other {Le prénom et le téléphone de {firstName} n’ont pas été enregistrés.}}",
+      "offerRide": "{legs, select, both {Les voitures de {driver} pour l’aller et le retour n’ont pas été proposées.} aller {La voiture de {driver} pour l’aller n’a pas été proposée.} other {La voiture de {driver} pour le retour n’a pas été proposée.}}",
+      "removeRide": "{leg, select, aller {La voiture de {driver} pour l’aller n’a pas été retirée.} other {La voiture de {driver} pour le retour n’a pas été retirée.}}",
+      "editRide": "{leg, select, aller {Les changements de la voiture de {driver} pour l’aller n’ont pas été enregistrés.} other {Les changements de la voiture de {driver} pour le retour n’ont pas été enregistrés.}}",
+      "readDevice": "Vos inscriptions n’ont pas pu être chargées."
+    },
+    "why": {
+      "offline": "Vérifiez la connexion, puis réessayez.",
+      "failed": "Une erreur est survenue : réessayez dans un instant.",
+      "retryUndo": "{problem, select, offline {Vérifiez la connexion, puis utilisez de nouveau « Annuler ».} other {Une erreur est survenue : dans un instant, utilisez de nouveau « Annuler ».}}",
+      "seatTaken": "Cette place vient d’être prise.",
+      "notEnoughSeats": "{free, plural, =0 {Il ne reste plus de place.} one {Il ne reste plus qu’une place.} other {Il ne reste plus que # places.}}",
+      "alreadyInCar": "{count, plural, one {{names} est déjà dans une voiture.} other {Une de ces personnes est déjà dans une voiture.}}",
+      "passengerInCar": "{count, plural, one {{names} est déjà dans une voiture.} other {Parmi {names}, une personne au moins est déjà dans une voiture.}}",
+      "rideGone": "Cette voiture n’est plus proposée.",
+      "drives": "{firstName} conduit {leg, select, aller {à l’aller} other {au retour}}.",
+      "alreadyDriving": "{driver} conduit déjà une voiture.",
+      "passengersChanged": "Quelqu’un a pris ou libéré une place entre-temps : modifiez la voiture de nouveau.",
+      "forbidden": "Cet appareil ne peut pas faire ce changement : rechargez la page.",
+      "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé."
+    },
+    "names": {
+      "andOthers": "{first}, {second} et {others, plural, one {# autre} other {# autres}}"
+    }
   },
   "Sheet": {
     "title": "Qui monte dans la voiture de {driver} ?",

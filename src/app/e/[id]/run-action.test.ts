@@ -85,4 +85,18 @@ describe("actionRunner", () => {
     expect(await first).toEqual({ ok: true, value: { ok: true, state } });
     expect(sending.mock.calls).toEqual([[true], [false]]);
   });
+
+  // #222: only a send that goes covers what an earlier one says (`Send.leaves`).
+  it("says a run goes, offline too; never a second run dropped while the first is on its way", async () => {
+    const { told, run } = page();
+    let answer: (value: unknown) => void = () => {};
+    const [first, dropped, offline] = [vi.fn(), vi.fn(), vi.fn()];
+    const sent = run("cell", () => new Promise((resolve) => (answer = resolve)), undefined, first);
+    await run("cell", async () => ({ ok: true, state }), undefined, dropped);
+    answer({ ok: true, state });
+    await sent;
+    told.connected = false;
+    await run("cell", async () => ({ ok: true, state }), undefined, offline);
+    expect([first.mock.calls.length, dropped.mock.calls.length, offline.mock.calls.length]).toEqual([1, 0, 1]);
+  });
 });
