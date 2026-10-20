@@ -9,6 +9,7 @@ import { sheetCandidates, sheetSubmit } from "@/domain/tap";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./create-event-form";
+import { nameList, whyOf, wordsOf, type Why } from "./failure-words";
 import { focusCar, focusCarTitle, focusFirstShown } from "./focus";
 import { useSends, type FromSheet } from "./hidden-page";
 import type { BoardDevice } from "./leg-panel";
@@ -18,22 +19,51 @@ import { PersonForm, StorageNotice } from "./person-form";
 /** A refusal said in the sheet: the car gone (C6.8), too few seats left (C6.5), someone in a car already. */
 export type SeatRefusal = "rideGone" | "notEnoughSeats" | "alreadyInCar";
 
-/** What became of the seats asked. */
-export type SeatsTaken = { kind: "done" } | { kind: "refused"; refusal: SeatRefusal } | { kind: "problem"; problem: BarProblem };
+/**
+ * What became of the seats asked: in the sheet, a refusal or a problem in its own words (v4.1);
+ * in the bar, `why` after the persons who could not get in (C11.11).
+ */
+export type SeatsTaken =
+  | { kind: "done" }
+  | { kind: "refused"; refusal: SeatRefusal; why: Why }
+  | { kind: "problem"; problem: BarProblem; why: Why };
 
-/** `takeSeats`'s answer as the page says it. The refusals with no words of their own are `failed` (§ 2.6). */
-export function seatsTaken(answer: { ok: true } | { ok: false; error: string }): SeatsTaken {
+/** What the server answers `takeSeats`, an unknown event included. */
+type SeatsAnswer =
+  | { ok: true }
+  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" }
+  | { ok: false; error: "notEnoughSeats"; freeSeats: number };
+
+/**
+ * `takeSeats`'s answer as the page says it, for the persons sent, `names`. The sheet has no words
+ * of its own for `forbidden`, `eventNotFound` and `invalid`: `failed` there (§ 2.6).
+ */
+export function seatsTaken(sent: { ok: true; value: SeatsAnswer } | { ok: false; problem: BarProblem }, names: readonly string[]): SeatsTaken {
+  if (!sent.ok) return { kind: "problem", problem: sent.problem, why: whyOf(sent.problem) };
+  const answer = sent.value;
   if (answer.ok) return { kind: "done" };
-  if (answer.error === "rideGone" || answer.error === "alreadyInCar") return { kind: "refused", refusal: answer.error };
-  if (answer.error === "notEnoughSeats" || answer.error === "seatTaken") return { kind: "refused", refusal: "notEnoughSeats" };
-  return { kind: "problem", problem: "failed" };
+  switch (answer.error) {
+    case "rideGone":
+      return { kind: "refused", refusal: "rideGone", why: whyOf("rideGone") };
+    case "alreadyInCar":
+      return { kind: "refused", refusal: "alreadyInCar", why: { kind: "alreadyInCar", names } };
+    case "seatTaken":
+      return { kind: "refused", refusal: "notEnoughSeats", why: whyOf("seatTaken") };
+    case "notEnoughSeats":
+      return { kind: "refused", refusal: "notEnoughSeats", why: { kind: "notEnoughSeats", free: answer.freeSeats } };
+    default:
+      return { kind: "problem", problem: "failed", why: whyOf(answer.error) };
+  }
 }
 
 /** The sheet that sends: whether it still shows what comes back, and what the bar says otherwise. */
 export interface SendingSheet extends FromSheet {
   /** True until the answer: « Placer » is inactive meanwhile. */
   sending: (sending: boolean) => void;
-  said: (taken: SeatsTaken) => string;
+  /** Who was sent, into whose car, as the sheet showed them when it sent: what a failure names. */
+  seats: { names: string[]; driver: string };
+  /** What the bar says of a success. */
+  placed: string;
 }
 
 /** Takes seats in a car for persons of the device (R6); `undefined` when seats are already on their way. */
@@ -100,7 +130,7 @@ function SeatSheet({
   hasRetour: boolean;
 }) {
   const t = useTranslations();
-  const format = useFormatter();
+  const words = wordsOf(t, useFormatter());
   const ids = useId();
   const boxId = (personId: string) => `${ids}-${personId}`;
   const candidates = sheetCandidates(persons);
@@ -132,23 +162,23 @@ function SeatSheet({
     focusNext.current = null;
   });
 
-  // What is said of an outcome, in the sheet or in the bar: the same words.
-  const said = (taken: SeatsTaken, names: string[]): string => {
+  // What the sheet says of a refusal or a problem: the bar names who could not get in instead.
+  const said = (taken: Exclude<SeatsTaken, { kind: "done" }>, count: number): string => {
     if (taken.kind === "problem") return t(`Actions.${taken.problem}`);
-    if (taken.kind === "refused") {
-      const { refusal } = taken;
-      return refusal === "notEnoughSeats" ? t("Sheet.notEnoughSeats") : t(`Actions.${refusal}`, { count: names.length });
-    }
-    return names.length === 1 ? t("Seat.placed", { firstName: names[0], driver }) : t("Sheet.placed", { names: format.list(names), driver });
+    const { refusal } = taken;
+    return refusal === "notEnoughSeats" ? t("Sheet.notEnoughSeats") : t(`Actions.${refusal}`, { count });
   };
 
   async function place() {
     if (sending || submit.kind !== "ready") return;
+    // In the order of « Vos inscriptions », as shown now.
     const names = chosen.map((person) => person.firstName);
     setRefused(null);
     const personIds = chosen.map((person) => person.id);
     const sheet = sends(personIds);
-    const taken = await takeSeats({ rideId, leg, personIds }, { ...sheet, sending: setSending, said: (outcome) => said(outcome, names) });
+    const placed =
+      names.length === 1 ? t("Seat.placed", { firstName: names[0], driver }) : t("Sheet.placed", { names: nameList(words, names), driver });
+    const taken = await takeSeats({ rideId, leg, personIds }, { ...sheet, sending: setSending, seats: { names, driver }, placed });
     // Not the sheet opened since: what came back is the bar's.
     if (taken === undefined || !sheet.inSheet()) return;
     if (taken.kind === "done") {
@@ -156,7 +186,7 @@ function SeatSheet({
       onOpenChange(false);
       return;
     }
-    setRefused(said(taken, names));
+    setRefused(said(taken, names.length));
     if (taken.kind === "refused" && taken.refusal === "rideGone") {
       focusNext.current = () => body.current?.closest('[role="dialog"]')?.querySelector<HTMLElement>("[data-slot=sheet-footer] button");
     }

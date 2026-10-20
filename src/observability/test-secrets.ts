@@ -40,6 +40,9 @@ export type Secrets = ReturnType<typeof drawSecrets>;
  */
 export const lowercaseBytes = (size: number) => Uint8Array.from({ length: size }, (_, at) => 32 + ((at * 7) % 25));
 
+/** Bytes whose id has a digit and uppercase letters (`7LZn2FVh`). */
+export const mixedBytes = (size: number) => Uint8Array.from({ length: size }, (_, at) => (at * 13 + 5) % 57);
+
 /** The secrets of an event, from the application's builders; from `random` for all three if given. */
 export function drawSecrets(random?: RandomBytes) {
   const id = generatePublicId(random);

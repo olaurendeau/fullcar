@@ -53,6 +53,35 @@ export async function watchAlerts(page: Page) {
   return () => page.evaluate(() => (window as unknown as { seenAlerts: object }).seenAlerts);
 }
 
+/** A change of one of the bar's two live regions: which, the text it holds since, and whether a sheet hid it then (Radix's `aria-hidden`). */
+export type RegionWrite = { region: "alert" | "status"; text: string; hidden: boolean };
+
+/**
+ * Records, from now on, every change of the bar's two live regions in the order it came, each
+ * watched by a `MutationObserver` of its own, and every text the bar's lines held (#222).
+ */
+export async function recordBar(page: Page) {
+  await page.evaluate(() => {
+    const record = { writes: [] as RegionWrite[], lines: [] as string[] };
+    (window as unknown as { barRecord: typeof record }).barRecord = record;
+    const alert = document.querySelector('[role="status"] + [role="alert"]')!;
+    const regions = { alert, status: alert.previousElementSibling! };
+    const watch = (element: Element, then: () => void) =>
+      new MutationObserver(then).observe(element, { childList: true, subtree: true, characterData: true });
+    for (const [region, element] of Object.entries(regions) as ["alert" | "status", Element][]) {
+      watch(element, () => record.writes.push({ region, text: element.textContent ?? "", hidden: !!element.closest('[aria-hidden="true"]') }));
+    }
+    watch(alert.parentElement!, () => {
+      for (const line of alert.parentElement!.querySelectorAll('[role="group"] > p')) record.lines.push(line.textContent ?? "");
+    });
+  });
+  return () => page.evaluate(() => (window as unknown as { barRecord: { writes: RegionWrite[]; lines: string[] } }).barRecord);
+}
+
+/** The texts written in `region`, empty ones left out. */
+export const said = (writes: RegionWrite[], region: "alert" | "status") =>
+  writes.filter((write) => write.region === region && write.text).map((write) => write.text);
+
 /**
  * Holds the first server action whose body carries `text` until `answer`, then fails it (500) or
  * lets it through. Any other request goes on to the routes set before, so that two can be held.

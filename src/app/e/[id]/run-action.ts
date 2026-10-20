@@ -33,7 +33,8 @@ export interface ActionPage {
 /**
  * The page's `runAction` (#87). The control `key` is `sending` until the answer, and a second
  * run of it meanwhile sends nothing. An answer's state replaces the page's. What came of the
- * action, the page says, in the bar or in the sheet that sent it (#216): never this.
+ * action, the page says, in the bar or in the sheet that sent it (#216): never this. `leaves`
+ * is told once the run goes, offline too, and never when it is dropped (`Send.leaves`, #222).
  */
 export function actionRunner(page: ActionPage, online?: () => boolean) {
   const inFlight = new Set<string>();
@@ -42,9 +43,11 @@ export function actionRunner(page: ActionPage, online?: () => boolean) {
     key: string,
     action: () => Promise<T>,
     sending?: (sending: boolean) => void,
+    leaves?: () => void,
   ): Promise<Sent<T> | undefined> {
     if (inFlight.has(key)) return undefined;
     inFlight.add(key);
+    leaves?.();
     sending?.(true);
     try {
       const sent = await sendAction(action, online);
