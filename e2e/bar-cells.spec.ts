@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, said, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, loseFirst, messages, newToken, recordBar, said, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -47,20 +47,6 @@ async function sendThenClose(page: Page, firstName: string, leg: "Aller" | "Reto
   await send(page, firstName, leg, button);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-}
-
-/** Holds the first action about `personId` until `lose()`, then aborts it: offline by then, the page says so. */
-async function loseFirst(page: Page, personId: string) {
-  let lose = () => {};
-  const lost = new Promise<void>((resolve) => (lose = resolve));
-  let held = false;
-  await page.route("**/e/**", async (route) => {
-    if (held || !route.request().postData()?.includes(personId)) return route.fallback();
-    held = true;
-    await lost;
-    return route.abort();
-  });
-  return lose;
 }
 
 /** Meanwhile, `who` offers a car on `leg`: she drives there, and has no Placement left to change. */

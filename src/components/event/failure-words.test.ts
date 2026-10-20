@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { createFormatter, createTranslator, type Messages } from "next-intl";
 import { describe, expect, it } from "vitest";
 import type { DeviceState } from "@/domain/board";
-import type { CellAction } from "@/domain/device-matrix";
+import { cellActions, type CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
-import { cellNotDone, cellWhy, failureText, nameList, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
+import { cellNotDone, cellWhy, editedFields, failureText, nameList, personWhy, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
 
 // C11.11: every failure in the bar, word for word as « Chaque échec, mot pour mot » says it
 // (docs/design/event-board/README.md, v4.2), in French and in English.
@@ -172,9 +172,44 @@ describe("cellNotDone and cellWhy: a cell's failure names the person, the leg an
       choice: "notConcerned",
     });
   });
+
+  // cellNotDone names the car for « Sortir de la voiture »: only a passenger has one to leave (#290's review).
+  it("« Sortir de la voiture » is offered to a passenger alone", () => {
+    const states: DeviceState[] = [
+      { kind: "withoutCar" },
+      { kind: "notConcerned" },
+      { kind: "driver", rideId: "tom" },
+      { kind: "passenger", rideId: "claire", driver: { id: "claire", firstName: "Claire" } },
+    ];
+    expect(states.filter((state) => cellActions(state).includes("leaveCar")).map((state) => state.kind)).toEqual(["passenger"]);
+  });
 });
 
-const FIVE =["Tom", "Léa", "Hugo", "Nina", "Zoé"];
+// #225: « Modifier » names the fields it sent; a refusal of a person's form says its reason.
+describe("editedFields and personWhy: a person's form (C11.11)", () => {
+  it("names the one field sent, or both", () => {
+    expect(editedFields(["firstName"])).toBe("firstName");
+    expect(editedFields(["phone"])).toBe("phone");
+    expect(editedFields(["firstName", "phone"])).toBe("both");
+    // Nothing changed: the form as it showed, both fields.
+    expect(editedFields([])).toBe("both");
+  });
+
+  it("gives `drives`, which only a cell's action meets, the generic reason, and the others as `whyOf` does", () => {
+    expect(personWhy("drives")).toEqual({ kind: "failed" });
+    for (const error of ["forbidden", "eventNotFound", "invalid", "idTaken", "noRetour", "offline", "failed"] as const) {
+      expect(personWhy(error)).toEqual(whyOf(error));
+    }
+  });
+
+  it("« Modifier » of the first name alone, word for word", () => {
+    const notDone: NotDone = { kind: "editPerson", firstName: "Tom", fields: editedFields(["firstName"]) };
+    expect(failureText(words("fr"), notDone, personWhy("offline"))).toBe("Le prénom de Tom n’a pas été enregistré. Vérifiez la connexion, puis réessayez.");
+    expect(failureText(words("en"), notDone, personWhy("offline"))).toBe("Tom’s first name was not saved. Check your connection, then try again.");
+  });
+});
+
+const FIVE = ["Tom", "Léa", "Hugo", "Nina", "Zoé"];
 
 // « Plusieurs prénoms »: up to three, `format.list`; beyond, the first two and « et N autres ». In
 // English, `format.list` puts a comma before « and » (Intl.ListFormat, `en`).

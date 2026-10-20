@@ -11,7 +11,8 @@ leaveNoToken();
 
 // A failure of the seat sheet names who could not get in (C11.11, #223).
 const FAILED = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
-const OFFLINE = "Action impossible, vérifiez la connexion";
+/** « Réessayer » offline names what was not loaded (C11.11, #225). */
+const OFFLINE = "Vos inscriptions n’ont pas pu être chargées. Vérifiez la connexion, puis réessayez.";
 const HUGO = "Hugo est dans la voiture de Marc";
 
 /** The device holds Tom, Léa and Hugo. Aller: Sophie and Marc drive nobody; Tom and Léa are without a car. */

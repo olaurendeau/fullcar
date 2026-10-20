@@ -10,6 +10,8 @@ import { PERSON_FIELDS, validatePerson, type PersonErrors, type PersonField } fr
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./create-event-form";
+import { editedFields, type NotDone } from "./failure-words";
+import { focusAddPerson } from "./focus";
 import { useSends, type FromSheet } from "./hidden-page";
 import { personErrorMessage } from "./person-error";
 
@@ -24,6 +26,10 @@ export interface PersonDraft {
 /** A registration as the form sends it. */
 export interface Registering extends FromSheet {
   person: PersonDraft;
+  /** What the bar says was not done: the first name sent, its spaces trimmed (C11.11). */
+  notDone: NotDone;
+  /** Where the focus goes from the bar: the leg's « Ajouter une personne », or the car's title from a seat's sheet. */
+  landmark: () => boolean;
   /** The form's creation id, drawn at its first send and kept until one succeeds. */
   creationId: () => string;
   /** True until the answer: « Valider » is inactive meanwhile (C1.9). */
@@ -47,6 +53,8 @@ export type AddPerson = (registering: Registering) => Promise<Registration | und
 export interface Updating extends FromSheet {
   personId: string;
   person: Partial<Record<PersonField, string>>;
+  /** What the bar says was not done: the fields sent, and the first name as it showed (C11.11). */
+  notDone: NotDone;
   /** True until the answer: « Valider » is inactive meanwhile (C1.9). */
   sending: (sending: boolean) => void;
 }
@@ -56,7 +64,7 @@ export type UpdatePerson = (updating: Updating) => Promise<Registration | undefi
 
 /** What the form does: register a person on a leg, or change one of the device's persons. */
 export type PersonFormMode =
-  | { kind: "add"; leg: Leg; hasRetour: boolean; addPerson: AddPerson }
+  | { kind: "add"; leg: Leg; hasRetour: boolean; addPerson: AddPerson; landmark: () => boolean }
   | { kind: "edit"; person: { id: string; firstName: string; phone: string | null }; updatePerson: UpdatePerson };
 
 /** Before « Valider », when this device cannot keep what it registers (C1.14, D5). */
@@ -105,7 +113,7 @@ export function AddPersonButton({
         toggle(next);
       }}
       trigger={
-        <Button variant="outline" disabled={disabled} className="h-auto min-h-11 whitespace-normal">
+        <Button variant="outline" disabled={disabled} data-add-person={leg} className="h-auto min-h-11 whitespace-normal">
           <UserPlus aria-hidden />
           {t("Board.addPerson")}
         </Button>
@@ -115,7 +123,7 @@ export function AddPersonButton({
     >
       {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
       <PersonForm
-        mode={{ kind: "add", leg, hasRetour, addPerson }}
+        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: () => focusAddPerson(leg) }}
         open={() => isOpen.current}
         onDone={() => toggle(false)}
       />
@@ -192,12 +200,16 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
             person: { ...values, bothLegs: hasRetour && bothLegs, leg },
             creationId: () => (creationId.current ??= newCreationId()),
             sending: setSending,
+            notDone: { kind: "addPerson", firstName: checked.person.firstName },
+            landmark: mode.landmark,
             ...sheet,
           })
         : await mode.updatePerson({
             personId: mode.person.id,
             person: Object.fromEntries(changed.map((name) => [name, values[name]])),
             sending: setSending,
+            // The first name before the change: nothing changed (« Ce que dit un échec »).
+            notDone: { kind: "editPerson", firstName: mode.person.firstName, fields: editedFields(changed) },
             ...sheet,
           });
     if (answer?.kind === "done") {
