@@ -251,6 +251,13 @@ describe("scrubEvent", () => {
     const browser = sentFrames(browserStackParser, "Error: x", `${lowercase.id}@${ORIGIN}/_next/static/chunks/page.js`, `at ${lowercase.id} (since 10:30)`);
     expect(node.length * browser.length).toBeGreaterThan(0);
     expect(leakedKinds(JSON.stringify([node, browser]), lowercase)).toEqual([]);
+    // Next to a `$`, which a function's name may hold and a word may not: in a frame of code too, with a digit.
+    for (const fixed of [lowercase, drawSecrets(mixedBytes)]) {
+      const glued = [sentFrames(nodeStackParser, "Error: x", `no event at $${fixed.id} (deleted)`, `failed at seat.$${fixed.id} (deleted)`)];
+      glued.push(sentFrames(browserStackParser, "Error: x", `    at $${fixed.id} (since 10:30)`, `$${fixed.id}@/_next/static/chunks/a.js`));
+      if (fixed !== lowercase) glued.push(sentFrames(nodeStackParser, "Error: x", `    at $${fixed.id} (app:///_next/static/a.js:1:2)`));
+      expect(leakedKinds(JSON.stringify(glued), fixed)).toEqual([]);
+    }
   });
 
   it("keeps the function names of real frames", () => {
