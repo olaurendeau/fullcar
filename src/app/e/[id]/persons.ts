@@ -6,12 +6,12 @@ import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
 import { devicePersonIds } from "@/domain/device";
-import { eventLegs, initialLegs, type Leg } from "@/domain/leg";
+import { initialLegs, LEGS, type Leg } from "@/domain/leg";
 import { validatePerson, validatePersonChange, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
 import { hashToken, tokenMatches } from "@/domain/token-hash";
-import { findPublicEvent } from "./event";
 import { readEventState, type EventState } from "./event-state";
+import { lockLegs } from "./retour";
 
 /*
  * Registering and changing a person (epic #66, R1 to R3, R7). Every input is `unknown`: a
@@ -28,7 +28,9 @@ export type PersonRefusal =
   /** The person drives on that leg: she has no Placement there to change. */
   | "drives"
   /** Something only a forged request sends: an id, a leg or a state that is not one. */
-  | "invalid";
+  | "invalid"
+  /** The write is on the retour, and the event no longer has one (decision 40). */
+  | "noRetour";
 
 type Refused = Exclude<PersonRefusal, "eventNotFound">;
 
@@ -42,6 +44,7 @@ type Written = { ok: true } | { ok: false; error: "eventNotFound" } | { ok: fals
 
 const FORBIDDEN = { ok: false, error: "forbidden" } as const;
 const INVALID = { ok: false, error: "invalid" } as const;
+const NO_RETOUR = { ok: false, error: "noRetour" } as const;
 
 /** What `setPersonLeg` may make of a person on a leg: the two states she declares herself. */
 const DECLARED_KINDS = ["withoutCar", "notConcerned"] as const;
@@ -51,10 +54,11 @@ function fieldsOf(input: unknown): Record<string, unknown> {
 }
 
 /**
- * Commits `write`, then reads the state as the device sees it. The read comes after the
- * commit, on its own snapshot (`readEventState` refuses a READ COMMITTED transaction), so it
- * shows this write and whatever others committed before it (C11.6). Given a transaction
- * already (a test), both run in it.
+ * Commits `write`, then reads the state as the device sees it. The write starts with the
+ * Event's lock (lock order: Event, then Ride, then Person) and is given the event's legs.
+ * The read comes after the commit, on its own snapshot (`readEventState` refuses a READ
+ * COMMITTED transaction), so it shows this write and whatever others committed before it
+ * (C11.6). Given a transaction already (a test), both run in it.
  */
 async function writeThenRead(
   db: Kysely<Database>,
@@ -63,9 +67,9 @@ async function writeThenRead(
   write: (trx: Kysely<Database>, legs: Leg[]) => Promise<Written>,
 ): Promise<PersonOutcome> {
   const written = await atomically(db, async (trx): Promise<Written> => {
-    const event = await findPublicEvent(trx, eventId);
-    if (event === undefined) return { ok: false, error: "eventNotFound" };
-    return write(trx, eventLegs(event.retour_at));
+    const locked = await lockLegs(trx, eventId, []);
+    if (!locked.ok) return { ok: false, error: "eventNotFound" };
+    return write(trx, locked.legs);
   });
   if (!written.ok && written.error === "eventNotFound") return written;
   const state = await readEventState(db, eventId, token);
@@ -82,7 +86,9 @@ async function isDevicePerson(trx: Kysely<Database>, eventId: string, token: unk
 
 /**
  * Registers a person (R1, R2): first name, number, « Aller et retour » and the tab's leg;
- * without a car on the legs of `initialLegs`, not concerned on the other.
+ * without a car on the legs of `initialLegs`, not concerned on the other. Either of them on
+ * a retour the event no longer has is refused by `noRetour` (M7.8): the page, which still
+ * showed it, keeps its form for the aller alone.
  *
  * A well-formed token nobody holds yet is accepted (C12.3): it is the device's first
  * registration. The id is the creation id drawn by the browser: sent again with the same
@@ -100,14 +106,16 @@ export async function addPerson(
   if (!validation.ok) return validation;
   const { id } = fields;
   return writeThenRead(db, eventId, token, async (trx, legs) => {
-    const leg = legs.find((known) => known === fields.leg);
+    const leg = LEGS.find((known) => known === fields.leg);
     if (!isCreationId(id) || leg === undefined) return INVALID;
+    const bothLegs = fields.bothLegs === true;
+    if (!legs.includes(leg) || (bothLegs && !legs.includes("retour"))) return NO_RETOUR;
     if (!isPersonalToken(token)) return FORBIDDEN;
     const stored = await insertPerson(trx, { id, eventId, ...validation.person, tokenHash: hashToken(token) });
     if (stored === undefined || !tokenMatches(token, stored.tokenHash)) return FORBIDDEN;
     // Sent again, or twice at once (the second insert waits for the first): nothing more to write.
     if (!stored.created) return { ok: true };
-    const withoutCar = initialLegs({ bothLegs: fields.bothLegs === true, leg, hasRetour: legs.includes("retour") });
+    const withoutCar = initialLegs({ bothLegs, leg, hasRetour: legs.includes("retour") });
     for (const placed of withoutCar) {
       await setPlacement(trx, { personId: id, eventId, leg: placed, rideId: null });
     }
@@ -141,7 +149,7 @@ export async function updatePerson(
  * Where one of the device's persons stands on one leg, the other leg untouched (C3.5):
  * `withoutCar` covers « Je cherche une place » and « Sortir de la voiture », `notConcerned`
  * « Pas concernée ». Done twice, the second time changes nothing (C7.4). Refused for the
- * driver of a Ride on that leg (C12.8).
+ * driver of a Ride on that leg (C12.8), and on a retour the event no longer has (M7.3).
  */
 export async function setPersonLeg(
   db: Kysely<Database>,
@@ -153,8 +161,9 @@ export async function setPersonLeg(
   const kind = DECLARED_KINDS.find((known) => known === fields.kind);
   const { personId } = fields;
   return writeThenRead(db, eventId, token, async (trx, legs) => {
-    const leg = legs.find((known) => known === fields.leg);
+    const leg = LEGS.find((known) => known === fields.leg);
     if (kind === undefined || leg === undefined || !isCreationId(personId)) return INVALID;
+    if (!legs.includes(leg)) return NO_RETOUR;
     if (!(await isDevicePerson(trx, eventId, token, personId))) return FORBIDDEN;
     const placement = { personId, eventId, leg };
     if ((await findDrivenRide(trx, { driverId: personId, eventId, leg })) !== undefined) {
