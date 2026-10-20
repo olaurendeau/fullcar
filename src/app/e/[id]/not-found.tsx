@@ -22,7 +22,7 @@ export default function EventNotFound() {
         <p className="text-muted-foreground">{t("deleted")}</p>
       </div>
       <Button asChild className="mt-6 h-11">
-        <Link href="/">{t("create")}</Link>
+        <Link href="/nouveau">{t("create")}</Link>
       </Button>
       <ContactFooter />
     </main>

@@ -5,7 +5,24 @@ import type { Breadcrumb, ErrorEvent, NodeOptions, StackFrame } from "@sentry/ne
  * (docs/agents/architecture.md, "Jetons"; #231). Each hook rebuilds what it sends from an
  * allowlist instead of deleting what it knows of: a field the SDK adds tomorrow stays home.
  * Pure functions: only types come from the SDK, nothing of it runs here.
+ *
+ * The invariant: a value is sent as it is only if the whole of it matches a strict set of
+ * characters, those such a value really has, and never whitespace (`NAME`, `HEX`, `safePath`,
+ * `FUNCTION_NAME`, a fixed list). Anything else goes through `scrubText`. A prefix or a shape
+ * proves nothing: the SDK's stack parsers make frames of the lines of a message, and the rest
+ * of such a line lands in a file, a scheme or a function's name.
  */
+
+/** Names, versions and identifiers the SDK and the build write: `sentry.javascript.node`, `11.8.0`, `errors[0]`, `npm:@scope/name`. */
+const NAME = /^[\w.$:@/+[\]-]+$/;
+const HEX = /^[\da-f]+$/i;
+const name = (value: string) => (NAME.test(value) ? value : scrubText(value));
+const hex = (value: string) => (HEX.test(value) ? value : scrubText(value));
+
+/** A path of the build: its characters only, and no run a token or a mixed-case id could be. */
+const PATH = /^[\w.\-/[\]()@+%~]+$/;
+const SECRET_IN_PATH = /(?<![\w-])(?=[\w-]*[A-Z])(?:[\w-]{22,}|[2-9A-HJ-NP-Za-km-z]{8})(?![\w-])/;
+const safePath = (path: string) => PATH.test(path) && !SECRET_IN_PATH.test(path);
 
 /** A span as `beforeSendSpan` receives it, with streamed spans (the default in v11). */
 export type StreamedSpan = Parameters<NonNullable<NodeOptions["beforeSendSpan"]>>[0];
@@ -31,7 +48,7 @@ const URL_PARTS = /^([a-z][a-z\d+.-]*:)?(?:\/\/([^/?#]*))?([^?#]*)/i;
 export function scrubUrl(url: string): string {
   const [, scheme = "", authority, path = ""] = URL_PARTS.exec(url) ?? [];
   const origin = `${scrubText(scheme)}${authority === undefined ? "" : `//${scrubText(authority.slice(authority.lastIndexOf("@") + 1))}`}`;
-  if (path.startsWith(STATIC_PATH)) return `${origin}${path}`;
+  if (path.startsWith(STATIC_PATH) && safePath(path)) return `${origin}${path}`;
   const segments = path.split("/").map((segment) => (segment === "" || LITERAL_SEGMENTS.has(segment) ? segment : ID));
   return `${origin}${segments.join("/")}`;
 }
@@ -51,7 +68,8 @@ function scrubLocation(location: string): string {
 
 function buildFile(location: unknown): string | undefined {
   const file = typeof location === "string" ? location.split(/[?#]/, 1)[0] : "";
-  return !/^https?:/i.test(file) && !/\s/.test(file) && BUILD_FILE.test(file) ? file : undefined;
+  const path = file.replace(/^(?:node:|[a-z][\w+.-]*:\/\/)/i, "");
+  return !/^https?:/i.test(file) && safePath(path) && BUILD_FILE.test(file) ? file : undefined;
 }
 
 /*
@@ -136,14 +154,14 @@ export function scrubEvent(event: ErrorEvent): ErrorEvent {
   const dsc = record(record(event.sdkProcessingMetadata).dynamicSamplingContext);
   return compact({
     type: undefined,
-    event_id: stringOr(event.event_id),
+    event_id: stringOr(event.event_id, hex),
     timestamp: finite(event.timestamp),
     level: typeof event.level === "string" && LEVELS.has(event.level) ? event.level : undefined,
-    platform: stringOr(event.platform),
-    release: stringOr(event.release),
-    dist: stringOr(event.dist),
-    environment: stringOr(event.environment),
-    sdk: event.sdk,
+    platform: stringOr(event.platform, name),
+    release: stringOr(event.release, name),
+    dist: stringOr(event.dist, name),
+    environment: stringOr(event.environment, name),
+    sdk: event.sdk && scrubSdk(record(event.sdk)),
     transaction: stringOr(event.transaction, scrubText),
     message: stringOr(event.message, scrubText),
     logentry: event.logentry && compact({ message: stringOr(event.logentry.message, scrubText) }),
@@ -152,13 +170,23 @@ export function scrubEvent(event: ErrorEvent): ErrorEvent {
     breadcrumbs: event.breadcrumbs && list(event.breadcrumbs).map(scrubBreadcrumb).filter((b) => b !== null),
     contexts: event.contexts && scrubContexts(record(event.contexts)),
     debug_meta: event.debug_meta && {
-      images: list(event.debug_meta.images).map((image) => {
-        const { code_file } = record(image);
-        return { ...image, ...(typeof code_file === "string" && { code_file: scrubLocation(code_file) }) };
-      }) as NonNullable<ErrorEvent["debug_meta"]>["images"],
+      images: list(event.debug_meta.images).map((image) =>
+        pick(record(image), { type: name, debug_id: name, code_file: scrubLocation }),
+      ) as unknown as NonNullable<ErrorEvent["debug_meta"]>["images"],
     },
     sdkProcessingMetadata: Object.keys(dsc).length ? { dynamicSamplingContext: scrubDsc(dsc) } : undefined,
   });
+}
+
+/** The SDK's name, version, integrations and packages, each a name. */
+function scrubSdk(sdk: Record<string, unknown>): ErrorEvent["sdk"] {
+  const names = (value: unknown) => (Array.isArray(value) ? value.filter((v) => typeof v === "string").map(name) : undefined);
+  return compact({
+    ...pick(sdk, { name, version: name }),
+    integrations: names(sdk.integrations),
+    packages: Array.isArray(sdk.packages) ? sdk.packages.map((p) => pick(record(p), { name, version: name })) : undefined,
+    settings: sdk.settings && pick(record(sdk.settings), { infer_ip: name }),
+  }) as ErrorEvent["sdk"];
 }
 
 type Exception = NonNullable<NonNullable<ErrorEvent["exception"]>["values"]>[number];
@@ -166,14 +194,14 @@ type Exception = NonNullable<NonNullable<ErrorEvent["exception"]>["values"]>[num
 function scrubException(exception: Exception): Exception {
   const mechanism = record(exception.mechanism);
   return compact({
-    type: stringOr(exception.type),
+    type: stringOr(exception.type, name),
     value: stringOr(exception.value, scrubText),
     mechanism: exception.mechanism && {
-      type: stringOr(mechanism.type) ?? "generic",
+      type: stringOr(mechanism.type, name) ?? "generic",
       ...compact({
         handled: bool(mechanism.handled),
         synthetic: bool(mechanism.synthetic),
-        source: stringOr(mechanism.source),
+        source: stringOr(mechanism.source, name),
         exception_id: finite(mechanism.exception_id),
         parent_id: finite(mechanism.parent_id),
         is_exception_group: bool(mechanism.is_exception_group),
@@ -210,15 +238,19 @@ function inCode(frame: StackFrame): boolean {
   return finite(frame.lineno) !== undefined && buildFile(frame.filename ?? frame.abs_path) !== undefined;
 }
 
-/** Where the code ran, and nothing it held: no `vars`, no lines of source. */
+/**
+ * Where the code ran, and nothing it held: no `vars`, no lines of source. Line and column
+ * only in a frame of code: from a line of a message (`tel:0647812953:1`), they are its digits.
+ */
 function scrubFrame(frame: StackFrame): StackFrame {
+  const code = inCode(frame);
   return compact({
     filename: stringOr(frame.filename, scrubLocation),
     abs_path: stringOr(frame.abs_path, scrubLocation),
     module: stringOr(frame.module, scrubLocation),
-    function: stringOr(frame.function, (name) => scrubFunctionName(name, inCode(frame))),
-    lineno: finite(frame.lineno),
-    colno: finite(frame.colno),
+    function: stringOr(frame.function, (fn) => scrubFunctionName(fn, code)),
+    lineno: code ? finite(frame.lineno) : undefined,
+    colno: code ? finite(frame.colno) : undefined,
     in_app: bool(frame.in_app),
   });
 }
@@ -229,18 +261,22 @@ function scrubRequest(request: NonNullable<ErrorEvent["request"]>, browser: bool
   return compact({
     method: method(request.method),
     url: stringOr(request.url, scrubUrl),
-    headers: browser && typeof userAgent === "string" ? { "User-Agent": userAgent } : undefined,
+    headers: browser && typeof userAgent === "string" ? { "User-Agent": scrubText(userAgent) } : undefined,
   });
 }
 
-/** System contexts as they are; `trace` without its `data`, `nextjs` with its paths scrubbed. */
+/** System contexts, each value a name or scrubbed; `trace` without its `data`, `nextjs` with its paths scrubbed. */
 const SYSTEM_CONTEXTS = ["app", "cloud_resource", "device", "os", "runtime"];
 
 function scrubContexts(contexts: Record<string, unknown>): ErrorEvent["contexts"] {
   const kept: Record<string, Record<string, unknown>> = {};
-  for (const name of SYSTEM_CONTEXTS) if (contexts[name]) kept[name] = record(contexts[name]);
+  for (const context of SYSTEM_CONTEXTS) {
+    if (!contexts[context]) continue;
+    const values = Object.entries(record(contexts[context])).map(([key, v]) => [key, typeof v === "string" ? name(v) : finite(v) ?? bool(v)]);
+    kept[context] = compact(Object.fromEntries(values));
+  }
   const { trace, nextjs, response } = contexts as Record<string, Record<string, unknown> | undefined>;
-  const ids = { trace_id: asIs, span_id: asIs, parent_span_id: asIs };
+  const ids = { trace_id: hex, span_id: hex, parent_span_id: hex };
   if (trace) kept.trace = pick(trace, { ...ids, op: scrubText, status: scrubText, origin: scrubText });
   if (nextjs) kept.nextjs = pick(nextjs, { request_path: scrubUrl, router_kind: scrubText, router_path: scrubUrl, route_type: scrubText });
   if (response) kept.response = compact({ status_code: finite(response.status_code) });
@@ -252,8 +288,8 @@ function scrubContexts(contexts: Record<string, unknown>): ErrorEvent["contexts"
  * `transaction` may be the raw URL of the page.
  */
 export function scrubDsc(dsc: Record<string, unknown>): Record<string, unknown> {
-  const kept = { trace_id: asIs, public_key: asIs, sample_rate: asIs, release: asIs, environment: asIs, sampled: asIs };
-  return pick(dsc, { ...kept, sample_rand: asIs, org_id: asIs, transaction: scrubText });
+  const kept = { trace_id: hex, public_key: hex, sample_rate: name, release: name, environment: name, sampled: name };
+  return pick(dsc, { ...kept, sample_rand: name, org_id: name, transaction: scrubText });
 }
 
 /**
@@ -289,7 +325,7 @@ function scrubAttribute(key: string, value: unknown): unknown {
     Array.isArray(value) ? value.map((v) => (typeof v === "string" ? each(v) : v)) : typeof value === "string" ? each(value) : value;
   if (key.startsWith("sentry.")) {
     if (DROPPED_SENTRY.test(key)) return undefined;
-    return VERBATIM_ATTRIBUTES.has(key) ? value : text(scrubText);
+    return text(VERBATIM_ATTRIBUTES.has(key) ? name : scrubText);
   }
   if (METHOD_ATTRIBUTES.has(key)) return method(value);
   if (STATUS_ATTRIBUTES.has(key)) return finite(value);
@@ -321,9 +357,9 @@ export function scrubSpan(span: StreamedSpan): StreamedSpan {
     // A name that cannot be read is sent as `[redacted]`.
   }
   return compact({
-    trace_id: span.trace_id,
-    parent_span_id: span.parent_span_id,
-    span_id: span.span_id,
+    trace_id: stringOr(span.trace_id, hex),
+    parent_span_id: stringOr(span.parent_span_id, hex),
+    span_id: stringOr(span.span_id, hex),
     name,
     start_timestamp: span.start_timestamp,
     end_timestamp: span.end_timestamp,
@@ -353,9 +389,7 @@ function method(value: unknown): string | undefined {
   return typeof value === "string" && METHOD.test(value) ? value : undefined;
 }
 
-const asIs = (s: string) => s;
-
-function stringOr(value: unknown, scrub: (s: string) => string = asIs): string | undefined {
+function stringOr(value: unknown, scrub: (s: string) => string = (s) => s): string | undefined {
   return typeof value === "string" ? scrub(value) : undefined;
 }
 
