@@ -40,11 +40,12 @@ const BUILD_FILE = /^node:|^(?:[a-z][\w+.-]*:\/\/)?\/_next\/|\/\.next\/|\/node_m
 /**
  * A frame's file: a file of the build (`app:///_next/…`, `…/.next/…`, `…/node_modules/…`,
  * `node:…`) as it is, without query nor fragment; anything else, a page among them, through
- * `scrubUrl`.
+ * `scrubUrl`. Never one with a space: the Node parser makes the file of a line of a message
+ * out of the rest of that line, words and all.
  */
 function scrubLocation(location: string): string {
   const file = location.split(/[?#]/, 1)[0];
-  return !/^https?:/i.test(file) && BUILD_FILE.test(file) ? file : scrubUrl(location);
+  return !/^https?:/i.test(file) && !/\s/.test(file) && BUILD_FILE.test(file) ? file : scrubUrl(location);
 }
 
 /*
@@ -180,16 +181,19 @@ function scrubException(exception: Exception): Exception {
 const FUNCTION_NAME = /^(?:new )?[A-Za-z_$<?][\w$<>?]*(?:\.[\w$<>?]+)*(?: \[as [\w$]+\])?$/;
 /** A part of such a name that may still be a token, or an id with a digit in it. */
 const SECRET_PART = /(?<![\w$])(?:[\w$]{22,}|(?=\w*\d)[2-9A-HJ-NP-Za-km-z]{8})(?![\w$])/;
+/** Any part shaped like an id, digits or not. */
+const ID_PART = /(?<![\w$])[2-9A-HJ-NP-Za-km-z]{8}(?![\w$])/;
 
 /**
  * A function's name as it is, when it reads as one: through `scrubText`, `onSubmit` would
  * read as an id. The SDK's parsers make a frame of any line of a message that looks like
  * one, and its words become the name: a name that does not read as one is not sent at all,
- * since `scrubText` cannot tell a first name from a word.
+ * since `scrubText` cannot tell a first name from a word. Such a frame has no line number,
+ * unlike a frame of code (`inCode`): there, any id-shaped part goes through `scrubText`.
  */
-function scrubFunctionName(name: string): string {
+function scrubFunctionName(name: string, inCode: boolean): string {
   if (!FUNCTION_NAME.test(name)) return REDACTED;
-  return SECRET_PART.test(name) ? scrubText(name) : name;
+  return SECRET_PART.test(name) || (!inCode && ID_PART.test(name)) ? scrubText(name) : name;
 }
 
 /** Where the code ran, and nothing it held: no `vars`, no lines of source. */
@@ -198,7 +202,7 @@ function scrubFrame(frame: StackFrame): StackFrame {
     filename: stringOr(frame.filename, scrubLocation),
     abs_path: stringOr(frame.abs_path, scrubLocation),
     module: stringOr(frame.module, scrubLocation),
-    function: stringOr(frame.function, scrubFunctionName),
+    function: stringOr(frame.function, (name) => scrubFunctionName(name, finite(frame.lineno) !== undefined)),
     lineno: finite(frame.lineno),
     colno: finite(frame.colno),
     in_app: bool(frame.in_app),

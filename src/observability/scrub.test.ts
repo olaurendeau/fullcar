@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 // The parser @sentry/nextjs runs in the browser, and the one it runs on the server.
+// @sentry/browser is not in package.json: it comes with @sentry/react, which @sentry/nextjs pins at 11.8.0.
 import { defaultStackParser as browserStackParser } from "@sentry/browser";
 import { type Breadcrumb, defaultStackParser as nodeStackParser, type StackFrame } from "@sentry/nextjs";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -182,16 +183,27 @@ describe("scrubEvent", () => {
 
   it("scrubs a function name the Node parser reads in a line of the message", () => {
     const lines = [`no seat for ${NAMES[2]} ${PHONES[0]} (car full)`, `no seat ${secrets.personalToken} (car full)`];
+    // With no `(`, the rest of the line becomes the frame's file: a build path in it is no pass.
+    lines.push(`no seat ${NAMES[2]} ${PHONES[0]}, see /var/task/node_modules/x/index.js`);
     const frames = sentFrames(nodeStackParser, "Error: Could not seat", ...lines);
     expect(frames.length).toBeGreaterThan(0);
     expect(leaks(frames)).toEqual([]);
   });
 
+  it("redacts an id read as a function name in a line of the message, which has no line number", () => {
+    const lowercase = drawSecrets(lowercaseBytes);
+    const node = sentFrames(nodeStackParser, "Error: x", `no event at ${lowercase.id} (deleted)`);
+    const browser = sentFrames(browserStackParser, "Error: x", `${lowercase.id}@${ORIGIN}/_next/static/chunks/page.js`);
+    expect(node.length * browser.length).toBeGreaterThan(0);
+    expect(leakedKinds(JSON.stringify([node, browser]), lowercase)).toEqual([]);
+  });
+
   it("keeps the function names of real frames", () => {
     const lines = ["at async onSubmit (app:///_next/static/chunks/page.js:1:4410)", "at new SeatPicker (app:///_next/static/chunks/page.js:2:10)"];
     lines.push("at Object.<anonymous> (/var/task/.next/server/app/page.js:3:7)", "at Array.map (<anonymous>)");
+    lines.push("at useState (app:///_next/static/chunks/page.js:4:1)", "at new Promise (<anonymous>)");
     const frames = sentFrames(nodeStackParser, "Error: boom", ...lines.map((line) => `    ${line}`));
-    same(frames.map((frame) => frame.function), ["Array.map", "Object.?", "new SeatPicker", "onSubmit"]);
+    same(frames.map((frame) => frame.function), ["new Promise", "useState", "Array.map", "Object.?", "new SeatPicker", "onSubmit"]);
   });
 
   it("keeps only the navigations and requests among the breadcrumbs", () => {
