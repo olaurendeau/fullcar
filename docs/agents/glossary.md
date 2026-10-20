@@ -4,7 +4,7 @@ Les mêmes mots dans le code, la base, l'UI et les issues. Un synonyme est un d�
 
 | terme | définition |
 |---|---|
-| **Event** | un déplacement de groupe : titre, lieu, date et heure d'aller, date et heure de retour, options activées, jeton d'admin. Le retour est coché par défaut à la création et peut être décoché : l'événement n'a alors qu'un leg, et pas d'onglets. |
+| **Event** | un déplacement de groupe : titre, lieu, début, fin, options activées, jeton d'admin. Le **début** (`aller_at`) est la date et l'heure de l'aller. La **fin** (`retour_at`) est l'heure à laquelle part le retour ; elle est vide s'il n'y a pas de retour, donc un événement sans retour n'a pas de fin. Le retour est coché par défaut à la création et peut être décoché : l'événement n'a alors qu'un leg, et pas d'onglets. |
 | **Leg** | un sens du trajet : `aller` ou `retour`. Jamais « trajet » tout court, qui prête à confusion avec Ride. |
 | **Person** | quelqu'un qui participe : prénom, téléphone (optionnel), besoin de rehausseur (si l'option est active), jeton personnel. Une Person n'est pas un compte : elle n'a pas de mot de passe et peut être créée par quelqu'un d'autre. |
 | **Ride** | une voiture proposée pour **un** leg : conducteur (Person), lieu et heure, nombre de places, rehausseurs disponibles, participation aux frais, note libre. Une voiture à l'aller et une voiture au retour sont deux Rides. Le **lieu** est celui du départ à l'aller, et celui de la dépose au retour (au retour, on part de l'événement). L'heure est préremplie avec celle de l'Event. |
