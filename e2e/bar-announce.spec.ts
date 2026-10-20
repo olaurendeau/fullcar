@@ -26,6 +26,8 @@ async function seedScene(db: Kysely<Database>, eventId: string, token: string) {
   return { persons, cars };
 }
 
+/** A car's title, found while a sheet hides the page from role queries. */
+const carTitle = (page: Page, rideId: string) => page.locator(`[data-car-title="${rideId}"]`);
 const title = (page: Page, driver: string) => page.getByRole("heading", { name: `Voiture de ${driver}` });
 const barStatus = (page: Page) => page.locator('[role="status"]:has(+ [role="alert"])');
 const barClose = (page: Page) => page.locator("[data-message-bar]").getByRole("button", { name: "Fermer" });
@@ -139,9 +141,9 @@ test.describe("the bar's live regions", () => {
     await openSheet(page, "Sophie");
     const record = await recordBar(page);
     await failHeld(page, sophie);
-    const refused = page.waitForResponse((response) => !!response.request().postData()?.includes(scene.cars.marc));
     marc();
-    await refused;
+    // Answered last, the refusal is taken once the page shows its state: the car gone, under the sheet.
+    await expect(carTitle(page, scene.cars.marc)).toHaveCount(0);
     await page.keyboard.press("Escape");
 
     await expect(messages(page)).toHaveCount(2);
@@ -175,27 +177,31 @@ test.describe("the bar's live regions", () => {
     ]);
   });
 
-  // The case of #216, both answers released while a third sheet hides the page (rule 7).
-  test("C11.12: a failure and a success released together: the failure is written first, each in its own region", async ({ page, seededEvent }) => {
+  // The case of #216, both answers released while a third sheet hides the page (rule 7): the
+  // success comes first, and Sophie's car, removed meanwhile, refuses the seats.
+  test("C11.12: a failure and a success released together: the failure is written first, each in its own region", async ({ db, page, seededEvent }) => {
     const marc = await holdFirst(page, scene.cars.marc, false);
-    const sophie = await holdFirst(page, scene.cars.sophie, true);
+    const sophie = await holdFirst(page, scene.cars.sophie, false);
     await page.goto(`/e/${seededEvent.id}`);
     await sendThenClose(page, "Marc", ["Tom", "Léa", "Hugo"]);
     await sendThenClose(page, "Sophie");
-    await openSheet(page, "Sophie");
+    await db.deleteFrom("ride").where("id", "=", scene.cars.sophie).execute();
+    await openSheet(page, "Marc");
     const record = await recordBar(page);
-    const placed = page.waitForResponse((response) => !!response.request().postData()?.includes(scene.cars.marc));
     marc();
-    await placed;
-    await failHeld(page, sophie);
+    sophie();
+    // Answered last, the refusal is taken once the page shows its state: the car gone, under the sheet.
+    await expect(carTitle(page, scene.cars.sophie)).toHaveCount(0);
     await page.keyboard.press("Escape");
 
-    await expect(messages(page)).toHaveText([FAILED, HUGO]);
-    await expect(bar(page)).toHaveText(FAILED);
+    await expect(messages(page)).toHaveCount(2);
+    const [refused] = await messages(page).allTextContents();
+    await expect(messages(page)).toHaveText([refused, HUGO]);
+    await expect(bar(page)).toHaveText(refused);
     await expect(barStatus(page)).toHaveText(HUGO);
     // The failure first; a success never touches `alert`, a failure never `status`; none under the sheet.
     expect((await record()).writes).toEqual([
-      { region: "alert", text: FAILED, hidden: false },
+      { region: "alert", text: refused, hidden: false },
       { region: "status", text: HUGO, hidden: false },
     ]);
 

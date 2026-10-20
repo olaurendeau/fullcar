@@ -68,13 +68,17 @@ export function whenPageShown(then: () => void, failure = false): () => void {
 export interface Send {
   about: readonly string[];
   seq: number;
+  /**
+   * It goes, and will have an answer: `runAction` says so, never for a run it drops because the
+   * same action is on its way. Until then, it covers no failure that comes after it (`whenClosed`).
+   */
+  leaves: () => void;
   /** Its answer came: withdraws what earlier sends it covers left, never what a send made since did. */
   answered: () => void;
   /**
    * Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn meanwhile by a send
-   * that covers it, or with its car. A `failure` that a send made since covers is never said: that
-   * send withdrew it, and its own answer says what came of it (rule 5). Such a send always
-   * leaves: each control is inactive while its own send is on its way (`runAction`).
+   * that covers it, or with its car. A `failure` that a send made since covers, and that leaves,
+   * is never said: that send withdrew it, and its own answer says what came of it (rule 5).
    */
   whenClosed: (then: () => void, failure?: boolean) => void;
 }
@@ -91,8 +95,8 @@ export interface FromSheet extends Send {
 }
 
 let sends = 0;
-/** Every send made, for a failure that comes after a send that covers it. */
-const made: Sent[] = [];
+/** Every send that left (`Send.leaves`), for a failure that comes after a send that covers it. */
+const made = new Set<Sent>();
 /** What waits for the bar, each with what its send was about (#208). */
 const left = new Set<Sent & { withdraw: () => void }>();
 /** The subjects of a car removed, and the first send made since: what an earlier one says, nothing says. */
@@ -124,14 +128,15 @@ function withdraw(withdrawal: Withdrawal) {
 export function sendAbout(about: readonly string[]): Send {
   const seq = (sends += 1);
   withdraw({ about });
-  made.push({ about, sent: seq });
+  const sent = { about, sent: seq };
   return {
     about,
     seq,
+    leaves: () => void made.add(sent),
     answered: () => withdraw({ about, before: seq }),
     whenClosed: (then, failure = false) => {
       if ((gone.get(about[0]) ?? 0) > seq) return;
-      if (failure && made.some((since) => since.sent > seq && covers({ about: since.about }, { about, sent: seq }))) return;
+      if (failure && [...made].some((since) => since.sent > seq && covers({ about: since.about }, sent))) return;
       const entry = { about, sent: seq, withdraw: () => {} };
       left.add(entry);
       entry.withdraw = whenPageShown(() => {

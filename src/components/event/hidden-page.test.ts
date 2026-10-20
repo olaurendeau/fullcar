@@ -112,14 +112,27 @@ describe("sendAbout (#208, #216)", () => {
     const first = sendAbout(about);
     const partial = sendAbout(["person:tom", "person:tom:firstName", "person:tom:phone"]);
     // The sheet reopened, and the same seats sent again: the first send's failure comes after.
-    sendAbout([...about, "seats:sophie:hugo"]);
-    sendAbout(["person:tom", "person:tom:phone"]);
+    sendAbout([...about, "seats:sophie:hugo"]).leaves();
+    sendAbout(["person:tom", "person:tom:phone"]).leaves();
     first.whenClosed(() => said.push("first failed"), true);
     first.whenClosed(() => said.push("first placed"));
     partial.whenClosed(() => said.push("partial failed"), true);
     uncover();
     await settled();
     expect(said).toEqual(["partial failed", "first placed"]);
+  });
+
+  it("a send that covers a failure but never leaves, dropped while the first is on its way: the failure is said", async () => {
+    const about = ["cell:tom:aller"];
+    const uncover = coverPage();
+    const said: string[] = [];
+    const first = sendAbout(about);
+    first.leaves();
+    sendAbout(about);
+    first.whenClosed(() => said.push("first failed"), true);
+    uncover();
+    await settled();
+    expect(said).toEqual(["first failed"]);
   });
 
   it("a send that carries only part of a failure's fields leaves it waiting; one that carries them all withdraws it", async () => {
