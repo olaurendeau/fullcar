@@ -25,10 +25,11 @@ export default function Home() {
       </Button>
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">{t("howItWorks")}</h2>
-        <ol className="flex flex-col gap-4">
+        {/* `role="list"`: without its bullets, Safari would no longer expose the list as one. */}
+        <ol role="list" className="flex flex-col gap-4">
           {STEPS.map((step, index) => (
             <li key={step} className="grid grid-cols-[1.75rem_1fr] gap-x-3 gap-y-0.5">
-              {/* The list already numbers its items for a screen reader. */}
+              {/* The list already gives each item its rank to a screen reader. */}
               <span
                 aria-hidden="true"
                 className="row-span-2 grid size-7 place-items-center rounded-full bg-muted text-sm font-semibold"

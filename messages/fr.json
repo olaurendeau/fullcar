@@ -19,7 +19,7 @@
         "text": "Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places."
       }
     },
-    "deleted": "Les événements sont supprimés 30 jours après leur date."
+    "deleted": "Les événements sont supprimés 30 jours après leur date."
   },
   "CreateEvent": {
     "title": "Titre",

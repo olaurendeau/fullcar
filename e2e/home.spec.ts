@@ -18,7 +18,8 @@ const FR = {
       "Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places.",
     ],
   ],
-  deleted: "Les événements sont supprimés 30 jours après leur date.",
+  // A non-breaking space, as in « Événement introuvable »: « 30 » never ends a line alone.
+  deleted: "Les événements sont supprimés 30 jours après leur date.",
 };
 type Words = typeof FR;
 const EN: Words = {
@@ -74,7 +75,25 @@ async function expectHome(page: Page, words: Words) {
   for (const [index, [title, text]] of words.steps.entries()) {
     await expect(steps.nth(index).getByRole("heading", { level: 3 })).toHaveText(title);
     await expect(steps.nth(index).locator("p")).toHaveText(text);
+    // Its rank, shown, but hidden from screen readers: the list gives it.
+    await expect(steps.nth(index).locator(':scope > [aria-hidden="true"]')).toHaveText(String(index + 1));
   }
+
+  // Safari exposes a list without bullets as a list only with its role: Chromium would without.
+  await expect(list).toHaveAttribute("role", "list");
+  // What a screen reader gets: a list of three items, each its title and its text, and no number.
+  await expect(list).toMatchAriaSnapshot(
+    [
+      "- list:",
+      "  - /children: equal",
+      ...words.steps.flatMap(([title, text]) => [
+        "  - listitem:",
+        "    - /children: equal",
+        `    - heading ${JSON.stringify(title)} [level=3]`,
+        `    - paragraph: ${JSON.stringify(text)}`,
+      ]),
+    ].join("\n"),
+  );
 }
 
 async function horizontalOverflow(page: Page): Promise<number> {
