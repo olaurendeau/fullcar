@@ -166,8 +166,9 @@ describe("nameList: from one to five persons (C11.11)", () => {
 });
 
 describe("whyOf", () => {
-  it("gives `invalid` and `idTaken` the generic reason, and keeps the others", () => {
-    for (const error of ["invalid", "idTaken", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
+  // `noRetour` until #265 gives it its own words.
+  it("gives `invalid`, `idTaken` and `noRetour` the generic reason, and keeps the others", () => {
+    for (const error of ["invalid", "idTaken", "noRetour", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
     for (const error of ["offline", "seatTaken", "rideGone", "forbidden", "eventNotFound", "passengersChanged"] as const) {
       expect(whyOf(error)).toEqual({ kind: error });
     }
