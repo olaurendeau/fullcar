@@ -6,7 +6,7 @@ import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
 import { devicePersonIds } from "@/domain/device";
-import { eventLegs, LEGS, otherLeg as otherLegOf, type Leg } from "@/domain/leg";
+import { LEGS, otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import { validatePerson, type NewPerson, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
 import { isPublicId } from "@/domain/public-id";
@@ -23,6 +23,7 @@ import {
 import { hashToken, tokenMatches } from "@/domain/token-hash";
 import { findPublicEvent } from "./event";
 import type { EventState } from "./event-state";
+import { lockLegs } from "./retour";
 
 /**
  * What the form « Proposer une voiture » sends (R4), typed `unknown` since a forged request
@@ -63,16 +64,24 @@ export type OfferErrors = PersonErrors & RideErrors & Partial<Record<OtherLegFie
 
 /**
  * - `eventNotFound`: no such event (or a malformed id, never looked up);
- * - `invalid`: what no form sends (an id or a leg malformed, a leg the event does
- *   not have, a new driver without a well-formed token, another leg than `keep` on an
- *   event without a retour, one id for both cars, a passenger ticked twice, the driver ticked);
+ * - `noRetour`: the car, or the driver's choice on the other leg (`withoutCar`, `drive`),
+ *   is on a retour the event no longer has (decision 40), before any other refusal;
+ * - `invalid`: what no form sends (an id or a leg malformed, a new driver without a
+ *   well-formed token, one id for both cars, a passenger ticked twice, the driver ticked);
  * - `forbidden`: the driver, or a passenger, is not a person of this device;
  * - `alreadyDriving`: she drives another car on this leg, or drives on the other leg and
  *   the offer would change it (C4.6);
  * - `alreadyInCar`: a passenger is in another car on this leg, or drives on it (C4.13);
  * - `idTaken`: a Ride's id, or the new driver's, is held by someone else.
  */
-export type OfferRefusal = "invalid" | "eventNotFound" | "forbidden" | "alreadyDriving" | "alreadyInCar" | "idTaken";
+export type OfferRefusal =
+  | "noRetour"
+  | "invalid"
+  | "eventNotFound"
+  | "forbidden"
+  | "alreadyDriving"
+  | "alreadyInCar"
+  | "idTaken";
 
 export type OfferRideResult =
   | { ok: true; rideId: string; driverId: string }
@@ -226,7 +235,8 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
  * 2. she leaves her seat, or the list of persons without a car, on this leg (C4.5);
  * 3. on the other leg, as `otherLeg` says: unchanged, without a car, not concerned, or
  *    driving a second car with the same seats and note (C4.2, C4.11), leaving her seat
- *    there unless she keeps it (C4.12);
+ *    there unless she keeps it (C4.12). Not concerned by a retour the event does not
+ *    have, she is already: the aller is written alone;
  * 4. the Ride is inserted on this leg;
  * 5. those ticked board it, on this leg only, unless one of them is in another car or
  *    drives there (C4.13); one not concerned by the leg is placed too, as in the sheet.
@@ -286,13 +296,14 @@ async function offerOnce(
   trx: Kysely<Database>,
   eventId: string,
   token: unknown,
-  { rideId, leg, driver, ride, otherLeg, passengerIds }: Offer,
+  { rideId, leg, driver, ride, otherLeg: sent, passengerIds }: Offer,
 ): Promise<OfferRideResult> {
-  const event = await findPublicEvent(trx, eventId);
-  if (event === undefined) throw new Refused("eventNotFound");
-  const legs = eventLegs(event.retour_at);
+  // Lock order: the Event first, shared, then the Rides, then the Persons.
   const other = otherLegOf(leg);
-  if (!legs.includes(leg) || (otherLeg.kind !== "keep" && !legs.includes(other))) throw new Refused("invalid");
+  const writesOther = sent.kind === "withoutCar" || sent.kind === "drive";
+  const locked = await lockLegs(trx, eventId, writesOther ? [leg, other] : [leg]);
+  if (!locked.ok) throw new Refused(locked.error);
+  const otherLeg: OtherLeg = locked.legs.includes(other) ? sent : { kind: "keep" };
 
   const driverId = driver.personId;
   const device = devicePersonIds(token, await readTokenHolders(trx, eventId));

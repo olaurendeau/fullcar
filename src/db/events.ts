@@ -70,3 +70,40 @@ export type PublicEvent = Pick<Selectable<EventTable>, (typeof PUBLIC_EVENT_COLU
 export async function findEventById(db: Kysely<Database>, id: string): Promise<PublicEvent | undefined> {
   return db.selectFrom("event").select(PUBLIC_EVENT_COLUMNS).where("id", "=", id).executeTakeFirst();
 }
+
+/**
+ * The row lock `lockEvent` takes. `share` for a write on a leg: such writes do not wait for
+ * each other. `noKeyUpdate` for a change of the event's fields: it waits for the writes on
+ * the legs under way, and they wait for it.
+ */
+export type EventLock = "share" | "noKeyUpdate";
+
+/**
+ * `SELECT … FOR SHARE`, or `FOR NO KEY UPDATE`, on the event, held until the transaction
+ * ends: the first lock of every write on a leg (lock order: Event, then Ride, then Person).
+ * Under READ COMMITTED, a lock obtained after waiting gives the row as committed: a write
+ * that waited for the removal of the retour sees `retour_at` null (M3.6). Nothing for an
+ * unknown event. Outside a transaction the lock ends with the statement: call it inside
+ * `atomically`.
+ */
+export async function lockEvent(db: Kysely<Database>, id: string, lock: EventLock): Promise<PublicEvent | undefined> {
+  const query = db.selectFrom("event").select(PUBLIC_EVENT_COLUMNS).where("id", "=", id);
+  return (lock === "share" ? query.forShare() : query.forNoKeyUpdate()).executeTakeFirst();
+}
+
+/** What the organiser changes: the options and the token are not among them. */
+export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" | "retourAt">;
+
+/**
+ * Whether the event existed, and now has these fields. A retour removed has its Rides and
+ * Placements deleted first, in the same transaction, under `lockEvent(…, "noKeyUpdate")`
+ * (`removeRetour`): no row of the retour stays under a `retour_at` null.
+ */
+export async function writeEventFields(db: Kysely<Database>, id: string, fields: EventFieldsChange): Promise<boolean> {
+  const result = await db
+    .updateTable("event")
+    .set({ title: fields.title, location: fields.location, aller_at: fields.allerAt, retour_at: fields.retourAt })
+    .where("id", "=", id)
+    .executeTakeFirst();
+  return Number(result.numUpdatedRows) > 0;
+}

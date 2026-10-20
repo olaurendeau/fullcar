@@ -234,7 +234,8 @@ describe("the person actions", () => {
   it("C1.4: addPerson, without a retour, leaves her without a car at the aller", async () => {
     await inTransaction(async (trx) => {
       const { id: eventId } = await seedEvent(trx, { retourAt: null });
-      const sent = registration({ bothLegs: true });
+      // Without a retour, the form has no « Aller et retour » box, and sends it unchecked.
+      const sent = registration({ bothLegs: false });
       const outcome = await addPerson(eventId, TOKEN, sent);
       expect(kinds(outcome.ok && outcome.state, sent.id)).toEqual([["aller", "withoutCar"]]);
     });
