@@ -177,7 +177,8 @@ test.describe("a failure of a person's form, or of « Réessayer », in the bar"
   const AGAIN: { what: string; who: "tom" | "lea"; fields: { firstName?: string; phone?: string }; after: string[] }[] = [
     { what: "Tom's first name and number sent again withdraw it at the send", who: "tom", fields: { firstName: "Tommy", phone: PHONE }, after: [] },
     { what: "Tom's number alone leaves it", who: "tom", fields: { phone: PHONE }, after: [`${TOM_BOTH} ${FAILED}`] },
-    { what: "Léa's first name leaves it", who: "lea", fields: { firstName: "Lila" }, after: [`${TOM_BOTH} ${FAILED}`] },
+    // The same fields: only the person tells the two sends apart.
+    { what: "Léa's first name and number leave it", who: "lea", fields: { firstName: "Lila", phone: PHONE }, after: [`${TOM_BOTH} ${FAILED}`] },
   ];
   for (const { what, who, fields, after } of AGAIN) {
     test(`C11.10: after the failure of Tom's first name and number, ${what}`, async ({ page, seededEvent }) => {
