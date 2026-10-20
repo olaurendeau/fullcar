@@ -356,12 +356,15 @@ describe("offerRide", () => {
     });
   });
 
-  it("refuses a car on the retour of an event without one, and an unknown event", async () => {
+  it("M7.5: refuses a car on the retour of an event without one by noRetour, before forbidden, and an unknown event", async () => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx, { retourAt: null });
       const { id, token } = await seedPerson(trx, eventId);
       const offer = anOffer("retour", { kind: "device", personId: id });
-      expect(await offerRide(trx, eventId, token, offer)).toEqual({ ok: false, error: "invalid" });
+      expect(await offerRide(trx, eventId, token, offer)).toEqual({ ok: false, error: "noRetour" });
+      expect(await offerRide(trx, eventId, newToken(), offer)).toEqual({ ok: false, error: "noRetour" });
+      expect(await offerRide(trx, eventId, newToken(), anOffer("retour", aNewDriver()))).toEqual({ ok: false, error: "noRetour" });
+      expect(await readTokenHolders(trx, eventId)).toHaveLength(1);
       expect(await offerRide(trx, "Zz9yXw8v", token, offer)).toEqual({ ok: false, error: "eventNotFound" });
       expect((await rowsOf(trx, eventId)).rides).toEqual([]);
     });
@@ -471,21 +474,36 @@ describe("offerRide", () => {
       });
     });
 
-    it.each(["withoutCar", "notConcerned", "drive"] as const)(
-      "refuses %s on the other leg of an event without a retour, and accepts keep",
+    it.each(["withoutCar", "drive"] as const)(
+      "M7.6: refuses %s on the other leg of an event without a retour by noRetour, and accepts keep",
       async (choice) => {
         await withRollback(async (trx) => {
           const { id: eventId } = await seedEvent(trx, { retourAt: null });
           const { id, token } = await seedPerson(trx, eventId);
           const driver = { kind: "device" as const, personId: id };
           const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
-          expect(await offerRide(trx, eventId, token, anOffer("aller", driver, { otherLeg }))).toEqual({ ok: false, error: "invalid" });
+          expect(await offerRide(trx, eventId, token, anOffer("aller", driver, { otherLeg }))).toEqual({ ok: false, error: "noRetour" });
           expect((await rowsOf(trx, eventId)).rides).toEqual([]);
           const kept = anOffer("aller", driver, { otherLeg: { kind: "keep" } });
           expect(await offerRide(trx, eventId, token, kept)).toMatchObject({ ok: true });
         });
       },
     );
+
+    it("« Je ne fais pas le retour » on an event without a retour offers the car on the aller alone", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx, { retourAt: null });
+        const { id, token } = await seedPerson(trx, eventId);
+        await seedPlacement(trx, { personId: id, eventId, leg: "aller", rideId: null });
+        const offer = anOffer("aller", { kind: "device", personId: id }, { otherLeg: { kind: "notConcerned" } });
+
+        expect(await offerRide(trx, eventId, token, offer)).toEqual({ ok: true, rideId: offer.rideId, driverId: id });
+
+        const rows = await rowsOf(trx, eventId);
+        expect(rows.rides).toEqual([{ id: offer.rideId, leg: "aller", driver_id: id }]);
+        expect(rows.placements).toEqual([]);
+      });
+    });
   });
 
   describe("the passengers", () => {
