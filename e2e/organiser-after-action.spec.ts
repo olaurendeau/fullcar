@@ -214,7 +214,6 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
   // Next sends one action after the other: « Actualiser » touched while the seat is on its way reads after it.
   test("O1.9: a read after an action that ends a running « Actualiser » says its outcome, as « Actualiser » would", async ({
     page,
-    seededEvent,
   }) => {
     const seat = await holdActionsWith(page, oriane);
     await sendSeatThenClose(page);
