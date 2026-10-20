@@ -15,7 +15,7 @@ const LANGUAGES = {
   fr: {
     switch: "English",
     legs: { aller: "Aller", retour: "Retour" },
-    dates: { aller: /^samedi 12 décembre 2026 à 07:30$/, retour: /^samedi 12 décembre 2026 à 18:00$/ },
+    dates: { aller: /^samedi 12 décembre 2026 à 07:30$/, retour: /^18:00$/ },
     invalid: "Ce lien d’organisateur n’est pas valide.",
   },
   en: {
@@ -23,7 +23,7 @@ const LANGUAGES = {
     legs: { aller: "Outbound", retour: "Return" },
     dates: {
       aller: /^Saturday, December 12, 2026 at 7:30\sAM$/,
-      retour: /^Saturday, December 12, 2026 at 6:00\sPM$/,
+      retour: /^6:00\sPM$/,
     },
     invalid: "This organiser link is not valid.",
   },

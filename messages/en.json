@@ -6,12 +6,12 @@
   "CreateEvent": {
     "title": "Title",
     "location": "Place",
-    "allerDate": "Outbound date",
-    "allerTime": "Outbound time",
+    "allerDate": "Start date",
+    "allerTime": "Start time",
     "retour": "Return",
     "retourHint": "Untick if no return trip is organised.",
-    "retourDate": "Return date",
-    "retourTime": "Return time",
+    "retourDate": "End date",
+    "retourTime": "End time",
     "options": "Options",
     "boosters": {
       "label": "Booster seats",
@@ -36,13 +36,17 @@
       "invalidTime": "Not a valid time.",
       "tooEarly": "This date has already passed.",
       "tooLate": "No more than a year ahead.",
-      "notAfterAller": "The return must be after the outbound trip."
+      "notAfterAller": "The end must be after the start."
     }
   },
   "Event": {
     "legs": {
       "aller": "Outbound",
       "retour": "Return"
+    },
+    "dates": {
+      "start": "Start",
+      "end": "End"
     },
     "noCar": {
       "aller": "No car offered for the outbound trip",
