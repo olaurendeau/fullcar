@@ -8,7 +8,7 @@ import type { FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, type BarMessage } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
-import type { OfferRide } from "@/components/event/ride-form";
+import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
 import type { Leg } from "@/domain/leg";
 import {
@@ -19,6 +19,7 @@ import {
   setPersonLeg as storePersonLeg,
   takeSeats as storeSeats,
   updatePerson as storePersonFields,
+  updateRide as storeRideChange,
 } from "./actions";
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
@@ -190,6 +191,26 @@ export function ParticipantBoard({
     return failure;
   };
 
+  // Once per sheet, as offerRide: only the fields the form changed, its passengers and who leaves.
+  const updateRide: UpdateRide = async ({ rideId, leg, ride, seenPassengerIds, leaving, sending, ...sheet }) => {
+    const change = { ...ride, seenPassengerIds, leaving };
+    const sent = await runAction(
+      `updateRide:${sheet.key}`,
+      () => storeRideChange(id, readDeviceToken(id), rideId, leg, change),
+      sending,
+    );
+    if (sent === undefined) return undefined;
+    sheet.answered();
+    const outcome = sent.ok ? sent.value : undefined;
+    if (outcome?.ok) return { kind: "done" };
+    if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
+    // Said in the step while it is open (C8.5); any other refusal has no words of its own.
+    const problem = sent.ok ? "failed" : sent.problem;
+    failedIn(sheet, problem);
+    if (outcome?.error === "passengersChanged") return { kind: "passengersChanged", passengers: outcome.passengerIds.length };
+    return { kind: "problem", problem };
+  };
+
   return (
     <EventView
       {...event}
@@ -208,6 +229,7 @@ export function ParticipantBoard({
         setPersonLeg,
         offerRide,
         takeSeats,
+        updateRide,
         removeRide,
       }}
       messageBar={<MessageBar message={message} onClose={() => setMessage(null)} refocus={focusLandmark} />}

@@ -258,7 +258,8 @@ test.describe("person changes", () => {
     // On Claire's car, Inès is a line and nothing more: its only buttons are its free seats and the driver's own (#168).
     const claires = car(page.getByRole("tabpanel"), "Claire");
     await expect(claires.getByRole("listitem").first()).toHaveText("Inès");
-    await expect(claires.getByRole("button")).toHaveCount(3);
+    await expect(claires.getByRole("button")).toHaveCount(4);
+    await expect(claires.getByRole("button", { name: "Modifier", exact: true })).toHaveCount(1);
     await expect(claires.getByRole("button", { name: "Retirer la voiture" })).toHaveCount(1);
     await expect(freeSeats(claires)).toHaveCount(2);
   });

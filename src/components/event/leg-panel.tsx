@@ -10,7 +10,7 @@ import { EmptyLeg } from "./empty-leg";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import type { RemoveRide } from "./remove-ride-dialog";
-import { OfferRideButton, type OfferRide } from "./ride-form";
+import { OfferRideButton, type OfferRide, type UpdateRide } from "./ride-form";
 import { useSeatSheet, type TakeSeats } from "./seat-sheet";
 import { WithoutCarList } from "./without-car-list";
 
@@ -30,6 +30,8 @@ export interface BoardDevice {
   offerRide: OfferRide;
   /** Seats in a car for persons of the device, from the sheet (#91). */
   takeSeats: TakeSeats;
+  /** Changes a car driven by one of the device's persons (C8.2), with the device's token. */
+  updateRide: UpdateRide;
   /** Removes a car driven by one of the device's persons (C8.6), with the device's token. */
   removeRide: RemoveRide;
 }
@@ -111,6 +113,7 @@ export function LegPanel({
                 date={legDate}
                 seatsActive={deviceKnown(device.status)}
                 onTakeSeat={(seat) => seats.openFor(car, seat)}
+                updateRide={drivesIt(car.id) ? device.updateRide : undefined}
                 removeRide={drivesIt(car.id) ? device.removeRide : undefined}
               />
             ))
