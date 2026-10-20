@@ -9,7 +9,11 @@ leaveNoToken();
 
 // #221: the bar keeps the last success and every failure still waiting (« La barre de messages », v4.2.3, C11.10, C5.10).
 
-const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+// Each failure names who could not get in, and why (C11.11, #223).
+const FAILED = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
+/** A cell's failure keeps the generic words until #224. */
+const CELL_FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+const PAUL = "Tom n’a pas pu monter dans la voiture de Paul. Une erreur est survenue : réessayez dans un instant.";
 const HUGO = "Hugo est dans la voiture de Marc";
 
 /**
@@ -110,9 +114,9 @@ test.describe("the bar's messages", () => {
     await sendThenClose(page, "Sophie");
     await tab(page, "Retour").click();
     await failHeld(page, paul);
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([PAUL]);
     await failHeld(page, sophie);
-    await expect(messages(page)).toHaveText([FAILED, FAILED]);
+    await expect(messages(page)).toHaveText([FAILED, PAUL]);
 
     await barClose(page).click();
     await expect(messages(page)).toHaveCount(0);
@@ -139,8 +143,8 @@ test.describe("the bar's messages", () => {
     const scrolled = await page.evaluate(() => window.scrollY);
 
     await failHeld(page, answer);
-    await expect(messages(page)).toHaveText([FAILED]);
-    await expect(bar(page)).toHaveText(FAILED);
+    await expect(messages(page)).toHaveText([CELL_FAILED]);
+    await expect(bar(page)).toHaveText(CELL_FAILED);
     expect(await page.evaluate(() => [document.activeElement === document.body, window.scrollY])).toEqual([true, scrolled]);
   });
 
@@ -158,8 +162,8 @@ test.describe("the bar's messages", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
     await failHeld(page, answer);
-    await expect(messages(page)).toHaveText([FAILED]);
-    await expect(bar(page)).toHaveText(FAILED);
+    await expect(messages(page)).toHaveText([CELL_FAILED]);
+    await expect(bar(page)).toHaveText(CELL_FAILED);
     expect(sent).toEqual(["POST"]);
   });
 
@@ -175,7 +179,7 @@ test.describe("the bar's messages", () => {
     await sendThenClose(page, "Sophie");
     await context.setOffline(true);
     lose();
-    const offline = "Action impossible, vérifiez la connexion";
+    const offline = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez.";
     await expect(messages(page)).toHaveText([offline]);
     await expect(messages(page).locator("svg.lucide-wifi-off")).toHaveCount(1);
 
