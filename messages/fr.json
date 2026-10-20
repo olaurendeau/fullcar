@@ -179,6 +179,7 @@
   "Actions": {
     "submit": "Valider",
     "close": "Fermer",
+    "messages": "Messages",
     "cancel": "Annuler",
     "offline": "Action impossible, vérifiez la connexion",
     "failed": "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
