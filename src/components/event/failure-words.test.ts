@@ -154,6 +154,15 @@ describe("cellNotDone and cellWhy: a cell's failure names the person, the leg an
     }
   }
 
+  // The retour removed meanwhile (#285): the generic reason, as `invalid`, until #265 gives it its own words.
+  it("`noRetour` gives the generic reason", () => {
+    const { action, ...cell } = CELLS["Cellule, « Je cherche une place » : Tom · Retour"];
+    expect(cellWhy("noRetour", cell)).toEqual({ kind: "failed" });
+    expect(failureText(words("fr"), cellNotDone(action, cell), cellWhy("noRetour", cell))).toBe(
+      "Tom · Retour : « Je cherche une place » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.",
+    );
+  });
+
   it("« Ne fait pas l’aller » from a passenger names the choice, not the car", () => {
     const { state } = CELLS["Cellule, « Sortir de la voiture » : Léa, voiture de Claire"];
     expect(cellNotDone("notConcerned", { firstName: "Léa", leg: "aller", state })).toEqual({
