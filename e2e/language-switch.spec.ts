@@ -38,6 +38,7 @@ const EN = {
 /** The pages of the contact link (contact.spec.ts): which, where, and the title that tells it is shown. */
 const PAGES: [string, (event: SeededEvent) => string, string][] = [
   ["the home page", () => "/", "Fullcar"],
+  ["the creation form", () => "/nouveau", "Créer un événement"],
   ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
   ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
   ["the organiser's page", ({ id, token }) => `/e/${id}/admin#${token}`, "Tournoi de Rennes"],
@@ -167,8 +168,8 @@ test.describe("the language switch, in a browser set to French", () => {
     });
   }
 
-  test("L3.4: on /, no reload: what is typed and ticked stays", async ({ page }) => {
-    await open(page, "/", "Fullcar");
+  test("L3.4, A2.6: on /nouveau, no reload: what is typed and ticked stays", async ({ page }) => {
+    await open(page, "/nouveau", "Créer un événement");
     await expect(page.getByRole("button", { name: "Créer" })).toBeEnabled();
     await markWindow(page);
     await page.getByLabel(FR.title, { exact: true }).fill("Sortie ski du club");
@@ -179,6 +180,7 @@ test.describe("the language switch, in a browser set to French", () => {
     await expect(page.getByLabel(EN.title, { exact: true })).toHaveValue("Sortie ski du club");
     await expect(page.getByLabel(EN.retour, { exact: true })).not.toBeChecked();
     await expect(page.getByLabel(EN.boosters, { exact: true })).toBeChecked();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Create an event");
     expect(await windowMarked(page)).toBe(true);
   });
 
