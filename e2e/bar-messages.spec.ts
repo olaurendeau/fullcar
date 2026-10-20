@@ -9,7 +9,11 @@ leaveNoToken();
 
 // #221: the bar keeps the last success and every failure still waiting (« La barre de messages », v4.2.3, C11.10, C5.10).
 
-const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+// Each failure names who could not get in, and why (C11.11, #223).
+const FAILED = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
+/** A cell's failure keeps the generic words until #224. */
+const CELL_FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+const PAUL = "Tom n’a pas pu monter dans la voiture de Paul. Une erreur est survenue : réessayez dans un instant.";
 const HUGO = "Hugo est dans la voiture de Marc";
 
 /**
@@ -110,15 +114,57 @@ test.describe("the bar's messages", () => {
     await sendThenClose(page, "Sophie");
     await tab(page, "Retour").click();
     await failHeld(page, paul);
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([PAUL]);
     await failHeld(page, sophie);
-    await expect(messages(page)).toHaveText([FAILED, FAILED]);
+    await expect(messages(page)).toHaveText([FAILED, PAUL]);
 
     await barClose(page).click();
     await expect(messages(page)).toHaveCount(0);
     // Sophie's car is on the Aller tab, mounted but hidden: the focus goes to Paul's, and the tab stays.
     await expect(title(page, "Paul")).toBeFocused();
     await expect(tab(page, "Retour")).toHaveAttribute("aria-selected", "true");
+  });
+
+  // #222: a line moves the focus only when the element that had it is gone (« Le focus après une
+  // action », rule 8); a focus put on nothing, as a tap on the page's text does on a phone, stays.
+  test("a cell's failure from a sheet closed since, the focus put on nothing: it stays there, and the page does not scroll", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, scene.persons.tom, true);
+    await page.goto(`/e/${seededEvent.id}`);
+    const tomAller = page.getByRole("region", { name: "Vos inscriptions" }).getByRole("button", { name: /^Tom, Aller : / });
+    await tomAller.click();
+    await page.getByRole("dialog", { name: "Tom · Aller" }).getByRole("button", { name: "Ne fait pas l’aller" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(tomAller).toBeFocused();
+    await page.evaluate(() => {
+      (document.activeElement as HTMLElement).blur();
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    const scrolled = await page.evaluate(() => window.scrollY);
+
+    await failHeld(page, answer);
+    await expect(messages(page)).toHaveText([CELL_FAILED]);
+    await expect(bar(page)).toHaveText(CELL_FAILED);
+    expect(await page.evaluate(() => [document.activeElement === document.body, window.scrollY])).toEqual([true, scrolled]);
+  });
+
+  // #222: the second tap sends nothing while the first is on its way, so it covers nothing either.
+  test("a cell's action tapped twice before its answer, the sheet closed, the first send failing: the failure is said", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, scene.persons.tom, true);
+    const sent: string[] = [];
+    page.on("request", (request) => void (request.postData()?.includes(scene.persons.tom) && sent.push(request.method())));
+    await page.goto(`/e/${seededEvent.id}`);
+    await page.getByRole("region", { name: "Vos inscriptions" }).getByRole("button", { name: /^Tom, Aller : / }).click();
+    const action = page.getByRole("dialog", { name: "Tom · Aller" }).getByRole("button", { name: "Ne fait pas l’aller" });
+    await action.click();
+    await action.click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await failHeld(page, answer);
+    await expect(messages(page)).toHaveText([CELL_FAILED]);
+    await expect(bar(page)).toHaveText(CELL_FAILED);
+    expect(sent).toEqual(["POST"]);
   });
 
   test("C11.10: a failure offline stays once the connection and the `online` event are back", async ({ context, page, seededEvent }) => {
@@ -133,7 +179,7 @@ test.describe("the bar's messages", () => {
     await sendThenClose(page, "Sophie");
     await context.setOffline(true);
     lose();
-    const offline = "Action impossible, vérifiez la connexion";
+    const offline = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez.";
     await expect(messages(page)).toHaveText([offline]);
     await expect(messages(page).locator("svg.lucide-wifi-off")).toHaveCount(1);
 

@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, messages, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -10,6 +10,8 @@ leaveNoToken();
 // #91: a free seat opens the sheet that chooses who boards (R6), and its success stays in the bar.
 
 const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+/** The same failure in the bar, which names who could not get in (C11.11). */
+const NOT_SEATED = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
 
 type Db = Kysely<Database>;
 
@@ -379,9 +381,9 @@ test.describe("the sheet", () => {
         await page.keyboard.press("Escape");
         await expect(marc).toHaveCount(0);
       }
-      await expect(bar(page)).toHaveText(FAILED);
+      await expect(bar(page)).toHaveText(NOT_SEATED);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
-      await expect(alerts(page)).toHaveText([FAILED]);
+      await expect(alerts(page)).toHaveText([NOT_SEATED]);
     });
   }
 
@@ -405,6 +407,28 @@ test.describe("the sheet", () => {
     });
   }
 
+  // #222: the reopened sheet closed too, its send waiting for the first one's answer (Next sends
+  // one at a time). That send withdrew the first one's failure: never shown nor announced, even
+  // before its own answer, which alone says what came of it.
+  test("seats sent again from a reopened sheet, closed too, before the first send fails: no false failure meanwhile", async ({ page, seededEvent }) => {
+    const resend = await holdFirst(page, scene.cars.sophie, false);
+    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
+    await placeButton(await openSheet(page, "Sophie")).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const record = await recordBar(page);
+    const resent = page.waitForRequest((request) => !!request.postData()?.includes(scene.cars.sophie));
+    await failHeld(page, answer);
+    await resent;
+    await expect(messages(page)).toHaveCount(0);
+    resend();
+
+    await expect(barStatus(page)).toHaveText("Tom et Léa sont dans la voiture de Sophie");
+    const { writes, lines } = await record();
+    expect(lines).not.toContain(NOT_SEATED);
+    expect(writes.map((write) => write.text)).not.toContain(NOT_SEATED);
+  });
+
   // A success never takes a failure away (#216): both are shown, the failure first.
   test("a failure waiting under another sheet stays, whatever success comes from that sheet", async ({ db, page, seededEvent }) => {
     const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
@@ -413,8 +437,8 @@ test.describe("the sheet", () => {
     for (const name of ["Tom", "Léa", "Hugo"]) await marc.getByRole("checkbox", { name }).click();
     await placeButton(marc).click();
     await expect(marc).toHaveCount(0);
-    await expect(messages(page)).toHaveText([FAILED, "Hugo est dans la voiture de Marc"]);
-    await expect(bar(page)).toHaveText(FAILED);
+    await expect(messages(page)).toHaveText([NOT_SEATED, "Hugo est dans la voiture de Marc"]);
+    await expect(bar(page)).toHaveText(NOT_SEATED);
     expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({ aller: scene.cars.marc });
   });
 
@@ -424,7 +448,7 @@ test.describe("the sheet", () => {
     await db.deleteFrom("ride").where("id", "=", scene.cars.sophie).execute();
     answer();
 
-    await expect(bar(page)).toHaveText("Cette voiture n’est plus proposée");
+    await expect(bar(page)).toHaveText("Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Cette voiture n’est plus proposée.");
     await expect(car(page, "Sophie")).toHaveCount(0);
     await expect(banner(page)).toBeFocused();
   });

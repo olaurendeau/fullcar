@@ -7,7 +7,8 @@ import { covers, type Sent, type Withdrawal } from "./bar-state";
  * message bar is under the sheet: a message written there meanwhile is neither seen nor heard.
  */
 let sheets = 0;
-/** What waits for the page to show, in the order it came (#167). */
+/** What waits for the page to show, in the order it came (#167): the failures, then the rest (rule 7 of « Lecteurs d’écran »). */
+const failures = new Set<() => void>();
 const waiting = new Set<() => void>();
 const watchers = new Set<() => void>();
 const changed = () => watchers.forEach((watcher) => watcher());
@@ -22,7 +23,8 @@ export function coverPage(): () => void {
     queueMicrotask(() => {
       if (sheets > 0) return;
       changed();
-      const due = [...waiting];
+      const due = [...failures, ...waiting];
+      failures.clear();
       waiting.clear();
       for (const then of due) then();
     });
@@ -51,21 +53,34 @@ export function usePageHidden(): boolean {
   );
 }
 
-/** Runs `then` once no sheet hides the page, at once if none does, each in turn. Returns what withdraws it alone while it waits. */
-export function whenPageShown(then: () => void): () => void {
+/**
+ * Runs `then` once no sheet hides the page, at once if none does, each in turn; a `failure`
+ * before the rest, so that it is written first (v4.2.2). Returns what withdraws it alone while it waits.
+ */
+export function whenPageShown(then: () => void, failure = false): () => void {
+  const lane = failure ? failures : waiting;
   if (sheets === 0) then();
-  else waiting.add(then);
-  return () => void waiting.delete(then);
+  else lane.add(then);
+  return () => void lane.delete(then);
 }
 
 /** A send to the server (#208, #216): what it is about, its number, and what it is given to say what came of it. */
 export interface Send {
   about: readonly string[];
   seq: number;
+  /**
+   * It goes, and will have an answer: `runAction` says so, never for a run it drops because the
+   * same action is on its way. Until then, it covers no failure that comes after it (`whenClosed`).
+   */
+  leaves: () => void;
   /** Its answer came: withdraws what earlier sends it covers left, never what a send made since did. */
   answered: () => void;
-  /** Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn meanwhile by a send that covers it, or with its car. */
-  whenClosed: (then: () => void) => void;
+  /**
+   * Runs `then` once no sheet hides the page (`whenPageShown`); withdrawn meanwhile by a send
+   * that covers it, or with its car. A `failure` that a send made since covers, and that leaves,
+   * is never said: that send withdrew it, and its own answer says what came of it (rule 5).
+   */
+  whenClosed: (then: () => void, failure?: boolean) => void;
 }
 
 /** What an action sent from a sheet is given to say its failure, in the sheet or in the bar. */
@@ -80,6 +95,8 @@ export interface FromSheet extends Send {
 }
 
 let sends = 0;
+/** Every send that left (`Send.leaves`), for a failure that comes after a send that covers it. */
+const made = new Set<Sent>();
 /** What waits for the bar, each with what its send was about (#208). */
 const left = new Set<Sent & { withdraw: () => void }>();
 /** The subjects of a car removed, and the first send made since: what an earlier one says, nothing says. */
@@ -111,18 +128,21 @@ function withdraw(withdrawal: Withdrawal) {
 export function sendAbout(about: readonly string[]): Send {
   const seq = (sends += 1);
   withdraw({ about });
+  const sent = { about, sent: seq };
   return {
     about,
     seq,
+    leaves: () => void made.add(sent),
     answered: () => withdraw({ about, before: seq }),
-    whenClosed: (then) => {
+    whenClosed: (then, failure = false) => {
       if ((gone.get(about[0]) ?? 0) > seq) return;
+      if (failure && [...made].some((since) => since.sent > seq && covers({ about: since.about }, sent))) return;
       const entry = { about, sent: seq, withdraw: () => {} };
       left.add(entry);
       entry.withdraw = whenPageShown(() => {
         left.delete(entry);
         then();
-      });
+      }, failure);
     },
   };
 }
