@@ -62,6 +62,10 @@
       "aller": "Aller",
       "retour": "Retour"
     },
+    "dates": {
+      "start": "Début",
+      "end": "Fin"
+    },
     "noCar": {
       "aller": "Aucune voiture proposée pour l’aller",
       "retour": "Aucune voiture proposée pour le retour"

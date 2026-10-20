@@ -68,6 +68,14 @@ export function wallClockParts(at: WallClock): { date: WallDate; time: WallTime 
 }
 
 /**
+ * Whether two WallClocks fall on the same calendar day of the event's place (D1.7): their
+ * digits, never a time zone, decide.
+ */
+export function sameWallDate(a: WallClock, b: WallClock): boolean {
+  return wallClockParts(a).date === wallClockParts(b).date;
+}
+
+/**
  * The instant whose UTC reading has the WallClock's digits. Formatted with
  * `timeZone: "UTC"`, it shows the same date and time in every browser's zone.
  */
