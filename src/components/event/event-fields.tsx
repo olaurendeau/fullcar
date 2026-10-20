@@ -27,19 +27,33 @@ export const BLANK_EVENT_FIELDS: EventFieldsState = {
   retourDateFollows: true,
 };
 
-/** The state after a text field changes: the aller date carries the retour date while it follows. */
-export function withEventField(state: EventFieldsState, name: EventField, value: string): EventFieldsState {
-  const values = { ...state.values, [name]: value };
-  if (name === "retourDate") return { values, retourDateFollows: false };
-  if (name === "allerDate" && state.retourDateFollows) values.retourDate = value;
-  return { values, retourDateFollows: state.retourDateFollows };
+/**
+ * A change of the fields, applied to the state current when it runs, not to the one of the
+ * render it came from: a state set meanwhile (a merge with the saved values, #269) is kept.
+ */
+export type EventFieldsUpdate = (state: EventFieldsState) => EventFieldsState;
+
+/** A text field changes: the aller date carries the retour date while it follows. */
+export function withEventField(name: EventField, value: string): EventFieldsUpdate {
+  return (state) => {
+    const values = { ...state.values, [name]: value };
+    if (name === "retourDate") return { values, retourDateFollows: false };
+    if (name === "allerDate" && state.retourDateFollows) values.retourDate = value;
+    return { values, retourDateFollows: state.retourDateFollows };
+  };
+}
+
+/** The box Retour changes. */
+export function withRetour(retour: boolean): EventFieldsUpdate {
+  return (state) => ({ ...state, values: { ...state.values, retour } });
 }
 
 /**
  * The fields of an Event (#264): Titre, Lieu, the start's date and time, the box Retour and,
  * while it is checked, the end's date and time. Shared by the creation and, with epic #250,
  * the organiser's change of the Event. Each error shows under its field; `idOf` names the
- * fields, so that the form around them can focus the first error.
+ * fields, so that the form around them can focus the first error. `onChange` receives an
+ * update, as a state setter takes it.
  */
 export function EventFormFields({
   idOf,
@@ -50,7 +64,7 @@ export function EventFormFields({
   idOf: (name: string) => string;
   state: EventFieldsState;
   errors: EventErrors;
-  onChange: (state: EventFieldsState) => void;
+  onChange: (update: EventFieldsUpdate) => void;
 }) {
   const t = useTranslations("CreateEvent");
   const { values } = state;
@@ -70,7 +84,7 @@ export function EventFormFields({
           // longest value, past `min-w-0` and `w-full`: out of its column (#114).
           className={cn("h-10", type !== "text" && "appearance-none")}
           value={values[name]}
-          onChange={(e) => onChange(withEventField(state, name, e.target.value))}
+          onChange={(e) => onChange(withEventField(name, e.target.value))}
           aria-invalid={error ? true : undefined}
           aria-describedby={message && idOf(`${name}-error`)}
         />
@@ -96,7 +110,7 @@ export function EventFormFields({
         label={t("retour")}
         hint={t("retourHint")}
         checked={values.retour}
-        onChange={(retour) => onChange({ ...state, values: { ...values, retour } })}
+        onChange={(retour) => onChange(withRetour(retour))}
       />
       {values.retour && (
         <div className="grid grid-cols-2 gap-3">
