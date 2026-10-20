@@ -184,7 +184,37 @@
     "offline": "Action failed, check your connection",
     "failed": "Something went wrong and nothing has changed. Try again in a moment.",
     "rideGone": "This car is no longer offered",
-    "alreadyInCar": "{count, plural, one {This person is already in a car} other {One of these people is already in a car}}: nothing has changed."
+    "alreadyInCar": "{count, plural, one {This person is already in a car} other {One of these people is already in a car}}: nothing has changed.",
+    "failure": "{notDone} {why}",
+    "notDone": {
+      "seats": "{names} could not be seated in {driver}’s car.",
+      "leave": "{names} could not leave {driver}’s car.",
+      "choice": "{person}: “{choice}” was not saved.",
+      "addPerson": "{firstName} could not be added to your sign-ups.",
+      "editPerson": "{fields, select, firstName {{firstName}’s first name was not saved.} phone {{firstName}’s phone number was not saved.} other {{firstName}’s first name and phone number were not saved.}}",
+      "offerRide": "{legs, select, both {{driver}’s cars for the outbound and return trips were not offered.} aller {{driver}’s car for the outbound trip was not offered.} other {{driver}’s car for the return trip was not offered.}}",
+      "removeRide": "{leg, select, aller {{driver}’s car for the outbound trip was not removed.} other {{driver}’s car for the return trip was not removed.}}",
+      "editRide": "{leg, select, aller {The changes to {driver}’s car for the outbound trip were not saved.} other {The changes to {driver}’s car for the return trip were not saved.}}",
+      "readDevice": "Your sign-ups could not be loaded."
+    },
+    "why": {
+      "offline": "Check your connection, then try again.",
+      "failed": "Something went wrong: try again in a moment.",
+      "retryUndo": "{problem, select, offline {Check your connection, then use “Undo” again.} other {Something went wrong: use “Undo” again in a moment.}}",
+      "seatTaken": "This seat has just been taken.",
+      "notEnoughSeats": "{free, plural, =0 {No seats are left.} one {Only one seat is left.} other {Only # seats are left.}}",
+      "alreadyInCar": "{count, plural, one {{names} is already in a car.} other {One of these people is already in a car.}}",
+      "passengerInCar": "{count, plural, one {{names} is already in a car.} other {Of {names}, at least one is already in a car.}}",
+      "rideGone": "This car is no longer offered.",
+      "drives": "{firstName} is driving on the {leg, select, aller {outbound} other {return}} trip.",
+      "alreadyDriving": "{driver} is already driving a car.",
+      "passengersChanged": "Someone took or left a seat in the meantime: edit the car again.",
+      "forbidden": "This device cannot make this change: reload the page.",
+      "eventNotFound": "This event can no longer be found: it may have been deleted."
+    },
+    "names": {
+      "andOthers": "{first}, {second} and {others, plural, one {# other} other {# others}}"
+    }
   },
   "Sheet": {
     "title": "Who gets in {driver}’s car?",

@@ -9,7 +9,8 @@ leaveNoToken();
 
 // #222: two hidden regions announce only the bar's new message (« Lecteurs d’écran », v4.2.2, C11.12).
 
-const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+// A failure of the seat sheet names who could not get in (C11.11, #223).
+const FAILED = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
 const OFFLINE = "Action impossible, vérifiez la connexion";
 const HUGO = "Hugo est dans la voiture de Marc";
 

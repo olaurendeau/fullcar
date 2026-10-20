@@ -10,6 +10,8 @@ leaveNoToken();
 // #91: a free seat opens the sheet that chooses who boards (R6), and its success stays in the bar.
 
 const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+/** The same failure in the bar, which names who could not get in (C11.11). */
+const NOT_SEATED = "Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
 
 type Db = Kysely<Database>;
 
@@ -379,9 +381,9 @@ test.describe("the sheet", () => {
         await page.keyboard.press("Escape");
         await expect(marc).toHaveCount(0);
       }
-      await expect(bar(page)).toHaveText(FAILED);
+      await expect(bar(page)).toHaveText(NOT_SEATED);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
-      await expect(alerts(page)).toHaveText([FAILED]);
+      await expect(alerts(page)).toHaveText([NOT_SEATED]);
     });
   }
 
@@ -423,8 +425,8 @@ test.describe("the sheet", () => {
 
     await expect(barStatus(page)).toHaveText("Tom et Léa sont dans la voiture de Sophie");
     const { writes, lines } = await record();
-    expect(lines).not.toContain(FAILED);
-    expect(writes.map((write) => write.text)).not.toContain(FAILED);
+    expect(lines).not.toContain(NOT_SEATED);
+    expect(writes.map((write) => write.text)).not.toContain(NOT_SEATED);
   });
 
   // A success never takes a failure away (#216): both are shown, the failure first.
@@ -435,8 +437,8 @@ test.describe("the sheet", () => {
     for (const name of ["Tom", "Léa", "Hugo"]) await marc.getByRole("checkbox", { name }).click();
     await placeButton(marc).click();
     await expect(marc).toHaveCount(0);
-    await expect(messages(page)).toHaveText([FAILED, "Hugo est dans la voiture de Marc"]);
-    await expect(bar(page)).toHaveText(FAILED);
+    await expect(messages(page)).toHaveText([NOT_SEATED, "Hugo est dans la voiture de Marc"]);
+    await expect(bar(page)).toHaveText(NOT_SEATED);
     expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({ aller: scene.cars.marc });
   });
 
@@ -446,7 +448,7 @@ test.describe("the sheet", () => {
     await db.deleteFrom("ride").where("id", "=", scene.cars.sophie).execute();
     answer();
 
-    await expect(bar(page)).toHaveText("Cette voiture n’est plus proposée");
+    await expect(bar(page)).toHaveText("Tom et Léa n’ont pas pu monter dans la voiture de Sophie. Cette voiture n’est plus proposée.");
     await expect(car(page, "Sophie")).toHaveCount(0);
     await expect(banner(page)).toBeFocused();
   });
