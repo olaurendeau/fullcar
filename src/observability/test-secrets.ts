@@ -25,6 +25,8 @@ export const PHONES = [
   "06-93-27-15-48",
   "+1 (415) 555-0134",
   "+44 20 7946 0958",
+  "06/21/73/48/95",
+  "07_38_26_91_47",
 ];
 
 /** A release as Vercel gives it, a commit SHA: kept as is, so it must not look like a phone. */
@@ -33,7 +35,9 @@ export const RELEASE = "4f1e9c2ab7d3e8f05c6a9b1d2e3f4a5b6c7d8e9f";
 export type Secrets = ReturnType<typeof drawSecrets>;
 
 export function drawSecrets() {
-  const id = generatePublicId();
+  let id = generatePublicId();
+  // 1 id in 70 000 is all lowercase, and stays in a text as a word would (scrub.ts, WORD).
+  while (/^[a-z]+$/.test(id)) id = generatePublicId();
   const adminToken = newAdminToken();
   const personalToken = personalTokenFromBytes(new Uint8Array(randomBytes(PERSONAL_TOKEN_BYTES)));
   const { publicUrl, adminUrl } = organiserLinks(ORIGIN, id, adminToken);
@@ -81,7 +85,7 @@ export function leakyEvent(secrets: Secrets, platform: "javascript" | "node" = "
     request: {
       method: "POST",
       url: adminUrl,
-      headers: { "User-Agent": USER_AGENT, Referer: adminUrl, Cookie: `token=${personalToken}`, "Next-Action": "7f3a9c1e" },
+      headers: { "User-Agent": USER_AGENT, Referer: secrets.personalUrl, Cookie: `token=${personalToken}`, "Next-Action": "7f3a9c1e" },
       cookies: { NEXT_LOCALE: "fr", token: personalToken },
       data: actionBody(secrets, NAMES[3], PHONES[2]),
       query_string: `token=${adminToken}`,
@@ -117,7 +121,7 @@ const digits = (text: string) => text.replace(/\D/g, "");
 export function leakedKinds(text: string, secrets: Secrets): string[] {
   const lower = text.toLowerCase();
   // Digits joined across the separators a phone number is written with.
-  const joined = text.replace(/[\s.()+-]/g, "");
+  const joined = text.replace(/[\s.()+/_-]/g, "");
   const found = new Set<string>();
   if (text.includes(secrets.id)) found.add("event id");
   if (text.includes(secrets.adminToken)) found.add("admin token");

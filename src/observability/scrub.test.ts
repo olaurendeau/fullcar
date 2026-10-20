@@ -44,9 +44,15 @@ describe("scrubText", () => {
   });
 
   it.each(NAMES.map((name, at) => [at, name]))("redacts quoted first name #%i, with every kind of quote", (_, name) => {
-    const text = scrubText(`"${name}" '${name}' “${name}” « ${name} » {"firstName":"${name}"}`);
+    const text = scrubText(`"${name}" '${name}' ‘${name}’ “${name}” \`${name}\` « ${name} » {"firstName":"${name}"}`);
     same(leaks(text), []);
-    same(text, '[redacted] [redacted] [redacted] [redacted] {[redacted]:[redacted]}');
+    same(text, "[redacted] [redacted] [redacted] [redacted] [redacted] [redacted] {[redacted]:[redacted]}");
+  });
+
+  it("redacts an event's id on its own, and leaves words of 8 letters", () => {
+    const text = scrubText(`event ${secrets.id} not found: x is not a function (SQLSTATE 23505)`);
+    same(leaks(text), []);
+    same(text, "event [redacted] not found: x is not a function (SQLSTATE 23505)");
   });
 
   it("redacts a quote left open, up to the end", () => {
@@ -85,7 +91,9 @@ describe("scrubBreadcrumb", () => {
   });
 
   it.each(["console", "ui.click", "ui.input", "sentry.event"])("drops a %s breadcrumb", (category) => {
-    expect(scrubBreadcrumb({ category, message: `${NAMES[0]} ${PHONES[0]}`, data: { arguments: [secrets.adminUrl] } })).toBeNull();
+    // Compared, not printed: a breadcrumb kept by mistake would print its name, phone and link.
+    const breadcrumb = { category, message: `${NAMES[0]} ${PHONES[0]}`, data: { arguments: [secrets.adminUrl] } };
+    expect(scrubBreadcrumb(breadcrumb) === null).toBe(true);
   });
 });
 
@@ -128,11 +136,25 @@ describe("scrubEvent", () => {
     });
   });
 
-  it("keeps a server frame's file as it is", () => {
+  function frameFiles(files: string[]) {
     const event = leakyEvent(secrets, "node");
-    const frame = { filename: "app:///_next/server/chunks/ssr/[root-of-the-server]__0f3a.js", lineno: 3 };
-    event.exception = { values: [{ type: "Error", value: "boom", stacktrace: { frames: [frame] } }] };
-    same(scrubEvent(event).exception?.values?.[0].stacktrace?.frames, [frame]);
+    event.exception = { values: [{ type: "Error", value: "boom", stacktrace: { frames: files.map((filename) => ({ filename })) } }] };
+    return scrubEvent(event).exception?.values?.[0].stacktrace?.frames?.map((frame) => frame.filename);
+  }
+
+  it("keeps the files of the build and of Node as they are", () => {
+    const files = [
+      "app:///_next/server/chunks/ssr/[root-of-the-server]__0f3a.js",
+      "/var/task/.next/server/app/e/[id]/admin/page.js",
+      "/var/task/node_modules/next/dist/server/base-server.js",
+      "node:internal/process/task_queues",
+    ];
+    same(frameFiles(files), files);
+  });
+
+  it("scrubs the path of a frame's file that is not an http URL", () => {
+    const files = frameFiles([`/e/${secrets.id}/admin`, `webpack-internal:///e/${secrets.id}/moi#${secrets.personalToken}`]);
+    same(files, ["/e/[id]/admin", "webpack-internal:///e/[id]/moi"]);
   });
 
   it("keeps only the navigations and requests among the breadcrumbs", () => {
@@ -190,7 +212,7 @@ describe("scrubSpan", () => {
       "http.response.status_code": 200,
       "http.route": "/e/[id]/admin",
     });
-    expect(sent.links).toBeUndefined();
+    expect(sent.links === undefined).toBe(true);
   });
 
   it("keeps of a db span its system and operation, and drops its query and parameters", () => {
@@ -233,7 +255,8 @@ describe("the module", () => {
   });
 
   it("finds every kind of secret when nothing is scrubbed, so that [] means something", () => {
-    expect(leaks(leakyEvent(secrets))).toEqual(["admin link", "admin token", "event id", "name", "personal token", "phone"]);
+    const kinds = ["admin link", "admin token", "event id", "name", "personal link", "personal token", "phone"];
+    expect(leaks(leakyEvent(secrets))).toEqual(kinds);
     expect(leaks(actionBody(secrets))).toEqual(["event id", "name", "personal token", "phone"]);
   });
 });

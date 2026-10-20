@@ -78,10 +78,11 @@ describe("errorCode", () => {
     ["no code", {}, undefined],
     ["a code that is not a SQLSTATE", { code: `E ${TOKEN}` }, undefined],
   ])("reads %s, and nothing of the message", (_, fields, code) => {
-    expect(errorCode(postgresError(fields))).toBe(code);
+    // Compared, not printed: a code that read the message would print a token.
+    expect(errorCode(postgresError(fields)) === code).toBe(true);
   });
 
   it("reads nothing from a value that is not an object", () => {
-    expect(errorCode(TOKEN)).toBeUndefined();
+    expect(errorCode(TOKEN) === undefined).toBe(true);
   });
 });

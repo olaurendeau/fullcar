@@ -94,7 +94,7 @@ function fillScope() {
   setContext("culture", { locale: "fr-FR", timezone: "Europe/Paris" });
   setContext("react", { version: "19.3.0", props: { firstName: NAMES[2] } });
   addBreadcrumb({ category: "fetch", type: "http", data: { method: "POST", url: `/e/${secrets.id}/admin#${secrets.adminToken}` } });
-  addBreadcrumb({ category: "navigation", data: { from: `/e/${secrets.id}`, to: secrets.adminUrl } });
+  addBreadcrumb({ category: "navigation", data: { from: secrets.personalUrl, to: secrets.adminUrl } });
   addBreadcrumb({ category: "console", message: `${NAMES[3]} ${PHONES[1]}` });
   addBreadcrumb({ category: "ui.click", message: `button[aria-label="${NAMES[4]}"]` });
 }
@@ -174,6 +174,7 @@ describe("what a NodeClient sends without the hooks", () => {
   it("carries every kind of secret, so that [] above means something", async () => {
     start({});
     await sendEverything();
-    expect(leakedKinds(sent.join("\n"), secrets)).toEqual(["admin link", "admin token", "event id", "name", "personal token", "phone"]);
+    const kinds = ["admin link", "admin token", "event id", "name", "personal link", "personal token", "phone"];
+    expect(leakedKinds(sent.join("\n"), secrets)).toEqual(kinds);
   });
 });

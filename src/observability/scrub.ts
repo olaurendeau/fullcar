@@ -34,32 +34,49 @@ export function scrubUrl(url: string): string {
   return `${scheme}${host}${segments.join("/")}`;
 }
 
-/** A frame's file: an `http(s)` URL is a page or an asset; anything else is a file of the build. */
+/** Files of the build and of Node, which name code and never a person. */
+const BUILD_FILE = /^node:|^(?:[a-z][\w+.-]*:\/\/)?\/_next\/|\/\.next\/|\/node_modules\//i;
+
+/**
+ * A frame's file: a file of the build (`app:///_next/…`, `…/.next/…`, `…/node_modules/…`,
+ * `node:…`) as it is, without query nor fragment; anything else, a page among them, through
+ * `scrubUrl`.
+ */
 function scrubLocation(location: string): string {
-  return /^https?:/i.test(location) ? scrubUrl(location) : location.split(/[?#]/, 1)[0];
+  const file = location.split(/[?#]/, 1)[0];
+  return !/^https?:/i.test(file) && BUILD_FILE.test(file) ? file : scrubUrl(location);
 }
 
 /*
  * Quoted passages, an unclosed one up to the end of the text. A single quote opens only
  * after something that is not a letter (« can't », « l'événement » are apostrophes), and
- * one followed by a letter does not close (N'Golo).
+ * one followed by a letter does not close (N'Golo, and N’Golo between ‘ and ’).
  */
 const DOUBLE_QUOTED = /"(?:[^"\\]|\\[\s\S])*(?:"|$)/g;
 const OTHER_QUOTED = [
   /(?<![\p{L}\p{N}])'(?:[^'\\]|\\[\s\S]|'(?=[\p{L}\p{N}]))*(?:'(?![\p{L}\p{N}])|$)/gu,
+  /‘(?:[^’]|’(?=[\p{L}\p{N}]))*(?:’(?![\p{L}\p{N}])|$)/gu,
   /“[^”]*(?:”|$)/g,
+  /`[^`]*(?:`|$)/g,
   /«[^»]*(?:»|$)/g,
 ];
 
 /*
  * Then, left to right: a URL (with a scheme, or a path after a space or a bracket); a run of
- * 22 base64url characters or more, a token's length; a run of digits that may be a phone
- * number, with `+ . ( ) -` and spaces. Two numbers side by side read as one longer run,
- * hence 6 digits or more rather than 6 to 15.
+ * 22 base64url characters or more, a token's length; 8 symbols of an event's id
+ * (public-id-format.ts); a run of digits that may be a phone number, with `+ . ( ) / _ -`
+ * and spaces. Two numbers side by side read as one longer run, hence 6 digits or more
+ * rather than 6 to 15.
  */
 const IN_TEXT =
-  /([a-z][a-z\d+.-]*:\/\/[^\s"'`<>]*|(?<![^\s([{<=,;:])\/[^\s"'`<>]*)|((?<![\w-])[\w-]{22,}(?![\w-]))|(?<!\d)\+?\(?\d(?:[\d \t\u00a0\u202f.()-]*\d)?/giu;
+  /([a-zA-Z][a-zA-Z\d+.-]*:\/\/[^\s"'`<>]*|(?<![^\s([{<=,;:])\/[^\s"'`<>]*)|((?<![\w-])[\w-]{22,}(?![\w-]))|((?<![\w-])[2-9A-HJ-NP-Za-km-z]{8}(?![\w-]))|(?<!\d)\+?\(?\d(?:[\d \t\u00a0\u202f.()/_-]*\d)?/gu;
 const PHONE_DIGITS = 6;
+/**
+ * 8 symbols that read as a word stay: all lowercase (1 id in 70 000 is), or a word of ours.
+ * Any other run is taken for an id, `Database` or `Function` included.
+ */
+const WORD = /^[a-z]+$/;
+const KEPT_WORDS = new Set(["SQLSTATE"]);
 
 /**
  * A message or a span's name without what may name someone: URLs through `scrubUrl`, and
@@ -71,8 +88,9 @@ export function scrubText(text: string, kind: "text" | "db" = "text"): string {
   for (const quoted of kind === "db" ? OTHER_QUOTED : [DOUBLE_QUOTED, ...OTHER_QUOTED]) {
     scrubbed = scrubbed.replace(quoted, REDACTED);
   }
-  return scrubbed.replace(IN_TEXT, (match: string, url?: string, run?: string) => {
+  return scrubbed.replace(IN_TEXT, (match: string, url?: string, run?: string, id?: string) => {
     if (url) return scrubUrl(url);
+    if (id) return WORD.test(id) || KEPT_WORDS.has(id) ? id : REDACTED;
     if (run || (match.match(/\d/g) ?? []).length >= PHONE_DIGITS) return REDACTED;
     return match;
   });
@@ -165,7 +183,8 @@ function scrubFrame(frame: StackFrame): StackFrame {
     filename: stringOr(frame.filename, scrubLocation),
     abs_path: stringOr(frame.abs_path, scrubLocation),
     module: stringOr(frame.module, scrubLocation),
-    function: stringOr(frame.function, scrubText),
+    // A name of our code: through scrubText, `onSubmit` would read as an event's id.
+    function: stringOr(frame.function),
     lineno: finite(frame.lineno),
     colno: finite(frame.colno),
     in_app: bool(frame.in_app),
