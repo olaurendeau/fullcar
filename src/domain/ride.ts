@@ -96,6 +96,20 @@ export function validateRide(fields: RideFields): RideValidation {
 }
 
 /**
+ * A change of a Ride (C8.2): a field left out (`undefined`) stays as it is, so that a form
+ * filled before another change landed does not undo it; the others follow `validateRide`.
+ */
+export function validateRideChange(fields: RideFields) {
+  const given = RIDE_FIELDS.filter((name) => fields[name] !== undefined);
+  // A field left out is read as a valid one, then left out of the change.
+  const sent = Object.fromEntries(given.map((name) => [name, fields[name]]));
+  const checked = validateRide({ location: "-", time: "00:00", seats: RIDE_SEATS_MIN, ...sent });
+  if (!checked.ok) return checked;
+  const change: Partial<NewRide> = Object.fromEntries(given.map((name) => [name, checked.ride[name]]));
+  return { ok: true as const, change };
+}
+
+/**
  * C4.13: those ticked in « Qui monte avec vous ? » board the new car, so at most as many
  * as its seats. The form and the server both apply it.
  */

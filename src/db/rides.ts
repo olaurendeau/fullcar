@@ -110,8 +110,8 @@ export async function lockRides(db: Kysely<Database>, rides: readonly RideRef[])
   for (const ride of byId) await lockRide(db, ride);
 }
 
-/** Whether that Ride existed on that leg, and now has these fields. */
-export async function updateRide(db: Kysely<Database>, ride: RideRef, fields: RideFields): Promise<boolean> {
+/** Whether that Ride existed on that leg, and now has these fields; one left out stays as it is. At least one is given. */
+export async function updateRide(db: Kysely<Database>, ride: RideRef, fields: Partial<RideFields>): Promise<boolean> {
   const result = await db
     .updateTable("ride")
     .set({ location: fields.location, departure_time: fields.departureTime, seats: fields.seats, note: fields.note })

@@ -64,6 +64,7 @@
       "seats": "Places",
       "freeSeat": "Place libre",
       "takeSeat": "Place libre : prendre une place dans la voiture de {driver}",
+      "edit": "Modifier",
       "remove": "Retirer la voiture"
     },
     "withoutCar": "Sans voiture",
@@ -124,7 +125,8 @@
   },
   "RideForm": {
     "title": {
-      "offer": "Proposer une voiture"
+      "offer": "Proposer une voiture",
+      "edit": "Modifier la voiture"
     },
     "storage": {
       "title": "Cet appareil ne pourra pas s’en souvenir",
@@ -198,6 +200,13 @@
     "placed": "{firstName} est dans la voiture de {driver}"
   },
   "RideChanges": {
+    "leaving": {
+      "title": "Qui sort de la voiture ?",
+      "body": "{passengers, plural, one {# personne} other {# personnes}} pour {seats, plural, one {# place} other {# places}} : cochez {leaving, plural, one {la personne qui sort} other {les # personnes qui sortent}}.",
+      "rule": "Les personnes qui sortent redeviennent sans voiture.",
+      "count": "{chosen, plural, one {# cochée} other {# cochées}} sur {leaving}",
+      "changed": "Quelqu’un a pris ou libéré une place entre-temps : rien n’a changé. Choisissez à nouveau parmi les personnes à bord."
+    },
     "remove": {
       "title": "Retirer la voiture ?",
       "body": "{passengers, plural, =0 {Personne ne redeviendra sans voiture.} one {# personne redeviendra sans voiture.} other {# personnes redeviendront sans voiture.}}",

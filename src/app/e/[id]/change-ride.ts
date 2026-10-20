@@ -8,7 +8,7 @@ import { isCreationId } from "@/domain/creation-id";
 import { devicePersonIds } from "@/domain/device";
 import { LEGS, type Leg } from "@/domain/leg";
 import { isPublicId } from "@/domain/public-id";
-import { seatReduction, validateRide, type NewRide, type RideErrors, type RideField } from "@/domain/ride";
+import { seatReduction, validateRideChange, type NewRide, type RideErrors, type RideField } from "@/domain/ride";
 import { readEventState, type EventState } from "./event-state";
 
 /**
@@ -52,7 +52,8 @@ function ids(value: unknown): string[] | undefined {
 }
 
 interface Change {
-  ride: NewRide;
+  /** Only what the driver changed: a field left out stays as it is. */
+  ride: Partial<NewRide>;
   /** The passengers the form showed while the driver chose who leaves, never read again. */
   seenPassengerIds: string[];
   leaving: string[];
@@ -65,9 +66,9 @@ function readChange(fields: unknown): Change | { errors: RideErrors; first: Ride
   const seenPassengerIds = ids(sent.seenPassengerIds);
   const leaving = ids(sent.leaving);
   if (seenPassengerIds === undefined || leaving === undefined) return undefined;
-  const validation = validateRide({ location: sent.location, time: sent.time, seats: sent.seats, note: sent.note });
+  const validation = validateRideChange({ location: sent.location, time: sent.time, seats: sent.seats, note: sent.note });
   if (!validation.ok) return { errors: validation.errors, first: validation.first };
-  return { ride: validation.ride, seenPassengerIds, leaving };
+  return { ride: validation.change, seenPassengerIds, leaving };
 }
 
 /**
@@ -96,19 +97,22 @@ async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, 
   const decision = seatReduction({
     passengerIds,
     seenPassengerIds: change.seenPassengerIds,
-    newSeats: change.ride.seats,
+    // Seats left out stay as they are: nobody has to leave.
+    newSeats: change.ride.seats ?? locked.seats,
     leaving: change.leaving,
   });
   if (!decision.ok) return { ok: false, error: "passengersChanged", passengerIds };
   await removePassengers(trx, ride, decision.leaving);
-  const { location, time, seats, note } = change.ride;
-  await writeRide(trx, ride, { location, departureTime: `${time}:00`, seats, note });
+  const { time, ...fields } = change.ride;
+  const write = { ...fields, ...(time !== undefined && { departureTime: `${time}:00` }) };
+  if (Object.keys(write).length > 0) await writeRide(trx, ride, write);
   return { ok: true };
 }
 
 /**
  * The driver changes their car (epic #66, R8, C8.2 to C8.5): place, time, note and seats,
- * by the rules of R4, and who leaves when the seats go below the passengers.
+ * by the rules of R4, and who leaves when the seats go below the passengers. A field left out
+ * stays as it is (`validateRideChange`): a change does not undo another made since the form showed.
  * `eventNotFound` for an unknown event; a malformed id is never looked up.
  *
  * The application passes the connection: the write commits in its own transaction (READ
