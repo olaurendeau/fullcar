@@ -27,6 +27,8 @@ const FR = {
   required: "Champ requis.",
   invalidPhone: "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )",
   failed: "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
+  /** In the bar, the failure names who was not added (C11.11, #225). */
+  barFailed: "Léa n’a pas pu rejoindre vos inscriptions. Une erreur est survenue : réessayez dans un instant.",
 };
 
 const storageKey = (id: string) => `fullcar:personal-token:${id}`;
@@ -397,10 +399,10 @@ test.describe("add a person", () => {
         }).toPass();
         await expect(form(page)).toHaveCount(0);
       }
-      await expect(bar(page)).toHaveText(FR.failed);
+      await expect(bar(page)).toHaveText(FR.barFailed);
       // The sheet that sent says nothing, and the bar fills only once the page is no longer hidden.
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
-      await expect(alerts(page)).toHaveText([FR.failed]);
+      await expect(alerts(page)).toHaveText([FR.barFailed]);
     });
   }
 
@@ -434,7 +436,7 @@ test.describe("add a person", () => {
       } else {
         await page.keyboard.press("Escape");
         await expect(form(page)).toHaveCount(0);
-        await expect(bar(page)).toHaveText(FR.failed);
+        await expect(bar(page)).toHaveText(FR.barFailed);
       }
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
     });
@@ -449,29 +451,44 @@ test.describe("add a person", () => {
     await page.goto(`/e/${seededEvent.id}`);
     await openForm(page);
     await form(page).getByLabel(FR.firstName).fill("Léa");
-    // In the page, as a user's two taps: the time between them is not Playwright's.
-    const closeThenReopen = () =>
-      page.evaluate(async () => {
+    const closeThenReopen = async () => {
+      const sheet = (await page.locator('[data-slot="sheet-content"]').elementHandle())!;
+      // In the page, as a user's two taps: the time between them is not Playwright's.
+      await page.evaluate(async () => {
         const named = (scope: ParentNode, name: string) =>
           Array.from(scope.querySelectorAll("button")).find((button) => button.textContent?.trim() === name)!;
         const close = named(document.querySelector('[role="dialog"]')!, "Fermer");
         const add = named(document.querySelector('[role="tabpanel"][data-state="active"]')!, "Ajouter une personne");
         close.click();
         await new Promise((resolve) => setTimeout(resolve, 150));
-        const veils = document.querySelectorAll('[data-slot="sheet-overlay"]').length;
-        const closing = document.querySelectorAll('[data-slot="sheet-content"][data-state="closed"]').length;
+        // Not before its veil is gone, as late as a busy machine makes it: until then, the
+        // sheet reopened keeps its veil, in its place.
+        await new Promise<void>((resolve) => {
+          const gone = () => !document.querySelector('[data-slot="sheet-overlay"]');
+          if (gone()) return resolve();
+          const observer = new MutationObserver(() => gone() && (observer.disconnect(), resolve()));
+          observer.observe(document.body, { childList: true });
+        });
         add.click();
-        return { veils, closing };
       });
-    // A busy machine can miss the 100 ms between the two ends: the same two taps then again.
-    let reopened = await closeThenReopen();
-    for (let tries = 1; tries < 10 && !(reopened.veils === 0 && reopened.closing === 1); tries++) {
       await expect(form(page)).toHaveAttribute("data-state", "open");
+      // Not what the page shows at the second tap: an end React has yet to render can still
+      // drop the sheet (#285's CI). What counts is what it kept: the same sheet, with its veil
+      // remounted after it in the page, the order #276 is about.
+      return sheet.evaluate((kept) => {
+        const veil = document.querySelector('[data-slot="sheet-overlay"]');
+        return { kept: kept.isConnected, veilAfter: !!veil && !!(kept.compareDocumentPosition(veil) & Node.DOCUMENT_POSITION_FOLLOWING) };
+      });
+    };
+    // A busy machine can end the sheet's closing before the second tap: a new form then, typed
+    // again, and the same two taps again.
+    let reopened = await closeThenReopen();
+    for (let tries = 1; tries < 10 && !(reopened.kept && reopened.veilAfter); tries++) {
+      if (!reopened.kept) await form(page).getByLabel(FR.firstName).fill("Léa");
       reopened = await closeThenReopen();
     }
-    expect(reopened).toEqual({ veils: 0, closing: 1 });
+    expect(reopened).toEqual({ kept: true, veilAfter: true });
 
-    await expect(form(page)).toHaveAttribute("data-state", "open");
     await expect(form(page).getByLabel(FR.firstName)).toHaveValue("Léa");
     await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished)));
     // What a finger lands on at « Valider »'s centre: the sheet, not its veil.
@@ -481,7 +498,7 @@ test.describe("add a person", () => {
       { x: box.x + box.width / 2, y: box.y + box.height / 2 },
     );
     expect(under).toBe("sheet-content");
-    await submit(page).tap({ timeout: 5000 });
+    await submit(page).tap();
     await expect(form(page)).toHaveCount(0);
     await expect(section(page).getByRole("rowheader")).toHaveText(["Léa"]);
   });

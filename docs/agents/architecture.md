@@ -174,7 +174,8 @@ simultanées voient la même place libre et insèrent toutes les deux.
 verrouillent de même d'abord la ligne du Ride. Une écriture qui verrouille aussi une Person
 (les déclencheurs de #66, C12.8, voir « Contraintes permanentes ») le fait **après** le Ride :
 l'ordre est Ride, puis Person, dans tout le code, sans quoi deux transactions peuvent
-s'attendre l'une l'autre. Ainsi, dans `src/db/placements.ts`, `setPlacement` (un Placement
+s'attendre l'une l'autre ; depuis #260, l'Event vient avant les deux (voir « L'Event
+d'abord »). Ainsi, dans `src/db/placements.ts`, `setPlacement` (un Placement
 dans une voiture) et `removePassengers` verrouillent d'abord le Ride avec `lockRide`
 (`src/db/rides.ts`, `SELECT … FROM ride … FOR UPDATE`), dans la transaction de l'appelant
 ou dans celle qu'ouvre `atomically` (`src/db/transaction.ts`). `deletePlacement`, lui, ne
@@ -202,6 +203,41 @@ prend à l'insertion, **avant** la Person `FOR UPDATE`. Une écriture qui aurait
 avec une prise de place. Ces verrous se prouvent par des tests de concurrence (voir « Base
 de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts`,
 `src/db/participant-tables.test.ts` et `src/app/e/[id]/offer-ride.test.ts`.
+
+### L'Event d'abord (#260)
+
+À partir de #260 (epic #250), l'organisateur peut supprimer le retour pendant qu'un
+participant écrit dessus. L'ordre des verrous devient donc **Event, puis Ride, puis
+Person**, dans tout le code :
+
+- Toute écriture de `seats.ts`, `persons.ts`, `offer-ride.ts` et `change-ride.ts`
+  (`src/app/e/[id]/`) commence sa transaction par `lockEvent(trx, id, "share")`
+  (`src/db/events.ts`, `SELECT … FROM event … FOR SHARE`), au travers de `lockLegs`
+  (`src/app/e/[id]/retour.ts`). Ces verrous partagés ne s'attendent pas entre eux : deux
+  prises de place restent sérialisées sur le Ride seulement.
+- Une modification de l'événement prend `lockEvent(trx, id, "noKeyUpdate")`
+  (`FOR NO KEY UPDATE`). Elle attend les écritures sur les legs en cours, et celles qui
+  arrivent l'attendent. Pour supprimer le retour, elle recompte ses lignes sous ce verrou
+  (`countLegRows`, `src/db/legs.ts`), les supprime (`deleteLegRows` : les Placements, puis
+  les Rides) par `removeRetour`, puis écrit `retour_at` à `null` (`writeEventFields`), dans
+  la même transaction.
+- Sous `READ COMMITTED`, un verrou obtenu après une attente rend la ligne validée : une
+  écriture qui a attendu la suppression voit `retour_at` à `null`. Une écriture sur un leg
+  que l'événement n'a pas répond `noRetour` avec l'état, avant tout autre refus de la
+  transaction, `rideGone` et `forbidden` compris. Seuls la passent une requête mal formée
+  (`invalid`, qu'aucune page n'envoie) et les erreurs de champs, lues avant la transaction.
+- La suppression tourne en `READ COMMITTED`, le niveau qu'ouvre `atomically`. En
+  `REPEATABLE READ`, le recomptage garderait l'instantané pris avant le verrou : il ne
+  verrait pas une écriture sur le retour validée pendant l'attente, trouverait les mêmes
+  nombres, et laisserait sa ligne cachée sous un `retour_at` à `null`.
+
+Ainsi, lancées ensemble, une suppression du retour et une écriture sur le retour se
+terminent de deux façons seulement : la suppression refusée parce que les nombres ont changé
+(`confirmRetour`), ou l'écriture refusée par `noRetour`. Aucune ligne du retour ne reste
+sous un `retour_at` à `null` : cachée, elle reviendrait le jour où le retour est rajouté.
+La preuve est dans `src/app/e/[id]/retour.test.ts` (M3.6, données validées), dans les deux
+ordres, pour une prise de place, « sans voiture », une voiture proposée et une personne
+ajoutée « Aller et retour ».
 
 ## Jetons, et pourquoi ils sont la pièce critique
 

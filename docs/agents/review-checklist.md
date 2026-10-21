@@ -104,6 +104,20 @@ celui qui écrit le code.
 - Occuper une place verrouille la ligne du Ride (`SELECT … FOR UPDATE`) dans la transaction,
   avant de compter les places restantes. Une insertion conditionnelle sans ce verrou est
   bloquante : deux taps simultanés sur la dernière place surchargeraient la voiture.
+- À partir de #260, l'ordre des verrous est Event, puis Ride, puis Person. Une écriture sur
+  un leg qui ne commence pas sa transaction par `lockEvent(trx, id, "share")` (directement
+  ou par `lockLegs`) est bloquante : une suppression du retour simultanée laisserait une
+  ligne du retour sous un `retour_at` à `null`. Une modification de l'événement prend
+  `lockEvent(trx, id, "noKeyUpdate")` ; un Ride ou une Person verrouillé avant l'Event est
+  bloquant.
+- Une écriture sur un retour que l'événement n'a plus répond `noRetour` avec l'état, avant
+  tout autre refus de la transaction (`rideGone` et `forbidden` compris) ; seuls une
+  requête mal formée (`invalid`) et les erreurs de champs passent avant. Une suppression du
+  retour qui ne recompte pas ses lignes sous le verrou de l'Event, ou qui supprime les
+  Rides du retour sans ses Placements, est bloquante.
+- La transaction qui supprime le retour est en `READ COMMITTED`. En `REPEATABLE READ`, le
+  recomptage manque une écriture validée pendant l'attente du verrou, la suppression passe,
+  et la ligne de cette écriture reste cachée sous un `retour_at` à `null` : bloquant.
 - Aucune transaction longue autour d'une purge ou d'un import.
 - Les requêtes passent par Kysely avec des paramètres liés : aucune concaténation de SQL.
 - `sql` n'est ni passé en argument, ni rangé dans un objet, ni importé par un chemin

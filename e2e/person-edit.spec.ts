@@ -17,7 +17,8 @@ const NEW_PHONE = "07 12 12 12 12";
 const REQUIRED = "Champ requis.";
 const INVALID_PHONE = "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )";
 const PHONE_HINT = "Visible seulement par l’organisateur et par les personnes de la même voiture.";
-const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+/** In the bar, the failure of « Clara » names the field sent and the first name before it (C11.11, #225). */
+const FAILED = "Le prénom de Claire n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
 const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
 
 /**

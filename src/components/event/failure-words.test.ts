@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { createFormatter, createTranslator, type Messages } from "next-intl";
 import { describe, expect, it } from "vitest";
+import type { DeviceState } from "@/domain/board";
+import { cellActions, type CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
-import { failureText, nameList, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
+import { cellNotDone, cellWhy, editedFields, failureText, nameList, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
 
 // C11.11: every failure in the bar, word for word as « Chaque échec, mot pour mot » says it
 // (docs/design/event-board/README.md, v4.2), in French and in English.
@@ -106,6 +108,8 @@ describe("failureText: each failure, word for word (C11.11)", () => {
   it("reads every row, and knows every action of the table", () => {
     expect(table.length).toBeGreaterThanOrEqual(66);
     expect(new Set(table.map((row) => row.action))).toEqual(new Set(Object.keys(ACTIONS)));
+    // A failure column of a form `sources` does not know would give no test at all.
+    for (const row of table) expect(sources(row.failure), `${row.action}, ${row.failure}`).not.toHaveLength(0);
   });
 
   for (const row of table) {
@@ -118,6 +122,120 @@ describe("failureText: each failure, word for word (C11.11)", () => {
       });
     }
   }
+});
+
+/** A cell's rows, by its sheet as it was at the send: the action touched, the person, the leg and her state there (#224). */
+const CELLS: Record<string, { action: Exclude<CellAction, "seeCar">; firstName: string; leg: Leg; state: DeviceState }> = {
+  "Cellule, « Ne fait pas l’aller » : Tom · Aller": { action: "notConcerned", firstName: "Tom", leg: "aller", state: { kind: "withoutCar" } },
+  "Cellule, « Je cherche une place » : Tom · Retour": { action: "lookingForSeat", firstName: "Tom", leg: "retour", state: { kind: "notConcerned" } },
+  "Cellule, « Sortir de la voiture » : Léa, voiture de Claire": {
+    action: "leaveCar",
+    firstName: "Léa",
+    leg: "aller",
+    state: { kind: "passenger", rideId: "claire", driver: { id: "claire", firstName: "Claire" } },
+  },
+};
+
+describe("cellNotDone and cellWhy: a cell's failure names the person, the leg and the choice (C11.11)", () => {
+  const cells = rows().filter((row) => row.action in CELLS);
+
+  it("reads the rows of the three actions of a cell", () => {
+    expect(new Set(cells.map((row) => row.action))).toEqual(new Set(Object.keys(CELLS)));
+  });
+
+  for (const row of cells) {
+    for (const source of sources(row.failure)) {
+      it(`${row.action}, ${source}`, () => {
+        const { action, ...cell } = CELLS[row.action];
+        const why = cellWhy(source as Parameters<typeof cellWhy>[0], cell);
+        expect(failureText(words("fr"), cellNotDone(action, cell), why)).toBe(row.fr);
+        expect(failureText(words("en"), cellNotDone(action, cell), why)).toBe(row.en);
+      });
+    }
+  }
+
+  // The retour removed meanwhile (#285): the generic reason, as `invalid`, until #265 gives it its own words.
+  it("`noRetour` gives the generic reason", () => {
+    const { action, ...cell } = CELLS["Cellule, « Je cherche une place » : Tom · Retour"];
+    expect(cellWhy("noRetour", cell)).toEqual({ kind: "failed" });
+    expect(failureText(words("fr"), cellNotDone(action, cell), cellWhy("noRetour", cell))).toBe(
+      "Tom · Retour : « Je cherche une place » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.",
+    );
+  });
+
+  it("« Ne fait pas l’aller » from a passenger names the choice, not the car", () => {
+    const { state } = CELLS["Cellule, « Sortir de la voiture » : Léa, voiture de Claire"];
+    expect(cellNotDone("notConcerned", { firstName: "Léa", leg: "aller", state })).toEqual({
+      kind: "choice",
+      firstName: "Léa",
+      leg: "aller",
+      choice: "notConcerned",
+    });
+  });
+
+  // cellNotDone names the car for « Sortir de la voiture »: only a passenger has one to leave (#290's review).
+  it("« Sortir de la voiture » is offered to a passenger alone", () => {
+    // One of each kind: a new kind of state does not compile until it is here.
+    const states = {
+      withoutCar: { kind: "withoutCar" },
+      notConcerned: { kind: "notConcerned" },
+      driver: { kind: "driver", rideId: "tom" },
+      passenger: { kind: "passenger", rideId: "claire", driver: { id: "claire", firstName: "Claire" } },
+    } satisfies { [K in DeviceState["kind"]]: Extract<DeviceState, { kind: K }> };
+    const offered = Object.values(states).filter((state) => cellActions(state).includes("leaveCar"));
+    expect(offered.map((state) => state.kind)).toEqual(["passenger"]);
+  });
+});
+
+// #225: « Modifier » names the fields it sent; a refusal of a person's form says its reason.
+describe("editedFields and personWhy: a person's form (C11.11)", () => {
+  it("names the one field sent, or both", () => {
+    expect(editedFields(["firstName"])).toBe("firstName");
+    expect(editedFields(["phone"])).toBe("phone");
+    expect(editedFields(["firstName", "phone"])).toBe("both");
+    // Nothing changed: the form as it showed, both fields.
+    expect(editedFields([])).toBe("both");
+  });
+
+  it("gives `drives`, which only a cell's action meets, the generic reason, and the others as `whyOf` does", () => {
+    expect(personWhy("drives")).toEqual({ kind: "failed" });
+    for (const error of ["forbidden", "eventNotFound", "invalid", "idTaken", "noRetour", "offline", "failed"] as const) {
+      expect(personWhy(error)).toEqual(whyOf(error));
+    }
+  });
+
+  it("« Modifier » of the first name alone, word for word", () => {
+    const notDone: NotDone = { kind: "editPerson", firstName: "Tom", fields: editedFields(["firstName"]) };
+    expect(failureText(words("fr"), notDone, personWhy("offline"))).toBe("Le prénom de Tom n’a pas été enregistré. Vérifiez la connexion, puis réessayez.");
+    expect(failureText(words("en"), notDone, personWhy("offline"))).toBe("Tom’s first name was not saved. Check your connection, then try again.");
+  });
+});
+
+// #226: an offer's refusal says its reason, `alreadyDriving` naming who drives.
+describe("offerWhy: « Proposer une voiture » (C11.11)", () => {
+  const offers = rows().filter((row) => row.action.startsWith("« Proposer une voiture »"));
+
+  it("reads the rows of an offer on one leg and on both", () => {
+    expect(new Set(offers.map((row) => row.action)).size).toBe(2);
+  });
+
+  for (const row of offers) {
+    // The passengers ticked in « Qui monte avec vous ? », which the form does not ask yet (#171).
+    for (const source of sources(row.failure).filter((source) => source !== "alreadyInCar")) {
+      it(`${row.action}, ${source}`, () => {
+        const { notDone } = ACTIONS[row.action];
+        if (notDone.kind !== "offerRide") throw new Error(row.action);
+        const why = offerWhy(source as Parameters<typeof offerWhy>[0], notDone.driver);
+        expect(failureText(words("fr"), notDone, why)).toBe(row.fr);
+        expect(failureText(words("en"), notDone, why)).toBe(row.en);
+      });
+    }
+  }
+
+  it("gives `alreadyInCar`, with no passenger ticked to name, and `noRetour` the generic reason", () => {
+    expect(offerWhy("alreadyInCar", "Marc")).toEqual({ kind: "failed" });
+    expect(offerWhy("noRetour", "Marc")).toEqual({ kind: "failed" });
+  });
 });
 
 const FIVE = ["Tom", "Léa", "Hugo", "Nina", "Zoé"];
@@ -166,8 +284,9 @@ describe("nameList: from one to five persons (C11.11)", () => {
 });
 
 describe("whyOf", () => {
-  it("gives `invalid` and `idTaken` the generic reason, and keeps the others", () => {
-    for (const error of ["invalid", "idTaken", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
+  // `noRetour` until #265 gives it its own words.
+  it("gives `invalid`, `idTaken` and `noRetour` the generic reason, and keeps the others", () => {
+    for (const error of ["invalid", "idTaken", "noRetour", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
     for (const error of ["offline", "seatTaken", "rideGone", "forbidden", "eventNotFound", "passengersChanged"] as const) {
       expect(whyOf(error)).toEqual({ kind: error });
     }

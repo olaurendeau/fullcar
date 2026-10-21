@@ -16,7 +16,8 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang={await getLocale()} className={cn("h-full antialiased", "font-sans")}>
-      <body className="min-h-full flex flex-col">
+      {/* Chrome takes the page's scroll anchoring from <body>: a page turns it off by its main (O1.11). */}
+      <body className="min-h-full flex flex-col has-data-[scroll-anchor=none]:[overflow-anchor:none]">
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
       </body>
     </html>

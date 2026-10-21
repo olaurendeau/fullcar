@@ -1,5 +1,8 @@
 import type { createFormatter, createTranslator, Messages } from "next-intl";
+import type { DeviceState } from "@/domain/board";
+import type { CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
+import type { PersonField } from "@/domain/person";
 
 /*
  * What a failure says in the bar (« Ce que dit un échec », docs/design/event-board/README.md,
@@ -34,10 +37,52 @@ export type Why =
 
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
- * only a forged request or a collision of ids gives, take the generic one.
+ * only a forged request or a collision of ids gives, take the generic one; so does `noRetour`,
+ * the retour removed meanwhile, until #265 gives it its own words.
  */
-export function whyOf(error: Plain | "invalid" | "idTaken"): Why {
-  return { kind: error === "invalid" || error === "idTaken" ? "failed" : error };
+export function whyOf(error: Plain | "invalid" | "idTaken" | "noRetour"): Why {
+  return { kind: error === "invalid" || error === "idTaken" || error === "noRetour" ? "failed" : error };
+}
+
+/** A cell of « Vos inscriptions » as its sheet showed it at the send: the person, the leg, and her state there. */
+export interface Cell {
+  firstName: string;
+  leg: Leg;
+  state: DeviceState;
+}
+
+/**
+ * What a cell's action did not do (« Ce que dit un échec »): the sheet's title and the button
+ * touched, or the car for « Sortir de la voiture », which only a passenger is offered.
+ */
+export function cellNotDone(action: Exclude<CellAction, "seeCar">, { firstName, leg, state }: Cell): NotDone {
+  if (action === "leaveCar" && state.kind === "passenger") return { kind: "leave", names: [firstName], driver: state.driver.firstName };
+  return { kind: "choice", firstName, leg, choice: action === "notConcerned" ? "notConcerned" : "lookingForSeat" };
+}
+
+/** Why a cell's action was not done: as `whyOf`, and `drives` names who drives, on the cell's leg. */
+export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives", { firstName, leg }: Cell): Why {
+  return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
+}
+
+/** What « Modifier » a person sent (v4.2.2): its one field changed, or both; nothing changed sends the form as it showed. */
+export function editedFields(changed: readonly PersonField[]): "firstName" | "phone" | "both" {
+  return changed.length === 1 ? changed[0] : "both";
+}
+
+/** Why a person's form was not done: as `whyOf`; `drives`, which only a cell's action meets, the generic reason. */
+export function personWhy(error: Parameters<typeof whyOf>[0] | "drives"): Why {
+  return whyOf(error === "drives" ? "invalid" : error);
+}
+
+/**
+ * Why « Proposer une voiture » was not done: as `whyOf`, and `alreadyDriving` names who drives.
+ * `alreadyInCar` is about the passengers ticked in « Qui monte avec vous ? », which the form does
+ * not ask yet (#171): the generic reason until then.
+ */
+export function offerWhy(error: Parameters<typeof whyOf>[0] | "alreadyDriving" | "alreadyInCar", driver: string): Why {
+  if (error === "alreadyDriving") return { kind: "alreadyDriving", driver };
+  return whyOf(error === "alreadyInCar" ? "invalid" : error);
 }
 
 /** The page's words: a translator from the root of the messages, and a list in its language. */

@@ -200,11 +200,14 @@ describe("addPerson", () => {
     });
   });
 
-  it("refuses the retour of an event without a retour", async () => {
+  it.each([
+    ["from the retour", { bothLegs: false, leg: "retour" }],
+    ["« Aller et retour » from the aller", { bothLegs: true, leg: "aller" }],
+  ])("M7.8: without a retour, %s is refused by noRetour, with the state, and nobody is created", async (_, legs) => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx, { retourAt: null });
-      const outcome = await addPerson(trx, eventId, NEW_TOKEN, registration({ bothLegs: false, leg: "retour" }));
-      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "invalid" }));
+      const outcome = await addPerson(trx, eventId, NEW_TOKEN, registration(legs));
+      expect(outcome).toEqual({ ok: false, error: "noRetour", state: await readEventState(trx, eventId, NEW_TOKEN) });
       expect(await personIds(trx, eventId)).toEqual([]);
     });
   });
@@ -406,14 +409,22 @@ describe("setPersonLeg", () => {
     });
   });
 
-  it("refuses the retour of an event without a retour", async () => {
-    await withRollback(async (trx) => {
-      const { id: eventId } = await seedEvent(trx, { retourAt: null });
-      const lea = await seedPerson(trx, eventId);
-      const outcome = await setPersonLeg(trx, eventId, lea.token, { personId: lea.id, leg: "retour", kind: "withoutCar" });
-      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "invalid" }));
-    });
-  });
+  it.each(["withoutCar", "notConcerned"])(
+    "M7.3: %s on the retour of an event without one is refused by noRetour, with the state, before forbidden",
+    async (kind) => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx, { retourAt: null });
+        const lea = await seedPerson(trx, eventId);
+        await seedPlacement(trx, { personId: lea.id, eventId, leg: "aller", rideId: null });
+        const before = await readEventState(trx, eventId, lea.token);
+        const outcome = await setPersonLeg(trx, eventId, lea.token, { personId: lea.id, leg: "retour", kind });
+        expect(outcome).toEqual({ ok: false, error: "noRetour", state: before });
+        const forged = await setPersonLeg(trx, eventId, NOBODYS_TOKEN, { personId: lea.id, leg: "retour", kind });
+        expect(forged).toMatchObject({ ok: false, error: "noRetour" });
+        expect(await readEventState(trx, eventId, lea.token)).toEqual(before);
+      });
+    },
+  );
 });
 
 describe("C12.4: the same creation sent twice at once", () => {
