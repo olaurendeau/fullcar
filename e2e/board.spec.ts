@@ -381,7 +381,7 @@ for (const javaScriptEnabled of [true, false]) {
         for (const read of received) expectNoNumber(read.url, readText(read));
 
         const panels = await Promise.all(panelReads);
-        expect(panels).toHaveLength(javaScriptEnabled && organiser ? 1 : 0);
+        expect(panels.length, "reads of the panel").toBe(javaScriptEnabled && organiser ? 1 : 0);
         for (const read of panels) {
           const text = readText(read);
           expect(text, "the panel holds Tom's number").toContain(PHONES.tom);

@@ -241,7 +241,7 @@ test.describe("organiser's arrival", () => {
     const texts = await Promise.all(seen);
     // The check itself was seen: a POST to the page, the token in its body only.
     expect(texts.filter((text) => text.includes("next-action")).length).toBeGreaterThan(0);
-    expect(texts.filter((text) => text.includes(seededEvent.token))).toEqual([]);
+    expect(texts.filter((text) => text.includes(seededEvent.token)).length, "URLs and headers holding the token").toBe(0);
   });
 
   test("C5.8: no referrer from the public page nor from the organiser's page", async ({ page, seededEvent }) => {
