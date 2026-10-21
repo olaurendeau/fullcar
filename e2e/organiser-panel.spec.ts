@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { leaveNoToken } from "./fixtures";
-import { expectRing, press } from "./focus-ring";
+import { expectRing, press, pressUntil } from "./focus-ring";
 import { digitsOf, expect, organiserPath, type ScenePhones, seedOrganiserScene, test } from "./organiser";
 
 /*
@@ -285,7 +285,7 @@ test("O5.6, O5.8, O7.4: five lines, then « Afficher… »; each list and each l
   expect((await box(more)).width).toBeGreaterThanOrEqual((await box(persons)).width);
 
   // By keyboard: the list unfolds, the focus on the 6th first name, its ring as wide as the text.
-  await more.focus();
+  await pressUntil(page, "Tab", more);
   await press(page, "Enter");
   await expect(rows(persons)).toHaveCount(7);
   const sixth = rows(persons).nth(5).getByText("Félix", { exact: true });

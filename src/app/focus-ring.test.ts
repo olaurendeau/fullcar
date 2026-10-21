@@ -20,7 +20,8 @@ function splitClass(name: string): { variants: string[]; utility: string } {
   for (const char of name) {
     if (char === "[" || char === "(") depth += 1;
     if (char === "]" || char === ")") depth -= 1;
-    if (char === ":" && depth === 0) {
+    // At or below 0: a word cut at a quote inside a bracket (`])]:utility`) is still split.
+    if (char === ":" && depth <= 0) {
       parts.push(part);
       part = "";
     } else part += char;
@@ -38,8 +39,8 @@ function oldRing(name: string): string | undefined {
   return undefined;
 }
 
-/** Every word of the file that may be a class: what lies between spaces, quotes, commas and braces. */
-const words = (text: string) => text.split(/[\s"`,;{}]+/).filter(Boolean);
+/** Every word of the file that may be a class: what lies between spaces, quotes (single ones too), commas and braces. */
+const words = (text: string) => text.split(/[\s"'`,;{}]+/).filter(Boolean);
 
 function* sources(directory: string): Generator<string> {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -87,6 +88,14 @@ describe("F1.12: the old focus ring is gone from src/", () => {
     ]) {
       expect(oldRing(allowed), allowed).toBeUndefined();
     }
+  });
+
+  it("finds them between single quotes too, a bracket's quotes included", () => {
+    const found = (text: string) => words(text).filter((word) => oldRing(word));
+    expect(found("cn('focus-visible:ring-3')")).toEqual(["focus-visible:ring-3"]);
+    expect(found(`"[&_svg:not([class*='size-'])]:focus-visible:ring-3 [&_svg:not([class*='size-'])]:size-4"`)).toEqual([
+      "])]:focus-visible:ring-3",
+    ]);
   });
 
   it("no .tsx nor .css file of src/ has one", () => {
