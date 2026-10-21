@@ -242,7 +242,9 @@ interface Sent {
  * Chromium may then report the request aborted once the whole answer is in, and drop its body
  * before `response.text()` asks (#303, see `watchRequests` in `organiser-fold.spec.ts`). Such a
  * request, routed by the test itself ahead of this route, is read by `response.text()`, and
- * fails if it cannot be: a test that only lets it through uses `route.fallback()`.
+ * fails if it cannot be: a test that only lets it through uses `route.fallback()`. A redirect
+ * is not followed here but given to the browser, which follows it through this route again: its
+ * `Location` and the next request stay searched.
  */
 async function record(context: BrowserContext, hide: (text: string) => string) {
   const state = { on: true };
@@ -256,7 +258,7 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     async (route: Route) => {
       const request = route.request();
       if (!isAction(request) && !isRouterRead(request)) return route.fallback();
-      const answer = route.fetch();
+      const answer = route.fetch({ maxRedirects: 0 });
       fetched.set(
         request,
         answer.then((response) => response.text()),
