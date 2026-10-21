@@ -10,6 +10,7 @@ import type { EventState } from "../event-state";
 import { ParticipantBoard, type BoardHandle } from "../participant-board";
 import { useAdminLinkCheck } from "./admin-link";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
+import { keepFolded, readFolded } from "./organiser-fold";
 import { alertShown, announcement, panelRead, screenRead, screenReducer } from "./screen-state";
 
 /**
@@ -19,8 +20,10 @@ import { alertShown, announcement, panelRead, screenRead, screenReducer } from "
  * - The area: the panel once the server has accepted the link's token (C4.9), the "not valid"
  *   message otherwise (C6.5), and a status line while the first check runs (O5.1). Hidden
  *   without JavaScript, where the page says why instead (O5.5).
- * - After « Réessayer », the focus goes to the panel's title, or to the "not valid" message,
- *   before the browser paints, and stays on the button on a new failure (O5.8).
+ * - After « Réessayer », the focus goes to the button of the panel's title, or to the "not
+ *   valid" message, before the browser paints, and stays on the button on a new failure (O5.8).
+ * - The panel arrives folded or not as the device kept it, read as it is applied, never before
+ *   (O8.5); its button alone folds and unfolds it, and keeps that on the device (#204).
  * - « Actualiser » reads the panel and the board together, and applies both or nothing (O1.9).
  *   After an action of the board, which shows its outcome already, the panel alone is read
  *   again, and withdrawn should that fail (O1.10). Only the latest read counts.
@@ -50,7 +53,7 @@ export function OrganiserScreen({
   const boardRef = useRef<BoardHandle>(null);
   const latest = useRef(0);
   const retried = useRef(false);
-  const title = useRef<HTMLHeadingElement>(null);
+  const title = useRef<HTMLButtonElement>(null);
   const invalid = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null)[] } | null>(null);
@@ -60,8 +63,9 @@ export function OrganiserScreen({
   useLayoutEffect(() => {
     // A link checked again outlives any read still running.
     latest.current += 1;
-    dispatch({ type: "checked", check });
-  }, [check]);
+    // Read with the panel only, in this continuation: it shows folded from its first frame.
+    dispatch({ type: "checked", check, folded: check.state === "valid" && readFolded(id) });
+  }, [check, id]);
 
   useLayoutEffect(() => {
     if (!retried.current || screen.state === "loading" || screen.state === "failed") return;
@@ -136,6 +140,11 @@ export function OrganiserScreen({
         onRefresh={refresh}
         expanded={screen.expanded}
         onToggle={(key) => dispatch({ type: "listToggled", key })}
+        folded={screen.folded}
+        onToggleFolded={() => {
+          dispatch({ type: "toggleFolded" });
+          keepFolded(id, !screen.folded);
+        }}
       />
     );
   } else if (screen.state === "loading") {
