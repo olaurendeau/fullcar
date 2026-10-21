@@ -18,6 +18,8 @@ import { currentDriver, driverChoice, NEW_DRIVER } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
+import type { NotDone } from "./failure-words";
+import { focusOffer } from "./focus";
 import { useSends, type FromSheet } from "./hidden-page";
 import { LeavingStep } from "./leaving-step";
 import { personErrorMessage } from "./person-error";
@@ -37,6 +39,10 @@ export interface RideDraft extends Record<"location" | "time" | "seats" | "note"
 /** An offer as the form sends it; sending, and where a failure is said, as for a registration. */
 export interface Offering extends FromSheet, Pick<Registering, "sending"> {
   offer: RideDraft;
+  /** What the bar says was not done: who drives, as the form named her, and each leg offered (C11.11). */
+  notDone: NotDone & { kind: "offerRide" };
+  /** Where the focus goes from the bar: « Proposer une voiture » of the leg it was sent from. */
+  landmark: () => boolean;
   /** The form's creation ids, the cars' and a new driver's, drawn at its first send and kept until one succeeds. */
   creationIds: () => CreationIds;
 }
@@ -60,6 +66,8 @@ export interface Changing extends FromSheet, Pick<Registering, "sending"> {
   ride: Partial<Record<RideField, string>>;
   seenPassengerIds: string[];
   leaving: string[];
+  /** What the bar says was not done: the changes to this car, named by its driver and its leg (C11.11). */
+  notDone: NotDone;
 }
 
 /** What became of a change, as for an offer; `passengersChanged` gives how many passengers there are now (C8.5). */
@@ -132,7 +140,13 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
         toggle(next);
       }}
       trigger={
-        <Button variant={main ? "default" : "outline"} disabled={disabled} className="h-auto min-h-11 whitespace-normal">
+        <Button
+          variant={main ? "default" : "outline"}
+          disabled={disabled}
+          // The landmark of its failure in the bar (`focusOffer`).
+          data-offer-ride={form.leg}
+          className="h-auto min-h-11 whitespace-normal"
+        >
           <Car aria-hidden />
           {t("Board.offerRide")}
         </Button>
@@ -294,6 +308,7 @@ function RideForm({
       seenPassengerIds: seen,
       leaving,
       sending: setSending,
+      notDone: { kind: "editRide", driver: editing.car.driver.firstName, leg },
       ...sheet,
     });
     if (answer?.kind === "errors") {
@@ -335,8 +350,12 @@ function RideForm({
     const { firstName, phone, otherLocation, otherTime, ...car } = values;
     const kind = otherField && otherChoice && otherLegKind(otherField, otherChoice);
     const otherLeg = kind === "drive" ? { kind, location: otherLocation, time: otherTime } : kind && { kind };
+    // As the form names her: the first name typed, its spaces trimmed, or the one chosen.
+    const name = person?.ok ? person.person.firstName : (candidates.find((candidate) => candidate.id === driver)?.firstName ?? "");
     const answer = await mode.offerRide({
       offer: { leg, ...car, driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver }, otherLeg },
+      notDone: { kind: "offerRide", driver: name, legs: kind === "drive" ? "both" : leg },
+      landmark: () => focusOffer(leg),
       creationIds: () => (creationIds.current ??= { rideId: newCreationId(), personId: newCreationId(), otherRideId: newCreationId() }),
       sending: setSending,
       ...sheet,

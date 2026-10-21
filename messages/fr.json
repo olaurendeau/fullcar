@@ -300,8 +300,10 @@
     "refreshed": "Espace organisateur actualisé.",
     "refreshFailed": {
       "title": "L’espace organisateur n’a pas pu être actualisé.",
-      "body": "Ce qui est affiché date du dernier chargement. Vérifiez la connexion, puis utilisez de nouveau « Actualiser »."
+      "body": "Ce qui est affiché date du dernier chargement. Vérifiez la connexion, puis utilisez de nouveau « Actualiser ».",
+      "bodyWithdrawn": "Vérifiez la connexion, puis utilisez de nouveau « Actualiser »."
     },
+    "stale": "L’espace organisateur n’est plus à jour. Utilisez « Actualiser » pour le relire.",
     "needsJavaScript": "L’espace organisateur nécessite JavaScript : activez-le, puis rechargez la page.",
     "withoutCar": {
       "title": "Sans voiture ({count})",
@@ -338,6 +340,7 @@
     "cookiesBlocked": "Your browser blocks cookies, which keep the language choice. Allow them for this site, then try again."
   },
   "Contact": {
+    "home": "Accueil",
     "link": "Nous contacter",
     "newTab": "(s’ouvre dans un nouvel onglet)"
   },

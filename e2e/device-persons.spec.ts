@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { failActions, holdActions, holdToken, newToken } from "./device";
+import { failActions, holdActions, holdFirst, holdToken, messages, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -255,16 +255,20 @@ test.describe("device persons", () => {
     await page.goto(`/e/${seededEvent.id}`);
     const panel = page.getByRole("tabpanel");
     const retry = page.getByRole("button", { name: "Réessayer" });
-    const alert = page.getByRole("alert").filter({ hasText: "Vos inscriptions n’ont pas pu être chargées" });
+    // The section's alert, which the bar's failure, naming what was not loaded too, is not.
+    const alert = page.getByRole("alert").filter({ hasText: "Rien ne peut être ajouté ni modifié" });
+    await expect(alert).toContainText("Vos inscriptions n’ont pas pu être chargées");
     await expect(alert).toContainText(
       "Rien ne peut être ajouté ni modifié tant qu’elles ne sont pas chargées. Vérifiez la connexion, puis réessayez.",
     );
     await expect(freeSeats(panel).first()).toBeDisabled();
 
-    // From the keyboard, against a server error: the generic message, the focus on the new « Réessayer ».
+    // From the keyboard, against a server error: the bar says what was not loaded, the focus on the new « Réessayer » (#225).
     await retry.focus();
     await page.keyboard.press("Enter");
-    const failed = page.getByRole("alert").filter({ hasText: "Une erreur est survenue et rien n’a changé." });
+    const failed = page
+      .getByRole("alert")
+      .filter({ hasText: "Vos inscriptions n’ont pas pu être chargées. Une erreur est survenue : réessayez dans un instant." });
     await expect(failed).toBeVisible();
     await expect(retry).toBeFocused();
     // Escape with the focus outside the bar: the bar closes, the focus stays.
@@ -275,14 +279,14 @@ test.describe("device persons", () => {
     // Offline: the bar says so, and the page keeps room below it (C11.4).
     await context.setOffline(true);
     await page.keyboard.press("Enter");
-    const offline = page.getByRole("alert").filter({ hasText: "Action impossible, vérifiez la connexion" });
+    const offline = page.getByRole("alert").filter({ hasText: "Vos inscriptions n’ont pas pu être chargées. Vérifiez la connexion, puis réessayez." });
     await expect(offline).toBeVisible();
     await expect(page.locator("main")).toHaveCSS("padding-bottom", /^1[2-9]\d(\.\d+)?px$/);
-    // Escape with the focus on « Fermer »: the focus goes to the active tab.
+    // Escape with the focus on « Fermer »: the focus goes to the line's landmark, « Réessayer » (C11.10).
     await page.getByRole("button", { name: "Fermer" }).focus();
     await page.keyboard.press("Escape");
     await expect(offline).toHaveCount(0);
-    await expect(page.getByRole("tab", { name: /^Aller/ })).toBeFocused();
+    await expect(retry).toBeFocused();
 
     // Read at last: the focus on the loading line meanwhile, then on the section's button.
     await context.setOffline(false);
@@ -367,14 +371,44 @@ test.describe("device persons, without a retour", () => {
     expect(await cells(page)).toEqual([["Sans voiture"]]);
   });
 
-  test("without tabs, « Fermer » gives the focus to the event's title", async ({ db, page, seededEvent }) => {
-    const token = newToken();
-    await seedPerson(db, seededEvent.id, { firstName: "Claire" }, token);
-    await holdToken(page, seededEvent.id, token);
-    await failActions(page);
+  // « Réessayer » is the landmark of its failure (#225); a read with no section to show gives the focus to the title, without tabs.
+  test("without tabs, « Fermer » gives the focus to « Réessayer », and a read with no person to the event's title", async ({ page, seededEvent }) => {
+    await holdToken(page, seededEvent.id, newToken());
+    const failing = await failActions(page);
     await page.goto(`/e/${seededEvent.id}`);
-    await page.getByRole("button", { name: "Réessayer" }).click();
+    const retry = page.getByRole("button", { name: "Réessayer" });
+    await retry.click();
     await page.getByRole("button", { name: "Fermer" }).click();
+    await expect(retry).toBeFocused();
+    failing.on = false;
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { level: 1, name: "Tournoi de Rennes" })).toBeFocused();
+    await expect(retry).toHaveCount(0);
+  });
+
+  // Rule 8 through « Fermer »: a line whose landmark no longer shows, the car gone with nobody
+  // left without a car, hence no banner either; without tabs, the event's title takes the focus.
+  test("without tabs, « Fermer » on a line whose landmark is gone gives the focus to the event's title", async ({ db, page, seededEvent }) => {
+    const token = newToken();
+    await seedPerson(db, seededEvent.id, { firstName: "Tom" }, token);
+    const sophie = await seedRide(db, seededEvent.id, (await seedPerson(db, seededEvent.id, { firstName: "Sophie" })).id);
+    await holdToken(page, seededEvent.id, token);
+    const answer = await holdFirst(page, sophie, false);
+    await page.goto(`/e/${seededEvent.id}`);
+    // Tom is not on the aller: the seat opens the sheet, Tom unticked.
+    await page.getByRole("button", { name: /^Place libre/ }).first().click();
+    const sheet = page.getByRole("dialog", { name: "Qui monte dans la voiture de Sophie ?" });
+    await sheet.getByRole("checkbox", { name: "Tom", exact: true }).setChecked(true);
+    await sheet.getByRole("button", { name: /^Placer/ }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await db.deleteFrom("ride").where("id", "=", sophie).execute();
+    answer();
+
+    await expect(messages(page)).toHaveText(["Tom n’a pas pu monter dans la voiture de Sophie. Cette voiture n’est plus proposée."]);
+    await expect(page.getByRole("heading", { name: "Voiture de Sophie" })).toHaveCount(0);
+    await expect(page.locator("[data-leg-banner]")).toHaveCount(0);
+    await page.locator("[data-message-bar]").getByRole("button", { name: "Fermer" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Tournoi de Rennes" })).toBeFocused();
   });
 });

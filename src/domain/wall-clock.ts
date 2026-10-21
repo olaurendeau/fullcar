@@ -60,6 +60,11 @@ export function toWallClock(date: WallDate, time: WallTime): WallClock {
   return `${date} ${time}:00`;
 }
 
+/** Whether `value` is a WallClock, the shape `wallClockParts` splits: anything may be given. */
+export function isWallClock(value: unknown): value is WallClock {
+  return typeof value === "string" && CLOCK.test(value);
+}
+
 /** The date and time of a WallClock, as the form shows them. */
 export function wallClockParts(at: WallClock): { date: WallDate; time: WallTime } {
   const match = CLOCK.exec(at);

@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { createFormatter, createTranslator, type Messages } from "next-intl";
 import { describe, expect, it } from "vitest";
 import type { DeviceState } from "@/domain/board";
-import type { CellAction } from "@/domain/device-matrix";
+import { cellActions, type CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
-import { cellNotDone, cellWhy, failureText, nameList, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
+import { cellNotDone, cellWhy, editedFields, failureText, nameList, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
 
 // C11.11: every failure in the bar, word for word as « Chaque échec, mot pour mot » says it
 // (docs/design/event-board/README.md, v4.2), in French and in English.
@@ -172,9 +172,73 @@ describe("cellNotDone and cellWhy: a cell's failure names the person, the leg an
       choice: "notConcerned",
     });
   });
+
+  // cellNotDone names the car for « Sortir de la voiture »: only a passenger has one to leave (#290's review).
+  it("« Sortir de la voiture » is offered to a passenger alone", () => {
+    // One of each kind: a new kind of state does not compile until it is here.
+    const states = {
+      withoutCar: { kind: "withoutCar" },
+      notConcerned: { kind: "notConcerned" },
+      driver: { kind: "driver", rideId: "tom" },
+      passenger: { kind: "passenger", rideId: "claire", driver: { id: "claire", firstName: "Claire" } },
+    } satisfies { [K in DeviceState["kind"]]: Extract<DeviceState, { kind: K }> };
+    const offered = Object.values(states).filter((state) => cellActions(state).includes("leaveCar"));
+    expect(offered.map((state) => state.kind)).toEqual(["passenger"]);
+  });
 });
 
-const FIVE =["Tom", "Léa", "Hugo", "Nina", "Zoé"];
+// #225: « Modifier » names the fields it sent; a refusal of a person's form says its reason.
+describe("editedFields and personWhy: a person's form (C11.11)", () => {
+  it("names the one field sent, or both", () => {
+    expect(editedFields(["firstName"])).toBe("firstName");
+    expect(editedFields(["phone"])).toBe("phone");
+    expect(editedFields(["firstName", "phone"])).toBe("both");
+    // Nothing changed: the form as it showed, both fields.
+    expect(editedFields([])).toBe("both");
+  });
+
+  it("gives `drives`, which only a cell's action meets, the generic reason, and the others as `whyOf` does", () => {
+    expect(personWhy("drives")).toEqual({ kind: "failed" });
+    for (const error of ["forbidden", "eventNotFound", "invalid", "idTaken", "noRetour", "offline", "failed"] as const) {
+      expect(personWhy(error)).toEqual(whyOf(error));
+    }
+  });
+
+  it("« Modifier » of the first name alone, word for word", () => {
+    const notDone: NotDone = { kind: "editPerson", firstName: "Tom", fields: editedFields(["firstName"]) };
+    expect(failureText(words("fr"), notDone, personWhy("offline"))).toBe("Le prénom de Tom n’a pas été enregistré. Vérifiez la connexion, puis réessayez.");
+    expect(failureText(words("en"), notDone, personWhy("offline"))).toBe("Tom’s first name was not saved. Check your connection, then try again.");
+  });
+});
+
+// #226: an offer's refusal says its reason, `alreadyDriving` naming who drives.
+describe("offerWhy: « Proposer une voiture » (C11.11)", () => {
+  const offers = rows().filter((row) => row.action.startsWith("« Proposer une voiture »"));
+
+  it("reads the rows of an offer on one leg and on both", () => {
+    expect(new Set(offers.map((row) => row.action)).size).toBe(2);
+  });
+
+  for (const row of offers) {
+    // The passengers ticked in « Qui monte avec vous ? », which the form does not ask yet (#171).
+    for (const source of sources(row.failure).filter((source) => source !== "alreadyInCar")) {
+      it(`${row.action}, ${source}`, () => {
+        const { notDone } = ACTIONS[row.action];
+        if (notDone.kind !== "offerRide") throw new Error(row.action);
+        const why = offerWhy(source as Parameters<typeof offerWhy>[0], notDone.driver);
+        expect(failureText(words("fr"), notDone, why)).toBe(row.fr);
+        expect(failureText(words("en"), notDone, why)).toBe(row.en);
+      });
+    }
+  }
+
+  it("gives `alreadyInCar`, with no passenger ticked to name, and `noRetour` the generic reason", () => {
+    expect(offerWhy("alreadyInCar", "Marc")).toEqual({ kind: "failed" });
+    expect(offerWhy("noRetour", "Marc")).toEqual({ kind: "failed" });
+  });
+});
+
+const FIVE = ["Tom", "Léa", "Hugo", "Nina", "Zoé"];
 
 // « Plusieurs prénoms »: up to three, `format.list`; beyond, the first two and « et N autres ». In
 // English, `format.list` puts a comma before « and » (Intl.ListFormat, `en`).

@@ -12,7 +12,9 @@ leaveNoToken();
 type Db = Kysely<Database>;
 
 const GARE = "Gare de Cesson";
-const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+/** In the bar, a failure names the car and its leg (C11.11, #226). */
+const BAR_FAILED =
+  "Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Une erreur est survenue : réessayez dans un instant.";
 const CHANGED = "Quelqu’un a pris ou libéré une place entre-temps : rien n’a changé. Choisissez à nouveau parmi les personnes à bord.";
 const SEATS = "Places, sans compter qui conduit";
 const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
@@ -256,7 +258,7 @@ test.describe("edit a car", () => {
         await page.keyboard.press("Escape");
       }
       await expect(page.getByRole("dialog")).toHaveCount(0);
-      await expect(bar(page)).toHaveText(FAILED);
+      await expect(bar(page)).toHaveText(BAR_FAILED);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
       expect((await rideOf(db, scene.car)).location).toBe("Mairie de Cesson");
     });
@@ -295,7 +297,7 @@ test.describe("edit a car", () => {
         await editButton(page).click();
         await page.keyboard.press("Escape");
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        if (said) await expect(bar(page)).toHaveText(FAILED);
+        if (said) await expect(bar(page)).toHaveText(BAR_FAILED);
         else await expect(bar(page)).toBeEmpty();
         expect(await rideOf(db, scene.car)).toMatchObject({ location: said ? "Mairie de Cesson" : GARE, note: note || null });
       });

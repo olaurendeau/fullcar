@@ -1,13 +1,11 @@
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { FOLDED_LINES as FOLD } from "@/app/e/[id]/admin/screen-state";
 import { Button } from "@/components/ui/button";
 import type { CarWithoutPhone, OrganiserLeg } from "@/domain/organiser-panel";
 import { wallClockAsUtc, type WallDate } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { PhoneLink } from "./phone-link";
-
-/** The lines a long list shows before « Afficher les {n} autres » (O5.6). */
-const FOLD = 5;
 
 /**
  * What takes the focus in a line, its first name or its car's title: inline, so that the
@@ -15,7 +13,7 @@ const FOLD = 5;
  */
 const focusTarget = "rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
-/** Whether a list is unfolded, and how to fold or unfold it: kept by `AdminPanel`, never here. */
+/** Whether a list is unfolded, and how to fold or unfold it: kept by the organiser's screen, never here. */
 export interface Fold {
   expanded: boolean;
   onToggle: () => void;
@@ -103,7 +101,8 @@ export function OrganiserCarsWithoutPhone({
 /**
  * A list's title (h4, the focus's fallback), its sentence, or the empty one at 0, then its
  * lines: the first five, then « Afficher les {n} autres », which shows them all and puts the
- * focus on the 6th; « Réduire la liste » keeps it (O5.6, O5.8).
+ * focus on the 6th; « Réduire la liste » keeps it (O5.6, O5.8). `data-organiser-list`: where
+ * the focus goes back to its title, should a read take away the line or the button it was on (O5.7).
  */
 function FoldList({
   title,
@@ -132,7 +131,7 @@ function FoldList({
   }, [expanded]);
 
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+    <div data-organiser-list className="flex min-w-0 flex-col gap-1.5 text-sm">
       <h4 id={titleId} tabIndex={-1} className="self-start font-semibold outline-none">
         {title}
       </h4>
