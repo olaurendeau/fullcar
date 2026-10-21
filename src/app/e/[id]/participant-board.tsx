@@ -4,8 +4,8 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
-import { cellWhy, failureText, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
-import { focusCar, focusCell, focusLandmark, focusName } from "@/components/event/focus";
+import { cellWhy, failureText, personWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
+import { focusCar, focusCell, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
 import { forget, sendAbout, type FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
@@ -37,7 +37,7 @@ export interface BoardHandle {
   apply(state: EventState): void;
 }
 
-/** No landmark of its own yet (« Ajouter », « Proposer », « Réessayer »): rule 8 goes on to the other lines, then to the active tab. */
+/** No landmark of its own yet (« Proposer »): rule 8 goes on to the other lines, then to the active tab. */
 const noLandmark = () => false;
 
 /**
@@ -82,8 +82,8 @@ export function ParticipantBoard({
   // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
   // hides the page: until then, it would be neither seen nor announced. It joins the others
   // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
-  // What was not done, then why (C11.11); without `notDone`, the generic words, until #225 and
-  // #226 name theirs.
+  // What was not done, then why (C11.11); without `notDone`, the generic words, until #226
+  // names theirs.
   function failedIn(sheet: FromSheet, { notDone, why, landmark }: { notDone?: NotDone; why: Why; landmark: () => boolean }) {
     if (sheet.inSheet()) return;
     const offline = why.kind === "offline" || (why.kind === "retryUndo" && why.problem === "offline");
@@ -103,7 +103,7 @@ export function ParticipantBoard({
       if (retry && sent) {
         retry.answered();
         if (sent.ok) messages.succeed(null);
-        else failedIn(retry, failure(sent.problem, noLandmark));
+        else failedIn(retry, { notDone: { kind: "readDevice" }, why: whyOf(sent.problem), landmark: focusRetry });
       }
       if (sent?.ok && sent.value) return sent.value;
       throw new Error("The device's persons could not be read.");
@@ -111,8 +111,13 @@ export function ParticipantBoard({
     setBoard,
   );
 
-  // What became of a person's form, sent from `sheet`.
-  function personFormOutcome(sent: Sent<PersonOutcome> | undefined, sheet: FromSheet, landmark: () => boolean): Registration | undefined {
+  // What became of a person's form, sent from `sheet`. In the bar, the failure names who, and
+  // the fields sent for a change, then why; the form keeps the generic words.
+  function personFormOutcome(
+    sent: Sent<PersonOutcome> | undefined,
+    sheet: FromSheet & { notDone: NotDone },
+    landmark: () => boolean,
+  ): Registration | undefined {
     if (sent === undefined) return undefined;
     sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
@@ -121,23 +126,24 @@ export function ParticipantBoard({
       return { kind: "done" };
     }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
-    // A refusal has no words of its own: the generic message, and the page shows the state it carries.
+    // The page shows the state a refusal carries.
     const problem = sent.ok ? "failed" : sent.problem;
-    failedIn(sheet, failure(problem, landmark));
+    const why = outcome ? personWhy(outcome.error) : whyOf(problem);
+    failedIn(sheet, { notDone: sheet.notDone, why, landmark });
     return { kind: "problem", problem };
   }
 
   // Each action runs once per sheet (`FromSheet.key`): one on its way never drops the action
   // of a sheet opened since, which Next sends once the first has its answer (#167).
   // The token is drawn and stored only once the request is about to leave: offline, nothing is (C1.5, C1.13).
-  const addPerson: AddPerson = async ({ person, creationId, sending, ...sheet }) => {
+  const addPerson: AddPerson = async ({ person, creationId, sending, landmark, ...sheet }) => {
     const sent = await runAction(
       `addPerson:${sheet.key}`,
       () => storePerson(id, ensureDeviceToken(id), { ...person, id: creationId() }),
       sending,
       sheet.leaves,
     );
-    const outcome = personFormOutcome(sent, sheet, noLandmark);
+    const outcome = personFormOutcome(sent, sheet, landmark);
     if (outcome?.kind === "done") device.registered();
     return outcome;
   };

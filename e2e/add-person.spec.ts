@@ -27,6 +27,8 @@ const FR = {
   required: "Champ requis.",
   invalidPhone: "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )",
   failed: "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
+  /** In the bar, the failure names who was not added (C11.11, #225). */
+  barFailed: "Léa n’a pas pu rejoindre vos inscriptions. Une erreur est survenue : réessayez dans un instant.",
 };
 
 const storageKey = (id: string) => `fullcar:personal-token:${id}`;
@@ -397,10 +399,10 @@ test.describe("add a person", () => {
         }).toPass();
         await expect(form(page)).toHaveCount(0);
       }
-      await expect(bar(page)).toHaveText(FR.failed);
+      await expect(bar(page)).toHaveText(FR.barFailed);
       // The sheet that sent says nothing, and the bar fills only once the page is no longer hidden.
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
-      await expect(alerts(page)).toHaveText([FR.failed]);
+      await expect(alerts(page)).toHaveText([FR.barFailed]);
     });
   }
 
@@ -434,7 +436,7 @@ test.describe("add a person", () => {
       } else {
         await page.keyboard.press("Escape");
         await expect(form(page)).toHaveCount(0);
-        await expect(bar(page)).toHaveText(FR.failed);
+        await expect(bar(page)).toHaveText(FR.barFailed);
       }
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
     });

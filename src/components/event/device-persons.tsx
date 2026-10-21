@@ -102,6 +102,8 @@ export function DevicePersons({
         <p className="text-muted-foreground">{t("failedBody")}</p>
         <Button
           ref={target}
+          // The landmark of its failure in the bar (`focusRetry`).
+          data-device-retry
           variant="outline"
           className="col-start-2 mt-2 h-11 justify-self-start"
           onClick={() => {

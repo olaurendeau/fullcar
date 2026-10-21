@@ -64,3 +64,13 @@ export function focusBanner(leg: Leg): boolean {
 
 /** The landmark of a message about a car (README, « Le repère de chaque message »): its title, or its leg's banner once it is gone. */
 export const focusCar = (leg: Leg, rideId: string) => () => focusCarTitle(leg, rideId) || focusBanner(leg);
+
+/** « Ajouter une personne » of `leg`, on its tab; false while that tab is not the active one. */
+export function focusAddPerson(leg: Leg): boolean {
+  return focus(document.querySelector<HTMLElement>(`[data-add-person="${leg}"]`));
+}
+
+/** « Réessayer » of « Vos inscriptions », above the tabs, shown while their read has failed. */
+export function focusRetry(): boolean {
+  return focus(document.querySelector<HTMLElement>("[data-device-retry]"));
+}
