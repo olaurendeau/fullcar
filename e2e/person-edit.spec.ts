@@ -189,7 +189,7 @@ test.describe("edit a person", () => {
     await expect(firstName).not.toHaveAttribute("aria-invalid");
     await expect(firstName).toHaveValue("Clara");
     await expect(form).toBeVisible();
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
     expect(await stored(db, scene.claire)).toEqual({ first_name: "Claire", phone: CLAIRE_PHONE });
   });
 
@@ -447,7 +447,8 @@ test.describe("edit a person", () => {
     const buttons = page.locator("[data-message-bar] button");
     const names = () => buttons.evaluateAll((all) => all.map((button) => button.getAttribute("aria-label") ?? button.textContent));
     const before = await names();
-    expect(before).toEqual(["Fermer"]);
+    // The success's « Annuler » (#170), then « Fermer ».
+    expect(before).toEqual(["Annuler", "Fermer"]);
 
     const sent = changes(page, scene.claire);
     const form = await openForm(page, "Claire");

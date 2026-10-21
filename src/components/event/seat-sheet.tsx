@@ -70,8 +70,14 @@ export interface SendingSheet extends FromSheet {
   placed: string;
 }
 
+/** A person sent, and where she stood on the leg before, as the page showed it: what « Annuler » gives her back (C5.10). */
+export interface Seated {
+  personId: string;
+  before: "withoutCar" | "notConcerned";
+}
+
 /** Takes seats in a car for persons of the device (R6); `undefined` when seats are already on their way. */
-export type TakeSeats = (seats: { rideId: string; leg: Leg; personIds: string[] }, sheet: SendingSheet) => Promise<SeatsTaken | undefined>;
+export type TakeSeats = (seats: { rideId: string; leg: Leg; persons: Seated[] }, sheet: SendingSheet) => Promise<SeatsTaken | undefined>;
 
 /** The car's title, or the active tab once it is gone. */
 const toCar = (leg: Leg, rideId: string) => focusFirstShown([() => focusCarTitle(leg, rideId)]);
@@ -124,7 +130,7 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
     const driver = car.driver.firstName;
     const placed = t("Seat.placed", { firstName: person.firstName, driver });
     const taken = await device.takeSeats(
-      { rideId, leg: board.leg, personIds: [person.id] },
+      { rideId, leg: board.leg, persons: [{ personId: person.id, before: "withoutCar" }] },
       toBar(`tap:${rideId}`, rideId, person, driver, placed),
     );
     // Offline or a server error changes nothing on the page: the focus stays where it is.
@@ -198,7 +204,8 @@ function RegisterSheet({
     const person = { id: registering.creationId(), firstName: registering.notDone.kind === "addPerson" ? registering.notDone.firstName : registering.person.firstName };
     afterClose.current = () => toCarOrBanner(leg, rideId);
     const placed = t("Seat.placed", { firstName: person.firstName, driver });
-    await device.takeSeats({ rideId, leg, personIds: [person.id] }, { ...toBar(`register:${person.id}`, rideId, person, driver, placed), sending: registering.sending });
+    // Registered from the seat, she was without a car on its leg.
+    await device.takeSeats({ rideId, leg, persons: [{ personId: person.id, before: "withoutCar" }] }, { ...toBar(`register:${person.id}`, rideId, person, driver, placed), sending: registering.sending });
     return added;
   };
 
@@ -307,7 +314,9 @@ function SeatSheet({
     const sheet = sends(personIds);
     const placed =
       names.length === 1 ? t("Seat.placed", { firstName: names[0], driver }) : t("Sheet.placed", { names: nameList(words, names), driver });
-    const taken = await takeSeats({ rideId, leg, personIds }, { ...sheet, sending: setSending, seats: { names, driver }, placed });
+    // Ticked by default exactly when without a car (C6.1): unticked, she did not do the leg.
+    const persons = chosen.map(({ id, checked }): Seated => ({ personId: id, before: checked ? "withoutCar" : "notConcerned" }));
+    const taken = await takeSeats({ rideId, leg, persons }, { ...sheet, sending: setSending, seats: { names, driver }, placed });
     // Not the sheet opened since: what came back is the bar's.
     if (taken === undefined || !sheet.inSheet()) return;
     if (taken.kind === "done") {
@@ -355,7 +364,7 @@ function SeatSheet({
             {!gone && candidates.length > 0 && (
               // Never `disabled`: the focus would fall out of the sheet while it is sent.
               <Button
-                className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground aria-disabled:cursor-not-allowed"
+                className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
                 aria-disabled={sending || submit.kind !== "ready" || undefined}
                 onClick={() => void place()}
               >

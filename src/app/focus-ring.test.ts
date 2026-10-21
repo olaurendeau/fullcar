@@ -122,12 +122,17 @@ describe("F1.12: the old focus ring, and the outline removed, are gone from src/
 
   it("no .tsx, .css nor .ts file of src/ outside the tests has one", () => {
     const found: string[] = [];
+    const read: string[] = [];
     for (const path of sources(SRC)) {
+      read.push(relative(SRC, path));
       for (const word of words(readFileSync(path, "utf8"))) {
         const why = oldRing(word);
         if (why) found.push(`${relative(SRC, path)}: ${word} (${why})`);
       }
     }
+    // #343: a scan that reads nothing finds nothing. It reads each kind of file, and more than a handful.
+    expect(read, "files read").toEqual(expect.arrayContaining(["app/globals.css", "components/ui/button.tsx", "db/test-events.ts"]));
+    expect(read.length, "files read").toBeGreaterThanOrEqual(50);
     expect(found).toEqual([]);
   });
 });
@@ -137,5 +142,41 @@ describe("F1.13: the ring token", () => {
     const css = readFileSync(join(SRC, "app/globals.css"), "utf8");
     const root = css.match(/:root\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(root.match(/--ring:\s*([^;]+);/)?.[1]).toBe("oklch(0.556 0 0)");
+  });
+});
+
+/*
+ * #347, P1.11 of the language-switch design (v3.3.3): the pointer is one rule, in the `base`
+ * layer of `globals.css`. A utility is in the `utilities` layer, which beats `base`: a
+ * `cursor-not-allowed`, whatever its variants, would give an inactive button another pointer
+ * than the arrow. Only the shadcn fields and label keep theirs, none of them inactive today.
+ */
+const NOT_ALLOWED_KEPT = ["components/ui/input.tsx", "components/ui/label.tsx", "components/ui/textarea.tsx"];
+
+/** Whether a class is `cursor-not-allowed`, whatever its variants and its `!`. */
+const notAllowed = (name: string) => splitClass(name).utility === "cursor-not-allowed";
+
+describe("P1.11: cursor-not-allowed is only in the shadcn fields and label", () => {
+  it("finds the utility whatever its variants, and lets another cursor be", () => {
+    for (const found of [
+      "cursor-not-allowed",
+      "aria-disabled:cursor-not-allowed",
+      "disabled:cursor-not-allowed",
+      "!cursor-not-allowed",
+      "peer-disabled:cursor-not-allowed!",
+    ]) {
+      expect(notAllowed(found), found).toBe(true);
+    }
+    for (const other of ["cursor-pointer", "cursor-default", "disabled:pointer-events-none", "aria-disabled:cursor-default"]) {
+      expect(notAllowed(other), other).toBe(false);
+    }
+  });
+
+  it("no other .tsx, .css nor .ts file of src/ outside the tests has it", () => {
+    const where = new Set<string>();
+    for (const path of sources(SRC)) {
+      if (words(readFileSync(path, "utf8")).some(notAllowed)) where.add(relative(SRC, path));
+    }
+    expect([...where].sort()).toEqual(NOT_ALLOWED_KEPT);
   });
 });

@@ -170,7 +170,7 @@ test.describe("creating an event from /nouveau", () => {
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sortie ski du club");
     expect(Date.now() - start).toBeLessThan(30_000);
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
   });
 
   test("C1.5: the token comes in the creation's response body, and in no URL nor header on the way to the arrival", async ({
@@ -217,11 +217,11 @@ test.describe("creating an event from /nouveau", () => {
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
 
     const token = new URL(page.url()).hash.slice(1);
-    expect((await Promise.all(creationBodies)).filter((body) => body.includes(token))).toHaveLength(1);
+    expect((await Promise.all(creationBodies)).filter((body) => body.includes(token)).length, "creation answers holding the token").toBe(1);
     const texts = await Promise.all(seen);
     // The arrival itself was watched: the App Router's fetch of the organiser's page.
     expect(texts.filter((text) => /\/e\/\w{8}\/admin\?_rsc=/.test(text)).length).toBeGreaterThan(0);
-    expect(texts.filter((text) => text.includes(token))).toEqual([]);
+    expect(texts.filter((text) => text.includes(token)).length, "URLs and headers holding the token").toBe(0);
   });
 
   test("C2.1, C2.2, D2.3: unchecking Retour hides both end fields, and six actions create an event without a retour", async ({
@@ -261,7 +261,7 @@ test.describe("creating an event from /nouveau", () => {
     await expect(field(page, FR.allerTime)).toHaveValue("07:30");
     await expect(field(page, FR.location)).not.toHaveAttribute("aria-invalid", "true");
     await expect(page).toHaveURL(/\/nouveau$/);
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
   });
 
   test("C1.7, D2.2: an end not after the start is refused, on the end's field, and nothing is created", async ({
@@ -289,7 +289,7 @@ test.describe("creating an event from /nouveau", () => {
     await expect(field(page, FR.retourDate)).toHaveAccessibleDescription(FR.notAfterAller);
     await expect(field(page, FR.retourDate)).toBeFocused();
     await expect(field(page, FR.retourTime)).not.toHaveAttribute("aria-invalid", "true");
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
   });
 
   test("C1.8, D2.3: a start before the device's today, or after today + 365 days, is refused", async ({ page }) => {
@@ -311,7 +311,7 @@ test.describe("creating an event from /nouveau", () => {
     await createButton(page).click();
     await expect(field(page, FR.retourDate)).toHaveAccessibleDescription(FR.tooLate);
     await expect(field(page, FR.allerDate)).not.toHaveAttribute("aria-invalid", "true");
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
   });
 
   test("C1.9: the server's errors are shown by field, when the device's clock is ahead", async ({ page }) => {
@@ -328,7 +328,7 @@ test.describe("creating an event from /nouveau", () => {
     await expect(field(page, FR.title)).toHaveValue("Sortie ski du club");
     await expect(createButton(page)).toBeEnabled();
     await expect(page).toHaveURL(/\/nouveau$/);
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
   });
 
   test("C1.10: an 80-character title and a 120-character place do not overflow at 360 px", async ({ page }) => {
@@ -368,7 +368,7 @@ test.describe("creating an event from /nouveau", () => {
 
     release();
     await expect(page).toHaveURL(ARRIVAL);
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
   });
 
   test("C7.3: Créer is 44 px high, the boxes are 44 px targets, the fields 40 px", async ({ page }) => {
@@ -531,7 +531,7 @@ test.describe("creating an event without JavaScript", () => {
     await field(page, FR.title).fill("Sortie ski du club");
     await field(page, FR.title).press("Enter");
     await expect(page).toHaveURL(/\/nouveau$/);
-    expect(sent).toEqual([]);
+    expect(sent.length).toBe(0);
   });
 });
 
@@ -584,6 +584,6 @@ test.describe("creating an event in a browser set to English", () => {
     await createButton(page, "Create").click();
     await expect(field(page, "End date")).toHaveAccessibleDescription("The end must be after the start.");
     await expect(page).toHaveURL(/\/nouveau$/);
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
   });
 });

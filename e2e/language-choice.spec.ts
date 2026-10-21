@@ -94,8 +94,20 @@ async function localeCookie(context: BrowserContext): Promise<string> {
 /** A language, as a path segment or a query string's value would name it. */
 const LOCALE = /^(fr|en)([-_][a-z]{2})?$/i;
 const LOCALE_KEY = /^(lang|language|locale|hl)$/i;
-/** The app's icons, which the document's head asks for again once rendered in the new language. */
-const ICON = /^\/(icon\.svg|apple-icon\.png)$/;
+/**
+ * The app's icons, which the document's head asks for again once rendered in the new language,
+ * and which Chromium may fetch at any time, the favicon included. Their one query parameter is
+ * their version, which Next names after the file: `/favicon.ico?favicon.<hash>.ico`. Its hash
+ * has 13 characters; at least 8 are asked, which no language name has.
+ */
+const ICON_VERSION = new Map([
+  ["/favicon.ico", /^favicon\.[\w-]{8,}\.ico$/],
+  ["/icon.svg", /^icon\.[\w-]{8,}\.svg$/],
+  ["/apple-icon.png", /^apple-icon\.[\w-]{8,}\.png$/],
+]);
+/** Whether a query parameter is an icon's version: on the icon's own path, named after it, without a value. */
+const isIconVersion = (pathname: string, key: string, value: string) =>
+  value === "" && (ICON_VERSION.get(pathname)?.test(key) ?? false);
 
 /** Whether a text holds one of these: answered as a boolean, so that a failure prints none of them. */
 const holdsAny = (text: string, secrets: string[]) => secrets.some((secret) => text.includes(secret));
@@ -327,12 +339,12 @@ test.describe("the language never in a URL", () => {
         )
         .map(({ method, pathname: to, query }) => hide(`${method} ${to}?${query}`));
       expect(named).toEqual([]);
-      // Nor any other query string than the RSC fetch's cache key, but an icon's, which is its version.
-      const queries = requests
-        .filter(({ pathname: to }) => !ICON.test(to))
-        .flatMap(({ method, pathname: to, query }) =>
-          [...query.keys()].filter((key) => key !== "_rsc").map((key) => hide(`${method} ${to} ${key}`)),
-        );
+      // Nor any other query parameter than the RSC fetch's cache key, and an icon's version.
+      const queries = requests.flatMap(({ method, pathname: to, query }) =>
+        [...query]
+          .filter(([key, value]) => key !== "_rsc" && !isIconVersion(to, key, value))
+          .map(([key]) => hide(`${method} ${to} ${key}`)),
+      );
       expect(queries).toEqual([]);
       // The secrets are in no part of any request.
       const leaks = requests.flatMap(({ method, pathname: to, query, headers, body }) =>
@@ -343,6 +355,32 @@ test.describe("the language never in a URL", () => {
       expect(leaks).toEqual([]);
     });
   }
+
+  test("L2.7: what is read past is an icon's version, as the document's head names it, and nothing else", async ({
+    page,
+  }) => {
+    await open(page, "/", "Fullcar");
+    const hrefs = await page
+      .locator('head link[rel="icon"], head link[rel="apple-touch-icon"]')
+      .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
+    const icons = hrefs.map((href) => new URL(href, "http://fullcar.test"));
+    expect(icons.map(({ pathname }) => pathname).sort()).toEqual(["/apple-icon.png", "/favicon.ico", "/icon.svg"]);
+    for (const { pathname, searchParams } of icons) {
+      const params = [...searchParams];
+      expect(params, pathname).toHaveLength(1);
+      const [[key, value]] = params;
+      expect(isIconVersion(pathname, key, value), `${pathname}'s version`).toBe(true);
+      // Its version only: not with a value, nor on another path.
+      expect(isIconVersion(pathname, key, "en"), `${pathname}'s version with a value`).toBe(false);
+      expect(isIconVersion("/", key, value), `${pathname}'s version on the home page`).toBe(false);
+    }
+    expect(isIconVersion("/favicon.ico", "lang", "")).toBe(false);
+    expect(isIconVersion("/favicon.ico", "icon.19jyq0e_4sn9e.svg", "")).toBe(false);
+    expect(isIconVersion("/favicon.ico", "favicon.ico", "")).toBe(false);
+    // A language is no version: a hash has at least 8 characters.
+    expect(isIconVersion("/favicon.ico", "favicon.en.ico", "")).toBe(false);
+    expect(isIconVersion("/favicon.ico", "favicon.en-GB.ico", "")).toBe(false);
+  });
 
   test("L2.7: the organiser's two links are the same after the tap, and the shared one opens in French", async ({
     page,

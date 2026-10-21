@@ -140,6 +140,14 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
     }
+  /* #347, the language-switch design (v3.3.3): the hand on what clicks, the arrow on what is inactive. */
+  button, [role="button"] {
+    cursor: pointer;
+    }
+  /* More specific than the line above: it wins on an inactive one. No utility may beat it (P1.11). */
+  :is(button, [role="button"]):is(:disabled, [aria-disabled="true"]) {
+    cursor: default;
+    }
   body {
     @apply bg-background text-foreground;
     }
