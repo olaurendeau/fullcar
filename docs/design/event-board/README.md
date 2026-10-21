@@ -119,7 +119,7 @@ fermeture : aucun message ne me dit que quelque chose a échoué.
   - `messages(page)` a exactement les deux mêmes textes, dans le même ordre (l’échec, puis la
     réussite) ;
   - les boutons de la barre (`[data-message-bar] button`) ont les mêmes noms qu’avant, soit
-    « Fermer » aujourd’hui. Le test ne dépend pas d’« Annuler », qui n’est pas construit ;
+    « Annuler » (celui de la réussite, #170) puis « Fermer » ;
   - un `MutationObserver` posé sur les deux régions (`recordBar`) avant le clic n’a vu
     aucune écriture.
 - **V1.6** Un autre appareil renomme Claire en `Clarisse` pendant que le formulaire est ouvert
@@ -669,7 +669,7 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
      feuille ou dans la barre ;
    - **un retrait de voiture réussi** (v4.4, décision du propriétaire sur #221, PR #255). Il
      retire tous les messages sur cette voiture, réussite comme échecs : ceux de ses places
-     (`seats:{rideId}`, et `undo:{rideId}` quand « Annuler » sera construit) et ceux de sa
+     (`seats:{rideId}`, et `undo:{rideId}` pour « Annuler », #170) et ceux de sa
      modification (`ride:{rideId}:edit`). Il les retire qu’ils soient en attente sous une
      feuille ou une confirmation, déjà dans la barre, ou venus d’un envoi parti avant la
      réponse du retrait ; un tel message ne s’affiche jamais. Un envoi parti après cette
