@@ -94,7 +94,7 @@ export function AdminPanel({
                 if (content.current?.contains(document.activeElement)) titleRef.current?.focus();
                 onToggleFolded();
               }}
-              className="-my-1.5 flex h-11 w-full items-center gap-1 rounded-lg pl-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
+              className="-my-1.5 flex h-11 w-full items-center gap-1 rounded-lg pl-2 text-left focus-visible:focus-ring focus-visible:-outline-offset-2"
             >
               {t("title")}
               <Chevron aria-hidden className="size-4 shrink-0 text-muted-foreground" />

@@ -89,6 +89,15 @@ export async function press(page: Page, key: string) {
   await page.keyboard.press(key);
 }
 
+/** `key` pressed, the unfocused state noted before each press, until `target` has the focus; at most `max` times. */
+export async function pressUntil(page: Page, key: string, target: Locator, max = 40) {
+  for (let presses = 0; presses < max; presses += 1) {
+    await press(page, key);
+    if (await isFocused(target)) return;
+  }
+  throw new Error(`pressUntil: ${key} pressed ${max} times did not reach ${target}`);
+}
+
 /** Steps 0 to 6 on the element, until they pass or `timeout` expires. */
 export async function expectRing(locator: Locator, { offset = 2, timeout }: Options = {}): Promise<Ring> {
   let ring: Ring | undefined;

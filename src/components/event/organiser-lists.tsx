@@ -11,7 +11,7 @@ import { PhoneLink } from "./phone-link";
  * What takes the focus in a line, its first name or its car's title: inline, so that the
  * ring follows the text, not the line (O5.8).
  */
-const focusTarget = "rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+const focusTarget = "rounded-sm focus-visible:focus-ring";
 
 /** Whether a list is unfolded, and how to fold or unfold it: kept by the organiser's screen, never here. */
 export interface Fold {

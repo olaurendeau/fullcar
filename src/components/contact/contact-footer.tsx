@@ -31,7 +31,7 @@ export function ContactFooter({ withHomeLink = true }: { withHomeLink?: boolean 
             <Link
               href="/"
               prefetch={false}
-              className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-muted-foreground underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-muted-foreground underline underline-offset-4 focus-visible:focus-ring"
             >
               {t("home")}
             </Link>
