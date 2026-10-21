@@ -129,6 +129,24 @@ test.describe("one tap", () => {
     expect(await placements(db, seededEvent.id, scene.tom)).toEqual({ aller: scene.cars.sophie, retour: null });
   });
 
+  // C5.2: a tap again before the answer sends nothing; Tom is placed once, and the bar says it once (#308).
+  test("C5.2: a tap again on the seat before the answer sends nothing", async ({ db, page, seededEvent }) => {
+    const answer = await holdFirst(page, scene.cars.sophie, false);
+    let sent = 0;
+    page.on("request", (request) => void (request.postData()?.includes(scene.cars.sophie) && (sent += 1)));
+    await page.goto(`/e/${seededEvent.id}`);
+    await seat(page, "Sophie").click();
+    await expect.poll(() => sent).toBe(1);
+    await seat(page, "Sophie").click();
+    answer();
+
+    await expect(messages(page)).toHaveText(["Tom est dans la voiture de Sophie"]);
+    await expect(title(page, "Sophie")).toBeFocused();
+    await expect(car(page, "Sophie").getByRole("listitem")).toHaveText(["Tom", "Place libre", "Place libre"]);
+    expect(sent).toBe(1);
+    expect(await placements(db, seededEvent.id, scene.tom)).toEqual({ aller: scene.cars.sophie, retour: null });
+  });
+
   // « Chaque échec, mot pour mot », lines « Un tap sur une place »: who, whose car, why. A refusal
   // gives the focus to the car's title, or to the leg's banner once the car is gone; never <body>.
   const CASES: { what: string; driver: string; fails: "offline" | "500" | ((db: Db, eventId: string) => Promise<unknown>); text: string; landmark: "title" | "banner" }[] = [
@@ -312,6 +330,27 @@ test.describe("one tap, a device without a person", () => {
     await expect(messages(page)).toHaveText(["Inès est dans la voiture de Marc"]);
     await expect(seat(page, "Sophie")).toBeFocused();
     expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+  });
+
+  // From a car's last seat, the sheet closed before the answer: the focus goes back to the seat,
+  // which the answer takes away; it lands on the car's title, never on <body> (#308).
+  test("C5.4: from the last seat, closed before the answer, the focus lands on the car's title", async ({ db, page, seededEvent }) => {
+    const answer = await holdFirst(page, "Inès", false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await seat(page, "Claire").click();
+    await registration(page).getByLabel("Prénom").fill("Inès");
+    await registration(page).getByRole("button", { name: "Valider" }).click();
+    await page.keyboard.press("Escape");
+    await expect(registration(page)).toHaveCount(0);
+    await expect(seat(page, "Claire")).toBeFocused();
+    answer();
+
+    await expect(messages(page)).toHaveText(["Inès est dans la voiture de Claire"]);
+    await expect(car(page, "Claire")).toContainText("Complet");
+    await expect(title(page, "Claire")).toBeFocused();
+    await expect(page.locator("body")).not.toBeFocused();
+    const ines = await personNamed(db, seededEvent.id, "Inès");
+    expect(await placements(db, seededEvent.id, ines)).toEqual({ aller: scene.cars.claire, retour: null });
   });
 
   test("closed without effect, the focus goes back to the seat, and nobody is registered", async ({ db, page, seededEvent }) => {
