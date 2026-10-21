@@ -193,8 +193,10 @@ describe("editedFields and personWhy: a person's form (C11.11)", () => {
     expect(editedFields(["firstName"])).toBe("firstName");
     expect(editedFields(["phone"])).toBe("phone");
     expect(editedFields(["firstName", "phone"])).toBe("both");
-    // Nothing changed: the form as it showed, both fields.
-    expect(editedFields([])).toBe("both");
+  });
+
+  it("is never reached with nothing changed: the form closes before, and sends nothing (v4.4, #298)", () => {
+    expect(() => editedFields([])).toThrow();
   });
 
   it("gives `drives`, which only a cell's action meets, the generic reason, and the others as `whyOf` does", () => {
