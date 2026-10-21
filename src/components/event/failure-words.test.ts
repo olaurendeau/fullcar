@@ -175,13 +175,15 @@ describe("cellNotDone and cellWhy: a cell's failure names the person, the leg an
 
   // cellNotDone names the car for « Sortir de la voiture »: only a passenger has one to leave (#290's review).
   it("« Sortir de la voiture » is offered to a passenger alone", () => {
-    const states: DeviceState[] = [
-      { kind: "withoutCar" },
-      { kind: "notConcerned" },
-      { kind: "driver", rideId: "tom" },
-      { kind: "passenger", rideId: "claire", driver: { id: "claire", firstName: "Claire" } },
-    ];
-    expect(states.filter((state) => cellActions(state).includes("leaveCar")).map((state) => state.kind)).toEqual(["passenger"]);
+    // One of each kind: a new kind of state does not compile until it is here.
+    const states = {
+      withoutCar: { kind: "withoutCar" },
+      notConcerned: { kind: "notConcerned" },
+      driver: { kind: "driver", rideId: "tom" },
+      passenger: { kind: "passenger", rideId: "claire", driver: { id: "claire", firstName: "Claire" } },
+    } satisfies { [K in DeviceState["kind"]]: Extract<DeviceState, { kind: K }> };
+    const offered = Object.values(states).filter((state) => cellActions(state).includes("leaveCar"));
+    expect(offered.map((state) => state.kind)).toEqual(["passenger"]);
   });
 });
 

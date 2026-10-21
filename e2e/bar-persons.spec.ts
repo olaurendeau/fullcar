@@ -123,6 +123,9 @@ test.describe("a failure of a person's form, or of « Réessayer », in the bar"
 
       await expect(messages(page)).toHaveText([text]);
       await expect(bar(page)).toHaveText(text);
+      // `toHaveText` folds spaces: the raw text proves those typed around « Inès » are gone.
+      expect(await messages(page).allTextContents()).toEqual([text]);
+      expect(await bar(page).textContent()).toBe(text);
       await expect(messages(page).locator(`svg.lucide-${icon}`)).toHaveCount(1);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
       await barClose(page).click();
