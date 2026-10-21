@@ -15,6 +15,10 @@ type Db = Kysely<Database>;
 const REMOVE = "Retirer la voiture";
 const NOTIFIED = "Personne n’est prévenu : pensez à le leur dire.";
 const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+/** In the bar, a failure names the car and its leg (C11.11, #226). */
+const REMOVAL_FAILED = "La voiture de Claire pour l’aller n’a pas été retirée. Une erreur est survenue : réessayez dans un instant.";
+const CHANGE_FAILED =
+  "Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Une erreur est survenue : réessayez dans un instant.";
 const GARE = "Gare de Cesson";
 
 /**
@@ -163,6 +167,8 @@ test.describe("remove a car", () => {
     await removeButton(car(panel(page), "Claire")).click();
     await confirm(page).click();
 
+    // Hidden by the confirmation, the car is « gone » before the answer (#295).
+    await expect(confirmation(page)).toHaveCount(0);
     await expect(car(panel(page), "Claire")).toHaveCount(0);
     await expect(toggle(page)).toBeFocused();
     await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
@@ -180,6 +186,8 @@ test.describe("remove a car", () => {
       await page.goto(`/e/${seededEvent.id}`);
       await removeButton(car(panel(page), "Claire")).click();
       await confirm(page).click();
+      // Hidden by the confirmation, the car is « gone » before the answer: reloaded then, the other device would see it (#295).
+      await expect(confirmation(page)).toHaveCount(0);
       await expect(car(panel(page), "Claire")).toHaveCount(0);
 
       await other.reload();
@@ -240,7 +248,7 @@ test.describe("remove a car", () => {
         await expect(alerts(confirmation(page))).toHaveCount(0);
         await confirmation(page).getByRole("button", { name: "Annuler" }).click();
       }
-      await expect(bar(page)).toHaveText(FAILED);
+      await expect(bar(page)).toHaveText(REMOVAL_FAILED);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
       await expect(car(panel(page), "Claire")).toBeVisible();
     });
@@ -257,8 +265,9 @@ test.describe("remove a car", () => {
       await expect(trigger).toBeFocused();
       if (when === "reopened") await trigger.click();
       answer();
-      await expect(car(panel(page), "Claire")).toHaveCount(0);
+      // Reopened, the confirmation hides the car from role queries until it closes (#295).
       await expect(confirmation(page)).toHaveCount(0);
+      await expect(car(panel(page), "Claire")).toHaveCount(0);
       await expect(cell(page, "Claire, Aller : Ne fait pas l’aller")).toBeFocused();
       await expect(alerts(page)).toHaveCount(0);
     });
@@ -330,12 +339,12 @@ test.describe("remove a car", () => {
     await page.keyboard.press("Escape");
     await expect(confirmation(page)).toHaveCount(0);
     await failHeld(page, removal);
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([REMOVAL_FAILED]);
 
     await changeClaire(page);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(car(panel(page), "Claire")).toContainText(GARE);
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([REMOVAL_FAILED]);
   });
 
   test("#221, C11.10: a removal of the car that fails does not withdraw its change's failure", async ({ page, seededEvent }) => {
@@ -344,14 +353,14 @@ test.describe("remove a car", () => {
     await changeClaire(page);
     await page.keyboard.press("Escape");
     await failHeld(page, change);
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([CHANGE_FAILED]);
 
     const removal = await holdFirst(page, scene.cars.claire, true);
     await removeClaire(page);
     await failHeld(page, removal);
     await expect(alerts(confirmation(page))).toHaveText(FAILED);
     await confirmation(page).getByRole("button", { name: "Annuler" }).click();
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([CHANGE_FAILED]);
   });
 });
 
@@ -366,9 +375,12 @@ test.describe("an offer sent again after a removal", () => {
     await form(page).getByLabel("Lieu de départ", { exact: true }).fill("Mairie de Vitré");
     await form(page).getByRole("button", { name: "Valider" }).click();
   }
+  // While the confirmation is open, Radix hides the page from role queries: the car is « gone »
+  // before the removal is answered (#295). The confirmation closes once it is: only then is a car not found a car removed.
   async function remove(page: Page) {
     await removeButton(car(panel(page), "Marc")).click();
     await confirm(page).click();
+    await expect(confirmation(page)).toHaveCount(0);
     await expect(car(panel(page), "Marc")).toHaveCount(0);
   }
 

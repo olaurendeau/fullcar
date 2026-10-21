@@ -31,12 +31,12 @@ export type SeatsTaken =
 /** What the server answers `takeSeats`, an unknown event included. */
 type SeatsAnswer =
   | { ok: true }
-  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" }
+  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "noRetour" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number };
 
 /**
  * `takeSeats`'s answer as the page says it, for the persons sent, `names`. The sheet has no words
- * of its own for `forbidden`, `eventNotFound` and `invalid`: `failed` there (§ 2.6).
+ * of its own for `forbidden`, `eventNotFound`, `invalid` and `noRetour`: `failed` there (§ 2.6).
  */
 export function seatsTaken(sent: { ok: true; value: SeatsAnswer } | { ok: false; problem: BarProblem }, names: readonly string[]): SeatsTaken {
   if (!sent.ok) return { kind: "problem", problem: sent.problem, why: whyOf(sent.problem) };
@@ -240,7 +240,7 @@ function SeatSheet({
           <>
             {!adding.kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
             <PersonForm
-              mode={{ kind: "add", leg, hasRetour, addPerson }}
+              mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
               open={() => isOpen.current}
               onDone={(personId) => {
                 focusNext.current = () => document.getElementById(boxId(personId));

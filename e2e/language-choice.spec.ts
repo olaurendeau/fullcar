@@ -436,9 +436,9 @@ test.describe("an event created in the language chosen", () => {
     });
     await field("Title").fill("Club ski trip");
     await field("Place").fill("La Clusaz");
-    await field("Outbound date").fill(allerDate);
-    await field("Outbound time").fill("07:30");
-    await field("Return time").fill("18:00");
+    await field("Start date").fill(allerDate);
+    await field("Start time").fill("07:30");
+    await field("End time").fill("18:00");
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
     // Read by its path only: the URL's fragment is the organiser's secret.

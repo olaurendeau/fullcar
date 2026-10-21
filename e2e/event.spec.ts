@@ -1,11 +1,18 @@
 import type { Page } from "@playwright/test";
 import { PUBLIC_ID_ALPHABET } from "@/domain/public-id";
-import { expect, test } from "./fixtures";
+import { expect, leaveNoToken, test } from "./fixtures";
+import { organiserPath } from "./organiser";
+
+// D1.6 opens the organiser's page with its token.
+leaveNoToken();
 
 // The seed (src/db/test-events.ts): aller on 2026-12-12 at 07:30, retour the same day at 18:00.
+// v4.3 (#235): the header names them « Début » and « Fin », the end its time alone that day.
 const FR = {
-  aller: /^samedi 12 décembre 2026 à 07:30$/,
-  retour: /^samedi 12 décembre 2026 à 18:00$/,
+  dates: ["Début", "Fin"],
+  start: /^samedi 12 décembre 2026 à 07:30$/,
+  end: /^18:00$/,
+  datetime: ["2026-12-12T07:30", "2026-12-12T18:00"],
   noCarAller: "Aucune voiture proposée pour l’aller",
   noCarRetour: "Aucune voiture proposée pour le retour",
   nobody: "Personne ne s’est encore inscrit.",
@@ -37,16 +44,44 @@ function swapOneCase(id: string): string {
   throw new Error("no letter of this id has its other case in the alphabet");
 }
 
+/** D1.1: the seeded event's header, « Début » in full, « Fin » its time alone, each `<time>` complete. */
+async function expectSameDayHeader(page: Page) {
+  const header = page.locator("header");
+  await expect(header.locator("dt")).toHaveText(FR.dates);
+  await expect(header.locator("dd")).toHaveText([FR.start, FR.end]);
+  await expect(header.locator("time")).toHaveCount(2);
+  await expect(header.locator("time").nth(0)).toHaveAttribute("datetime", FR.datetime[0]);
+  await expect(header.locator("time").nth(1)).toHaveAttribute("datetime", FR.datetime[1]);
+}
+
+/** D1.8: how far each `dt` of the header sits from the top of its `dd`, in px. */
+async function dtOffsets(page: Page): Promise<number[]> {
+  return page.locator("header dl").evaluate((dl) =>
+    Array.from(dl.querySelectorAll("dt"), (dt) => {
+      const dd = dt.nextElementSibling as HTMLElement;
+      return Math.abs(dt.getBoundingClientRect().top - dd.getBoundingClientRect().top);
+    }),
+  );
+}
+
 test.describe("event page, with a retour", () => {
   test.use({ locale: "fr-FR" });
 
-  test("C5.1: shows the title, the place, and the date and time of both legs", async ({ page, seededEvent }) => {
+  test("C5.1, D1.1: shows the title, the place, the start, and the end without its date that day", async ({
+    page,
+    seededEvent,
+  }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
     await expect(page.getByText("Gymnase des Gayeulles")).toBeVisible();
-    const legs = page.locator("header dl");
-    await expect(legs.locator("dt")).toHaveText(["Aller", "Retour"]);
-    await expect(legs.locator("dd")).toHaveText([FR.aller, FR.retour]);
+    await expectSameDayHeader(page);
+  });
+
+  test("D1.4: the header names no leg, the tabs keep theirs", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(page.locator("header dt")).toHaveText(FR.dates);
+    await expect(page.locator("header")).not.toContainText(/Aller|Retour/);
+    await expect(page.getByRole("tab")).toHaveText(["Aller", "Retour"]);
   });
 
   test("C5.2, C9.6: Aller is selected first, with its empty state, both actions and no date line", async ({ page, seededEvent }) => {
@@ -119,12 +154,13 @@ test.describe("event page, with a retour", () => {
 test.describe("event page, without retour", () => {
   test.use({ locale: "fr-FR", eventFields: { retourAt: null } });
 
-  test("C2.4, C5.4: no tab, the aller and its empty state shown directly", async ({ page, seededEvent }) => {
+  test("C2.4, C5.4, D1.3: no tab, no end, the aller and its empty state shown directly", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
-    const legs = page.locator("header dl");
-    await expect(legs.locator("dt")).toHaveText(["Aller"]);
-    await expect(legs.locator("dd")).toHaveText([FR.aller]);
+    const header = page.locator("header");
+    await expect(header.locator("dt")).toHaveText(["Début"]);
+    await expect(header.locator("dd")).toHaveText([FR.start]);
+    await expect(header).not.toContainText("Fin");
 
     await expect(page.getByText(FR.noCarAller)).toBeVisible();
     await expect(page.getByText(FR.nobody)).toBeVisible();
@@ -160,22 +196,91 @@ for (const timezoneId of ["America/New_York", "Europe/Paris"]) {
 
     test("C1.12: shows the times of the event's place, unchanged", async ({ page, seededEvent }) => {
       await page.goto(`/e/${seededEvent.id}`, { waitUntil: "networkidle" });
-      await expect(page.locator("header dd")).toHaveText([FR.aller, FR.retour]);
+      await expect(page.locator("header dd")).toHaveText([FR.start, FR.end]);
     });
   });
 }
 
+// D1.2: an end on another day shows its own date, after midnight as over several days.
+for (const { retourAt, end } of [
+  { retourAt: "2026-12-13 01:00:00", end: /^dimanche 13 décembre 2026 à 01:00$/ },
+  { retourAt: "2026-12-14 17:00:00", end: /^lundi 14 décembre 2026 à 17:00$/ },
+]) {
+  test.describe(`event page, ending on ${retourAt}`, () => {
+    test.use({ locale: "fr-FR", eventFields: { allerAt: "2026-12-12 20:00:00", retourAt } });
+
+    test("D1.2: the end shows its date and its time", async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await expect(page.locator("header dt")).toHaveText(FR.dates);
+      await expect(page.locator("header dd")).toHaveText([/^samedi 12 décembre 2026 à 20:00$/, end]);
+    });
+  });
+}
+
+// D1.7: « the same day » is the event's place's, whatever the browser's zone, on both sides of midnight.
+for (const { retourAt, end } of [
+  { retourAt: "2026-12-12 23:30:00", end: /^23:30$/ },
+  { retourAt: "2026-12-13 00:30:00", end: /^dimanche 13 décembre 2026 à 00:30$/ },
+]) {
+  test.describe(`event page ending on ${retourAt}, in a browser set to America/New_York`, () => {
+    test.use({
+      locale: "fr-FR",
+      timezoneId: "America/New_York",
+      eventFields: { allerAt: "2026-12-12 20:00:00", retourAt },
+    });
+
+    test("D1.7: the same day is read on the wall clock", async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`, { waitUntil: "networkidle" });
+      await expect(page.locator("header dd")).toHaveText([/^samedi 12 décembre 2026 à 20:00$/, end]);
+    });
+  });
+}
+
+// D1.8: the longest header, two full dates, at 360 px in both languages.
+for (const { locale, dates } of [
+  { locale: "fr-FR", dates: FR.dates },
+  { locale: "en-GB", dates: ["Start", "End"] },
+]) {
+  test.describe(`event page over two days, in ${locale}, at 360 px`, () => {
+    test.use({
+      locale,
+      viewport: { width: 360, height: 780 },
+      eventFields: { allerAt: "2026-12-12 20:00:00", retourAt: "2026-12-14 17:00:00" },
+    });
+
+    test("D1.8: no sideways scroll, and each dt on the first line of its dd", async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await expect(page.locator("header dt")).toHaveText(dates);
+      expect(await horizontalOverflow(page)).toBe(0);
+      const offsets = await dtOffsets(page);
+      expect(offsets).toHaveLength(2);
+      for (const offset of offsets) expect(offset).toBeLessThanOrEqual(4);
+    });
+  });
+}
+
+test.describe("event page, on the organiser's page", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("D1.6: the same header as the event's page, under the organiser area", async ({ page, seededEvent }) => {
+    // A failed navigation would print the URL, and the token in its fragment: named instead.
+    await page.goto(organiserPath(seededEvent)).catch(() => {
+      throw new Error("D1.6: the organiser's page did not load");
+    });
+    await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
+    await expectSameDayHeader(page);
+    await expect(page.locator("header")).not.toContainText(/Aller|Retour/);
+  });
+});
+
 test.describe("event page, in a browser set to English", () => {
   test.use({ locale: "en-GB" });
 
-  test("C5.1, C7.1: speaks English, dates included", async ({ page, seededEvent }) => {
+  test("C5.1, C7.1, D1.5: speaks English, dates included", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
-    await expect(page.locator("header dt")).toHaveText(["Outbound", "Return"]);
-    await expect(page.locator("header dd")).toHaveText([
-      /^Saturday, December 12, 2026 at 7:30\sAM$/,
-      /^Saturday, December 12, 2026 at 6:00\sPM$/,
-    ]);
+    await expect(page.locator("header dt")).toHaveText(["Start", "End"]);
+    await expect(page.locator("header dd")).toHaveText([/^Saturday, December 12, 2026 at 7:30\sAM$/, /^6:00\sPM$/]);
     await expect(page.getByRole("tab")).toHaveText(["Outbound", "Return"]);
     await expect(page.getByRole("tabpanel").getByText("No car offered for the outbound trip")).toBeVisible();
     await expect(page.getByRole("tabpanel").getByText("Nobody has signed up yet.")).toBeVisible();
