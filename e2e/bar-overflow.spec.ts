@@ -163,9 +163,11 @@ test.describe("a bar of many lines", () => {
     expect(close.y - shown.y).toBeLessThan(12);
     expect(shown.x + shown.width - (close.x + close.width)).toBeLessThan(12);
 
-    // Overflowing, it takes the focus from the keyboard, before « Fermer ».
+    // Overflowing, it takes the focus from the keyboard, before the success's « Annuler » (#170) and « Fermer ».
     await expect(list(page)).toHaveAttribute("tabindex", "0");
     await barClose(page).focus();
+    await page.keyboard.press("Shift+Tab");
+    await expect(list(page).getByRole("button", { name: "Annuler" })).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(list(page)).toBeFocused();
   });

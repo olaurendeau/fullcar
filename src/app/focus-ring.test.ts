@@ -122,12 +122,17 @@ describe("F1.12: the old focus ring, and the outline removed, are gone from src/
 
   it("no .tsx, .css nor .ts file of src/ outside the tests has one", () => {
     const found: string[] = [];
+    const read: string[] = [];
     for (const path of sources(SRC)) {
+      read.push(relative(SRC, path));
       for (const word of words(readFileSync(path, "utf8"))) {
         const why = oldRing(word);
         if (why) found.push(`${relative(SRC, path)}: ${word} (${why})`);
       }
     }
+    // #343: a scan that reads nothing finds nothing. It reads each kind of file, and more than a handful.
+    expect(read, "files read").toEqual(expect.arrayContaining(["app/globals.css", "components/ui/button.tsx", "db/test-events.ts"]));
+    expect(read.length, "files read").toBeGreaterThanOrEqual(50);
     expect(found).toEqual([]);
   });
 });
