@@ -221,8 +221,8 @@ test.describe("add a person", () => {
     // Both requests carried the one token the device stored.
     const stored = await page.evaluate((key) => localStorage.getItem(key) ?? "", storageKey(seededEvent.id));
     expect(isPersonalToken(stored)).toBe(true);
-    expect(lea).toHaveLength(1);
-    expect(tom).toHaveLength(1);
+    expect(lea.length).toBe(1);
+    expect(tom.length).toBe(1);
     expect([lea[0], tom[0]].map((request) => request.postData()?.includes(stored))).toEqual([true, true]);
 
     await page.reload();
@@ -272,7 +272,7 @@ test.describe("add a person", () => {
     await expect(phone).toBeFocused();
     await expect(firstName).not.toHaveAttribute("aria-invalid");
     await expect(firstName).toHaveValue("Léa");
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
     expect(await firstNames(db, seededEvent.id)).toEqual([]);
   });
 
@@ -287,7 +287,7 @@ test.describe("add a person", () => {
     release();
     await expect(form(page)).toHaveCount(0);
     await expect(section(page).getByRole("rowheader")).toHaveText(["Léa"]);
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
   });
 
   test("C1.12: a response lost after the write, sent again, makes one person, the device's", async ({
@@ -336,7 +336,7 @@ test.describe("add a person", () => {
     await submit(page).click();
     await expect(failure(page)).toHaveText("Action impossible, vérifiez la connexion");
     await expect(form(page).getByLabel(FR.firstName)).toHaveValue("Léa");
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
     expect(await keysOf(page, seededEvent.id)).toEqual([]);
 
     // A field error replaces the message: the two are never shown together.

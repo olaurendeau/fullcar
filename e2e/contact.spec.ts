@@ -177,7 +177,7 @@ test.describe("contact link", () => {
 
     expect(tab.url()).toBe(CRISP_CHAT);
     expect(await tab.evaluate(() => window.opener)).toBeNull();
-    expect(crisp).toHaveLength(1);
+    expect(crisp.length).toBe(1);
     const request = crisp[0];
     expect(request.url()).toBe(CRISP_CHAT);
     expect(await request.headerValue("referer")).toBeNull();
