@@ -132,7 +132,7 @@ function FoldList({
 
   return (
     <div data-organiser-list className="flex min-w-0 flex-col gap-1.5 text-sm">
-      <h4 id={titleId} tabIndex={-1} className="self-start font-semibold outline-none">
+      <h4 id={titleId} tabIndex={-1} className="self-start rounded-sm font-semibold focus-visible:focus-ring">
         {title}
       </h4>
       {lines.length > 0 ? (

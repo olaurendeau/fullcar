@@ -1,11 +1,11 @@
-import type { Page, Request, Route } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { expect, organiserPath, seedCrowd, seedOrganiserScene, test } from "./organiser";
+import { expect, holdActionsWith, organiserPath, seedCrowd, seedOrganiserScene, test } from "./organiser";
 
 /*
  * #183, epic #154: after an action of the board, the panel alone is read again; withdrawn
@@ -51,26 +51,6 @@ async function takeSeat(page: Page, driver?: string) {
   await board(page).getByRole("button", { name: driver ? name : new RegExp(`^${name}`) }).first().click();
   await expect(page.getByRole("group", { name: "Messages" }).getByText(new RegExp(`^${ORGANISER} est dans la voiture de`))).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-}
-
-const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
-
-/** Holds, from now on, every action whose body carries `text` until it fails or goes through. */
-async function holdActionsWith(page: Page, text: string) {
-  const held: Route[] = [];
-  await page.route(
-    (url) => url.pathname.endsWith("/admin"),
-    (route) => (isAction(route.request()) && (route.request().postData() ?? "").includes(text) ? held.push(route) : route.fallback()),
-  );
-  return {
-    held: () => held.length,
-    fail: async () => {
-      for (const route of held.splice(0)) await route.fulfill({ status: 500, contentType: "text/plain", body: "" });
-    },
-    release: async () => {
-      for (const route of held.splice(0)) await route.fallback();
-    },
-  };
 }
 
 /** Holds, from now on, every read of the panel (the admin token in its body). */

@@ -83,7 +83,7 @@ export function DevicePersons({
         ref={target}
         role="status"
         tabIndex={-1}
-        className="flex items-center gap-2 text-sm text-muted-foreground outline-none"
+        className="flex items-center gap-2 rounded-sm text-sm text-muted-foreground focus-visible:focus-ring"
       >
         <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
         {t("loading")}

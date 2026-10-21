@@ -172,6 +172,30 @@ export async function watchHash(page: Page): Promise<() => Promise<number>> {
   };
 }
 
+/**
+ * Holds, from now on, every action posted to an organiser's page whose body carries `text`,
+ * until it fails (`fail`, a 500; `lose`, a cut connection) or goes through (`release`).
+ */
+export async function holdActionsWith(page: Page, text: string) {
+  const held: Route[] = [];
+  await page.route(
+    (url) => url.pathname.endsWith("/admin"),
+    (route) => (isAction(route.request()) && (route.request().postData() ?? "").includes(text) ? held.push(route) : route.fallback()),
+  );
+  return {
+    held: () => held.length,
+    fail: async () => {
+      for (const route of held.splice(0)) await route.fulfill({ status: 500, contentType: "text/plain", body: "" });
+    },
+    lose: async () => {
+      for (const route of held.splice(0)) await route.abort("internetdisconnected");
+    },
+    release: async () => {
+      for (const route of held.splice(0)) await route.fallback();
+    },
+  };
+}
+
 /** A request the browser sent, and what it received. */
 export interface Exchange {
   method: string;

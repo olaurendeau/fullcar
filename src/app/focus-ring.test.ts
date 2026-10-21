@@ -5,11 +5,14 @@ import { describe, expect, it } from "vitest";
 
 /*
  * #320, epic #236: the focus ring of the language-switch design (v3.3.1), read in the source.
- * F1.12: no class of the old ring is left in a `.tsx` or `.css` file of `src/`. A class is cut
+ * F1.12: no class of the old ring is left in a `.tsx` or `.css` file of `src/`, nor the
+ * utility that removes the outline, which left the landmarks of #314 with no ring at all
+ * (#321): `NO_OUTLINE`, written in two parts so that no file of `src/` holds it. A class is cut
  * into its variants and its utility (`a:b:utility`), so that `not-focus-visible` is not taken
  * for `focus-visible`. F1.13: the `--ring` token is `#737373`, opaque.
  */
 
+const NO_OUTLINE = "outline-" + "none";
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 
 /** The variants and the utility of a class: `a:[&:x]:b:utility` gives `["a", "[&:x]", "b"]`, `utility`. */
@@ -33,6 +36,7 @@ function splitClass(name: string): { variants: string[]; utility: string } {
 function oldRing(name: string): string | undefined {
   const { variants, utility } = splitClass(name);
   if (utility === "ring-ring/50" || utility === "outline-ring/50") return "the old ring colour";
+  if (utility === NO_OUTLINE) return "no ring at all";
   if (variants.includes("focus-visible") && (utility.startsWith("ring") || utility === "outline-1")) {
     return "a ring on focus-visible";
   }
@@ -50,7 +54,7 @@ function* sources(directory: string): Generator<string> {
   }
 }
 
-describe("F1.12: the old focus ring is gone from src/", () => {
+describe("F1.12: the old focus ring, and the outline removed, are gone from src/", () => {
   it("cuts a class into its variants and its utility, brackets kept whole", () => {
     expect(splitClass("ring-3")).toEqual({ variants: [], utility: "ring-3" });
     expect(splitClass("dark:focus-visible:ring-destructive/40")).toEqual({
@@ -64,7 +68,7 @@ describe("F1.12: the old focus ring is gone from src/", () => {
     expect(splitClass("[&_svg:not([class*='size-'])]:size-4").utility).toBe("size-4");
   });
 
-  it("finds each class of the old ring, and lets the error halo and the new ring be", () => {
+  it("finds each class of the old ring and the outline removed, and lets the error halo, the new ring and outline-hidden be", () => {
     for (const old of [
       "outline-ring/50",
       "focus-visible:ring-ring/50",
@@ -74,6 +78,9 @@ describe("F1.12: the old focus ring is gone from src/", () => {
       "focus-visible:ring-destructive/20",
       "dark:focus-visible:ring-destructive/40",
       "focus-visible:outline-1",
+      NO_OUTLINE,
+      `focus-visible:${NO_OUTLINE}`,
+      `!${NO_OUTLINE}`,
     ]) {
       expect(oldRing(old), old).toBeDefined();
     }
@@ -83,6 +90,8 @@ describe("F1.12: the old focus ring is gone from src/", () => {
       "group-has-[:focus-visible]/field-label:ring-0",
       "focus-visible:focus-ring",
       "focus-visible:-outline-offset-2",
+      // The dialog's content, which Radix focuses as a fallback: transparent, seen in forced colours.
+      "outline-hidden",
       "focus-visible:border-ring",
       "ring-1",
     ]) {
