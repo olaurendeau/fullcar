@@ -375,12 +375,24 @@ async function expectRingInList(page: Page) {
 }
 
 /**
+ * The area Playwright crops an element's screenshot to: its box in the document, grown to whole
+ * CSS px (`enclosingIntRect`: floor of the start, ceil of the end, 0.001 px tolerated), given
+ * back in the viewport's coordinates, as `boundingBox` gives the box.
+ */
+async function shotArea(page: Page, box: { x: number; y: number; width: number; height: number }) {
+  const scroll = await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
+  const [left, top] = [Math.floor(box.x + scroll.x + 1e-3), Math.floor(box.y + scroll.y + 1e-3)];
+  const [right, bottom] = [Math.ceil(box.x + box.width + scroll.x - 1e-3), Math.ceil(box.y + box.height + scroll.y - 1e-3)];
+  return { x: left - scroll.x, y: top - scroll.y, width: right - left, height: bottom - top };
+}
+
+/**
  * The bar shot (`locator.screenshot`), read at the device's scale: the pixel 1 CSS px outside the
  * middle of each side of « Annuler », in the middle of its outline's width.
  */
 async function ringPixels(page: Page) {
   const shot = (await board(page).screenshot()).toString("base64");
-  const [button, origin] = [(await undo(page).boundingBox())!, (await board(page).boundingBox())!];
+  const [button, origin] = [(await undo(page).boundingBox())!, await shotArea(page, (await board(page).boundingBox())!)];
   const middle = { x: button.x + button.width / 2, y: button.y + button.height / 2 };
   const points = {
     top: [middle.x, button.y - 1],
