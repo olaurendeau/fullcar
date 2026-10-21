@@ -293,11 +293,6 @@ test.describe("the scene of O2.5", () => {
     seededEvent,
   }) => {
     await keepKey(page, seededEvent.id);
-    // The browser drops answers of the navigation the arrival replaces: fetched here, their bodies stay readable for the fixture (O6.1).
-    await page.route(
-      (url) => url.searchParams.has("_rsc") || url.pathname.startsWith("/_next/"),
-      async (route) => route.fulfill({ response: await route.fetch() }),
-    );
     await page.goto("/nouveau");
     await expect(page.getByRole("button", { name: "Créer" })).toBeEnabled({ timeout: 15_000 });
     const day = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);

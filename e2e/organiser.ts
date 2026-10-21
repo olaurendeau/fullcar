@@ -220,6 +220,11 @@ function isAction(request: Request): boolean {
   return request.method() === "POST" && request.headers()["next-action"] !== undefined;
 }
 
+/** A read of the App Router (a navigation, a refresh, a prefetch): `?_rsc=` in its URL. */
+function isRouterRead(request: Request): boolean {
+  return new URL(request.url()).searchParams.has("_rsc");
+}
+
 /** A request as it left, answered or not. */
 interface Sent {
   method: string;
@@ -232,10 +237,12 @@ interface Sent {
 /**
  * Records every request of the context, and the answer to each that has one: a request the
  * browser gives up on (a favicon, a page left mid-load) only has its path and headers.
- * A server action's answer is read as Playwright fetches it (`route.fetch()`): Chromium may
- * drop it before `response.text()` asks, once it reports the request aborted after React has
- * read the whole answer (#303, see `watchRequests` in `organiser-fold.spec.ts`). An action routed by the test itself, ahead of this
- * route, is read by `response.text()`, and fails if it cannot be.
+ * The answers React reads, a server action's and the router's (`?_rsc=`), are read as
+ * Playwright fetches them (`route.fetch()`): React reads them through a stream reader, and
+ * Chromium may then report the request aborted once the whole answer is in, and drop its body
+ * before `response.text()` asks (#303, see `watchRequests` in `organiser-fold.spec.ts`). Such a
+ * request, routed by the test itself ahead of this route, is read by `response.text()`, and
+ * fails if it cannot be: a test that only lets it through uses `route.fallback()`.
  */
 async function record(context: BrowserContext, hide: (text: string) => string) {
   const state = { on: true };
@@ -248,7 +255,7 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     () => state.on,
     async (route: Route) => {
       const request = route.request();
-      if (!isAction(request)) return route.fallback();
+      if (!isAction(request) && !isRouterRead(request)) return route.fallback();
       const answer = route.fetch();
       fetched.set(
         request,
