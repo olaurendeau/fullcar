@@ -9,8 +9,8 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import { buildBoard } from "@/domain/board";
 import type { Leg } from "@/domain/leg";
-import { withVisiblePhones, type VisibleBoard } from "@/domain/phone-visibility";
-import { readEventState } from "./event-state";
+import { withVisiblePhones } from "@/domain/phone-visibility";
+import { readEventState, type EventState } from "./event-state";
 
 // Passed through, and watched: the board and the numbers must follow the same device.
 vi.mock("@/domain/board", async (importOriginal) => {
@@ -86,8 +86,8 @@ function sentNumbers(value: unknown): Name[] {
   return names.filter((name) => sent.some((text) => text.includes(digits(PHONES[name])))).sort();
 }
 
-function legOf(state: VisibleBoard | undefined, leg: Leg) {
-  const found = state?.find((board) => board.leg === leg);
+function legOf(state: EventState | undefined, leg: Leg) {
+  const found = state?.legs.find((board) => board.leg === leg);
   if (found === undefined) throw new Error(`no ${leg} in the state`);
   return found;
 }
@@ -143,7 +143,7 @@ describe("readEventState", () => {
       const a = await seedScene(trx);
       const b = await seedScene(trx);
       const state = await readEventState(trx, b.eventId, a.lea.token);
-      expect(state?.flatMap((leg) => leg.device)).toEqual([]);
+      expect(state?.legs.flatMap((leg) => leg.device)).toEqual([]);
       expect(sentNumbers(state)).toEqual([]);
     });
   });
@@ -201,7 +201,24 @@ describe("readEventState", () => {
   it("has one leg without a retour", async () => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx, { retourAt: null });
-      expect((await readEventState(trx, eventId))?.map((leg) => leg.leg)).toEqual(["aller"]);
+      expect((await readEventState(trx, eventId))?.legs.map((leg) => leg.leg)).toEqual(["aller"]);
+    });
+  });
+
+  // Epic #250: an open page applies the header of the state its next action brings back (M7.2).
+  it.each<[string, { retourAt?: null }, string | null]>([
+    ["with a retour", {}, "2026-12-12 18:00:00"],
+    ["without a retour: no end", { retourAt: null }, null],
+  ])("carries the event's header, %s", async (_, fields, retourAt) => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { title: "Match à Vannes", location: "Salle du Vincin", ...fields });
+      const state = await readEventState(trx, eventId);
+      expect(state?.event).toStrictEqual({
+        title: "Match à Vannes",
+        location: "Salle du Vincin",
+        allerAt: "2026-12-12 07:30:00",
+        retourAt,
+      });
     });
   });
 
@@ -262,6 +279,34 @@ describe("readEventState", () => {
       expect(moved).toBe(true);
       expect(aller.withoutCar).toEqual([]);
       expect(aller.cars.map((car) => [car.id, car.passengers.map((person) => person.id)])).toEqual([[r1, [lea.id]]]);
+    });
+  });
+
+  it("reads the header on the same snapshot as the legs: a retour removed meanwhile shows in neither", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      // Once the event's row is read, and before its legs are: the organiser renames it and
+      // removes its retour, committed on another connection.
+      let changed = false;
+      const eventReads = new Set<QueryId>();
+      const between: KyselyPlugin = {
+        transformQuery({ node, queryId }) {
+          const from = node.kind === "SelectQueryNode" ? node.from?.froms[0] : undefined;
+          if (from && TableNode.is(from) && from.table.identifier.name === "event") eventReads.add(queryId);
+          return node;
+        },
+        async transformResult({ queryId, result }) {
+          if (eventReads.has(queryId) && !changed) {
+            changed = true;
+            await getDb().updateTable("event").set({ title: "Renommé", retour_at: null }).where("id", "=", eventId).execute();
+          }
+          return result;
+        },
+      };
+
+      const state = await readEventState(db.withPlugin(between), eventId);
+      expect(changed).toBe(true);
+      expect(state?.event).toMatchObject({ title: "Tournoi de Rennes", retourAt: "2026-12-12 18:00:00" });
+      expect(state?.legs.map((leg) => leg.leg)).toEqual(["aller", "retour"]);
     });
   });
 });

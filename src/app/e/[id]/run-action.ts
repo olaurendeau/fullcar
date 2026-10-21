@@ -62,8 +62,32 @@ export function actionRunner(page: ActionPage, online?: () => boolean) {
   };
 }
 
+/**
+ * Whether `value` is a state the page can apply: its header and its legs (epic #250). The
+ * legs alone, as a server not yet deployed would answer, are not one: the page keeps its own.
+ */
+export function isEventState(value: unknown): value is EventState {
+  if (typeof value !== "object" || value === null || !("event" in value) || !("legs" in value)) return false;
+  return typeof value.event === "object" && value.event !== null && Array.isArray(value.legs);
+}
+
+/** The state a read answered: nothing for a failure, an unknown event, or the legs alone. */
+export function stateRead(sent: Sent<unknown> | undefined): EventState | undefined {
+  return sent?.ok && isEventState(sent.value) ? sent.value : undefined;
+}
+
+/**
+ * What showing `next` after `before` does, whichever way it came (an action, a read, `apply`):
+ * nothing when `next` is not a state, the legs alone included; otherwise whether the tabs go
+ * or come with the retour.
+ */
+export function stateShown(before: EventState, next: unknown): { state: EventState; tabsChange: boolean } | undefined {
+  if (!isEventState(next)) return undefined;
+  return { state: next, tabsChange: !before.event.retourAt !== !next.event.retourAt };
+}
+
 /** The state an action's answer carries back, refusal included (C5.7, C11.6), if any. */
 export function stateOf(answer: unknown): EventState | undefined {
   if (typeof answer !== "object" || answer === null || !("state" in answer)) return undefined;
-  return Array.isArray(answer.state) ? (answer.state as EventState) : undefined;
+  return isEventState(answer.state) ? answer.state : undefined;
 }

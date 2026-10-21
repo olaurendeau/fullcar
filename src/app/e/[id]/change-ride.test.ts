@@ -9,9 +9,8 @@ import { withRollback } from "@/db/test-db";
 import { removeSeededRetour, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import type { VisibleBoard } from "@/domain/phone-visibility";
 import { removeRide, updateRide } from "./change-ride";
-import { readEventState } from "./event-state";
+import { readEventState, type EventState } from "./event-state";
 
 type Db = Kysely<Database>;
 
@@ -73,16 +72,16 @@ async function rowsOf(db: Db, eventId: string) {
 }
 
 /** The state a result gives, if it gives one. */
-function stateOf(result: object): VisibleBoard | undefined {
-  return "state" in result ? (result.state as VisibleBoard) : undefined;
+function stateOf(result: object): EventState | undefined {
+  return "state" in result ? (result.state as EventState) : undefined;
 }
 
-function carOf(state: VisibleBoard | undefined, leg: Leg, rideId: string) {
-  return state?.find((board) => board.leg === leg)?.cars.find((car) => car.id === rideId);
+function carOf(state: EventState | undefined, leg: Leg, rideId: string) {
+  return state?.legs.find((board) => board.leg === leg)?.cars.find((car) => car.id === rideId);
 }
 
-function legOf(state: VisibleBoard | undefined, leg: Leg) {
-  const board = state?.find((found) => found.leg === leg);
+function legOf(state: EventState | undefined, leg: Leg) {
+  const board = state?.legs.find((found) => found.leg === leg);
   if (board === undefined) throw new Error(`no ${leg} in the state`);
   return board;
 }

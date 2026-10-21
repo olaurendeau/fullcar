@@ -1,9 +1,9 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { useImperativeHandle, useRef, useState, type Ref } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
-import { EventView, type EventViewProps } from "@/components/event/event-view";
+import { EventView } from "@/components/event/event-view";
 import { cellWhy, failureText, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
 import { focusCar, focusCell, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
 import { forget, sendAbout, type FromSheet } from "@/components/event/hidden-page";
@@ -12,6 +12,7 @@ import type { AddPerson, Registration, UpdatePerson } from "@/components/event/p
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
+import type { EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import {
   addPerson as storePerson,
@@ -26,7 +27,7 @@ import {
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
-import { actionRunner, sendAction, stateOf, type Sent } from "./run-action";
+import { actionRunner, sendAction, stateOf, stateRead, stateShown, type Sent } from "./run-action";
 
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
@@ -43,26 +44,63 @@ export interface BoardHandle {
  * number, then reads the device's persons with its token (`useDevice`) and takes the state
  * the server answers, which carries the numbers this device may see (C10.1). `onAction` is
  * told each time the state an action answered is shown: never for the first read, nor `apply`.
+ *
+ * Each state shown brings the event's header too (epic #250): its title, place, start and end,
+ * the tabs, the legs' dates and `document.title` follow it, and `onState` is told it. Should
+ * the retour go while its tab is active, the aller shows; should what had the focus go with
+ * the tabs, the event's title takes it, never `<body>`.
  */
 export function ParticipantBoard({
   id,
-  board: rendered,
+  state: rendered,
   ref,
   onAction,
-  ...event
-}: { id: string; board: EventState; ref?: Ref<BoardHandle>; onAction?: () => void } & Omit<
-  EventViewProps,
-  "board" | "device" | "messageBar" | "tab" | "onTab"
->) {
+  onState,
+}: {
+  id: string;
+  state: EventState;
+  ref?: Ref<BoardHandle>;
+  onAction?: () => void;
+  onState?: (event: EventHeader) => void;
+}) {
   const words = wordsOf(useTranslations(), useFormatter());
-  const [board, setBoard] = useState(rendered);
+  const [state, setState] = useState(rendered);
+  const [tab, setTab] = useState<Leg>("aller");
+  // The state last given, and what had the focus when the tabs went or came.
+  const latest = useRef(rendered);
+  const focused = useRef<Element | null>(null);
+  // Every state the page shows goes through here: an action's, a read's, `apply`.
+  // What is not a state (the legs alone, from a server not yet deployed) is not shown.
+  const [setBoard] = useState(() => (next: EventState) => {
+    const shown = stateShown(latest.current, next);
+    if (!shown) return;
+    latest.current = shown.state;
+    if (shown.tabsChange) {
+      // The aller's panel mounts anew, in or out of the tabs; without a retour, the aller shows.
+      focused.current = document.activeElement;
+      setTab("aller");
+    }
+    setState(shown.state);
+  });
   useImperativeHandle(
     ref,
     () => ({ read: () => sendAction(() => loadEventState(id, readDeviceToken(id))), apply: setBoard }),
-    [id],
+    [id, setBoard],
   );
-  const [tab, setTab] = useState<Leg>("aller");
   const messages = useMessageBar();
+
+  useLayoutEffect(() => {
+    const element = focused.current;
+    focused.current = null;
+    if (element && !element.isConnected) document.getElementById("event-title")?.focus();
+  }, [state]);
+
+  const { event } = state;
+  useEffect(() => {
+    document.title = event.title;
+    onState?.(event);
+  }, [event, onState]);
+
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
   const [runner] = useState(() => actionRunner({ state: setBoard, ended: messages.ended }));
@@ -98,7 +136,9 @@ export function ParticipantBoard({
         if (sent.ok) messages.succeed(null);
         else failedIn(retry, { notDone: { kind: "readDevice" }, why: whyOf(sent.problem), landmark: focusRetry });
       }
-      if (sent?.ok && sent.value) return sent.value;
+      // An answer that is not a state fails the read, as an unknown event does.
+      const answered = stateRead(sent);
+      if (answered) return answered;
       throw new Error("The device's persons could not be read.");
     },
     setBoard,
@@ -261,7 +301,7 @@ export function ParticipantBoard({
   return (
     <EventView
       {...event}
-      board={board}
+      board={state.legs}
       tab={tab}
       onTab={setTab}
       device={{
