@@ -47,9 +47,14 @@ export function useKeepBoardInPlace(ref: RefObject<HTMLElement | null>) {
     let scrolled = window.scrollY;
     let end: number | null = null;
     const onScroll = () => {
-      if (frame.getBoundingClientRect().height === height) scrolled = window.scrollY;
-      // The end of the page is at least where the scroll is, whatever a scrollbar takes.
-      else end ??= Math.max(window.scrollY, document.documentElement.scrollHeight - window.innerHeight);
+      if (frame.getBoundingClientRect().height === height) {
+        scrolled = window.scrollY;
+        // The height back to what the observer knew, before it ran: no end of a change is kept.
+        end = null;
+      } else {
+        // The end of the page is at least where the scroll is, whatever a scrollbar takes.
+        end ??= Math.max(window.scrollY, document.documentElement.scrollHeight - window.innerHeight);
+      }
     };
     const observer = new ResizeObserver(() => {
       const { top, height: after } = frame.getBoundingClientRect();

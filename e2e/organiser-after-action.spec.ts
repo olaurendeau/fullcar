@@ -390,6 +390,61 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     });
   }
 
+  for (const viewport of [
+    { width: 360, height: 780 },
+    { width: 1280, height: 800 },
+  ]) {
+    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the organiser not scrolling, the bar of messages measured in the very frame the browser pulls the scroll back: the car stays in place (#316)`, async ({
+      page,
+      seededEvent,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.addStyleTag({ content: "html, main { overflow-anchor: none !important; }" });
+      const title = carTitle(page, "Anaïs");
+      const y = async () => {
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        return (await title.boundingBox())!.y;
+      };
+      const reads = await holdPanelReads(page, seededEvent);
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      expect(await panel(page).evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThan(0);
+      await expect(title).toBeInViewport();
+      const before = await y();
+      await takeSeat(page, "Anaïs");
+      await expect.poll(reads.held).toBe(1);
+
+      // In a frame's animation callbacks, after its scroll events and before its observers: a
+      // section of the panel hidden, the room kept below the bar gone, and the bar 1 px taller,
+      // so that its observer measures it again before the panel's. The browser pulls the scroll
+      // back without that room, and no scroll event says so before the panel's observer runs:
+      // the page is longer again when it does. A real withdrawal may read the layout in its own
+      // task, and a scroll event would then come first.
+      const { measured, pulledBack, hidden } = await section(page, "Aller").evaluate(
+        (element) =>
+          new Promise<Record<string, number>>((resolve) =>
+            requestAnimationFrame(() => {
+              const end = () => document.documentElement.scrollHeight - window.innerHeight;
+              const room = document.documentElement.style;
+              const measured = parseFloat(room.getPropertyValue("--message-bar-height"));
+              const atStart = window.scrollY;
+              const height = element.getBoundingClientRect().height;
+              (element as HTMLElement).hidden = true;
+              room.removeProperty("--message-bar-height");
+              const pulledBack = Math.max(0, atStart - end());
+              document.querySelector<HTMLElement>('[data-message-bar="open"]')!.style.height = `${measured + 1}px`;
+              resolve({ measured, pulledBack, hidden: height });
+            }),
+          ),
+      );
+      expect(measured).toBeGreaterThan(0);
+      // Pulled back by part of the hidden height only.
+      expect(pulledBack).toBeGreaterThan(1);
+      expect(pulledBack).toBeLessThan(hidden - 1);
+      expect(Math.abs((await y()) - before)).toBeLessThanOrEqual(1);
+      await reads.release();
+    });
+  }
+
   test.describe("at 1280 px", () => {
     test.use({ viewport: { width: 1280, height: 800 } });
 
