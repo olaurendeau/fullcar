@@ -1,4 +1,4 @@
-import type { Locator, Page, Request, Route } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
@@ -11,6 +11,8 @@ import {
   expect,
   foldKey,
   hideToken,
+  holdActionsWith,
+  isAction,
   oneCharOff,
   organiserPath,
   seedCrowd,
@@ -65,29 +67,11 @@ async function rootFont(page: Page) {
   await page.addStyleTag({ content: "html { font-size: 125% }" });
   await page.evaluate(() => Promise.all(document.getAnimations().map((each) => each.finished)));
 }
-const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
 
 /** Folds or unfolds by a click, and checks the button says so. */
 async function setFolded(page: Page, folded: boolean) {
   await toggle(page).click();
   await expect(toggle(page)).toHaveAttribute("aria-expanded", String(!folded));
-}
-
-/** Holds, from now on, every read of the panel (the admin token in its body); `fail` loses them as a cut connection does. */
-async function holdPanelReads(page: Page, { id, token }: SeededEvent) {
-  const held: Route[] = [];
-  await page.route(`**/e/${id}/admin`, (route) =>
-    isAction(route.request()) && (route.request().postData() ?? "").includes(token) ? held.push(route) : route.fallback(),
-  );
-  return {
-    held: () => held.length,
-    fail: async () => {
-      for (const route of held.splice(0)) await route.abort("internetdisconnected");
-    },
-    release: async () => {
-      for (const route of held.splice(0)) await route.fallback();
-    },
-  };
 }
 
 /**
@@ -374,11 +358,11 @@ test.describe("the scene of O2.5", () => {
     await expect(alertText(page)).toContainText(FR.invalid);
     await nothingToFold();
 
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
     await page.goto(organiserPath(seededEvent));
     await expect.poll(reads.held).toBe(1);
     await nothingToFold();
-    await reads.fail();
+    await reads.lose();
     await expect(alertText(page)).toContainText(FR.failed);
     await nothingToFold();
 
@@ -412,7 +396,7 @@ test.describe("the scene of O2.5", () => {
       await other.close();
     }
 
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
     const height = (await box(panel(page))).height;
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);
@@ -431,10 +415,10 @@ test.describe("the scene of O2.5", () => {
     await page.goto(organiserPath(seededEvent));
     await expect(summary(page)).toBeVisible();
     const before = await summary(page).textContent();
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);
-    await reads.fail();
+    await reads.lose();
     await expect(alertText(page)).toContainText(FR.failedTitle);
     const [title, alert, list] = await Promise.all([box(toggle(page)), box(alertText(page)), box(summary(page))]);
     expect(alert.y).toBeGreaterThan(title.y + title.height);
@@ -458,12 +442,12 @@ test.describe("the scene of O2.5", () => {
     await expect(summary(page)).toBeVisible();
     await expect(page.getByRole("region", { name: "Vos inscriptions" }).getByText("Oriane")).toBeVisible();
 
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
     // Oriane alone is without a car at the aller: one tap seats her, with no sheet (C5.2, #92).
     await board(page).getByRole("button", { name: "Place libre : prendre une place dans la voiture de Anaïs" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect.poll(reads.held).toBe(1);
-    await reads.fail();
+    await reads.lose();
     await expect(summary(page)).toHaveCount(0);
     await expect(stale(page)).toBeVisible();
     expect(await stale(page).evaluate((text) => text.closest("p")!.parentElement!.tagName)).toBe("SECTION");
@@ -471,7 +455,7 @@ test.describe("the scene of O2.5", () => {
 
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);
-    await reads.fail();
+    await reads.lose();
     await expect(alertText(page)).toHaveText(`${FR.failedTitle}${FR.bodyWithdrawn}`);
     await expect(stale(page)).toHaveCount(0);
     await expect(summary(page)).toHaveCount(0);
@@ -486,7 +470,7 @@ test.describe("the scene of O2.5", () => {
   }) => {
     await page.goto(organiserPath(seededEvent));
     await expect(toggle(page)).toBeVisible();
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
     const requests = watchRequests(page, seededEvent);
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);

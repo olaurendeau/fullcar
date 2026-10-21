@@ -18,11 +18,20 @@ import { expect, type Locator, type Page } from "@playwright/test";
  *    transparent and one of its lengths is not 0: `ring-0` writes a coloured layer of no
  *    length (checkbox, radio-group).
  *    Layers are counted, not compared: a halo that replaced a shadow already visible would
- *    pass. No component is in that case. Tailwind 4 writes `ring-*` in `--tw-ring-shadow`
+ *    pass. That cannot happen to a shadow: Tailwind 4 writes `ring-*` in `--tw-ring-shadow`
  *    and `shadow-*` in `--tw-shadow`, two layers apart, so a ring is always added to a
- *    shadow. No component of `ui/` has a visible shadow unfocused (the tabs' `data-active:`
- *    never applies: Radix sets `data-state="active"`). The one layer visible unfocused is the
- *    error halo, `aria-invalid:ring-3`, which a focus halo would replace in the same layer.
+ *    shadow, never put in its place. One element measured has a visible shadow unfocused:
+ *    the selected tab. In this project `data-active:` matches `[data-state="active"]` as well as
+ *    `[data-active]` (`node_modules/shadcn/dist/tailwind.css`), and Radix sets the first on
+ *    the selected tab, so the default tabs list gives it `shadow-sm`. Tab reaches the
+ *    selected tab alone (Radix's roving tabindex), so the state `walk` notes before that
+ *    press is the selected tab unfocused: `walk` compares the visible layers of that one
+ *    tab, selected, focused and unfocused, `shadow-sm`'s on both sides, and the outline of
+ *    the focus ring adds none. An arrow selects as it focuses: noted before it, the tab was
+ *    not selected yet, and its shadow would count as layers more; such a tab is measured
+ *    once Tab has left it and Shift+Tab brought the keyboard back (`selectedTabRing`, F1.3).
+ *    The one other layer visible unfocused is the error halo, `aria-invalid:ring-3`, which
+ *    a focus halo would replace in the same layer.
  *    F1.8 excludes that twice: « Lieu » is not in error yet when the unfocused state is read,
  *    before Enter on « Créer », and F1.8 also asks for no visible layer at all focused.
  * Colours are read in sRGB through a canvas: the computed style writes oklch or oklab.

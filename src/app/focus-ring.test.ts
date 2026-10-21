@@ -5,11 +5,12 @@ import { describe, expect, it } from "vitest";
 
 /*
  * #320, epic #236: the focus ring of the language-switch design (v3.3.1), read in the source.
- * F1.12: no class of the old ring is left in a `.tsx` or `.css` file of `src/`, nor the
- * utility that removes the outline, which left the landmarks of #314 with no ring at all
- * (#321): `NO_OUTLINE`, written in two parts so that no file of `src/` holds it. A class is cut
- * into its variants and its utility (`a:b:utility`), so that `not-focus-visible` is not taken
- * for `focus-visible`. F1.13: the `--ring` token is `#737373`, opaque.
+ * F1.12: no class of the old ring is left in a `.tsx`, `.css` or `.ts` file of `src/` (a list
+ * of classes may live in a `.ts`; the `.test.ts` files, which name the old classes to find
+ * them, are left out: #337), nor the utility that removes the outline, which left the
+ * landmarks of #314 with no ring at all (#321): `NO_OUTLINE`, written in two parts so that no
+ * file of `src/` holds it. A class is cut into its variants and its utility (`a:b:utility`), so
+ * that `not-focus-visible` is not taken for `focus-visible`. F1.13: the `--ring` token is `#737373`, opaque.
  */
 
 const NO_OUTLINE = "outline-" + "none";
@@ -46,11 +47,14 @@ function oldRing(name: string): string | undefined {
 /** Every word of the file that may be a class: what lies between spaces, quotes (single ones too), commas and braces. */
 const words = (text: string) => text.split(/[\s"'`,;{}]+/).filter(Boolean);
 
+/** Whether the scan reads a file of this name: a `.tsx`, a `.css`, or a `.ts` that is no test. */
+const scanned = (name: string) => /\.(tsx|css)$/.test(name) || (/\.ts$/.test(name) && !/\.(test|spec)\.ts$/.test(name));
+
 function* sources(directory: string): Generator<string> {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) yield* sources(path);
-    else if (/\.(tsx|css)$/.test(entry.name)) yield path;
+    else if (scanned(entry.name)) yield path;
   }
 }
 
@@ -107,7 +111,16 @@ describe("F1.12: the old focus ring, and the outline removed, are gone from src/
     ]);
   });
 
-  it("no .tsx nor .css file of src/ has one", () => {
+  it("reads the .tsx, .css and .ts files, and leaves the tests out", () => {
+    for (const name of ["button.tsx", "globals.css", "classes.ts", "test-events.ts", "page.test.tsx"]) {
+      expect(scanned(name), name).toBe(true);
+    }
+    for (const name of ["focus-ring.test.ts", "admin.action.test.ts", "rows.spec.ts", "README.md", "next-env.d.mts"]) {
+      expect(scanned(name), name).toBe(false);
+    }
+  });
+
+  it("no .tsx, .css nor .ts file of src/ outside the tests has one", () => {
     const found: string[] = [];
     for (const path of sources(SRC)) {
       for (const word of words(readFileSync(path, "utf8"))) {
