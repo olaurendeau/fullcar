@@ -19,7 +19,7 @@ const NOBODYS_TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
 const NEW_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZQ";
 
 function legOf(state: EventState | undefined, leg: Leg) {
-  const found = state?.find((board) => board.leg === leg);
+  const found = state?.legs.find((board) => board.leg === leg);
   if (found === undefined) throw new Error(`no ${leg} in the state`);
   return found;
 }
@@ -27,7 +27,7 @@ function legOf(state: EventState | undefined, leg: Leg) {
 /** Where the person stands on each leg of the state, as her device sees it. */
 function standing(state: EventState | undefined, personId: string): Partial<Record<Leg, string>> {
   const legs: Partial<Record<Leg, string>> = {};
-  for (const board of state ?? []) {
+  for (const board of state?.legs ?? []) {
     const person = board.device.find((device) => device.id === personId);
     if (person) legs[board.leg] = person.state.kind;
   }

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { ContactFooter } from "@/components/contact/contact-footer";
-import { eventMetadata, loadEvent, loadPublicState } from "../load-event";
+import { eventMetadata, loadPublicState } from "../load-event";
 import { OrganiserScreen } from "./organiser-screen";
 
 // No loading.tsx here either: an unknown id answers a real 404 (C6.4).
@@ -19,17 +19,18 @@ export async function generateMetadata({ params }: PageProps<"/e/[id]/admin">): 
  */
 export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) {
   const { id } = await params;
-  const [event, board, t] = await Promise.all([loadEvent(id), loadPublicState(id), getTranslations("Admin")]);
-  if (!event || !board) notFound();
+  // The header comes with the legs, from one snapshot (epic #250).
+  const [state, t] = await Promise.all([loadPublicState(id), getTranslations("Admin")]);
+  if (!state) notFound();
 
   // The page's whole width, for the panel's 1024 px (O7.5); the rest keeps the column of
-  // /e/{id}, centred. While the bar of messages shows, 112 px more below: nothing stays under it (C11.4).
+  // /e/{id}, centred. While the bar of messages shows, room below for it as measured, and its 12 px: nothing stays under it (C11.4).
   // No scroll anchoring, here and on <body> (`data-scroll-anchor`, layout.tsx): the screen keeps the
   // board in place itself, as Safari iOS needs, and the browsers that anchor would move it a second time (O1.11).
   return (
     <main
       data-scroll-anchor="none"
-      className="flex w-full flex-1 flex-col gap-6 p-4 [overflow-anchor:none] has-data-[message-bar=open]:pb-[calc(1rem+112px+env(safe-area-inset-bottom))]"
+      className="flex w-full flex-1 flex-col gap-6 p-4 [overflow-anchor:none] has-data-[message-bar=open]:pb-[calc(1rem+var(--message-bar-height,0px)+12px+env(safe-area-inset-bottom))]"
     >
       {/* Without JavaScript, the token cannot be checked: the panel's place says so (O5.5). */}
       <noscript>
@@ -41,14 +42,7 @@ export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) 
           {t("needsJavaScript")}
         </p>
       </noscript>
-      <OrganiserScreen
-        id={event.id}
-        title={event.title}
-        location={event.location}
-        allerAt={event.aller_at}
-        retourAt={event.retour_at}
-        board={board}
-      >
+      <OrganiserScreen id={id} state={state}>
         <ContactFooter />
       </OrganiserScreen>
     </main>

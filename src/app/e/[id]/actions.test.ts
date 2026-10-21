@@ -71,7 +71,7 @@ describe("loadEventState", () => {
       const state = await loadEventState(eventId, lea.token);
       expect(state).toEqual(await readEventState(trx, eventId, lea.token));
       expect(JSON.parse(JSON.stringify(state))).toStrictEqual(state);
-      const [aller] = state ?? [];
+      const [aller] = state?.legs ?? [];
       expect(aller.device.map((person) => person.id)).toEqual([lea.id]);
     });
   });
@@ -95,7 +95,7 @@ describe("loadEventState", () => {
     await inTransaction(async (trx) => {
       const { eventId } = await seedScene(trx);
       const state = await loadEventState(eventId, token);
-      expect(state?.flatMap((leg) => leg.device)).toEqual([]);
+      expect(state?.legs.flatMap((leg) => leg.device)).toEqual([]);
       expect(JSON.stringify(state)).not.toMatch(/06 \d\d/);
     });
   });
@@ -206,7 +206,7 @@ describe("the person actions", () => {
   const TOKEN = "q3Vx9kLmN2pR7sT1uW4yZQ";
   const registration = (fields: object = {}) => ({ id: randomUUID(), firstName: "Zoé", phone: "", bothLegs: true, leg: "aller", ...fields });
   const kinds = (state: unknown, personId: string) =>
-    (state as { leg: string; device: { id: string; state: { kind: string } }[] }[]).map((leg) => [
+    (state as EventState).legs.map((leg) => [
       leg.leg,
       leg.device.find((person) => person.id === personId)?.state.kind,
     ]);
@@ -320,8 +320,8 @@ describe("the person actions", () => {
 const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" };
 
 /** The state a result gives, if it gives one. */
-function stateOf(result: object): EventState | undefined {
-  return "state" in result ? (result.state as EventState) : undefined;
+function stateOf(result: object): EventState["legs"] | undefined {
+  return "state" in result ? (result.state as EventState).legs : undefined;
 }
 
 /** The fields the change form sends, with the passengers its step showed. */
