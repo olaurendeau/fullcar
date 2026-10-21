@@ -233,7 +233,8 @@
       "alreadyDriving": "{driver} conduit déjà une voiture.",
       "passengersChanged": "Quelqu’un a pris ou libéré une place entre-temps : modifiez la voiture de nouveau.",
       "forbidden": "Cet appareil ne peut pas faire ce changement : rechargez la page.",
-      "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé."
+      "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé.",
+      "noRetour": "Il n’y a plus de retour pour cet événement."
     },
     "names": {
       "andOthers": "{first}, {second} et {others, plural, one {# autre} other {# autres}}"
