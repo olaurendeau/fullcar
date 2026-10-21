@@ -199,8 +199,8 @@ describe("loadOrganiserPanel", () => {
   });
 
   // C6.6, O6.4: `next dev` prints each Server Function call with its arguments, the token among them.
-  it("sets logging.serverFunctions to false in the Next config", () => {
-    expect(nextConfig.logging).toMatchObject({ serverFunctions: false });
+  it("sets logging.serverFunctions to false in the Next config", async () => {
+    expect((await nextConfig()).logging).toMatchObject({ serverFunctions: false });
   });
 });
 
