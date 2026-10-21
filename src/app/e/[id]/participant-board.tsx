@@ -27,7 +27,7 @@ import {
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
-import { actionRunner, sendAction, stateOf, type Sent } from "./run-action";
+import { actionRunner, sendAction, stateOf, stateRead, stateShown, type Sent } from "./run-action";
 
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
@@ -70,15 +70,17 @@ export function ParticipantBoard({
   const latest = useRef(rendered);
   const focused = useRef<Element | null>(null);
   // Every state the page shows goes through here: an action's, a read's, `apply`.
+  // What is not a state (the legs alone, from a server not yet deployed) is not shown.
   const [setBoard] = useState(() => (next: EventState) => {
-    const before = latest.current;
-    latest.current = next;
-    if (!before.event.retourAt !== !next.event.retourAt) {
+    const shown = stateShown(latest.current, next);
+    if (!shown) return;
+    latest.current = shown.state;
+    if (shown.tabsChange) {
       // The aller's panel mounts anew, in or out of the tabs; without a retour, the aller shows.
       focused.current = document.activeElement;
       setTab("aller");
     }
-    setState(next);
+    setState(shown.state);
   });
   useImperativeHandle(
     ref,
@@ -134,7 +136,9 @@ export function ParticipantBoard({
         if (sent.ok) messages.succeed(null);
         else failedIn(retry, { notDone: { kind: "readDevice" }, why: whyOf(sent.problem), landmark: focusRetry });
       }
-      if (sent?.ok && sent.value) return sent.value;
+      // An answer that is not a state fails the read, as an unknown event does.
+      const answered = stateRead(sent);
+      if (answered) return answered;
       throw new Error("The device's persons could not be read.");
     },
     setBoard,
