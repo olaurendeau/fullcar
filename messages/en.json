@@ -300,8 +300,10 @@
     "refreshed": "Organiser area refreshed.",
     "refreshFailed": {
       "title": "The organiser area could not be refreshed.",
-      "body": "What you see dates from the last load. Check your connection, then use “Refresh” again."
+      "body": "What you see dates from the last load. Check your connection, then use “Refresh” again.",
+      "bodyWithdrawn": "Check your connection, then use “Refresh” again."
     },
+    "stale": "The organiser area is out of date. Use “Refresh” to load it again.",
     "needsJavaScript": "The organiser area needs JavaScript: turn it on, then reload the page.",
     "withoutCar": {
       "title": "Without a car ({count})",

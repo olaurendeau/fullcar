@@ -26,7 +26,7 @@ import {
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
-import { actionRunner, sendAction, type ActionProblem, type Sent } from "./run-action";
+import { actionRunner, sendAction, stateOf, type ActionProblem, type Sent } from "./run-action";
 
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
@@ -44,14 +44,16 @@ const noLandmark = () => false;
  * The event's board on `/e/{id}` and `/e/{id}/admin` (C11.7), under `organiser-screen.tsx`
  * there. It starts from the state the server rendered, with no device and no
  * number, then reads the device's persons with its token (`useDevice`) and takes the state
- * the server answers, which carries the numbers this device may see (C10.1).
+ * the server answers, which carries the numbers this device may see (C10.1). `onAction` is
+ * told each time the state an action answered is shown: never for the first read, nor `apply`.
  */
 export function ParticipantBoard({
   id,
   board: rendered,
   ref,
+  onAction,
   ...event
-}: { id: string; board: EventState; ref?: Ref<BoardHandle> } & Omit<
+}: { id: string; board: EventState; ref?: Ref<BoardHandle>; onAction?: () => void } & Omit<
   EventViewProps,
   "board" | "device" | "messageBar" | "tab" | "onTab"
 >) {
@@ -66,7 +68,13 @@ export function ParticipantBoard({
   const messages = useMessageBar();
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
-  const [runAction] = useState(() => actionRunner({ state: setBoard, ended: messages.ended }));
+  const [runner] = useState(() => actionRunner({ state: setBoard, ended: messages.ended }));
+  // Once the runner has shown the state an action answered, refusal included.
+  const runAction: typeof runner = async (...run) => {
+    const sent = await runner(...run);
+    if (sent?.ok && stateOf(sent.value)) onAction?.();
+    return sent;
+  };
 
   /** A problem with no words of its own yet: only its reason, offline or not (#87). */
   const failure = (problem: ActionProblem, landmark: () => boolean) => ({ why: whyOf(problem), landmark });
