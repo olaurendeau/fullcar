@@ -21,7 +21,6 @@ export default async function EventPage({ params }: PageProps<"/e/[id]">) {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col p-4 has-data-[message-bar=open]:pb-[calc(1rem+var(--message-bar-height,0px)+12px+env(safe-area-inset-bottom))]">
       <ParticipantBoard id={id} state={state} />
-
       <ContactFooter />
     </main>
   );
