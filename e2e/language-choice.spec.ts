@@ -396,12 +396,12 @@ test.describe("the language never in a URL", () => {
         ),
       );
     const before = await links(FR);
-    expect(before[0]).toBe(`${new URL(baseURL!).origin}/e/${seededEvent.id}`);
+    expect(before[0] === `${new URL(baseURL!).origin}/e/${seededEvent.id}`, "the share link").toBe(true);
 
     await switchTo(page, "en");
     await expect(page.getByRole("region", { name: EN.panel })).toBeVisible();
     const after = await links(EN);
-    expect(after[0]).toBe(before[0]);
+    expect(after[0] === before[0], "the share link is the same").toBe(true);
     expect(after[1] === before[1], "the organiser's link is the same").toBe(true);
 
     const elsewhere = await browser.newContext({ locale: "fr-FR", baseURL });

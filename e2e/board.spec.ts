@@ -5,7 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { htmlByLegSection } from "./organiser";
+import { hideToken, htmlByLegSection } from "./organiser";
 
 leaveNoToken();
 
@@ -341,13 +341,13 @@ for (const javaScriptEnabled of [true, false]) {
           async (route) => {
             if (!isPanelRead(route.request(), id)) return route.fallback();
             const answer = route.fetch();
-            panelReads.push(body(route.request().url(), answer.then((response) => response.text())));
+            panelReads.push(body(hideToken(route.request().url(), seededEvent.token), answer.then((response) => response.text())));
             await route.fulfill({ response: await answer });
           },
         );
         const bodies: Promise<Body>[] = [];
         page.on("response", (response) => {
-          if (!isPanelRead(response.request(), id)) bodies.push(body(response.url(), response.text()));
+          if (!isPanelRead(response.request(), id)) bodies.push(body(hideToken(response.url(), seededEvent.token), response.text()));
         });
         await page.goto(path(seededEvent), { waitUntil: "networkidle" });
         // With JavaScript, the link's check answered: its panel shows.

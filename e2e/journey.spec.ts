@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { BrowserContext, Page, Response } from "@playwright/test";
-import { expect, expectUrl, leaveNoToken, test } from "./fixtures";
+import { expect, expectText, expectUrl, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
 
@@ -146,7 +146,7 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
       const shareLink = page.getByRole("region", { name: words.panel }).getByRole("group", { name: words.shareLink });
       await expectUrl(page, ARRIVAL, "the organiser's link");
       const id = ARRIVAL.exec(page.url())![1];
-      await expect(shareLink.getByTestId("link")).toHaveText(`${origin}/e/${id}`);
+      await expectText(shareLink.getByTestId("link"), `${origin}/e/${id}`, "the share link is shown");
       expect(Date.now() - start).toBeLessThan(30_000);
 
       // C1.12: 07:30 and 18:00, as typed, from a server in UTC+14 to a browser elsewhere.

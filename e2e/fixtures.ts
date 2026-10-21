@@ -1,11 +1,11 @@
-import { expect, test as base, type Page, type TestInfoError } from "@playwright/test";
+import { expect, test as base, type Locator, type Page, type TestInfoError } from "@playwright/test";
 import type { Kysely } from "kysely";
 import { createDb } from "@/db/client";
 import type { Database } from "@/db/schema";
 import type { NewEvent } from "@/domain/event";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 
-export { expect } from "@playwright/test";
+export { expect };
 
 /**
  * The only shape accepted, from end to end: `postgres[ql]://[credentials@]db[:port]/fullcar`,
@@ -63,6 +63,14 @@ export const test = base.extend<
  */
 export function expectUrl(page: Page, url: RegExp, message: string) {
   return expect.poll(() => url.test(page.url()), { message }).toBe(true);
+}
+
+/**
+ * The locator shows exactly `text`, compared without printing either (#365): one of the
+ * organiser's two links, or a link a regression made one, would show the token.
+ */
+export function expectText(locator: Locator, text: string, message: string) {
+  return expect.poll(async () => (await locator.innerText()) === text, { message }).toBe(true);
 }
 
 /**

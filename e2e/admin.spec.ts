@@ -1,6 +1,6 @@
-import type { Locator, Page, Route } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, expectText, leaveNoToken, test } from "./fixtures";
 import { hideToken } from "./organiser";
 
 leaveNoToken();
@@ -35,9 +35,6 @@ function oneCharOff(token: string): string {
 }
 
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
-/** The organiser's link shown is `link`, compared without printing either: a failure would show the token (#365). */
-const showsLink = (shown: Locator, link: string, message: string) =>
-  expect.poll(async () => (await shown.innerText()) === link, { message }).toBe(true);
 const linkGroup = (page: Page, name: string) => panel(page).getByRole("group", { name });
 // Within the page's content: Next's route announcer is an alert as well. With text: the bar of
 // messages keeps its own alert region, empty, on the page (#87).
@@ -62,8 +59,8 @@ test.describe("organiser's arrival", () => {
     const share = linkGroup(page, FR.shareLink);
     const admin = linkGroup(page, FR.adminLink);
     const warning = panel(page).getByRole("note");
-    await expect(share.getByTestId("link")).toHaveText(`${origin}/e/${seededEvent.id}`);
-    await showsLink(admin.getByTestId("link"), `${origin}/e/${seededEvent.id}/admin#${seededEvent.token}`, "the organiser's link is shown");
+    await expectText(share.getByTestId("link"), `${origin}/e/${seededEvent.id}`, "the share link is shown");
+    await expectText(admin.getByTestId("link"), `${origin}/e/${seededEvent.id}/admin#${seededEvent.token}`, "the organiser's link is shown");
     await expect(admin).toContainText("Personnel");
     // Its exact text: `toContainText` takes a non-breaking space for the README's plain one.
     expect(await admin.getByText(/^Ne le partagez pas/).textContent()).toBe(FR.doNotShare);
@@ -191,12 +188,12 @@ test.describe("organiser's arrival", () => {
     await page.goto(adminPath(seededEvent));
     const shown = await linkGroup(page, FR.adminLink).getByTestId("link").innerText();
     await page.reload();
-    await showsLink(linkGroup(page, FR.adminLink).getByTestId("link"), shown, "the same link after a reload");
+    await expectText(linkGroup(page, FR.adminLink).getByTestId("link"), shown, "the same link after a reload");
     expect(new URL(page.url()).hash === `#${seededEvent.token}`, "the URL keeps the token in its fragment").toBe(true);
 
     const later = await context.newPage();
     await later.goto(adminPath(seededEvent));
-    await showsLink(linkGroup(later, FR.adminLink).getByTestId("link"), shown, "the same link in another tab");
+    await expectText(linkGroup(later, FR.adminLink).getByTestId("link"), shown, "the same link in another tab");
   });
 
   test("C4.9: the panel appears only once the server has checked the token, sent in a request's body", async ({
@@ -253,10 +250,13 @@ test.describe("organiser's arrival", () => {
   });
 
   test("C5.8: no referrer from the public page nor from the organiser's page", async ({ page, seededEvent }) => {
-    for (const path of [`/e/${seededEvent.id}`, adminPath(seededEvent)]) {
+    for (const [name, path] of [
+      ["the public page", `/e/${seededEvent.id}`],
+      ["the organiser's page", adminPath(seededEvent)],
+    ]) {
       const response = await page.goto(path);
-      expect(response?.status(), path).toBe(200);
-      expect(response?.headers()["referrer-policy"], path).toBe("no-referrer");
+      expect(response?.status(), name).toBe(200);
+      expect(response?.headers()["referrer-policy"], name).toBe("no-referrer");
     }
   });
 });
@@ -338,7 +338,7 @@ test.describe("organiser's link of an unknown event", () => {
       await page.goto("about:blank");
       const response = await page.goto(path);
       // The title is streamed after the page's content: waited for, not read at once.
-      await expect(page, path).toHaveTitle("Événement introuvable");
+      await expect(page, hideToken(path, seededEvent.token)).toHaveTitle("Événement introuvable");
       return {
         status: response?.status(),
         text: await page.locator("main").innerText(),
@@ -352,7 +352,7 @@ test.describe("organiser's link of an unknown event", () => {
       "/e/Ab3dEf7/admin",
       "/e/Ab3dEf70/admin",
     ]) {
-      expect(await seen(path), path).toEqual(unknown);
+      expect(await seen(path), hideToken(path, seededEvent.token)).toEqual(unknown);
     }
   });
 });

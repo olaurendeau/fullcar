@@ -183,12 +183,15 @@ celui qui écrit le code.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.
 - À partir de #365, aucune vérification de bout en bout n'affiche un jeton, un lien
-  administrateur ou un numéro en échouant. Un tableau rempli depuis le réseau (`Request`,
-  corps, en-têtes, ou textes filtrés sur un jeton) ne s'affirme que par son nombre
-  (`.length`), jamais par `toHaveLength` ni `toEqual`. Une chaîne qui peut contenir un
-  jeton, un lien administrateur ou un numéro ne s'affirme que par un booléen. Un texte dont
-  chaque jeton a d'abord été remplacé (`hideToken`, `hide`) et qui ne porte aucun numéro
-  n'en fait plus partie.
+  administrateur ou un numéro en échouant, ni par ce qu'elle compare, ni par le message
+  qu'elle passe à `expect`. Un tableau rempli depuis le réseau (`Request`, corps, en-têtes,
+  ou textes filtrés sur un jeton) qui peut porter un jeton, un lien administrateur ou un
+  numéro ne s'affirme que par son nombre (`.length`), jamais par `toHaveLength` ni
+  `toEqual`. Une chaîne qui peut contenir un jeton, un lien administrateur ou un numéro ne
+  s'affirme que par un booléen. Un texte dont chaque jeton a d'abord été remplacé
+  (`hideToken`, `hide`) et qui ne porte aucun numéro n'est plus concerné. Seule exception
+  pour un numéro semé : celui qu'on attend à l'écran (`toHaveText`, `href="tel:…"`) ou
+  qu'on relit dans la base peut paraître dans un échec.
 
 ## États vides
 
