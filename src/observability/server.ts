@@ -33,20 +33,36 @@ export const SERVER_INTEGRATIONS = [
 ] as const;
 
 /**
+ * Of every error's stack, and of its causes', the frames of code alone. On the server the
+ * parser skips the first line of a stack, whatever the error's name, and makes a frame of any
+ * other line of its message that reads as one: `    at Marc (…)` would send a first name as
+ * a function's.
+ */
+export function codeFramesOnly<E extends Sentry.Event>(event: E): E {
+  for (const value of event.exception?.values ?? []) {
+    if (value.stacktrace?.frames) value.stacktrace.frames = value.stacktrace.frames.filter(inCode);
+  }
+  return event;
+}
+
+/**
  * An error of the database or of the system: `database error (SQLSTATE x)` and nothing of its
- * message, which may quote a value, as `databaseFailure` logs it (`src/db/failure.ts`). Of its
- * stack, the frames of code alone: pg's `DatabaseError` is named `error`, not `…Error`, and the
- * parser makes a frame of any line of its message after the first that reads as one (`at …`).
+ * message, which may quote a value, as `databaseFailure` logs it (`src/db/failure.ts`).
  */
 export function databaseErrors<E extends Sentry.Event>(event: E, hint: Sentry.EventHint): E {
   const code = errorCode(hint.originalException);
   const values = event.exception?.values;
   if (!code || !values?.length) return event;
   // The thrown error is the last one: its causes come before it.
-  const thrown = values[values.length - 1];
-  thrown.value = `database error (${code})`;
-  if (thrown.stacktrace?.frames) thrown.stacktrace.frames = thrown.stacktrace.frames.filter(inCode);
+  values[values.length - 1].value = `database error (${code})`;
   return event;
+}
+
+/** The hooks of `registerHooks`, and the server's event processors. */
+export function registerServerHooks(client: Pick<Sentry.NodeClient, "on" | "addEventProcessor">): void {
+  registerHooks(client);
+  client.addEventProcessor(codeFramesOnly);
+  client.addEventProcessor(databaseErrors);
 }
 
 export async function startServerSentry(env: SentryEnv, load: Load = loadSdk): Promise<void> {
@@ -57,8 +73,7 @@ export async function startServerSentry(env: SentryEnv, load: Load = loadSdk): P
   const http = sentry.httpIntegration({ disableIncomingRequestSpans: true, sessions: false });
   const client = sentry.init({ ...options, integrations: exactIntegrations(SERVER_INTEGRATIONS, [http]) });
   if (!client) return;
-  registerHooks(client);
-  client.addEventProcessor(databaseErrors);
+  registerServerHooks(client);
 }
 
 /** `onRequestError`: reported only with a DSN, the SDK loaded only then. */
