@@ -26,8 +26,10 @@ describe("sendAction", () => {
   });
 });
 
+const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: null };
+
 describe("stateOf", () => {
-  const state = [{ leg: "aller", cars: [], withoutCar: [], device: [] }];
+  const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
   it("is the state an action gives back, refusal included", () => {
     expect(stateOf({ ok: true, state })).toBe(state);
@@ -39,10 +41,21 @@ describe("stateOf", () => {
     expect(stateOf(undefined)).toBeUndefined();
     expect(stateOf({ ok: true, state: "nope" })).toBeUndefined();
   });
+
+  // Epic #250: the header comes with the legs. An answer without it (legs alone, from a server
+  // not yet deployed) is not applied: the page would lose its title.
+  it.each<[string, unknown]>([
+    ["the legs alone", state.legs],
+    ["no header", { legs: state.legs }],
+    ["no legs", { event: header }],
+    ["a header that is not an object", { event: "Tournoi", legs: state.legs }],
+  ])("is nothing for a state with %s", (_, given) => {
+    expect(stateOf({ ok: true, state: given })).toBeUndefined();
+  });
 });
 
 describe("actionRunner", () => {
-  const state: EventState = [{ leg: "aller", cars: [], withoutCar: [], device: [] }];
+  const state: EventState = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
   /** A page that records the states the runner gives it and each action that ends, and a connection that can be cut. */
   function page() {

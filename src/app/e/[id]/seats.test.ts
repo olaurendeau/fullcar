@@ -9,8 +9,7 @@ import { withRollback } from "@/db/test-db";
 import { removeSeededRetour, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import type { VisibleBoard } from "@/domain/phone-visibility";
-import { readEventState } from "./event-state";
+import { readEventState, type EventState } from "./event-state";
 import { takeSeats, undoSeats } from "./seats";
 
 type Db = Kysely<Database>;
@@ -61,7 +60,7 @@ async function placementsOf(db: Db, eventId: string) {
 
 /** The first names in the car, as the state a result gives shows them. */
 function passengersOf(result: object, leg: Leg, rideId: string): string[] {
-  const state = "state" in result ? (result.state as VisibleBoard) : undefined;
+  const state = "state" in result ? (result.state as EventState).legs : undefined;
   const car = state?.find((board) => board.leg === leg)?.cars.find((found) => found.id === rideId);
   if (car === undefined) throw new Error(`no car ${rideId} on the ${leg} in the state`);
   return car.passengers.map((person) => person.firstName);

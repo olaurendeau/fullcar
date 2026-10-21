@@ -62,8 +62,17 @@ export function actionRunner(page: ActionPage, online?: () => boolean) {
   };
 }
 
+/**
+ * Whether `value` is a state the page can apply: its header and its legs (epic #250). The
+ * legs alone, as a server not yet deployed would answer, are not one: the page keeps its own.
+ */
+export function isEventState(value: unknown): value is EventState {
+  if (typeof value !== "object" || value === null || !("event" in value) || !("legs" in value)) return false;
+  return typeof value.event === "object" && value.event !== null && Array.isArray(value.legs);
+}
+
 /** The state an action's answer carries back, refusal included (C5.7, C11.6), if any. */
 export function stateOf(answer: unknown): EventState | undefined {
   if (typeof answer !== "object" || answer === null || !("state" in answer)) return undefined;
-  return Array.isArray(answer.state) ? (answer.state as EventState) : undefined;
+  return isEventState(answer.state) ? answer.state : undefined;
 }
