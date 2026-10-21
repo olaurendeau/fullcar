@@ -140,7 +140,7 @@ test.describe("remove a car", () => {
     await expect(cell(page, "Léa, Retour : Avec Claire")).toBeVisible();
     expect((await rides(db, seededEvent.id)).map((ride) => `${ride.leg} ${ride.first_name}`)).toEqual(["aller Marc", "retour Claire", "retour Tom"]);
     // The token went in the body, never in the URL.
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
     expect(sent[0].body).toContain(token);
     expect(sent[0].url).not.toContain(token);
   });
