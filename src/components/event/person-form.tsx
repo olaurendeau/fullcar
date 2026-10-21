@@ -162,7 +162,8 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
   const creationId = useRef<string | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
   // Each form its own: a sheet reopened during a send shows a new form, and the sending one is gone.
-  // A change is about its person, whichever form sends it; a registration, about its form.
+  // A change is about its person, whichever form sends it; a registration, about the first name it
+  // sends, whichever form, tab or seat's sheet sends it (`person:new:{prénom}`, #228).
   const sends = useSends(open, mode.kind === "edit" ? `person:${mode.person.id}` : undefined);
   const editing = mode.kind === "edit";
   const { leg, hasRetour } = mode.kind === "add" ? mode : { leg: "aller" as const, hasRetour: false };
@@ -196,8 +197,9 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
     if (!checked.ok) return showErrors(checked.errors, checked.first);
     setErrors({});
     setProblem(null);
-    // Withdraws a failure any form about this person left for the bar, if this send carries all its fields.
-    const sheet = sends(mode.kind === "edit" ? changed : []);
+    // Withdraws a failure any form about this person left for the bar, if this send carries all its
+    // fields; a registration, one of the same first name, its spaces trimmed and its case kept.
+    const sheet = mode.kind === "edit" ? sends(changed) : sends([], [`person:new:${checked.person.firstName}`]);
     const answer =
       mode.kind === "add"
         ? await mode.addPerson({
