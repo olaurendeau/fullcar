@@ -257,7 +257,9 @@
     "placed": "{names} sont dans la voiture de {driver}"
   },
   "Seat": {
-    "placed": "{firstName} est dans la voiture de {driver}"
+    "placed": "{firstName} est dans la voiture de {driver}",
+    "undo": "Annuler",
+    "undone": "{names} {count, plural, one {n’est plus} other {ne sont plus}} dans la voiture de {driver}"
   },
   "RideChanges": {
     "leaving": {

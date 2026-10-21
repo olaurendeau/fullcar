@@ -4,9 +4,10 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView } from "@/components/event/event-view";
-import { cellWhy, failureText, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
-import { focusCar, focusCell, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
-import { forget, pageHidden, sendAbout, whenPageShown, type FromSheet } from "@/components/event/hidden-page";
+import type { Undo } from "@/components/event/bar-state";
+import { cellWhy, failureText, nameList, offerWhy, personWhy, undoWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
+import { focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
+import { aboutOf, forget, pageHidden, sendAbout, whenPageShown, type FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
@@ -21,6 +22,7 @@ import {
   removeRide as storeRideRemoval,
   setPersonLeg as storePersonLeg,
   takeSeats as storeSeats,
+  undoSeats as storeUndo,
   updatePerson as storePersonFields,
   updateRide as storeRideChange,
 } from "./actions";
@@ -137,13 +139,14 @@ export function ParticipantBoard({
   // hides the page: until then, it would be neither seen nor announced. It joins the others
   // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
   // What was not done, then why (C11.11): no failure of the bar is generic. A sheet whose leg
-  // is gone `closes`, and its failure goes to the bar all the same (rule 9).
-  function failedIn(sheet: FromSheet, failure: { notDone: NotDone; why: Why; landmark: () => boolean; closes?: boolean }) {
-    const { notDone, why, landmark, closes } = failure;
+  // is gone `closes`, and its failure goes to the bar all the same (rule 9). A failure of
+  // « Annuler » carries it again (rule 6).
+  function failedIn(sheet: FromSheet, failure: { notDone: NotDone; why: Why; landmark: () => boolean; closes?: boolean; undo?: Undo }) {
+    const { notDone, why, landmark, closes, undo } = failure;
     if (!closes && sheet.inSheet()) return;
     const offline = why.kind === "offline" || (why.kind === "retryUndo" && why.problem === "offline");
     const text = failureText(words, notDone, why);
-    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about: sheet.about, sent: sheet.seq }), true);
+    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about: sheet.about, sent: sheet.seq, undo }), true);
   }
 
   const device = useDevice(
@@ -264,17 +267,48 @@ export function ParticipantBoard({
     return closes ? { kind: "noRetour" } : { kind: "problem", problem };
   };
 
+  // « Annuler » (C5.10, rule 6): the persons placed get their state before on the leg back, if
+  // still in the car. Its failure names them and the car, and carries the same « Annuler »; its
+  // success, those given back, the focus on the car's title once the page shows it.
+  const [undoneIn, setUndoneIn] = useState<{ landmark: () => boolean } | null>(null);
+  useEffect(() => {
+    if (undoneIn && (document.activeElement === null || document.activeElement === document.body)) focusFirstShown([undoneIn.landmark]);
+  }, [undoneIn]);
+  function undoOf(key: number, { rideId, leg, persons }: Parameters<TakeSeats>[0], { names, driver }: { names: string[]; driver: string }): Undo {
+    const personIds = persons.map(({ personId }) => personId);
+    const landmark = focusCar(leg, rideId);
+    async function giveBack() {
+      const send = { key: "undo", inSheet: () => false, ...sendAbout(aboutOf([`undo:${rideId}`], personIds)) };
+      const sent = await runAction(`undo:${key}`, () => storeUndo(id, readDeviceToken(id), rideId, leg, persons), undefined, send.leaves);
+      if (sent === undefined) return;
+      send.answered();
+      const answer = sent.ok ? sent.value : { ok: false as const, error: sent.problem };
+      if (!answer.ok) return failedIn(send, { notDone: { kind: "leave", names, driver }, why: undoWhy(answer.error), landmark, undo });
+      const { undoneIds } = answer;
+      const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
+      const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });
+      send.whenClosed(() => {
+        // Nobody given back, the bar has nothing to say: it closes.
+        messages.succeed(undone.length > 0 ? { text, landmark } : null);
+        setUndoneIn({ landmark });
+      });
+    }
+    const undo: Undo = { run: () => void giveBack() };
+    return undo;
+  }
+
   // A success waits for the page to show, as a failure does, and replaces the success alone: it
   // never takes a failure away (#216). A refusal or a failure is said in the sheet that sent
-  // while it shows it, in the bar otherwise.
-  const takeSeats: TakeSeats = async ({ rideId, leg, personIds }, { sending, seats, placed, ...sheet }) => {
-    const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, personIds);
+  // while it shows it, in the bar otherwise. A success carries its « Annuler ».
+  const takeSeats: TakeSeats = async (request, { sending, seats, placed, ...sheet }) => {
+    const { rideId, leg, persons } = request;
+    const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, persons.map(({ personId }) => personId));
     const sent = await runAction(`takeSeats:${sheet.key}`, send, sending, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
     const taken = seatsTaken(sent, seats.names);
     const landmark = focusCar(leg, rideId);
-    if (taken.kind === "done") sheet.whenClosed(() => messages.succeed({ text: placed, landmark }));
+    if (taken.kind === "done") sheet.whenClosed(() => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats) }));
     else failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes: taken.kind === "noRetour" });
     return taken;
   };
@@ -294,7 +328,7 @@ export function ParticipantBoard({
     if (sent.ok && sent.value.ok) {
       messages.succeed(null);
       // The car is gone: what was sent about its seats or its change, nothing says any more (#213, #218).
-      forget([`seats:${rideId}`, `ride:${rideId}:edit`]);
+      forget([`seats:${rideId}`, `undo:${rideId}`, `ride:${rideId}:edit`]);
       return null;
     }
     // In the bar, the failure names the car and its leg, then why, a refusal included; the confirmation keeps the generic words.
