@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Withdrawal } from "./bar-state";
+import { covers, type Withdrawal } from "./bar-state";
 import { aboutOf, coverPage, forget, onWithdraw, sendAbout, whenPageShown } from "./hidden-page";
 
 /** Once the microtask a sheet leaves at its unmount has run. */
@@ -187,5 +187,23 @@ describe("sendAbout (#208, #216)", () => {
     await settled();
     expect(said).toEqual(["another car", "since"]);
     expect(told).toEqual([{ gone: ["seats:gone", "ride:gone:edit"], before: onItsWay.seq + 2 }]);
+  });
+});
+
+// « Le sujet d'un échec », line « un tap ; la feuille »: a tap and the sheet send about the same car and persons (#92).
+describe("aboutOf", () => {
+  it("names the subject, then each field under it", () => {
+    expect(aboutOf(["seats:sophie"], ["tom", "lea"])).toEqual(["seats:sophie", "seats:sophie:tom", "seats:sophie:lea"]);
+    expect(aboutOf(["seats:sophie"])).toEqual(["seats:sophie"]);
+  });
+
+  it("a tap for Tom alone withdraws no failure of Tom and Léa; a send of both does", () => {
+    const told: Withdrawal[] = [];
+    const stop = onWithdraw((withdrawal) => told.push(withdrawal));
+    sendAbout(aboutOf(["seats:sophie"], ["tom"]));
+    sendAbout(aboutOf(["seats:sophie"], ["tom", "lea"]));
+    stop();
+    const failed = { about: aboutOf(["seats:sophie"], ["tom", "lea"]), sent: 0 };
+    expect(told.map((withdrawal) => covers(withdrawal, failed))).toEqual([false, true]);
   });
 });

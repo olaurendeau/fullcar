@@ -1,11 +1,11 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { sql, type ControlledTransaction, type Kysely } from "kysely";
+import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { findEventById, lockEvent, writeEventFields } from "@/db/events";
 import { countLegRows, type LegCounts } from "@/db/legs";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
-import { withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
@@ -122,42 +122,6 @@ describe("removeRetour", () => {
 
 function newToken(): string {
   return personalTokenFromBytes(randomBytes(PERSONAL_TOKEN_BYTES));
-}
-
-async function backendPid(trx: ControlledTransaction<Database>) {
-  const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx);
-  return rows[0]!.pid;
-}
-
-/** Resolves once some session waits for a lock that the session `pid` holds. */
-async function someoneBlockedBy(db: Db, pid: number) {
-  for (let attempt = 0; attempt < 120; attempt++) {
-    const { rows } = await sql<{ pid: number }>`
-      select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
-    if (rows.length > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error("no session ever waited for the first one");
-}
-
-/** `first` in a transaction held open until `second` waits for it, then committed. */
-async function whileHeld<T>(db: Db, first: (trx: Db) => Promise<unknown>, second: () => Promise<T>): Promise<T> {
-  const holder = await db.startTransaction().setIsolationLevel("repeatable read").execute();
-  try {
-    await first(holder);
-    const pid = await backendPid(holder);
-    const pending = second();
-    pending.catch(() => {});
-    await someoneBlockedBy(db, pid);
-    await holder.commit().execute();
-    return await pending;
-  } finally {
-    try {
-      await holder.rollback().execute();
-    } catch {
-      // Already committed: nothing to give back.
-    }
-  }
 }
 
 /** Rows of the retour left under an event without a retour: what M3.6 forbids. */

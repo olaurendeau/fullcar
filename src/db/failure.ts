@@ -6,7 +6,7 @@ const SQLSTATE = /^[0-9A-Z]{5}$/;
  * a system error (a refused or dropped connection). Enough to tell an outage from a broken
  * constraint; the message, the query, its values and the row stay out, a token among them.
  */
-function errorCode(error: unknown): string | undefined {
+export function errorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   try {
     const { code, errno } = error as { code?: unknown; errno?: unknown };

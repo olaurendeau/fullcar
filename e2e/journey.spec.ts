@@ -470,8 +470,8 @@ test.describe("an event with its three options", () => {
       stops_enabled: true,
     });
     const withOptions = await markup(page, withOptionsUrl);
-    // The flight rows are read: the props the board receives are among them.
-    const boardProps = plain.some((text) => text.includes('{"id":"{id}","title":"Sortie ski du club",'));
+    // The flight rows are read: the props the board receives are among them, its state's header first (epic #250).
+    const boardProps = plain.some((text) => text.includes('{"id":"{id}","state":{"event":{"title":"Sortie ski du club",'));
     expect(boardProps).toBe(true);
     expect(withOptions).toEqual(plain);
   });

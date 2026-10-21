@@ -281,7 +281,15 @@ test.describe("device persons", () => {
     await page.keyboard.press("Enter");
     const offline = page.getByRole("alert").filter({ hasText: "Vos inscriptions n’ont pas pu être chargées. Vérifiez la connexion, puis réessayez." });
     await expect(offline).toBeVisible();
-    await expect(page.locator("main")).toHaveCSS("padding-bottom", /^1[2-9]\d(\.\d+)?px$/);
+    // The room is 1rem + the bar's height, as measured, + 12 px (#227).
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const room = parseFloat(getComputedStyle(document.querySelector("main")!).paddingBottom);
+          return room - document.querySelector("[data-message-bar]")!.getBoundingClientRect().height;
+        }),
+      )
+      .toBeCloseTo(28, 0);
     // Escape with the focus on « Fermer »: the focus goes to the line's landmark, « Réessayer » (C11.10).
     await page.getByRole("button", { name: "Fermer" }).focus();
     await page.keyboard.press("Escape");

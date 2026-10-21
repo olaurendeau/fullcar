@@ -181,6 +181,6 @@ export function useSends(
   return (fields = [], subjects = [subject ?? key]) => ({ key, inSheet: () => isOpen() && mounted.current, ...sendAbout(aboutOf(subjects, fields)) });
 }
 
-/** What a send is about: each of its subjects, then each of that subject's `fields` (`subject:field`). */
+/** What a send is about: each of its subjects, then each of that subject's `fields` (`subject:field`), as `sendAbout` reads them. */
 export const aboutOf = (subjects: readonly string[], fields: readonly string[] = []): string[] =>
   subjects.flatMap((subject) => [subject, ...fields.map((field) => `${subject}:${field}`)]);

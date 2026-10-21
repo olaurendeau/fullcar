@@ -43,16 +43,14 @@ const board = (page: Page) => page.getByRole("tabpanel");
 const carTitle = (page: Page, driver: string) => board(page).getByRole("heading", { name: `Voiture de ${driver}` });
 
 /**
- * Oriane takes a seat in `driver`'s car, the first with a free seat without one: through the
- * sheet, ticked for her, until a tap does it alone (#92). The sheet closed, the board shows it.
+ * Oriane takes a seat in `driver`'s car, the first with a free seat without one: in one tap, the
+ * only person of the device without a car at the aller (C5.2, #92). The bar says so.
  */
 async function takeSeat(page: Page, driver?: string) {
   const name = `Place libre : prendre une place dans la voiture de ${driver ?? ""}`;
   await board(page).getByRole("button", { name: driver ? name : new RegExp(`^${name}`) }).first().click();
-  const sheet = page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ });
-  await sheet.getByRole("button", { name: /^Placer/ }).click();
-  await expect(sheet).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Messages" }).getByText(new RegExp(`^${ORGANISER} est dans la voiture de`))).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
 const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
@@ -98,11 +96,9 @@ async function openAsOrganiser(page: Page, db: Kysely<Database>, event: SeededEv
   return id;
 }
 
-/** Oriane's seat in Anaïs's car sent from the sheet, then the sheet closed before the answer. */
-async function sendSeatThenClose(page: Page) {
+/** Oriane's seat in Anaïs's car, sent in one tap (C5.2, #92): no sheet waits for the answer. */
+async function sendSeat(page: Page) {
   await board(page).getByRole("button", { name: "Place libre : prendre une place dans la voiture de Anaïs" }).click();
-  await page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ }).getByRole("button", { name: /^Placer/ }).click();
-  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
@@ -216,7 +212,7 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     page,
   }) => {
     const seat = await holdActionsWith(page, oriane);
-    await sendSeatThenClose(page);
+    await sendSeat(page);
     await expect.poll(seat.held).toBe(1);
     await refresh(page).click();
     await expect(panel(page).getByRole("status")).toHaveText(FR.refreshing);
@@ -330,6 +326,57 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     });
   }
 
+  for (const viewport of [
+    { width: 360, height: 780 },
+    { width: 1280, height: 800 },
+  ]) {
+    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the organiser scrolls up in the very frame the browser pulls the scroll back: the car moves by that scroll alone (#297)`, async ({
+      page,
+      seededEvent,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.addStyleTag({ content: "html, main { overflow-anchor: none !important; }" });
+      const title = carTitle(page, "Anaïs");
+      const y = async () => {
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        return (await title.boundingBox())!.y;
+      };
+      const reads = await holdPanelReads(page, seededEvent);
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      expect(await panel(page).evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThan(0);
+      await expect(title).toBeInViewport();
+      const before = await y();
+      await takeSeat(page, "Anaïs");
+      await expect.poll(reads.held).toBe(1);
+
+      // In the task that commits the withdrawal, before the next frame's observers: the layout
+      // clamps the scroll to the end of a shorter page, then the organiser scrolls 60 px up.
+      await panel(page).evaluate((element) => {
+        const height = element.getBoundingClientRect().height;
+        const end = () => document.documentElement.scrollHeight - window.innerHeight;
+        const atStart = window.scrollY;
+        const observer = new MutationObserver(() => {
+          const after = element.getBoundingClientRect().height;
+          if (after > height - 100) return;
+          observer.disconnect();
+          Object.assign(window, { pulledBack: Math.max(0, atStart - end()), withdrawn: height - after });
+          window.scrollBy({ top: -60, behavior: "instant" });
+        });
+        observer.observe(element, { subtree: true, childList: true });
+      });
+      await reads.fail();
+      await expectWithdrawn(page);
+      // Pulled back by part of the withdrawn height only: the case where the sum is wrong without #297.
+      const { pulledBack, withdrawn } = await page.evaluate(() => {
+        const { pulledBack, withdrawn } = window as unknown as { pulledBack: number; withdrawn: number };
+        return { pulledBack, withdrawn };
+      });
+      expect(pulledBack).toBeGreaterThan(1);
+      expect(pulledBack).toBeLessThan(withdrawn - 1);
+      expect(Math.abs((await y()) - before - 60)).toBeLessThanOrEqual(1);
+    });
+  }
+
   test.describe("at 1280 px", () => {
     test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -356,7 +403,7 @@ test("O1.10: a seat taken while the area loads, answered once it is there, reads
   await page.goto(organiserPath(seededEvent));
   await expect(ownPersons(page).getByText(ORGANISER)).toBeVisible();
   await expect(page.getByText("Chargement de l’espace organisateur…")).toBeVisible();
-  await sendSeatThenClose(page);
+  await sendSeat(page);
 
   // The area read before the seat is taken; the seat's answer comes once it is shown.
   await reads.release();
