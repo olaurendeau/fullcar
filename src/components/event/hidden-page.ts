@@ -155,11 +155,6 @@ export function forget(subjects: readonly string[]) {
   withdraw({ gone: subjects, before: sends + 1 });
 }
 
-/** What a send is about: its subject, then each of its fields (`subject:field`), as `sendAbout` reads them. */
-export function aboutOf(subject: string, fields: readonly string[] = []): string[] {
-  return [subject, ...fields.map((field) => `${subject}:${field}`)];
-}
-
 /**
  * For the content of a sheet that sends actions, under `SheetContent`: call what it returns at
  * each send, for that send's `FromSheet`. Each mount is a sheet of its own (`useId` draws a new
@@ -167,9 +162,13 @@ export function aboutOf(subject: string, fields: readonly string[] = []): string
  * sheet that sent is gone. Above the content, `key` would outlive the sheet's openings.
  *
  * A send is about its `subject` (a person, a cell, a car; the sheet itself by default),
- * whichever sheet sent it, and about the `fields` it carried, if given (`sendAbout`).
+ * whichever sheet sent it, and about the `fields` it carried, if given (`sendAbout`). One that
+ * names its own `subjects` is about them instead: what it sends, whichever sheet (#228).
  */
-export function useSends(isOpen: () => boolean, subject?: string): (fields?: readonly string[]) => FromSheet {
+export function useSends(
+  isOpen: () => boolean,
+  subject?: string,
+): (fields?: readonly string[], subjects?: readonly string[]) => FromSheet {
   const key = useId();
   const mounted = useRef(false);
   useEffect(() => {
@@ -179,7 +178,9 @@ export function useSends(isOpen: () => boolean, subject?: string): (fields?: rea
     };
   }, []);
 
-  return (fields = []) => {
-    return { key, inSheet: () => isOpen() && mounted.current, ...sendAbout(aboutOf(subject ?? key, fields)) };
-  };
+  return (fields = [], subjects = [subject ?? key]) => ({ key, inSheet: () => isOpen() && mounted.current, ...sendAbout(aboutOf(subjects, fields)) });
 }
+
+/** What a send is about: each of its subjects, then each of that subject's `fields` (`subject:field`), as `sendAbout` reads them. */
+export const aboutOf = (subjects: readonly string[], fields: readonly string[] = []): string[] =>
+  subjects.flatMap((subject) => [subject, ...fields.map((field) => `${subject}:${field}`)]);

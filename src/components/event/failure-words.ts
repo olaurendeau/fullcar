@@ -65,8 +65,12 @@ export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives", { firstNa
   return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
 }
 
-/** What « Modifier » a person sent (v4.2.2): its one field changed, or both; nothing changed sends the form as it showed. */
+/**
+ * What « Modifier » a person sent (v4.2.2): its one field changed, or both. Nothing changed sends
+ * nothing (v4.4): the form closes before, and a failure never names fields that did not go.
+ */
 export function editedFields(changed: readonly PersonField[]): "firstName" | "phone" | "both" {
+  if (changed.length === 0) throw new Error("editedFields: nothing changed, nothing is sent");
   return changed.length === 1 ? changed[0] : "both";
 }
 
