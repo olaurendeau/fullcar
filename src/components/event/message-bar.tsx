@@ -22,6 +22,7 @@ export function useMessageBar() {
   const [write] = useState(() => ({
     succeed: (message: bar.Message | null) => setState((current) => bar.succeed(current, message)),
     fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
+    inform: (message: bar.Message) => setState((current) => bar.inform(current, message)),
     ended: () => setState(bar.ended),
     close: () => setState(bar.close),
   }));

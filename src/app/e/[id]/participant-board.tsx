@@ -6,7 +6,7 @@ import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView } from "@/components/event/event-view";
 import { cellWhy, failureText, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
 import { focusCar, focusCell, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
-import { forget, sendAbout, type FromSheet } from "@/components/event/hidden-page";
+import { forget, sendAbout, whenPageShown, type FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
@@ -311,6 +311,7 @@ export function ParticipantBoard({
           device.retry();
         },
         refocus: focusLandmark,
+        inform: (message) => void whenPageShown(() => messages.inform(message)),
         addPerson,
         updatePerson,
         setPersonLeg,

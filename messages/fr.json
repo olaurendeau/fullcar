@@ -115,6 +115,11 @@
     "sheetTitle": "{firstName} · {leg}",
     "edit": "Modifier",
     "seeCar": "Voir la voiture",
+    "findSeat": "Trouver une place",
+    "noFreeSeat": {
+      "aller": "Aucune place libre à l’aller pour l’instant.",
+      "retour": "Aucune place libre au retour pour l’instant."
+    },
     "leaveCar": "Sortir de la voiture",
     "lookingForSeat": "Je cherche une place",
     "notConcerned": {

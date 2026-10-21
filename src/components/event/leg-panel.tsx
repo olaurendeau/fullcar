@@ -4,6 +4,7 @@ import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
+import type { Message } from "./bar-state";
 import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
@@ -20,6 +21,8 @@ export interface BoardDevice {
   retry: () => void;
   /** Gives the focus to a stable landmark, when what had it is gone. */
   refocus: () => void;
+  /** Writes an information in the bar once no sheet hides the page (« Aucune place libre… », rule 4). */
+  inform: (message: Message) => void;
   /** Registers a person on this device (R1), with the device's token. */
   addPerson: AddPerson;
   /** Changes the first name and the number of one of the device's persons (C2.3). */

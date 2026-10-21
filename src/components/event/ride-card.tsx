@@ -2,9 +2,13 @@ import { Clock, MapPin, Plus, User } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import type { VisibleCar } from "@/domain/phone-visibility";
 import { wallClockAsUtc, type WallDate } from "@/domain/wall-clock";
+import { cn } from "@/lib/utils";
 import { PhoneLink } from "./phone-link";
 import { RemoveRideButton, type RemoveRide } from "./remove-ride-dialog";
 import { EditRideButton, type UpdateRide } from "./ride-form";
+
+/** Scrolled into view, it stops above the bar, as the page keeps room for it (« Trouver une place », C11.4). */
+const ABOVE_BAR = "scroll-mb-[calc(1rem+var(--message-bar-height,0px)+12px+env(safe-area-inset-bottom))]";
 
 /**
  * A car of the leg (C4.3): its driver, with its time on the right of that line, then
@@ -39,7 +43,7 @@ export function RideCard({
   const driver = car.driver.firstName;
 
   return (
-    <article aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3 rounded-xl border p-4">
+    <article aria-labelledby={headingId} className={cn("flex min-w-0 flex-col gap-3 rounded-xl border p-4", ABOVE_BAR)}>
       <div className="flex items-start justify-between gap-2">
         {/* Focusable by script alone: « Voir la voiture » leads here (focusCarTitle). */}
         <h3
@@ -84,10 +88,16 @@ export function RideCard({
           <li key={`free-${seat}`} className="flex">
             <button
               type="button"
+              // « Trouver une place » gives the focus to the first (`focusFreeSeat`).
+              data-free-seat={car.id}
+              data-leg={car.leg}
               disabled={!seatsActive}
               aria-label={t("takeSeat", { driver })}
               onClick={(event) => onTakeSeat(event.currentTarget)}
-              className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-dashed border-foreground/25 bg-background px-3 text-left text-sm font-medium focus-visible:focus-ring disabled:opacity-50"
+              className={cn(
+                "flex min-h-11 w-full items-center gap-2 rounded-lg border border-dashed border-foreground/25 bg-background px-3 text-left text-sm font-medium focus-visible:focus-ring disabled:opacity-50",
+                ABOVE_BAR,
+              )}
             >
               <Plus aria-hidden className="size-4 shrink-0 text-muted-foreground" />
               {t("freeSeat")}

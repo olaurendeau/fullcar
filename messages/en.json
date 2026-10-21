@@ -115,6 +115,11 @@
     "sheetTitle": "{firstName} · {leg}",
     "edit": "Edit",
     "seeCar": "See the car",
+    "findSeat": "Find a seat",
+    "noFreeSeat": {
+      "aller": "No free seat on the outbound trip for now.",
+      "retour": "No free seat on the return trip for now."
+    },
     "leaveCar": "Leave the car",
     "lookingForSeat": "I need a seat",
     "notConcerned": {
