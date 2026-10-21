@@ -7,7 +7,7 @@ import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import nextConfig from "../../../../../next.config";
-import { loadOrganiserPanel } from "./actions";
+import { loadOrganiserPanel, updateEvent } from "./actions";
 
 // The action reaches the database through getDb(): here, the test's transaction.
 const connection = vi.hoisted(() => ({ current: undefined as Kysely<Database> | undefined }));
@@ -201,5 +201,102 @@ describe("loadOrganiserPanel", () => {
   // C6.6, O6.4: `next dev` prints each Server Function call with its arguments, the token among them.
   it("sets logging.serverFunctions to false in the Next config", () => {
     expect(nextConfig.logging).toMatchObject({ serverFunctions: false });
+  });
+});
+
+describe("updateEvent", () => {
+  const BEFORE = {
+    title: "Tournoi de Rennes",
+    location: "Gymnase des Gayeulles",
+    allerAt: "2026-12-12 07:30:00",
+    retourAt: "2026-12-12 18:00:00",
+  };
+  const FIELDS = {
+    title: "Tournoi de Rennes U13",
+    location: BEFORE.location,
+    allerDate: "2026-12-12",
+    allerTime: "07:30",
+    retour: true,
+    retourDate: "2026-12-12",
+    retourTime: "18:00",
+  };
+
+  it("changes the event for its token, from the request's body, and answers without the token", async () => {
+    const { answer, token, title } = await withRollback((trx) =>
+      using(trx, async () => {
+        const { id, token } = await seedEvent(trx);
+        const answer = await updateEvent(id, token, FIELDS, BEFORE);
+        const row = await trx.selectFrom("event").select("title").where("id", "=", id).executeTakeFirstOrThrow();
+        return { answer, token, title: row.title };
+      }),
+    );
+    expect(answer).toEqual({ ok: true, event: { ...BEFORE, title: FIELDS.title } });
+    expect(title).toBe(FIELDS.title);
+    expect(JSON.stringify(answer).includes(token)).toBe(false);
+  });
+
+  it("answers invalid for another token, and writes nothing", async () => {
+    const { answer, title } = await withRollback((trx) =>
+      using(trx, async () => {
+        const { id, token } = await seedEvent(trx);
+        const answer = await updateEvent(id, oneCharOff(token), FIELDS, BEFORE);
+        const row = await trx.selectFrom("event").select("title").where("id", "=", id).executeTakeFirstOrThrow();
+        return { answer, title: row.title };
+      }),
+    );
+    expect(answer).toEqual({ ok: false, error: "invalid" });
+    expect(title).toBe(BEFORE.title);
+  });
+
+  it.each([
+    ["too short", "Ab3dEf7"],
+    ["with SQL in it", "' or 1=1"],
+    ["not a string", 12345678],
+    ["missing", undefined],
+  ])("answers eventNotFound for an id %s without reading the database", async (_, id) => {
+    reads = 0;
+    expect(await using(failingDb(), () => updateEvent(id, newAdminToken(), FIELDS, BEFORE))).toEqual({
+      ok: false,
+      error: "eventNotFound",
+    });
+    expect(reads).toBe(0);
+  });
+
+  it("fails with a generic error, carrying neither the database's detail nor the token", async () => {
+    const token = newAdminToken();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await using(failingDb(token), () => updateEvent("Ab3dEf7h", token, FIELDS, BEFORE)).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack, JSON.stringify(failure)]) {
+        expect(text?.includes(POSTGRES_DETAIL)).toBe(false);
+        expect(text?.includes(token)).toBe(false);
+      }
+      expect(cause).toBeUndefined();
+      expect(log.mock.calls).toEqual([["updateEvent: the event could not be changed (SQLSTATE 08006)"]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("logs nothing, with the right token or a wrong one", async () => {
+    const methods = ["log", "info", "warn", "error", "debug", "trace"] as const;
+    const spies = methods.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+    try {
+      await withRollback((trx) =>
+        using(trx, async () => {
+          const { id, token } = await seedEvent(trx);
+          await updateEvent(id, oneCharOff(token), FIELDS, BEFORE);
+          await updateEvent(id, token, FIELDS, BEFORE);
+        }),
+      );
+      expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
   });
 });
