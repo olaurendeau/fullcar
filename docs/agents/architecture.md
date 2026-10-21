@@ -158,7 +158,8 @@ configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
   On procède par expansion puis contraction : ajouter (colonne nullable ou avec défaut,
   table), déployer le code qui s'en sert, et ne retirer l'ancien que dans un déploiement
   suivant. Renommer ou supprimer une colonne encore lue d'un seul coup est un défaut.
-- Les déploiements de prévisualisation (preview) n'ont pas de base pour l'instant.
+- Il n'y a pas de déploiement de prévisualisation (preview) : le `vercel.json` de la racine
+  (#344, PR #348) coupe le déploiement automatique de toute branche sauf `main`.
 
 ## Concurrence
 
