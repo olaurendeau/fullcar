@@ -99,6 +99,20 @@ export async function holdFirst(page: Page, text: string, fails: boolean) {
   return answer;
 }
 
+/** Holds the first server action whose body carries `text` until `lose()`, then aborts it: offline by then, the page says so. */
+export async function loseFirst(page: Page, text: string) {
+  let lose = () => {};
+  const lost = new Promise<void>((resolve) => (lose = resolve));
+  let held = false;
+  await page.route("**/e/**", async (route) => {
+    if (held || !route.request().postData()?.includes(text)) return route.fallback();
+    held = true;
+    await lost;
+    return route.abort();
+  });
+  return lose;
+}
+
 /** Lets the action `holdFirst` holds fail, and waits for its 500. */
 export async function failHeld(page: Page, answer: () => void) {
   const responded = page.waitForResponse((response) => response.status() === 500);
