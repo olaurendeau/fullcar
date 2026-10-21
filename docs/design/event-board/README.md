@@ -10,8 +10,153 @@
 - v4.3 : « Début » et « Fin » dans l’en-tête et dans le formulaire de création. Epic :
   https://github.com/olaurendeau/fullcar/issues/235 ; option (a) choisie par le propriétaire
   le 20/10 (« Décision du propriétaire »)
-- Hors de cette maquette : la vue organisateur, epic #154
+- v4.4 : « Valider » sans changement dans « Modifier » une personne n’envoie rien. Tâche :
+  https://github.com/olaurendeau/fullcar/issues/298 ; même règle que « Modifier l’événement »
+  (organizer-view v3.3, M2.5). Deux corrections du README notées sur #216 y sont reportées
+- Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
+  la maquette `language-switch` depuis sa v3 (#236)
 - Page : `index.html` (autonome, maquettes à 360 px de large)
+
+## Ce qui change en v4.4 : « Valider » sans changement (#298)
+
+Venu de la relecture de #296 (https://github.com/olaurendeau/fullcar/pull/296#issuecomment-6304935175).
+
+**Le problème.** Une personne ouvre « Modifier » sur l’une de ses inscriptions, ne change
+rien, puis touche « Valider ». Aujourd’hui, la page envoie quand même une requête, sans aucun
+champ. Hors ligne, cet envoi échoue, et la barre dit « Le prénom et le téléphone de Claire
+n’ont pas été enregistrés. Vérifiez la connexion, puis réessayez. » La personne lit qu’elle a
+perdu deux changements qu’elle n’a jamais faits. La règle des sujets dit pourtant que le
+sujet est « la personne et chaque champ envoyé » : ici, aucun champ n’est parti. Ce qu’elle
+fait aujourd’hui à la place : elle ferme la feuille avec « Fermer » ou Échap, si elle y pense.
+
+**La règle.** « Valider » sans aucun champ changé ferme le formulaire et n’envoie rien,
+comme « Modifier l’événement » de l’espace organisateur (organizer-view v3.3, M2.5).
+
+1. **Un champ est changé** quand sa valeur diffère de celle que le formulaire montrait à son
+   ouverture, caractère pour caractère. Un champ changé puis remis à cette valeur n’est pas
+   changé. « Tom » suivi d’une espace est un changement : il part, et le serveur enregistre
+   « Tom » (décision v4.4-2).
+2. **Aucun champ changé** : la feuille se ferme, et rien n’est envoyé, ni requête, ni
+   vérification des champs. Le focus va sur le prénom de la personne dans « Vos
+   inscriptions », comme après un « Valider » qui enregistre.
+3. **La barre ne change pas.** Aucune ligne n’y entre, aucune n’en sort : la réussite et son
+   « Annuler », l’information et chaque échec restent, celui d’un « Modifier » précédent de la
+   même personne compris. Rien n’est écrit dans les régions `status` et `alert`. Ce n’est pas
+   une action, puisque rien n’est envoyé (règle 2 et règle 5 de la barre).
+4. **Hors ligne**, c’est la même chose : la feuille se ferme, et rien n’est dit, ni dans la
+   feuille ni dans la barre. La connexion n’est pas consultée.
+5. **Au moins un champ changé** : inchangé. Seuls les champs changés partent, et un échec
+   nomme ces champs (`Actions.notDone.editPerson`).
+6. **Sans JavaScript** : rien à faire. « Vos inscriptions » n’existe pas sans JavaScript, ni
+   donc « Modifier » (C3.4).
+
+### Les mots de la v4.4
+
+Aucun mot nouveau, aucun mot changé. L’écran garde ses textes, rien de plus n’est dit :
+
+| clé | fr | en |
+|---|---|---|
+| `PersonForm.title.edit` | Modifier {firstName} | Edit {firstName} |
+| `PersonForm.firstName` | Prénom | First name |
+| `PersonForm.phone` | Téléphone (facultatif) | Phone (optional) |
+| `Actions.submit` | Valider | Confirm |
+| `Actions.close` | Fermer | Close |
+
+Pas de message « Rien n’a changé » (décision v4.4-3).
+
+### Les états de la v4.4
+
+| état | ce qui se passe | critère |
+|---|---|---|
+| rien changé, « Valider » | la feuille se ferme, rien n’est envoyé, focus sur le prénom | V1.1 |
+| rien changé, Entrée dans « Prénom » | idem | V1.2 |
+| changé puis remis | idem | V1.3 |
+| rien changé, hors ligne | idem ; rien n’est dit | V1.4 |
+| rien changé, la barre porte déjà des messages | la barre ne change pas, l’échec de cette personne compris | V1.5 |
+| une espace ajoutée au prénom | c’est un changement : il part, le serveur enregistre sans l’espace | V1.8 |
+| rien changé, la personne renommée entre-temps par un autre appareil | rien n’est envoyé ; la page montre le nouveau prénom à sa prochaine lecture | V1.6 |
+| un champ changé | inchangé : il part seul | V1.7 (tests existants) |
+| sans JavaScript | sans objet : « Vos inscriptions » est absente | C3.4 |
+
+### Critères de la v4.4
+
+Chaque critère est prouvé par un test Playwright, dans la scène de `person-edit.spec.ts`
+(Claire, `06 11 22 33 44`, et Léa, sur le même appareil). « Aucune requête » se prouve ainsi :
+on enregistre les requêtes `next-action` dont le corps contient l’identifiant de Claire
+(`changes(page, claire)`). Après le « Valider » sans changement, on rouvre « Modifier
+Claire », on change son téléphone en `07 12 12 12 12`, puis on valide. Une fois la feuille
+fermée, la liste contient **exactement une** requête, qui porte `07 12 12 12 12`. La seconde
+part après la première : si la première avait envoyé, la liste en aurait deux.
+
+**H3. Fermer sans rien changer.** En tant que parent qui ouvre « Modifier » pour vérifier
+un numéro, je touche « Valider » sans rien changer, et rien ne se passe d’autre que la
+fermeture : aucun message ne me dit que quelque chose a échoué.
+
+- **V1.1** « Modifier Claire », puis « Valider » sans toucher aux champs :
+  - `getByRole("dialog")` a 0 élément ;
+  - le bouton « Claire » de « Vos inscriptions » a le focus ;
+  - aucune requête n’a été envoyée (preuve ci-dessus) ;
+  - en base, `first_name` = `Claire` et `phone` = `06 11 22 33 44`.
+- **V1.2** La même chose avec Entrée dans le champ « Prénom » au lieu du clic sur « Valider ».
+- **V1.3** « Prénom » rempli avec `Clara`, puis de nouveau avec `Claire` ; « Téléphone
+  (facultatif) » vidé, puis rempli avec `06 11 22 33 44` ; puis « Valider » : mêmes
+  assertions qu’en V1.1.
+- **V1.4** `context.setOffline(true)`, puis « Valider » sans changement :
+  - la feuille se ferme, et le bouton « Claire » a le focus ;
+  - `getByRole("alert").filter({ hasText: /\S/ })` a 0 élément dans la page ;
+  - la liste de la barre (`getByRole("group", { name: "Messages" })`) a 0 ligne ;
+  - le texte « Action impossible, vérifiez la connexion » n’apparaît nulle part.
+- **V1.5** La barre porte déjà deux lignes, obtenues ainsi (v4.4.1) :
+  1. la scène ajoute une voiture de Marc **au retour** (`seedRide`, leg `retour`, une place
+     libre) ; sur l’onglet Retour, Claire, seule sans voiture, prend la place libre. La barre
+     dit « Claire est dans la voiture de Marc » ;
+  2. « Modifier Claire », « Prénom » = `Clara`, « Valider » avec la réponse retenue
+     (`holdFirst(page, "Clara", true)`), Échap, puis `failHeld` : la barre ajoute « Le prénom
+     de Claire n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant. ».
+
+  Puis « Modifier Claire » (le formulaire montre « Claire »), et « Valider » sans
+  changement :
+  - `messages(page)` a exactement les deux mêmes textes, dans le même ordre (l’échec, puis la
+    réussite) ;
+  - les boutons de la barre (`[data-message-bar] button`) ont les mêmes noms qu’avant, soit
+    « Fermer » aujourd’hui. Le test ne dépend pas d’« Annuler », qui n’est pas construit ;
+  - un `MutationObserver` posé sur les deux régions (`recordBar`) avant le clic n’a vu
+    aucune écriture.
+- **V1.6** Un autre appareil renomme Claire en `Clarisse` pendant que le formulaire est ouvert
+  sur « Claire » ; « Valider » sans changement : aucune requête, et en base `first_name`
+  reste `Clarisse`.
+- **V1.7** Inchangés, et toujours verts : « a form filled before another change’s answer sends
+  only what it changed » et le renvoi partiel de C11.11 (le téléphone seul nomme « Le
+  téléphone de Claire »).
+- **V1.8** Une espace est un changement (décision v4.4-2, v4.4.1) : « Prénom » = `Claire `
+  (une espace à la fin), puis « Valider » :
+  - la liste `changes(page, claire)` a exactement une requête, et son corps contient
+    `"Claire "` (avec l’espace) ;
+  - la feuille se ferme, le bouton « Claire » a le focus ;
+  - en base, `first_name` = `Claire` : le serveur a retiré l’espace.
+
+**Non prouvable par un test** : qu’une personne comprenne qu’il n’y avait rien à enregistrer.
+La feuille qui se ferme le dit, comme « Fermer » ; c’est une raison de la décision v4.4-3,
+pas un critère.
+
+### Pour le développement
+
+- Le formulaire (`person-form.tsx`) compare déjà les valeurs à celles qu’il montrait
+  (`changed`). Avec `changed` vide en mode `edit`, il appelle `onDone`, ce qui ferme la
+  feuille, sans appeler `sends()` ni `updatePerson`. La comparaison se fait avant
+  `validatePerson`.
+- `editedFields([])` renvoie `both`. Ce cas ne doit plus être atteint : un test Vitest, ou une
+  assertion, le prouve.
+- Rien ne change côté serveur : `updatePerson` sans champ reste accepté, pour une requête
+  forgée ou un client ancien.
+
+### Pour la prochaine révision d’organizer-view
+
+M2.5 (« Valider » sans changement dans « Modifier l’événement ») dit « la feuille se ferme,
+aucune requête, aucun message dans la barre ». Il devrait dire aussi, comme V1.1 et V1.5 ici :
+où va le focus (le bouton « Modifier l’événement », qui a ouvert la feuille), et que les
+lignes déjà dans la barre restent, mêmes textes, même ordre, sans écriture dans les régions.
+Relevé à la revue de la v4.4 ; la maquette organizer-view n’est pas changée ici.
 
 ## Ce qui change en v4.3 : « Début » et « Fin »
 
@@ -522,10 +667,19 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
    - l’envoi d’une action sur **le même sujet** (table « Le sujet d’un échec »), **dès
      l’envoi**. Ce que devient ce nouvel envoi est dit par son propre message, dans sa
      feuille ou dans la barre ;
+   - **un retrait de voiture réussi** (v4.4, décision du propriétaire sur #221, PR #255). Il
+     retire tous les messages sur cette voiture, réussite comme échecs : ceux de ses places
+     (`seats:{rideId}`, et `undo:{rideId}` quand « Annuler » sera construit) et ceux de sa
+     modification (`ride:{rideId}:edit`). Il les retire qu’ils soient en attente sous une
+     feuille ou une confirmation, déjà dans la barre, ou venus d’un envoi parti avant la
+     réponse du retrait ; un tel message ne s’affiche jamais. Un envoi parti après cette
+     réponse dit son propre échec (`rideGone`). La voiture n’existe plus : ces messages ne
+     décrivent plus rien ;
    - « Fermer », ou Échap.
 
-   Rien d’autre ne le retire : ni une réussite, ni une information, ni un autre échec, ni le
-   temps, ni l’ouverture d’une feuille, ni le retour du réseau.
+   Rien d’autre ne le retire : ni une réussite d’une autre action, ni une information, ni un
+   autre échec, ni le temps, ni l’ouverture d’une feuille, ni le retour du réseau, ni un
+   « Valider » sans changement, qui n’envoie rien (v4.4).
 6. **« Annuler »** : un seul par placement.
    - Il est sur la réussite du placement.
    - Si cet « Annuler » échoue, le placement tient : la réussite reste, et l’échec s’ajoute
@@ -615,9 +769,9 @@ tests Playwright (C11.10) :
 | « Annuler » | la voiture et chaque personne (`undo:{rideId}` + personnes) | l’« Annuler » de la ligne d’échec | Tom et Léa placés de nouveau dans la voiture de Sophie ; « Sortir de la voiture » depuis la cellule de Tom |
 | une action de cellule (« Ne fait pas l’aller / le retour », « Je cherche une place », « Sortir de la voiture ») | la cellule (`cell:{personId}:{leg}`) | après l’échec de « Ne fait pas l’aller » pour Tom · Aller, « Ne fait pas l’aller » depuis la même cellule, rouverte | une action depuis Tom · Retour ; une place prise pour Tom par un tap |
 | « Ajouter une personne » (depuis le tableau, une place ou la feuille) | le prénom envoyé, espaces de début et de fin retirés (`person:new:{prénom}`) | « Inès » échoue depuis le bouton de l’onglet Aller ; « Inès » (avec des espaces autour) est renvoyé depuis la feuille d’une place de l’onglet Retour | « Hugo » envoyé depuis le même bouton |
-| « Modifier » une personne | la personne et chaque champ envoyé (`person:{personId}` + champs) | après l’échec du prénom et du téléphone de Tom, un « Modifier » de Tom qui envoie les deux | un « Modifier » de Tom qui n’envoie que le téléphone ; un « Modifier » de Léa |
+| « Modifier » une personne | la personne et chaque champ envoyé (`person:{personId}` + champs) | après l’échec du prénom et du téléphone de Tom, un « Modifier » de Tom qui envoie les deux | un « Modifier » de Tom qui n’envoie que le téléphone ; un « Modifier » de Léa ; un « Valider » sans changement de Tom, qui n’envoie rien (v4.4, V1.5) |
 | « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi » depuis l’onglet Aller, Marc avec « J’emmène aussi » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs |
-| « Modifier » la voiture (#93) | la modification de cette voiture (`ride:{rideId}:edit`, comme PR #218) | un nouveau « Modifier » de la même voiture | « Retirer la voiture » de cette voiture ; « Modifier » d’une autre voiture |
+| « Modifier » la voiture (#93) | la modification de cette voiture (`ride:{rideId}:edit`, comme PR #218) | un nouveau « Modifier » de la même voiture | « Retirer la voiture » de cette voiture, **qui échoue** (`ride-remove.spec.ts:350`) ; « Modifier » d’une autre voiture. Un retrait **réussi** retire l’échec (règle 5, v4.4.1) |
 | « Retirer la voiture » | le retrait de cette voiture (`ride:{rideId}`, comme PR #213) | un nouveau « Retirer la voiture » de la même voiture | « Modifier » de cette voiture |
 | « Réessayer » de « Vos inscriptions » | la lecture de « Vos inscriptions » (`device:read`) | le « Réessayer » suivant | le retour du réseau (`setOffline(false)`, évènement `online`) |
 
@@ -679,10 +833,14 @@ Cette règle vaut pour `{names}`, dans `Actions.notDone.seats`, `Actions.notDone
 |---|---|---|---|
 | 1 | Tom | Tom | le prénom |
 | 2 | Tom et Léa | Tom and Léa | `format.list`, `type: "conjunction"` (comme `Sheet.placed` aujourd’hui) |
-| 3 | Tom, Léa et Hugo | Tom, Léa and Hugo | idem |
+| 3 | Tom, Léa et Hugo | Tom, Léa, and Hugo | idem : en anglais, `format.list` met une virgule avant « and » (v4.4, #280) |
 | 4 et plus | Tom, Léa et 2 autres | Tom, Léa and 2 others | `Actions.names.andOthers`, avec les deux premiers prénoms |
 
 - **Ordre** : celui de « Vos inscriptions » (`LegBoard.device`), pas celui des cases cochées.
+- **Jusqu’à trois prénoms, le texte est celui de `format.list`**, quel qu’il soit dans la
+  langue : « Tom, Léa et Hugo », « Tom, Léa, and Hugo ». Un test compare au résultat de
+  `format.list`, jamais à une chaîne écrite à la main pour l’anglais (v4.4). Au-delà, c’est la
+  clé `Actions.names.andOthers`, inchangée : « Tom, Léa and 2 others » (décision v4.4-5).
 - **`count`**, qui accorde « n’a pas pu » / « n’ont pas pu » et « est » / « sont », compte
   toutes les personnes, nommées ou non.
 - **Au-delà de trois prénoms**, la phrase passerait à 360 px à une ligne de plus avant même
@@ -792,6 +950,10 @@ bandeau) ; les cellules « Ne fait pas… » sont `text-muted-foreground` sur bl
 Hors de cet épic : `AdminLinkProblem` (`admin-panel.tsx`) garde un fond teinté ; à corriger
 à part.
 
+L’anneau de focus des maquettes de cette page est celui d’avant #236 (`ring-ring/50`,
+environ 1,5:1). L’anneau qui atteint 3:1 est défini dans la maquette `language-switch` v3,
+qui vaut pour tout l’écran.
+
 ## Le focus après une action
 
 Les cellules et les prénoms de la matrice ne disparaissent jamais après une action : ils
@@ -804,7 +966,7 @@ rendu focalisable par `tabIndex={-1}` ; feuille et confirmation passent par leur
 | une action de la feuille d’une cellule (« Ne fait pas… », « Je cherche une place », « Sortir de la voiture ») | la cellule, qui lit son nouvel état |
 | « Trouver une place » | la première place libre de la première voiture qui en a, sur l’onglet du leg ; sinon « Proposer une voiture » de ce leg |
 | « Voir la voiture » | le titre de la carte, sur l’onglet du leg |
-| « Modifier » depuis la feuille du prénom, puis « Valider » | le prénom |
+| « Modifier » depuis la feuille du prénom, puis « Valider », avec ou sans changement (v4.4) | le prénom |
 | bouton de la section (déplier, replier) | ne bouge pas |
 | un tap qui place, la feuille validée, « Proposer une voiture » validé avec des passagers | le titre de la carte |
 | « Annuler » dans la barre | le titre de la carte d’où les personnes sont sorties, s’il est affiché ; sinon la règle 8 de la barre (v4.2.2) |
@@ -873,6 +1035,7 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | la page en anglais | En anglais | C11.1 |
 | en-tête : même jour, deux jours, après minuit, sans retour, `/admin`, en anglais (v4.3) | Début et fin | D1.1 à D1.8 |
 | formulaire de création : champs de date, fin avant le début, en anglais (v4.3) | Début et fin | D2.1, D2.2 |
+| « Modifier » sans changement : avant « Valider », après (feuille fermée, focus sur le prénom, barre inchangée), hors ligne (v4.4) | « Valider » sans changement | V1.1 à V1.6, V1.8 |
 
 ## Les mots
 
@@ -1313,6 +1476,18 @@ v4.3-5. Décision : la fin n’existe qu’avec un retour ; sans retour, la seul
 
 v4.3-6. Décision du propriétaire, le 20/10 (#235) : le formulaire de création dit aussi « Date de début », « Heure de début », « Date de fin », « Heure de fin », et l’erreur « La fin doit être après le début. » (option (a)). — Raison : sinon, une même valeur serait saisie « Heure de l’aller » et lue « Début », deux noms pour une chose (glossaire : « un synonyme est un défaut »).
 
+### Nouvelles en v4.4 (« Valider » sans changement, #298)
+
+v4.4-1. Décision : « Valider » sans aucun champ changé ferme le formulaire « Modifier {prénom} » et n’envoie rien. — Raison : piste recommandée par #298, et règle déjà fixée pour « Modifier l’événement » (organizer-view v3.3, M2.5). Un envoi vide ne change rien en base, et son échec nommait des champs qui ne partaient pas.
+
+v4.4-2. Décision : un champ est changé quand sa valeur diffère, caractère pour caractère, de celle que le formulaire montrait à son ouverture, sans retirer les espaces. — Raison : c’est la comparaison que fait déjà `person-form.tsx`, et la définition de organizer-view (« différente de la valeur chargée »). Une espace ajoutée part, et le serveur enregistre le prénom sans elle : l’effet est nul, et une règle de nettoyage propre à ce formulaire ferait deux définitions de « changé » dans l’application.
+
+v4.4-3. Décision : rien n’est dit, ni « Rien n’a changé » ni autre chose. — Raison : la feuille qui se ferme suffit, comme pour « Fermer » ; organizer-view a fait le même choix (« aucun message dans la barre »). Un message ajouterait une ligne à la barre, qui en garde déjà plusieurs (v4.2), pour ne rien dire.
+
+v4.4-4. Décision : la règle 5 de la barre écrit ce que fait un retrait de voiture réussi : il retire tous les messages sur cette voiture, échecs compris. — Raison : c’est la décision du propriétaire sur #221, construite dans PR #255. Le README disait « Rien d’autre ne le retire », ce qui n’était plus vrai (noté sur #216).
+
+v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.list` : « Tom, Léa, and Hugo » en anglais. `Actions.names.andOthers` garde « Tom, Léa and 2 others ». — Raison : #280 ; le README écrivait « Tom, Léa and Hugo », que `format.list` ne produit pas en `en`. La clé `andOthers` est un texte écrit, hors de cette correction : la changer serait un changement de mots, que rien n’a demandé.
+
 ## Écarts par rapport à la revue
 
 1. « Chaque personne sur une ligne (prénom, état, menu) » : dans la matrice, le « menu » est
@@ -1439,7 +1614,7 @@ v4.3-6. Décision du propriétaire, le 20/10 (#235) : le formulaire de création
   - Une action qui réussit remplace ou retire la réussite, retire l’information, et ne retire aucun échec.
   - Une action qui échoue ajoute son échec, retire l’information, et rien d’autre.
   - Une information (« Aucune place libre… ») ne vient d’aucun envoi : elle remplace l’information d’avant et ne retire ni la réussite, ni son « Annuler », ni aucun échec. « Trouver une place » qui trouve une place ne touche pas à la barre.
-  - Un échec n’est retiré que de deux façons : dès l’envoi d’une action sur le même sujet qui couvre au moins ce qu’il portait (table « Le sujet d’un échec » du README), ou par « Fermer » / Échap, qui retirent tous les messages et n’envoient rien.
+  - Un échec n’est retiré que de trois façons : dès l’envoi d’une action sur le même sujet qui couvre au moins ce qu’il portait (table « Le sujet d’un échec » du README) ; par un retrait réussi de sa voiture, qui retire tous les messages sur elle (v4.4) ; ou par « Fermer » / Échap, qui retirent tous les messages et n’envoient rien.
   - Quand l’élément de la barre qui a le focus disparaît, quelle qu’en soit la raison, le focus va au premier repère affiché (sur l’onglet actif ou hors des onglets, et pas dans une section repliée) dans cet ordre : celui du message de cet élément ; ceux des autres messages, encore là ou qui viennent de partir, du plus récent au plus ancien ; l’onglet actif ; sans onglets, le titre de l’événement. Jamais `<body>`, et jamais de changement d’onglet.
 
   Playwright :
@@ -1453,7 +1628,7 @@ v4.3-6. Décision du propriétaire, le 20/10 (#235) : le formulaire de création
   - `alreadyInCar` nomme les personnes : la personne d’un tap, et les personnes cochées de « Qui monte avec vous ? ».
   - « Modifier » une personne nomme les champs envoyés.
   - Un « Annuler » qui échoue nomme son bouton.
-  - Les prénoms : un seul ; deux (« Tom et Léa ») ; trois (« Tom, Léa et Hugo ») ; au-delà, les deux premiers et « et N autres » ; toujours dans l’ordre de « Vos inscriptions ». La même règle vaut pour « {prénoms} sont dans la voiture de… » et « … ne sont plus… ».
+  - Les prénoms : un seul ; deux (« Tom et Léa ») ; trois (« Tom, Léa et Hugo », « Tom, Léa, and Hugo » en anglais, le texte de `format.list`) ; au-delà, les deux premiers et « et N autres » ; toujours dans l’ordre de « Vos inscriptions ». La même règle vaut pour « {prénoms} sont dans la voiture de… » et « … ne sont plus… ».
   - Vitest : la fonction qui compose le texte, sur chaque ligne de cette table, en français et en anglais, et pour 1 à 5 personnes.
   - Playwright : le texte exact hors ligne (`setOffline`), sur une erreur serveur (réponse 500 par `page.route`), sur `alreadyInCar` (un tap, et « Proposer une voiture » avec deux personnes cochées) et sur une place prise, pour un tap et pour une feuille fermée avant la réponse ; « Réessayer » hors ligne ; un renvoi partiel de « Modifier » qui donne deux lignes différentes.
 - **Nouveau C11.12** (#216) La liste visible de la barre n’est pas une région vivante. Deux régions masquées visuellement, toujours montées, placées après « Fermer », annoncent :
@@ -1471,6 +1646,17 @@ v4.3-6. Décision du propriétaire, le 20/10 (#235) : le formulaire de création
 
   *Non prouvable par un test* : ce que prononce un lecteur d’écran. Revue avec VoiceOver (iOS, Safari), TalkBack (Android, Chrome) et NVDA (Windows, Chrome), sur le cas de #216 dans les deux ordres d’arrivée : chaque message est annoncé une fois, et aucun n’est relu quand un autre arrive. En mode navigation (NVDA, rotor VoiceOver), chaque message se lit deux fois, dans la liste puis dans sa région : on vérifie que cette lecture reste compréhensible.
 - Aucun critère de l’epic ne disait ce que fait la barre d’un échec : C11.10 à C11.12 sont les seuls nouveaux. Le reste amende C5.7, C5.10, C11.4 et les deux lignes d’états. C11.9 ne change pas : les nouvelles clés sont dans `Actions`, déjà vérifié.
+
+### v4.4 (#298), « Valider » sans changement
+
+- **C2.3** : ajouter : « Valider » sans aucun champ changé ferme le formulaire « Modifier
+  {prénom} » sans rien envoyer ; le focus va sur le prénom, et la barre ne change pas.
+- **C11.10** : « Un échec n’est retiré que de deux façons » devient « de trois façons » :
+  l’envoi d’une action sur le même sujet, un retrait de voiture réussi pour les messages sur
+  cette voiture (déjà construit, PR #255), ou « Fermer » / Échap.
+- **C11.11** : « trois (« Tom, Léa et Hugo ») » précise : le texte de `format.list` dans la
+  langue (« Tom, Léa, and Hugo » en anglais).
+- **Nouveaux** : V1.1 à V1.8, dans « Critères de la v4.4 ».
 
 ### v4.3 (#235), début et fin : critères de #3 amendés
 
@@ -1504,6 +1690,16 @@ v4.3-6. Décision du propriétaire, le 20/10 (#235) : le formulaire de création
 - **Nouveaux** : D1.1 à D1.8 et D2.1 à D2.5, dans « Critères de la v4.3 ».
 
 ## Hors périmètre
+
+En v4.4 :
+
+- « Modifier » la voiture sans changement : elle envoie encore une requête. Son échec ne
+  nomme aucun champ (« Les changements de la voiture de Claire… »), donc ses mots ne sont pas
+  faux ; la même règle s’y appliquerait, mais elle touche l’étape « qui sort » et
+  `passengersChanged`. À traiter dans une tâche à part.
+- « Ajouter une personne » : un formulaire vide est une erreur (« Champ requis. »), pas une
+  absence de changement.
+- L’anneau de focus (#236), défini dans la maquette `language-switch` v3.
 
 En v4.3 :
 
@@ -1754,3 +1950,35 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
   - « Pour #232 » reprend la phrase déjà retenue dans #232.
   - Rendu vérifié avec Chrome headless (`chrome`), à 1280 et 400 px : aucun débordement
     horizontal. Republiée à la même URL.
+- v4.4 (2026-10-21) : #298, « Valider » sans changement dans « Modifier » une personne.
+  - Partie de v4.3.1 : la copie locale, `origin/main` (`docs/design/event-board/`) et
+    l’artifact publié étaient identiques.
+  - Nouvelle section « Ce qui change en v4.4 » : la règle, les états, les critères V1.1 à
+    V1.7, aucun mot nouveau, et ce qui reste à faire côté code. Le tableau du focus, la table
+    des sujets, les états couverts, les décisions (v4.4-1 à v4.4-5), les critères à amender
+    (C2.3, C11.10, C11.11) et le hors-périmètre sont mis à jour.
+  - Deux corrections notées sur #216 :
+    - la règle 5 de la barre écrit ce que fait un retrait de voiture réussi (#221, PR #255) ;
+    - en anglais, trois prénoms donnent « Tom, Léa, and Hugo », le texte de `format.list`
+      (#280).
+  - La page ajoute la section « « Valider » sans changement (v4.4) », avec quatre maquettes,
+    et reprend les deux corrections.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.4 (suite) : revue de design : changements demandés. Un bloquant : la ligne « Modifier »
+  la voiture de la table des sujets donnait « Retirer la voiture » de cette voiture comme ne
+  retirant pas l’échec, ce que contredit la règle 5 corrigée. Quatre suggestions.
+- v4.4.1 (2026-10-21) : le bloquant est corrigé, et les suggestions sont appliquées, sans en
+  refuser aucune.
+  - Table des sujets, ligne « Modifier » la voiture : « … qui échoue »
+    (`ride-remove.spec.ts:350`) ; un retrait réussi retire l’échec (règle 5). Même ligne sur
+    la page.
+  - V1.8 nouveau : « Claire » suivi d’une espace part, et la base garde « Claire ».
+  - V1.5 concret : Claire placée dans la voiture de Marc au retour, puis l’échec retenu de
+    « Clara ». Le test ne dépend plus d’« Annuler », qui n’est pas construit ; la maquette
+    « Après » le montre sans « Annuler ».
+  - Note pour la prochaine révision d’organizer-view : M2.5 doit dire où va le focus et que
+    les lignes de la barre restent.
+  - Le mélange de virgules entre trois prénoms (« Tom, Léa, and Hugo ») et quatre (« Tom, Léa
+    and 2 others ») est noté par la revue et gardé (décision v4.4-5).
+  - Rendu vérifié avec Chrome headless, à 1280 et 500 px : aucun débordement horizontal.
+    Republiée à la même URL.
