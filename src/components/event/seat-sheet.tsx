@@ -26,7 +26,9 @@ export type SeatRefusal = "rideGone" | "notEnoughSeats" | "alreadyInCar";
 export type SeatsTaken =
   | { kind: "done" }
   | { kind: "refused"; refusal: SeatRefusal; why: Why }
-  | { kind: "problem"; problem: BarProblem; why: Why };
+  | { kind: "problem"; problem: BarProblem; why: Why }
+  /** The car's retour is gone: the sheet closes, and the bar says why (rule 9). */
+  | { kind: "noRetour"; why: Why };
 
 /** What the server answers `takeSeats`, an unknown event included. */
 type SeatsAnswer =
@@ -36,7 +38,7 @@ type SeatsAnswer =
 
 /**
  * `takeSeats`'s answer as the page says it, for the persons sent, `names`. The sheet has no words
- * of its own for `forbidden`, `eventNotFound`, `invalid` and `noRetour`: `failed` there (§ 2.6).
+ * of its own for `forbidden`, `eventNotFound` and `invalid`: `failed` there (§ 2.6).
  */
 export function seatsTaken(sent: { ok: true; value: SeatsAnswer } | { ok: false; problem: BarProblem }, names: readonly string[]): SeatsTaken {
   if (!sent.ok) return { kind: "problem", problem: sent.problem, why: whyOf(sent.problem) };
@@ -51,6 +53,8 @@ export function seatsTaken(sent: { ok: true; value: SeatsAnswer } | { ok: false;
       return { kind: "refused", refusal: "notEnoughSeats", why: whyOf("seatTaken") };
     case "notEnoughSeats":
       return { kind: "refused", refusal: "notEnoughSeats", why: { kind: "notEnoughSeats", free: answer.freeSeats } };
+    case "noRetour":
+      return { kind: "noRetour", why: whyOf("noRetour") };
     default:
       return { kind: "problem", problem: "failed", why: whyOf(answer.error) };
   }
@@ -66,8 +70,14 @@ export interface SendingSheet extends FromSheet {
   placed: string;
 }
 
+/** A person sent, and where she stood on the leg before, as the page showed it: what « Annuler » gives her back (C5.10). */
+export interface Seated {
+  personId: string;
+  before: "withoutCar" | "notConcerned";
+}
+
 /** Takes seats in a car for persons of the device (R6); `undefined` when seats are already on their way. */
-export type TakeSeats = (seats: { rideId: string; leg: Leg; personIds: string[] }, sheet: SendingSheet) => Promise<SeatsTaken | undefined>;
+export type TakeSeats = (seats: { rideId: string; leg: Leg; persons: Seated[] }, sheet: SendingSheet) => Promise<SeatsTaken | undefined>;
 
 /** The car's title, or the active tab once it is gone. */
 const toCar = (leg: Leg, rideId: string) => focusFirstShown([() => focusCarTitle(leg, rideId)]);
@@ -120,7 +130,7 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
     const driver = car.driver.firstName;
     const placed = t("Seat.placed", { firstName: person.firstName, driver });
     const taken = await device.takeSeats(
-      { rideId, leg: board.leg, personIds: [person.id] },
+      { rideId, leg: board.leg, persons: [{ personId: person.id, before: "withoutCar" }] },
       toBar(`tap:${rideId}`, rideId, person, driver, placed),
     );
     // Offline or a server error changes nothing on the page: the focus stays where it is.
@@ -194,7 +204,8 @@ function RegisterSheet({
     const person = { id: registering.creationId(), firstName: registering.notDone.kind === "addPerson" ? registering.notDone.firstName : registering.person.firstName };
     afterClose.current = () => toCarOrBanner(leg, rideId);
     const placed = t("Seat.placed", { firstName: person.firstName, driver });
-    await device.takeSeats({ rideId, leg, personIds: [person.id] }, { ...toBar(`register:${person.id}`, rideId, person, driver, placed), sending: registering.sending });
+    // Registered from the seat, she was without a car on its leg.
+    await device.takeSeats({ rideId, leg, persons: [{ personId: person.id, before: "withoutCar" }] }, { ...toBar(`register:${person.id}`, rideId, person, driver, placed), sending: registering.sending });
     return added;
   };
 
@@ -219,6 +230,7 @@ function RegisterSheet({
         mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
         open={() => isOpen.current}
         onDone={() => onOpenChange(false)}
+        onGone={() => onOpenChange(false)}
       />
     </BottomSheet>
   );
@@ -287,7 +299,7 @@ function SeatSheet({
   });
 
   // What the sheet says of a refusal or a problem: the bar names who could not get in instead.
-  const said = (taken: Exclude<SeatsTaken, { kind: "done" }>, count: number): string => {
+  const said = (taken: Exclude<SeatsTaken, { kind: "done" | "noRetour" }>, count: number): string => {
     if (taken.kind === "problem") return t(`Actions.${taken.problem}`);
     const { refusal } = taken;
     return refusal === "notEnoughSeats" ? t("Sheet.notEnoughSeats") : t(`Actions.${refusal}`, { count });
@@ -302,7 +314,9 @@ function SeatSheet({
     const sheet = sends(personIds);
     const placed =
       names.length === 1 ? t("Seat.placed", { firstName: names[0], driver }) : t("Sheet.placed", { names: nameList(words, names), driver });
-    const taken = await takeSeats({ rideId, leg, personIds }, { ...sheet, sending: setSending, seats: { names, driver }, placed });
+    // Ticked by default exactly when without a car (C6.1): unticked, she did not do the leg.
+    const persons = chosen.map(({ id, checked }): Seated => ({ personId: id, before: checked ? "withoutCar" : "notConcerned" }));
+    const taken = await takeSeats({ rideId, leg, persons }, { ...sheet, sending: setSending, seats: { names, driver }, placed });
     // Not the sheet opened since: what came back is the bar's.
     if (taken === undefined || !sheet.inSheet()) return;
     if (taken.kind === "done") {
@@ -310,6 +324,8 @@ function SeatSheet({
       onOpenChange(false);
       return;
     }
+    // Its leg is gone (rule 9): it closes, the focus back on the seat, which shows until then.
+    if (taken.kind === "noRetour") return onOpenChange(false);
     setRefused(said(taken, names.length));
     if (taken.kind === "refused" && taken.refusal === "rideGone") {
       focusNext.current = () => body.current?.closest('[role="dialog"]')?.querySelector<HTMLElement>("[data-slot=sheet-footer] button");
@@ -366,6 +382,7 @@ function SeatSheet({
             <PersonForm
               mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
               open={() => isOpen.current}
+              onGone={() => onOpenChange(false)}
               onDone={(personId) => {
                 focusNext.current = () => document.getElementById(boxId(personId));
                 setAdding(null);

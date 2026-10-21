@@ -1,6 +1,6 @@
 import { CircleCheck, TriangleAlert, Users, WifiOff, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createAnnouncer, type Announcer } from "./announce";
@@ -24,6 +24,11 @@ export function useMessageBar() {
     fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
     ended: () => setState(bar.ended),
     close: () => setState(bar.close),
+    // Rule 6: gone from every line as it is sent, in the same render as the failure its send withdraws.
+    undo: (undo: bar.Undo) => {
+      setState((current) => bar.undoing(current, undo));
+      undo.run();
+    },
   }));
   return { state, ...write };
 }
@@ -56,7 +61,21 @@ const onNothing = () => document.activeElement === null || document.activeElemen
  * it while it has it, even once it no longer overflows, lest the focus fall on <body>. A new
  * failure brings it back to its top, where it shows; a new success scrolls into view, at its bottom.
  */
-function MessageList({ lines, failing, written, label }: { lines: bar.Line[]; failing: boolean; written?: bar.Line; label: string }) {
+function MessageList({
+  lines,
+  failing,
+  written,
+  label,
+  onUndo,
+}: {
+  lines: bar.Line[];
+  failing: boolean;
+  written?: bar.Line;
+  label: string;
+  onUndo: (undo: bar.Undo) => void;
+}) {
+  const t = useTranslations("Seat");
+  const ids = useId();
   const list = useRef<HTMLDivElement>(null);
   const [overflows, setOverflows] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -81,15 +100,39 @@ function MessageList({ lines, failing, written, label }: { lines: bar.Line[]; fa
       onFocus={(event) => event.target === event.currentTarget && setFocused(true)}
       // The window left (Alt+Tab): the list is still the active element, and gets the focus back with the window.
       onBlur={(event) => event.target === event.currentTarget && document.hasFocus() && setFocused(false)}
-      className="max-h-[40dvh] min-w-0 flex-1 overflow-y-auto rounded-md focus-visible:focus-ring focus-visible:outline-offset-0"
+      className="grid max-h-[40dvh] min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] content-start overflow-y-auto rounded-md focus-visible:focus-ring focus-visible:outline-offset-0"
     >
       {lines.map((line) => {
         const Icon = iconOf(line);
+        const text = `${ids}-${line.id}`;
         return (
-          <p key={line.id} data-bar-line={line.id} className="flex items-start gap-2.5 border-t py-2.5 first:border-t-0 wrap-anywhere">
-            <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", failing && line.kind === "failure" && "text-destructive")} />
-            <span className={cn("min-w-0 flex-1", failing && line.kind === "success" && "font-medium")}>{line.text}</span>
-          </p>
+          <Fragment key={line.id}>
+            <p
+              data-bar-line={line.id}
+              className={cn("flex gap-2.5 border-t py-2.5 first:border-t-0 wrap-anywhere", line.undo ? "items-center" : "col-span-2 items-start")}
+            >
+              <Icon aria-hidden className={cn("size-4 shrink-0", !line.undo && "mt-0.5", failing && line.kind === "failure" && "text-destructive")} />
+              <span id={text} className={cn("min-w-0 flex-1", failing && line.kind === "success" && "font-medium")}>
+                {line.text}
+              </span>
+            </p>
+            {/* Rule 6: after its line's text, out of the regions; a sibling of the line, which keeps its words alone. */}
+            {line.undo && (
+              <div data-bar-line={line.id} className="flex items-center border-t py-1 pl-2 [p:first-child+&]:border-t-0">
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "h-11 px-3 focus-visible:outline-offset-0",
+                    !failing && "border-primary-foreground/45 bg-transparent text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground",
+                  )}
+                  aria-describedby={text}
+                  onClick={() => line.undo && onUndo(line.undo)}
+                >
+                  {t("undo")}
+                </Button>
+              </div>
+            )}
+          </Fragment>
         );
       })}
     </div>
@@ -176,12 +219,6 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
       document.removeEventListener("focusout", forget);
     };
   }, []);
-  const writtenLandmark = useEffectEvent(() => {
-    const lost = focused.current?.element;
-    if (onNothing() && lost && fell(lost)) written?.landmark();
-  });
-  useEffect(() => writtenLandmark(), [written?.id]);
-
   // Rule 8: an element of the bar that had the focus is gone, or disabled, and the focus fell
   // on <body>, as when an action without words empties the bar while « Fermer » has the focus.
   // Its line's landmark first, then those of the other lines, still there or just gone, the
@@ -197,6 +234,15 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
     focusFirstShown(all.sort((a, b) => rank(b) - rank(a)).map((line) => line.landmark));
   });
   useEffect(() => leftBar(), [messages.state]);
+
+  // After rule 8, which goes first (#311's review): an element of the bar gone in the same render
+  // as a line is written, as a late success that replaces the one whose « Annuler » had the focus,
+  // gives it to its own line's landmark, not to the written line's.
+  const writtenLandmark = useEffectEvent(() => {
+    const lost = focused.current?.element;
+    if (onNothing() && lost && fell(lost)) written?.landmark();
+  });
+  useEffect(() => writtenLandmark(), [written?.id]);
 
   // The page keeps room below it for the bar, as measured (« À 360 px »): `main` reads the height.
   useEffect(() => {
@@ -221,7 +267,7 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
         open && (failing ? "border-destructive bg-background text-foreground" : "border-transparent bg-primary font-medium text-primary-foreground"),
       )}
     >
-      {open && <MessageList lines={lines} failing={failing} written={written} label={t("messages")} />}
+      {open && <MessageList lines={lines} failing={failing} written={written} label={t("messages")} onUndo={messages.undo} />}
       {open && (
         <Button
           variant="ghost"

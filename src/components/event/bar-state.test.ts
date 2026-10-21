@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { close, covers, emptyBar, ended, fail, inform, lines, regions, succeed, withdraw, type BarState } from "./bar-state";
+import { close, covers, emptyBar, ended, fail, inform, lines, regions, succeed, undoing, withdraw, type BarState, type Undo } from "./bar-state";
 
 // The rules of « La barre de messages » (docs/design/event-board/README.md, v4.2.3, #216).
 
@@ -116,5 +116,38 @@ describe("the regions: each says the last line written there while it is in the 
     state = inform(state, success("Aucune place libre"));
     expect(regions(withdraw(ended(state), { about: ["b"] }))).toEqual({ alert: "", status: "" });
     expect(texts(withdraw(ended(state), { about: ["b"] }))).toEqual(["A", "Tom est dans la voiture de Sophie"]);
+  });
+});
+
+describe("rule 6: one « Annuler » per placement", () => {
+  const undoOf = (state: BarState) => lines(state).map((line) => (line.undo ? `${line.text} + Annuler` : line.text));
+  const placed = (undo: Undo) => ({ ...success("Tom est dans la voiture de Sophie"), undo });
+  const undoFailed = (undo: Undo) => ({ ...failure("Tom n’a pas pu sortir", ["undo:sophie", "undo:sophie:tom"]), undo });
+
+  it("is on the success of the placement, and goes with it at the next success", () => {
+    const state = succeed(emptyBar, placed({ run: () => {} }));
+    expect(undoOf(state)).toEqual(["Tom est dans la voiture de Sophie + Annuler"]);
+    expect(undoOf(fail(state, failure("A")))).toEqual(["A", "Tom est dans la voiture de Sophie + Annuler"]);
+    expect(undoOf(succeed(state, success("Hugo est dans la voiture de Marc")))).toEqual(["Hugo est dans la voiture de Marc"]);
+  });
+
+  it("sent, it shows on no line: the success stays without it, a failure of another placement keeps its own", () => {
+    const tom = { run: () => {} };
+    const hugo = { run: () => {} };
+    let state = fail(emptyBar, { ...undoFailed(hugo), text: "Hugo n’a pas pu sortir" });
+    state = succeed(state, placed(tom));
+    expect(undoOf(undoing(state, tom))).toEqual(["Hugo n’a pas pu sortir + Annuler", "Tom est dans la voiture de Sophie"]);
+  });
+
+  it("failed, its failure carries it alone; a later success leaves the failure and its « Annuler »", () => {
+    const tom = { run: () => {} };
+    let state = undoing(succeed(emptyBar, placed(tom)), tom);
+    state = fail(state, undoFailed(tom));
+    expect(undoOf(state)).toEqual(["Tom n’a pas pu sortir + Annuler", "Tom est dans la voiture de Sophie"]);
+    state = succeed(state, success("Hugo est dans la voiture de Marc"));
+    expect(undoOf(state)).toEqual(["Tom n’a pas pu sortir + Annuler", "Hugo est dans la voiture de Marc"]);
+    // Sent again from the failure: its send withdraws it, and no line shows « Annuler ».
+    state = withdraw(undoing(state, tom), { about: ["undo:sophie", "undo:sophie:tom"] });
+    expect(undoOf(state)).toEqual(["Hugo est dans la voiture de Marc"]);
   });
 });

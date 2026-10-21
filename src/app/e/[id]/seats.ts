@@ -153,9 +153,11 @@ function undoRequest(rideId: unknown, leg: unknown, persons: unknown): UndoReque
 
 /**
  * Under the Event's lock, the Ride's, then the persons' (lock order: Event, Ride, Person),
- * who is still in the Ride is read again: only they change, back without a car or with no
- * Placement on the leg (C5.10, as C7.4). All or nothing. Neither write fires a trigger of
- * C12.8: an update of `ride_id` alone and a delete are not among their events.
+ * each person goes back without a car, or to no Placement on the leg, by her state before.
+ * C5.10 (as C7.4) holds by the writes' filter on `ride_id`: a person no longer in the Ride is
+ * not touched. Reading who is in it again only sorts them by their state before. All or
+ * nothing. Neither write fires a trigger of C12.8: an update of `ride_id` alone and a delete
+ * are not among their events.
  */
 async function giveBackSeats(
   trx: Kysely<Database>,

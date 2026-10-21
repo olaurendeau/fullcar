@@ -316,7 +316,8 @@ function RideForm({
       showErrors(answer.errors, false, answer.first);
       // Not the sheet opened since: it shows another form.
     } else if (answer === undefined || !sheet.inSheet()) return;
-    else if (answer.kind === "done") onDone();
+    // Done, or its car's retour gone (rule 9): the sheet closes.
+    else if (answer.kind === "done" || answer.kind === "noRetour") onDone();
     else if (answer.kind === "problem") setProblem(answer.problem);
     else {
       setChanged(true);
@@ -367,6 +368,8 @@ function RideForm({
       if (sheet.inSheet()) onDone();
     } else if (answer?.kind === "errors") showErrors(answer.errors, false, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
+    // Offered on the retour, which is gone (rule 9): the sheet closes.
+    else if (answer?.kind === "noRetour" && sheet.inSheet()) onDone();
   }
 
   const field = (name: FieldName, label: string, control: Control, hint?: string) => {

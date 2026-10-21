@@ -20,13 +20,14 @@ export interface CellSending extends FromSheet {
 
 /**
  * Declares one of the device's persons without a car, or not concerned, on a leg
- * (`setPersonLeg`). `null` once done; the problem to show otherwise; `undefined` when a change
- * from this sheet is already on its way (#167). A problem the sheet no longer shows goes to the bar.
+ * (`setPersonLeg`). `null` once done; `noRetour` when the leg is gone, which closes the sheet
+ * as the bar says why (rule 9); the problem to show otherwise; `undefined` when a change from
+ * this sheet is already on its way (#167). A problem the sheet no longer shows goes to the bar.
  */
 export type SetPersonLeg = (
   change: { personId: string; leg: Leg; kind: "withoutCar" | "notConcerned" },
   sheet: CellSending,
-) => Promise<BarProblem | null | undefined>;
+) => Promise<BarProblem | "noRetour" | null | undefined>;
 
 /**
  * The sheet of a cell of « Vos inscriptions » (#89, « Les cellules »): « {prénom} · {leg} »,
@@ -81,8 +82,9 @@ export function CellSheet({
     const sheet = { ...sends(), cell, notDone: cellNotDone(action, cell) };
     const outcome = await setPersonLeg(change, sheet);
     if (outcome === undefined) return;
-    if (sheet.inSheet()) setProblem(outcome);
-    if (outcome === null) onOpenChange(false);
+    if (sheet.inSheet()) setProblem(outcome === "noRetour" ? null : outcome);
+    // Done, or its leg gone (rule 9): it closes, the focus back on the cell, shown until then.
+    if (outcome === null || outcome === "noRetour") onOpenChange(false);
   }
 
   function seeCar(rideId: string) {

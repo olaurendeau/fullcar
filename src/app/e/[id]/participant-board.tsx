@@ -4,9 +4,10 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView } from "@/components/event/event-view";
-import { cellWhy, failureText, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
-import { focusCar, focusCell, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
-import { forget, sendAbout, type FromSheet } from "@/components/event/hidden-page";
+import type { Undo } from "@/components/event/bar-state";
+import { cellWhy, failureText, nameList, offerWhy, personWhy, undoWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
+import { focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
+import { aboutOf, forget, pageHidden, sendAbout, whenPageShown, type FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
@@ -21,13 +22,14 @@ import {
   removeRide as storeRideRemoval,
   setPersonLeg as storePersonLeg,
   takeSeats as storeSeats,
+  undoSeats as storeUndo,
   updatePerson as storePersonFields,
   updateRide as storeRideChange,
 } from "./actions";
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
-import { actionRunner, sendAction, stateOf, stateRead, stateShown, type Sent } from "./run-action";
+import { actionRunner, sendAction, stateOf, stateRead, stateShown, withRetourHeld, type Sent } from "./run-action";
 
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
@@ -48,7 +50,8 @@ export interface BoardHandle {
  * Each state shown brings the event's header too (epic #250): its title, place, start and end,
  * the tabs, the legs' dates and `document.title` follow it, and `onState` is told it. Should
  * the retour go while its tab is active, the aller shows; should what had the focus go with
- * the tabs, the event's title takes it, never `<body>`.
+ * the tabs, the event's title takes it, never `<body>`. While a sheet hides the page, the retour
+ * it may be on stays shown until it is closed (rule 9, `withRetourHeld`).
  */
 export function ParticipantBoard({
   id,
@@ -66,21 +69,42 @@ export function ParticipantBoard({
   const words = wordsOf(useTranslations(), useFormatter());
   const [state, setState] = useState(rendered);
   const [tab, setTab] = useState<Leg>("aller");
-  // The state last given, and what had the focus when the tabs went or came.
+  // The state last given, the one shown, and what had the focus when the tabs went or came.
   const latest = useRef(rendered);
+  const displayed = useRef(rendered);
   const focused = useRef<Element | null>(null);
   // Every state the page shows goes through here: an action's, a read's, `apply`.
   // What is not a state (the legs alone, from a server not yet deployed) is not shown.
-  const [setBoard] = useState(() => (next: EventState) => {
-    const shown = stateShown(latest.current, next);
-    if (!shown) return;
-    latest.current = shown.state;
-    if (shown.tabsChange) {
-      // The aller's panel mounts anew, in or out of the tabs; without a retour, the aller shows.
-      focused.current = document.activeElement;
-      setTab("aller");
-    }
-    setState(shown.state);
+  const [setBoard] = useState(() => {
+    const show = (next: EventState, tabsChange: boolean) => {
+      if (tabsChange) {
+        // The aller's panel mounts anew, in or out of the tabs; without a retour, the aller shows.
+        focused.current = document.activeElement;
+        setTab("aller");
+      }
+      displayed.current = next;
+      setState(next);
+    };
+    // Once no sheet hides the page, and Radix has given the focus back from the last one, in a
+    // `setTimeout` of its own: the state last given, which a sheet opened meanwhile holds again.
+    const release = () =>
+      whenPageShown(() =>
+        setTimeout(() => {
+          const shown = pageHidden() ? undefined : stateShown(displayed.current, latest.current);
+          if (shown) show(shown.state, shown.tabsChange);
+          else release();
+        }),
+      );
+    return (next: EventState) => {
+      const shown = stateShown(displayed.current, next);
+      if (!shown) return;
+      latest.current = shown.state;
+      // A sheet on the retour closes over it, its focus going back there, never with it (rule 9).
+      const held = pageHidden() && withRetourHeld(displayed.current, shown.state);
+      if (!held) return show(shown.state, shown.tabsChange);
+      show(held, false);
+      release();
+    };
   });
   useImperativeHandle(
     ref,
@@ -114,12 +138,15 @@ export function ParticipantBoard({
   // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
   // hides the page: until then, it would be neither seen nor announced. It joins the others
   // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
-  // What was not done, then why (C11.11): no failure of the bar is generic.
-  function failedIn(sheet: FromSheet, { notDone, why, landmark }: { notDone: NotDone; why: Why; landmark: () => boolean }) {
-    if (sheet.inSheet()) return;
+  // What was not done, then why (C11.11): no failure of the bar is generic. A sheet whose leg
+  // is gone `closes`, and its failure goes to the bar all the same (rule 9). A failure of
+  // « Annuler » carries it again (rule 6).
+  function failedIn(sheet: FromSheet, failure: { notDone: NotDone; why: Why; landmark: () => boolean; closes?: boolean; undo?: Undo }) {
+    const { notDone, why, landmark, closes, undo } = failure;
+    if (!closes && sheet.inSheet()) return;
     const offline = why.kind === "offline" || (why.kind === "retryUndo" && why.problem === "offline");
     const text = failureText(words, notDone, why);
-    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about: sheet.about, sent: sheet.seq }), true);
+    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about: sheet.about, sent: sheet.seq, undo }), true);
   }
 
   const device = useDevice(
@@ -131,13 +158,13 @@ export function ParticipantBoard({
       const retry = retrying.current && { key: "retry", inSheet: () => false, ...sendAbout(["device:read"]) };
       retrying.current = false;
       const sent = retry ? await runAction("retry", read, undefined, retry.leaves) : await sendAction(read);
+      // An answer that is not a state fails the read, as an unknown event does: the bar says so too.
+      const answered = stateRead(sent);
       if (retry && sent) {
         retry.answered();
-        if (sent.ok) messages.succeed(null);
-        else failedIn(retry, { notDone: { kind: "readDevice" }, why: whyOf(sent.problem), landmark: focusRetry });
+        if (answered) messages.succeed(null);
+        else failedIn(retry, { notDone: { kind: "readDevice" }, why: whyOf(sent.ok ? "failed" : sent.problem), landmark: focusRetry });
       }
-      // An answer that is not a state fails the read, as an unknown event does.
-      const answered = stateRead(sent);
       if (answered) return answered;
       throw new Error("The device's persons could not be read.");
     },
@@ -145,11 +172,13 @@ export function ParticipantBoard({
   );
 
   // What became of a person's form, sent from `sheet`. In the bar, the failure names who, and
-  // the fields sent for a change, then why; the form keeps the generic words.
+  // the fields sent for a change, then why; the form keeps the generic words. Sent from the
+  // retour's tab once it is gone, the sheet closes (rule 9).
   function personFormOutcome(
     sent: Sent<PersonOutcome> | undefined,
     sheet: FromSheet & { notDone: NotDone },
     landmark: () => boolean,
+    leg?: Leg,
   ): Registration | undefined {
     if (sent === undefined) return undefined;
     sheet.answered();
@@ -162,8 +191,9 @@ export function ParticipantBoard({
     // The page shows the state a refusal carries.
     const problem = sent.ok ? "failed" : sent.problem;
     const why = outcome ? personWhy(outcome.error) : whyOf(problem);
-    failedIn(sheet, { notDone: sheet.notDone, why, landmark });
-    return { kind: "problem", problem };
+    const closes = why.kind === "noRetour" && leg === "retour";
+    failedIn(sheet, { notDone: sheet.notDone, why, landmark, closes });
+    return closes ? { kind: "noRetour" } : { kind: "problem", problem };
   }
 
   // Each action runs once per sheet (`FromSheet.key`): one on its way never drops the action
@@ -176,7 +206,7 @@ export function ParticipantBoard({
       sending,
       sheet.leaves,
     );
-    const outcome = personFormOutcome(sent, sheet, landmark);
+    const outcome = personFormOutcome(sent, sheet, landmark, person.leg);
     if (outcome?.kind === "done") device.registered();
     return outcome;
   };
@@ -203,7 +233,9 @@ export function ParticipantBoard({
     }
     const error = !sent.ok ? sent.problem : "error" in sent.value ? sent.value.error : "failed";
     const landmark = () => focusCell(change.personId, change.leg);
-    failedIn(sheet, { notDone, why: cellWhy(error, cell), landmark });
+    const why = cellWhy(error, cell);
+    failedIn(sheet, { notDone, why, landmark, closes: why.kind === "noRetour" });
+    if (why.kind === "noRetour") return "noRetour";
     return sent.ok ? "failed" : sent.problem;
   };
 
@@ -229,22 +261,55 @@ export function ParticipantBoard({
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     const problem = sent.ok ? "failed" : sent.problem;
     const why = outcome ? offerWhy(outcome.error, notDone.driver) : whyOf(problem);
-    failedIn(sheet, { notDone, why, landmark });
-    return { kind: "problem", problem };
+    // Offered from the retour's tab once it is gone, the sheet closes (rule 9).
+    const closes = why.kind === "noRetour" && car.leg === "retour";
+    failedIn(sheet, { notDone, why, landmark, closes });
+    return closes ? { kind: "noRetour" } : { kind: "problem", problem };
   };
+
+  // « Annuler » (C5.10, rule 6): the persons placed get their state before on the leg back, if
+  // still in the car. Its failure names them and the car, and carries the same « Annuler »; its
+  // success, those given back, the focus on the car's title once the page shows it.
+  const [undoneIn, setUndoneIn] = useState<{ landmark: () => boolean } | null>(null);
+  useEffect(() => {
+    if (undoneIn && (document.activeElement === null || document.activeElement === document.body)) focusFirstShown([undoneIn.landmark]);
+  }, [undoneIn]);
+  function undoOf(key: number, { rideId, leg, persons }: Parameters<TakeSeats>[0], { names, driver }: { names: string[]; driver: string }): Undo {
+    const personIds = persons.map(({ personId }) => personId);
+    const landmark = focusCar(leg, rideId);
+    async function giveBack() {
+      const send = { key: "undo", inSheet: () => false, ...sendAbout(aboutOf([`undo:${rideId}`], personIds)) };
+      const sent = await runAction(`undo:${key}`, () => storeUndo(id, readDeviceToken(id), rideId, leg, persons), undefined, send.leaves);
+      if (sent === undefined) return;
+      send.answered();
+      const answer = sent.ok ? sent.value : { ok: false as const, error: sent.problem };
+      if (!answer.ok) return failedIn(send, { notDone: { kind: "leave", names, driver }, why: undoWhy(answer.error), landmark, undo });
+      const { undoneIds } = answer;
+      const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
+      const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });
+      send.whenClosed(() => {
+        // Nobody given back, the bar has nothing to say: it closes.
+        messages.succeed(undone.length > 0 ? { text, landmark } : null);
+        setUndoneIn({ landmark });
+      });
+    }
+    const undo: Undo = { run: () => void giveBack() };
+    return undo;
+  }
 
   // A success waits for the page to show, as a failure does, and replaces the success alone: it
   // never takes a failure away (#216). A refusal or a failure is said in the sheet that sent
-  // while it shows it, in the bar otherwise.
-  const takeSeats: TakeSeats = async ({ rideId, leg, personIds }, { sending, seats, placed, ...sheet }) => {
-    const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, personIds);
+  // while it shows it, in the bar otherwise. A success carries its « Annuler ».
+  const takeSeats: TakeSeats = async (request, { sending, seats, placed, ...sheet }) => {
+    const { rideId, leg, persons } = request;
+    const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, persons.map(({ personId }) => personId));
     const sent = await runAction(`takeSeats:${sheet.key}`, send, sending, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
     const taken = seatsTaken(sent, seats.names);
     const landmark = focusCar(leg, rideId);
-    if (taken.kind === "done") sheet.whenClosed(() => messages.succeed({ text: placed, landmark }));
-    else failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark });
+    if (taken.kind === "done") sheet.whenClosed(() => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats) }));
+    else failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes: taken.kind === "noRetour" });
     return taken;
   };
 
@@ -263,7 +328,7 @@ export function ParticipantBoard({
     if (sent.ok && sent.value.ok) {
       messages.succeed(null);
       // The car is gone: what was sent about its seats or its change, nothing says any more (#213, #218).
-      forget([`seats:${rideId}`, `ride:${rideId}:edit`]);
+      forget([`seats:${rideId}`, `undo:${rideId}`, `ride:${rideId}:edit`]);
       return null;
     }
     // In the bar, the failure names the car and its leg, then why, a refusal included; the confirmation keeps the generic words.
@@ -293,9 +358,10 @@ export function ParticipantBoard({
     // names the car and its leg, then why, a refusal included.
     const problem = sent.ok ? "failed" : sent.problem;
     const why = outcome ? whyOf(outcome.error) : whyOf(problem);
-    failedIn(sheet, { notDone, why, landmark: focusCar(leg, rideId) });
+    // A car of the retour once it is gone: the sheet closes (rule 9).
+    failedIn(sheet, { notDone, why, landmark: focusCar(leg, rideId), closes: why.kind === "noRetour" });
     if (outcome?.error === "passengersChanged") return { kind: "passengersChanged", passengers: outcome.passengerIds.length };
-    return { kind: "problem", problem };
+    return why.kind === "noRetour" ? { kind: "noRetour" } : { kind: "problem", problem };
   };
 
   return (

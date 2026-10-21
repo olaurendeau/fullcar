@@ -233,7 +233,8 @@
       "alreadyDriving": "{driver} is already driving a car.",
       "passengersChanged": "Someone took or left a seat in the meantime: edit the car again.",
       "forbidden": "This device cannot make this change: reload the page.",
-      "eventNotFound": "This event can no longer be found: it may have been deleted."
+      "eventNotFound": "This event can no longer be found: it may have been deleted.",
+      "noRetour": "This event no longer has a return trip."
     },
     "names": {
       "andOthers": "{first}, {second} and {others, plural, one {# other} other {# others}}"
@@ -251,7 +252,9 @@
     "placed": "{names} are in {driver}’s car"
   },
   "Seat": {
-    "placed": "{firstName} is in {driver}’s car"
+    "placed": "{firstName} is in {driver}’s car",
+    "undo": "Undo",
+    "undone": "{names} {count, plural, one {is} other {are}} no longer in {driver}’s car"
   },
   "RideChanges": {
     "leaving": {
