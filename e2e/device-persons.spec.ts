@@ -189,10 +189,10 @@ test.describe("device persons", () => {
     // Paul's car shares nothing with the device: no link, and his number is neither sent nor shown.
     await expect(car(panel, "Paul").getByRole("listitem")).toHaveText(["Nina"]);
     await expect(car(panel, "Paul").getByRole("link")).toHaveCount(0);
-    expect(sent).toContain(PHONES.marc);
-    for (const text of [sent, await page.content()]) {
-      expect(text).not.toContain(PHONES.paul);
-      expect(text).not.toContain(PHONES.paul.replace(/\D/g, ""));
+    expect(sent.includes(PHONES.marc), "the answer holds Marc's number").toBe(true);
+    for (const [where, text] of [["the answer", sent], ["the page", await page.content()]] as const) {
+      expect(text.includes(PHONES.paul), `${where} holds Paul's number`).toBe(false);
+      expect(text.includes(PHONES.paul.replace(/\D/g, "")), `${where} holds the digits of Paul's number`).toBe(false);
     }
     await expect(call(car(panel, "Marc"), "Marc")).toHaveAttribute("href", "tel:0798765432");
     await expect(call(car(panel, "Claire"), "Claire")).toHaveText(PHONES.claire);

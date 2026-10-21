@@ -1,4 +1,4 @@
-import { test as base, type TestInfoError } from "@playwright/test";
+import { expect, test as base, type Page, type TestInfoError } from "@playwright/test";
 import type { Kysely } from "kysely";
 import { createDb } from "@/db/client";
 import type { Database } from "@/db/schema";
@@ -56,6 +56,14 @@ export const test = base.extend<
     await db.deleteFrom("event").where("id", "=", event.id).execute();
   },
 });
+
+/**
+ * The page reaches a URL that `url` matches, checked without printing it (#365): the URL a
+ * failure would show may be the organiser's link, which `toHaveURL` prints whole.
+ */
+export function expectUrl(page: Page, url: RegExp, message: string) {
+  return expect.poll(() => url.test(page.url()), { message }).toBe(true);
+}
 
 /**
  * For a file that opens a page with a valid token, the organiser's or a device's personal one,

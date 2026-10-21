@@ -1,6 +1,7 @@
-import type { Page, Route } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { hideToken } from "./organiser";
 
 leaveNoToken();
 
@@ -34,6 +35,9 @@ function oneCharOff(token: string): string {
 }
 
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
+/** The organiser's link shown is `link`, compared without printing either: a failure would show the token (#365). */
+const showsLink = (shown: Locator, link: string, message: string) =>
+  expect.poll(async () => (await shown.innerText()) === link, { message }).toBe(true);
 const linkGroup = (page: Page, name: string) => panel(page).getByRole("group", { name });
 // Within the page's content: Next's route announcer is an alert as well. With text: the bar of
 // messages keeps its own alert region, empty, on the page (#87).
@@ -59,7 +63,7 @@ test.describe("organiser's arrival", () => {
     const admin = linkGroup(page, FR.adminLink);
     const warning = panel(page).getByRole("note");
     await expect(share.getByTestId("link")).toHaveText(`${origin}/e/${seededEvent.id}`);
-    await expect(admin.getByTestId("link")).toHaveText(`${origin}/e/${seededEvent.id}/admin#${seededEvent.token}`);
+    await showsLink(admin.getByTestId("link"), `${origin}/e/${seededEvent.id}/admin#${seededEvent.token}`, "the organiser's link is shown");
     await expect(admin).toContainText("Personnel");
     // Its exact text: `toContainText` takes a non-breaking space for the README's plain one.
     expect(await admin.getByText(/^Ne le partagez pas/).textContent()).toBe(FR.doNotShare);
@@ -109,7 +113,7 @@ test.describe("organiser's arrival", () => {
       const button = linkGroup(page, name).getByRole("button", { name: FR.copy });
       await button.click();
       await expect(linkGroup(page, name).getByRole("button", { name: FR.copied })).toBeVisible();
-      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+      expect((await page.evaluate(() => navigator.clipboard.readText())) === url, `${name}: the clipboard holds the link`).toBe(true);
       expect((await linkGroup(page, name).getByRole("button").first().boundingBox())!.height).toBeGreaterThanOrEqual(
         44,
       );
@@ -135,7 +139,8 @@ test.describe("organiser's arrival", () => {
 
     const link = admin.getByTestId("link");
     await link.click();
-    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(await link.innerText());
+    const selection = await page.evaluate(() => window.getSelection()?.toString());
+    expect(selection === (await link.innerText()), "the whole link is selected").toBe(true);
   });
 
   test("C4.5: Share opens the native sheet with the share link only", async ({ page, seededEvent, baseURL }) => {
@@ -155,8 +160,11 @@ test.describe("organiser's arrival", () => {
     expect((await share.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await share.click();
     await expect
-      .poll(() => page.evaluate(() => (window as unknown as { shared: unknown[] }).shared))
-      .toEqual([{ url: `${new URL(baseURL!).origin}/e/${seededEvent.id}` }]);
+      .poll(async () => {
+        const shared = await page.evaluate(() => (window as unknown as { shared: unknown[] }).shared);
+        return hideToken(JSON.stringify(shared), seededEvent.token);
+      })
+      .toBe(JSON.stringify([{ url: `${new URL(baseURL!).origin}/e/${seededEvent.id}` }]));
   });
 
   test("C4.5: without native sharing, there is no Share button and Copy takes the whole width", async ({
@@ -183,12 +191,12 @@ test.describe("organiser's arrival", () => {
     await page.goto(adminPath(seededEvent));
     const shown = await linkGroup(page, FR.adminLink).getByTestId("link").innerText();
     await page.reload();
-    await expect(linkGroup(page, FR.adminLink).getByTestId("link")).toHaveText(shown);
-    expect(new URL(page.url()).hash).toBe(`#${seededEvent.token}`);
+    await showsLink(linkGroup(page, FR.adminLink).getByTestId("link"), shown, "the same link after a reload");
+    expect(new URL(page.url()).hash === `#${seededEvent.token}`, "the URL keeps the token in its fragment").toBe(true);
 
     const later = await context.newPage();
     await later.goto(adminPath(seededEvent));
-    await expect(linkGroup(later, FR.adminLink).getByTestId("link")).toHaveText(shown);
+    await showsLink(linkGroup(later, FR.adminLink).getByTestId("link"), shown, "the same link in another tab");
   });
 
   test("C4.9: the panel appears only once the server has checked the token, sent in a request's body", async ({
@@ -209,7 +217,7 @@ test.describe("organiser's arrival", () => {
     await expect.poll(() => bodies.length).toBe(1);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
     await expect(panel(page)).toHaveCount(0);
-    expect(bodies[0]).toContain(seededEvent.token);
+    expect(bodies[0].includes(seededEvent.token), "the check's body carries the token").toBe(true);
 
     release();
     await expect(panel(page)).toBeVisible();
@@ -233,7 +241,7 @@ test.describe("organiser's arrival", () => {
     });
 
     const response = await page.goto(adminPath(seededEvent), { waitUntil: "networkidle" });
-    expect(await response!.text()).not.toContain(seededEvent.token);
+    expect((await response!.text()).includes(seededEvent.token), "the page's HTML holds the token").toBe(false);
     await expect(panel(page)).toBeVisible();
     await page.reload({ waitUntil: "networkidle" });
     await expect(panel(page)).toBeVisible();

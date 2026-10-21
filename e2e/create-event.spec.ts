@@ -1,5 +1,5 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, expectUrl, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
 
@@ -166,7 +166,7 @@ test.describe("creating an event from /nouveau", () => {
     await field(page, FR.retourTime).fill("18:00"); // end time: 5
     await createButton(page).click(); // 6
 
-    await expect(page).toHaveURL(ARRIVAL);
+    await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sortie ski du club");
     expect(Date.now() - start).toBeLessThan(30_000);
@@ -213,7 +213,7 @@ test.describe("creating an event from /nouveau", () => {
     );
     await createButton(page).click();
     await checked;
-    await expect(page).toHaveURL(ARRIVAL);
+    await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
 
     const token = new URL(page.url()).hash.slice(1);
@@ -235,7 +235,7 @@ test.describe("creating an event from /nouveau", () => {
     await expect(field(page, FR.retourTime)).toHaveCount(0);
     await createButton(page).click(); // 6
 
-    await expect(page).toHaveURL(ARRIVAL);
+    await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
     await expect(page.getByRole("tab")).toHaveCount(0);
   });
@@ -260,7 +260,7 @@ test.describe("creating an event from /nouveau", () => {
     await expect(field(page, FR.location)).toHaveValue("Chalet des Écureuils");
     await expect(field(page, FR.allerTime)).toHaveValue("07:30");
     await expect(field(page, FR.location)).not.toHaveAttribute("aria-invalid", "true");
-    await expect(page).toHaveURL(/\/nouveau$/);
+    await expectUrl(page, /\/nouveau$/, "still the creation form");
     expect(sent.length).toBe(0);
   });
 
@@ -327,7 +327,7 @@ test.describe("creating an event from /nouveau", () => {
     await expect(field(page, FR.allerDate)).toBeFocused();
     await expect(field(page, FR.title)).toHaveValue("Sortie ski du club");
     await expect(createButton(page)).toBeEnabled();
-    await expect(page).toHaveURL(/\/nouveau$/);
+    await expectUrl(page, /\/nouveau$/, "still the creation form");
     expect(sent.length).toBe(1);
   });
 
@@ -339,7 +339,7 @@ test.describe("creating an event from /nouveau", () => {
 
     await field(page, FR.retourTime).fill("18:00");
     await createButton(page).click();
-    await expect(page).toHaveURL(ARRIVAL);
+    await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("W".repeat(80));
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
     expect(await horizontalOverflow(page)).toBe(0);
@@ -367,7 +367,7 @@ test.describe("creating an event from /nouveau", () => {
     await expect.poll(() => sent.length).toBe(1);
 
     release();
-    await expect(page).toHaveURL(ARRIVAL);
+    await expectUrl(page, ARRIVAL, "the organiser's link");
     expect(sent.length).toBe(1);
   });
 
@@ -409,13 +409,13 @@ test.describe("creating an event from /nouveau", () => {
     await expect(page.getByText(FR.required)).toHaveCount(0);
     const alertBox = (await alert(page).boundingBox())!;
     expect(alertBox.y + alertBox.height).toBeLessThanOrEqual((await createButton(page).boundingBox())!.y);
-    await expect(page).toHaveURL(/\/nouveau$/);
+    await expectUrl(page, /\/nouveau$/, "still the creation form");
     await expect(field(page, FR.title)).toHaveValue("Sortie ski du club");
     await expect(field(page, FR.retourTime)).toHaveValue("18:00");
 
     await context.setOffline(false);
     await createButton(page).click();
-    await expect(page).toHaveURL(ARRIVAL);
+    await expectUrl(page, ARRIVAL, "the organiser's link");
   });
 
   test("server error: the same alert, with no technical detail, and the values kept", async ({ page }) => {
@@ -530,7 +530,7 @@ test.describe("creating an event without JavaScript", () => {
 
     await field(page, FR.title).fill("Sortie ski du club");
     await field(page, FR.title).press("Enter");
-    await expect(page).toHaveURL(/\/nouveau$/);
+    await expectUrl(page, /\/nouveau$/, "still the creation form");
     expect(sent.length).toBe(0);
   });
 });
@@ -583,7 +583,7 @@ test.describe("creating an event in a browser set to English", () => {
     await field(page, "End time").fill("18:00");
     await createButton(page, "Create").click();
     await expect(field(page, "End date")).toHaveAccessibleDescription("The end must be after the start.");
-    await expect(page).toHaveURL(/\/nouveau$/);
+    await expectUrl(page, /\/nouveau$/, "still the creation form");
     expect(sent.length).toBe(0);
   });
 });
