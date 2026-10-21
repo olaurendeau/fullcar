@@ -12,6 +12,19 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * 5. the opacities of the element and its ancestors multiply to 1;
  * 6. no more visible boxShadow layer focused than unfocused. The unfocused state is read
  *    before the keyboard moves (`noteUnfocused`, `press`), never by `blur()` or `focus()`.
+ *    An element the action itself renders, then focuses (a sixth line unfolded, an alert,
+ *    « Chargement… »), was not there to be read: it counts as no visible layer unfocused,
+ *    so any visible layer it has focused fails. A layer is visible if its colour is not
+ *    transparent and one of its lengths is not 0: `ring-0` writes a coloured layer of no
+ *    length (checkbox, radio-group).
+ *    Layers are counted, not compared: a halo that replaced a shadow already visible would
+ *    pass. No component is in that case. Tailwind 4 writes `ring-*` in `--tw-ring-shadow`
+ *    and `shadow-*` in `--tw-shadow`, two layers apart, so a ring is always added to a
+ *    shadow. No component of `ui/` has a visible shadow unfocused (the tabs' `data-active:`
+ *    never applies: Radix sets `data-state="active"`). The one layer visible unfocused is the
+ *    error halo, `aria-invalid:ring-3`, which a focus halo would replace in the same layer.
+ *    F1.8 excludes that twice: « Lieu » is not in error yet when the unfocused state is read,
+ *    before Enter on « Créer », and F1.8 also asks for no visible layer at all focused.
  * Colours are read in sRGB through a canvas: the computed style writes oklch or oklab.
  */
 
@@ -37,11 +50,16 @@ type Read = {
 const RING: Rgba = { r: 115, g: 115, b: 115, a: 1 };
 const STORE = "__focusRingUnfocused";
 
-/** A computed colour of the element in sRGB, its opacity `a` from 0 to 1. */
+/**
+ * A computed colour of the element in sRGB, its opacity `a` from 0 to 1. The property is
+ * written as in CSS (`background-color`): another name, or one that is no colour, throws.
+ */
 export const rgba = (locator: Locator, property: string): Promise<Rgba> =>
   locator.evaluate((element, name) => {
+    const value = getComputedStyle(element).getPropertyValue(name);
+    if (!CSS.supports("color", value)) throw new Error(`rgba: ${name} is no colour property ("${value}")`);
     const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
-    context.fillStyle = getComputedStyle(element).getPropertyValue(name);
+    context.fillStyle = value;
     context.fillRect(0, 0, 1, 1);
     const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
     return { r, g, b, a: a / 255 };
@@ -165,7 +183,9 @@ function readRing(locator: Locator, offset: Offset): Promise<Read> {
       }
       let opacity = 1;
       for (let at: Element | null = element; at; at = at.parentElement) opacity *= Number(getComputedStyle(at).opacity);
-      const unfocused = (window as unknown as Record<string, WeakMap<Element, string> | undefined>)[store]?.get(element);
+      // No record at all: nothing was noted. No entry: the action rendered the element.
+      const noted = (window as unknown as Record<string, WeakMap<Element, string> | undefined>)[store];
+      const unfocused = noted && (noted.has(element) ? visible(noted.get(element)!) : 0);
       const name =
         element.getAttribute("aria-label") ||
         (element as HTMLElement).innerText?.trim().replace(/\s+/g, " ").slice(0, 40) ||
@@ -181,7 +201,7 @@ function readRing(locator: Locator, offset: Offset): Promise<Read> {
         backgrounds,
         opacity,
         shadows: visible(style.boxShadow),
-        unfocusedShadows: unfocused === undefined ? null : visible(unfocused),
+        unfocusedShadows: unfocused ?? null,
       };
     },
     { inside: offset < 0, store: STORE },

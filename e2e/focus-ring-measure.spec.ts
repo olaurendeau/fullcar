@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { expectRing, press, rgba, walk } from "./focus-ring";
+import { expectRing, noteUnfocused, press, rgba, walk } from "./focus-ring";
 
 /*
  * #319, epic #236: the focus-ring measure (language-switch v3.3.1, steps 0 to 6) checked on
@@ -31,6 +31,9 @@ test.describe("the focus-ring measure", () => {
     const background = await rgba(text, "background-color");
     expect(background).toMatchObject({ r: 235, g: 235, b: 235 });
     expect(background.a).toBeCloseTo(0.5, 2);
+    // Written in camelCase, or no colour at all: an error, not black.
+    await expect(rgba(text, "backgroundColor")).rejects.toThrow('rgba: backgroundColor is no colour property ("")');
+    await expect(rgba(text, "display")).rejects.toThrow('rgba: display is no colour property ("block")');
   });
 
   test("a 2 px outline on white gives 4.74", async ({ page }) => {
@@ -54,6 +57,56 @@ test.describe("the focus-ring measure", () => {
     await press(page, "Tab");
     const both = expectRing(page.getByRole("button", { name: "Les deux" }), SHORT);
     await expect(both).rejects.toThrow(/^(?![\s\S]*outlineStyle)[\s\S]*1 visible boxShadow layer more than unfocused/);
+  });
+
+  test("an element focused by a click, its outline on :focus only, fails", async ({ page }) => {
+    await open(page, "<button>Créer</button>", `button:focus { ${RING} }`);
+    await noteUnfocused(page);
+    await page.getByRole("button").click();
+    await expect(expectRing(page.getByRole("button"), SHORT)).rejects.toThrow(
+      /ratio 4\.74:1: no keyboard focus \(:focus-visible\)$/,
+    );
+  });
+
+  test("a coloured layer of no length, as ring-0 writes, is no visible layer", async ({ page }) => {
+    await open(
+      page,
+      '<input type="checkbox" aria-label="Léa">',
+      "input:focus-visible { box-shadow: 0 0 0 0 rgb(255 255 255); }",
+    );
+    await press(page, "Tab");
+    await expectRing(page.getByRole("checkbox"), SHORT);
+  });
+
+  test("an element the key renders, then focuses, counts as no visible layer unfocused", async ({ page }) => {
+    // Enter shows a line and focuses it, as « Afficher les N autres » does with the sixth.
+    await open(
+      page,
+      `<button>Avec halo</button><button>Afficher</button><script>
+        for (const button of document.querySelectorAll("button")) {
+          button.addEventListener("click", () => {
+            const line = Object.assign(document.createElement("span"), { tabIndex: -1 });
+            line.textContent = button.textContent === "Afficher" ? "Sixième" : "Halo";
+            line.className = button.textContent === "Afficher" ? "" : "halo";
+            button.after(line);
+            line.focus();
+          });
+        }
+      </script>`,
+      `.halo:focus-visible { ${HALO} }`,
+    );
+    await press(page, "Tab");
+    await press(page, "Tab");
+    await press(page, "Enter");
+    const ring = await expectRing(page.getByText("Sixième"), SHORT);
+    expect(ring.ratio.toFixed(2)).toBe("4.74");
+    await press(page, "Shift+Tab");
+    await press(page, "Shift+Tab");
+    await expect(page.getByRole("button", { name: "Avec halo" })).toBeFocused();
+    await press(page, "Enter");
+    await expect(expectRing(page.getByText("Halo", { exact: true }), SHORT)).rejects.toThrow(
+      /ratio 4\.74:1: 2 visible boxShadow layer more than unfocused$/,
+    );
   });
 
   test("a parent at opacity 0.5 fails", async ({ page }) => {
