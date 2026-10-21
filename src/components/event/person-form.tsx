@@ -162,7 +162,8 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
   const creationId = useRef<string | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
   // Each form its own: a sheet reopened during a send shows a new form, and the sending one is gone.
-  // A change is about its person, whichever form sends it; a registration, about its form.
+  // A change is about its person, whichever form sends it; a registration, about the first name it
+  // sends, whichever form, tab or seat's sheet sends it (`person:new:{prénom}`, #228).
   const sends = useSends(open, mode.kind === "edit" ? `person:${mode.person.id}` : undefined);
   const editing = mode.kind === "edit";
   const { leg, hasRetour } = mode.kind === "add" ? mode : { leg: "aller" as const, hasRetour: false };
@@ -186,14 +187,19 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // A field is changed when it differs, character for character, from what the form showed:
+    // put back as it was, it is not (v4.4-2). In `edit` mode, only what changed is sent.
+    const changed = PERSON_FIELDS.filter((name) => values[name] !== shown[name]);
+    // Nothing changed: the sheet closes, as after a change done; nothing is checked nor sent,
+    // and the bar keeps what it holds (v4.4, #298).
+    if (mode.kind === "edit" && changed.length === 0) return onDone(mode.person.id);
     const checked = validatePerson(values);
     if (!checked.ok) return showErrors(checked.errors, checked.first);
     setErrors({});
     setProblem(null);
-    // In `edit` mode, only what changed is sent. Withdraws a failure any form about this person
-    // left for the bar, if this send carries all its fields.
-    const changed = PERSON_FIELDS.filter((name) => values[name] !== shown[name]);
-    const sheet = sends(mode.kind === "edit" ? changed : []);
+    // Withdraws a failure any form about this person left for the bar, if this send carries all its
+    // fields; a registration, one of the same first name, its spaces trimmed and its case kept.
+    const sheet = mode.kind === "edit" ? sends(changed) : sends([], [`person:new:${checked.person.firstName}`]);
     const answer =
       mode.kind === "add"
         ? await mode.addPerson({

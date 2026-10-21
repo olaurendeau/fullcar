@@ -11,7 +11,7 @@ import { EditRideButton, type UpdateRide } from "./ride-form";
  * « Complet » when no seat is left (v4-13); under it, its place and note, then a line per
  * passenger and one per free seat. The numbers the state carries are
  * `tel:` links (C10.1). A free seat is a button, inactive until the device's persons are
- * known (C5.9) and without JavaScript; its tap opens the sheet (`onTakeSeat`, #91). Long
+ * known (C5.9) and without JavaScript; its tap takes a seat or opens a sheet (`onTakeSeat`, #92). Long
  * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
  * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
  * removes it (C8.1).

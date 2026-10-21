@@ -132,6 +132,7 @@
       "edit": "Edit {firstName}"
     },
     "remember": "No account, no e-mail: this device will remember it for this event.",
+    "forSeat": "This person will take a seat in {driver}’s car.",
     "firstName": "First name",
     "phone": "Phone (optional)",
     "phoneHint": "Only visible to the organiser and to the people in the same car.",
