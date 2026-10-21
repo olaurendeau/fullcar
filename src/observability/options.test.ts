@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import {
-  captureException, continueTrace, createTransport, getDefaultIntegrations, initWithoutDefaultIntegrations, startSpan,
-  type NodeClient,
+  captureException, continueTrace, createTransport, defaultStackParser, getDefaultIntegrations, initWithoutDefaultIntegrations,
+  startSpan, type NodeClient,
 } from "@sentry/nextjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, startBrowserSentry } from "./client";
@@ -126,6 +126,27 @@ describe("on the server, with a DSN", () => {
     expect(values({ code: "23505", message: "duplicate key" })).toEqual(["cause", "database error (SQLSTATE 23505)"]);
     expect(values({ code: "ECONNREFUSED", errno: -111 })).toEqual(["cause", "database error (errno -111)"]);
     expect(values(new Error("thrown"))).toEqual(["cause", "thrown"]);
+  });
+
+  it("keeps of a database error's stack the frames of code alone, none of the lines of its message", () => {
+    // pg's DatabaseError is named "error", and the parser skips only the first line of a stack.
+    const error = Object.assign(new Error(), { name: "error", code: "22P02" });
+    error.stack = [
+      'error: invalid input syntax for type integer: "seat',
+      "    at row 12",
+      '    at noon (10:30:00)"',
+      "    at Parser.parseErrorMessage (/var/task/node_modules/pg-protocol/dist/parser.js:285:98)",
+      "    at async loadEvent (/var/task/.next/server/chunks/ssr/4821.js:1:2345)",
+    ].join("\n");
+    // As the SDK parses an error: its first line, the name and the message, is skipped.
+    const frames = defaultStackParser(error.stack, 1);
+    expect(frames.length).toBe(4);
+    const event = { exception: { values: [{ type: "error", value: "invalid input syntax", stacktrace: { frames } }] } };
+    const kept = databaseErrors(event, { originalException: error }).exception.values[0].stacktrace.frames;
+    expect(kept.map(({ filename }) => filename)).toEqual([
+      "/var/task/.next/server/chunks/ssr/4821.js",
+      "/var/task/node_modules/pg-protocol/dist/parser.js",
+    ]);
   });
 
   it("hands a request's error to captureRequestError", async () => {

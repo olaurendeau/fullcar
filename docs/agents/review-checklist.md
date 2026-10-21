@@ -91,7 +91,7 @@ celui qui écrit le code.
   tant que la PR ne l'y ajoute pas.
 - La purge est testée : une donnée créée pour un événement passé disparaît 30 jours après
   son dernier leg, avec et sans retour.
-- Aucun tracking, aucune requête vers un tiers, aucun script distant, aucune police web :
+- Aucun tracking, aucune requête du navigateur vers un tiers, aucun script distant, aucune police web :
   la pile de polices système suffit. Vercel Web Analytics et Speed Insights restent
   désactivés.
 - La route de purge refuse tout appel sans le bon `CRON_SECRET`.
@@ -111,7 +111,9 @@ celui qui écrit le code.
   donnée de personne passée au SDK à la main (`setUser`, `setTag`, `setExtra`, `setContext`,
   `captureMessage`), est bloquant.
 - Une erreur qui peut partir a un `name` qui finit par `Error` : sinon le SDK lit la première
-  ligne de sa pile comme une frame, et son message avec (#239).
+  ligne de sa pile comme une frame, et son message avec (#239). Seule exception, le
+  `DatabaseError` de pg, qui s'appelle `error` : `databaseErrors` (`src/observability/server.ts`)
+  n'en garde que le code et les frames de code.
 - Le navigateur ne parle qu'à notre origine (`tunnelRoute: "/monitoring"`). Aucun DSN ni
   jeton Sentry écrit en dur ; `SENTRY_AUTH_TOKEN` n'est lu qu'au build, et sans lui aucune
   source map n'est produite.

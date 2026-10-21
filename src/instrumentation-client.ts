@@ -13,7 +13,9 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
     .then(({ browserEnv, startBrowserSentry }) => startBrowserSentry(browserEnv()))
     .then((started) => {
       sentry = started;
-    });
+    })
+    // A chunk that does not load (network down, blocked): the page goes on as without a DSN.
+    .catch(() => undefined);
 }
 
 /** A navigation of the App Router: nothing is passed on until the SDK has loaded. */

@@ -1,6 +1,7 @@
 import type * as Sentry from "@sentry/nextjs";
 import { errorCode } from "@/db/failure";
 import { exactIntegrations, registerHooks, sentryOptions, type SentryEnv } from "./options";
+import { inCode } from "./scrub";
 
 /*
  * Sentry on the server (Node.js runtime), started by `register()` in `src/instrumentation.ts`.
@@ -33,13 +34,18 @@ export const SERVER_INTEGRATIONS = [
 
 /**
  * An error of the database or of the system: `database error (SQLSTATE x)` and nothing of its
- * message, which may quote a value, as `databaseFailure` logs it (`src/db/failure.ts`).
+ * message, which may quote a value, as `databaseFailure` logs it (`src/db/failure.ts`). Of its
+ * stack, the frames of code alone: pg's `DatabaseError` is named `error`, not `…Error`, and the
+ * parser makes a frame of any line of its message after the first that reads as one (`at …`).
  */
 export function databaseErrors<E extends Sentry.Event>(event: E, hint: Sentry.EventHint): E {
   const code = errorCode(hint.originalException);
   const values = event.exception?.values;
+  if (!code || !values?.length) return event;
   // The thrown error is the last one: its causes come before it.
-  if (code && values?.length) values[values.length - 1].value = `database error (${code})`;
+  const thrown = values[values.length - 1];
+  thrown.value = `database error (${code})`;
+  if (thrown.stacktrace?.frames) thrown.stacktrace.frames = thrown.stacktrace.frames.filter(inCode);
   return event;
 }
 

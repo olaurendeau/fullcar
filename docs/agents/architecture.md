@@ -25,8 +25,10 @@ est lu par trente personnes pendant trois jours, puis purgé.
 Polices : la pile de polices système, **aucune police web**, ni distante ni servie par
 l'application. Aucune requête du navigateur vers un tiers, et rien à télécharger avant le
 premier affichage. Avec un DSN Sentry (#234), le navigateur envoie ses rapports d'erreur à
-notre origine, `/monitoring`, que Vercel réécrit vers Sentry : Sentry voit l'IP de Vercel,
-pas celle du visiteur.
+notre origine, `/monitoring`, que Vercel réécrit vers Sentry. La réécriture peut transmettre
+l'IP du visiteur (`X-Forwarded-For`) : ce qui la tient hors de Sentry, c'est
+`infer_ip: "never"`, que le SDK du navigateur pose avec `userInfo` coupé, et le réglage
+« Prevent Storing of IP Addresses » du projet Sentry.
 
 ## Environnements et base de données
 
