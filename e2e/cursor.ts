@@ -1,4 +1,5 @@
 import { expect, type Locator } from "@playwright/test";
+import { withoutNumbers } from "./without-numbers";
 
 /*
  * The pointer of the language-switch design (v3.3.3, #347), as its README reads it: the
@@ -6,9 +7,6 @@ import { expect, type Locator } from "@playwright/test";
  * the hover: no `hover()`. Expected values are exact: `pointer` (the hand), `default` (the
  * arrow), `text`, and `auto` where it is named.
  */
-
-/** Any number in a message, hidden: a `tel:` link is named by its number. */
-const withoutNumbers = (text: string) => text.replace(/\+?\d[\d .\-()]{4,}\d/g, "<numéro>");
 
 /** The computed `cursor` of `locator`, once visible. A failure names no phone number. */
 export async function cursorOf(locator: Locator): Promise<string> {

@@ -94,6 +94,28 @@ test.describe("the pointer", () => {
     });
   });
 
+  /*
+   * #354: no element of src/ has `role="button"` today, but the rule of the design names it
+   * (v3.3.3). Two of them, added to a page of the app, read its stylesheet: removing the
+   * selector from either line of `globals.css` fails here.
+   */
+  test('a role="button" has the hand, the arrow when aria-disabled', async ({ page }) => {
+    await open(page, "/");
+    await page.evaluate(() => {
+      for (const [id, disabled] of [["active", false], ["inactive", true]] as const) {
+        const element = document.createElement("div");
+        element.setAttribute("role", "button");
+        element.dataset.test = id;
+        if (disabled) element.setAttribute("aria-disabled", "true");
+        element.textContent = id;
+        document.body.append(element);
+      }
+    });
+    expect(
+      await cursorsOf({ active: page.locator('[data-test="active"]'), "aria-disabled": page.locator('[data-test="inactive"]') }),
+    ).toEqual({ active: "pointer", "aria-disabled": "default" });
+  });
+
   test.describe("without JavaScript", () => {
     test.use({ javaScriptEnabled: false });
 
@@ -191,15 +213,25 @@ test.describe("the pointer on the event's page", () => {
     }) => {
       const release = await holdActions(page);
       await open(page, `/e/${seededEvent.id}`);
-      const seats = await panel(page).getByRole("button", { name: /^Place libre/ }).all();
-      expect(seats.length, "the free seats").toBeGreaterThan(0);
-      const actions = [button(panel(page), "Ajouter une personne"), button(panel(page), "Proposer une voiture"), ...seats];
-      for (const action of actions) await expect(action).toBeDisabled();
-      expect(await Promise.all(actions.map(cursorOf))).toEqual(actions.map(() => "default"));
+      // #354: each one by its name, so that a failure says which one.
+      const actions: Record<string, Locator> = {
+        "Ajouter une personne": button(panel(page), "Ajouter une personne"),
+        "Proposer une voiture": button(panel(page), "Proposer une voiture"),
+      };
+      for (const driver of ["Claire", "Marc"]) {
+        const seats = await freeSeats(page, driver).all();
+        expect(seats.length, `the free seats of ${driver}'s car`).toBeGreaterThan(0);
+        seats.forEach((seat, index) => (actions[`free seat ${index + 1} of ${driver}'s car`] = seat));
+      }
+      // Every free seat of the panel, as before #354: the two cars hold them all.
+      expect(Object.keys(actions).length - 2, "the free seats").toBe(await panel(page).getByRole("button", { name: /^Place libre/ }).count());
+      const each = (cursor: string) => Object.fromEntries(Object.keys(actions).map((name) => [name, cursor]));
+      for (const action of Object.values(actions)) await expect(action).toBeDisabled();
+      expect(await cursorsOf(actions)).toEqual(each("default"));
 
       release();
-      for (const action of actions) await expect(action).toBeEnabled();
-      expect(await Promise.all(actions.map(cursorOf))).toEqual(actions.map(() => "pointer"));
+      for (const action of Object.values(actions)) await expect(action).toBeEnabled();
+      expect(await cursorsOf(actions)).toEqual(each("pointer"));
     });
 
     test("P1.6: in « Proposer une voiture », a radio button, its label, « Valider » and « Fermer » have the hand; the place and the note have text; the time has the arrow", async ({
