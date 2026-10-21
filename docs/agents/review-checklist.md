@@ -91,9 +91,12 @@ celui qui écrit le code.
   tant que la PR ne l'y ajoute pas.
 - La purge est testée : une donnée créée pour un événement passé disparaît 30 jours après
   son dernier leg, avec et sans retour.
-- Aucun tracking, aucune requête vers un tiers, aucun script distant, aucune police web :
-  la pile de polices système suffit. Vercel Web Analytics et Speed Insights restent
-  désactivés.
+- Aucune requête vers un tiers, aucun script distant, aucune police web : la pile de polices
+  système suffit. Speed Insights reste désactivé.
+- À partir de #346, Vercel Web Analytics n'est monté qu'en production
+  (`NEXT_PUBLIC_VERCEL_ENV`), avec `analyticsBeforeSend`. Une page vue qui part avec un
+  identifiant d'événement, une query ou un fragment, un `beforeSend` retiré, un `mode`
+  forcé ou un événement personnalisé (`track`) sont bloquants.
 - La route de purge refuse tout appel sans le bon `CRON_SECRET`.
 
 ## Sentry (à partir de #234)

@@ -60,3 +60,16 @@ changement.
 La release et l'environnement viennent de Vercel (`VERCEL_GIT_COMMIT_SHA`, `VERCEL_ENV`, et
 leurs versions `NEXT_PUBLIC_` dans le navigateur) : « Automatically expose System Environment
 Variables » doit rester activé.
+
+## Vercel Web Analytics
+
+La mesure d'audience de Vercel n'est chargée que sur le déploiement de production
+(`NEXT_PUBLIC_VERCEL_ENV` vaut `production`) : rien en local, en CI ni sur une preview. Elle
+ne pose aucun cookie. Une page vue part réduite à son origine et à sa route (`/`, `/nouveau`,
+`/e/[id]`, `/e/[id]/admin`) : ni identifiant d'événement, ni query, ni fragment, donc aucun
+jeton. Une autre page ne part pas.
+
+**À faire par le propriétaire** : dans le tableau de bord Vercel, ouvrir **Analytics**, choisir
+le projet, cliquer sur **Enable**, puis redéployer. Sans cette activation, le script n'existe
+pas sur le domaine et rien n'est envoyé. « Automatically expose System Environment Variables »
+doit rester activé : sans `NEXT_PUBLIC_VERCEL_ENV`, le composant n'est pas monté.

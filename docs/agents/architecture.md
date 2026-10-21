@@ -26,7 +26,8 @@ Polices : la pile de polices système, **aucune police web**, ni distante ni ser
 l'application. Aucune requête du navigateur vers un tiers, et rien à télécharger avant le
 premier affichage. Avec un DSN Sentry (#234), le navigateur envoie ses rapports d'erreur à
 notre origine, `/monitoring`, que Vercel réécrit vers Sentry : Sentry voit l'IP de Vercel,
-pas celle du visiteur.
+pas celle du visiteur. Vercel Web Analytics (#346) charge son script et envoie ses pages
+vues à notre origine aussi (`/_vercel/insights/…`, ou un chemin propre au projet).
 
 ## Environnements et base de données
 
@@ -428,6 +429,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 | rapports d'erreur | `src/observability/`, à partir de #234 | Sentry, seulement avec `NEXT_PUBLIC_SENTRY_DSN` : `register()` (`src/instrumentation.ts`) et `src/instrumentation-client.ts` importent le SDK dynamiquement, et sans DSN ne le chargent pas ; `options.ts` coupe `dataCollection`, la propagation de trace et toute intégration hors d'une liste exacte (`server.ts`, `client.ts`) ; les hooks de `scrub.ts` reconstruisent chaque envoi, et `registerHooks` y ajoute `createDsc` et `beforeEnvelope` ; une erreur de base part en `database error (SQLSTATE x)` |
+| mesure d'audience | `src/components/analytics/web-analytics.tsx` et `src/observability/analytics.ts`, à partir de #346 | `<Analytics />` de `@vercel/analytics/next`, monté par le layout racine seulement si `NEXT_PUBLIC_VERCEL_ENV` vaut `production` ; `analyticsBeforeSend` réduit chaque page vue à l'origine et à la route (`/`, `/nouveau`, `/e/[id]`, `/e/[id]/admin`), sans query ni fragment, et ne laisse partir ni une autre page ni un événement personnalisé |
 
 Une server action renvoie des **données simples** (sérialisables) et des **clés d'erreur**
 (traduites par la vue), jamais un message rédigé ni le détail d'une erreur Postgres. Elle
@@ -507,7 +509,9 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   toutes les deux, et lève `23514` avec un nom de contrainte. Quand `ride_id` est
   renseigné, `placement_driver_on_leg` verrouille d'abord le Ride (`FOR KEY SHARE`) :
   l'ordre reste Ride, puis Person (voir « Concurrence »).
-- **Zéro tracking** : Vercel Web Analytics et Speed Insights restent désactivés.
+- **Mesure d'audience** : à partir de #346, Vercel Web Analytics, sur le déploiement de
+  production seulement, sans cookie, et une page vue ne porte que son origine et sa route
+  (voir « Emplacement du code »). Speed Insights reste désactivé.
 
 ## Décisions à remonter à l'humain
 
