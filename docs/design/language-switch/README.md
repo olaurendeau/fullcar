@@ -8,10 +8,123 @@
   (#337, PR #342)
 - v3.3.3 : le pointeur, pour toute l’application (#347) : la main sur ce qui se clique, la
   flèche sur ce qui est inactif ; « Placer » inactif passe de `not-allowed` à la flèche
+- v3.3.4 : l’anneau d’« Annuler » dans la barre de messages est entier sur ses quatre côtés :
+  sa rangée prend 2 px de marge à droite, et le bouton une marge de défilement de 4 px en haut
+  et en bas (#350). Critère F1.19
 - Page : `index.html` (autonome, maquettes à 360 px de large). Les sections de la v2
   montrent l’écran tel qu’il était le 17/10 (en-tête « Aller » / « Retour », bas de page sans
   « Accueil ») : seules les sections « L’anneau de focus (v3) » et « Le pointeur (v3.3.3) »
   sont à jour de l’écran actuel.
+
+## Ce qui change en v3.3.4 : l’anneau d’« Annuler » dans la barre (#350)
+
+### Le problème
+
+Une personne au clavier atteint « Annuler » dans la barre de messages (#340). Son contour,
+à 0 px (règle 4 de la v3), déborde du bouton de 2 px de chaque côté. Le bouton est dans la
+dernière colonne de la liste des messages, sur une rangée en `pl-2` sans marge à droite : son
+bord droit est celui de la liste. Or la liste défile (`overflow-y: auto`), ce qui rogne aussi
+ce qui dépasse sur les côtés. Le côté droit du contour est donc coupé. Mesuré dans Chromium
+à 360 px : à droite du bouton, les pixels ont la couleur du fond de la barre au lieu de
+`#737373`. Le contour est ouvert d’un côté, et aucun critère ne le mesure.
+
+### La règle
+
+1. La rangée d’« Annuler » prend **2 px de marge à droite** (`pr-0.5`), soit l’épaisseur du
+   contour. Le contour reste à **0 px**, comme celui de « Fermer », juste à côté : il a
+   désormais la place de se dessiner dans la liste, à droite comme ailleurs (4 px en haut et
+   en bas, 8 px à gauche).
+2. Le texte d’une ligne qui porte « Annuler » perd ces 2 px : 143 px au lieu de 145 à 360 px
+   (159 au lieu de 161 en anglais). Les autres lignes ne changent pas.
+3. **Quand la liste défile**, le bouton prend aussi `scroll-my-1` (`scroll-margin-block:
+   4px`, la marge haute et basse de sa rangée). Un « Annuler » coupé par le bord haut ou bas
+   de la liste, puis atteint au clavier, est amené en vue entier, contour compris. Sans
+   cette marge, Chromium le colle au bord de la liste, à 0 px, et le côté haut ou bas du
+   contour est coupé ; avec elle, l’écart est de 4 px. Mesuré à la revue, puis de nouveau
+   en v3.3.4, dans Chromium : un bouton coupé de 20 à 24 px au bord bas ou haut donne 0 px
+   sans la marge, et 4 px avec. Un bouton entièrement caché est centré, avec ou sans elle.
+4. Rien d’autre ne change : ni la couleur, ni l’épaisseur, ni le décalage, ni le pointeur.
+
+### Les états de la v3.3.4
+
+| état | ce qui se voit | critère |
+|---|---|---|
+| réussite seule, « Annuler » atteint au clavier | contour entier, à 0 px, sur `#171717` (3,78:1) | F1.19 |
+| barre en échec, l’« Annuler » d’un échec atteint au clavier | contour entier, à 0 px, sur blanc (4,74:1), à 2 px au moins de la bordure rouge | F1.19 |
+| la liste qui défile, « Annuler » coupé par son bord bas, atteint par Tab | amené en vue à 4 px du bord ; contour entier | F1.19 |
+| la liste qui défile, « Annuler » coupé par son bord haut, atteint par Maj+Tab depuis « Fermer » | amené en vue à 4 px du bord ; contour entier | F1.19 |
+| hors ligne, chargement, vide, sans JavaScript | sans objet : sans barre, pas d’« Annuler » | — |
+
+### Les mots de la v3.3.4
+
+Aucun. « Annuler » garde son nom et son `aria-describedby`.
+
+### Critère de la v3.3.4
+
+- **F1.19** « Annuler » dans la barre, atteint au clavier (Tab ou Maj+Tab, jamais
+  `focus()`), à 360 × 780, dans trois scènes :
+  1. **réussite seule** : Tom placé d’un tap dans la voiture de Sophie. La barre dit « Tom
+     est dans la voiture de Sophie », avec « Annuler » ;
+  2. **barre en échec** : le même placement, puis « Annuler » hors ligne. La barre porte
+     « Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de
+     nouveau « Annuler ». » avec son « Annuler », puis la réussite, sans le sien. On repasse
+     en ligne avant de mesurer ;
+  3. **la liste qui défile**, deux variantes. Dans chacune, l’« Annuler » de l’échec de Tom
+     est le seul de la barre : la réussite a perdu le sien (règle 6 d’event-board). La liste
+     déborde, et on la fait défiler par script (`scrollTop`, ce qui ne déplace pas le focus)
+     jusqu’à ce qu’« Annuler » soit **en partie** visible, coupé de 16 à 24 px. Avant la
+     touche, on vérifie qu’il est bien coupé : sa boîte dépasse celle de la liste ;
+     les autres échecs viennent d’actions de cellule envoyées comme dans
+     `e2e/bar-overflow.spec.ts` : la requête retenue (`gate`), la feuille fermée, puis une
+     réponse 500 (`cellThenClose`). Hors ligne, la réponse arriverait la feuille encore
+     ouverte, et l’échec y resterait (règle 9 d’event-board) ;
+     - **3a, le bord bas** : la scène 2, puis trois échecs de plus, écrits après et donc
+       au-dessus de celui de Tom.
+       La liste reçoit le focus au clavier (Tab), puis on la fait défiler pour couper
+       « Annuler » par son bord bas, puis **Tab** ;
+     - **3b, le bord haut** : trois échecs d’abord, puis le placement de Tom et son
+       « Annuler » hors ligne. L’échec de Tom, le plus récent, est en haut, et les trois
+       autres sont dessous. On atteint « Fermer » au clavier, par Maj+Tab depuis l’élément
+       qui suit la barre dans l’ordre de Tab. Puis on fait défiler la liste pour couper
+       « Annuler » par son bord haut, puis **Maj+Tab**.
+
+  Dans chaque scène :
+  - la mesure de la v3 passe (points 0 à 6), avec `outlineOffset` = `0px`. Le fond touché
+    est `rgb(23, 23, 23)` dans la scène 1, avec un rapport d’au moins 3,7, et blanc dans les
+    scènes 2 et 3 ;
+  - dans la scène 3, l’écart entre le bord du bouton et le bord de la liste par lequel il
+    était coupé vaut au moins 3,5 px (4 px attendus, `scroll-my-1`) ;
+  - **le contour tient dans la liste** : la boîte d’« Annuler » (`getBoundingClientRect`),
+    agrandie de 2 px de chaque côté, est entièrement dans la boîte de la liste
+    (`getByRole("group", { name: "Messages" })`), qui n’a pas de bordure : c’est la zone
+    qu’elle rogne. La tolérance est de 0,5 px, pour les sous-pixels, comme en F1.6 ;
+  - dans la scène 2, la règle des 2 px de F1.6 vaut aussi : la boîte agrandie reste à 2 px
+    au moins de la bordure rouge de la barre.
+
+  Dans les scènes 1 et 2, **les pixels** : on fait une capture de la barre
+  (`locator.screenshot`), lue à l’échelle de l’appareil. Au milieu de chaque côté du bouton,
+  le pixel situé à 1 px CSS hors du bouton, au centre de l’épaisseur du contour, vaut
+  `rgb(115, 115, 115)`, à 4 près par canal.
+
+  Sans `pr-0.5`, le test échoue dans toutes les scènes : la boîte agrandie dépasse la liste
+  de 2 px à droite, et le pixel de droite a la couleur du fond de la barre
+  (`rgb(23, 23, 23)` ou blanc). Sans `scroll-my-1`, il échoue dans la scène 3 : l’écart
+  vaut 0 px, et la boîte agrandie dépasse la liste de 2 px en bas (3a) ou en haut (3b).
+
+### Pour le développement de la v3.3.4
+
+- `message-bar.tsx`, la rangée d’« Annuler » : `pl-2` devient `pr-0.5 pl-2`. Le bouton garde
+  `focus-visible:outline-offset-0`.
+- Pas de marge sur la liste elle-même : toutes les lignes perdraient 2 px de texte, et la
+  liste n’en a besoin que pour ce bouton.
+- `scroll-my-1` sur le bouton, toujours : `pr-0.5` ne suffit pas quand la liste défile
+  (règle 3).
+- F1.19 rejoint F1.6, dans `e2e/bar-overflow.spec.ts`.
+
+### Hors périmètre de la v3.3.4
+
+- L’anneau de la liste et de « Fermer » : ils sont entiers (F1.6).
+- Le style d’« Annuler » hors focus, et au survol.
 
 ## Ce qui change en v3.3.3 : le pointeur (#347)
 
@@ -251,10 +364,11 @@ Aujourd’hui, rien ne remplace l’anneau : la personne cherche à l’œil que
 
    « Annuler », **dans** la liste de la barre depuis #340, prend 0 px comme « Fermer » : le
    code lui donne `focus-visible:outline-offset-0` (`message-bar.tsx`), et sa rangée lui
-   laisse 4 px en haut et en bas. Son côté droit, lui, est coupé par la liste, qui défile et
-   ne lui laisse aucune marge à droite : le contour n’est pas entier, ce que la mesure a
-   confirmé ; voir l’issue ouverte, liée sur la PR de #347. Aucun critère F1 ne le mesure
-   (corrigé en v3.3.3 : la v3 le disait non construit et lui prédisait −2 px).
+   laisse 4 px en haut et en bas. Depuis la v3.3.4 (#350), elle lui laisse aussi 2 px à
+   droite, où la liste, qui défile, coupait le contour, et le bouton prend `scroll-my-1`,
+   pour qu’un défilement au clavier ne le colle pas au bord haut ou bas : le contour est
+   entier sur ses quatre côtés (F1.19, décision 21). La v3 le disait non construit et lui prédisait −2 px ; la v3.3.3
+   l’a corrigé.
 5. **Partout où un élément reçoit le focus** : boutons de toutes les variantes,
    `destructive` compris ; liens (« Accueil », « Nous contacter », `tel:`, « Créer un
    événement ») ; champs, zone de texte, cases, boutons radio ; onglets et **panneau
@@ -320,7 +434,7 @@ Le seuil est 3:1.
 | `src/components/event/organiser-lists.tsx` | ligne (repère) ; titre de liste (repère, #314) | idem ; `outline-none` | 2 px, blanc |
 | `src/components/event/organiser-leg.tsx` | titre de leg (repère, #314) | `outline-none` | 2 px, blanc |
 | `src/components/event/admin-panel.tsx` | bouton qui replie l’espace ; alerte « lien non valide » (repère, #314) | idem + `focus-visible:ring-inset` ; `outline-none` | −2 px, blanc ; 2 px, blanc |
-| `src/components/event/message-bar.tsx` | la liste (`focus-visible:ring-3 focus-visible:ring-ring/50`, #311), « Fermer » (`Button`) | idem | 0 px, `primary` ou blanc |
+| `src/components/event/message-bar.tsx` | la liste (`focus-visible:ring-3 focus-visible:ring-ring/50`, #311), « Fermer » (`Button`) ; « Annuler » (#340, v3.3.4) | idem | 0 px, `primary` ou blanc ; « Annuler » : sa rangée prend `pr-0.5`, le bouton `scroll-my-1` |
 | `src/components/event/seat-sheet.tsx` | « Placer » `aria-disabled` | `aria-disabled:opacity-50` | 2 px, blanc ; inactif en couleurs |
 
 ### Les états
@@ -333,6 +447,7 @@ Le seuil est 3:1.
 | « Fermer » de la barre avec une réussite (fond sombre) | contour à 0 px, 3,78:1 | F1.6 |
 | « Fermer » de la barre avec un échec (bordure rouge) | contour à 0 px, 2 px de blanc avant la bordure | F1.6 |
 | la liste de la barre qui défile, atteinte par Tab | contour à 0 px | F1.6 |
+| « Annuler » de la barre, en réussite et en échec (v3.3.4) | contour à 0 px, entier sur ses quatre côtés | F1.19 |
 | le bouton qui replie l’espace organisateur | contour à −2 px | F1.7 |
 | un champ en erreur qui a le focus | contour, bordure rouge, pas de halo | F1.8 |
 | « Placer » inactif, avec et sans le focus | fond gris, texte gris, opaque ; contour au focus | F1.9 |
@@ -600,6 +715,7 @@ Les couleurs des maquettes sont celles de `src/app/globals.css` (`--muted-foregr
 
 | v3.3.3 : le pointeur, la main sur un bouton, un lien, un onglet, une case et son libellé ; la flèche sur « Placer » inactif et « Créer » sans JavaScript ; le texte sur un champ | « Le pointeur (v3.3.3) » | P1.1 à P1.11 |
 | v3.1 : l’anneau de focus sur fond blanc, `muted` et sombre ; avant / après ; confirmation ; barre en réussite et en échec, liste qui défile ; champ en erreur ; contour intérieur ; « Placer » inactif | « L’anneau de focus (v3) » | F1.1 à F1.11, F1.16 |
+| v3.3.4 : « Annuler » de la barre au focus, en réussite et en échec, contour entier | « L’anneau de focus (v3) », « Dans la barre de messages » | F1.19 |
 
 Non dessiné, parce que sans UI propre : la persistance au rechargement et à la visite
 suivante (L2.1 à L2.6), et le parcours de création en anglais (L2.8).
@@ -704,6 +820,19 @@ et se place au-dessus de la ligne du bas de page, jamais après « Nous contacte
     Raison : un écran tactile ne dessine pas de pointeur, la condition ne changerait rien de
     visible ; sans elle, les tests du projet `e2e` (Pixel 7) lisent la même valeur qu’un
     ordinateur, et P1.10 le vérifie sur un contexte de bureau.
+
+### Nouvelle en v3.3.4 (#350)
+
+21. Décision : la rangée d’« Annuler » prend 2 px de marge à droite (`pr-0.5`), et le contour
+    reste à 0 px. — Raison : c’est le seul côté coupé, et la marge ne coûte que 2 px au texte
+    de cette ligne. Le contour à l’intérieur (−2 px), l’autre piste de #350, est écarté : sur
+    la barre sombre, il recouvrirait la bordure d’« Annuler » (`primary-foreground/45`, à peu
+    près `#7d7d7d`), presque de la même couleur (1,15:1). Le focus ferait passer une bordure
+    grise de 1 px à 2 px, ce qui se voit à peine. Il différerait aussi de « Fermer », juste à
+    côté. Une marge sur toute la liste est écartée aussi : elle prendrait 2 px à chaque
+    ligne. Le bouton prend aussi `scroll-my-1` : quand la liste défile, Chromium colle au
+    bord un bouton qu’il amène en vue depuis une partie coupée, et la marge garde 4 px pour
+    le contour (revue de la v3.3.4, mesuré).
 
 ## Révisions
 
@@ -853,3 +982,35 @@ et se place au-dessus de la ligne du bas de page, jamais après « Nous contacte
   feuille d’où il vient ; la règle 4 de la v3 dit que le contour d’« Annuler » dans la barre
   est coupé à droite par la liste (mesuré ; suivi dans une issue ouverte). Republiée à la
   même URL.
+- v3.3.4 (2026-10-21) : #350. L’anneau d’« Annuler » dans la barre est coupé à droite par
+  la liste qui défile.
+  - La rangée prend `pr-0.5`, et le contour reste à 0 px (décision 21 ; le contour à
+    l’intérieur est écarté).
+  - Nouveau critère F1.19 : réussite seule, barre en échec, liste qui défile. Il mesure la
+    boîte agrandie du bouton dans la liste, et les pixels du contour.
+  - La règle 4 de la v3, le tableau des fichiers et celui des états sont alignés.
+  - La page ajoute « Annuler » au focus, dans les deux états de la barre, à la maquette
+    « Dans la barre de messages ».
+  - Une version de plus et pas une correction sur place : PR #347 copie déjà la v3.3.3 dans
+    le dépôt. Pas encore relue en revue de design. Republiée à la même URL.
+- v3.3.4 (suite) : revue de design : changements demandés. Un bloquant : la scène 3 de F1.19
+  n’atteignait pas l’état visé. Fin amenait déjà « Annuler » en vue, entier, avant Tab. Et
+  dans cet état, le relecteur a mesuré un bouton collé au bord de la liste (0 px), au contour
+  coupé en haut ou en bas, que `scroll-my-1` porte à 4 px. Une suggestion : dessiner la
+  scène 3. Corrigé sur place, sans changer de numéro, puisque la v3.3.4 n’a pas été copiée
+  dans le dépôt :
+  - **Règle 3 et développement** : `scroll-my-1` est obligatoire, non plus conditionnel
+    (décision 21 complétée). Mesure refaite dans Chrome headless avec la page de sonde du
+    relecteur, étendue au bord haut : 0 px sans la marge, 4 px avec, aux deux bords.
+  - **F1.19, scène 3** : deux variantes, « Annuler » coupé par le bord bas puis Tab (3a),
+    coupé par le bord haut puis Maj+Tab depuis « Fermer » (3b). Le test vérifie qu’il est
+    coupé avant la touche, puis un écart d’au moins 3,5 px.
+  - **Ce qui fait échouer le test**, et le tableau des états : alignés.
+  - **La page** dessine la scène 3 aux deux bords, sans et avec `scroll-my-1`, avec un
+    vrai défilement. Republiée à la même URL.
+- v3.3.4 : **approuvée** par la revue de design. Une suggestion appliquée sans nouvelle
+  version ni nouvelle revue, en prose seulement : les trois échecs de plus de la scène 3 de
+  F1.19 ne viennent plus d’actions de cellule hors ligne, dont l’échec resterait dans la
+  feuille encore ouverte (règle 9 d’event-board). Ils suivent la méthode de
+  `e2e/bar-overflow.spec.ts` : la requête retenue (`gate`), la feuille fermée, puis une
+  réponse 500 (`cellThenClose`). Republiée à la même URL.
