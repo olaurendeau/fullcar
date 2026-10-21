@@ -121,6 +121,40 @@ export async function seedCrowd(db: Kysely<Database>, eventId: string): Promise<
   }
 }
 
+/** The key that keeps the organiser's card of event `id` folded on the device (#204, O8.5). */
+export const foldKey = (id: string) => `fullcar:organiser-folded:${id}`;
+
+/**
+ * The widest summary line of O8.3, for event `eventId`: at the retour, 20 persons without a
+ * car and one car of 8 seats, « Il manque 12 places ». Nobody at the aller.
+ */
+export async function seedWorstSummary(db: Kysely<Database>, eventId: string): Promise<void> {
+  const { id } = await seedPerson(db, eventId, { firstName: "Marc" });
+  await seedRide(db, eventId, id, { leg: "retour", seats: 8, departureTime: "18:00:00" });
+  for (let n = 0; n < 20; n++) {
+    const personId = (await seedPerson(db, eventId, { firstName: `Guest ${n + 1}` })).id;
+    await seedPlacement(db, { personId, eventId, leg: "retour", rideId: null });
+  }
+}
+
+/** How `localStorage` throws, for `breakStorage`: at the property itself, or at one of its methods. */
+export type BrokenStorage = "property" | "getItem" | "setItem" | "removeItem";
+
+/**
+ * Makes `localStorage` throw, as a blocked storage does, on the documents of `/e/…` alone:
+ * once the test is over, the fixture still reads the storage on `/icon.svg` (O2.10).
+ */
+export async function breakStorage(page: Page, how: BrokenStorage): Promise<void> {
+  await page.addInitScript((how) => {
+    if (!location.pathname.startsWith("/e/")) return;
+    const refuse = () => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    };
+    if (how === "property") Object.defineProperty(window, "localStorage", { configurable: true, get: refuse });
+    else Object.defineProperty(Storage.prototype, how, { configurable: true, value: refuse });
+  }, how);
+}
+
 /**
  * Counts the `hashchange` events of each document of `page` (O6.3). The count reads 0 on a
  * document where nothing changed the fragment, and throws where the watch did not run.

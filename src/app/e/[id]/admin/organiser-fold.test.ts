@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { browserUnsafe } from "@/domain/test-browser-safe";
+import { browserUnsafeReached } from "@/domain/test-browser-safe";
 import { keepFolded, organiserFold, readFolded, type FoldStorage } from "./organiser-fold";
 
 /** A `localStorage` in memory, whose every call is a spy. */
@@ -215,11 +216,20 @@ describe("bound to window.localStorage", () => {
 });
 
 describe("organiser-fold module", () => {
-  const source = readFileSync(new URL("./organiser-fold.ts", import.meta.url), "utf8");
+  const file = fileURLToPath(new URL("./organiser-fold.ts", import.meta.url));
+  const source = readFileSync(file, "utf8");
 
-  // The browser loads it: its id check comes from public-id-format, not from public-id.
-  it("uses no Node built-in, nor the module that draws ids", () => {
-    expect(browserUnsafe(source)).toEqual([]);
-    expect(source).not.toMatch(/["']@\/domain\/public-id["']/);
+  // The browser loads it: its id check comes from public-id-format, not from public-id, which
+  // draws ids with node:crypto. Its imports are followed, however they are written (#204).
+  it("reaches no Node built-in, through any of its imports", () => {
+    expect(browserUnsafeReached(source, file)).toEqual([]);
   });
+
+  it.each(["@/domain/public-id", "../../../../domain/public-id", "../../../../domain/public-id.ts"])(
+    "finds node:crypto behind an import of the module that draws ids, written %s",
+    (spelling) => {
+      const imported = `import { isPublicId } from "${spelling}";\n${source}`;
+      expect(browserUnsafeReached(imported, file)).toEqual(["domain/public-id.ts: node:crypto"]);
+    },
+  );
 });
