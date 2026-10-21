@@ -136,6 +136,48 @@ test.describe("« Trouver une place »", () => {
     await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Avec Sophie");
   });
 
+  // Rule 8 after #340 (review of #339): a late success replaces Tom's, whose « Annuler » has the
+  // focus, while a more recent information stays. The focus goes to the landmark of Tom's line,
+  // his car's title, not to the information's, « Proposer une voiture » of the same leg.
+  test("rule 8: a late success replaces Tom's while his « Annuler » has the focus; the information stays, the focus goes to Sophie's title", async ({ db, page, seededEvent }) => {
+    const eventId = seededEvent.id;
+    const mine = async (firstName: string) => (await seedPerson(db, eventId, { firstName }, token)).id;
+    const other = async (firstName: string) => (await seedPerson(db, eventId, { firstName })).id;
+    const [tom, lea, hugo] = [await mine("Tom"), await mine("Léa"), await mine("Hugo")];
+    await seedRide(db, eventId, await other("Sophie"), { seats: 1 });
+    await seedRide(db, eventId, await other("Paul"), { leg: "retour" });
+    await seedPlacement(db, { personId: tom, eventId, leg: "aller", rideId: null });
+    await seedPlacement(db, { personId: hugo, eventId, leg: "retour", rideId: null });
+    await holdToken(page, eventId, token);
+    await page.goto(`/e/${eventId}`);
+    await expect(seat(page, "Sophie")).toBeEnabled();
+    // Léa looks for a seat on the aller once the page is shown: Tom is still the only one there, and his tap places him.
+    await seedPlacement(db, { personId: lea, eventId, leg: "aller", rideId: null });
+    await seat(page, "Sophie").click();
+    await expect(messages(page)).toHaveText([TOM_PLACED]);
+    await expect(cell(page, "Léa", "Aller")).toHaveAccessibleName("Léa, Aller : Sans voiture");
+
+    // Hugo's tap on the retour, held: it began before the information.
+    const answer = await holdFirst(page, hugo, false);
+    await tab(page, "Retour").click();
+    await seat(page, "Paul").click();
+    // « Trouver une place » for Léa: Sophie's car is full, no free seat on the aller.
+    await cell(page, "Léa", "Aller").click();
+    await sheet(page, "Léa · Aller").getByRole("button", { name: "Trouver une place" }).click();
+    await expect(tab(page, "Aller")).toHaveAttribute("aria-selected", "true");
+    await expect(messages(page)).toHaveText(["Aucune place libre à l’aller pour l’instant.", TOM_PLACED]);
+    await expect(offer(page)).toBeFocused();
+
+    const undo = page.locator("[data-message-bar]").getByRole("button", { name: "Annuler" });
+    await undo.focus();
+    const answered = page.waitForResponse((response) => !!response.request().postData()?.includes(hugo));
+    answer();
+    await answered;
+    await expect(messages(page)).toHaveText(["Aucune place libre à l’aller pour l’instant.", "Hugo est dans la voiture de Paul"]);
+    await expect(page.getByRole("heading", { name: "Voiture de Sophie" })).toBeFocused();
+    await expect(offer(page)).not.toBeFocused();
+  });
+
   // C11.12 (v4.4.3): the region `status` empties only while it still says the information.
   test("C11.12: Hugo's tap fails within 100 ms of Tom's success: the information goes, `status` says Tom's success and is never emptied after", async ({ db, page, seededEvent }) => {
     const scene = await seedScene(db, seededEvent.id, token, [{ driver: "Marc", time: "17:00:00", free: 0 }]);

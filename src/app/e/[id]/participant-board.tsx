@@ -288,7 +288,8 @@ export function ParticipantBoard({
       const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
       const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });
       send.whenClosed(() => {
-        // Nobody given back, the bar has nothing to say: it closes.
+        // Nobody given back, there is no success to say: the success goes. The failures stay, and
+        // an information written since « Annuler » left too (rule 4, v4.4.2): the bar closes only without them.
         messages.succeed(undone.length > 0 ? { text, landmark } : null);
         setUndoneIn({ landmark });
       });
