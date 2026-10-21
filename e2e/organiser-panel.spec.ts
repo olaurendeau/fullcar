@@ -4,6 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { leaveNoToken } from "./fixtures";
+import { expectRing, press, pressUntil } from "./focus-ring";
 import { digitsOf, expect, organiserPath, type ScenePhones, seedOrganiserScene, test } from "./organiser";
 
 /*
@@ -284,12 +285,13 @@ test("O5.6, O5.8, O7.4: five lines, then « Afficher… »; each list and each l
   expect((await box(more)).width).toBeGreaterThanOrEqual((await box(persons)).width);
 
   // By keyboard: the list unfolds, the focus on the 6th first name, its ring as wide as the text.
-  await more.focus();
-  await page.keyboard.press("Enter");
+  await pressUntil(page, "Tab", more);
+  await press(page, "Enter");
   await expect(rows(persons)).toHaveCount(7);
   const sixth = rows(persons).nth(5).getByText("Félix", { exact: true });
   await expect(sixth).toBeFocused();
-  expect(await sixth.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
+  // F1.16: the ring of the focus that the application moves.
+  await expectRing(sixth);
   expect((await box(sixth)).width).toBeLessThan((await box(rows(persons).nth(5))).width / 2);
   await expect(aller.getByRole("heading", { level: 4, name: "Sans voiture (7)", exact: true })).toBeVisible();
   // The others did not move.

@@ -2,7 +2,7 @@ import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -33,7 +33,7 @@ async function seedScene(db: Db, eventId: string, token: string, marcsToken: str
   const marcsCar = await seedRide(db, eventId, marc.id);
   await seedPlacement(db, { personId: lea.id, eventId, leg: "aller", rideId: marcsCar });
   await seedPlacement(db, { personId: claire.id, eventId, leg: "retour", rideId: null });
-  return { claire: claire.id, lea: lea.id };
+  return { claire: claire.id, lea: lea.id, marc: marc.id };
 }
 
 const section = (page: Page) => page.getByRole("region", { name: "Vos inscriptions" });
@@ -64,6 +64,25 @@ function changes(page: Page, text: string): Request[] {
 
 async function stored(db: Db, personId: string) {
   return db.selectFrom("person").select(["first_name", "phone"]).where("id", "=", personId).executeTakeFirstOrThrow();
+}
+
+/** The first name stored, and whether the number stored is `phone`: an assertion never prints a number. */
+async function kept(db: Db, personId: string, phone: string) {
+  const row = await stored(db, personId);
+  return { firstName: row.first_name, phone: row.phone === phone };
+}
+
+/**
+ * « Aucune requête » (v4.4): a change of the number, sent after from a reopened form. Once it is
+ * done, `sent` holds it alone; had the « Valider » before sent anything, it would hold two.
+ * Only booleans are printed: a body carries the device's token.
+ */
+async function nothingSentBefore(page: Page, sent: Request[]) {
+  const form = await openForm(page, "Claire");
+  await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
+  await form.getByRole("button", { name: "Valider" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(sent.map((request) => !!request.postData()?.includes(NEW_PHONE))).toEqual([true]);
 }
 
 async function selectTab(page: Page, name: string) {
@@ -331,5 +350,144 @@ test.describe("edit a person", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(nameButton(page, "Clara")).toBeFocused();
     expect(await stored(db, scene.claire)).toEqual({ first_name: "Clara", phone: NEW_PHONE });
+  });
+
+  // #298 (v4.4): « Valider » with nothing changed closes the form, and sends and checks nothing.
+  // A field changed, then put back as the form showed it, is not changed (v4.4-2).
+  const unchanged = {
+    "V1.1: « Valider »": (form: Locator) => form.getByRole("button", { name: "Valider" }).click(),
+    "V1.2: Enter in « Prénom »": (form: Locator) => form.getByLabel("Prénom").press("Enter"),
+    "V1.3: « Valider » after each field changed, then put back": async (form: Locator) => {
+      await form.getByLabel("Prénom").fill("Clara");
+      await form.getByLabel("Prénom").fill("Claire");
+      await form.getByLabel("Téléphone (facultatif)").clear();
+      await form.getByLabel("Téléphone (facultatif)").fill(CLAIRE_PHONE);
+      await form.getByRole("button", { name: "Valider" }).click();
+    },
+  };
+  for (const [title, validate] of Object.entries(unchanged)) {
+    test(`${title} with nothing changed: the form closes, the focus on the first name, nothing sent`, async ({ db, page, seededEvent }) => {
+      const sent = changes(page, scene.claire);
+      await page.goto(`/e/${seededEvent.id}`);
+      await validate(await openForm(page, "Claire"));
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(nameButton(page, "Claire")).toBeFocused();
+      await expect(alerts(page)).toHaveCount(0);
+      expect(await kept(db, scene.claire, CLAIRE_PHONE)).toEqual({ firstName: "Claire", phone: true });
+      await nothingSentBefore(page, sent);
+    });
+  }
+
+  // Rule 2 (v4.4): nothing changed is not checked either. A first name of invisible characters
+  // alone, which the database takes and `validatePerson` reads as empty, closes the form.
+  test("nothing changed is not checked: a first name stored that the form refuses closes the form, and nothing is sent", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await db.updateTable("person").set({ first_name: "​" }).where("id", "=", scene.claire).execute();
+    const sent = changes(page, scene.claire);
+    await page.goto(`/e/${seededEvent.id}`);
+    const name = page.locator(`[data-person-name="${scene.claire}"]`);
+    const openInvisible = async () => {
+      await name.click();
+      await page.getByRole("dialog").getByRole("button", { name: "Modifier", exact: true }).click();
+      return page.getByRole("dialog");
+    };
+    await (await openInvisible()).getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(name).toBeFocused();
+
+    // As `nothingSentBefore`, with a first name the form takes: one request, the second.
+    const form = await openInvisible();
+    await form.getByLabel("Prénom").fill("Claire");
+    await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(sent.map((request) => !!request.postData()?.includes(NEW_PHONE))).toEqual([true]);
+  });
+
+  test("V1.4: offline, nothing changed: the form closes, and nothing is said", async ({ context, page, seededEvent }) => {
+    const sent = changes(page, scene.claire);
+    await page.goto(`/e/${seededEvent.id}`);
+    const form = await openForm(page, "Claire");
+    await context.setOffline(true);
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(nameButton(page, "Claire")).toBeFocused();
+    await expect(alerts(page)).toHaveCount(0);
+    await expect(messages(page)).toHaveCount(0);
+    await expect(page.getByText("Action impossible, vérifiez la connexion")).toHaveCount(0);
+
+    await context.setOffline(false);
+    await nothingSentBefore(page, sent);
+    // A failure of the first « Valider » would name both fields: the number alone does not withdraw it.
+    await expect(page.getByText(/connexion/)).toHaveCount(0);
+  });
+
+  test("V1.5: nothing changed, under a failure and a success in the bar: the same lines, and nothing written", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await seedRide(db, seededEvent.id, scene.marc, { leg: "retour", seats: 1 });
+    const answer = await holdFirst(page, "Clara", true);
+    await page.goto(`/e/${seededEvent.id}`);
+    await selectTab(page, "Retour");
+    // Claire is the device's only person without a car on the retour (Léa does not make it):
+    // one tap places her, without a sheet (C5.2, #92).
+    await car(page.getByRole("tabpanel"), "Marc").getByRole("button", { name: /^Place libre/ }).click();
+    await expect(messages(page)).toHaveText(["Claire est dans la voiture de Marc"]);
+    await sendThenClose(page);
+    await failHeld(page, answer);
+    const lines = [FAILED, "Claire est dans la voiture de Marc"];
+    await expect(messages(page)).toHaveText(lines);
+    // Said too: the region is written 100 ms after its line shows.
+    await expect(bar(page)).toHaveText(FAILED);
+    const buttons = page.locator("[data-message-bar] button");
+    const names = () => buttons.evaluateAll((all) => all.map((button) => button.getAttribute("aria-label") ?? button.textContent));
+    const before = await names();
+    // The success's « Annuler » (#170), then « Fermer ».
+    expect(before).toEqual(["Annuler", "Fermer"]);
+
+    const sent = changes(page, scene.claire);
+    const form = await openForm(page, "Claire");
+    await expect(form.getByLabel("Prénom")).toHaveValue("Claire");
+    const record = await recordBar(page);
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(nameButton(page, "Claire")).toBeFocused();
+    await expect(messages(page)).toHaveText(lines);
+    expect(await names()).toEqual(before);
+    expect(await record()).toEqual({ writes: [], lines: [] });
+    await nothingSentBefore(page, sent);
+  });
+
+  test("V1.6: renamed by another device while the form is open, nothing changed: the new first name stays", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    const sent = changes(page, scene.claire);
+    await page.goto(`/e/${seededEvent.id}`);
+    const form = await openForm(page, "Claire");
+    await db.updateTable("person").set({ first_name: "Clarisse" }).where("id", "=", scene.claire).execute();
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.locator(`[data-person-name="${scene.claire}"]`)).toBeFocused();
+    await nothingSentBefore(page, sent);
+    expect((await stored(db, scene.claire)).first_name).toBe("Clarisse");
+  });
+
+  test("V1.8: a space after the first name is a change: sent, and stored without it", async ({ db, page, seededEvent }) => {
+    const sent = changes(page, scene.claire);
+    await page.goto(`/e/${seededEvent.id}`);
+    const form = await openForm(page, "Claire");
+    await form.getByLabel("Prénom").fill("Claire ");
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(nameButton(page, "Claire")).toBeFocused();
+    expect(sent.map((request) => !!request.postData()?.includes('"Claire "'))).toEqual([true]);
+    expect(await kept(db, scene.claire, CLAIRE_PHONE)).toEqual({ firstName: "Claire", phone: true });
   });
 });

@@ -23,7 +23,7 @@ export type NotDone =
   | { kind: "readDevice" };
 
 /** The reasons said by their key alone. */
-type Plain = "offline" | "failed" | "seatTaken" | "rideGone" | "passengersChanged" | "forbidden" | "eventNotFound";
+type Plain = "offline" | "failed" | "seatTaken" | "rideGone" | "passengersChanged" | "forbidden" | "eventNotFound" | "noRetour";
 
 /** Why, and what to do: offline (nothing left), a server error, or the server's refusal. */
 export type Why =
@@ -37,11 +37,20 @@ export type Why =
 
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
- * only a forged request or a collision of ids gives, take the generic one; so does `noRetour`,
- * the retour removed meanwhile, until #265 gives it its own words.
+ * only a forged request or a collision of ids gives, take the generic one. `noRetour`, the
+ * retour removed meanwhile, says so (`Actions.why.noRetour`, decision 40).
  */
-export function whyOf(error: Plain | "invalid" | "idTaken" | "noRetour"): Why {
-  return { kind: error === "invalid" || error === "idTaken" || error === "noRetour" ? "failed" : error };
+export function whyOf(error: Plain | "invalid" | "idTaken"): Why {
+  return { kind: error === "invalid" || error === "idTaken" ? "failed" : error };
+}
+
+/**
+ * Why « Annuler » was not done (C5.10): offline or on an error, `invalid` included, the reason
+ * names the button to use again (`retryUndo`); a refusal, as `whyOf` gives it.
+ */
+export function undoWhy(error: "offline" | "failed" | "invalid" | "forbidden" | "eventNotFound" | "noRetour"): Why {
+  if (error === "offline" || error === "failed" || error === "invalid") return { kind: "retryUndo", problem: error === "offline" ? "offline" : "failed" };
+  return whyOf(error);
 }
 
 /** A cell of « Vos inscriptions » as its sheet showed it at the send: the person, the leg, and her state there. */
@@ -65,8 +74,12 @@ export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives", { firstNa
   return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
 }
 
-/** What « Modifier » a person sent (v4.2.2): its one field changed, or both; nothing changed sends the form as it showed. */
+/**
+ * What « Modifier » a person sent (v4.2.2): its one field changed, or both. Nothing changed sends
+ * nothing (v4.4): the form closes before, and a failure never names fields that did not go.
+ */
 export function editedFields(changed: readonly PersonField[]): "firstName" | "phone" | "both" {
+  if (changed.length === 0) throw new Error("editedFields: nothing changed, nothing is sent");
   return changed.length === 1 ? changed[0] : "both";
 }
 

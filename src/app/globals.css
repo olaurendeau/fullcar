@@ -71,7 +71,7 @@
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --ring: oklch(0.556 0 0);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -122,9 +122,23 @@
     --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* The focus ring (language-switch v3.3.1, #236): 2 px of #737373, 2 px out, so that it only
+   touches the background around the element, 3:1 at least on white, `muted` and `primary`.
+   An outline, not a box-shadow: it stays in forced colours. `focus-visible:outline-offset-0`
+   and `focus-visible:-outline-offset-2` come after it in the stylesheet, and win. */
+@utility focus-ring {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+    }
+  /* Every element without a ring of its own: a link, the tel: link, « Nous contacter ». */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
     }
   body {
     @apply bg-background text-foreground;

@@ -53,6 +53,9 @@ export function usePageHidden(): boolean {
   );
 }
 
+/** Whether a sheet hides the page now, for what is decided once rather than rendered. */
+export const pageHidden = () => sheets > 0;
+
 /**
  * Runs `then` once no sheet hides the page, at once if none does, each in turn; a `failure`
  * before the rest, so that it is written first (v4.2.2). Returns what withdraws it alone while it waits.
@@ -162,9 +165,13 @@ export function forget(subjects: readonly string[]) {
  * sheet that sent is gone. Above the content, `key` would outlive the sheet's openings.
  *
  * A send is about its `subject` (a person, a cell, a car; the sheet itself by default),
- * whichever sheet sent it, and about the `fields` it carried, if given (`sendAbout`).
+ * whichever sheet sent it, and about the `fields` it carried, if given (`sendAbout`). One that
+ * names its own `subjects` is about them instead: what it sends, whichever sheet (#228).
  */
-export function useSends(isOpen: () => boolean, subject?: string): (fields?: readonly string[]) => FromSheet {
+export function useSends(
+  isOpen: () => boolean,
+  subject?: string,
+): (fields?: readonly string[], subjects?: readonly string[]) => FromSheet {
   const key = useId();
   const mounted = useRef(false);
   useEffect(() => {
@@ -174,8 +181,9 @@ export function useSends(isOpen: () => boolean, subject?: string): (fields?: rea
     };
   }, []);
 
-  return (fields = []) => {
-    const about = subject ?? key;
-    return { key, inSheet: () => isOpen() && mounted.current, ...sendAbout([about, ...fields.map((field) => `${about}:${field}`)]) };
-  };
+  return (fields = [], subjects = [subject ?? key]) => ({ key, inSheet: () => isOpen() && mounted.current, ...sendAbout(aboutOf(subjects, fields)) });
 }
+
+/** What a send is about: each of its subjects, then each of that subject's `fields` (`subject:field`), as `sendAbout` reads them. */
+export const aboutOf = (subjects: readonly string[], fields: readonly string[] = []): string[] =>
+  subjects.flatMap((subject) => [subject, ...fields.map((field) => `${subject}:${field}`)]);

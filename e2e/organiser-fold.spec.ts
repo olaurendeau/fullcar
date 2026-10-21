@@ -1,14 +1,18 @@
-import type { Locator, Page, Request, Route } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
+import { expectRing, press } from "./focus-ring";
 import {
   breakStorage,
   expect,
   foldKey,
+  hideToken,
+  holdActionsWith,
+  isAction,
   oneCharOff,
   organiserPath,
   seedCrowd,
@@ -63,7 +67,6 @@ async function rootFont(page: Page) {
   await page.addStyleTag({ content: "html { font-size: 125% }" });
   await page.evaluate(() => Promise.all(document.getAnimations().map((each) => each.finished)));
 }
-const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
 
 /** Folds or unfolds by a click, and checks the button says so. */
 async function setFolded(page: Page, folded: boolean) {
@@ -71,21 +74,40 @@ async function setFolded(page: Page, folded: boolean) {
   await expect(toggle(page)).toHaveAttribute("aria-expanded", String(!folded));
 }
 
-/** Holds, from now on, every read of the panel (the admin token in its body); `fail` loses them as a cut connection does. */
-async function holdPanelReads(page: Page, { id, token }: SeededEvent) {
-  const held: Route[] = [];
-  await page.route(`**/e/${id}/admin`, (route) =>
-    isAction(route.request()) && (route.request().postData() ?? "").includes(token) ? held.push(route) : route.fallback(),
-  );
-  return {
-    held: () => held.length,
-    fail: async () => {
-      for (const route of held.splice(0)) await route.abort("internetdisconnected");
-    },
-    release: async () => {
-      for (const route of held.splice(0)) await route.fallback();
-    },
+/**
+ * What became of each request the page sends from now on, in the order sent, by name: the
+ * panel's read (the admin token in its body), the board's (the page's other action), or any
+ * other by its method and path, the token hidden. A request is `sent` until it ends, then
+ * `answered` with its status, or `failed` with the browser's reason. Nothing more: no URL,
+ * body or header.
+ *
+ * #303: Chromium reports a fetch whose body the page reads to its end through a stream reader
+ * as failed, `net::ERR_ABORTED` (`canceled` in its network log), when the body is drained
+ * before the network layer says the request is complete. React reads a server action's answer
+ * that way (`createFromFetch`), so either read may end so, its answer already in: nothing calls
+ * `abort()` or `cancel()`, and the page applies it. Measured in Chromium (#303): one run of this
+ * test in five, and one in two with no route at all; a page of the event fetched a hundred
+ * times was reported aborted 93 times read through a reader, never by `response.text()`.
+ * Such a request, failed after its answer arrived, is `answered`; the test that counts it
+ * checks that the page applied that answer, which a body cut short would have failed. A
+ * request failed before any answer (a route, a signal, a navigation) stays `failed`.
+ */
+function watchRequests(page: Page, { id, token }: SeededEvent) {
+  const fates = new Map<Request, string>();
+  const name = (request: Request) => {
+    const path = hideToken(new URL(request.url()).pathname, token);
+    if (!isAction(request) || path !== `/e/${id}/admin`) return `${request.method()} ${path}`;
+    return (request.postData() ?? "").includes(token) ? "the panel's read" : "the board's read";
   };
+  const answered = async (request: Request) => `answered ${(await request.response())?.status()}`;
+  page.on("request", (request) => fates.set(request, "sent"));
+  page.on("requestfinished", async (request) => fates.set(request, await answered(request)));
+  page.on("requestfailed", async (request) => {
+    const reason = request.failure()?.errorText;
+    const late = reason === "net::ERR_ABORTED" && (await request.response()) !== null;
+    fates.set(request, late ? await answered(request) : `failed ${reason}`);
+  });
+  return () => [...fates].map(([request, fate]) => `${name(request)}: ${fate}`);
 }
 
 /** The key set to `value` before any script of each document runs. */
@@ -150,10 +172,11 @@ test.describe("the scene of O2.5", () => {
       for (const link of await panel(page).getByTestId("link").all()) await expect(link).toBeHidden();
 
       // From the keyboard: the ring is inside the button; Tab goes to « Actualiser », then out of the panel.
-      await page.keyboard.press("Tab");
-      await page.keyboard.press("Shift+Tab");
+      await press(page, "Tab");
+      await press(page, "Shift+Tab");
       await expect(toggle(page)).toBeFocused();
-      expect(await toggle(page).evaluate((element) => getComputedStyle(element).boxShadow)).toContain("inset");
+      // F1.7: inside, 2 px in from the edge, where « Actualiser » touches the button.
+      await expectRing(toggle(page), { offset: -2 });
       await page.keyboard.press("Tab");
       await expect(refresh(page)).toBeFocused();
       await page.keyboard.press("Tab");
@@ -256,11 +279,6 @@ test.describe("the scene of O2.5", () => {
     seededEvent,
   }) => {
     await keepKey(page, seededEvent.id);
-    // The browser drops answers of the navigation the arrival replaces: fetched here, their bodies stay readable for the fixture (O6.1).
-    await page.route(
-      (url) => url.searchParams.has("_rsc") || url.pathname.startsWith("/_next/"),
-      async (route) => route.fulfill({ response: await route.fetch() }),
-    );
     await page.goto("/nouveau");
     await expect(page.getByRole("button", { name: "Créer" })).toBeEnabled({ timeout: 15_000 });
     const day = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
@@ -340,11 +358,11 @@ test.describe("the scene of O2.5", () => {
     await expect(alertText(page)).toContainText(FR.invalid);
     await nothingToFold();
 
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
     await page.goto(organiserPath(seededEvent));
     await expect.poll(reads.held).toBe(1);
     await nothingToFold();
-    await reads.fail();
+    await reads.lose();
     await expect(alertText(page)).toContainText(FR.failed);
     await nothingToFold();
 
@@ -378,7 +396,7 @@ test.describe("the scene of O2.5", () => {
       await other.close();
     }
 
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
     const height = (await box(panel(page))).height;
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);
@@ -397,10 +415,10 @@ test.describe("the scene of O2.5", () => {
     await page.goto(organiserPath(seededEvent));
     await expect(summary(page)).toBeVisible();
     const before = await summary(page).textContent();
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);
-    await reads.fail();
+    await reads.lose();
     await expect(alertText(page)).toContainText(FR.failedTitle);
     const [title, alert, list] = await Promise.all([box(toggle(page)), box(alertText(page)), box(summary(page))]);
     expect(alert.y).toBeGreaterThan(title.y + title.height);
@@ -424,13 +442,12 @@ test.describe("the scene of O2.5", () => {
     await expect(summary(page)).toBeVisible();
     await expect(page.getByRole("region", { name: "Vos inscriptions" }).getByText("Oriane")).toBeVisible();
 
-    const reads = await holdPanelReads(page, seededEvent);
+    const reads = await holdActionsWith(page, seededEvent.token);
+    // Oriane alone is without a car at the aller: one tap seats her, with no sheet (C5.2, #92).
     await board(page).getByRole("button", { name: "Place libre : prendre une place dans la voiture de Anaïs" }).click();
-    const sheet = page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ });
-    await sheet.getByRole("button", { name: /^Placer/ }).click();
-    await expect(sheet).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect.poll(reads.held).toBe(1);
-    await reads.fail();
+    await reads.lose();
     await expect(summary(page)).toHaveCount(0);
     await expect(stale(page)).toBeVisible();
     expect(await stale(page).evaluate((text) => text.closest("p")!.parentElement!.tagName)).toBe("SECTION");
@@ -438,7 +455,7 @@ test.describe("the scene of O2.5", () => {
 
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);
-    await reads.fail();
+    await reads.lose();
     await expect(alertText(page)).toHaveText(`${FR.failedTitle}${FR.bodyWithdrawn}`);
     await expect(stale(page)).toHaveCount(0);
     await expect(summary(page)).toHaveCount(0);
@@ -451,21 +468,32 @@ test.describe("the scene of O2.5", () => {
     page,
     seededEvent,
   }) => {
+    // #343: watched from before the page loads, so that a read of the load that ends late is
+    // counted where it was sent, before « Actualiser », and a fold that cancels any request is seen.
+    const requests = watchRequests(page, seededEvent);
     await page.goto(organiserPath(seededEvent));
     await expect(toggle(page)).toBeVisible();
-    const reads = await holdPanelReads(page, seededEvent);
+    await expect
+      .poll(() => requests().filter((fate) => fate.endsWith(": sent")), { message: "requests of the load still running" })
+      .toEqual([]);
+    const loaded = requests();
+    const reads = await holdActionsWith(page, seededEvent.token);
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);
-    let sent = 0;
-    let failed = 0;
-    page.on("request", () => (sent += 1));
-    page.on("requestfailed", () => (failed += 1));
+    // Next sends one action at a time: the board's read waits for the panel's answer.
+    const held = [...loaded, "the panel's read: sent"];
+    expect(requests(), "requests while the read is held").toEqual(held);
     await setFolded(page, true);
     await setFolded(page, false);
     await setFolded(page, true);
-    expect([sent, failed], "requests sent and cancelled while folding").toEqual([0, 0]);
+    expect(requests(), "requests sent or ended while folding").toEqual(held);
     await reads.release();
     await expect(panel(page).getByRole("status")).toHaveText(FR.refreshed);
+    // Every request from « Actualiser » on, and how it ended (#303: answered, even when Chromium reports it aborted).
+    await expect
+      .poll(() => requests().slice(loaded.length), { message: "requests from « Actualiser » to its end" })
+      .toEqual(["the panel's read: answered 200", "the board's read: answered 200"]);
+    await expect(alertText(page)).toHaveCount(0);
   });
 });
 

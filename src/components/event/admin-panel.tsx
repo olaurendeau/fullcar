@@ -94,7 +94,7 @@ export function AdminPanel({
                 if (content.current?.contains(document.activeElement)) titleRef.current?.focus();
                 onToggleFolded();
               }}
-              className="-my-1.5 flex h-11 w-full items-center gap-1 rounded-lg pl-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
+              className="-my-1.5 flex h-11 w-full items-center gap-1 rounded-lg pl-2 text-left focus-visible:focus-ring focus-visible:-outline-offset-2"
             >
               {t("title")}
               <Chevron aria-hidden className="size-4 shrink-0 text-muted-foreground" />
@@ -187,7 +187,7 @@ const ALERT_TEXT = "col-start-2 row-start-1 flex max-w-prose flex-col gap-0.5";
 const ALERT_FRAME =
   "grid grid-cols-[1rem_1fr] gap-x-2.5 rounded-lg border border-destructive bg-background p-3 text-sm";
 // The board's width, centred, where the panel would be (O7.5).
-const PROBLEM_FRAME = cn(ALERT_FRAME, "mx-auto w-full max-w-board outline-none");
+const PROBLEM_FRAME = cn(ALERT_FRAME, "mx-auto w-full max-w-board focus-visible:focus-ring");
 
 /**
  * Instead of the panel, when the link is not the organiser's (C6.5), or when the check

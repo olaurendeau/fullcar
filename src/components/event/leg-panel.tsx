@@ -28,7 +28,7 @@ export interface BoardDevice {
   setPersonLeg: SetPersonLeg;
   /** Offers a car on a leg (R4), with the device's token. */
   offerRide: OfferRide;
-  /** Seats in a car for persons of the device, from the sheet (#91). */
+  /** Seats in a car for persons of the device, from a tap (#92) or the sheet (#91). */
   takeSeats: TakeSeats;
   /** Changes a car driven by one of the device's persons (C8.2), with the device's token. */
   updateRide: UpdateRide;
@@ -112,7 +112,7 @@ export function LegPanel({
                 car={car}
                 date={legDate}
                 seatsActive={deviceKnown(device.status)}
-                onTakeSeat={(seat) => seats.openFor(car, seat)}
+                onTakeSeat={(seat) => seats.tap(car, seat)}
                 updateRide={drivesIt(car.id) ? device.updateRide : undefined}
                 removeRide={drivesIt(car.id) ? device.removeRide : undefined}
               />

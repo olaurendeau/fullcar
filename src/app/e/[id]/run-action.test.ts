@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
-import { actionRunner, sendAction, stateOf } from "./run-action";
+import { actionRunner, sendAction, stateOf, stateRead, stateShown, withRetourHeld } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -26,8 +26,10 @@ describe("sendAction", () => {
   });
 });
 
+const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: null };
+
 describe("stateOf", () => {
-  const state = [{ leg: "aller", cars: [], withoutCar: [], device: [] }];
+  const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
   it("is the state an action gives back, refusal included", () => {
     expect(stateOf({ ok: true, state })).toBe(state);
@@ -39,10 +41,77 @@ describe("stateOf", () => {
     expect(stateOf(undefined)).toBeUndefined();
     expect(stateOf({ ok: true, state: "nope" })).toBeUndefined();
   });
+
+  // Epic #250: the header comes with the legs. An answer without it (legs alone, from a server
+  // not yet deployed) is not applied: the page would lose its title.
+  it.each<[string, unknown]>([
+    ["the legs alone", state.legs],
+    ["no header", { legs: state.legs }],
+    ["no legs", { event: header }],
+    ["a header that is not an object", { event: "Tournoi", legs: state.legs }],
+  ])("is nothing for a state with %s", (_, given) => {
+    expect(stateOf({ ok: true, state: given })).toBeUndefined();
+  });
+});
+
+// Review of #305: the device's first read and `apply` are guarded as an action's answer is.
+describe("stateRead", () => {
+  const state = { event: header, legs: [] };
+
+  it("is the state a read answered", () => {
+    expect(stateRead({ ok: true, value: state })).toBe(state);
+  });
+
+  it.each<[string, unknown]>([
+    ["a failure", { ok: false, problem: "failed" }],
+    ["an unknown event", { ok: true, value: undefined }],
+    ["the legs alone", { ok: true, value: [] }],
+    ["no read at all", undefined],
+  ])("is nothing for %s", (_, sent) => {
+    expect(stateRead(sent as never)).toBeUndefined();
+  });
+});
+
+describe("stateShown", () => {
+  const withRetour: EventState = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [] };
+  const withoutRetour: EventState = { event: header, legs: [] };
+
+  it("shows nothing that is not a state: the legs alone change nothing, and throw nothing", () => {
+    expect(stateShown(withRetour, [])).toBeUndefined();
+    expect(stateShown(withRetour, { legs: [] })).toBeUndefined();
+  });
+
+  it.each<[string, EventState, EventState, boolean]>([
+    ["the retour removed: the tabs go", withRetour, withoutRetour, true],
+    ["a retour added: the tabs come", withoutRetour, withRetour, true],
+    ["the retour kept", withRetour, { ...withRetour, legs: [] }, false],
+    ["still no retour", withoutRetour, { ...withoutRetour, legs: [] }, false],
+  ])("%s", (_, before, next, tabsChange) => {
+    expect(stateShown(before, next)).toStrictEqual({ state: next, tabsChange });
+  });
+});
+
+// #265, § 5 of the epic's design: while a sheet hides the page, the retour it may be on stays.
+describe("withRetourHeld", () => {
+  const leg = (name: "aller" | "retour", rideId: string) => ({ leg: name, cars: [], withoutCar: [], device: [], rideId });
+  const shown = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [leg("aller", "old"), leg("retour", "old")] } as never as EventState;
+  const next = { event: { ...header, title: "Tournoi de Vannes" }, legs: [leg("aller", "new")] } as never as EventState;
+
+  it("shows the next state, with the end and the retour leg shown", () => {
+    expect(withRetourHeld(shown, next)).toStrictEqual({
+      event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-12 18:00:00" },
+      legs: [leg("aller", "new"), leg("retour", "old")],
+    });
+  });
+
+  it("holds nothing when the retour stays, nor when none was shown", () => {
+    expect(withRetourHeld(shown, shown)).toBeUndefined();
+    expect(withRetourHeld(next, next)).toBeUndefined();
+  });
 });
 
 describe("actionRunner", () => {
-  const state: EventState = [{ leg: "aller", cars: [], withoutCar: [], device: [] }];
+  const state: EventState = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
   /** A page that records the states the runner gives it and each action that ends, and a connection that can be cut. */
   function page() {

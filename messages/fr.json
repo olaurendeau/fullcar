@@ -132,6 +132,7 @@
       "edit": "Modifier {firstName}"
     },
     "remember": "Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.",
+    "forSeat": "Cette personne prendra une place dans la voiture de {driver}.",
     "firstName": "Prénom",
     "phone": "Téléphone (facultatif)",
     "phoneHint": "Visible seulement par l’organisateur et par les personnes de la même voiture.",
@@ -232,7 +233,8 @@
       "alreadyDriving": "{driver} conduit déjà une voiture.",
       "passengersChanged": "Quelqu’un a pris ou libéré une place entre-temps : modifiez la voiture de nouveau.",
       "forbidden": "Cet appareil ne peut pas faire ce changement : rechargez la page.",
-      "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé."
+      "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé.",
+      "noRetour": "Il n’y a plus de retour pour cet événement."
     },
     "names": {
       "andOthers": "{first}, {second} et {others, plural, one {# autre} other {# autres}}"
@@ -250,7 +252,9 @@
     "placed": "{names} sont dans la voiture de {driver}"
   },
   "Seat": {
-    "placed": "{firstName} est dans la voiture de {driver}"
+    "placed": "{firstName} est dans la voiture de {driver}",
+    "undo": "Annuler",
+    "undone": "{names} {count, plural, one {n’est plus} other {ne sont plus}} dans la voiture de {driver}"
   },
   "RideChanges": {
     "leaving": {

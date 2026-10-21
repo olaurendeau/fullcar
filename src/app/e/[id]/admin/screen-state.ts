@@ -1,7 +1,7 @@
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
 import type { EventState } from "../event-state";
-import type { Sent } from "../run-action";
+import { stateRead, type Sent } from "../run-action";
 import type { AdminLinkCheck } from "./admin-link";
 
 /*
@@ -146,8 +146,9 @@ export function screenRead(
   board: Sent<EventState | undefined>,
 ): { legs: OrganiserLeg[]; board: EventState } | undefined {
   const legs = panelRead(panel);
-  if (!legs || !board.ok || !Array.isArray(board.value)) return undefined;
-  return { legs, board: board.value };
+  const state = stateRead(board);
+  if (!legs || !state) return undefined;
+  return { legs, board: state };
 }
 
 /**

@@ -41,7 +41,9 @@ export type Registration =
   | { kind: "done" }
   | { kind: "errors"; errors: PersonErrors; first: PersonField }
   /** Offline, a server error, or a refusal (`Actions.failed`): nothing changed. */
-  | { kind: "problem"; problem: "offline" | "failed" };
+  | { kind: "problem"; problem: "offline" | "failed" }
+  /** Sent on the retour, which is gone: the sheet closes, and the bar says why (rule 9). */
+  | { kind: "noRetour" };
 
 /** Registers a person (R1): the device's token, then the form's creation id, then the request. */
 export type AddPerson = (registering: Registering) => Promise<Registration | undefined>;
@@ -126,6 +128,7 @@ export function AddPersonButton({
         mode={{ kind: "add", leg, hasRetour, addPerson, landmark: () => focusAddPerson(leg) }}
         open={() => isOpen.current}
         onDone={() => toggle(false)}
+        onGone={() => toggle(false)}
       />
     </BottomSheet>
   );
@@ -143,8 +146,21 @@ export function AddPersonButton({
  * In `edit` mode (C2.3), the first name and the number are filled with the person's, under the
  * same rules, without « Aller et retour »; the first name has the focus as the form shows.
  * Opened from the sheet of a free seat, « Annuler » under « Valider » goes back to its list (C6.6).
+ * Sent on the retour once it is gone, `onGone` closes its sheet (rule 9).
  */
-export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormMode; open: () => boolean; onDone: (personId: string) => void; onCancel?: () => void }) {
+export function PersonForm({
+  mode,
+  open,
+  onDone,
+  onCancel,
+  onGone,
+}: {
+  mode: PersonFormMode;
+  open: () => boolean;
+  onDone: (personId: string) => void;
+  onCancel?: () => void;
+  onGone?: () => void;
+}) {
   const t = useTranslations("PersonForm");
   const tErrors = useTranslations("FormErrors");
   const tActions = useTranslations("Actions");
@@ -162,7 +178,8 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
   const creationId = useRef<string | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
   // Each form its own: a sheet reopened during a send shows a new form, and the sending one is gone.
-  // A change is about its person, whichever form sends it; a registration, about its form.
+  // A change is about its person, whichever form sends it; a registration, about the first name it
+  // sends, whichever form, tab or seat's sheet sends it (`person:new:{prénom}`, #228).
   const sends = useSends(open, mode.kind === "edit" ? `person:${mode.person.id}` : undefined);
   const editing = mode.kind === "edit";
   const { leg, hasRetour } = mode.kind === "add" ? mode : { leg: "aller" as const, hasRetour: false };
@@ -186,14 +203,19 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // A field is changed when it differs, character for character, from what the form showed:
+    // put back as it was, it is not (v4.4-2). In `edit` mode, only what changed is sent.
+    const changed = PERSON_FIELDS.filter((name) => values[name] !== shown[name]);
+    // Nothing changed: the sheet closes, as after a change done; nothing is checked nor sent,
+    // and the bar keeps what it holds (v4.4, #298).
+    if (mode.kind === "edit" && changed.length === 0) return onDone(mode.person.id);
     const checked = validatePerson(values);
     if (!checked.ok) return showErrors(checked.errors, checked.first);
     setErrors({});
     setProblem(null);
-    // In `edit` mode, only what changed is sent. Withdraws a failure any form about this person
-    // left for the bar, if this send carries all its fields.
-    const changed = PERSON_FIELDS.filter((name) => values[name] !== shown[name]);
-    const sheet = sends(mode.kind === "edit" ? changed : []);
+    // Withdraws a failure any form about this person left for the bar, if this send carries all its
+    // fields; a registration, one of the same first name, its spaces trimmed and its case kept.
+    const sheet = mode.kind === "edit" ? sends(changed) : sends([], [`person:new:${checked.person.firstName}`]);
     const answer =
       mode.kind === "add"
         ? await mode.addPerson({
@@ -220,6 +242,7 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
       if (sheet.inSheet() && personId) onDone(personId);
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
+    else if (answer?.kind === "noRetour" && sheet.inSheet()) onGone?.();
   }
 
   const field = (name: PersonField, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {

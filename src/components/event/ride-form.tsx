@@ -265,9 +265,9 @@ function RideForm({
   const backFromStep = useRef(false);
   const creationIds = useRef<CreationIds | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
-  // Each form its own, and its own subject, as in « Ajouter une personne »: an offer is a new car.
-  // A change is about its car, whichever form sends it, apart from its removal (`ride:{id}`, #213):
-  // neither withdraws the other's failure.
+  // Each form its own. An offer is about each leg it offers, and who drives there, whichever form
+  // sends it (`offer:{leg}:{personId}`, or `offer:{leg}:new:{prénom}`, #228). A change is about its
+  // car, whichever form sends it, apart from its removal (`ride:{id}`, #213): neither withdraws the other's failure.
   const sends = useSends(open, editing && `ride:${editing.car.id}:edit`);
   const isNew = !editing && driver === NEW_DRIVER;
 
@@ -316,7 +316,8 @@ function RideForm({
       showErrors(answer.errors, false, answer.first);
       // Not the sheet opened since: it shows another form.
     } else if (answer === undefined || !sheet.inSheet()) return;
-    else if (answer.kind === "done") onDone();
+    // Done, or its car's retour gone (rule 9): the sheet closes.
+    else if (answer.kind === "done" || answer.kind === "noRetour") onDone();
     else if (answer.kind === "problem") setProblem(answer.problem);
     else {
       setChanged(true);
@@ -346,12 +347,13 @@ function RideForm({
       return showErrors(found, driver === undefined, person?.ok === false ? person.first : !ride.ok ? ride.first : otherFirst);
     }
     showErrors({}, false, undefined);
-    const sheet = sends();
     const { firstName, phone, otherLocation, otherTime, ...car } = values;
     const kind = otherField && otherChoice && otherLegKind(otherField, otherChoice);
     const otherLeg = kind === "drive" ? { kind, location: otherLocation, time: otherTime } : kind && { kind };
     // As the form names her: the first name typed, its spaces trimmed, or the one chosen.
     const name = person?.ok ? person.person.firstName : (candidates.find((candidate) => candidate.id === driver)?.firstName ?? "");
+    const legs = kind === "drive" ? [leg, otherLegOf(leg)] : [leg];
+    const sheet = sends([], legs.map((offered) => `offer:${offered}:${isNew ? `new:${name}` : driver}`));
     const answer = await mode.offerRide({
       offer: { leg, ...car, driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver }, otherLeg },
       notDone: { kind: "offerRide", driver: name, legs: kind === "drive" ? "both" : leg },
@@ -366,6 +368,8 @@ function RideForm({
       if (sheet.inSheet()) onDone();
     } else if (answer?.kind === "errors") showErrors(answer.errors, false, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
+    // Offered on the retour, which is gone (rule 9): the sheet closes.
+    else if (answer?.kind === "noRetour" && sheet.inSheet()) onDone();
   }
 
   const field = (name: FieldName, label: string, control: Control, hint?: string) => {

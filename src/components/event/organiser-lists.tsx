@@ -11,7 +11,7 @@ import { PhoneLink } from "./phone-link";
  * What takes the focus in a line, its first name or its car's title: inline, so that the
  * ring follows the text, not the line (O5.8).
  */
-const focusTarget = "rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+const focusTarget = "rounded-sm focus-visible:focus-ring";
 
 /** Whether a list is unfolded, and how to fold or unfold it: kept by the organiser's screen, never here. */
 export interface Fold {
@@ -132,7 +132,7 @@ function FoldList({
 
   return (
     <div data-organiser-list className="flex min-w-0 flex-col gap-1.5 text-sm">
-      <h4 id={titleId} tabIndex={-1} className="self-start font-semibold outline-none">
+      <h4 id={titleId} tabIndex={-1} className="self-start rounded-sm font-semibold focus-visible:focus-ring">
         {title}
       </h4>
       {lines.length > 0 ? (

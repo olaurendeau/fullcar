@@ -1,19 +1,16 @@
 import { MapPin } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import type { EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
-import type { WallClock } from "@/domain/wall-clock";
 import { DevicePersons } from "./device-persons";
 import { EventDates } from "./event-dates";
 import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabs } from "./leg-tabs";
 
-export interface EventViewProps {
-  title: string;
-  location: string;
-  allerAt: WallClock;
-  retourAt: WallClock | null;
+/** The header: from the state the page shows last, which carries it (epic #250). */
+export interface EventViewProps extends EventHeader {
   /** Each leg's cars, persons without a car and coverage (#86), in the event's order. */
   board: VisibleBoard;
   /** What the page knows of the device's persons (#87). */
@@ -45,7 +42,7 @@ export function EventView({ title, location, allerAt, retourAt, board, device, m
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <h1 id="event-title" tabIndex={-1} className="text-2xl font-bold wrap-anywhere outline-none">{title}</h1>
+          <h1 id="event-title" tabIndex={-1} className="rounded-sm text-2xl font-bold wrap-anywhere focus-visible:focus-ring">{title}</h1>
           <p className="flex items-start gap-2">
             <MapPin className="mt-1 size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 wrap-anywhere">{location}</span>

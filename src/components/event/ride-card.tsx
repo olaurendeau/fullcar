@@ -11,7 +11,7 @@ import { EditRideButton, type UpdateRide } from "./ride-form";
  * « Complet » when no seat is left (v4-13); under it, its place and note, then a line per
  * passenger and one per free seat. The numbers the state carries are
  * `tel:` links (C10.1). A free seat is a button, inactive until the device's persons are
- * known (C5.9) and without JavaScript; its tap opens the sheet (`onTakeSeat`, #91). Long
+ * known (C5.9) and without JavaScript; its tap takes a seat or opens a sheet (`onTakeSeat`, #92). Long
  * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
  * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
  * removes it (C8.1).
@@ -47,7 +47,7 @@ export function RideCard({
           tabIndex={-1}
           data-car-title={car.id}
           data-leg={car.leg}
-          className="min-w-0 rounded-sm font-semibold wrap-anywhere outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="min-w-0 rounded-sm font-semibold wrap-anywhere focus-visible:focus-ring"
         >
           {t("title", { driver })}
         </h3>
@@ -87,7 +87,7 @@ export function RideCard({
               disabled={!seatsActive}
               aria-label={t("takeSeat", { driver })}
               onClick={(event) => onTakeSeat(event.currentTarget)}
-              className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-dashed border-foreground/25 bg-background px-3 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-dashed border-foreground/25 bg-background px-3 text-left text-sm font-medium focus-visible:focus-ring disabled:opacity-50"
             >
               <Plus aria-hidden className="size-4 shrink-0 text-muted-foreground" />
               {t("freeSeat")}

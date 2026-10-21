@@ -82,7 +82,7 @@ export function LanguageSwitch({ before, children }: { before?: ReactNode; child
           lang={next}
           disabled={!hydrated || switching}
           onClick={change}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm text-muted-foreground focus-visible:focus-ring disabled:opacity-50"
         >
           <Globe aria-hidden="true" className="size-[15px] shrink-0" />
           {t("label")}

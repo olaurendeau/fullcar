@@ -244,7 +244,8 @@ describe("panelRead", () => {
 });
 
 describe("screenRead", () => {
-  const board: EventState = [];
+  const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: null };
+  const board: EventState = { event: header, legs: [] };
   const panel = { state: "panel", legs: after };
 
   it("is the panel's legs and the board's state when both reads answered", () => {
@@ -260,6 +261,7 @@ describe("screenRead", () => {
     ["the panel's answer is undefined", { ok: true, value: undefined }, { ok: true, value: board }],
     ["the panel's answer has no legs", { ok: true, value: { state: "panel" } }, { ok: true, value: board }],
     ["the board's state is undefined", { ok: true, value: panel }, { ok: true, value: undefined }],
+    ["the board's state has no header (epic #250)", { ok: true, value: panel }, { ok: true, value: [] }],
   ])("is nothing when %s", (_, panelSent, boardSent) => {
     expect(screenRead(panelSent as never, boardSent as never)).toBeUndefined();
   });

@@ -1,11 +1,11 @@
-import type { Page, Request, Route } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { expect, organiserPath, seedCrowd, seedOrganiserScene, test } from "./organiser";
+import { expect, holdActionsWith, organiserPath, seedCrowd, seedOrganiserScene, test } from "./organiser";
 
 /*
  * #183, epic #154: after an action of the board, the panel alone is read again; withdrawn
@@ -43,36 +43,14 @@ const board = (page: Page) => page.getByRole("tabpanel");
 const carTitle = (page: Page, driver: string) => board(page).getByRole("heading", { name: `Voiture de ${driver}` });
 
 /**
- * Oriane takes a seat in `driver`'s car, the first with a free seat without one: through the
- * sheet, ticked for her, until a tap does it alone (#92). The sheet closed, the board shows it.
+ * Oriane takes a seat in `driver`'s car, the first with a free seat without one: in one tap, the
+ * only person of the device without a car at the aller (C5.2, #92). The bar says so.
  */
 async function takeSeat(page: Page, driver?: string) {
   const name = `Place libre : prendre une place dans la voiture de ${driver ?? ""}`;
   await board(page).getByRole("button", { name: driver ? name : new RegExp(`^${name}`) }).first().click();
-  const sheet = page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ });
-  await sheet.getByRole("button", { name: /^Placer/ }).click();
-  await expect(sheet).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Messages" }).getByText(new RegExp(`^${ORGANISER} est dans la voiture de`))).toBeVisible();
-}
-
-const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
-
-/** Holds, from now on, every action whose body carries `text` until it fails or goes through. */
-async function holdActionsWith(page: Page, text: string) {
-  const held: Route[] = [];
-  await page.route(
-    (url) => url.pathname.endsWith("/admin"),
-    (route) => (isAction(route.request()) && (route.request().postData() ?? "").includes(text) ? held.push(route) : route.fallback()),
-  );
-  return {
-    held: () => held.length,
-    fail: async () => {
-      for (const route of held.splice(0)) await route.fulfill({ status: 500, contentType: "text/plain", body: "" });
-    },
-    release: async () => {
-      for (const route of held.splice(0)) await route.fallback();
-    },
-  };
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
 /** Holds, from now on, every read of the panel (the admin token in its body). */
@@ -98,11 +76,9 @@ async function openAsOrganiser(page: Page, db: Kysely<Database>, event: SeededEv
   return id;
 }
 
-/** Oriane's seat in Anaïs's car sent from the sheet, then the sheet closed before the answer. */
-async function sendSeatThenClose(page: Page) {
+/** Oriane's seat in Anaïs's car, sent in one tap (C5.2, #92): no sheet waits for the answer. */
+async function sendSeat(page: Page) {
   await board(page).getByRole("button", { name: "Place libre : prendre une place dans la voiture de Anaïs" }).click();
-  await page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ }).getByRole("button", { name: /^Placer/ }).click();
-  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
@@ -216,7 +192,7 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     page,
   }) => {
     const seat = await holdActionsWith(page, oriane);
-    await sendSeatThenClose(page);
+    await sendSeat(page);
     await expect.poll(seat.held).toBe(1);
     await refresh(page).click();
     await expect(panel(page).getByRole("status")).toHaveText(FR.refreshing);
@@ -330,6 +306,217 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     });
   }
 
+  for (const [viewport, bar] of [
+    [{ width: 360, height: 780 }, "measured before"],
+    [{ width: 1280, height: 800 }, "measured before"],
+    [{ width: 360, height: 780 }, "measured in that frame"],
+    [{ width: 1280, height: 800 }, "measured in that frame"],
+  ] as const) {
+    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the organiser scrolls up in the very frame the browser pulls the scroll back, the bar of messages ${bar}: the car moves by that scroll alone (#297, #316)`, async ({
+      page,
+      seededEvent,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.addStyleTag({ content: "html, main { overflow-anchor: none !important; }" });
+      const title = carTitle(page, "Anaïs");
+      const y = async () => {
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        return (await title.boundingBox())!.y;
+      };
+      const reads = await holdPanelReads(page, seededEvent);
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      expect(await panel(page).evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThan(0);
+      await expect(title).toBeInViewport();
+      const before = await y();
+      await takeSeat(page, "Anaïs");
+      await expect.poll(reads.held).toBe(1);
+
+      // In the task that commits the withdrawal, before the next frame's observers: the layout
+      // clamps the scroll to the end of a shorter page, then the organiser scrolls 60 px up.
+      // « measured in that frame »: the room kept below for the bar, opened by the seat, is only
+      // measured then, before the panel's observer, as a loaded machine makes it (#316). The
+      // clamp is made without that room, and the page is longer again when the observer runs.
+      const measured = await panel(page).evaluate((element, late) => {
+        const height = element.getBoundingClientRect().height;
+        const end = () => document.documentElement.scrollHeight - window.innerHeight;
+        const atStart = window.scrollY;
+        const room = document.documentElement.style;
+        const measured = room.getPropertyValue("--message-bar-height");
+        const observer = new MutationObserver(() => {
+          const after = element.getBoundingClientRect().height;
+          if (after > height - 100) return;
+          observer.disconnect();
+          if (late) {
+            room.removeProperty("--message-bar-height");
+            requestAnimationFrame(() => room.setProperty("--message-bar-height", measured));
+          }
+          Object.assign(window, { pulledBack: Math.max(0, atStart - end()), withdrawn: height - after });
+          window.scrollBy({ top: -60, behavior: "instant" });
+        });
+        observer.observe(element, { subtree: true, childList: true });
+        return parseFloat(measured);
+      }, bar === "measured in that frame");
+      expect(measured).toBeGreaterThan(0);
+      await reads.fail();
+      await expectWithdrawn(page);
+      // Pulled back by part of the withdrawn height only: the case where the sum is wrong without #297.
+      const { pulledBack, withdrawn } = await page.evaluate(() => {
+        const { pulledBack, withdrawn } = window as unknown as { pulledBack: number; withdrawn: number };
+        return { pulledBack, withdrawn };
+      });
+      expect(pulledBack).toBeGreaterThan(1);
+      expect(pulledBack).toBeLessThan(withdrawn - 1);
+      expect(Math.abs((await y()) - before - 60)).toBeLessThanOrEqual(1);
+    });
+  }
+
+  for (const viewport of [
+    { width: 360, height: 780 },
+    { width: 1280, height: 800 },
+  ]) {
+    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the organiser not scrolling, the bar of messages measured in the very frame the browser pulls the scroll back: the car stays in place (#316)`, async ({
+      page,
+      seededEvent,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.addStyleTag({ content: "html, main { overflow-anchor: none !important; }" });
+      const title = carTitle(page, "Anaïs");
+      const y = async () => {
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        return (await title.boundingBox())!.y;
+      };
+      const reads = await holdPanelReads(page, seededEvent);
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      expect(await panel(page).evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThan(0);
+      await expect(title).toBeInViewport();
+      const before = await y();
+      await takeSeat(page, "Anaïs");
+      await expect.poll(reads.held).toBe(1);
+
+      // In a frame's animation callbacks, after its scroll events and before its observers: a
+      // section of the panel hidden, the room kept below the bar gone, and the bar 1 px taller,
+      // so that its observer measures it again before the panel's. The browser pulls the scroll
+      // back without that room, and no scroll event says so before the panel's observer runs:
+      // the page is longer again when it does. A real withdrawal may read the layout in its own
+      // task, and a scroll event would then come first.
+      const { measured, pulledBack, hidden } = await section(page, "Aller").evaluate(
+        (element) =>
+          new Promise<Record<string, number>>((resolve) =>
+            requestAnimationFrame(() => {
+              const end = () => document.documentElement.scrollHeight - window.innerHeight;
+              const room = document.documentElement.style;
+              const measured = parseFloat(room.getPropertyValue("--message-bar-height"));
+              const atStart = window.scrollY;
+              const height = element.getBoundingClientRect().height;
+              (element as HTMLElement).hidden = true;
+              room.removeProperty("--message-bar-height");
+              const pulledBack = Math.max(0, atStart - end());
+              document.querySelector<HTMLElement>('[data-message-bar="open"]')!.style.height = `${measured + 1}px`;
+              resolve({ measured, pulledBack, hidden: height });
+            }),
+          ),
+      );
+      expect(measured).toBeGreaterThan(0);
+      // Pulled back by part of the hidden height only.
+      expect(pulledBack).toBeGreaterThan(1);
+      expect(pulledBack).toBeLessThan(hidden - 1);
+      expect(Math.abs((await y()) - before)).toBeLessThanOrEqual(1);
+      await reads.release();
+    });
+  }
+
+  for (const [viewport, next] of [
+    [{ width: 360, height: 780 }, "the section hidden"],
+    [{ width: 1280, height: 800 }, "the section hidden"],
+    [{ width: 360, height: 780 }, "the same 40 px again"],
+    [{ width: 1280, height: 800 }, "the same 40 px again"],
+  ] as const) {
+    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the end of the page read by a scroll event during a change undone before the panel's observer is not the end of the next change, ${next}: the car stays in place (#331)`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.addStyleTag({ content: "html, main { overflow-anchor: none !important; }" });
+      const title = carTitle(page, "Anaïs");
+      const y = async () => {
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        return (await title.boundingBox())!.y;
+      };
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      expect(await panel(page).evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThan(0);
+      await expect(title).toBeInViewport();
+      const before = await y();
+
+      // In a task: the section of the aller 40 px shorter, the browser pulling the scroll back as
+      // much, and the organiser 30 px up; the next frame's scroll event sees the panel so, and
+      // reads that end of the page. In that frame's animation callbacks, after the event and
+      // before the panel's observer: the 40 px back, so that the observer never sees them, and
+      // the organiser back where they were. Then the next change:
+      // - « the section hidden », in those same callbacks: no scroll event comes between, and
+      //   nothing is painted before the observer runs;
+      // - « the same 40 px again », in a later task, once the page got longer outside the panel,
+      //   as the room kept below the bar of messages makes it (#316): nothing is pulled back, and
+      //   the next scroll event sees the panel at the very height of the end it read before.
+      // Either way, the car has no reason to move.
+      const { shorter, seen, back, hidden, again, seenAgain } = await section(page, "Aller").evaluate(
+        (element, same) => {
+          const section = element as HTMLElement;
+          const atStart = window.scrollY;
+          const height = section.getBoundingClientRect().height;
+          const shorten = () => {
+            section.style.overflow = "hidden";
+            section.style.maxHeight = `${height - 40}px`;
+            return atStart - window.scrollY;
+          };
+          const shorter = shorten();
+          window.scrollBy({ top: -30, behavior: "instant" });
+          // What each scroll event sees the section lose.
+          const seen: number[] = [];
+          const onScroll = () => seen.push(height - section.getBoundingClientRect().height);
+          window.addEventListener("scroll", onScroll);
+          return new Promise<{ shorter: number; seen: number[]; back: number; hidden: number; again: number; seenAgain: number[] }>((resolve) =>
+            requestAnimationFrame(() => {
+              const first = [...seen];
+              section.style.removeProperty("max-height");
+              section.style.removeProperty("overflow");
+              window.scrollTo({ top: atStart, behavior: "instant" });
+              const back = window.scrollY - atStart;
+              const done = (again: number, seenAgain: number[]) => {
+                window.removeEventListener("scroll", onScroll);
+                resolve({ shorter, seen: first, back, hidden: height, again, seenAgain });
+              };
+              if (!same) {
+                section.hidden = true;
+                done(0, []);
+                return;
+              }
+              document.body.style.paddingBottom = "300px";
+              setTimeout(() => {
+                const mark = seen.length;
+                const again = shorten();
+                requestAnimationFrame(() => requestAnimationFrame(() => done(again, seen.slice(mark))));
+              });
+            }),
+          );
+        },
+        next === "the same 40 px again",
+      );
+      // The scroll event saw the section 40 px shorter, and the end of the page pulled back as much.
+      expect(shorter).toBeGreaterThan(1);
+      expect(seen).toHaveLength(1);
+      expect(Math.abs(seen[0] - 40)).toBeLessThanOrEqual(1);
+      expect(back).toBe(0);
+      if (next === "the section hidden") {
+        // Hidden, the section pulls the scroll back by far more than that end of the page.
+        expect(hidden).toBeGreaterThan(shorter + 40);
+      } else {
+        // Nothing pulled back this time, and the next scroll event saw the section 40 px shorter again.
+        expect(again).toBe(0);
+        expect(Math.abs(seenAgain[0] - 40)).toBeLessThanOrEqual(1);
+      }
+      expect(Math.abs((await y()) - before)).toBeLessThanOrEqual(1);
+    });
+  }
+
   test.describe("at 1280 px", () => {
     test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -356,7 +543,7 @@ test("O1.10: a seat taken while the area loads, answered once it is there, reads
   await page.goto(organiserPath(seededEvent));
   await expect(ownPersons(page).getByText(ORGANISER)).toBeVisible();
   await expect(page.getByText("Chargement de l’espace organisateur…")).toBeVisible();
-  await sendSeatThenClose(page);
+  await sendSeat(page);
 
   // The area read before the seat is taken; the seat's answer comes once it is shown.
   await reads.release();

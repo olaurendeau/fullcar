@@ -4,10 +4,19 @@
  * only place that decides it: pure functions over a state that `useMessageBar` keeps.
  */
 
-/** A message: its words, and its landmark, which takes the focus and says whether it is shown (rule 8). */
+/**
+ * « Annuler » of a placement (rule 6): what it sends. One per placement: the success's and the
+ * failure of its undo carry the same.
+ */
+export interface Undo {
+  run: () => void;
+}
+
+/** A message: its words, its landmark, which takes the focus and says whether it is shown (rule 8), and its « Annuler ». */
 export interface Message {
   text: string;
   landmark: () => boolean;
+  undo?: Undo;
 }
 
 /** What a send was about: its subjects, each subject's fields after it (#208), and its number. */
@@ -74,6 +83,15 @@ export const ended = (state: BarState): BarState => keep(state, (line) => line.k
 /** Rule 5: the failures `withdrawal` covers go; nothing else. */
 export const withdraw = (state: BarState, withdrawal: Withdrawal): BarState =>
   keep(state, (line) => line.kind !== "failure" || !covers(withdrawal, line));
+
+/**
+ * Rule 6: an « Annuler » sent shows on no line any more: the success keeps its words without it,
+ * and its send withdraws its failure. Its answer brings a success, or a failure with it again.
+ */
+export const undoing = (state: BarState, undo: Undo): BarState => ({
+  ...state,
+  lines: state.lines.map((line) => (line.undo === undo ? { ...line, undo: undefined } : line)),
+});
 
 /** Rule 7: « Fermer », or Escape, removes every line. */
 export const close = (state: BarState): BarState => keep(state, () => false);

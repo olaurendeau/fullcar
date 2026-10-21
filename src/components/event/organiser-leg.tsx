@@ -71,7 +71,7 @@ function OrganiserLegSection({
   return (
     <section aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3 border-t pt-4 lg:border-t-0 lg:pt-0">
       <div className="flex flex-col gap-1">
-        <h3 id={headingId} tabIndex={-1} className="self-start font-semibold outline-none">
+        <h3 id={headingId} tabIndex={-1} className="self-start rounded-sm font-semibold focus-visible:focus-ring">
           {t(`legs.${leg}`)}
         </h3>
         <p className="flex items-start gap-2 text-[13px] leading-[18px] text-muted-foreground">

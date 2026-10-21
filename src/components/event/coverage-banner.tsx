@@ -30,7 +30,7 @@ export function CoverageBanner({ coverage, live = true, leg }: { coverage: Cover
       tabIndex={leg && -1}
       data-leg-banner={leg}
       className={cn(
-        "flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        "flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm font-medium focus-visible:focus-ring",
         banner.kind === "missingSeats" ? "bg-amber-100 text-amber-950" : "bg-muted",
       )}
     >

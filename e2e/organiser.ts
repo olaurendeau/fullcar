@@ -172,6 +172,30 @@ export async function watchHash(page: Page): Promise<() => Promise<number>> {
   };
 }
 
+/**
+ * Holds, from now on, every action posted to an organiser's page whose body carries `text`,
+ * until it fails (`fail`, a 500; `lose`, a cut connection) or goes through (`release`).
+ */
+export async function holdActionsWith(page: Page, text: string) {
+  const held: Route[] = [];
+  await page.route(
+    (url) => url.pathname.endsWith("/admin"),
+    (route) => (isAction(route.request()) && (route.request().postData() ?? "").includes(text) ? held.push(route) : route.fallback()),
+  );
+  return {
+    held: () => held.length,
+    fail: async () => {
+      for (const route of held.splice(0)) await route.fulfill({ status: 500, contentType: "text/plain", body: "" });
+    },
+    lose: async () => {
+      for (const route of held.splice(0)) await route.abort("internetdisconnected");
+    },
+    release: async () => {
+      for (const route of held.splice(0)) await route.fallback();
+    },
+  };
+}
+
 /** A request the browser sent, and what it received. */
 export interface Exchange {
   method: string;
@@ -216,8 +240,13 @@ async function bodyOf(text: Promise<string>, path: string): Promise<string> {
 }
 
 /** A server action: a POST with a `next-action` header. */
-function isAction(request: Request): boolean {
+export function isAction(request: Request): boolean {
   return request.method() === "POST" && request.headers()["next-action"] !== undefined;
+}
+
+/** A read of the App Router (a navigation, a refresh, a prefetch): `?_rsc=` in its URL. */
+function isRouterRead(request: Request): boolean {
+  return new URL(request.url()).searchParams.has("_rsc");
 }
 
 /** A request as it left, answered or not. */
@@ -232,9 +261,14 @@ interface Sent {
 /**
  * Records every request of the context, and the answer to each that has one: a request the
  * browser gives up on (a favicon, a page left mid-load) only has its path and headers.
- * A server action's answer is read as Playwright fetches it (`route.fetch()`): Chromium may
- * drop it before `response.text()` asks. An action routed by the test itself, ahead of this
- * route, is read by `response.text()`, and fails if it cannot be.
+ * The answers React reads, a server action's and the router's (`?_rsc=`), are read as
+ * Playwright fetches them (`route.fetch()`): React reads them through a stream reader, and
+ * Chromium may then report the request aborted once the whole answer is in, and drop its body
+ * before `response.text()` asks (#303, see `watchRequests` in `organiser-fold.spec.ts`). Such a
+ * request, routed by the test itself ahead of this route, is read by `response.text()`, and
+ * fails if it cannot be: a test that only lets it through uses `route.fallback()`. A redirect
+ * is not followed here but given to the browser, which follows it through this route again: its
+ * `Location` and the next request stay searched.
  */
 async function record(context: BrowserContext, hide: (text: string) => string) {
   const state = { on: true };
@@ -247,8 +281,8 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     () => state.on,
     async (route: Route) => {
       const request = route.request();
-      if (!isAction(request)) return route.fallback();
-      const answer = route.fetch();
+      if (!isAction(request) && !isRouterRead(request)) return route.fallback();
+      const answer = route.fetch({ maxRedirects: 0 });
       fetched.set(
         request,
         answer.then((response) => response.text()),

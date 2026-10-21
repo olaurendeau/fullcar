@@ -1,6 +1,7 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { expectRing, press, pressUntil, rgba } from "./focus-ring";
 import { hideToken } from "./organiser";
 
 leaveNoToken();
@@ -115,12 +116,13 @@ async function expectNoNavigation(page: Page) {
   await expect(page.locator("[aria-current]")).toHaveCount(0);
 }
 
-/** The focus ring of `element`, reached by the keyboard: its box-shadow and outline style. */
-function ringOf(element: Locator) {
-  return element.evaluate((node) => {
-    const style = getComputedStyle(node);
-    return { focused: document.activeElement === node, boxShadow: style.boxShadow, outlineStyle: style.outlineStyle };
+/** The outline of `element`, its colour read in sRGB: what makes its focus ring. */
+async function outlineOf(element: Locator) {
+  const style = await element.evaluate((node) => {
+    const { outlineStyle, outlineWidth, outlineOffset } = getComputedStyle(node);
+    return { outlineStyle, outlineWidth, outlineOffset };
   });
+  return { ...style, outlineColor: await rgba(element, "outline-color") };
 }
 
 /** A mark only the same document keeps: a document loaded again would lose it. */
@@ -171,21 +173,18 @@ test.describe("the home link, in a browser set to French", () => {
     const link = homeLink(page, FR);
     const button = languageSwitch(page, FR);
 
-    // Reached from the switch, backwards, by the keyboard: the focus is visible.
-    await button.focus();
-    const switchRing = await ringOf(button);
-    await page.keyboard.press("Shift+Tab");
+    // Only the keyboard moves the focus (F1.14): « Accueil » by Shift+Tab from the switch, the switch by Tab from it.
+    await pressUntil(page, "Tab", button);
+    await press(page, "Shift+Tab");
     await expect(link).toBeFocused();
-    const ring = await ringOf(link);
-    expect(ring.focused).toBe(true);
-    expect(ring.boxShadow).not.toBe("none");
-    expect(ring.outlineStyle).toBe("none");
-    // The ring of the language switch, and only it.
-    expect(switchRing.boxShadow).not.toBe("none");
-    expect(ring.boxShadow).toBe(switchRing.boxShadow);
-
-    await page.keyboard.press("Tab");
+    await expectRing(link);
+    const ring = await outlineOf(link);
+    await press(page, "Tab");
     await expect(button).toBeFocused();
+    await expectRing(button);
+    // The ring of the language switch, and only it.
+    expect(ring).toEqual(await outlineOf(button));
+
     await page.keyboard.press("Tab");
     await expect(contactLink(page, FR)).toBeFocused();
   });
@@ -228,7 +227,12 @@ test.describe("the home link, in a browser set to French", () => {
     await markWindow(page);
 
     phase.name = "home";
+    // Armed before the tap (F1.15): the RSC response of `/`, which a quick answer would otherwise pass by.
+    const homeResponse = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/" && response.request().headers()["rsc"] === "1",
+    );
     await homeLink(page, FR).click();
+    await homeResponse;
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fullcar");
     await expect(page.getByText(FR.tagline, { exact: true })).toBeVisible();
     // Exactly the origin's `/`, no fragment, in the same tab, by the same document.
@@ -238,7 +242,6 @@ test.describe("the home link, in a browser set to French", () => {
     expect(await windowMarked(page)).toBe(true);
     // Whatever the home page asks once there (its own prefetch included) is in the list.
     await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(500);
 
     phase.name = "back";
     await page.goBack();
