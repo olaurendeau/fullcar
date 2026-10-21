@@ -43,3 +43,20 @@ make help    # le reste
 Le développement suit le plugin [ola-workflow](https://github.com/olaurendeau/ola-workflow) :
 les documents que lisent les agents sont dans [`docs/agents/`](docs/agents/), et le profil
 du projet dans [`.claude/workflow.json`](.claude/workflow.json).
+
+## Variables d'environnement de Sentry
+
+Toutes facultatives. Sans `NEXT_PUBLIC_SENTRY_DSN`, Sentry n'est ni chargé ni configuré, et
+rien ne part. Les variables en `NEXT_PUBLIC_` sont lues au build : redéployer après un
+changement.
+
+| variable | rôle |
+|---|---|
+| `NEXT_PUBLIC_SENTRY_DSN` | le DSN du projet Sentry (organisation en région EU) ; active Sentry côté serveur et navigateur |
+| `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | la part des traces envoyées, entre `0` et `1` (par exemple `0.1`) ; absente ou invalide, aucune trace |
+| `SENTRY_AUTH_TOKEN` | build seulement : envoie les source maps à Sentry, puis les supprime du build ; sans lui, aucune n'est produite |
+| `SENTRY_ORG`, `SENTRY_PROJECT` | build seulement, avec `SENTRY_AUTH_TOKEN` : où envoyer les source maps |
+
+La release et l'environnement viennent de Vercel (`VERCEL_GIT_COMMIT_SHA`, `VERCEL_ENV`, et
+leurs versions `NEXT_PUBLIC_` dans le navigateur) : « Automatically expose System Environment
+Variables » doit rester activé.

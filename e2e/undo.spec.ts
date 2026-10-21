@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { failHeld, holdFirst, holdToken, messages, newToken } from "./device";
+import { removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -230,6 +231,30 @@ test.describe("« Annuler »", () => {
       await undo(page).click();
       await expect(messages(page)).toHaveText([hugoFailed]);
       await expect(title(page, "Sophie")).toBeFocused();
+    });
+
+    // With #330: « Annuler » comes from the bar, never from a sheet, so nothing holds the retour for it.
+    test("C5.10, M7.10: « Annuler » on the retour; once the retour is gone, its failure says so, and the focus is not lost", async ({ db, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await tab(page, "Retour").click();
+      await cellAction(page, "Tom", "Retour", "Sortir de la voiture");
+      await expect(cell(page, "Tom", "Retour")).toHaveAccessibleName("Tom, Retour : Sans voiture");
+      await seat(page, "Paul").click();
+      await expect(messages(page)).toHaveText(["Tom est dans la voiture de Paul"]);
+      await undo(page).click();
+      await expect(messages(page)).toHaveText(["Tom n’est plus dans la voiture de Paul"]);
+      await expect(title(page, "Paul")).toBeFocused();
+      expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: null });
+
+      await seat(page, "Paul").click();
+      await expect(messages(page)).toHaveText(["Tom est dans la voiture de Paul"]);
+      await removeRetourInDb(db, seededEvent.id);
+      await undo(page).click();
+      const gone = "Tom n’a pas pu sortir de la voiture de Paul. Il n’y a plus de retour pour cet événement.";
+      await expect(messages(page)).toHaveText([gone, "Tom est dans la voiture de Paul"]);
+      await expect(undo(page)).toHaveAccessibleDescription(gone);
+      await expect(page.getByRole("tab")).toHaveCount(0);
+      await expect(page.locator("#event-title")).toBeFocused();
     });
 
     test("rule 8: « Annuler » after a change of tab: the focus on the active tab, the tab kept; back on the aller, on the car's title", async ({ page, seededEvent }) => {

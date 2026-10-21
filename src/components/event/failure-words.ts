@@ -23,7 +23,7 @@ export type NotDone =
   | { kind: "readDevice" };
 
 /** The reasons said by their key alone. */
-type Plain = "offline" | "failed" | "seatTaken" | "rideGone" | "passengersChanged" | "forbidden" | "eventNotFound";
+type Plain = "offline" | "failed" | "seatTaken" | "rideGone" | "passengersChanged" | "forbidden" | "eventNotFound" | "noRetour";
 
 /** Why, and what to do: offline (nothing left), a server error, or the server's refusal. */
 export type Why =
@@ -37,11 +37,11 @@ export type Why =
 
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
- * only a forged request or a collision of ids gives, take the generic one; so does `noRetour`,
- * the retour removed meanwhile, until #265 gives it its own words.
+ * only a forged request or a collision of ids gives, take the generic one. `noRetour`, the
+ * retour removed meanwhile, says so (`Actions.why.noRetour`, decision 40).
  */
-export function whyOf(error: Plain | "invalid" | "idTaken" | "noRetour"): Why {
-  return { kind: error === "invalid" || error === "idTaken" || error === "noRetour" ? "failed" : error };
+export function whyOf(error: Plain | "invalid" | "idTaken"): Why {
+  return { kind: error === "invalid" || error === "idTaken" ? "failed" : error };
 }
 
 /**

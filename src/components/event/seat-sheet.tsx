@@ -26,7 +26,9 @@ export type SeatRefusal = "rideGone" | "notEnoughSeats" | "alreadyInCar";
 export type SeatsTaken =
   | { kind: "done" }
   | { kind: "refused"; refusal: SeatRefusal; why: Why }
-  | { kind: "problem"; problem: BarProblem; why: Why };
+  | { kind: "problem"; problem: BarProblem; why: Why }
+  /** The car's retour is gone: the sheet closes, and the bar says why (rule 9). */
+  | { kind: "noRetour"; why: Why };
 
 /** What the server answers `takeSeats`, an unknown event included. */
 type SeatsAnswer =
@@ -36,7 +38,7 @@ type SeatsAnswer =
 
 /**
  * `takeSeats`'s answer as the page says it, for the persons sent, `names`. The sheet has no words
- * of its own for `forbidden`, `eventNotFound`, `invalid` and `noRetour`: `failed` there (§ 2.6).
+ * of its own for `forbidden`, `eventNotFound` and `invalid`: `failed` there (§ 2.6).
  */
 export function seatsTaken(sent: { ok: true; value: SeatsAnswer } | { ok: false; problem: BarProblem }, names: readonly string[]): SeatsTaken {
   if (!sent.ok) return { kind: "problem", problem: sent.problem, why: whyOf(sent.problem) };
@@ -51,6 +53,8 @@ export function seatsTaken(sent: { ok: true; value: SeatsAnswer } | { ok: false;
       return { kind: "refused", refusal: "notEnoughSeats", why: whyOf("seatTaken") };
     case "notEnoughSeats":
       return { kind: "refused", refusal: "notEnoughSeats", why: { kind: "notEnoughSeats", free: answer.freeSeats } };
+    case "noRetour":
+      return { kind: "noRetour", why: whyOf("noRetour") };
     default:
       return { kind: "problem", problem: "failed", why: whyOf(answer.error) };
   }
@@ -226,6 +230,7 @@ function RegisterSheet({
         mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
         open={() => isOpen.current}
         onDone={() => onOpenChange(false)}
+        onGone={() => onOpenChange(false)}
       />
     </BottomSheet>
   );
@@ -294,7 +299,7 @@ function SeatSheet({
   });
 
   // What the sheet says of a refusal or a problem: the bar names who could not get in instead.
-  const said = (taken: Exclude<SeatsTaken, { kind: "done" }>, count: number): string => {
+  const said = (taken: Exclude<SeatsTaken, { kind: "done" | "noRetour" }>, count: number): string => {
     if (taken.kind === "problem") return t(`Actions.${taken.problem}`);
     const { refusal } = taken;
     return refusal === "notEnoughSeats" ? t("Sheet.notEnoughSeats") : t(`Actions.${refusal}`, { count });
@@ -319,6 +324,8 @@ function SeatSheet({
       onOpenChange(false);
       return;
     }
+    // Its leg is gone (rule 9): it closes, the focus back on the seat, which shows until then.
+    if (taken.kind === "noRetour") return onOpenChange(false);
     setRefused(said(taken, names.length));
     if (taken.kind === "refused" && taken.refusal === "rideGone") {
       focusNext.current = () => body.current?.closest('[role="dialog"]')?.querySelector<HTMLElement>("[data-slot=sheet-footer] button");
@@ -375,6 +382,7 @@ function SeatSheet({
             <PersonForm
               mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
               open={() => isOpen.current}
+              onGone={() => onOpenChange(false)}
               onDone={(personId) => {
                 focusNext.current = () => document.getElementById(boxId(personId));
                 setAdding(null);
