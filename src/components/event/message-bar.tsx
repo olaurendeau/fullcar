@@ -1,6 +1,6 @@
 import { CircleCheck, TriangleAlert, Users, WifiOff, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createAnnouncer, type Announcer } from "./announce";
@@ -34,6 +34,67 @@ const announce = (announcer: Announcer | undefined, text: string) => (text ? ann
 const iconOf = (line: bar.Line) =>
   line.kind === "success" ? CircleCheck : line.kind === "info" ? Users : line.offline ? WifiOff : TriangleAlert;
 
+/** The bar's height, measured, which the page's `main` keeps as room below it. */
+const HEIGHT = "--message-bar-height";
+
+/** The element that last had the focus, whether it is the bar's, and the bar's line it belongs to (NaN: none, as « Fermer »). */
+interface Focused {
+  element: Element;
+  inBar: boolean;
+  line: number;
+}
+
+/** The element that had the focus is gone, or can no longer take it. */
+const fell = (element: Element) => !element.isConnected || element.matches(":disabled");
+
+/** The focus fell on nothing: <body>. */
+const onNothing = () => document.activeElement === null || document.activeElement === document.body;
+
+/**
+ * The bar's lines, a group that is no live region (« À 360 px », v4.2.3). It stops at 40dvh
+ * and scrolls beyond; overflowing, it takes the focus, to scroll from the keyboard, and keeps
+ * it while it has it, even once it no longer overflows, lest the focus fall on <body>. A new
+ * failure brings it back to its top, where it shows; a new success scrolls into view, at its bottom.
+ */
+function MessageList({ lines, failing, written, label }: { lines: bar.Line[]; failing: boolean; written?: bar.Line; label: string }) {
+  const list = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => setOverflows(element.scrollHeight > element.clientHeight));
+    for (const watched of [element, ...element.children]) observer.observe(watched);
+    return () => observer.disconnect();
+  }, [lines]);
+  useEffect(() => {
+    if (written?.kind === "failure") list.current?.scrollTo({ top: 0 });
+    if (written?.kind === "success") list.current?.querySelector(`[data-bar-line="${written.id}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [written?.id, written?.kind]);
+
+  return (
+    <div
+      ref={list}
+      role="group"
+      aria-label={label}
+      tabIndex={overflows || focused ? 0 : undefined}
+      onFocus={(event) => event.target === event.currentTarget && setFocused(true)}
+      onBlur={(event) => event.target === event.currentTarget && setFocused(false)}
+      className="max-h-[40dvh] min-w-0 flex-1 overflow-y-auto rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      {lines.map((line) => {
+        const Icon = iconOf(line);
+        return (
+          <p key={line.id} data-bar-line={line.id} className="flex items-start gap-2.5 border-t py-2.5 first:border-t-0 wrap-anywhere">
+            <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", failing && line.kind === "failure" && "text-destructive")} />
+            <span className={cn("min-w-0 flex-1", failing && line.kind === "success" && "font-medium")}>{line.text}</span>
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * The page's one bar of messages, placed in the DOM before the tabs and shown fixed at the
  * bottom (« La barre de messages », v4.2.3): one line per message, the failures first, and one
@@ -46,7 +107,7 @@ const iconOf = (line: bar.Line) =>
 export function MessageBar({ messages }: { messages: ReturnType<typeof useMessageBar> }) {
   const t = useTranslations("Actions");
   const element = useRef<HTMLDivElement>(null);
-  const lines = bar.lines(messages.state);
+  const lines = useMemo(() => bar.lines(messages.state), [messages.state]);
   const { alert, status } = bar.regions(messages.state);
   const open = lines.length > 0;
   const failing = lines.some((line) => line.kind === "failure");
@@ -92,20 +153,59 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
 
   // A seat taken, or a car removed, by a send from a sheet closed meanwhile can remove the
   // element that had the focus: the line it writes then gives the focus to its landmark (« Le
-  // focus après une action »). A focus put on nothing, as a tap on the page's text does, stays.
-  const focused = useRef<Element | null>(null);
+  // focus après une action »). A focus put on nothing, as a tap on the page's text does, stays:
+  // what had it is forgotten as it leaves, unless it leaves because it is gone or disabled.
+  const focused = useRef<Focused | null>(null);
   useEffect(() => {
-    const remember = (event: FocusEvent) => void (focused.current = event.target as Element);
+    const remember = (event: FocusEvent) => {
+      const target = event.target as Element;
+      const inBar = !!element.current?.contains(target);
+      focused.current = { element: target, inBar, line: Number(target.closest("[data-bar-line]")?.getAttribute("data-bar-line")) };
+    };
+    const forget = (event: FocusEvent) => {
+      const lost = focused.current;
+      if (event.relatedTarget || lost?.element !== event.target) return;
+      queueMicrotask(() => void (focused.current === lost && !fell(lost.element) && (focused.current = null)));
+    };
     document.addEventListener("focusin", remember);
-    return () => document.removeEventListener("focusin", remember);
+    document.addEventListener("focusout", forget);
+    return () => {
+      document.removeEventListener("focusin", remember);
+      document.removeEventListener("focusout", forget);
+    };
   }, []);
   const writtenLandmark = useEffectEvent(() => {
-    const active = document.activeElement;
-    const lost = focused.current;
-    const fell = lost !== null && (!lost.isConnected || lost.matches(":disabled"));
-    if ((active === null || active === document.body) && fell) written?.landmark();
+    const lost = focused.current?.element;
+    if (onNothing() && lost && fell(lost)) written?.landmark();
   });
   useEffect(() => writtenLandmark(), [written?.id]);
+
+  // Rule 8: an element of the bar that had the focus is gone, or disabled, and the focus fell
+  // on <body>, as when an action without words empties the bar while « Fermer » has the focus.
+  // Its line's landmark first, then those of the other lines, still there or just gone, the
+  // most recent first; else the active tab, or the title.
+  const shown = useRef<bar.Line[]>([]);
+  const leftBar = useEffectEvent(() => {
+    const before = shown.current;
+    shown.current = lines;
+    const lost = focused.current;
+    if (!lost?.inBar || !onNothing() || !fell(lost.element)) return;
+    const all = [...new Map([...before, ...lines].map((line) => [line.id, line])).values()];
+    const rank = (line: bar.Line) => (line.id === lost.line ? Infinity : line.id);
+    focusFirstShown(all.sort((a, b) => rank(b) - rank(a)).map((line) => line.landmark));
+  });
+  useEffect(() => leftBar(), [messages.state]);
+
+  // The page keeps room below it for the bar, as measured (« À 360 px »): `main` reads the height.
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new ResizeObserver(([entry]) => root.style.setProperty(HEIGHT, `${entry.target.getBoundingClientRect().height}px`));
+    if (element.current) observer.observe(element.current);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty(HEIGHT);
+    };
+  }, []);
 
   return (
     <div
@@ -119,19 +219,7 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
         open && (failing ? "border-destructive bg-background text-foreground" : "border-transparent bg-primary font-medium text-primary-foreground"),
       )}
     >
-      {open && (
-        <div role="group" aria-label={t("messages")} className="min-w-0 flex-1">
-          {lines.map((line) => {
-            const Icon = iconOf(line);
-            return (
-              <p key={line.id} className="flex items-start gap-2.5 border-t py-2.5 first:border-t-0 wrap-anywhere">
-                <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", failing && line.kind === "failure" && "text-destructive")} />
-                <span className={cn("min-w-0 flex-1", failing && line.kind === "success" && "font-medium")}>{line.text}</span>
-              </p>
-            );
-          })}
-        </div>
-      )}
+      {open && <MessageList lines={lines} failing={failing} written={written} label={t("messages")} />}
       {open && (
         <Button
           variant="ghost"
