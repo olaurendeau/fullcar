@@ -92,15 +92,18 @@ test.describe("the subject of « Ajouter une personne » and « Proposer une voi
     await expect(lines(page)).toHaveText([]);
   });
 
-  test("C11.10, « Ajouter »: « Hugo » from the same button leaves the failure of « Inès »", async ({ page, seededEvent }) => {
-    await failInes(page, seededEvent.id);
-    const answer = await holdFirst(page, "Hugo", false);
-    await addFromTab(page, "Hugo");
-    await expect(lines(page)).toHaveText([INES]);
-    answer();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(messages(page)).toHaveText([INES]);
-  });
+  // The first name sent is the subject, its case kept: « inès » is not « Inès » (review of #307).
+  for (const firstName of ["Hugo", "inès"]) {
+    test(`C11.10, « Ajouter »: « ${firstName} » from the same button leaves the failure of « Inès »`, async ({ page, seededEvent }) => {
+      await failInes(page, seededEvent.id);
+      const answer = await holdFirst(page, firstName, false);
+      await addFromTab(page, firstName);
+      await expect(lines(page)).toHaveText([INES]);
+      answer();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(messages(page)).toHaveText([INES]);
+    });
+  }
 
   test("C11.10, « Ajouter »: a failure that comes after « Inès » is sent again from the sheet reopened is never said", async ({ page, seededEvent }) => {
     const first = await holdFirst(page, "Inès", true);
