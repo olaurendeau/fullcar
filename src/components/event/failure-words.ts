@@ -75,6 +75,16 @@ export function personWhy(error: Parameters<typeof whyOf>[0] | "drives"): Why {
   return whyOf(error === "drives" ? "invalid" : error);
 }
 
+/**
+ * Why « Proposer une voiture » was not done: as `whyOf`, and `alreadyDriving` names who drives.
+ * `alreadyInCar` is about the passengers ticked in « Qui monte avec vous ? », which the form does
+ * not ask yet (#171): the generic reason until then.
+ */
+export function offerWhy(error: Parameters<typeof whyOf>[0] | "alreadyDriving" | "alreadyInCar", driver: string): Why {
+  if (error === "alreadyDriving") return { kind: "alreadyDriving", driver };
+  return whyOf(error === "alreadyInCar" ? "invalid" : error);
+}
+
 /** The page's words: a translator from the root of the messages, and a list in its language. */
 export interface Words {
   t: ReturnType<typeof createTranslator<Messages>>;

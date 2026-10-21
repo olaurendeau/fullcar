@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import type { Leg } from "@/domain/leg";
+import type { NotDone } from "./failure-words";
 import { focusCell } from "./focus";
 import { HidesPage, useSends, type FromSheet } from "./hidden-page";
 import type { BarProblem } from "./message-bar";
@@ -24,7 +25,7 @@ import type { BarProblem } from "./message-bar";
  * no longer shows goes to the bar.
  */
 export type RemoveRide = (
-  removal: { rideId: string; leg: Leg; sending: (sending: boolean) => void; removed: () => void },
+  removal: { rideId: string; leg: Leg; sending: (sending: boolean) => void; removed: () => void; notDone: NotDone },
   confirmation: FromSheet,
 ) => Promise<BarProblem | null | undefined>;
 
@@ -32,6 +33,8 @@ interface Car {
   id: string;
   leg: Leg;
   driverId: string;
+  /** The driver's first name, as the card shows it: the bar names the car by it (C11.11). */
+  driver: string;
   passengers: number;
 }
 
@@ -87,7 +90,13 @@ export function RemoveRideButton({ car, removeRide }: { car: Car; removeRide: Re
           sending={sending}
           send={(confirmation) =>
             removeRide(
-              { rideId: car.id, leg, sending: setSending, removed: () => (removed.current = true) },
+              {
+                rideId: car.id,
+                leg,
+                sending: setSending,
+                removed: () => (removed.current = true),
+                notDone: { kind: "removeRide", driver: car.driver, leg },
+              },
               confirmation,
             )
           }

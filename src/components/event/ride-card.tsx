@@ -100,7 +100,7 @@ export function RideCard({
           {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} />}
           {removeRide && (
             <RemoveRideButton
-              car={{ id: car.id, leg: car.leg, driverId: car.driver.id, passengers: car.passengers.length }}
+              car={{ id: car.id, leg: car.leg, driverId: car.driver.id, driver: car.driver.firstName, passengers: car.passengers.length }}
               removeRide={removeRide}
             />
           )}

@@ -6,7 +6,7 @@ import { cellActions, type CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
-import { cellNotDone, cellWhy, editedFields, failureText, nameList, personWhy, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
+import { cellNotDone, cellWhy, editedFields, failureText, nameList, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
 
 // C11.11: every failure in the bar, word for word as « Chaque échec, mot pour mot » says it
 // (docs/design/event-board/README.md, v4.2), in French and in English.
@@ -208,6 +208,33 @@ describe("editedFields and personWhy: a person's form (C11.11)", () => {
     const notDone: NotDone = { kind: "editPerson", firstName: "Tom", fields: editedFields(["firstName"]) };
     expect(failureText(words("fr"), notDone, personWhy("offline"))).toBe("Le prénom de Tom n’a pas été enregistré. Vérifiez la connexion, puis réessayez.");
     expect(failureText(words("en"), notDone, personWhy("offline"))).toBe("Tom’s first name was not saved. Check your connection, then try again.");
+  });
+});
+
+// #226: an offer's refusal says its reason, `alreadyDriving` naming who drives.
+describe("offerWhy: « Proposer une voiture » (C11.11)", () => {
+  const offers = rows().filter((row) => row.action.startsWith("« Proposer une voiture »"));
+
+  it("reads the rows of an offer on one leg and on both", () => {
+    expect(new Set(offers.map((row) => row.action)).size).toBe(2);
+  });
+
+  for (const row of offers) {
+    // The passengers ticked in « Qui monte avec vous ? », which the form does not ask yet (#171).
+    for (const source of sources(row.failure).filter((source) => source !== "alreadyInCar")) {
+      it(`${row.action}, ${source}`, () => {
+        const { notDone } = ACTIONS[row.action];
+        if (notDone.kind !== "offerRide") throw new Error(row.action);
+        const why = offerWhy(source as Parameters<typeof offerWhy>[0], notDone.driver);
+        expect(failureText(words("fr"), notDone, why)).toBe(row.fr);
+        expect(failureText(words("en"), notDone, why)).toBe(row.en);
+      });
+    }
+  }
+
+  it("gives `alreadyInCar`, with no passenger ticked to name, and `noRetour` the generic reason", () => {
+    expect(offerWhy("alreadyInCar", "Marc")).toEqual({ kind: "failed" });
+    expect(offerWhy("noRetour", "Marc")).toEqual({ kind: "failed" });
   });
 });
 
