@@ -468,14 +468,20 @@ test.describe("the scene of O2.5", () => {
     page,
     seededEvent,
   }) => {
+    // #343: watched from before the page loads, so that a read of the load that ends late is
+    // counted where it was sent, before « Actualiser », and a fold that cancels any request is seen.
+    const requests = watchRequests(page, seededEvent);
     await page.goto(organiserPath(seededEvent));
     await expect(toggle(page)).toBeVisible();
+    await expect
+      .poll(() => requests().filter((fate) => fate.endsWith(": sent")), { message: "requests of the load still running" })
+      .toEqual([]);
+    const loaded = requests();
     const reads = await holdActionsWith(page, seededEvent.token);
-    const requests = watchRequests(page, seededEvent);
     await refresh(page).click();
     await expect.poll(reads.held).toBe(1);
     // Next sends one action at a time: the board's read waits for the panel's answer.
-    const held = ["the panel's read: sent"];
+    const held = [...loaded, "the panel's read: sent"];
     expect(requests(), "requests while the read is held").toEqual(held);
     await setFolded(page, true);
     await setFolded(page, false);
@@ -485,7 +491,7 @@ test.describe("the scene of O2.5", () => {
     await expect(panel(page).getByRole("status")).toHaveText(FR.refreshed);
     // Every request from « Actualiser » on, and how it ended (#303: answered, even when Chromium reports it aborted).
     await expect
-      .poll(requests, { message: "requests from « Actualiser » to its end" })
+      .poll(() => requests().slice(loaded.length), { message: "requests from « Actualiser » to its end" })
       .toEqual(["the panel's read: answered 200", "the board's read: answered 200"]);
     await expect(alertText(page)).toHaveCount(0);
   });
