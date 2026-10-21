@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
 import { usePageHidden } from "@/components/event/hidden-page";
-import type { WallClock } from "@/domain/wall-clock";
 import type { EventState } from "../event-state";
 import { ParticipantBoard, type BoardHandle } from "../participant-board";
 import { useAdminLinkCheck } from "./admin-link";
@@ -31,22 +30,10 @@ import { alertShown, announcement, panelRead, screenRead, screenReducer } from "
  *   title, or to its section's when the list went too (O5.7); never to `<body>`.
  * - Its frame keeps the board in place on screen as it changes height (O1.11).
  * - While a sheet hides the page, the live regions keep what they said: their next words wait
- *   for it to show. The legs' dates are the page's: the panel's answer does not carry them.
+ *   for it to show. The legs' dates are the page's, from the header of the state the board
+ *   shows last (epic #250): the panel's answer does not carry them.
  */
-export function OrganiserScreen({
-  id,
-  board,
-  children,
-  ...event
-}: {
-  id: string;
-  title: string;
-  location: string;
-  allerAt: WallClock;
-  retourAt: WallClock | null;
-  board: EventState;
-  children: ReactNode;
-}) {
+export function OrganiserScreen({ id, state, children }: { id: string; state: EventState; children: ReactNode }) {
   const t = useTranslations("Admin");
   const link = useAdminLinkCheck(id);
   const [screen, dispatch] = useReducer(screenReducer, { state: "loading" });
@@ -56,6 +43,7 @@ export function OrganiserScreen({
   const title = useRef<HTMLButtonElement>(null);
   const invalid = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
+  const [event, setEvent] = useState(state.event);
   const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null)[] } | null>(null);
   useKeepBoardInPlace(frame);
 
@@ -177,7 +165,7 @@ export function OrganiserScreen({
         {area}
       </div>
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">
-        <ParticipantBoard ref={boardRef} id={id} board={board} onAction={reread} {...event} />
+        <ParticipantBoard ref={boardRef} id={id} state={state} onAction={reread} onState={setEvent} />
         {children}
       </div>
     </>
