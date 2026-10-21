@@ -425,11 +425,13 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     });
   }
 
-  for (const viewport of [
-    { width: 360, height: 780 },
-    { width: 1280, height: 800 },
-  ]) {
-    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the end of the page read by a scroll event during a change undone before the panel's observer is not the end of the next change: the car stays in place (#331)`, async ({
+  for (const [viewport, next] of [
+    [{ width: 360, height: 780 }, "the section hidden"],
+    [{ width: 1280, height: 800 }, "the section hidden"],
+    [{ width: 360, height: 780 }, "the same 40 px again"],
+    [{ width: 1280, height: 800 }, "the same 40 px again"],
+  ] as const) {
+    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the end of the page read by a scroll event during a change undone before the panel's observer is not the end of the next change, ${next}: the car stays in place (#331)`, async ({
       page,
     }) => {
       await page.setViewportSize(viewport);
@@ -447,38 +449,70 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
       // In a task: the section of the aller 40 px shorter, the browser pulling the scroll back as
       // much, and the organiser 30 px up; the next frame's scroll event sees the panel so, and
       // reads that end of the page. In that frame's animation callbacks, after the event and
-      // before the panel's observer: the 40 px back, so that the observer never sees them, the
-      // organiser back where they were, then the section hidden. No scroll event comes between,
-      // and nothing is painted before the observer runs: the car has no reason to move.
-      const { shorter, seen, back, hidden } = await section(page, "Aller").evaluate((element) => {
-        const section = element as HTMLElement;
-        const atStart = window.scrollY;
-        const height = section.getBoundingClientRect().height;
-        section.style.overflow = "hidden";
-        section.style.maxHeight = `${height - 40}px`;
-        const shorter = atStart - window.scrollY;
-        window.scrollBy({ top: -30, behavior: "instant" });
-        let seen = 0;
-        const onScroll = () => (seen = section.getBoundingClientRect().height);
-        window.addEventListener("scroll", onScroll, { once: true });
-        return new Promise<Record<string, number>>((resolve) =>
-          requestAnimationFrame(() => {
-            window.removeEventListener("scroll", onScroll);
-            section.style.removeProperty("max-height");
-            section.style.removeProperty("overflow");
-            window.scrollTo({ top: atStart, behavior: "instant" });
-            const back = window.scrollY - atStart;
-            section.hidden = true;
-            resolve({ shorter, seen: height - seen, back, hidden: height });
-          }),
-        );
-      });
+      // before the panel's observer: the 40 px back, so that the observer never sees them, and
+      // the organiser back where they were. Then the next change:
+      // - « the section hidden », in those same callbacks: no scroll event comes between, and
+      //   nothing is painted before the observer runs;
+      // - « the same 40 px again », in a later task, once the page got longer outside the panel,
+      //   as the room kept below the bar of messages makes it (#316): nothing is pulled back, and
+      //   the next scroll event sees the panel at the very height of the end it read before.
+      // Either way, the car has no reason to move.
+      const { shorter, seen, back, hidden, again, seenAgain } = await section(page, "Aller").evaluate(
+        (element, same) => {
+          const section = element as HTMLElement;
+          const atStart = window.scrollY;
+          const height = section.getBoundingClientRect().height;
+          const shorten = () => {
+            section.style.overflow = "hidden";
+            section.style.maxHeight = `${height - 40}px`;
+            return atStart - window.scrollY;
+          };
+          const shorter = shorten();
+          window.scrollBy({ top: -30, behavior: "instant" });
+          // What each scroll event sees the section lose.
+          const seen: number[] = [];
+          const onScroll = () => seen.push(height - section.getBoundingClientRect().height);
+          window.addEventListener("scroll", onScroll);
+          return new Promise<{ shorter: number; seen: number[]; back: number; hidden: number; again: number; seenAgain: number[] }>((resolve) =>
+            requestAnimationFrame(() => {
+              const first = [...seen];
+              section.style.removeProperty("max-height");
+              section.style.removeProperty("overflow");
+              window.scrollTo({ top: atStart, behavior: "instant" });
+              const back = window.scrollY - atStart;
+              const done = (again: number, seenAgain: number[]) => {
+                window.removeEventListener("scroll", onScroll);
+                resolve({ shorter, seen: first, back, hidden: height, again, seenAgain });
+              };
+              if (!same) {
+                section.hidden = true;
+                done(0, []);
+                return;
+              }
+              document.body.style.paddingBottom = "300px";
+              setTimeout(() => {
+                const mark = seen.length;
+                const again = shorten();
+                requestAnimationFrame(() => requestAnimationFrame(() => done(again, seen.slice(mark))));
+              });
+            }),
+          );
+        },
+        next === "the same 40 px again",
+      );
       // The scroll event saw the section 40 px shorter, and the end of the page pulled back as much.
       expect(shorter).toBeGreaterThan(1);
-      expect(Math.abs(seen - 40)).toBeLessThanOrEqual(1);
+      expect(seen).toHaveLength(1);
+      expect(Math.abs(seen[0] - 40)).toBeLessThanOrEqual(1);
       expect(back).toBe(0);
-      // Hidden, the section pulls the scroll back by far more than that end of the page.
-      expect(hidden).toBeGreaterThan(shorter + 40);
+      if (next === "the section hidden") {
+        // Hidden, the section pulls the scroll back by far more than that end of the page.
+        expect(hidden).toBeGreaterThan(shorter + 40);
+      } else {
+        // Nothing pulled back this time, and the next scroll event saw the section 40 px shorter again.
+        expect(again).toBe(0);
+        expect(Math.abs(seenAgain[0] - 40)).toBeLessThanOrEqual(1);
+      }
       expect(Math.abs((await y()) - before)).toBeLessThanOrEqual(1);
     });
   }
