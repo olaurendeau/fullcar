@@ -17,9 +17,9 @@ export default async function EventPage({ params }: PageProps<"/e/[id]">) {
   const state = await loadPublicState(id);
   if (!state) notFound();
 
-  // While the bar of messages shows, 112 px more below: nothing stays under it (C11.4).
+  // While the bar of messages shows, room below for it as measured, and its 12 px: nothing stays under it (C11.4).
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col p-4 has-data-[message-bar=open]:pb-[calc(1rem+112px+env(safe-area-inset-bottom))]">
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col p-4 has-data-[message-bar=open]:pb-[calc(1rem+var(--message-bar-height,0px)+12px+env(safe-area-inset-bottom))]">
       <ParticipantBoard id={id} state={state} />
       <ContactFooter />
     </main>

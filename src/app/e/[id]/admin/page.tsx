@@ -24,13 +24,13 @@ export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) 
   if (!state) notFound();
 
   // The page's whole width, for the panel's 1024 px (O7.5); the rest keeps the column of
-  // /e/{id}, centred. While the bar of messages shows, 112 px more below: nothing stays under it (C11.4).
+  // /e/{id}, centred. While the bar of messages shows, room below for it as measured, and its 12 px: nothing stays under it (C11.4).
   // No scroll anchoring, here and on <body> (`data-scroll-anchor`, layout.tsx): the screen keeps the
   // board in place itself, as Safari iOS needs, and the browsers that anchor would move it a second time (O1.11).
   return (
     <main
       data-scroll-anchor="none"
-      className="flex w-full flex-1 flex-col gap-6 p-4 [overflow-anchor:none] has-data-[message-bar=open]:pb-[calc(1rem+112px+env(safe-area-inset-bottom))]"
+      className="flex w-full flex-1 flex-col gap-6 p-4 [overflow-anchor:none] has-data-[message-bar=open]:pb-[calc(1rem+var(--message-bar-height,0px)+12px+env(safe-area-inset-bottom))]"
     >
       {/* Without JavaScript, the token cannot be checked: the panel's place says so (O5.5). */}
       <noscript>
