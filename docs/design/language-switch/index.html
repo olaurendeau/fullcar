@@ -8,7 +8,7 @@
     --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
     --app-border: #e5e5e5; --app-primary: #171717; --app-primary-fg: #fafafa;
     --app-destructive: #e7000b; --app-destructive-bg: #fef2f2; --app-destructive-line: #f8c4c4;
-    --app-ring: #a1a1a1; --app-check: #171717; --app-check-fg: #fafafa;
+    --app-ring: #737373; --app-ring-old: #a1a1a1; --app-check: #171717; --app-check-fg: #fafafa;
     --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444; --fold: #2457c5;
   }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -96,7 +96,36 @@
   .sw { gap: 6px; border-radius: 8px; }
   .sw svg { width: 15px; height: 15px; }
   .sw.disabled { opacity: .5; }
-  .sw.focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring) 50%, transparent); outline: 1px solid var(--app-ring); }
+  /* v3 (#236): the focus ring is a 2 px solid outline, 2 px off the edge, #737373, opaque */
+  .sw.focus, .ring { outline: 2px solid var(--app-ring); outline-offset: 2px; }
+  .ring.in { outline-offset: -2px; }
+  .ring.zero { outline-offset: 0; }
+  .mbar.err { background: var(--app-bg); color: var(--app-fg); border: 1px solid var(--app-destructive); font-weight: 400; }
+  .mbar { border: 1px solid transparent; }
+  .mbar .msgs.scroll { max-height: 128px; overflow-y: auto; border-radius: 6px; }
+  .mbar.err .mrow + .mrow { border-top: 1px solid var(--app-border); }
+  .btn.inactive { background: var(--app-muted-bg); color: var(--app-muted); cursor: not-allowed; }
+  .ring-old { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring-old) 50%, transparent); }
+  .tabs span.ring-old { outline: 1px solid var(--app-ring-old); }
+  .home-link { min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; font-size: 14px; color: var(--app-muted); text-decoration: underline; text-underline-offset: 4px; border-radius: 8px; }
+  .mbar { display: flex; gap: 12px; align-items: flex-start; border-radius: 12px; padding: 4px 4px 4px 16px; background: var(--app-primary); color: var(--app-primary-fg); font-weight: 500; font-size: 14px; }
+  .mbar .msgs { flex: 1; min-width: 0; }
+  .mrow { display: flex; gap: 10px; align-items: center; min-height: 44px; margin: 0; }
+  .mrow .t { flex: 1; min-width: 0; overflow-wrap: anywhere; margin: 0; padding: 10px 0; }
+  .mbar .x { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; }
+  .mbar .undo { flex: none; min-height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.45); display: inline-flex; align-items: center; }
+  .mbar svg { width: 16px; height: 16px; flex: none; }
+  .dialog { background: var(--app-bg); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); border: 1px solid var(--app-border); }
+  .dialog strong { font-size: 17px; }
+  .dialog p { margin: 0; color: var(--app-muted); }
+  .dialog .foot-btns { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+  .btn.danger { background: var(--app-destructive); color: #fff; }
+  .dialog .foot-btns .btn { flex: none; }
+  .input.err.halo { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-destructive) 20%, transparent); }
+  .fold-btn { height: 44px; display: flex; align-items: center; gap: 4px; padding-left: 8px; border-radius: 8px; font-weight: 600; }
+  .ratio { font: 600 11px/16px ui-monospace, Menlo, monospace; color: var(--accent); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .pair > div { min-width: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
   .contact { text-decoration: underline; text-underline-offset: 4px; }
   /* The existing alert pattern: <p role="alert" class="text-sm text-destructive"> */
   .alert { margin: 0; color: var(--app-destructive); font-size: 14px; line-height: 20px; text-align: center; }
@@ -126,7 +155,117 @@
 
 <div class="wrap">
   <h1>Changer de langue</h1>
-  <p class="lead">Epic <a href="https://github.com/olaurendeau/fullcar/issues/113">#113</a>, version 2. Un bouton discret dans le bas de page, à gauche de « Nous contacter », passe la page du français à l’anglais ou l’inverse en un tap, sans recharger la page, et l’appareil s’en souvient. Les maquettes sont à 360 px de large ; le cadre pointillé bleu marque ce qui change ; <code>{hôte}</code> tient lieu du nom de domaine.</p>
+  <p class="lead">Epic <a href="https://github.com/olaurendeau/fullcar/issues/113">#113</a>, version 3.3.1. La v3 (<a href="https://github.com/olaurendeau/fullcar/issues/236">#236</a>), revue en v3.1, puis v3.2, v3.3 et v3.3.1 (critères), approuvée, définit l’anneau de focus de toute l’application, repères de #314 compris : voir « <a href="#anneau">L’anneau de focus (v3)</a> ». Les sections de la v2, plus bas, montrent l’écran tel qu’il était le 17/10 (en-tête « Aller » / « Retour », bas de page sans « Accueil ») ; leurs anneaux suivent la v3. Un bouton discret dans le bas de page, à gauche de « Nous contacter », passe la page du français à l’anglais ou l’inverse en un tap, sans recharger la page, et l’appareil s’en souvient. Les maquettes sont à 360 px de large ; le cadre pointillé bleu marque ce qui change ; <code>{hôte}</code> tient lieu du nom de domaine.</p>
+
+  <h2 id="anneau">L’anneau de focus (v3.3.1, #236)</h2>
+  <p class="lead">Une personne qui se déplace au clavier ne voyait presque pas où était le focus : le halo de shadcn, <code>ring-ring/50</code>, fait 1,54:1 sur blanc, quand WCAG 1.4.11 demande 3:1. La v3 le remplace, sur tous les écrans, par un <strong>contour plein de 2 px, à 2 px du bord, en <code>#737373</code></strong> (le jeton <code>--ring</code>, opaque). Cette maquette le porte parce qu’elle est la plus globale : son bouton est sur toutes les pages, elle dessine déjà toutes les pages, et l’anneau mesuré par #236 est le sien (décision 7). Aucun mot nouveau.</p>
+  <div class="anatomy">
+    <div class="card">
+      <h3>La règle</h3>
+      <ul>
+        <li><strong>Forme</strong> : <code>outline: 2px solid var(--ring); outline-offset: 2px</code>, qui suit les coins. Plus de halo (<code>box-shadow</code>) au focus.</li>
+        <li><strong>Couleur</strong> : <code>--ring</code> = <code>oklch(0.556 0 0)</code> (<code>#737373</code>, la valeur de <code>--muted-foreground</code>), opaque, partout.</li>
+        <li><strong>Le décalage</strong> laisse voir le fond de l’endroit : le contour ne touche que ce fond, quelle que soit la couleur de l’élément.</li>
+        <li><strong>Trois décalages</strong> : 2 px par défaut ; <strong>0 px</strong> dans la barre de messages (« Fermer », la liste qui défile), qui n’a que 4 px de marge avant sa bordure, rouge en cas d’échec ; <strong>−2 px</strong> pour le bouton qui replie l’espace organisateur, collé à « Actualiser ».</li>
+        <li><strong>Partout où un élément reçoit le focus</strong>, panneau d’onglet et repères focalisés par le script compris (ceux de #314 aussi).</li>
+        <li><strong>Champ en erreur</strong> : le halo rouge ne s’affiche que sans le focus ; au focus, bordure rouge et message.</li>
+        <li><strong>Rien de translucide</strong> : « Placer » inactif se dit par un fond gris et un texte gris, pas par l’opacité.</li>
+        <li><strong>Souris</strong> : inchangé (<code>:focus-visible</code>). <strong>Couleurs forcées</strong> : le contour reste.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Les contrastes, mesurés</h3>
+      <ul>
+        <li>Sur blanc (<code>background</code>) : <strong>4,74:1</strong> (avant : 1,54:1).</li>
+        <li>Sur <code>muted</code> <code>#f5f5f5</code>, la barre des onglets : <strong>4,35:1</strong> (avant : 1,49:1 ; contour d’onglet 2,37:1).</li>
+        <li>Bouton <code>destructive</code>, avant : 1,44:1.</li>
+        <li>Sur la barre sombre <code>#171717</code> : <strong>3,78:1</strong> (avant : 2,68:1).</li>
+        <li>Collé à un bouton rouge ou à la bordure rouge de la barre, ce serait 1,01:1 : c’est pourquoi il en est séparé.</li>
+        <li>Pourquoi <code>#737373</code> : c’est <code>--muted-foreground</code>, une couleur que la palette a déjà ; elle passe aussi sur la barre sombre, ce que ne font ni <code>--foreground</code> ni <code>#525252</code> (2,29:1).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Pourquoi un contour, et pas le halo</h3>
+      <ul>
+        <li>Décalé, il ne touche que le fond : un seul contraste à vérifier par fond, pas un par couleur de bouton.</li>
+        <li>Un <code>box-shadow</code> disparaît dans les thèmes de contraste de Windows ; un <code>outline</code> reste.</li>
+        <li>C’est déjà la forme du contour par défaut du navigateur, celle des liens sans classe (« Nous contacter », <code>tel:</code>) : une seule forme partout.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="state">
+      <h3>Le bas de page, avant et après</h3>
+      <p>« English » atteint par Tab, sur une page en français. Avant : un halo gris clair à 50 %, à peine visible. Après : le contour, que « Accueil » et « Nous contacter » prennent aussi. <span class="crit">F1.1, F1.14</span></p>
+      <div class="phone"><div class="screen" style="gap:12px">
+        <span class="small-muted">Avant (1,54:1)</span>
+        <div class="foot" style="outline:none;margin-top:0;padding-top:0"><div class="foot-row"><span class="home-link">Accueil</span><span class="sw ring-old" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span><span class="contact">Nous contacter</span></div></div>
+        <span class="small-muted">Après (4,74:1)</span>
+        <div class="foot" style="outline:none;margin-top:0;padding-top:0"><div class="foot-row"><span class="home-link">Accueil</span><span class="sw focus" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span><span class="contact">Nous contacter</span></div></div>
+        <span class="small-muted">« Accueil », le même contour</span>
+        <div class="foot" style="outline:none;margin-top:0;padding-top:0"><div class="foot-row"><span class="home-link ring">Accueil</span><span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span><span class="contact">Nous contacter</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Un onglet, sur la barre des onglets</h3>
+      <p>Le fond touché est <code>muted</code>. Seul l’onglet actif est dans l’ordre de Tab ; « Retour » s’atteint par la flèche droite (Radix), qui le sélectionne : le test fait une promenade par onglet. Le contour dépasse d’un pixel le bord de la barre ; il reste lisible sur les deux fonds. <span class="crit">F1.3</span></p>
+      <div class="phone"><div class="screen" style="gap:12px">
+        <span class="small-muted">Avant (halo 1,49:1, contour de 1 px 2,37:1)</span>
+        <div class="tabs"><span class="on">Aller</span><span class="ring-old">Retour</span></div>
+        <span class="small-muted">Après (4,35:1)</span>
+        <div class="tabs"><span class="on">Aller</span><span class="ring">Retour</span></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Dans la barre de messages : contour à 0 px</h3>
+      <p>La barre n’a que 4 px de marge en haut, en bas et à droite. À 2 px, le contour toucherait sa bordure, rouge quand elle porte un échec (1,01:1) ; à 0 px, il reste 2 px de son fond. En haut, une réussite seule : « Fermer » sur <code>#171717</code>, 3,78:1. Au milieu, un échec : « Fermer » sur blanc, sans toucher le rouge. En bas, la liste qui défile (#311), atteinte par Tab. <span class="crit">F1.6</span></p>
+      <div class="phone"><div class="screen" style="gap:12px">
+        <div class="mbar"><div class="msgs"><p class="mrow"><span class="t">Tom est dans la voiture de Sophie</span></p></div><span class="x ring zero" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        <div class="mbar err"><div class="msgs"><p class="mrow" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span class="t">Tom n’a pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.</span></p></div><span class="x ring zero" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        <div class="mbar err"><div class="msgs scroll ring zero"><p class="mrow" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span class="t">Inès n’a pas pu rejoindre vos inscriptions. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span class="t">Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow"><span class="t">…</span></p></div><span class="x" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Le bouton rouge de la confirmation</h3>
+      <p>Le contour est à 2 px du bouton rouge : il touche le blanc de la boîte (<code>bg-popover</code>, 4,74:1), jamais le rouge (1,01:1). « Annuler », dessous, touche le même blanc : la boîte n’a pas de pied gris. <span class="crit">F1.5</span></p>
+      <div class="phone"><div class="screen">
+        <div class="dialog"><strong>Retirer la voiture ?</strong><p>2 personnes redeviendront sans voiture.</p><p>Personne n’est prévenu : pensez à le leur dire.</p><div class="foot-btns"><div class="btn danger ring">Retirer la voiture</div><div class="btn outline">Annuler</div></div></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Un champ en erreur</h3>
+      <p>« Lieu » vide après « Créer », atteint par Tab. Avant : le halo rouge et le halo gris se mêlaient. Après : la bordure rouge et le message restent, le halo rouge s’efface tant que le champ a le focus, et le contour est seul. <span class="crit">F1.8</span></p>
+      <div class="phone"><div class="screen" style="gap:12px">
+        <div class="pair">
+          <div><span class="small-muted">Sans le focus (inchangé)</span><div class="field" style="width:100%"><label class="err">Lieu</label><div class="input err halo"></div><span class="errtext">Champ requis.</span></div></div>
+          <div><span class="small-muted">Au focus, v3</span><div class="field" style="width:100%"><label class="err">Lieu</label><div class="input err ring"></div><span class="errtext">Champ requis.</span></div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Contour intérieur : l’espace organisateur</h3>
+      <p>Le bouton qui replie l’espace touche « Actualiser », sans espace entre eux (décision 26 d’organizer-view) : un contour extérieur passerait sur sa bordure. Il passe à l’intérieur (<code>outline-offset: -2px</code>), comme son <code>ring-inset</code> d’aujourd’hui. <span class="crit">F1.7</span></p>
+      <div class="phone"><div class="screen">
+        <section class="panel" style="padding-top:8px"><div style="display:flex;align-items:center"><span class="fold-btn ring in" style="flex:1">Espace organisateur <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg></span><span class="btn outline" style="flex:none;padding:0 12px">Actualiser</span></div><div class="cut">… liens, avertissement</div></section>
+      </div></div>
+    </div>
+    <div class="state">
+      <h3>« Placer » inactif, sans translucidité</h3>
+      <p>Aucune case cochée : « Placer » est inactif (<code>aria-disabled</code>) mais garde le focus. Il ne le dit plus par l’opacité, qui pâlirait aussi le contour (1,96:1), mais par ses couleurs : fond <code>muted</code>, texte <code>muted-foreground</code> (4,35:1), même libellé. Actif, il redevient noir. <span class="crit">F1.9</span></p>
+      <div class="phone"><div class="screen" style="gap:10px">
+        <span class="small-muted">Inactif</span><div class="btn inactive" style="flex:none">Placer</div>
+        <span class="small-muted">Inactif, au focus</span><div class="btn inactive ring" style="flex:none">Placer</div>
+        <span class="small-muted">Actif (une case cochée), au focus</span><div class="btn ring" style="flex:none">Placer 1 personne</div>
+      </div></div>
+    </div>
+  </div>
+  <div class="note">Non dessinés, parce qu’ils ne se voient pas : à la souris, un clic sur un bouton ne montre pas le contour (F1.10) ; en couleurs forcées, le contour prend la couleur du système (F1.11) ; sans JavaScript, c’est le même contour, puisque c’est du CSS. Les repères focalisés par le script (titre d’une carte, bandeau, lignes de l’organisateur, et ceux de #314) prennent le même contour à 2 px. L’inventaire de chaque fichier, la mesure (couleurs lues en sRGB par un canevas) et les critères F1.1 à F1.18 sont dans le README.</div>
 
   <h2>Le contrôle</h2>
   <p class="lead">Un seul bouton, qui nomme <strong>l’autre</strong> langue dans cette langue : « English » sur une page en français, « Français » sur une page en anglais.</p>
@@ -475,6 +614,23 @@
     <li><strong>Sans rechargement du document.</strong> L’URL ne change pas, fragment compris ; ce qui est saisi ou coché reste en place ; le panneau organisateur n’est pas revérifié, donc le jeton ne part dans aucune requête.</li>
     <li><strong>Tout ou rien.</strong> Un changement qui échoue ne change ni la page ni le choix enregistré : au rechargement, la page est dans l’ancienne langue.</li>
   </ol>
+  <h3 style="margin-top:24px">Nouvelles en v3 (#236)</h3>
+  <ol class="decisions" start="7">
+    <li><strong>Cette maquette porte l’anneau de focus de toute l’application</strong> : la plus globale. Son bouton est sur toutes les pages, elle les dessine toutes, et l’anneau mesuré par #236 est le sien ; <code>home</code> le recopie.</li>
+    <li><strong>Un contour plein de 2 px, à 2 px du bord</strong>, plutôt que le halo de shadcn : le décalage laisse le fond de l’endroit entre l’élément et le contour ; un contour reste en couleurs forcées.</li>
+    <li><strong>Une seule couleur, <code>#737373</code>, opaque</strong> : la valeur de <code>--muted-foreground</code>, déjà dans la palette, qui passe aussi sur la barre sombre (3,78:1).</li>
+    <li><strong>À l’intérieur pour le bouton qui replie l’espace organisateur</strong> : il touche « Actualiser ».</li>
+    <li><strong>Le halo rouge d’un champ en erreur ne s’affiche que sans le focus</strong> (<code>aria-invalid:not-focus-visible:…</code>) : à côté du contour, il ferait 3,3:1.</li>
+    <li><strong>Rien de ce qui reçoit le focus n’est translucide</strong> : à 50 % d’opacité, le contour ferait 1,96:1.</li>
+    <li><strong>La palette <code>.dark</code> n’est pas touchée</strong> : elle n’est jamais appliquée.</li>
+  </ol>
+  <h3 style="margin-top:24px">Nouvelles en v3.1</h3>
+  <ol class="decisions" start="14">
+    <li><strong>Contour à 0 px dans la barre de messages</strong> (« Fermer », la liste) : 2 px de fond restent avant la bordure, rouge en cas d’échec.</li>
+    <li><strong>« Placer » inactif en couleurs</strong> (fond <code>muted</code>, texte <code>muted-foreground</code>), sans opacité, avec et sans le focus.</li>
+    <li><strong>Les repères de #314 suivent la même règle</strong> ; leurs critères sont F1.17.</li>
+    <li><strong>Les tests lisent les couleurs en sRGB par un canevas</strong> : le navigateur les rend en <code>oklch</code>.</li>
+  </ol>
 
   <h2>Hors périmètre</h2>
   <ul style="max-width:80ch">
@@ -483,5 +639,6 @@
     <li>L’affichage des champs date et heure natifs, qui suit le navigateur et non la page.</li>
     <li>Les autres onglets déjà ouverts : ils prennent la nouvelle langue à leur prochain chargement.</li>
     <li>Le 404 générique de Next pour une adresse hors de <code>/e/…</code> (par exemple <code>/abc</code>), qui n’a pas de bas de page.</li>
+    <li>v3.1 : la palette sombre ; le survol ; le widget Crisp ; redessiner les maquettes <code>event-board</code>, <code>home</code> et <code>organizer-view</code>, qui renvoient ici. (Les repères de #314 sont désormais dans la règle.)</li>
   </ul>
 </div>
