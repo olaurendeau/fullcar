@@ -1,4 +1,6 @@
 import type { createFormatter, createTranslator, Messages } from "next-intl";
+import type { DeviceState } from "@/domain/board";
+import type { CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 
 /*
@@ -39,6 +41,27 @@ export type Why =
  */
 export function whyOf(error: Plain | "invalid" | "idTaken" | "noRetour"): Why {
   return { kind: error === "invalid" || error === "idTaken" || error === "noRetour" ? "failed" : error };
+}
+
+/** A cell of « Vos inscriptions » as its sheet showed it at the send: the person, the leg, and her state there. */
+export interface Cell {
+  firstName: string;
+  leg: Leg;
+  state: DeviceState;
+}
+
+/**
+ * What a cell's action did not do (« Ce que dit un échec »): the sheet's title and the button
+ * touched, or the car for « Sortir de la voiture », which only a passenger is offered.
+ */
+export function cellNotDone(action: Exclude<CellAction, "seeCar">, { firstName, leg, state }: Cell): NotDone {
+  if (action === "leaveCar" && state.kind === "passenger") return { kind: "leave", names: [firstName], driver: state.driver.firstName };
+  return { kind: "choice", firstName, leg, choice: action === "notConcerned" ? "notConcerned" : "lookingForSeat" };
+}
+
+/** Why a cell's action was not done: as `whyOf`, and `drives` names who drives, on the cell's leg. */
+export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives", { firstName, leg }: Cell): Why {
+  return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
 }
 
 /** The page's words: a translator from the root of the messages, and a list in its language. */

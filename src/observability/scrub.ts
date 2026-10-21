@@ -226,23 +226,22 @@ function scrubException(exception: Exception): Exception {
 /** What V8 and the SDK's parsers name a function: `onSubmit`, `new Seat`, `Object.?`, `a.b [as c]`. */
 const FUNCTION_NAME = /^(?:new )?[A-Za-z_$<?][\w$<>?]*(?:\.[\w$<>?]+)*(?: \[as [\w$]+\])?$/;
 /*
- * A part of such a name that may still be a token, or an id with a digit in it; and any
- * part shaped like an id, digits or not. An id is bounded as `scrubText` bounds it, by
- * anything but a letter, a digit or `_`: a `$` next to it (`$Ab3dEf7h`) does not hide it.
+ * A part of such a name that may still be a token, or an id with a digit in it. An id is
+ * bounded as `scrubText` bounds it, by anything but a letter, a digit or `_`: a `$` next to
+ * it (`$Ab3dEf7h`) does not hide it.
  */
 const SECRET_PART = /(?<![\w$])[\w$]{22,}(?![\w$])|(?<!\w)(?=\w*\d)[2-9A-HJ-NP-Za-km-z]{8}(?!\w)/;
-const ID_PART = /(?<!\w)[2-9A-HJ-NP-Za-km-z]{8}(?!\w)/;
 
 /**
- * A function's name as it is, when it reads as one: through `scrubText`, `onSubmit` would
- * read as an id. The SDK's parsers make a frame of any line of a message that looks like
- * one, and its words become the name: a name that does not read as one is not sent at all,
- * since `scrubText` cannot tell a first name from a word. Outside a frame of code, any
- * id-shaped part, a `$` beside it or not, goes through `scrubText` too.
+ * A function's name as it is only in a frame of code, when it reads as one and holds no
+ * secret's part: through `scrubText`, `onSubmit` would read as an id. The SDK's parsers make
+ * a frame of any line of a message that looks like one, and its words become the name: a
+ * name that does not read as one is not sent at all, since `scrubText` cannot tell a first
+ * name from a word; outside a frame of code, every name goes through `scrubText`.
  */
 function scrubFunctionName(name: string, code: boolean): string {
   if (!FUNCTION_NAME.test(name)) return REDACTED;
-  return SECRET_PART.test(name) || (!code && ID_PART.test(name)) ? scrubText(name) : name;
+  return !code || SECRET_PART.test(name) ? scrubText(name) : name;
 }
 
 /**

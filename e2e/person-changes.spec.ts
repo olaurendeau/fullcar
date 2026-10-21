@@ -10,7 +10,10 @@ leaveNoToken();
 
 // #89: acting from « Vos inscriptions », each cell a button that opens its sheet.
 
+/** In the sheet that sent, while it is open. */
 const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+/** In the bar: Tom · Aller's « Ne fait pas l’aller », not saved (C11.11, #224). */
+const TOM_FAILED = "Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
 
 type Db = Kysely<Database>;
 
@@ -366,9 +369,9 @@ test.describe("person changes", () => {
         }).toPass();
         await expect(lea).toHaveCount(0);
       }
-      await expect(bar(page)).toHaveText(FAILED);
+      await expect(bar(page)).toHaveText(TOM_FAILED);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
-      await expect(alerts(page)).toHaveText([FAILED]);
+      await expect(alerts(page)).toHaveText([TOM_FAILED]);
     });
   }
 
@@ -436,9 +439,9 @@ test.describe("person changes", () => {
     await expect(section(page).getByRole("rowheader")).toHaveText(["Claire", "Léa", "Tom", "Hugo", "Zed"]);
 
     // Tom's failure is not lost: said once the page shows, and Tom is still without a car.
-    await expect(bar(page)).toHaveText(FAILED);
+    await expect(bar(page)).toHaveText(TOM_FAILED);
     expect(await seen()).toEqual({ inSheet: false, barHidden: false });
-    await expect(alerts(page)).toHaveText([FAILED]);
+    await expect(alerts(page)).toHaveText([TOM_FAILED]);
     await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
   });
 

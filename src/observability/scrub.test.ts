@@ -244,6 +244,13 @@ describe("scrubEvent", () => {
     expect(leakedKinds(JSON.stringify(send(`${ORIGIN}/e/${lowercase.id}/admin`)), lowercase)).toEqual([]);
   });
 
+  it("redacts a phone number read as a function name in a line of the message", () => {
+    const node = sentFrames(nodeStackParser, "Error: x", `failed at seat.${PHONES[1]} (deleted)`, `no driver at seat.06.47.81.29.53 (car full)`);
+    const browser = sentFrames(browserStackParser, "Error: x", `    at seat.${PHONES[1]} (since 10:30)`);
+    expect(node.length * browser.length).toBeGreaterThan(0);
+    expect(leaks([node, browser])).toEqual([]);
+  });
+
   it("redacts an id read as a function name in a line of the message, line number or not", () => {
     const lowercase = drawSecrets(lowercaseBytes);
     const lines = [`no event at ${lowercase.id} (deleted)`, `no event at ${lowercase.id} (since 10:30:00)`];
