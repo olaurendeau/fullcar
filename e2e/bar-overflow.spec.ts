@@ -166,10 +166,17 @@ test.describe("a bar of many lines", () => {
       expect(height).toBeGreaterThan(300);
       expect(room).toBeCloseTo(16 + height + 12, 0);
 
-      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-      const contact = (await page.getByRole("link", { name: /^Nous contacter/ }).boundingBox())!;
-      const shown = (await board(page).boundingBox())!;
-      expect(contact.y + contact.height).toBeLessThanOrEqual(shown.y);
+      // Scrolled to the bottom and measured at once: the organiser's area, read again after an
+      // action, can change the page's height meanwhile (#292).
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+            const contact = [...document.querySelectorAll("a")].find((link) => link.textContent?.startsWith("Nous contacter"))!;
+            return contact.getBoundingClientRect().bottom - document.querySelector("[data-message-bar]")!.getBoundingClientRect().top;
+          }),
+        )
+        .toBeLessThanOrEqual(0);
     });
   }
 
