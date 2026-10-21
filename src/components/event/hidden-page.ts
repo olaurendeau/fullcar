@@ -53,6 +53,9 @@ export function usePageHidden(): boolean {
   );
 }
 
+/** Whether a sheet hides the page now, for what is decided once rather than rendered. */
+export const pageHidden = () => sheets > 0;
+
 /**
  * Runs `then` once no sheet hides the page, at once if none does, each in turn; a `failure`
  * before the rest, so that it is written first (v4.2.2). Returns what withdraws it alone while it waits.

@@ -41,7 +41,9 @@ export type Registration =
   | { kind: "done" }
   | { kind: "errors"; errors: PersonErrors; first: PersonField }
   /** Offline, a server error, or a refusal (`Actions.failed`): nothing changed. */
-  | { kind: "problem"; problem: "offline" | "failed" };
+  | { kind: "problem"; problem: "offline" | "failed" }
+  /** Sent on the retour, which is gone: the sheet closes, and the bar says why (rule 9). */
+  | { kind: "noRetour" };
 
 /** Registers a person (R1): the device's token, then the form's creation id, then the request. */
 export type AddPerson = (registering: Registering) => Promise<Registration | undefined>;
@@ -126,6 +128,7 @@ export function AddPersonButton({
         mode={{ kind: "add", leg, hasRetour, addPerson, landmark: () => focusAddPerson(leg) }}
         open={() => isOpen.current}
         onDone={() => toggle(false)}
+        onGone={() => toggle(false)}
       />
     </BottomSheet>
   );
@@ -143,8 +146,21 @@ export function AddPersonButton({
  * In `edit` mode (C2.3), the first name and the number are filled with the person's, under the
  * same rules, without « Aller et retour »; the first name has the focus as the form shows.
  * Opened from the sheet of a free seat, « Annuler » under « Valider » goes back to its list (C6.6).
+ * Sent on the retour once it is gone, `onGone` closes its sheet (rule 9).
  */
-export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormMode; open: () => boolean; onDone: (personId: string) => void; onCancel?: () => void }) {
+export function PersonForm({
+  mode,
+  open,
+  onDone,
+  onCancel,
+  onGone,
+}: {
+  mode: PersonFormMode;
+  open: () => boolean;
+  onDone: (personId: string) => void;
+  onCancel?: () => void;
+  onGone?: () => void;
+}) {
   const t = useTranslations("PersonForm");
   const tErrors = useTranslations("FormErrors");
   const tActions = useTranslations("Actions");
@@ -226,6 +242,7 @@ export function PersonForm({ mode, open, onDone, onCancel }: { mode: PersonFormM
       if (sheet.inSheet() && personId) onDone(personId);
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
+    else if (answer?.kind === "noRetour" && sheet.inSheet()) onGone?.();
   }
 
   const field = (name: PersonField, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {
