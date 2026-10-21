@@ -155,6 +155,11 @@ export function forget(subjects: readonly string[]) {
   withdraw({ gone: subjects, before: sends + 1 });
 }
 
+/** What a send is about: its subject, then each of its fields (`subject:field`), as `sendAbout` reads them. */
+export function aboutOf(subject: string, fields: readonly string[] = []): string[] {
+  return [subject, ...fields.map((field) => `${subject}:${field}`)];
+}
+
 /**
  * For the content of a sheet that sends actions, under `SheetContent`: call what it returns at
  * each send, for that send's `FromSheet`. Each mount is a sheet of its own (`useId` draws a new
@@ -175,7 +180,6 @@ export function useSends(isOpen: () => boolean, subject?: string): (fields?: rea
   }, []);
 
   return (fields = []) => {
-    const about = subject ?? key;
-    return { key, inSheet: () => isOpen() && mounted.current, ...sendAbout([about, ...fields.map((field) => `${about}:${field}`)]) };
+    return { key, inSheet: () => isOpen() && mounted.current, ...sendAbout(aboutOf(subject ?? key, fields)) };
   };
 }

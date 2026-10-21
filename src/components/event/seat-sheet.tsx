@@ -5,16 +5,16 @@ import { storageAvailable } from "@/app/e/[id]/device-token";
 import { Button } from "@/components/ui/button";
 import type { Leg } from "@/domain/leg";
 import type { VisibleCar, VisibleLegBoard } from "@/domain/phone-visibility";
-import { sheetCandidates, sheetSubmit } from "@/domain/tap";
+import { sheetCandidates, sheetSubmit, tapOutcome } from "@/domain/tap";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./create-event-form";
 import { nameList, whyOf, wordsOf, type Why } from "./failure-words";
 import { focusCar, focusCarTitle, focusFirstShown } from "./focus";
-import { useSends, type FromSheet } from "./hidden-page";
+import { aboutOf, sendAbout, useSends, type FromSheet } from "./hidden-page";
 import type { BoardDevice } from "./leg-panel";
 import type { BarProblem } from "./message-bar";
-import { PersonForm, StorageNotice } from "./person-form";
+import { PersonForm, StorageNotice, type AddPerson } from "./person-form";
 
 /** A refusal said in the sheet: the car gone (C6.8), too few seats left (C6.5), someone in a car already. */
 export type SeatRefusal = "rideGone" | "notEnoughSeats" | "alreadyInCar";
@@ -72,32 +72,163 @@ export type TakeSeats = (seats: { rideId: string; leg: Leg; personIds: string[] 
 /** The car's title, or the active tab once it is gone. */
 const toCar = (leg: Leg, rideId: string) => focusFirstShown([() => focusCarTitle(leg, rideId)]);
 
-/** The car a free seat opened the sheet for, and that seat. Each opening is a new sheet. */
-type Opening = { rideId: string; driver: string; seat: HTMLElement; open: boolean; count: number };
+/** The car's title, or its leg's banner once it is gone, or the active tab (« Le focus après une action »). */
+const toCarOrBanner = (leg: Leg, rideId: string) => focusFirstShown([focusCar(leg, rideId)]);
 
 /**
- * The sheet of a leg's free seats (#91): `openFor(car, seat)` for the free seat's tap, which
- * always opens it here (C5.5; #92 adds the shortcuts), and `sheet`, to render once on the leg.
- * It lives on the leg, not on the car: the car may go while it is open (C6.8). A success
- * closes the sheet that sent it, never one opened since.
+ * What a seat's send is given when no sheet shows what comes back: the bar says it, success or
+ * failure, once no sheet hides the page. About the car and the person, as the sheet's sends are.
+ */
+function toBar(key: string, rideId: string, person: { id: string; firstName: string }, driver: string, placed: string): SendingSheet {
+  const send = sendAbout(aboutOf(`seats:${rideId}`, [person.id]));
+  return { key, inSheet: () => false, ...send, sending: () => {}, seats: { names: [person.firstName], driver }, placed };
+}
+
+/**
+ * The car a free seat opened a sheet for, and that seat: the sheet that chooses who boards, or
+ * the first registration of a device without a person (C5.4). Each opening is a new sheet.
+ */
+type Opening = { kind: "sheet" | "register"; rideId: string; driver: string; seat: HTMLElement; open: boolean; count: number };
+
+/**
+ * A leg's free seats (#91, #92): `tap(car, seat)` for a free seat's tap, which follows
+ * `tapOutcome` (R5), and `sheet`, to render once on the leg. The only person of the device
+ * without a car on the leg boards at once (C5.2); a device without a person gets the first
+ * registration (C5.4); any other device, the sheet (C5.5); nothing until its persons are
+ * known (C5.9). The sheets live on the leg, not on the car: the car may go while one is open
+ * (C6.8). A success closes the sheet that sent it, never one opened since.
  */
 export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRetour: boolean) {
+  const t = useTranslations();
   const [opening, setOpening] = useState<Opening | null>(null);
-  const openFor = (car: VisibleCar, seat: HTMLElement) =>
-    setOpening((current) => ({ rideId: car.id, driver: car.driver.firstName, seat, open: true, count: (current?.count ?? 0) + 1 }));
-  const sheet = opening && (
-    <SeatSheet
-      key={opening.count}
-      leg={board.leg}
-      opening={opening}
-      car={board.cars.find((car) => car.id === opening.rideId)}
-      persons={board.device}
-      onOpenChange={(open) => setOpening((current) => (current?.count === opening.count ? { ...current, open } : current))}
-      device={device}
-      hasRetour={hasRetour}
-    />
+  // The cars a tap is on its way to: a tap again meanwhile sends nothing, and withdraws nothing.
+  const tapping = useRef(new Set<string>());
+  // Once the page shows what a tap's answer carried, the focus goes to the car, if the seat
+  // still had it or it fell with the seat: never from a sheet opened meanwhile (C5.2, C5.7).
+  const [landed, setLanded] = useState<{ seat: HTMLElement; rideId: string } | null>(null);
+  useEffect(() => {
+    if (!landed) return;
+    const active = document.activeElement;
+    if (active === landed.seat || active === null || active === document.body) toCarOrBanner(board.leg, landed.rideId);
+  }, [landed, board.leg]);
+
+  const open = (kind: Opening["kind"], car: VisibleCar, seat: HTMLElement) =>
+    setOpening((current) => ({ kind, rideId: car.id, driver: car.driver.firstName, seat, open: true, count: (current?.count ?? 0) + 1 }));
+
+  // One tap, no other step (C5.2): what comes back is the bar's, as from a sheet closed meanwhile.
+  async function place(car: VisibleCar, seat: HTMLElement, person: { id: string; firstName: string }) {
+    const { id: rideId } = car;
+    if (tapping.current.has(rideId)) return;
+    tapping.current.add(rideId);
+    const driver = car.driver.firstName;
+    const placed = t("Seat.placed", { firstName: person.firstName, driver });
+    try {
+      const taken = await device.takeSeats(
+        { rideId, leg: board.leg, personIds: [person.id] },
+        toBar(`tap:${rideId}`, rideId, person, driver, placed),
+      );
+      // Offline or a server error changes nothing on the page: the focus stays where it is.
+      if (taken && taken.kind !== "problem") setLanded({ seat, rideId });
+    } finally {
+      tapping.current.delete(rideId);
+    }
+  }
+
+  function tap(car: VisibleCar, seat: HTMLElement) {
+    const outcome = tapOutcome(device.status, board.device);
+    if (outcome.kind === "wait") return;
+    const person = outcome.kind === "place" && board.device.find(({ id }) => id === outcome.personId);
+    if (person) void place(car, seat, person);
+    else open(outcome.kind === "register" ? "register" : "sheet", car, seat);
+  }
+
+  const onOpenChange = (count: number) => (open: boolean) =>
+    setOpening((current) => (current?.count === count ? { ...current, open } : current));
+  const sheet =
+    opening &&
+    (opening.kind === "register" ? (
+      <RegisterSheet key={opening.count} leg={board.leg} opening={opening} onOpenChange={onOpenChange(opening.count)} device={device} hasRetour={hasRetour} />
+    ) : (
+      <SeatSheet
+        key={opening.count}
+        leg={board.leg}
+        opening={opening}
+        car={board.cars.find((car) => car.id === opening.rideId)}
+        persons={board.device}
+        onOpenChange={onOpenChange(opening.count)}
+        device={device}
+        hasRetour={hasRetour}
+      />
+    ));
+  return { tap, sheet };
+}
+
+/**
+ * The first registration from a free seat, on a device without a person (C5.4): « Ajouter une
+ * personne », then « Cette personne prendra une place dans la voiture de {driver}. » and the
+ * fields of R1. « Valider » registers her, then seats her in that car, and the bar says what
+ * came of the seat: placed, or not, why, with the person kept without a car on the leg (#92).
+ * The focus then goes to the car's title, or to the leg's banner once the car is gone. A
+ * registration that fails stays in the form, as from « Ajouter une personne ». Closed without
+ * effect, the focus goes back to the seat.
+ */
+function RegisterSheet({
+  leg,
+  opening: { rideId, driver, seat, open },
+  onOpenChange,
+  device,
+  hasRetour,
+}: {
+  leg: Leg;
+  opening: Opening;
+  onOpenChange: (open: boolean) => void;
+  device: BoardDevice;
+  hasRetour: boolean;
+}) {
+  const t = useTranslations();
+  // Probed as the sheet opens, with a key that names no event (C1.13).
+  const [kept] = useState(storageAvailable);
+  const isOpen = useRef(open);
+  useEffect(() => {
+    isOpen.current = open;
+  }, [open]);
+  const afterClose = useRef(() => (seat.isConnected ? seat.focus() : toCarOrBanner(leg, rideId)));
+
+  const addPerson: AddPerson = async (registering) => {
+    const added = await device.addPerson(registering);
+    if (added?.kind !== "done") return added;
+    // Her creation id is her id; her first name as sent, its spaces trimmed.
+    const person = { id: registering.creationId(), firstName: registering.notDone.kind === "addPerson" ? registering.notDone.firstName : registering.person.firstName };
+    afterClose.current = () => toCarOrBanner(leg, rideId);
+    const placed = t("Seat.placed", { firstName: person.firstName, driver });
+    await device.takeSeats({ rideId, leg, personIds: [person.id] }, { ...toBar(`register:${person.id}`, rideId, person, driver, placed), sending: registering.sending });
+    return added;
+  };
+
+  return (
+    <BottomSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t("PersonForm.title.add")}
+      description={
+        <>
+          <span className="block">{t("PersonForm.forSeat", { driver })}</span>
+          {kept && <span className="block">{t("PersonForm.remember")}</span>}
+        </>
+      }
+      onCloseAutoFocus={(event) => {
+        event.preventDefault();
+        afterClose.current();
+      }}
+    >
+      {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
+      <PersonForm
+        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
+        open={() => isOpen.current}
+        onDone={() => onOpenChange(false)}
+      />
+    </BottomSheet>
   );
-  return { openFor, sheet };
 }
 
 /**
