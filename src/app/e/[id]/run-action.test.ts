@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
-import { actionRunner, sendAction, stateOf } from "./run-action";
+import { actionRunner, sendAction, stateOf, stateRead, stateShown } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -26,8 +26,10 @@ describe("sendAction", () => {
   });
 });
 
+const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: null };
+
 describe("stateOf", () => {
-  const state = [{ leg: "aller", cars: [], withoutCar: [], device: [] }];
+  const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
   it("is the state an action gives back, refusal included", () => {
     expect(stateOf({ ok: true, state })).toBe(state);
@@ -39,10 +41,58 @@ describe("stateOf", () => {
     expect(stateOf(undefined)).toBeUndefined();
     expect(stateOf({ ok: true, state: "nope" })).toBeUndefined();
   });
+
+  // Epic #250: the header comes with the legs. An answer without it (legs alone, from a server
+  // not yet deployed) is not applied: the page would lose its title.
+  it.each<[string, unknown]>([
+    ["the legs alone", state.legs],
+    ["no header", { legs: state.legs }],
+    ["no legs", { event: header }],
+    ["a header that is not an object", { event: "Tournoi", legs: state.legs }],
+  ])("is nothing for a state with %s", (_, given) => {
+    expect(stateOf({ ok: true, state: given })).toBeUndefined();
+  });
+});
+
+// Review of #305: the device's first read and `apply` are guarded as an action's answer is.
+describe("stateRead", () => {
+  const state = { event: header, legs: [] };
+
+  it("is the state a read answered", () => {
+    expect(stateRead({ ok: true, value: state })).toBe(state);
+  });
+
+  it.each<[string, unknown]>([
+    ["a failure", { ok: false, problem: "failed" }],
+    ["an unknown event", { ok: true, value: undefined }],
+    ["the legs alone", { ok: true, value: [] }],
+    ["no read at all", undefined],
+  ])("is nothing for %s", (_, sent) => {
+    expect(stateRead(sent as never)).toBeUndefined();
+  });
+});
+
+describe("stateShown", () => {
+  const withRetour: EventState = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [] };
+  const withoutRetour: EventState = { event: header, legs: [] };
+
+  it("shows nothing that is not a state: the legs alone change nothing, and throw nothing", () => {
+    expect(stateShown(withRetour, [])).toBeUndefined();
+    expect(stateShown(withRetour, { legs: [] })).toBeUndefined();
+  });
+
+  it.each<[string, EventState, EventState, boolean]>([
+    ["the retour removed: the tabs go", withRetour, withoutRetour, true],
+    ["a retour added: the tabs come", withoutRetour, withRetour, true],
+    ["the retour kept", withRetour, { ...withRetour, legs: [] }, false],
+    ["still no retour", withoutRetour, { ...withoutRetour, legs: [] }, false],
+  ])("%s", (_, before, next, tabsChange) => {
+    expect(stateShown(before, next)).toStrictEqual({ state: next, tabsChange });
+  });
 });
 
 describe("actionRunner", () => {
-  const state: EventState = [{ leg: "aller", cars: [], withoutCar: [], device: [] }];
+  const state: EventState = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
   /** A page that records the states the runner gives it and each action that ends, and a connection that can be cut. */
   function page() {

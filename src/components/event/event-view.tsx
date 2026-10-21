@@ -1,19 +1,16 @@
 import { MapPin } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import type { EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
-import type { WallClock } from "@/domain/wall-clock";
 import { DevicePersons } from "./device-persons";
 import { EventDates } from "./event-dates";
 import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabs } from "./leg-tabs";
 
-export interface EventViewProps {
-  title: string;
-  location: string;
-  allerAt: WallClock;
-  retourAt: WallClock | null;
+/** The header: from the state the page shows last, which carries it (epic #250). */
+export interface EventViewProps extends EventHeader {
   /** Each leg's cars, persons without a car and coverage (#86), in the event's order. */
   board: VisibleBoard;
   /** What the page knows of the device's persons (#87). */
