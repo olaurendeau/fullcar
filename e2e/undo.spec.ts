@@ -49,6 +49,8 @@ const cell = (page: Page, firstName: string, leg: "Aller" | "Retour") =>
   page.getByRole("region", { name: "Vos inscriptions" }).getByRole("button", { name: new RegExp(`^${firstName}, ${leg} : `) });
 const sheet = (page: Page, driver: string) => page.getByRole("dialog", { name: `Qui monte dans la voiture de ${driver} ?` });
 const bar = (page: Page) => page.locator("[data-message-bar]");
+/** The bar's lines, found by their CSS: a sheet or a confirmation hides them from role queries. */
+const lines = (page: Page) => page.locator('[data-message-bar] [role="group"] > p');
 /** The bar's status region, where a success goes. */
 const barStatus = (page: Page) => page.locator('[role="status"]:has(+ [role="alert"])');
 /** Every « Annuler » of the bar, top to bottom: out of its regions, between the lines and « Fermer ». */
@@ -290,6 +292,91 @@ test.describe("« Annuler »", () => {
       marc();
       await expect(messages(page)).toHaveText(["Léa est dans la voiture de Marc"]);
       await expect(title(page, "Sophie")).toBeFocused();
+    });
+
+    // « Le sujet d’un échec », the « Annuler » row: seats asked again in the same car are another
+    // subject. The undo's answer is lost after its write; Hugo's cell brings the state back.
+    test("C11.10: Tom and Léa placed again in Sophie's car do not withdraw the failure of their « Annuler »", async ({ page, seededEvent }) => {
+      let lost = false;
+      await page.route("**/e/**", async (route) => {
+        if (lost || !route.request().postData()?.includes("withoutCar")) return route.fallback();
+        lost = true;
+        await route.fetch();
+        await route.abort();
+      });
+      await page.goto(`/e/${seededEvent.id}`);
+      await sendFromSheet(page, "Sophie", ["Tom", "Léa"]);
+      await expect(messages(page)).toHaveText(["Tom et Léa sont dans la voiture de Sophie"]);
+      await undo(page).click();
+      const failed = "Tom et Léa n’ont pas pu sortir de la voiture de Sophie. Une erreur est survenue : dans un instant, utilisez de nouveau « Annuler ».";
+      await expect(messages(page)).toHaveText([failed, "Tom et Léa sont dans la voiture de Sophie"]);
+      await cellAction(page, "Hugo", "Aller", "Je cherche une place");
+      await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
+
+      await sendFromSheet(page, "Sophie", ["Tom", "Léa"]);
+      await expect(messages(page)).toHaveText([failed, "Tom et Léa sont dans la voiture de Sophie"]);
+      await expect(undo(page)).toHaveCount(2);
+    });
+  });
+
+  // Rule 5 (v4.4.1): a car removed takes every message about it, `undo:{rideId}` included.
+  test.describe("the car removed", () => {
+    let sophie: string;
+
+    // The device holds Sophie, who drives at the aller, and Tom, without a car there.
+    test.beforeEach(async ({ db, seededEvent }) => {
+      const mine = async (firstName: string) => (await seedPerson(db, seededEvent.id, { firstName }, token)).id;
+      sophie = await seedRide(db, seededEvent.id, await mine("Sophie"));
+      await seedPlacement(db, { personId: await mine("Tom"), eventId: seededEvent.id, leg: "aller", rideId: null });
+    });
+
+    const remove = async (page: Page) => {
+      await car(page, "Sophie").getByRole("button", { name: "Retirer la voiture", exact: true }).click();
+      await page.getByRole("alertdialog", { name: "Retirer la voiture ?" }).getByRole("button", { name: "Retirer la voiture", exact: true }).click();
+    };
+
+    test("rule 5: the failure of an « Annuler » in the bar goes once the car is removed", async ({ context, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await expect(messages(page)).toHaveText([PLACED]);
+      await context.setOffline(true);
+      await undo(page).click();
+      await expect(messages(page)).toHaveText([UNDO_OFFLINE, PLACED]);
+      await context.setOffline(false);
+
+      await remove(page);
+      await expect(car(page, "Sophie")).toHaveCount(0);
+      // The confirmation hides the bar from role queries until it is gone: its lines are read by their CSS.
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      await expect(lines(page)).toHaveCount(0);
+      await expect(undo(page)).toHaveCount(0);
+    });
+
+    // Next sends the page's actions one at a time: « Annuler », sent while the removal waits for
+    // its answer, leaves once the car is gone, and its failure is never said.
+    test("rule 5: an « Annuler » sent before the removal's answer, whose answer is lost: its failure is never said", async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await expect(messages(page)).toHaveText([PLACED]);
+      const removal = await holdFirst(page, sophie, false);
+      let undone = false;
+      await page.route("**/e/**", async (route) => {
+        if (undone || !route.request().postData()?.includes("withoutCar")) return route.fallback();
+        undone = true;
+        await route.abort();
+      });
+      await remove(page);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      await undo(page).click();
+      const aborted = page.waitForEvent("requestfailed", (request) => !!request.postData()?.includes("withoutCar"));
+      removal();
+      await aborted;
+
+      await expect(car(page, "Sophie")).toHaveCount(0);
+      // A message left would be written by now.
+      await page.waitForTimeout(500);
+      await expect(lines(page)).toHaveCount(0);
     });
   });
 });
