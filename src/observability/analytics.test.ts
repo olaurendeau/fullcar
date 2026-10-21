@@ -82,4 +82,22 @@ describe("WebAnalytics", () => {
     same(sent(pageview(`not a url ${secrets.adminToken}`)), null);
     same(sent({ type: "event", url: `${ORIGIN}/` }), null);
   });
+
+  describe("on a browser without URL.canParse (Safari 16.4 to 16.x, Chrome 111 to 119)", () => {
+    const canParse = Object.getOwnPropertyDescriptor(URL, "canParse");
+    beforeEach(() => {
+      Reflect.deleteProperty(URL, "canParse");
+    });
+    afterEach(() => {
+      if (canParse) Object.defineProperty(URL, "canParse", canParse);
+    });
+
+    it("sends the admin link as its route, and nothing for a URL it cannot read", () => {
+      expect(URL.canParse).toBeUndefined();
+      const event = sent(pageview(secrets.adminUrl));
+      expect(leaks(event)).toEqual([]);
+      same(event, pageview(`${ORIGIN}/e/[id]/admin`));
+      same(sent(pageview(`not a url ${secrets.adminToken}`)), null);
+    });
+  });
 });
