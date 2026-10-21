@@ -434,11 +434,9 @@ test.describe("edit a person", () => {
     const answer = await holdFirst(page, "Clara", true);
     await page.goto(`/e/${seededEvent.id}`);
     await selectTab(page, "Retour");
+    // Claire is the device's only person without a car on the retour (Léa does not make it):
+    // one tap places her, without a sheet (C5.2, #92).
     await car(page.getByRole("tabpanel"), "Marc").getByRole("button", { name: /^Place libre/ }).click();
-    // The tap always opens the sheet until #92 (PR #306) builds the direct tap, which will place
-    // Claire, alone without a car, without it: this step changes then.
-    await page.getByRole("dialog").getByRole("button", { name: "Placer 1 personne" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(messages(page)).toHaveText(["Claire est dans la voiture de Marc"]);
     await sendThenClose(page);
     await failHeld(page, answer);
