@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   addDays,
+  isWallClock,
   isWallDate,
   isWallTime,
   localDate,
@@ -121,6 +122,16 @@ describe("wall-clock time, without a time zone", () => {
   it("refuses to split anything else", () => {
     for (const value of ["", "2026-12-12", "2026-12-12T07:30:00", "2026-12-12 07:30", "2026-12-12 07:30:00Z"]) {
       expect(() => wallClockParts(value)).toThrow("not a wall-clock timestamp");
+    }
+  });
+
+  it("tells what it can split, from anything a request may send, without throwing", () => {
+    expect(isWallClock("2026-12-12 07:30:00")).toBe(true);
+    for (const value of ["", "2026-12-12", "2026-12-12T07:30:00", "2026-12-12 07:30", "2026-12-12 07:30:00Z"]) {
+      expect(isWallClock(value)).toBe(false);
+    }
+    for (const value of [undefined, null, 20261212, ["2026-12-12 07:30:00"], { toString: () => "2026-12-12 07:30:00" }]) {
+      expect(isWallClock(value)).toBe(false);
     }
   });
 });

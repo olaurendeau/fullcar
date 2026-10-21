@@ -224,12 +224,19 @@ Person**, dans tout le code :
 - Sous `READ COMMITTED`, un verrou obtenu après une attente rend la ligne validée : une
   écriture qui a attendu la suppression voit `retour_at` à `null`. Une écriture sur un leg
   que l'événement n'a pas répond `noRetour` avec l'état, avant tout autre refus de la
-  transaction, `rideGone` et `forbidden` compris. Seuls la passent une requête mal formée
-  (`invalid`, qu'aucune page n'envoie) et les erreurs de champs, lues avant la transaction.
+  transaction, `rideGone` et `forbidden` compris. Seules la passent une requête mal formée
+  (`invalid`, qu'aucune page n'envoie), où qu'elle soit lue : avant la transaction, ou dans
+  la transaction après `lockLegs`, comme dans `addPerson` et `setPersonLeg` (`persons.ts`) ;
+  et les erreurs de champs, lues avant la transaction.
 - La suppression tourne en `READ COMMITTED`, le niveau qu'ouvre `atomically`. En
   `REPEATABLE READ`, le recomptage garderait l'instantané pris avant le verrou : il ne
   verrait pas une écriture sur le retour validée pendant l'attente, trouverait les mêmes
   nombres, et laisserait sa ligne cachée sous un `retour_at` à `null`.
+- La modification de l'événement est `updateEvent` (`src/app/e/[id]/admin/actions.ts`),
+  dont le cas d'usage est `editEvent` (`src/app/e/[id]/edit-event.ts`, #263). Elle compare
+  `before` à la ligne que rend le verrou, jamais à un instantané pris avant lui, puis
+  supprime le retour s'il est décoché, et écrit les champs, dans la même transaction
+  d'`atomically`.
 
 Ainsi, lancées ensemble, une suppression du retour et une écriture sur le retour se
 terminent de deux façons seulement : la suppression refusée parce que les nombres ont changé
@@ -237,7 +244,8 @@ terminent de deux façons seulement : la suppression refusée parce que les nomb
 sous un `retour_at` à `null` : cachée, elle reviendrait le jour où le retour est rajouté.
 La preuve est dans `src/app/e/[id]/retour.test.ts` (M3.6, données validées), dans les deux
 ordres, pour une prise de place, « sans voiture », une voiture proposée et une personne
-ajoutée « Aller et retour ».
+ajoutée « Aller et retour ». `src/app/e/[id]/edit-event.test.ts` refait la preuve au travers
+d'`editEvent`, pour une prise de place et une voiture proposée.
 
 ## Jetons, et pourquoi ils sont la pièce critique
 
@@ -252,6 +260,8 @@ prise de contrôle, et un jeton deviné l'est aussi.
   client le lit et le transmet dans le corps de la requête. Pour le lien admin, ce corps est
   celui de `loadOrganiserPanel`, qui répond `{ state: "invalid" }` sans aucune donnée, ou le
   panneau, et rien d'autre (amendement de #3 C4.9). Le panneau n'est jamais dans le HTML.
+  À partir de #263, c'est aussi celui d'`updateEvent`, la modification de l'événement : un
+  jeton refusé répond `invalid` sans rien écrire, et aucune réponse ne porte le jeton.
   - lien admin : `/e/{id}/admin#{token}`
   - lien perso : `/e/{id}/moi#{token}`
 - **Jamais journalisés**, ni en clair ni tronqués, ni côté serveur ni dans un rapport
