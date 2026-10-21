@@ -65,8 +65,8 @@ export function CellSheet({
   showLeg: (leg: Leg) => void;
   /** The first car of `leg` with a free seat (`findSeat`), if any. */
   freeCar: string | undefined;
-  /** Writes an information in the bar, once no sheet hides the page. */
-  inform: (message: Message) => void;
+  /** Writes an information about `leg` in the bar, once no sheet hides the page. */
+  inform: (message: Message, leg: Leg) => void;
 }) {
   const t = useTranslations("DevicePersons");
   const tLegs = useTranslations("Event.legs");
@@ -110,7 +110,7 @@ export function CellSheet({
     const car = freeCar;
     const offer = () => focusOffer(leg);
     showLeg(leg);
-    if (car === undefined) inform({ text: t(`noFreeSeat.${leg}`), landmark: offer });
+    if (car === undefined) inform({ text: t(`noFreeSeat.${leg}`), landmark: offer }, leg);
     afterClose.current = () => focusFirstShown(car === undefined ? [offer] : [() => focusFreeSeat(leg, car), offer]);
     onOpenChange(false);
   }

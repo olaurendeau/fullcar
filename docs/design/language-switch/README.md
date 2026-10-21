@@ -4,6 +4,8 @@
 - Epic : https://github.com/olaurendeau/fullcar/issues/113
 - v3, revue en v3.1, v3.2, v3.3 et v3.3.1 (approuvée) : l’anneau de focus, pour toute l’application. Tâche :
   https://github.com/olaurendeau/fullcar/issues/236 ; inclut la règle de #314
+- v3.3.2 : F1.12 lit aussi les fichiers `.ts` de `src/`, sauf les `.test.ts` et `.spec.ts`
+  (#337, PR #342)
 - Page : `index.html` (autonome, maquettes à 360 px de large). Les sections de la v2
   montrent l’écran tel qu’il était le 17/10 (en-tête « Aller » / « Retour », bas de page sans
   « Accueil ») : seule la section « L’anneau de focus (v3) » est à jour de l’écran actuel.
@@ -274,8 +276,10 @@ Critères :
   `outlineStyle` vaut `none` tant qu’aucune touche n’a été pressée.
 - **F1.11** `page.emulateMedia({ forcedColors: "active" })`, puis Tab jusqu’à ce bouton :
   `outlineStyle` = `solid` et `outlineWidth` = `2px`.
-- **F1.12** Un test Vitest lit chaque fichier `.tsx` et `.css` de `src/`, coupe chaque classe
-  en variantes et utilitaire (`a:b:utilitaire`), et n’y trouve aucune de celles-ci :
+- **F1.12** Un test Vitest lit chaque fichier `.tsx`, `.css` et `.ts` de `src/`, sauf les
+  `.test.ts` et `.spec.ts`, qui citent les anciennes classes pour les trouver (v3.3.2, #337).
+  Il coupe chaque classe en variantes et utilitaire (`a:b:utilitaire`), et n’y trouve aucune
+  de celles-ci :
   - l’utilitaire `ring-ring/50` ou `outline-ring/50`, quelles que soient les variantes ;
   - l’utilitaire `outline-none` ;
   - un utilitaire qui commence par `ring` (`ring-3`, `ring-[3px]`, `ring-ring…`,
@@ -283,7 +287,9 @@ Critères :
     La variante `not-focus-visible` n’est pas `focus-visible` : le halo d’erreur
     `aria-invalid:not-focus-visible:ring-3` est permis.
 
-  Le rapport liste les fichiers et les classes fautifs.
+  Le rapport liste les fichiers et les classes fautifs. Un second test fixe, par leur nom, les
+  fichiers lus : `button.tsx`, `globals.css`, `classes.ts` et `page.test.tsx` le sont ;
+  `focus-ring.test.ts`, `rows.spec.ts` et `README.md` ne le sont pas.
 - **F1.13** `globals.css` : `--ring` vaut `oklch(0.556 0 0)` dans `:root` (Vitest) ; c’est
   aussi ce que lit F1.1, `rgb(115, 115, 115)`.
 - **F1.16** Les repères qui ont déjà un anneau, focalisés **comme l’application le fait**,
@@ -602,3 +608,14 @@ et se place au-dessus de la ligne du bas de page, jamais après « Nous contacte
     le jeton (comme `holdActionsWith`).
   - Revue de design : **approuvée**, sans autre cycle (décision du coordinateur). Republiée
     à la même URL.
+- v3.3.2 (2026-10-21) : F1.12 seul, sans rien redessiner. Le scan lit aussi les fichiers
+  `.ts` de `src/`, sauf les `.test.ts` et `.spec.ts` (#337, PR #342) : une liste de classes
+  peut vivre dans un `.ts`. Un second test fixe les fichiers lus et ceux qui sont exclus. La
+  page ne change que son numéro de version et sa phrase d’introduction : elle ne détaille
+  pas F1.12, et renvoie au README pour F1.1 à F1.18. Pas encore relue en revue de design.
+  Republiée à la même URL.
+- v3.3.2 (suite) : revue de design : **approuvée**. Une correction de texte, appliquée sans
+  nouvelle revue : l’en-tête du README et la page disaient « sauf les tests » et « tests
+  exclus », alors que F1.12 lit les `.test.tsx` ; ils disent désormais « sauf les `.test.ts`
+  et `.spec.ts` ». Cette ligne de révisions dit aussi que la page renvoie à F1.12 sans le
+  détailler. Republiée à la même URL.

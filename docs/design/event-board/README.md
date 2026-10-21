@@ -13,6 +13,12 @@
 - v4.4 : « Valider » sans changement dans « Modifier » une personne n’envoie rien. Tâche :
   https://github.com/olaurendeau/fullcar/issues/298 ; même règle que « Modifier l’événement »
   (organizer-view v3.3, M2.5). Deux corrections du README notées sur #216 y sont reportées
+- v4.4.2 : les règles 2 et 3 de la barre suivent la règle 4. L’information n’est retirée
+  qu’à la fin d’une action commencée après elle. Décision du propriétaire sur PR #339
+  (« Trouver une place », #172) :
+  https://github.com/olaurendeau/fullcar/pull/339. « Annuler » est construit (#170, PR #340).
+  v4.4.3 : après la revue, la région `status` n’est vidée que si elle annonce encore
+  l’information.
 - Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
   la maquette `language-switch` depuis sa v3 (#236)
 - Page : `index.html` (autonome, maquettes à 360 px de large)
@@ -119,7 +125,7 @@ fermeture : aucun message ne me dit que quelque chose a échoué.
   - `messages(page)` a exactement les deux mêmes textes, dans le même ordre (l’échec, puis la
     réussite) ;
   - les boutons de la barre (`[data-message-bar] button`) ont les mêmes noms qu’avant, soit
-    « Fermer » aujourd’hui. Le test ne dépend pas d’« Annuler », qui n’est pas construit ;
+    « Annuler » (celui de la réussite, #170) puis « Fermer » ;
   - un `MutationObserver` posé sur les deux régions (`recordBar`) avant le clic n’a vu
     aucune écriture.
 - **V1.6** Un autre appareil renomme Claire en `Clarisse` pendant que le formulaire est ouvert
@@ -652,14 +658,23 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
 2. **Une action qui réussit** remplace la réussite affichée par la sienne (« Hugo est dans la
    voiture de Marc »). Si elle n’a pas de message, elle la retire : c’est le cas d’une action
    de cellule, d’« Ajouter une personne », de « Modifier », de « Proposer une voiture » sans
-   passager et de « Retirer la voiture ». Elle retire aussi l’information, qui ne décrit plus
-   l’état de la page. Elle ne retire **aucun échec**.
-3. **Une action qui échoue** ajoute son échec et retire l’information. Elle ne retire **ni la
-   réussite, ni les autres échecs**.
+   passager et de « Retirer la voiture ». Elle ne retire **aucun échec**. Elle retire
+   l’information seulement si elle a commencé **après** elle (règle 4) : la réussite d’une
+   action commencée avant l’information la laisse en place (v4.4.2).
+3. **Une action qui échoue** ajoute son échec. Elle ne retire **ni la réussite, ni les autres
+   échecs**. Elle retire l’information seulement si elle a commencé **après** elle (règle 4) :
+   l’échec d’une action commencée avant l’information la laisse en place (v4.4.2).
 4. **Une information** (v4.2.2) remplace l’information d’avant. Elle ne retire **rien
    d’autre** : ni la réussite, ni son « Annuler », ni aucun échec. Elle part à la fin de
-   l’action suivante, réussie ou non, ou par « Fermer » / Échap. « Trouver une place » qui
-   trouve une place libre n’écrit rien dans la barre et n’y touche pas.
+   l’action suivante **commencée après elle**, réussie ou non, ou par « Fermer » / Échap.
+   Une action commence quand elle part au serveur ; l’information compte du moment où elle
+   est écrite dans la barre (règle 1). Une action commencée avant l’information, et finie
+   après, la laisse en place, qu’elle réussisse ou qu’elle échoue (v4.4.2). « Trouver une
+   place » qui trouve une place libre n’écrit rien dans la barre et n’y touche pas.
+
+   Cas accepté (v4.4.2) : une action lente, commencée avant l’information, libère une place ;
+   l’information reste, alors qu’elle est devenue fausse. « pour l’instant » l’atténue, et
+   la prochaine action commencée après elle la retire.
 
    Exemple : Tom est placé, avec son « Annuler » ; « Trouver une place » pour Léa ne retire
    ni l’un ni l’autre, qu’il y ait une place libre ou non.
@@ -669,7 +684,7 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
      feuille ou dans la barre ;
    - **un retrait de voiture réussi** (v4.4, décision du propriétaire sur #221, PR #255). Il
      retire tous les messages sur cette voiture, réussite comme échecs : ceux de ses places
-     (`seats:{rideId}`, et `undo:{rideId}` quand « Annuler » sera construit) et ceux de sa
+     (`seats:{rideId}`, et `undo:{rideId}` pour « Annuler », #170) et ceux de sa
      modification (`ride:{rideId}:edit`). Il les retire qu’ils soient en attente sous une
      feuille ou une confirmation, déjà dans la barre, ou venus d’un envoi parti avant la
      réponse du retrait ; un tel message ne s’affiche jamais. Un envoi parti après cette
@@ -918,8 +933,12 @@ message à annoncer**. La v4.2.2 en fixe le moment d’écriture.
    Deux échecs écrits dans le même passage : le second annule l’écriture du premier, et seul
    le second est annoncé. Le premier reste dans la liste visible.
 4. **Aucune écriture n’écrit de texte dans l’autre région.** Un échec n’écrit rien dans la
-   région `status` : il peut seulement la vider, quand il retire l’information qu’elle annonce
-   (règle 3). Une réussite ou une information n’écrit rien dans la région `alert`. Un deuxième échec
+   région `status`. Il la vide dans un seul cas : il retire l’information (règle 4), **et** la
+   région `status` annonce encore cette information, son texte ou son écriture en attente.
+   Si la région annonce un autre message, par exemple une réussite écrite après
+   l’information (v4.4.2), l’échec n’y touche pas, ni à son texte ni à son écriture en
+   attente : ce message est encore dans la barre. Une réussite ou une information n’écrit rien
+   dans la région `alert`. Un deuxième échec
    remplace le texte du premier dans la région `alert` : seul le deuxième est lu, et le
    premier reste dans la liste visible, où on le relit.
 5. **Réussite, puis échec.** La réussite est polie, l’échec assertif, et il peut couper sa
@@ -1029,6 +1048,7 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | la barre : après « Fermer », repère sur l’autre onglet | La barre de messages | C11.10 |
 | la barre : « Réessayer » qui échoue | La barre de messages | C5.9, C11.11 |
 | aucune place libre : l’information au-dessus de la réussite de Tom et de son « Annuler » | Trouver une place | C3.8, C11.10 |
+| la barre : une action commencée avant l’information finit après, réussie ou non ; l’information reste (v4.4.2). Réussie : la barre est celle de la maquette « Aucune place libre sur ce leg », l’information au-dessus de la réussite de Tom. Échouée : sans maquette, la règle 4 le dit | Trouver une place ; La barre de messages | C11.10, C11.12 |
 | la barre avec une réussite seule (après le tap, après « Annuler », 15 voitures, en anglais) | Un tap et « Annuler », Erreurs et chargement, En anglais | C5.2, C5.10, C11.4, C11.1 |
 | la barre en anglais | La barre de messages | C11.1, C11.11 |
 | place prise, le message amendé | Un tap et « Annuler » | C5.7 |
@@ -1486,6 +1506,8 @@ v4.4-3. Décision : rien n’est dit, ni « Rien n’a changé » ni autre chose
 
 v4.4-4. Décision : la règle 5 de la barre écrit ce que fait un retrait de voiture réussi : il retire tous les messages sur cette voiture, échecs compris. — Raison : c’est la décision du propriétaire sur #221, construite dans PR #255. Le README disait « Rien d’autre ne le retire », ce qui n’était plus vrai (noté sur #216).
 
+v4.4.2-1. Décision : l’information (« Aucune place libre… ») n’est retirée qu’à la fin d’une action commencée **après** elle (règle 4). La réussite ou l’échec d’une action commencée avant elle la laisse en place (règles 2 et 3). Cas accepté : une action lente, commencée avant, libère une place, et l’information reste alors qu’elle est devenue fausse. — Raison : décision du propriétaire sur PR #339 (« Trouver une place », #172). Sinon, l’information peut disparaître presque aussitôt, sans être annoncée. Les règles 2 et 3 contredisaient la règle 4 et C11.10. Précise la décision v4.2.2-5 (« part à la fin de l’action suivante »).
+
 v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.list` : « Tom, Léa, and Hugo » en anglais. `Actions.names.andOthers` garde « Tom, Léa and 2 others ». — Raison : #280 ; le README écrivait « Tom, Léa and Hugo », que `format.list` ne produit pas en `en`. La clé `andOthers` est un texte écrit, hors de cette correction : la changer serait un changement de mots, que rien n’a demandé.
 
 ## Écarts par rapport à la revue
@@ -1611,8 +1633,8 @@ v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.lis
   - l’espace réservé en bas de la page vaut `1rem` + la hauteur de la barre + 12 px + `env(safe-area-inset-bottom)`, et « Nous contacter » défile entièrement au-dessus de la barre.
 - **États à concevoir, « hors ligne » et « erreur serveur »** : dans la barre, le message nomme ce qui n’a pas été fait, puis donne la raison, par exemple « Tom n’a pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez. » Dans une feuille ou un formulaire ouverts, rien ne change (« Action impossible, vérifiez la connexion »). La colonne « critère » de ces deux lignes renvoie à C11.10 et C11.11.
 - **Nouveau C11.10** (#216) La barre de messages montre ensemble au plus une réussite (la dernière), au plus une information (la dernière) et tous les échecs en attente. De haut en bas : les échecs, du plus récent au plus ancien, puis l’information, puis la réussite. « Récent » se mesure au moment où le message est écrit dans la barre. Une action est un envoi au serveur.
-  - Une action qui réussit remplace ou retire la réussite, retire l’information, et ne retire aucun échec.
-  - Une action qui échoue ajoute son échec, retire l’information, et rien d’autre.
+  - Une action qui réussit remplace ou retire la réussite, et ne retire aucun échec. Elle retire l’information seulement si elle a commencé après elle (v4.4.2).
+  - Une action qui échoue ajoute son échec. Elle ne retire rien d’autre que l’information, et celle-ci seulement si l’action a commencé après elle (v4.4.2).
   - Une information (« Aucune place libre… ») ne vient d’aucun envoi : elle remplace l’information d’avant et ne retire ni la réussite, ni son « Annuler », ni aucun échec. « Trouver une place » qui trouve une place ne touche pas à la barre.
   - Un échec n’est retiré que de trois façons : dès l’envoi d’une action sur le même sujet qui couvre au moins ce qu’il portait (table « Le sujet d’un échec » du README) ; par un retrait réussi de sa voiture, qui retire tous les messages sur elle (v4.4) ; ou par « Fermer » / Échap, qui retirent tous les messages et n’envoient rien.
   - Quand l’élément de la barre qui a le focus disparaît, quelle qu’en soit la raison, le focus va au premier repère affiché (sur l’onglet actif ou hors des onglets, et pas dans une section repliée) dans cet ordre : celui du message de cet élément ; ceux des autres messages, encore là ou qui viennent de partir, du plus récent au plus ancien ; l’onglet actif ; sans onglets, le titre de l’événement. Jamais `<body>`, et jamais de changement d’onglet.
@@ -1623,6 +1645,7 @@ v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.lis
   - trois échecs écrits dans l’ordre A, B, C s’affichent C, B, A ; un échec qui attendait la fermeture d’une feuille prend son rang à cette fermeture ;
   - un échec hors ligne reste après `context.setOffline(false)` et l’évènement `online` ;
   - Tom placé, puis « Trouver une place » pour Léa : avec une place libre, la barre ne change pas ; sans place libre, l’information s’ajoute, et la réussite de Tom et son « Annuler » restent ; l’action suivante retire l’information ;
+  - un tap pour Tom, réponse retenue, puis « Trouver une place » pour Léa sans place libre, puis la réponse pour Tom : la barre garde l’information et la réussite de Tom, et la région `status` contient la réussite de Tom (v4.4.2) ;
   - le focus ne tombe jamais sur `<body>`, et va au repère attendu, dans six cas : « Fermer » avec le repère le plus récent sur l’autre onglet ; « Fermer » sur un échec d’« Ajouter une personne », de « Proposer une voiture » et de « Réessayer » ; l’« Annuler » d’un échec, activé au clavier ; une réponse tardive qui remplace la réussite dont l’« Annuler » a le focus ; une action sans message qui vide la barre, le focus sur « Fermer » ; un « Annuler » réussi après un changement d’onglet.
 - **Nouveau C11.11** (#216) Un échec dit dans la barre ce qui n’a pas été fait, puis pourquoi et quoi faire, mot pour mot comme la table « Chaque échec, mot pour mot » du README. Aucun échec de la barre n’est générique, « Réessayer » compris.
   - `alreadyInCar` nomme les personnes : la personne d’un tap, et les personnes cochées de « Qui monte avec vous ? ».
@@ -1641,8 +1664,9 @@ v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.lis
   - deux échecs écrits dans le même passage : à +100 ms, la région `alert` ne contient que le second, et l’observateur n’a jamais vu le texte du premier ;
   - « Fermer » moins de 100 ms après un échec : la région reste vide ;
   - un renvoi hors ligne qui échoue de la même façon : l’observateur voit la région vide, puis le même texte ;
-  - une réussite ne modifie pas la région `alert` ; un échec n’écrit aucun texte dans la région `status` (sans information affichée, il ne la modifie pas ; avec « Aucune place libre » affichée, il la vide) ; une information s’écrit dans la région `status` ;
-  - un échec et une réussite libérés à la fermeture d’une même feuille : l’échec est écrit d’abord.
+  - une réussite ne modifie pas la région `alert` ; un échec n’écrit aucun texte dans la région `status` (il la vide seulement s’il retire l’information, son action ayant commencé après elle, et que la région `status` annonce encore cette information, texte ou écriture en attente ; dans tous les autres cas il ne la modifie pas) ; une information s’écrit dans la région `status` ;
+  - un échec et une réussite libérés à la fermeture d’une même feuille : l’échec est écrit d’abord ;
+  - Tom placé, réponse retenue ; « Trouver une place » pour Léa, sans place libre, écrit l’information ; la réponse pour Tom arrive, l’information reste ; puis, moins de 100 ms après, un tap pour Hugo, commencé après l’information, échoue. La barre perd l’information et garde la réussite de Tom. Avec `page.clock` : 100 ms après la réponse pour Tom, la région `status` contient le texte de sa réussite, donc l’écriture en attente n’a pas été annulée ; ensuite, jusqu’à la fin du test, l’observateur ne la voit jamais vidée. La région `alert` contient l’échec d’Hugo (v4.4.3).
 
   *Non prouvable par un test* : ce que prononce un lecteur d’écran. Revue avec VoiceOver (iOS, Safari), TalkBack (Android, Chrome) et NVDA (Windows, Chrome), sur le cas de #216 dans les deux ordres d’arrivée : chaque message est annoncé une fois, et aucun n’est relu quand un autre arrive. En mode navigation (NVDA, rotor VoiceOver), chaque message se lit deux fois, dans la liste puis dans sa région : on vérifie que cette lecture reste compréhensible.
 - Aucun critère de l’epic ne disait ce que fait la barre d’un échec : C11.10 à C11.12 sont les seuls nouveaux. Le reste amende C5.7, C5.10, C11.4 et les deux lignes d’états. C11.9 ne change pas : les nouvelles clés sont dans `Actions`, déjà vérifié.
@@ -1974,8 +1998,9 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
     la page.
   - V1.8 nouveau : « Claire » suivi d’une espace part, et la base garde « Claire ».
   - V1.5 concret : Claire placée dans la voiture de Marc au retour, puis l’échec retenu de
-    « Clara ». Le test ne dépend plus d’« Annuler », qui n’est pas construit ; la maquette
-    « Après » le montre sans « Annuler ».
+    « Clara ». Le test ne dépendait pas d’« Annuler », pas encore construit, et la maquette
+    « Après » le montrait sans « Annuler ». Depuis #170 (PR #340) et la v4.4.2, V1.5 attend
+    « Annuler » puis « Fermer », et la maquette montre « Annuler ».
   - Note pour la prochaine révision d’organizer-view : M2.5 doit dire où va le focus et que
     les lignes de la barre restent.
   - Le mélange de virgules entre trois prénoms (« Tom, Léa, and Hugo ») et quatre (« Tom, Léa
@@ -1983,3 +2008,38 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
   - Rendu vérifié avec Chrome headless, à 1280 et 500 px : aucun débordement horizontal.
     Republiée à la même URL.
 - v4.4.1 (suite) : revue de design : **approuvée**.
+- v4.4.2 (2026-10-21) : deux amendements de texte, sans rien redessiner.
+  - Règles 2 et 3 de la barre : la réussite ou l’échec d’une action commencée avant
+    l’information la laisse en place ; seule une action commencée après elle la retire
+    (règle 4). Décision du propriétaire sur PR #339 (« Trouver une place », #172). La règle 4
+    dit quand une action commence, et le cas accepté. Même correction dans C11.10 (deux
+    puces, et un cas Playwright de plus), C11.12, le point 4 de « Lecteurs d’écran » et la
+    table des états. Nouvelle décision v4.4.2-1.
+  - « Annuler » est construit (#170, PR #340) : V1.5 attend « Annuler » puis « Fermer », la
+    règle 5 nomme `undo:{rideId}` pour « Annuler », et l’entrée v4.4.1 ci-dessus ne dit plus
+    qu’il n’est pas construit. La maquette « Après » de V1.5 montre « Annuler » sur la
+    réussite.
+  - La page reprend les mêmes textes (règles 2 à 4, « Lecteurs d’écran », C11.10, C11.12,
+    décisions, version).
+  - Rendu vérifié avec Chrome headless, à 500 et 1280 px : aucun débordement horizontal, et
+    la barre de V1.5 tient avec « Annuler ». Pas encore relue en revue de design. Republiée à
+    la même URL.
+- v4.4.2 (suite) : revue de design : changements demandés. Un bloquant : C11.12 et le point 4
+  de « Lecteurs d’écran » faisaient vider la région `status` selon le moment où l’action
+  avait commencé, et non selon ce qu’elle annonce. Avec une réussite arrivée après
+  l’information, l’échec suivant aurait vidé l’annonce de cette réussite, encore dans la
+  barre, et pu annuler son écriture en attente. Deux suggestions retenues ; la suggestion de
+  ne pas dire « Annuler » construit est écartée par le coordinateur (#340 est mergée avant
+  que #339 copie cette maquette).
+- v4.4.3 (2026-10-21) : le bloquant est corrigé, et les suggestions retenues sont appliquées.
+  - Point 4 et C11.12 : un échec vide la région `status` seulement s’il retire l’information
+    et que la région annonce encore cette information (texte ou écriture en attente). Un cas
+    Playwright de plus dans C11.12 : Tom, l’information, la réussite de Tom, puis l’échec
+    d’Hugo moins de 100 ms après ; la région `status` garde la réussite de Tom.
+  - La règle 4 de la page dit, comme le README, quand une action commence.
+  - Table des états : la variante réussie renvoie à la maquette « Aucune place libre sur ce
+    leg » ; la variante échouée reste sans maquette, comme avant la v4.4.2.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.4.3 (suite) : revue de design : **approuvée**. Deux corrections de texte, appliquées
+  sans nouvelle revue : « Deux suggestions retenues » au lieu de « Trois » dans l’entrée
+  v4.4.2 (suite), et le point final de la ligne v4.4.3 de l’en-tête. Republiée à la même URL.

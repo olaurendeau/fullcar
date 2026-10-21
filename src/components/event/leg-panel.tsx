@@ -1,6 +1,7 @@
 import { useFormatter, useTranslations } from "next-intl";
 import type { DevicePerson } from "@/domain/board";
 import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
+import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
@@ -21,8 +22,11 @@ export interface BoardDevice {
   retry: () => void;
   /** Gives the focus to a stable landmark, when what had it is gone. */
   refocus: () => void;
-  /** Writes an information in the bar once no sheet hides the page (« Aucune place libre… », rule 4). */
-  inform: (message: Message) => void;
+  /**
+   * Writes an information about `leg` in the bar once no sheet hides the page (« Aucune place
+   * libre… », rule 4); never about a retour gone by then (#330, rule 9).
+   */
+  inform: (message: Message, leg: Leg) => void;
   /** Registers a person on this device (R1), with the device's token. */
   addPerson: AddPerson;
   /** Changes the first name and the number of one of the device's persons (C2.3). */

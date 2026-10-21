@@ -343,7 +343,11 @@ export function ParticipantBoard({
           device.retry();
         },
         refocus: focusLandmark,
-        inform: (message) => void whenPageShown(() => messages.inform(message)),
+        inform: (message, leg) =>
+          void whenPageShown(() => {
+            // The retour may have gone under the sheet: its tab goes as it closes, and nothing is said about it.
+            if (leg === "aller" || latest.current.event.retourAt) messages.inform(message);
+          }),
         addPerson,
         updatePerson,
         setPersonLeg,

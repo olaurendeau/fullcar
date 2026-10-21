@@ -2,7 +2,8 @@ import type { Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
+import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, said, watchAlerts } from "./device";
+import { removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -15,6 +16,9 @@ type Db = Kysely<Database>;
 const TOM_PLACED = "Tom est dans la voiture de Sophie";
 const NO_SEAT = "Aucune place libre au retour pour l’instant.";
 const LEA_FAILED = "Léa · Retour : « Ne fait pas le retour » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
+const HUGO_FAILED = "Hugo n’a pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
+/** Tom's « Je cherche une place » on the retour, refused once the organiser has removed it (#330, rule 9). */
+const TOM_NO_RETOUR = "Tom · Retour : « Je cherche une place » n’a pas été enregistré. Il n’y a plus de retour pour cet événement.";
 
 /**
  * The device holds Tom and Léa. Aller: Sophie drives nobody, Tom is without a car, Léa is not
@@ -130,7 +134,51 @@ test.describe("« Trouver une place »", () => {
     await expect(messages(page)).toHaveText([NO_SEAT, TOM_PLACED]);
     await expect(barStatus(page)).toHaveText(TOM_PLACED);
     await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Avec Sophie");
+  });
+
+  // C11.12 (v4.4.3): the region `status` empties only while it still says the information.
+  test("C11.12: Hugo's tap fails within 100 ms of Tom's success: the information goes, `status` says Tom's success and is never emptied after", async ({ db, page, seededEvent }) => {
+    const scene = await seedScene(db, seededEvent.id, token, [{ driver: "Marc", time: "17:00:00", free: 0 }]);
+    const hugo = (await seedPerson(db, seededEvent.id, { firstName: "Hugo" }, token)).id;
+    await holdToken(page, seededEvent.id, token);
+    await page.clock.install();
+    const tom = await holdFirst(page, scene.sophie, false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await seat(page, "Sophie").click();
+    await findSeat(page);
+    await expect(barStatus(page)).toHaveText(NO_SEAT);
+    // Back to Sophie's car, on the aller: a tab is no action.
+    await tab(page, "Aller").click();
+    await expect(tab(page, "Aller")).toHaveAttribute("aria-selected", "true");
+
+    // Hugo, not concerned so far, looks for a seat on the aller: the answer to Tom's tap shows it.
+    await seedPlacement(db, { personId: hugo, eventId: seededEvent.id, leg: "aller", rideId: null });
+    const record = await recordBar(page);
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+    const answered = page.waitForResponse((response) => !!response.request().postData()?.includes(scene.tom));
+    tom();
+    await answered;
     await expect(messages(page)).toHaveText([NO_SEAT, TOM_PLACED]);
+    // Tom's success is written in `status` 100 ms after the region empties.
+    await expect(barStatus(page)).toBeEmpty();
+    await expect(cell(page, "Hugo", "Aller")).toHaveAccessibleName("Hugo, Aller : Sans voiture");
+
+    // Begun after the information, Hugo's tap fails before those 100 ms, and removes it. From the
+    // keyboard: the clock paused, a click would wait for the seat to be stable.
+    const failing = await holdFirst(page, hugo, true);
+    await seat(page, "Sophie").focus();
+    await page.keyboard.press("Enter");
+    await failHeld(page, failing);
+    await expect(messages(page)).toHaveText([HUGO_FAILED, TOM_PLACED]);
+    await page.clock.runFor(100);
+    // The write due was not cancelled.
+    await expect(barStatus(page)).toHaveText(TOM_PLACED);
+    await expect(bar(page)).toHaveText(HUGO_FAILED);
+    await page.clock.runFor(1_000);
+    await expect(barStatus(page)).toHaveText(TOM_PLACED);
+    const { writes } = await record();
+    // Emptied once, as Tom's success is written, and never again.
+    expect(writes.filter((write) => write.region === "status").map((write) => write.text)).toEqual(["", TOM_PLACED]);
   });
 
   test("C3.8, C5.5, C6.1: with two persons without a car, Enter on the seat opens the sheet, both checked", async ({ db, page, seededEvent }) => {
@@ -216,4 +264,40 @@ test.describe("« Trouver une place »", () => {
     expect(seatBox.y + seatBox.height).toBeLessThanOrEqual(barBox.y);
     await expect(messages(page)).toHaveText([TOM_PLACED]);
   });
+
+  // Review of #339: #330 keeps the retour shown under an open sheet until it closes. Tom's change,
+  // sent before the organiser removed the retour, is refused while Léa's sheet is open; Léa then
+  // finds a seat on that retour. Its failure is said once the sheet closes, the information of a
+  // retour gone never is, and the focus goes to the event's title, never <body>.
+  for (const free of [1, 0]) {
+    test(`#330: « Trouver une place » on the retour while it goes, ${free ? "a free seat" : "no free seat"}: Tom's failure in the bar, the focus on the title`, async ({ db, page, seededEvent }) => {
+      const scene = await seedScene(db, seededEvent.id, token, [{ driver: "Marc", time: "17:00:00", free }]);
+      await holdToken(page, seededEvent.id, token);
+      await page.goto(`/e/${seededEvent.id}`);
+      const seen = await watchAlerts(page);
+      const answer = await holdFirst(page, scene.tom, false);
+      await cell(page, "Tom", "Retour").click();
+      await sheet(page, "Tom · Retour").getByRole("button", { name: "Je cherche une place" }).click();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await cell(page, "Léa", "Retour").click();
+      await removeRetourInDb(db, seededEvent.id);
+      const answered = page.waitForResponse((response) => !!response.request().postData()?.includes(scene.tom));
+      answer();
+      await answered;
+      // The retour stays behind Léa's sheet, and Tom's failure waits for it to close.
+      await expect(page.locator('[role="tab"]')).toHaveCount(2);
+      await expect(page.locator('[data-message-bar] [role="group"] > p')).toHaveCount(0);
+
+      await sheet(page, "Léa · Retour").getByRole("button", { name: "Trouver une place" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      // Gone once Radix has given the focus back and the page has taken the state without the retour.
+      await expect(page.locator('[role="tab"]')).toHaveCount(0);
+      await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+      await expect(messages(page)).toHaveText([TOM_NO_RETOUR]);
+      await expect(bar(page)).toHaveText(TOM_NO_RETOUR);
+      expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+      await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+    });
+  }
 });
