@@ -147,6 +147,33 @@ describe("sendAbout (#208, #216)", () => {
     expect(said).toEqual(["Tom"]);
   });
 
+  it("sends(fields, subjects): each subject, then each of its fields", () => {
+    expect(aboutOf(["person:tom"])).toEqual(["person:tom"]);
+    expect(aboutOf(["person:tom"], ["firstName", "phone"])).toEqual(["person:tom", "person:tom:firstName", "person:tom:phone"]);
+    expect(aboutOf(["offer:aller:new:Marc", "offer:retour:new:Marc"])).toEqual(["offer:aller:new:Marc", "offer:retour:new:Marc"]);
+  });
+
+  // « Le sujet d’un échec », line « Proposer une voiture »: one subject per leg of the offer (#228).
+  it("an offer on both legs is withdrawn by one on both, in either order; neither by one on a leg, nor by another driver's", async () => {
+    const uncover = coverPage();
+    const said: string[] = [];
+    const both = ["offer:aller:new:Marc", "offer:retour:new:Marc"];
+    sendAbout(aboutOf(both)).whenClosed(() => said.push("both"));
+    sendAbout(aboutOf(["offer:aller:new:Marc"])).whenClosed(() => said.push("aller"));
+    sendAbout(aboutOf(["offer:retour:new:Marc", "offer:aller:claire"]));
+    sendAbout(aboutOf(["offer:aller:claire"]));
+    uncover();
+    await settled();
+    expect(said).toEqual(["both", "aller"]);
+
+    const again = coverPage();
+    sendAbout(aboutOf(both)).whenClosed(() => said.push("both again"));
+    sendAbout(aboutOf([...both].reverse()));
+    again();
+    await settled();
+    expect(said).toEqual(["both", "aller"]);
+  });
+
   it("a car removed: what was sent about it, waiting or on its way, is never said; what is sent since is", async () => {
     const uncover = coverPage();
     const said: string[] = [];
@@ -166,17 +193,17 @@ describe("sendAbout (#208, #216)", () => {
 // « Le sujet d'un échec », line « un tap ; la feuille »: a tap and the sheet send about the same car and persons (#92).
 describe("aboutOf", () => {
   it("names the subject, then each field under it", () => {
-    expect(aboutOf("seats:sophie", ["tom", "lea"])).toEqual(["seats:sophie", "seats:sophie:tom", "seats:sophie:lea"]);
-    expect(aboutOf("seats:sophie")).toEqual(["seats:sophie"]);
+    expect(aboutOf(["seats:sophie"], ["tom", "lea"])).toEqual(["seats:sophie", "seats:sophie:tom", "seats:sophie:lea"]);
+    expect(aboutOf(["seats:sophie"])).toEqual(["seats:sophie"]);
   });
 
   it("a tap for Tom alone withdraws no failure of Tom and Léa; a send of both does", () => {
     const told: Withdrawal[] = [];
     const stop = onWithdraw((withdrawal) => told.push(withdrawal));
-    sendAbout(aboutOf("seats:sophie", ["tom"]));
-    sendAbout(aboutOf("seats:sophie", ["tom", "lea"]));
+    sendAbout(aboutOf(["seats:sophie"], ["tom"]));
+    sendAbout(aboutOf(["seats:sophie"], ["tom", "lea"]));
     stop();
-    const failed = { about: aboutOf("seats:sophie", ["tom", "lea"]), sent: 0 };
+    const failed = { about: aboutOf(["seats:sophie"], ["tom", "lea"]), sent: 0 };
     expect(told.map((withdrawal) => covers(withdrawal, failed))).toEqual([false, true]);
   });
 });

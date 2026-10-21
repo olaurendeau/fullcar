@@ -80,7 +80,7 @@ const toCarOrBanner = (leg: Leg, rideId: string) => focusFirstShown([focusCar(le
  * failure, once no sheet hides the page. About the car and the person, as the sheet's sends are.
  */
 function toBar(key: string, rideId: string, person: { id: string; firstName: string }, driver: string, placed: string): SendingSheet {
-  const send = sendAbout(aboutOf(`seats:${rideId}`, [person.id]));
+  const send = sendAbout(aboutOf([`seats:${rideId}`], [person.id]));
   return { key, inSheet: () => false, ...send, sending: () => {}, seats: { names: [person.firstName], driver }, placed };
 }
 
