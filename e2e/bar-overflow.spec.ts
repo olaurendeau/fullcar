@@ -1,10 +1,10 @@
-import type { Locator, Page } from "@playwright/test";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, messages, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { expectRing, pressUntil, rgba } from "./focus-ring";
+import { expectRing, press, pressUntil, rgba } from "./focus-ring";
 import { organiserPath } from "./organiser";
 
 leaveNoToken();
@@ -47,7 +47,7 @@ const title = (page: Page, driver: string) => page.getByRole("heading", { name: 
  * places someone in Marc's car or `fails` is turned off. The page's reads go through: they
  * carry no id of the scene.
  */
-async function gate(page: Page, scene: Scene) {
+async function gate(page: Page, scene: { persons: Record<string, string>; cars: { marc: string } }) {
   const ids = [...Object.values(scene.persons), ...Object.values(scene.cars)];
   let open = Promise.resolve();
   let release = () => {};
@@ -309,4 +309,195 @@ test.describe("a bar of many lines", () => {
       }
     });
   }
+});
+
+// F1.19, #350: « Annuler », in the bar's list that clips what overflows it, shows its ring at
+// 0 px whole on its four sides: its row keeps 2 px on its right (`pr-0.5`), and a scroll from
+// the keyboard keeps 4 px above or below it (`scroll-my-1`) (language-switch design, v3.3.4).
+
+const PLACED = "Tom est dans la voiture de Sophie";
+const UNDO_OFFLINE = "Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».";
+
+/**
+ * The device holds Tom, without a car at the aller, the only one there: a tap on a seat places
+ * him. Léa, Hugo and Nina do not do the aller, and are without a car at the retour. Aller:
+ * Sophie and Marc drive nobody.
+ */
+async function seedUndoScene(db: Db, eventId: string, token: string) {
+  const mine = async (firstName: string) => (await seedPerson(db, eventId, { firstName }, token)).id;
+  const other = async (firstName: string) => (await seedPerson(db, eventId, { firstName })).id;
+  const persons = { tom: await mine("Tom"), lea: await mine("Léa"), hugo: await mine("Hugo"), nina: await mine("Nina") };
+  const cars = { sophie: await seedRide(db, eventId, await other("Sophie")), marc: await seedRide(db, eventId, await other("Marc")) };
+  await seedPlacement(db, { personId: persons.tom, eventId, leg: "aller", rideId: null });
+  for (const personId of [persons.lea, persons.hugo, persons.nina]) await seedPlacement(db, { personId, eventId, leg: "retour", rideId: null });
+  return { persons, cars };
+}
+
+const undo = (page: Page) => list(page).getByRole("button", { name: "Annuler" });
+
+/** Scene 1: Tom placed by a tap in Sophie's car, the success with its « Annuler ». */
+async function placeTom(page: Page) {
+  await page.getByRole("tabpanel").getByRole("article", { name: "Voiture de Sophie" }).getByRole("button", { name: /^Place libre/ }).first().click();
+  await expect(messages(page).last()).toHaveText(PLACED);
+}
+
+/** Scene 2: « Annuler » offline. Its failure takes an « Annuler », which the success loses; back online after. */
+async function undoOffline(page: Page, context: BrowserContext) {
+  await context.setOffline(true);
+  await undo(page).click();
+  await expect(messages(page).first()).toHaveText(UNDO_OFFLINE);
+  await expect(undo(page)).toHaveCount(1);
+  await expect(undo(page)).toHaveAccessibleDescription(UNDO_OFFLINE);
+  await context.setOffline(false);
+}
+
+/** Three failures more, of Léa's, Hugo's and Nina's retour, each sheet closed before its answer (500). */
+async function threeFailures(page: Page, scene: Awaited<ReturnType<typeof seedUndoScene>>) {
+  const before = await messages(page).count();
+  const actions = await gate(page, scene);
+  actions.shut();
+  for (const name of ["Léa", "Hugo", "Nina"]) await cellThenClose(page, name, "Retour", "Ne fait pas le retour");
+  actions.release();
+  await expect(messages(page)).toHaveCount(before + 3);
+  await page.unroute("**/e/**");
+}
+
+/** From each side of `inner` to the same side of `outer`, inward, in CSS px: negative, `inner` passes it. */
+async function gaps(inner: Locator, outer: Locator) {
+  const [a, b] = [(await inner.boundingBox())!, (await outer.boundingBox())!];
+  return { top: a.y - b.y, right: b.x + b.width - (a.x + a.width), bottom: b.y + b.height - (a.y + a.height), left: a.x - b.x };
+}
+
+/** The ring holds in the list: « Annuler »'s box grown by its outline of 2 px is inside the list's, which has no border. 0.5 px is tolerated. */
+async function expectRingInList(page: Page) {
+  const found = await gaps(undo(page), list(page));
+  for (const [side, gap] of Object.entries(found)) expect(gap, `the ring inside the list, ${side}`).toBeGreaterThanOrEqual(2 - 0.5);
+}
+
+/**
+ * The bar shot (`locator.screenshot`), read at the device's scale: the pixel 1 CSS px outside the
+ * middle of each side of « Annuler », in the middle of its outline's width.
+ */
+async function ringPixels(page: Page) {
+  const shot = (await board(page).screenshot()).toString("base64");
+  const [button, origin] = [(await undo(page).boundingBox())!, (await board(page).boundingBox())!];
+  const middle = { x: button.x + button.width / 2, y: button.y + button.height / 2 };
+  const points = {
+    top: [middle.x, button.y - 1],
+    right: [button.x + button.width + 1, middle.y],
+    bottom: [middle.x, button.y + button.height + 1],
+    left: [button.x - 1, middle.y],
+  };
+  return page.evaluate(
+    async ({ shot, points, origin }) => {
+      const bytes = Uint8Array.from(atob(shot), (char) => char.charCodeAt(0));
+      const image = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
+      const canvas = document.createElement("canvas");
+      [canvas.width, canvas.height] = [image.width, image.height];
+      const context = canvas.getContext("2d", { willReadFrequently: true })!;
+      context.drawImage(image, 0, 0);
+      const scale = image.width / origin.width;
+      return Object.fromEntries(
+        Object.entries(points).map(([side, [x, y]]) => {
+          const [r, g, b] = context.getImageData(Math.floor((x - origin.x) * scale), Math.floor((y - origin.y) * scale), 1, 1).data;
+          return [side, { r, g, b }];
+        }),
+      );
+    },
+    { shot, points, origin },
+  );
+}
+
+/** Each of the four pixels is the ring's rgb(115, 115, 115), within 4 a channel. */
+async function expectRingPixels(page: Page) {
+  for (const [side, { r, g, b }] of Object.entries(await ringPixels(page))) {
+    for (const channel of [r, g, b]) expect(Math.abs(channel - 115), `the ring's pixel, ${side}: rgb(${r}, ${g}, ${b})`).toBeLessThanOrEqual(4);
+  }
+}
+
+/** Scrolls the list by script, which leaves the focus where it is, until « Annuler » is cut by `edge` by 20 px; checks it is. */
+async function cut(page: Page, edge: "top" | "bottom") {
+  await list(page).evaluate((element, edge) => {
+    const [button, shown] = [element.querySelector("button")!.getBoundingClientRect(), element.getBoundingClientRect()];
+    element.scrollTop += edge === "bottom" ? button.bottom - shown.bottom - 20 : button.top - shown.top + 20;
+  }, edge);
+  const gap = (await gaps(undo(page), list(page)))[edge];
+  expect(gap, `« Annuler » cut by the list's ${edge} edge`).toBeLessThanOrEqual(-16);
+  expect(gap, `« Annuler » cut by the list's ${edge} edge`).toBeGreaterThanOrEqual(-24);
+}
+
+test.describe("F1.19: « Annuler » in the bar, reached from the keyboard at 360 × 780", () => {
+  test.use({ locale: "fr-FR" });
+  const token = newToken();
+  let scene: Awaited<ReturnType<typeof seedUndoScene>>;
+
+  test.beforeEach(async ({ db, page, seededEvent }) => {
+    expect(page.viewportSize()).toEqual({ width: 360, height: 780 });
+    scene = await seedUndoScene(db, seededEvent.id, token);
+    await holdToken(page, seededEvent.id, token);
+  });
+
+  for (const failing of [false, true]) {
+    test(`F1.19: ${failing ? "with a failure, the bar white and bordered in red" : "a success alone, the bar dark"}: the ring at 0 px, whole on its four sides`, async ({ context, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await placeTom(page);
+      if (failing) {
+        await undoOffline(page, context);
+        await expect(messages(page)).toHaveText([UNDO_OFFLINE, PLACED]);
+      } else await expect(messages(page)).toHaveText([PLACED]);
+
+      await pressUntil(page, "Shift+Tab", undo(page));
+      const ring = await expectRing(undo(page), { offset: 0 });
+      expect(ring.background).toBe(failing ? "rgb(255, 255, 255)" : "rgb(23, 23, 23)");
+      if (!failing) expect(ring.ratio).toBeGreaterThanOrEqual(3.7);
+      await expectRingPixels(page);
+      await expectRingInList(page);
+      if (failing) expect(await within(undo(page), board(page), { ring: 2 }), "1.5 px at least between the ring and the border").toBe(true);
+    });
+  }
+
+  test("F1.19, scene 3a: the list that scrolls, « Annuler » cut by its bottom edge, then Tab: brought into view 4 px from the edge, the ring whole", async ({ context, page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await placeTom(page);
+    await undoOffline(page, context);
+    await threeFailures(page, scene);
+    // Tom's failure, the only one with « Annuler », under the three written after it; the success last.
+    await expect(messages(page).nth(3)).toHaveText(UNDO_OFFLINE);
+    await expect(messages(page).last()).toHaveText(PLACED);
+    await expect(list(page)).toHaveAttribute("tabindex", "0");
+
+    await pressUntil(page, "Tab", list(page));
+    await cut(page, "bottom");
+    await expect(list(page)).toBeFocused();
+    await press(page, "Tab");
+    await expect(undo(page)).toBeFocused();
+
+    const ring = await expectRing(undo(page), { offset: 0 });
+    expect(ring.background).toBe("rgb(255, 255, 255)");
+    expect((await gaps(undo(page), list(page))).bottom, "4 px between « Annuler » and the list's bottom edge").toBeGreaterThanOrEqual(3.5);
+    await expectRingInList(page);
+  });
+
+  test("F1.19, scene 3b: the list that scrolls, « Annuler » cut by its top edge, then Shift+Tab from « Fermer »: brought into view 4 px from the edge, the ring whole", async ({ context, page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await threeFailures(page, scene);
+    await placeTom(page);
+    await undoOffline(page, context);
+    // Tom's failure, the most recent, on top of the three others; the success last.
+    await expect(messages(page)).toHaveCount(5);
+    await expect(messages(page).last()).toHaveText(PLACED);
+    await expect(list(page)).toHaveAttribute("tabindex", "0");
+
+    // From the element after the bar in the order of Tab: « Fermer » is the bar's last.
+    await pressUntil(page, "Shift+Tab", barClose(page));
+    await cut(page, "top");
+    await expect(barClose(page)).toBeFocused();
+    await press(page, "Shift+Tab");
+    await expect(undo(page)).toBeFocused();
+
+    const ring = await expectRing(undo(page), { offset: 0 });
+    expect(ring.background).toBe("rgb(255, 255, 255)");
+    expect((await gaps(undo(page), list(page))).top, "4 px between « Annuler » and the list's top edge").toBeGreaterThanOrEqual(3.5);
+    await expectRingInList(page);
+  });
 });
