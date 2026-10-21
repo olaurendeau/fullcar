@@ -29,4 +29,28 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withNextIntl(nextConfig);
+/*
+ * Sentry only when a DSN is set at build time (#234): without one, the SDK's build plugin is
+ * not even imported, and the configuration stays the one above. The browser talks to our
+ * origin only (`/monitoring`, rewritten to Sentry's ingest). Source maps are made, uploaded
+ * and deleted only with `SENTRY_AUTH_TOKEN`; without it, none is made and the build passes.
+ */
+export default async function config(): Promise<NextConfig> {
+  const withIntl = withNextIntl(nextConfig);
+  if (!process.env.NEXT_PUBLIC_SENTRY_DSN?.trim()) return withIntl;
+  const { withSentryConfig } = await import("@sentry/nextjs/config");
+  return withSentryConfig(withIntl, {
+    org: process.env.SENTRY_ORG,
+    project: process.env.SENTRY_PROJECT,
+    tunnelRoute: "/monitoring",
+    telemetry: false,
+    silent: true,
+    sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN, deleteSourcemapsAfterUpload: true },
+    webpack: {
+      automaticVercelMonitors: false,
+      autoInstrumentServerFunctions: false,
+      autoInstrumentMiddleware: false,
+      autoInstrumentAppDirectory: false,
+    },
+  });
+}

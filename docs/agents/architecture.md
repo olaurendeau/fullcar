@@ -23,8 +23,10 @@ est lu par trente personnes pendant trois jours, puis purgé.
 | purge | Vercel Cron quotidienne vers une route protégée par `CRON_SECRET` |
 
 Polices : la pile de polices système, **aucune police web**, ni distante ni servie par
-l'application. Aucune requête vers un tiers, et rien à télécharger avant le premier
-affichage.
+l'application. Aucune requête du navigateur vers un tiers, et rien à télécharger avant le
+premier affichage. Avec un DSN Sentry (#234), le navigateur envoie ses rapports d'erreur à
+notre origine, `/monitoring`, que Vercel réécrit vers Sentry : Sentry voit l'IP de Vercel,
+pas celle du visiteur.
 
 ## Environnements et base de données
 
@@ -265,7 +267,9 @@ prise de contrôle, et un jeton deviné l'est aussi.
   - lien admin : `/e/{id}/admin#{token}`
   - lien perso : `/e/{id}/moi#{token}`
 - **Jamais journalisés**, ni en clair ni tronqués, ni côté serveur ni dans un rapport
-  d'erreur.
+  d'erreur. À partir de #234, un rapport part vers Sentry seulement si un DSN est configuré,
+  et il est reconstruit par les hooks de `src/observability/scrub.ts` (voir « Emplacement du
+  code »).
 - Comparaison à temps constant.
 - `Referrer-Policy: no-referrer` sur toutes les pages : le fragment n'est pas transmis dans le
   `Referer`, mais l'identifiant de l'événement l'est.
@@ -423,6 +427,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
+| rapports d'erreur | `src/observability/`, à partir de #234 | Sentry, seulement avec `NEXT_PUBLIC_SENTRY_DSN` : `register()` (`src/instrumentation.ts`) et `src/instrumentation-client.ts` importent le SDK dynamiquement, et sans DSN ne le chargent pas ; `options.ts` coupe `dataCollection`, la propagation de trace et toute intégration hors d'une liste exacte (`server.ts`, `client.ts`) ; les hooks de `scrub.ts` reconstruisent chaque envoi, et `registerHooks` y ajoute `createDsc` et `beforeEnvelope` ; une erreur de base part en `database error (SQLSTATE x)` |
 
 Une server action renvoie des **données simples** (sérialisables) et des **clés d'erreur**
 (traduites par la vue), jamais un message rédigé ni le détail d'une erreur Postgres. Elle

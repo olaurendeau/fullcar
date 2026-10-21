@@ -90,6 +90,17 @@ export function stateShown(before: EventState, next: unknown): { state: EventSta
   return { state: next, tabsChange: !before.event.retourAt !== !next.event.retourAt };
 }
 
+/**
+ * What the page shows of `next` while a sheet hides it, when `next` takes away the retour that
+ * `shown` has (epic #250, § 5): `next`, with `shown`'s end and retour leg, so that a sheet on the
+ * retour closes over it rather than going with it (rule 9). Nothing to hold otherwise.
+ */
+export function withRetourHeld(shown: EventState, next: EventState): EventState | undefined {
+  if (!shown.event.retourAt || next.event.retourAt) return undefined;
+  const legs = [...next.legs.filter(({ leg }) => leg !== "retour"), ...shown.legs.filter(({ leg }) => leg === "retour")];
+  return { event: { ...next.event, retourAt: shown.event.retourAt }, legs };
+}
+
 /** The state an action's answer carries back, refusal included (C5.7, C11.6), if any. */
 export function stateOf(answer: unknown): EventState | undefined {
   if (typeof answer !== "object" || answer === null || !("state" in answer)) return undefined;

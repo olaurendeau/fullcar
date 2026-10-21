@@ -240,7 +240,7 @@ async function bodyOf(text: Promise<string>, path: string): Promise<string> {
 }
 
 /** A server action: a POST with a `next-action` header. */
-function isAction(request: Request): boolean {
+export function isAction(request: Request): boolean {
   return request.method() === "POST" && request.headers()["next-action"] !== undefined;
 }
 

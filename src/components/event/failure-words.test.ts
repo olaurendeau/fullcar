@@ -154,15 +154,6 @@ describe("cellNotDone and cellWhy: a cell's failure names the person, the leg an
     }
   }
 
-  // The retour removed meanwhile (#285): the generic reason, as `invalid`, until #265 gives it its own words.
-  it("`noRetour` gives the generic reason", () => {
-    const { action, ...cell } = CELLS["Cellule, « Je cherche une place » : Tom · Retour"];
-    expect(cellWhy("noRetour", cell)).toEqual({ kind: "failed" });
-    expect(failureText(words("fr"), cellNotDone(action, cell), cellWhy("noRetour", cell))).toBe(
-      "Tom · Retour : « Je cherche une place » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.",
-    );
-  });
-
   it("« Ne fait pas l’aller » from a passenger names the choice, not the car", () => {
     const { state } = CELLS["Cellule, « Sortir de la voiture » : Léa, voiture de Claire"];
     expect(cellNotDone("notConcerned", { firstName: "Léa", leg: "aller", state })).toEqual({
@@ -234,9 +225,8 @@ describe("offerWhy: « Proposer une voiture » (C11.11)", () => {
     }
   }
 
-  it("gives `alreadyInCar`, with no passenger ticked to name, and `noRetour` the generic reason", () => {
+  it("gives `alreadyInCar`, with no passenger ticked to name, the generic reason", () => {
     expect(offerWhy("alreadyInCar", "Marc")).toEqual({ kind: "failed" });
-    expect(offerWhy("noRetour", "Marc")).toEqual({ kind: "failed" });
   });
 });
 
@@ -286,11 +276,53 @@ describe("nameList: from one to five persons (C11.11)", () => {
 });
 
 describe("whyOf", () => {
-  // `noRetour` until #265 gives it its own words.
-  it("gives `invalid`, `idTaken` and `noRetour` the generic reason, and keeps the others", () => {
-    for (const error of ["invalid", "idTaken", "noRetour", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
-    for (const error of ["offline", "seatTaken", "rideGone", "forbidden", "eventNotFound", "passengersChanged"] as const) {
+  it("gives `invalid` and `idTaken` the generic reason, and keeps the others", () => {
+    for (const error of ["invalid", "idTaken", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
+    for (const error of ["offline", "seatTaken", "rideGone", "forbidden", "eventNotFound", "passengersChanged", "noRetour"] as const) {
       expect(whyOf(error)).toEqual({ kind: error });
     }
   });
+});
+
+/** What each sender gives a `noRetour` refusal, by the row of the v3.3 table it says. */
+const NO_RETOUR: Record<string, () => [NotDone, Why]> = {
+  "Cellule, « Je cherche une place » : Tom · Retour": () => {
+    const { action, ...cell } = CELLS["Cellule, « Je cherche une place » : Tom · Retour"];
+    return [cellNotDone(action, cell), cellWhy("noRetour", cell)];
+  },
+  "Un tap sur une place : Tom, voiture de Sophie au retour": () => [{ kind: "seats", names: ["Tom"], driver: "Sophie" }, whyOf("noRetour")],
+  "La feuille « Qui monte… ? » : Tom et Léa, voiture de Sophie au retour": () => [
+    { kind: "seats", names: ["Tom", "Léa"], driver: "Sophie" },
+    whyOf("noRetour"),
+  ],
+  "« Proposer une voiture » depuis le Retour : Marc": () => [{ kind: "offerRide", driver: "Marc", legs: "retour" }, offerWhy("noRetour", "Marc")],
+  "« Ajouter une personne » depuis le Retour : Inès": () => [{ kind: "addPerson", firstName: "Inès" }, personWhy("noRetour")],
+  "« Modifier » la voiture : Sophie, retour": () => [{ kind: "editRide", driver: "Sophie", leg: "retour" }, whyOf("noRetour")],
+};
+
+// #265, decision 40: a sheet of the retour refused by `noRetour` says what was not done, then
+// `Actions.why.noRetour`, word for word as « Chaque échec de la v3.3, mot pour mot » says it
+// (docs/design/organizer-view/README.md, v3.3.6). The rows that say what to do again are #266's.
+describe("failureText: each `noRetour` failure of the retour, word for word (v3.3)", () => {
+  const readme = readFileSync(new URL("../../../docs/design/organizer-view/README.md", import.meta.url), "utf8").split("\n");
+  const start = readme.indexOf("### Chaque échec de la v3.3, mot pour mot (amendement de C11.11)");
+  const end = readme.findIndex((line, index) => index > start && line.startsWith("### "));
+  const table = readme
+    .slice(start, end)
+    .filter((line) => line.startsWith("| ") && line.includes("`why.noRetour`"))
+    .map((line) => line.split("|").map((cell) => cell.trim()))
+    .map(([, action, failure, fr, en]) => ({ action, failure, fr, en }));
+
+  it("reads every row of `why.noRetour`, and knows each", () => {
+    expect(new Set(table.map((row) => row.action))).toEqual(new Set(Object.keys(NO_RETOUR)));
+  });
+
+  for (const { action, failure, fr, en } of table) {
+    it(action, () => {
+      expect(failure).toBe("`noRetour`");
+      const [notDone, why] = NO_RETOUR[action]();
+      expect(failureText(words("fr"), notDone, why)).toBe(fr);
+      expect(failureText(words("en"), notDone, why)).toBe(en);
+    });
+  }
 });
