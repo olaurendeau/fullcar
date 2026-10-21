@@ -95,8 +95,12 @@ test.describe("« Trouver une place »", () => {
     await placeTom(page);
     const record = await recordBar(page);
     // Every request that carries Léa, in the order it left.
-    const writes: string[] = [];
-    page.on("request", (request) => void (request.postData()?.includes(scene.lea) && writes.push(request.postData() ?? "")));
+    // A boolean each, whether it carries Zoé's car: a body holds the device's token, never kept nor shown (#364, #365).
+    const writes: boolean[] = [];
+    page.on("request", (request) => {
+      const body = request.postData() ?? "";
+      if (body.includes(scene.lea)) writes.push(body.includes(scene.rides["Zoé"]));
+    });
 
     await findSeat(page);
     await expect(seat(page, "Zoé")).toBeFocused();
@@ -113,8 +117,8 @@ test.describe("« Trouver une place »", () => {
     await expect(cell(page, "Léa", "Retour")).toHaveAccessibleName("Léa, Retour : Avec Zoé");
     // Léa's seat, a later request known to carry her, is the only one that did: « Trouver une
     // place » sent nothing, neither before it nor late (Next sends one server action at a time).
-    expect(writes).toHaveLength(1);
-    expect(writes[0]).toContain(scene.rides["Zoé"]);
+    expect(writes.length, "requests carrying Léa").toBe(1);
+    expect(writes[0], "Léa's request carries Zoé's car").toBe(true);
     expect(await placements(db, seededEvent.id, scene.lea)).toEqual({ retour: scene.rides["Zoé"] });
   });
 
