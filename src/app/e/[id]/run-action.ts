@@ -87,12 +87,13 @@ export function stateShown(before: EventState, next: unknown): { state: EventSta
 }
 
 /**
- * What the page shows of `next` while a sheet hides it, when `next` takes away the retour that
- * `shown` has (epic #250, § 5): `next`, with `shown`'s end and retour leg, so that a sheet on the
- * retour closes over it rather than going with it (rule 9). Nothing to hold otherwise.
+ * What the page shows of `next` while a sheet hides it, when `next` makes the tabs go or come
+ * (epic #250, § 5): `next`, with `shown`'s end and retour leg, or none. A sheet on the retour
+ * closes over it rather than going with it (rule 9); one on the aller is not mounted anew with
+ * its panel, and keeps the legs it opened with (decision 41). Nothing to hold otherwise.
  */
-export function withRetourHeld(shown: EventState, next: EventState): EventState | undefined {
-  if (!shown.event.retourAt || next.event.retourAt) return undefined;
+export function withTabsHeld(shown: EventState, next: EventState): EventState | undefined {
+  if (!shown.event.retourAt === !next.event.retourAt) return undefined;
   const legs = [...next.legs.filter(({ leg }) => leg !== "retour"), ...shown.legs.filter(({ leg }) => leg === "retour")];
   return { event: { ...next.event, retourAt: shown.event.retourAt }, legs };
 }

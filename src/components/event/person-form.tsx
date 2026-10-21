@@ -42,7 +42,7 @@ export type Registration =
   | { kind: "errors"; errors: PersonErrors; first: PersonField }
   /** Offline, a server error, or a refusal (`Actions.failed`): nothing changed. */
   | { kind: "problem"; problem: "offline" | "failed" }
-  /** Sent on the retour, which is gone: the sheet closes, and the bar says why (rule 9). */
+  /** Sent on the retour, which is gone: a sheet of the retour closes, and the bar says why (rule 9); one of the aller stays, without it. */
   | { kind: "noRetour" };
 
 /** Registers a person (R1): the device's token, then the form's creation id, then the request. */
@@ -146,7 +146,8 @@ export function AddPersonButton({
  * In `edit` mode (C2.3), the first name and the number are filled with the person's, under the
  * same rules, without « Aller et retour »; the first name has the focus as the form shows.
  * Opened from the sheet of a free seat, « Annuler » under « Valider » goes back to its list (C6.6).
- * Sent on the retour once it is gone, `onGone` closes its sheet (rule 9).
+ * Sent on the retour once it is gone, `onGone` closes its sheet (rule 9); sent from the aller with
+ * « Aller et retour », the form stays without it (decision 41).
  */
 export function PersonForm({
   mode,
@@ -174,7 +175,10 @@ export function PersonForm({
   const [bothLegs, setBothLegs] = useState(true);
   const [errors, setErrors] = useState<PersonErrors>({});
   const [sending, setSending] = useState(false);
-  const [problem, setProblem] = useState<"offline" | "failed" | null>(null);
+  const [problem, setProblem] = useState<"offline" | "failed" | "noRetour" | null>(null);
+  // « Aller et retour » as the sheet opened with it (the page holds the retour while the sheet
+  // shows), until its own send is refused by `noRetour` (decision 41): the aller alone, then.
+  const [gone, setGone] = useState(false);
   const creationId = useRef<string | undefined>(undefined);
   const submitButton = useRef<HTMLButtonElement>(null);
   // Each form its own: a sheet reopened during a send shows a new form, and the sending one is gone.
@@ -182,7 +186,7 @@ export function PersonForm({
   // sends, whichever form, tab or seat's sheet sends it (`person:new:{prénom}`, #228).
   const sends = useSends(open, mode.kind === "edit" ? `person:${mode.person.id}` : undefined);
   const editing = mode.kind === "edit";
-  const { leg, hasRetour } = mode.kind === "add" ? mode : { leg: "aller" as const, hasRetour: false };
+  const { leg, hasRetour } = mode.kind === "add" ? { leg: mode.leg, hasRetour: mode.hasRetour && !gone } : { leg: "aller" as const, hasRetour: false };
 
   // « Modifier » is gone as the form takes its place: the focus goes to the first name.
   useEffect(() => {
@@ -190,9 +194,9 @@ export function PersonForm({
   }, [editing, ids]);
 
   // « Valider » lost the focus while it was inactive: after a refusal, it gets it back
-  // (« refus dans une feuille : ne bouge pas »).
+  // (« refus dans une feuille : ne bouge pas »). « Aller et retour » gone, it takes it wherever it was (M7.8).
   useEffect(() => {
-    if (problem && !sending && document.activeElement === document.body) submitButton.current?.focus();
+    if (problem && !sending && (problem === "noRetour" || document.activeElement === document.body)) submitButton.current?.focus();
   }, [problem, sending]);
 
   function showErrors(found: PersonErrors, first: PersonField) {
@@ -242,7 +246,13 @@ export function PersonForm({
       if (sheet.inSheet() && personId) onDone(personId);
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
-    else if (answer?.kind === "noRetour" && sheet.inSheet()) onGone?.();
+    // The retour is gone. Sent on it, the sheet closes (rule 9); from the aller, it stays without
+    // « Aller et retour », and a second « Valider » registers the person at the aller alone (M7.8).
+    else if (answer?.kind === "noRetour" && sheet.inSheet()) {
+      if (leg === "retour") return onGone?.();
+      setGone(true);
+      setProblem("noRetour");
+    }
   }
 
   const field = (name: PersonField, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {

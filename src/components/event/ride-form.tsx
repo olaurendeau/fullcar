@@ -227,7 +227,11 @@ function RideForm({
   const ids = useId();
   const idOf = (name: string) => `${ids}-${name}`;
   const editing = mode.kind === "edit" ? mode : undefined;
-  const { persons, other } = mode.kind === "offer" ? mode : { persons: [], other: undefined };
+  // The other leg as the sheet opened with it (the page holds it while the sheet shows), until
+  // its own send is refused by `noRetour` (decision 41): the aller alone, then.
+  const [problem, setProblem] = useState<"offline" | "failed" | "noRetour" | null>(null);
+  const [gone, setGone] = useState(false);
+  const { persons, other } = mode.kind === "offer" ? { ...mode, other: gone ? undefined : mode.other } : { persons: [], other: undefined };
   // What the form showed, in `edit` mode: a field left as it was is not sent (#208).
   const [shown] = useState(() => {
     const car = editing?.car;
@@ -256,7 +260,6 @@ function RideForm({
   const [errors, setErrors] = useState<OfferErrors>({});
   const [noDriver, setNoDriver] = useState(false);
   const [sending, setSending] = useState(false);
-  const [problem, setProblem] = useState<"offline" | "failed" | null>(null);
   // In `edit` mode: the step shown, by its round, a new one at each refusal (C8.5), and that refusal said.
   const [step, setStep] = useState<number | null>(null);
   const [changed, setChanged] = useState(false);
@@ -280,7 +283,13 @@ function RideForm({
     const back = backFromStep.current;
     if (step === null) backFromStep.current = false;
     const active = document.activeElement;
-    if (sending || step !== null || (active !== null && active !== document.body)) return;
+    if (sending || step !== null) return;
+    // The other leg gone from the form, wherever the focus was: « Valider » (M7.6).
+    if (problem === "noRetour") {
+      submitButton.current?.focus();
+      return;
+    }
+    if (active !== null && active !== document.body) return;
     if (problem || changed) submitButton.current?.focus();
     else if (back) document.getElementById(`${ids}-seats`)?.focus();
   }, [problem, changed, sending, step, ids]);
@@ -368,8 +377,13 @@ function RideForm({
       if (sheet.inSheet()) onDone();
     } else if (answer?.kind === "errors") showErrors(answer.errors, false, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
-    // Offered on the retour, which is gone (rule 9): the sheet closes.
-    else if (answer?.kind === "noRetour" && sheet.inSheet()) onDone();
+    // The retour is gone. Offered on it, the sheet closes (rule 9); from the aller, it stays without
+    // the other leg, what was typed kept, and a second « Valider » offers the aller alone (M7.6).
+    else if (answer?.kind === "noRetour" && sheet.inSheet()) {
+      if (leg === "retour") return onDone();
+      setGone(true);
+      setProblem("noRetour");
+    }
   }
 
   const field = (name: FieldName, label: string, control: Control, hint?: string) => {

@@ -5,7 +5,19 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView } from "@/components/event/event-view";
 import type { Undo } from "@/components/event/bar-state";
-import { cellWhy, failureText, nameList, offerWhy, personWhy, undoWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
+import {
+  cellWhy,
+  failureText,
+  nameList,
+  noRetourAgain,
+  offerWhy,
+  personWhy,
+  undoWhy,
+  whyOf,
+  wordsOf,
+  type NotDone,
+  type Why,
+} from "@/components/event/failure-words";
 import { focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
 import { aboutOf, forget, pageHidden, sendAbout, whenPageShown, type FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
@@ -29,7 +41,7 @@ import {
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
-import { actionRunner, sendAction, stateOf, stateRead, stateShown, withRetourHeld, type Sent } from "./run-action";
+import { actionRunner, sendAction, stateOf, stateRead, stateShown, withTabsHeld, type Sent } from "./run-action";
 
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
@@ -50,8 +62,9 @@ export interface BoardHandle {
  * Each state shown brings the event's header too (epic #250): its title, place, start and end,
  * the tabs, the legs' dates and `document.title` follow it, and `onState` is told it. Should
  * the retour go while its tab is active, the aller shows; should what had the focus go with
- * the tabs, the event's title takes it, never `<body>`. While a sheet hides the page, the retour
- * it may be on stays shown until it is closed (rule 9, `withRetourHeld`).
+ * the tabs, the event's title takes it, never `<body>`. While a sheet hides the page, the tabs
+ * stay as they are until it is closed: the retour it may be on (rule 9), and none coming that
+ * would mount the aller's panel, and a sheet of the aller, anew (`withTabsHeld`).
  */
 export function ParticipantBoard({
   id,
@@ -99,8 +112,9 @@ export function ParticipantBoard({
       const shown = stateShown(displayed.current, next);
       if (!shown) return;
       latest.current = shown.state;
-      // A sheet on the retour closes over it, its focus going back there, never with it (rule 9).
-      const held = pageHidden() && withRetourHeld(displayed.current, shown.state);
+      // A sheet on the retour closes over it, its focus going back there, never with it (rule 9);
+      // one on the aller stays, its focus with it.
+      const held = pageHidden() && withTabsHeld(displayed.current, shown.state);
       if (!held) return show(shown.state, shown.tabsChange);
       show(held, false);
       release();
@@ -173,7 +187,8 @@ export function ParticipantBoard({
 
   // What became of a person's form, sent from `sheet`. In the bar, the failure names who, and
   // the fields sent for a change, then why; the form keeps the generic words. Sent from the
-  // retour's tab once it is gone, the sheet closes (rule 9).
+  // retour's tab once it is gone, the sheet closes (rule 9); from the aller's, « Aller et retour »
+  // goes from the sheet, and, closed, the bar says to add the person again (decision 47).
   function personFormOutcome(
     sent: Sent<PersonOutcome> | undefined,
     sheet: FromSheet & { notDone: NotDone },
@@ -191,9 +206,10 @@ export function ParticipantBoard({
     // The page shows the state a refusal carries.
     const problem = sent.ok ? "failed" : sent.problem;
     const why = outcome ? personWhy(outcome.error) : whyOf(problem);
-    const closes = why.kind === "noRetour" && leg === "retour";
-    failedIn(sheet, { notDone: sheet.notDone, why, landmark, closes });
-    return closes ? { kind: "noRetour" } : { kind: "problem", problem };
+    const gone = why.kind === "noRetour";
+    const closes = gone && leg === "retour";
+    failedIn(sheet, { notDone: sheet.notDone, why: gone && !closes ? noRetourAgain("addPerson") : why, landmark, closes });
+    return gone ? { kind: "noRetour" } : { kind: "problem", problem };
   }
 
   // Each action runs once per sheet (`FromSheet.key`): one on its way never drops the action
@@ -261,10 +277,12 @@ export function ParticipantBoard({
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     const problem = sent.ok ? "failed" : sent.problem;
     const why = outcome ? offerWhy(outcome.error, notDone.driver) : whyOf(problem);
-    // Offered from the retour's tab once it is gone, the sheet closes (rule 9).
-    const closes = why.kind === "noRetour" && car.leg === "retour";
-    failedIn(sheet, { notDone, why, landmark, closes });
-    return closes ? { kind: "noRetour" } : { kind: "problem", problem };
+    // Offered from the retour's tab once it is gone, the sheet closes (rule 9). From the aller's,
+    // the retour goes from the sheet; closed, the bar says to offer the car again (decision 47).
+    const gone = why.kind === "noRetour";
+    const closes = gone && car.leg === "retour";
+    failedIn(sheet, { notDone, why: gone && !closes ? noRetourAgain("offerRide") : why, landmark, closes });
+    return gone ? { kind: "noRetour" } : { kind: "problem", problem };
   };
 
   // « Annuler » (C5.10, rule 6): the persons placed get their state before on the leg back, if

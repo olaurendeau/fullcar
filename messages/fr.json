@@ -207,6 +207,7 @@
     "offline": "Action impossible, vérifiez la connexion",
     "failed": "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
     "rideGone": "Cette voiture n’est plus proposée",
+    "noRetour": "Il n’y a plus de retour pour cet événement : rien n’a changé.",
     "alreadyInCar": "{count, plural, one {Cette personne est déjà dans une voiture} other {Une de ces personnes est déjà dans une voiture}} : rien n’a changé.",
     "failure": "{notDone} {why}",
     "notDone": {
@@ -234,7 +235,8 @@
       "passengersChanged": "Quelqu’un a pris ou libéré une place entre-temps : modifiez la voiture de nouveau.",
       "forbidden": "Cet appareil ne peut pas faire ce changement : rechargez la page.",
       "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé.",
-      "noRetour": "Il n’y a plus de retour pour cet événement."
+      "noRetour": "Il n’y a plus de retour pour cet événement.",
+      "noRetourAgain": "Il n’y a plus de retour pour cet événement : {action, select, offerRide {proposez de nouveau la voiture, pour l’aller seulement.} other {ajoutez de nouveau cette personne, pour l’aller seulement.}}"
     },
     "names": {
       "andOthers": "{first}, {second} et {others, plural, one {# autre} other {# autres}}"
