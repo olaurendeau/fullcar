@@ -280,9 +280,10 @@ test.describe("the sheet", () => {
       const other = await context.newPage();
       await holdToken(other, seededEvent.id, paul.token);
       await other.goto(`/e/${seededEvent.id}`);
-      const theirs = await openSheet(other, "Marc");
-      await placeButton(theirs).click();
-      await expect(theirs).toHaveCount(0);
+      // Paul alone is without a car on their device: one tap seats him (C5.2, #92).
+      await freeSeats(other, "Marc").first().click();
+      await expect(messages(other)).toHaveText(["Paul est dans la voiture de Marc"]);
+      await other.goto("about:blank");
     } finally {
       await context.close();
     }
