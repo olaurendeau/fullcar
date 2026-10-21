@@ -70,6 +70,11 @@ export function focusAddPerson(leg: Leg): boolean {
   return focus(document.querySelector<HTMLElement>(`[data-add-person="${leg}"]`));
 }
 
+/** « Proposer une voiture » of `leg`, on its tab; false while that tab is not the active one. */
+export function focusOffer(leg: Leg): boolean {
+  return focus(document.querySelector<HTMLElement>(`[data-offer-ride="${leg}"]`));
+}
+
 /** « Réessayer » of « Vos inscriptions », above the tabs, shown while their read has failed. */
 export function focusRetry(): boolean {
   return focus(document.querySelector<HTMLElement>("[data-device-retry]"));

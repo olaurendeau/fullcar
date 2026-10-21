@@ -15,6 +15,10 @@ type Db = Kysely<Database>;
 const REMOVE = "Retirer la voiture";
 const NOTIFIED = "Personne n’est prévenu : pensez à le leur dire.";
 const FAILED = "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.";
+/** In the bar, a failure names the car and its leg (C11.11, #226). */
+const REMOVAL_FAILED = "La voiture de Claire pour l’aller n’a pas été retirée. Une erreur est survenue : réessayez dans un instant.";
+const CHANGE_FAILED =
+  "Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Une erreur est survenue : réessayez dans un instant.";
 const GARE = "Gare de Cesson";
 
 /**
@@ -244,7 +248,7 @@ test.describe("remove a car", () => {
         await expect(alerts(confirmation(page))).toHaveCount(0);
         await confirmation(page).getByRole("button", { name: "Annuler" }).click();
       }
-      await expect(bar(page)).toHaveText(FAILED);
+      await expect(bar(page)).toHaveText(REMOVAL_FAILED);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
       await expect(car(panel(page), "Claire")).toBeVisible();
     });
@@ -335,12 +339,12 @@ test.describe("remove a car", () => {
     await page.keyboard.press("Escape");
     await expect(confirmation(page)).toHaveCount(0);
     await failHeld(page, removal);
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([REMOVAL_FAILED]);
 
     await changeClaire(page);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(car(panel(page), "Claire")).toContainText(GARE);
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([REMOVAL_FAILED]);
   });
 
   test("#221, C11.10: a removal of the car that fails does not withdraw its change's failure", async ({ page, seededEvent }) => {
@@ -349,14 +353,14 @@ test.describe("remove a car", () => {
     await changeClaire(page);
     await page.keyboard.press("Escape");
     await failHeld(page, change);
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([CHANGE_FAILED]);
 
     const removal = await holdFirst(page, scene.cars.claire, true);
     await removeClaire(page);
     await failHeld(page, removal);
     await expect(alerts(confirmation(page))).toHaveText(FAILED);
     await confirmation(page).getByRole("button", { name: "Annuler" }).click();
-    await expect(messages(page)).toHaveText([FAILED]);
+    await expect(messages(page)).toHaveText([CHANGE_FAILED]);
   });
 });
 

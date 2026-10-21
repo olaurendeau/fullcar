@@ -35,6 +35,8 @@ const FR = {
   failed: "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
   offline: "Action impossible, vérifiez la connexion",
 };
+/** In the bar, a failure names who drives and the leg offered (C11.11, #226). */
+const BAR_FAILED = "La voiture de Marc pour l’aller n’a pas été proposée. Une erreur est survenue : réessayez dans un instant.";
 
 async function selectTab(page: Page, name: string) {
   const tab = page.getByRole("tab", { name: new RegExp(`^${name}`) });
@@ -453,8 +455,8 @@ test.describe("offer a car", () => {
         await openForm(page);
         await expect(bar(page)).toBeEmpty();
       } else {
-        await expect(bar(page)).toHaveText(FR.failed);
-        await expect(alerts(page)).toHaveText([FR.failed]);
+        await expect(bar(page)).toHaveText(BAR_FAILED);
+        await expect(alerts(page)).toHaveText([BAR_FAILED]);
         await expect(offerButton(panel(page))).toBeFocused();
       }
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });

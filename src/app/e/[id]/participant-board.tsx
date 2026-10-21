@@ -4,7 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView, type EventViewProps } from "@/components/event/event-view";
-import { cellWhy, failureText, personWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
+import { cellWhy, failureText, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "@/components/event/failure-words";
 import { focusCar, focusCell, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
 import { forget, sendAbout, type FromSheet } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
@@ -26,7 +26,7 @@ import {
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
-import { actionRunner, sendAction, stateOf, type ActionProblem, type Sent } from "./run-action";
+import { actionRunner, sendAction, stateOf, type Sent } from "./run-action";
 
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
@@ -36,9 +36,6 @@ export interface BoardHandle {
   read(): Promise<Sent<EventState | undefined>>;
   apply(state: EventState): void;
 }
-
-/** No landmark of its own yet (« Proposer »): rule 8 goes on to the other lines, then to the active tab. */
-const noLandmark = () => false;
 
 /**
  * The event's board on `/e/{id}` and `/e/{id}/admin` (C11.7), under `organiser-screen.tsx`
@@ -76,18 +73,14 @@ export function ParticipantBoard({
     return sent;
   };
 
-  /** A problem with no words of its own yet: only its reason, offline or not (#87). */
-  const failure = (problem: ActionProblem, landmark: () => boolean) => ({ why: whyOf(problem), landmark });
-
   // In the sheet while it is open and the one that sent. Otherwise in the bar, once no sheet
   // hides the page: until then, it would be neither seen nor announced. It joins the others
   // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
-  // What was not done, then why (C11.11); without `notDone`, the generic words, until #226
-  // names theirs.
-  function failedIn(sheet: FromSheet, { notDone, why, landmark }: { notDone?: NotDone; why: Why; landmark: () => boolean }) {
+  // What was not done, then why (C11.11): no failure of the bar is generic.
+  function failedIn(sheet: FromSheet, { notDone, why, landmark }: { notDone: NotDone; why: Why; landmark: () => boolean }) {
     if (sheet.inSheet()) return;
     const offline = why.kind === "offline" || (why.kind === "retryUndo" && why.problem === "offline");
-    const text = notDone ? failureText(words, notDone, why) : words.t(offline ? "Actions.offline" : "Actions.failed");
+    const text = failureText(words, notDone, why);
     sheet.whenClosed(() => messages.fail({ text, landmark, offline, about: sheet.about, sent: sheet.seq }), true);
   }
 
@@ -175,7 +168,8 @@ export function ParticipantBoard({
   };
 
   // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
-  const offerRide: OfferRide = async ({ offer: { driver, otherLeg, ...car }, creationIds, sending, ...sheet }) => {
+  // In the bar, the failure names who drives and each leg offered, then why, `alreadyDriving` included.
+  const offerRide: OfferRide = async ({ offer: { driver, otherLeg, ...car }, creationIds, sending, notDone, landmark, ...sheet }) => {
     const send = () => {
       const { rideId, personId, otherRideId } = creationIds();
       // The car on the other leg has its own creation id (C4.10).
@@ -194,7 +188,8 @@ export function ParticipantBoard({
     }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     const problem = sent.ok ? "failed" : sent.problem;
-    failedIn(sheet, failure(problem, noLandmark));
+    const why = outcome ? offerWhy(outcome.error, notDone.driver) : whyOf(problem);
+    failedIn(sheet, { notDone, why, landmark });
     return { kind: "problem", problem };
   };
 
@@ -215,7 +210,7 @@ export function ParticipantBoard({
 
   // The car's id and leg, and the device's token, in the body; the page takes the state a refusal carries too.
   // Once per car, not per confirmation: removing it is the same whichever sends, and one reopened meanwhile waits.
-  const removeRide: RemoveRide = async ({ rideId, leg, sending, removed }, confirmation) => {
+  const removeRide: RemoveRide = async ({ rideId, leg, sending, removed, notDone }, confirmation) => {
     const remove = async () => {
       const answer = await storeRideRemoval(id, readDeviceToken(id), rideId, leg);
       // Known before the page takes the state without the car, whenever React renders it.
@@ -231,14 +226,14 @@ export function ParticipantBoard({
       forget([`seats:${rideId}`, `ride:${rideId}:edit`]);
       return null;
     }
-    // A refusal has no words of its own (`forbidden`, `invalid`…): the generic message.
-    const problem = sent.ok ? "failed" : sent.problem;
-    failedIn(confirmation, failure(problem, focusCar(leg, rideId)));
-    return problem;
+    // In the bar, the failure names the car and its leg, then why, a refusal included; the confirmation keeps the generic words.
+    const why = whyOf(!sent.ok ? sent.problem : "error" in sent.value ? sent.value.error : "failed");
+    failedIn(confirmation, { notDone, why, landmark: focusCar(leg, rideId) });
+    return sent.ok ? "failed" : sent.problem;
   };
 
   // Once per sheet, as offerRide: only the fields the form changed, its passengers and who leaves.
-  const updateRide: UpdateRide = async ({ rideId, leg, ride, seenPassengerIds, leaving, sending, ...sheet }) => {
+  const updateRide: UpdateRide = async ({ rideId, leg, ride, seenPassengerIds, leaving, sending, notDone, ...sheet }) => {
     const change = { ...ride, seenPassengerIds, leaving };
     const sent = await runAction(
       `updateRide:${sheet.key}`,
@@ -254,9 +249,11 @@ export function ParticipantBoard({
       return { kind: "done" };
     }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
-    // Said in the step while it is open (C8.5); any other refusal has no words of its own.
+    // `passengersChanged` is said in the step while it is open (C8.5). In the bar, the failure
+    // names the car and its leg, then why, a refusal included.
     const problem = sent.ok ? "failed" : sent.problem;
-    failedIn(sheet, failure(problem, focusCar(leg, rideId)));
+    const why = outcome ? whyOf(outcome.error) : whyOf(problem);
+    failedIn(sheet, { notDone, why, landmark: focusCar(leg, rideId) });
     if (outcome?.error === "passengersChanged") return { kind: "passengersChanged", passengers: outcome.passengerIds.length };
     return { kind: "problem", problem };
   };
