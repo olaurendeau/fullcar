@@ -5,6 +5,7 @@ import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
+import { expectRing, press } from "./focus-ring";
 import {
   breakStorage,
   expect,
@@ -187,10 +188,11 @@ test.describe("the scene of O2.5", () => {
       for (const link of await panel(page).getByTestId("link").all()) await expect(link).toBeHidden();
 
       // From the keyboard: the ring is inside the button; Tab goes to « Actualiser », then out of the panel.
-      await page.keyboard.press("Tab");
-      await page.keyboard.press("Shift+Tab");
+      await press(page, "Tab");
+      await press(page, "Shift+Tab");
       await expect(toggle(page)).toBeFocused();
-      expect(await toggle(page).evaluate((element) => getComputedStyle(element).boxShadow)).toContain("inset");
+      // F1.7: inside, 2 px in from the edge, where « Actualiser » touches the button.
+      await expectRing(toggle(page), { offset: -2 });
       await page.keyboard.press("Tab");
       await expect(refresh(page)).toBeFocused();
       await page.keyboard.press("Tab");

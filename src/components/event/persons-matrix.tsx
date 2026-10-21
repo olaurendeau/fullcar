@@ -70,7 +70,7 @@ export function PersonsMatrix({
                 data-person-name={row.id}
                 aria-haspopup="dialog"
                 onClick={() => onName(row.id)}
-                className="flex min-h-11 max-w-full items-center gap-1 rounded-lg px-0.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="flex min-h-11 max-w-full items-center gap-1 rounded-lg px-0.5 text-left focus-visible:focus-ring"
               >
                 <span className="min-w-0 wrap-break-word">{row.firstName}</span>
                 <ChevronDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
@@ -88,7 +88,7 @@ export function PersonsMatrix({
                     aria-label={t("cellLabel", { firstName: row.firstName, leg: tLegs(cell.leg), cell: text })}
                     onClick={() => onCell(row.id, cell.leg)}
                     className={cn(
-                      "flex min-h-11 w-full items-center rounded-lg border px-2 py-1 text-left text-[13px] leading-4 font-medium wrap-break-word outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                      "flex min-h-11 w-full items-center rounded-lg border px-2 py-1 text-left text-[13px] leading-4 font-medium wrap-break-word focus-visible:focus-ring",
                       CELL[cell.state.kind],
                     )}
                   >

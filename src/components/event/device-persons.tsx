@@ -136,7 +136,7 @@ export function DevicePersons({
           aria-expanded={open}
           aria-controls={MATRIX_ID}
           onClick={() => setExpanded(!open)}
-          className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg text-left focus-visible:focus-ring"
         >
           <span className="flex min-w-0 flex-col">
             <strong id={TITLE_ID} className="font-semibold">

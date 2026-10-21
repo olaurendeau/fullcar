@@ -81,7 +81,7 @@ function MessageList({ lines, failing, written, label }: { lines: bar.Line[]; fa
       onFocus={(event) => event.target === event.currentTarget && setFocused(true)}
       // The window left (Alt+Tab): the list is still the active element, and gets the focus back with the window.
       onBlur={(event) => event.target === event.currentTarget && document.hasFocus() && setFocused(false)}
-      className="max-h-[40dvh] min-w-0 flex-1 overflow-y-auto rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="max-h-[40dvh] min-w-0 flex-1 overflow-y-auto rounded-md focus-visible:focus-ring focus-visible:outline-offset-0"
     >
       {lines.map((line) => {
         const Icon = iconOf(line);
@@ -226,7 +226,7 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
         <Button
           variant="ghost"
           size="icon"
-          className={cn("size-11 shrink-0", !failing && "hover:bg-primary-foreground/15 hover:text-primary-foreground")}
+          className={cn("size-11 shrink-0 focus-visible:outline-offset-0", !failing && "hover:bg-primary-foreground/15 hover:text-primary-foreground")}
           aria-label={t("close")}
           onClick={() => close(true)}
         >
