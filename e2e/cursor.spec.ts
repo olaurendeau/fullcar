@@ -322,7 +322,8 @@ test.describe("the pointer on the event's page", () => {
       await expect(sheet).toHaveCount(0);
       const bar = page.locator("[data-message-bar]");
       const list = bar.getByRole("group", { name: "Messages" });
-      await expect(list).toHaveText("Tom est dans la voiture de Sophie");
+      // Its lines: « Annuler » is in the list too, after its line (#340).
+      await expect(list.locator("p")).toHaveText(["Tom est dans la voiture de Sophie"]);
       expect(
         await cursorsOf({ Annuler: button(bar, "Annuler"), Fermer: button(bar, "Fermer"), "the list of messages": list }),
       ).toEqual({ Annuler: "pointer", Fermer: "pointer", "the list of messages": "auto" });
