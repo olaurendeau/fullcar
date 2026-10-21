@@ -590,6 +590,7 @@ function RideForm({
               hint={tStates("withoutCar")}
               checked={ticked[person.id] ?? false}
               onChange={(value) => setTicked((current) => ({ ...current, [person.id]: value }))}
+              invalid={!!errors.passengers}
             />
           ))}
           {errors.passengers && (

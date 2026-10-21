@@ -55,6 +55,12 @@ function offers(page: Page, marker: string): Request[] {
   return sent;
 }
 
+/**
+ * The keys of the offer a request sent, its third argument (`offerRide(id, token, offer)`). Only
+ * keys: an assertion on the body would print the device's token when it fails.
+ */
+const sentKeys = (request: Request): string[] => Object.keys(JSON.parse(request.postData() ?? "[]")[2] ?? {});
+
 async function openForm(page: Page) {
   await panel(page).getByRole("button", { name: "Proposer une voiture", exact: true }).click();
   await expect(form(page)).toBeVisible();
@@ -103,6 +109,7 @@ test.describe("« Qui monte avec vous ? »", () => {
     await expect(undo(page)).toBeVisible();
     await expect(title(page, "Claire")).toBeFocused();
     expect(sent).toHaveLength(1);
+    expect(sentKeys(sent[0])).toContain("passengerIds");
     const [clairesCar] = await driven(db, id, claire);
     expect(await where(db, [lea, tom, hugo], "aller")).toEqual([clairesCar, clairesCar, undefined]);
     // On this leg only: the retour is as it was (C3.5).
@@ -128,6 +135,27 @@ test.describe("« Qui monte avec vous ? »", () => {
     await expect(group(page)).toHaveCount(0);
     await driverRadio(page, "Une nouvelle personne").check();
     expect(await boxes(page)).toEqual(["LéaSans voiture false"]);
+  });
+
+  test("nobody ticked: the offer is #90's, without `passengerIds`, nothing in the bar, the focus back on its button", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Claire: claire, Léa: lea } = await device(db, page, id, ["Claire", "Léa"]);
+    await place(db, id, lea, "aller", null);
+    const sent = offers(page, "Gare de Vitré");
+    await page.goto(`/e/${id}`);
+    await openForm(page);
+    await driverRadio(page, "Claire").check();
+    await expect(box(page, "Léa")).not.toBeChecked();
+    await field(page, "Lieu de départ").fill("Gare de Vitré");
+    await submit(page).click();
+
+    await expect(form(page)).toHaveCount(0);
+    await expect(panel(page).getByRole("button", { name: "Proposer une voiture", exact: true })).toBeFocused();
+    await expect(lines(page)).toHaveCount(0);
+    expect(sent).toHaveLength(1);
+    expect(sentKeys(sent[0])).not.toContain("passengerIds");
+    expect(await driven(db, id, claire)).toHaveLength(1);
+    expect(await where(db, [lea], "aller")).toEqual([null]);
   });
 
   test("C4.5: a passenger chosen to drive, two ticked: her seat is freed, both board her car, in one request", async ({ db, page, seededEvent }) => {
@@ -167,9 +195,12 @@ test.describe("« Qui monte avec vous ? »", () => {
     await field(page, "Places, sans compter qui conduit").fill("1");
     await box(page, "Léa").check();
     await box(page, "Tom").check();
+    await expect(box(page, "Léa")).not.toHaveAttribute("aria-invalid");
     await submit(page).click();
 
     await expect(group(page)).toHaveAccessibleDescription("1 place seulement : décochez quelqu’un ou ajoutez des places.");
+    // Each box says it is in error, as « Qui conduit ? » does (C4.7).
+    for (const name of ["Léa", "Tom"]) await expect(box(page, name)).toHaveAttribute("aria-invalid", "true");
     await expect(box(page, "Léa")).toBeFocused();
     await expect(box(page, "Tom")).toBeChecked();
     await expect(field(page, "Lieu de départ")).toHaveValue("Mairie");
