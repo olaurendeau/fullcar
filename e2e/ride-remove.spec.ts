@@ -273,9 +273,9 @@ test.describe("remove a car", () => {
     });
   }
 
+  // Tom alone is without a car at the aller, Claire drives: one tap sends him, with no sheet (C5.2, C5.6, #92).
   const seatTom = async (page: Page) => {
     await car(panel(page), "Claire").getByRole("button", { name: /^Place libre/ }).click();
-    await page.getByRole("dialog", { name: "Qui monte dans la voiture de Claire ?" }).getByRole("button", { name: /^Placer/ }).click();
   };
   const changeClaire = async (page: Page) => {
     await car(panel(page), "Claire").getByRole("button", { name: "Modifier", exact: true }).click();

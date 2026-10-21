@@ -425,10 +425,9 @@ test.describe("the scene of O2.5", () => {
     await expect(page.getByRole("region", { name: "Vos inscriptions" }).getByText("Oriane")).toBeVisible();
 
     const reads = await holdPanelReads(page, seededEvent);
+    // Oriane alone is without a car at the aller: one tap seats her, with no sheet (C5.2, #92).
     await board(page).getByRole("button", { name: "Place libre : prendre une place dans la voiture de Anaïs" }).click();
-    const sheet = page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ });
-    await sheet.getByRole("button", { name: /^Placer/ }).click();
-    await expect(sheet).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect.poll(reads.held).toBe(1);
     await reads.fail();
     await expect(summary(page)).toHaveCount(0);
