@@ -29,11 +29,12 @@ async function seedScene(db: Db, eventId: string, token: string, retour: { drive
   await seedPlacement(db, { personId: tom, eventId, leg: "aller", rideId: null });
   await seedPlacement(db, { personId: lea, eventId, leg: "retour", rideId: null });
   if (tomWithoutCar) await seedPlacement(db, { personId: tom, eventId, leg: "retour", rideId: null });
+  const rides: Record<string, string> = {};
   for (const { driver, time, free } of retour) {
-    const rideId = await seedRide(db, eventId, await other(driver), { leg: "retour", departureTime: time, seats: Math.max(free, 1) });
+    const rideId = (rides[driver] = await seedRide(db, eventId, await other(driver), { leg: "retour", departureTime: time, seats: Math.max(free, 1) }));
     if (free === 0) await seedPlacement(db, { personId: await other(`Avec ${driver}`), eventId, leg: "retour", rideId });
   }
-  return { tom, lea, sophie };
+  return { tom, lea, sophie, rides };
 }
 
 /** A person's Placements, by leg: a Ride's id, `null` without a car; a leg left out is not concerned. */
@@ -89,13 +90,13 @@ test.describe("« Trouver une place »", () => {
     await page.goto(`/e/${seededEvent.id}`);
     await placeTom(page);
     const record = await recordBar(page);
+    // Every request that carries Léa, in the order it left.
     const writes: string[] = [];
-    page.on("request", (request) => void (request.postData()?.includes(scene.lea) && writes.push(request.url())));
+    page.on("request", (request) => void (request.postData()?.includes(scene.lea) && writes.push(request.postData() ?? "")));
 
     await findSeat(page);
     await expect(seat(page, "Zoé")).toBeFocused();
     // Nothing written, nothing placed, and the bar untouched (v4.2.2-5).
-    expect(writes).toEqual([]);
     expect(await placements(db, seededEvent.id, scene.lea)).toEqual({ retour: null });
     await expect(cell(page, "Léa", "Retour")).toHaveAccessibleName("Léa, Retour : Sans voiture");
     await expect(messages(page)).toHaveText([TOM_PLACED]);
@@ -106,6 +107,30 @@ test.describe("« Trouver une place »", () => {
     await expect(messages(page)).toHaveText(["Léa est dans la voiture de Zoé"]);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(cell(page, "Léa", "Retour")).toHaveAccessibleName("Léa, Retour : Avec Zoé");
+    // Léa's seat, a later request known to carry her, is the only one that did: « Trouver une
+    // place » sent nothing, neither before it nor late (Next sends one server action at a time).
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toContain(scene.rides["Zoé"]);
+    expect(await placements(db, seededEvent.id, scene.lea)).toEqual({ retour: scene.rides["Zoé"] });
+  });
+
+  test("rule 4: Tom's tap, sent before the information and answered after it, leaves it (#339)", async ({ db, page, seededEvent }) => {
+    const scene = await seedScene(db, seededEvent.id, token, [{ driver: "Marc", time: "17:00:00", free: 0 }]);
+    await holdToken(page, seededEvent.id, token);
+    const answer = await holdFirst(page, scene.sophie, false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await seat(page, "Sophie").click();
+
+    await findSeat(page);
+    await expect(messages(page)).toHaveText([NO_SEAT]);
+    const answered = page.waitForResponse((response) => !!response.request().postData()?.includes(scene.sophie));
+    answer();
+    await answered;
+    // Tom's success comes under the information, which stays: his action began before it.
+    await expect(messages(page)).toHaveText([NO_SEAT, TOM_PLACED]);
+    await expect(barStatus(page)).toHaveText(TOM_PLACED);
+    await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Avec Sophie");
+    await expect(messages(page)).toHaveText([NO_SEAT, TOM_PLACED]);
   });
 
   test("C3.8, C5.5, C6.1: with two persons without a car, Enter on the seat opens the sheet, both checked", async ({ db, page, seededEvent }) => {

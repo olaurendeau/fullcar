@@ -6,49 +6,59 @@ import { close, covers, emptyBar, ended, fail, inform, lines, regions, succeed, 
 const landmark = () => true;
 const success = (text: string) => ({ text, landmark });
 const failure = (text: string, about: string[] = [text], sent = 1) => ({ text, landmark, about, sent });
+/** An information, written at `at` on the clock that also stamps when each action begins. */
+const info = (text: string, at = 1) => ({ text, landmark, at });
 const texts = (state: BarState) => lines(state).map((line) => line.text);
 
 describe("the bar's lines", () => {
   it("rule 1: the failures, most recent first, then the information, then the success, whatever order they came in", () => {
     let state = succeed(emptyBar, success("Hugo est dans la voiture de Marc"));
     state = fail(state, failure("A"));
-    state = inform(state, success("Aucune place libre"));
+    state = inform(state, info("Aucune place libre"));
     state = fail(state, failure("B"));
     state = fail(state, failure("C"));
     // An information written after the last failure removes nothing, and is shown under them.
-    state = inform(state, success("Aucune place libre au retour"));
+    state = inform(state, info("Aucune place libre au retour"));
     expect(texts(state)).toEqual(["C", "B", "A", "Aucune place libre au retour", "Hugo est dans la voiture de Marc"]);
   });
 
-  it("rule 2: a success replaces the success and the information, never a failure; one without words removes them", () => {
+  it("rule 2: a success replaces the success, never a failure; one without words removes it", () => {
     let state = fail(emptyBar, failure("A"));
     state = succeed(state, success("Tom est dans la voiture de Sophie"));
-    state = inform(state, success("Aucune place libre"));
     state = succeed(state, success("Hugo est dans la voiture de Marc"));
     expect(texts(state)).toEqual(["A", "Hugo est dans la voiture de Marc"]);
-    state = inform(state, success("Aucune place libre"));
     expect(texts(succeed(state, null))).toEqual(["A"]);
   });
 
-  it("rule 3: a failure removes the information, neither the success nor the other failures", () => {
+  it("rule 3: a failure removes neither the success nor the other failures", () => {
     let state = succeed(emptyBar, success("Tom est dans la voiture de Sophie"));
     state = fail(state, failure("A"));
-    state = inform(state, success("Aucune place libre"));
     expect(texts(fail(state, failure("B")))).toEqual(["B", "A", "Tom est dans la voiture de Sophie"]);
   });
 
-  it("rule 4: an information replaces the last one, and goes once the next action ends, whatever its outcome", () => {
+  // The information goes with the end of an action, not with its words: the success or the failure of an action
+  // that began after it comes once that action has ended (rules 2 and 3), and those of one that began before leave it.
+  it("rule 4: an information replaces the last one, and goes once an action that began after it ends, whatever its outcome", () => {
     let state = succeed(emptyBar, success("Tom est dans la voiture de Sophie"));
     state = fail(state, failure("A"));
-    state = inform(state, success("Aucune place libre à l’aller"));
-    state = inform(state, success("Aucune place libre au retour"));
+    state = inform(state, info("Aucune place libre à l’aller", 2));
+    state = inform(state, info("Aucune place libre au retour", 4));
     expect(texts(state)).toEqual(["A", "Aucune place libre au retour", "Tom est dans la voiture de Sophie"]);
-    expect(texts(ended(state))).toEqual(["A", "Tom est dans la voiture de Sophie"]);
+    expect(texts(ended(state, 5))).toEqual(["A", "Tom est dans la voiture de Sophie"]);
+  });
+
+  it("rule 4: an action that began before the information leaves it, whatever came of it (#339)", () => {
+    let state = inform(emptyBar, info("Aucune place libre au retour", 4));
+    state = ended(state, 3);
+    state = succeed(state, success("Tom est dans la voiture de Sophie"));
+    state = fail(state, failure("A"));
+    expect(texts(state)).toEqual(["A", "Aucune place libre au retour", "Tom est dans la voiture de Sophie"]);
+    expect(regions(state).status).toBe("Tom est dans la voiture de Sophie");
   });
 
   it("rule 7: « Fermer » removes every line", () => {
     let state = succeed(emptyBar, success("Tom est dans la voiture de Sophie"));
-    state = inform(fail(state, failure("A")), success("Aucune place libre"));
+    state = inform(fail(state, failure("A")), info("Aucune place libre"));
     expect(lines(close(state))).toEqual([]);
     expect(regions(close(state))).toEqual({ alert: "", status: "" });
   });
@@ -94,7 +104,7 @@ describe("rule 5: what withdraws a failure", () => {
     let state = succeed(emptyBar, success("Hugo est dans la voiture de Marc"));
     state = fail(state, failure("A", seats, 1));
     state = fail(state, failure("B", ["cell:tom:aller"], 2));
-    state = inform(state, success("Aucune place libre"));
+    state = inform(state, info("Aucune place libre"));
     expect(texts(withdraw(state, { about: seats }))).toEqual(["B", "Aucune place libre", "Hugo est dans la voiture de Marc"]);
   });
 });
@@ -106,15 +116,15 @@ describe("the regions: each says the last line written there while it is in the 
     state = fail(state, failure("A"));
     expect(regions(state)).toEqual({ alert: "A", status: "Tom est dans la voiture de Sophie" });
     state = fail(state, failure("B", ["b"]));
-    state = inform(state, success("Aucune place libre"));
+    state = inform(state, info("Aucune place libre"));
     expect(regions(state)).toEqual({ alert: "B", status: "Aucune place libre" });
   });
 
   it("a region empties when its line goes, even when an older line of its kind stays", () => {
     let state = succeed(emptyBar, success("Tom est dans la voiture de Sophie"));
     state = fail(fail(state, failure("A", ["a"])), failure("B", ["b"]));
-    state = inform(state, success("Aucune place libre"));
-    expect(regions(withdraw(ended(state), { about: ["b"] }))).toEqual({ alert: "", status: "" });
-    expect(texts(withdraw(ended(state), { about: ["b"] }))).toEqual(["A", "Tom est dans la voiture de Sophie"]);
+    state = inform(state, info("Aucune place libre"));
+    expect(regions(withdraw(ended(state, 2), { about: ["b"] }))).toEqual({ alert: "", status: "" });
+    expect(texts(withdraw(ended(state, 2), { about: ["b"] }))).toEqual(["A", "Tom est dans la voiture de Sophie"]);
   });
 });

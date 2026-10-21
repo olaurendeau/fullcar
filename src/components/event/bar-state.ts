@@ -21,8 +21,13 @@ export interface Failure extends Message, Sent {
   offline?: boolean;
 }
 
+/** An information, and when it was written, on the clock that also stamps when each action begins (`ended`). */
+export interface Information extends Message {
+  at: number;
+}
+
 /** A line of the bar; `id` is the order in which it was written, which makes it recent (rule 1). */
-export type Line = { id: number } & (({ kind: "failure" } & Failure) | ({ kind: "success" } & Message) | ({ kind: "info" } & Message));
+export type Line = { id: number } & (({ kind: "failure" } & Failure) | ({ kind: "success" } & Message) | ({ kind: "info" } & Information));
 
 export interface BarState {
   lines: readonly Line[];
@@ -54,22 +59,30 @@ function write(state: BarState, line: Line, kept: (line: Line) => boolean): BarS
   return { ...state, lines: [...state.lines.filter(kept), line], next: line.id + 1, [region]: line.id };
 }
 
-/** Rule 2: an action that succeeds replaces the success, or removes it without words; and the information. Never a failure. */
+/*
+ * The information goes with the end of an action (`ended`), never with its words: the success or
+ * the failure of an action that began after it is written once that action has ended (rules 2
+ * and 3), and those of an action that began before it leave it (#339).
+ */
+
+/** Rule 2: an action that succeeds replaces the success, or removes it without words. Never a failure. */
 export const succeed = (state: BarState, message: Message | null): BarState =>
   message
-    ? write(state, { ...message, kind: "success", id: state.next }, (line) => line.kind === "failure")
-    : keep(state, (line) => line.kind === "failure");
+    ? write(state, { ...message, kind: "success", id: state.next }, (line) => line.kind !== "success")
+    : keep(state, (line) => line.kind !== "success");
 
-/** Rule 3: an action that fails adds its failure and removes the information alone. */
-export const fail = (state: BarState, failure: Failure): BarState =>
-  write(state, { ...failure, kind: "failure", id: state.next }, (line) => line.kind !== "info");
+/** Rule 3: an action that fails adds its failure, and removes nothing. */
+export const fail = (state: BarState, failure: Failure): BarState => write(state, { ...failure, kind: "failure", id: state.next }, () => true);
 
 /** Rule 4: an information replaces the information, and nothing else. */
-export const inform = (state: BarState, message: Message): BarState =>
-  write(state, { ...message, kind: "info", id: state.next }, (line) => line.kind !== "info");
+export const inform = (state: BarState, information: Information): BarState =>
+  write(state, { ...information, kind: "info", id: state.next }, (line) => line.kind !== "info");
 
-/** Rule 4: the information goes once the next action ends, whatever came of it. */
-export const ended = (state: BarState): BarState => keep(state, (line) => line.kind !== "info");
+/**
+ * Rule 4: the information goes once an action that `began` after it was written ends, whatever
+ * came of it. One that began before it, a tap answered late, leaves it (#339).
+ */
+export const ended = (state: BarState, began: number): BarState => keep(state, (line) => line.kind !== "info" || line.at > began);
 
 /** Rule 5: the failures `withdrawal` covers go; nothing else. */
 export const withdraw = (state: BarState, withdrawal: Withdrawal): BarState =>

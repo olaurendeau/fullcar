@@ -103,7 +103,7 @@ export function ParticipantBoard({
 
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
-  const [runner] = useState(() => actionRunner({ state: setBoard, ended: messages.ended }));
+  const [runner] = useState(() => actionRunner({ state: setBoard, begins: messages.begins }));
   // Once the runner has shown the state an action answered, refusal included.
   const runAction: typeof runner = async (...run) => {
     const sent = await runner(...run);

@@ -94,12 +94,30 @@ describe("stateShown", () => {
 describe("actionRunner", () => {
   const state: EventState = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
-  /** A page that records the states the runner gives it and each action that ends, and a connection that can be cut. */
+  /** A page that records the states the runner gives it and each action that begins and ends, and a connection that can be cut. */
   function page() {
-    const told = { states: [] as EventState[], ended: 0, connected: true };
-    const run = actionRunner({ state: (next) => told.states.push(next), ended: () => (told.ended += 1) }, () => told.connected);
+    const told = { states: [] as EventState[], begun: 0, ended: 0, connected: true };
+    const begins = () => {
+      told.begun += 1;
+      return () => void (told.ended += 1);
+    };
+    const run = actionRunner({ state: (next) => told.states.push(next), begins }, () => told.connected);
     return { told, run };
   }
+
+  // The bar's information goes at the end of an action that began after it was written (rule 4, #339).
+  it("an action begins before it is sent, and ends once its answer is in", async () => {
+    const { told, run } = page();
+    let answer: (value: unknown) => void = () => {};
+    const sent = run("seat", () => {
+      expect(told).toMatchObject({ begun: 1, ended: 0 });
+      return new Promise((resolve) => (answer = resolve));
+    });
+    expect(told).toMatchObject({ begun: 1, ended: 0 });
+    answer({ ok: true, state });
+    await sent;
+    expect(told).toMatchObject({ begun: 1, ended: 1 });
+  });
 
   // The page says what came of an action, in the bar or in its sheet (#216): the runner writes nothing there.
   it("each action that runs ends once, whatever came of it; a second run of it meanwhile does not", async () => {
@@ -112,7 +130,7 @@ describe("actionRunner", () => {
     await run("seat", async () => ({ ok: true, state }));
     answer({ ok: false, error: "seatTaken", state });
     await first;
-    expect(told.ended).toBe(2);
+    expect(told).toMatchObject({ begun: 2, ended: 2 });
   });
 
   it("an answer gives the page the state the server sends, refusal included", async () => {

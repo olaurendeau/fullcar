@@ -19,13 +19,24 @@ export type BarProblem = "offline" | "failed";
 export function useMessageBar() {
   const [state, setState] = useState(bar.emptyBar);
   useEffect(() => onWithdraw((withdrawal) => setState((current) => bar.withdraw(current, withdrawal))), []);
-  const [write] = useState(() => ({
-    succeed: (message: bar.Message | null) => setState((current) => bar.succeed(current, message)),
-    fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
-    inform: (message: bar.Message) => setState((current) => bar.inform(current, message)),
-    ended: () => setState(bar.ended),
-    close: () => setState(bar.close),
-  }));
+  const [write] = useState(() => {
+    // One clock for the information and the actions: one that began before an information leaves it (rule 4).
+    let clock = 0;
+    return {
+      succeed: (message: bar.Message | null) => setState((current) => bar.succeed(current, message)),
+      fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
+      inform: (message: bar.Message) => {
+        const at = (clock += 1);
+        setState((current) => bar.inform(current, { ...message, at }));
+      },
+      /** An action begins: call what it returns once it ends. */
+      begins: () => {
+        const began = (clock += 1);
+        return () => setState((current) => bar.ended(current, began));
+      },
+      close: () => setState(bar.close),
+    };
+  });
   return { state, ...write };
 }
 
