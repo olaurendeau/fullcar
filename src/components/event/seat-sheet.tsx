@@ -240,7 +240,7 @@ function SeatSheet({
           <>
             {!adding.kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
             <PersonForm
-              mode={{ kind: "add", leg, hasRetour, addPerson }}
+              mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
               open={() => isOpen.current}
               onDone={(personId) => {
                 focusNext.current = () => document.getElementById(boxId(personId));

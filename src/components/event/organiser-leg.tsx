@@ -1,5 +1,6 @@
 import { Clock } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { listKey, type OrganiserList } from "@/app/e/[id]/admin/screen-state";
 import type { Leg } from "@/domain/leg";
 import { legIsEmpty, type OrganiserLeg } from "@/domain/organiser-panel";
 import { wallClockParts, type WallClock } from "@/domain/wall-clock";
@@ -7,10 +8,6 @@ import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
 import { LegTime } from "./leg-panel";
 import { OrganiserCarsWithoutPhone, OrganiserWithoutCar } from "./organiser-lists";
-
-/** The two lists of a leg, as `AdminPanel` keys their folds: `aller:withoutCar`, for one. */
-type OrganiserList = "withoutCar" | "carsWithoutPhone";
-const foldKey = (leg: Leg, list: OrganiserList) => `${leg}:${list}`;
 
 /** The id of a leg's title (h3), where its tile puts the focus (#180). */
 export const legHeadingId = (leg: Leg) => `organiser-leg-${leg}`;
@@ -67,8 +64,8 @@ function OrganiserLegSection({
   const { leg } = board;
   const headingId = legHeadingId(leg);
   const fold = (list: OrganiserList) => ({
-    expanded: expanded.has(foldKey(leg, list)),
-    onToggle: () => onToggle(foldKey(leg, list)),
+    expanded: expanded.has(listKey(leg, list)),
+    onToggle: () => onToggle(listKey(leg, list)),
   });
 
   return (

@@ -1,7 +1,25 @@
 {
   "Home": {
     "title": "Fullcar",
-    "tagline": "Group carpooling, there and back, no account needed."
+    "tagline": "Group carpooling, there and back, no account needed.",
+    "intro": "A match, a wedding, a ski weekend: share one link, and everyone sees who is driving, where seats are free and who still has no car.",
+    "create": "Create an event",
+    "howItWorks": "How it works",
+    "steps": {
+      "create": {
+        "title": "Create the event",
+        "text": "A title, a place, the start time and, if there is a return trip, the end time. No account, no email address."
+      },
+      "share": {
+        "title": "Share the link",
+        "text": "By text message or in the group chat. Everyone signs up, offers a car or takes a free seat."
+      },
+      "follow": {
+        "title": "See who still has no car",
+        "text": "A banner shows how many people still have no car, and whether seats are missing."
+      }
+    },
+    "deleted": "Events are deleted 30 days after their date."
   },
   "CreateEvent": {
     "title": "Title",
@@ -282,8 +300,10 @@
     "refreshed": "Organiser area refreshed.",
     "refreshFailed": {
       "title": "The organiser area could not be refreshed.",
-      "body": "What you see dates from the last load. Check your connection, then use “Refresh” again."
+      "body": "What you see dates from the last load. Check your connection, then use “Refresh” again.",
+      "bodyWithdrawn": "Check your connection, then use “Refresh” again."
     },
+    "stale": "The organiser area is out of date. Use “Refresh” to load it again.",
     "needsJavaScript": "The organiser area needs JavaScript: turn it on, then reload the page.",
     "withoutCar": {
       "title": "Without a car ({count})",
@@ -320,6 +340,7 @@
     "cookiesBlocked": "Votre navigateur bloque les cookies, qui retiennent le choix de la langue. Autorisez-les pour ce site, puis réessayez."
   },
   "Contact": {
+    "home": "Home",
     "link": "Contact us",
     "newTab": "(opens in a new tab)"
   },
