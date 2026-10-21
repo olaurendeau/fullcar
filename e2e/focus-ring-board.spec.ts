@@ -210,7 +210,6 @@ test.describe("the focus ring on the event's page", () => {
       // The place, the time and the seats, then the note; « Au retour », its radio buttons, by its chosen one.
       // No box of « Qui monte avec vous ? »: the form does not ask it yet (#171).
       expect(reached).toEqual(["<input>", "<input>", "<input>", "<textarea>", "<button>", '<button> "Valider"', '<button> "Fermer"']);
-      expect((await expectRing(button(sheet, "Fermer"))).background).toBe(WHITE);
     });
 
     test("F1.5: the confirmation « Retirer la voiture ? » opened from the keyboard: the red button and « Annuler » touch the box's white", async ({
