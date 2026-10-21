@@ -198,7 +198,7 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     await expectWithdrawn(page);
   });
 
-  test("O5.8: the panel withdrawn while its tile has the focus: the focus goes to the panel's title, never to <body>", async ({
+  test("O5.8: the panel withdrawn while its tile has the focus: the focus goes to the button of the panel's title, never to <body>", async ({
     page,
     seededEvent,
   }) => {
@@ -208,7 +208,7 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     await tiles(page).first().focus();
     await reads.fail();
     await expectWithdrawn(page);
-    await expect(panel(page).getByRole("heading", { level: 2 })).toBeFocused();
+    await expect(panel(page).getByRole("button", { name: FR.panel, exact: true })).toBeFocused();
   });
 
   // Next sends one action after the other: « Actualiser » touched while the seat is on its way reads after it.

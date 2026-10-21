@@ -45,11 +45,17 @@ export type ScreenState =
       refreshed: boolean;
       /** The lists unfolded, by `listKey`: kept through the reads, in memory alone (O5.7). */
       expanded: ReadonlySet<string>;
+      /** The card folded (#204): read once, as the first panel arrives, then changed by its button alone. */
+      folded: boolean;
     };
 
 export type ScreenEvent =
-  /** The first read, a « Réessayer » starting (failed, retrying) or ending: what `useAdminLinkCheck` says. */
-  | { type: "checked"; check: AdminLinkCheck }
+  /**
+   * The first read, a « Réessayer » starting (failed, retrying) or ending: what `useAdminLinkCheck`
+   * says. With the panel, whether the card was left folded on the device (O8.5).
+   */
+  | { type: "checked"; check: AdminLinkCheck; folded?: boolean }
+  | { type: "toggleFolded" }
   | { type: "refreshStarted"; read: number }
   /** With the panel's legs on a success; without, a failure. */
   | { type: "refreshEnded"; read: number; legs?: OrganiserLeg[] }
@@ -57,7 +63,7 @@ export type ScreenEvent =
   | { type: "reread"; legs?: OrganiserLeg[] }
   | { type: "listToggled"; key: string };
 
-function fromCheck(check: AdminLinkCheck): ScreenState {
+function fromCheck(check: AdminLinkCheck, folded = false): ScreenState {
   switch (check.state) {
     case "checking":
       return { state: "loading" };
@@ -68,7 +74,7 @@ function fromCheck(check: AdminLinkCheck): ScreenState {
     case "valid": {
       const { publicUrl, adminUrl, legs } = check;
       const panel = { publicUrl, adminUrl, legs };
-      return { state: "ready", panel, refreshing: null, refreshFailed: 0, refreshed: false, expanded: new Set() };
+      return { state: "ready", panel, refreshing: null, refreshFailed: 0, refreshed: false, expanded: new Set(), folded };
     }
   }
 }
@@ -96,12 +102,14 @@ function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean):
  * latest read counts: the end of any other changes nothing, nor does it once the link was
  * checked again. A read after an action says nothing (O1.10): a success replaces the panel, a
  * failure withdraws it and empties the alert, so that one message is left, the action's in the
- * bar. It also ends a refresh still running, whose board was read before the action: the
+ * bar. Whether the card is folded, only its button changes (O8.6): no read, action nor failure.
+ * It also ends a refresh still running, whose board was read before the action: the
  * organiser who asked for it hears its outcome, « actualisé » or the alert, withdrawn.
  */
 export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenState {
-  if (event.type === "checked") return fromCheck(event.check);
+  if (event.type === "checked") return fromCheck(event.check, event.folded);
   if (state.state !== "ready") return state;
+  if (event.type === "toggleFolded") return { ...state, folded: !state.folded };
   if (event.type === "reread") {
     // Ending a refresh, it is that refresh's outcome, said as a refresh says it (O1.9, O5.4).
     const refreshing = state.refreshing !== null;

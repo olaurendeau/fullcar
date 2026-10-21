@@ -32,6 +32,7 @@ const ready = (fields: Partial<Extract<ScreenState, { state: "ready" }>> = {}): 
   refreshFailed: 0,
   refreshed: false,
   expanded: new Set(),
+  folded: false,
   ...fields,
 });
 /** A panel withdrawn after an action whose read failed (O1.10): the links stay. */
@@ -144,6 +145,39 @@ describe("screenReducer", () => {
     ],
   ])("%s", (_, state, event, next) => {
     expect(screenReducer(state, event)).toStrictEqual(next);
+  });
+});
+
+// O8.4, O8.5, O8.6: the card arrives folded or unfolded, and only its button changes that.
+describe("screenReducer, the folded card", () => {
+  const folded = ready({ folded: true });
+
+  it.each<[string, ScreenState, ScreenEvent, boolean]>([
+    ["the first panel, kept folded", { state: "loading" }, { type: "checked", check: valid, folded: true }, true],
+    ["the first panel, kept unfolded", { state: "loading" }, { type: "checked", check: valid, folded: false }, false],
+    ["the first panel, nothing read", { state: "loading" }, { type: "checked", check: valid }, false],
+    ["« Réessayer » reads the panel, kept folded", { state: "failed", retrying: true }, { type: "checked", check: valid, folded: true }, true],
+    ["the button folds", ready(), { type: "toggleFolded" }, true],
+    ["the button unfolds", folded, { type: "toggleFolded" }, false],
+    ["a refresh starts", folded, { type: "refreshStarted", read: 1 }, true],
+    ["a refresh succeeds", ready({ folded: true, refreshing: 1 }), { type: "refreshEnded", read: 1, legs: after }, true],
+    ["a refresh fails", ready({ folded: true, refreshing: 1 }), { type: "refreshEnded", read: 1 }, true],
+    ["a read after an action succeeds", folded, { type: "reread", legs: after }, true],
+    ["a read after an action fails: the panel withdrawn", folded, { type: "reread" }, true],
+    ["withdrawn, a refresh fails", ready({ folded: true, panel: withdrawn, refreshing: 1 }), { type: "refreshEnded", read: 1 }, true],
+    ["a list unfolded", folded, { type: "listToggled", key: listKey("aller", "withoutCar") }, true],
+  ])("%s", (_, state, event, next) => {
+    const got = screenReducer(state, event);
+    expect(got.state === "ready" && got.folded).toBe(next);
+  });
+
+  it("folds and unfolds without touching anything else", () => {
+    const state = ready({ refreshing: 2, refreshFailed: 1, expanded: new Set([listKey("aller", "withoutCar")]) });
+    expect(screenReducer(state, { type: "toggleFolded" })).toStrictEqual({ ...state, folded: true });
+  });
+
+  it("does nothing without the panel", () => {
+    expect(screenReducer({ state: "invalid" }, { type: "toggleFolded" })).toStrictEqual({ state: "invalid" });
   });
 });
 
