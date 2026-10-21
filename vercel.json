@@ -1,1 +1,4 @@
-{ "git": { "deploymentEnabled": { "**": false, "main": true } } }
+{
+  "regions": ["fra1"],
+  "git": { "deploymentEnabled": { "**": false, "main": true } }
+}
