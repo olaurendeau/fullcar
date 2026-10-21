@@ -1,7 +1,25 @@
 {
   "Home": {
     "title": "Fullcar",
-    "tagline": "Le covoiturage de groupe, aller et retour, sans compte."
+    "tagline": "Le covoiturage de groupe, aller et retour, sans compte.",
+    "intro": "Un match, un mariage, un week-end au ski : partagez un seul lien, et chacun voit qui conduit, où il reste des places et qui n’a pas encore de voiture.",
+    "create": "Créer un événement",
+    "howItWorks": "Comment ça marche",
+    "steps": {
+      "create": {
+        "title": "Créez l’événement",
+        "text": "Un titre, un lieu, l’heure de début et, s’il y a un retour, l’heure de fin. Sans compte ni adresse e-mail."
+      },
+      "share": {
+        "title": "Partagez le lien",
+        "text": "Par SMS ou dans le groupe. Chacun s’inscrit, propose une voiture ou prend une place libre."
+      },
+      "follow": {
+        "title": "Suivez qui reste sans voiture",
+        "text": "Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places."
+      }
+    },
+    "deleted": "Les événements sont supprimés 30 jours après leur date."
   },
   "CreateEvent": {
     "title": "Titre",
