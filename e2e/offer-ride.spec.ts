@@ -341,7 +341,7 @@ test.describe("offer a car", () => {
     await context.setOffline(true);
     await submit(page).click();
     await expect(field(page, FR.seats)).toHaveAccessibleDescription(FR.seatsHint);
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
     expect(await rides(db, id)).toEqual([]);
   });
 
@@ -355,7 +355,7 @@ test.describe("offer a car", () => {
     release();
     await expect(form(page)).toHaveCount(0);
     await expect(car(panel(page), "Marc")).toBeVisible();
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
     expect(await rides(db, seededEvent.id)).toHaveLength(1);
   });
 
@@ -396,7 +396,7 @@ test.describe("offer a car", () => {
     await submit(page).click();
     await expect(failure(page)).toHaveText(FR.offline);
     // Nothing sent, and no token drawn nor stored (C1.13).
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
     const keys = await page.evaluate((event) => Object.keys(localStorage).filter((key) => key.includes(event)), seededEvent.id);
     expect(keys).toEqual([]);
 

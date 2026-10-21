@@ -129,12 +129,13 @@ function MessageList({
               </span>
             </p>
             {/* Rule 6: after its line's text, out of the regions; a sibling of the line, which keeps its words alone. */}
+            {/* The list clips its ring at 0 px: 2 px on the right, and 4 px above or below once the keyboard scrolls to it (#350). */}
             {line.undo && (
-              <div data-bar-line={line.id} className="flex items-center border-t py-1 pl-2 [p:first-child+&]:border-t-0">
+              <div data-bar-line={line.id} className="flex items-center border-t py-1 pr-0.5 pl-2 [p:first-child+&]:border-t-0">
                 <Button
                   variant="outline"
                   className={cn(
-                    "h-11 px-3 focus-visible:outline-offset-0",
+                    "h-11 scroll-my-1 px-3 focus-visible:outline-offset-0",
                     !failing && "border-primary-foreground/45 bg-transparent text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground",
                   )}
                   aria-describedby={text}

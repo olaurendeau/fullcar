@@ -104,7 +104,7 @@
   .mbar { border: 1px solid transparent; }
   .mbar .msgs.scroll { max-height: 128px; overflow-y: auto; border-radius: 6px; }
   .mbar.err .mrow + .mrow { border-top: 1px solid var(--app-border); }
-  .btn.inactive { background: var(--app-muted-bg); color: var(--app-muted); cursor: not-allowed; }
+  .btn.inactive { background: var(--app-muted-bg); color: var(--app-muted); cursor: default; }
   .ring-old { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring-old) 50%, transparent); }
   .tabs span.ring-old { outline: 1px solid var(--app-ring-old); }
   .home-link { min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; font-size: 14px; color: var(--app-muted); text-decoration: underline; text-underline-offset: 4px; border-radius: 8px; }
@@ -114,6 +114,15 @@
   .mrow .t { flex: 1; min-width: 0; overflow-wrap: anywhere; margin: 0; padding: 10px 0; }
   .mbar .x { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; }
   .mbar .undo { flex: none; min-height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.45); display: inline-flex; align-items: center; }
+  /* v3.3.4 (#350): the list really scrolls here, so it clips as the app's does. */
+  .mbar .msgs.ugrid { display: grid; grid-template-columns: minmax(0, 1fr) auto; overflow-y: auto; }
+  .mbar .urow { display: flex; align-items: center; padding: 4px 2px 4px 8px; }
+  .mbar .urow.flush { padding-right: 0; }
+  .mbar.err .undo { border-color: var(--app-border); }
+  .mbar .mrow.span2 { grid-column: span 2; }
+  .mbar.err .mrow.sep { border-top: 1px solid var(--app-border); }
+  .mbar.err .urow.sep { border-top: 1px solid var(--app-border); }
+  .mbar.err .mrow.sep:first-child, .mbar.err .mrow.sep:first-child + .urow.sep { border-top: 0; }
   .mbar svg { width: 16px; height: 16px; flex: none; }
   .dialog { background: var(--app-bg); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); border: 1px solid var(--app-border); }
   .dialog strong { font-size: 17px; }
@@ -142,6 +151,19 @@
   tr:last-child td { border-bottom: 0; }
   ol.decisions { padding-left: 20px; max-width: 80ch; }
   ol.decisions li { margin-bottom: 10px; }
+
+  /* v3.3.3 (#347): the pointer. Each example carries the cursor it will have. */
+  .hand { cursor: pointer; }
+  .ptr-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .ptr-row > :first-child { min-width: 0; }
+  .ptr-tag { flex: none; margin-left: auto; max-width: 6.5em; text-align: right; font: 600 11px/14px ui-monospace, Menlo, monospace; color: var(--app-muted); }
+  .ptr-tag.hand-tag { color: var(--app-fg); }
+  .cell { flex: 1; display: flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: 4px 8px; border: 1px solid var(--app-border); border-radius: 8px; font-size: 13px; font-weight: 500; }
+  .seat { flex: 1; display: flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px dashed color-mix(in srgb, var(--app-fg) 25%, transparent); border-radius: 8px; font-weight: 500; }
+  .pax { flex: 1; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: 8px; background: var(--app-muted-bg); }
+  .tel { color: var(--app-fg); text-decoration: underline; text-underline-offset: 3px; }
+  .input.text-field { width: 100%; font: inherit; background: var(--app-bg); color: var(--app-fg); }
+  pre.css { margin: 8px 0 0; padding: 8px 10px; overflow-x: auto; border-radius: 8px; background: var(--accent-soft); color: var(--fg); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 </style>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -155,7 +177,85 @@
 
 <div class="wrap">
   <h1>Changer de langue</h1>
-  <p class="lead">Epic <a href="https://github.com/olaurendeau/fullcar/issues/113">#113</a>, version 3.3.1. La v3 (<a href="https://github.com/olaurendeau/fullcar/issues/236">#236</a>), revue en v3.1, puis v3.2, v3.3 et v3.3.1 (critères), approuvée, définit l’anneau de focus de toute l’application, repères de #314 compris : voir « <a href="#anneau">L’anneau de focus (v3)</a> ». Les sections de la v2, plus bas, montrent l’écran tel qu’il était le 17/10 (en-tête « Aller » / « Retour », bas de page sans « Accueil ») ; leurs anneaux suivent la v3. Un bouton discret dans le bas de page, à gauche de « Nous contacter », passe la page du français à l’anglais ou l’inverse en un tap, sans recharger la page, et l’appareil s’en souvient. Les maquettes sont à 360 px de large ; le cadre pointillé bleu marque ce qui change ; <code>{hôte}</code> tient lieu du nom de domaine.</p>
+  <p class="lead">Epic <a href="https://github.com/olaurendeau/fullcar/issues/113">#113</a>, version 3.3.4, approuvée. La v3.3.4 (<a href="https://github.com/olaurendeau/fullcar/issues/350">#350</a>) rend entier le contour d’« Annuler » dans la barre de messages : sa rangée prend 2 px de marge à droite, et le bouton une marge de défilement de 4 px ; voir « Dans la barre de messages », dans « <a href="#anneau">L’anneau de focus (v3)</a> ». La v3.3.3 (#347) ajoute la règle du pointeur pour toute l’application : la main sur ce qui se clique, la flèche sur ce qui est inactif ; voir « <a href="#pointeur">Le pointeur (v3.3.3)</a> ». La v3.3.2 a étendu le contrôle F1.12 aux fichiers <code>.ts</code> de <code>src/</code>, sauf les <code>.test.ts</code> et <code>.spec.ts</code> (#337). La v3 (<a href="https://github.com/olaurendeau/fullcar/issues/236">#236</a>), revue en v3.1, puis v3.2, v3.3 et v3.3.1 (critères), approuvée, définit l’anneau de focus de toute l’application, repères de #314 compris : voir « <a href="#anneau">L’anneau de focus (v3)</a> ». Les sections de la v2, plus bas, montrent l’écran tel qu’il était le 17/10 (en-tête « Aller » / « Retour », bas de page sans « Accueil ») ; leurs anneaux suivent la v3. Un bouton discret dans le bas de page, à gauche de « Nous contacter », passe la page du français à l’anglais ou l’inverse en un tap, sans recharger la page, et l’appareil s’en souvient. Les maquettes sont à 360 px de large ; le cadre pointillé bleu marque ce qui change ; <code>{hôte}</code> tient lieu du nom de domaine.</p>
+
+  <h2 id="pointeur">Le pointeur (v3.3.3, #347)</h2>
+  <p class="lead">Sur ordinateur, le pointeur restait une flèche au survol d’un bouton : depuis Tailwind 4, <code>preflight</code> ne donne plus <code>cursor: pointer</code> à <code>&lt;button&gt;</code>. La v3.3.3 pose une règle pour toute l’application, à côté de l’anneau (décision 18) : <strong>la main sur ce qui se clique, la flèche sur ce qui est inactif, le curseur texte sur les champs</strong>. Aucun mot nouveau. Les exemples ci-dessous portent la vraie règle : survolez-les à la souris.</p>
+  <div class="anatomy">
+    <div class="card">
+      <h3>La règle</h3>
+      <ul>
+        <li><strong>La main</strong> sur tout <code>&lt;button&gt;</code> et <code>role="button"</code> actifs : boutons, onglets, cases et boutons radio (des <code>&lt;button&gt;</code> chez Radix), prénoms et cellules, places libres, tuiles, bouton qui replie l’espace, bouton de langue, « Fermer », « Annuler » (celui de la confirmation et celui de la barre, #340).</li>
+        <li><strong>Les liens</strong> et les <strong>libellés de case</strong> gardent la main qu’ils ont déjà.</li>
+        <li><strong>Inactif</strong> (<code>disabled</code>, <code>aria-disabled</code>) : <strong>la flèche</strong>, jamais <code>not-allowed</code>, « Placer » compris (décision 19).</li>
+        <li><strong>Champs</strong> : le curseur du navigateur, inchangé : le texte sur un champ de texte, de téléphone ou une zone de texte ; la flèche sur un champ de date ou d’heure, et sur le libellé d’un champ. <strong>Ce qui ne se clique pas</strong> (panneau d’onglet, titres, liste de la barre) : inchangé (<code>auto</code>).</li>
+        <li><strong>Sans condition de média</strong> : un écran tactile ne dessine pas de pointeur (décision 20).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Dans <code>globals.css</code>, couche <code>base</code></h3>
+      <pre class="css">button, [role="button"] { cursor: pointer; }
+:is(button, [role="button"]):is(:disabled, [aria-disabled="true"]) {
+  cursor: default;
+}</pre>
+      <ul>
+        <li>Retirées : <code>aria-disabled:cursor-not-allowed</code> de « Placer », <code>disabled:cursor-not-allowed</code> des cases et boutons radio.</li>
+        <li>Critères P1.1 à P1.11 dans le README : la valeur calculée de <code>cursor</code>, page par page.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="state">
+      <h3>Page d’un événement</h3>
+      <p>Onglets, cellule de la matrice, place libre, boutons de la carte, lien <code>tel:</code> : la main. Le titre et le panneau d’onglet ne changent pas. <span class="crit">P1.4</span></p>
+      <div class="phone"><div class="screen" style="gap:12px">
+        <div class="ptr-row"><p class="ev-h1" style="font-size:20px">Tournoi de Rennes</p><span class="ptr-tag">inchangé</span></div>
+        <div class="ptr-row"><div class="tabs" style="flex:1"><span class="on hand">Aller</span><span class="hand">Retour</span></div><span class="ptr-tag hand-tag">main</span></div>
+        <div class="ptr-row"><span class="cell hand">Léa, Aller : Avec Marc</span><span class="ptr-tag hand-tag">main</span></div>
+        <div class="ptr-row"><span class="seat hand">+ Place libre</span><span class="ptr-tag hand-tag">main</span></div>
+        <div class="ptr-row"><div class="row" style="flex:1"><span class="btn outline hand">Modifier</span><span class="btn outline hand" style="color:var(--app-destructive)">Retirer la voiture</span></div><span class="ptr-tag hand-tag">main</span></div>
+        <div class="ptr-row"><span class="pax">Léa <a class="tel hand">07 22 33 44 55</a></span><span class="ptr-tag hand-tag">main</span></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Les feuilles : cases, champs, « Placer »</h3>
+      <p>La case et tout son libellé : la main. « Placer » sans case cochée (<code>aria-disabled</code>) : la flèche, avec ses couleurs grises (règle 7) ; une case cochée, la main. Un champ de texte : le curseur texte ; un champ d’heure, dessiné en bas sous la feuille « Proposer une voiture » d’où il vient : la flèche, que le navigateur lui donne. <span class="crit">P1.6</span></p>
+      <div class="phone"><div class="screen" style="gap:10px">
+        <strong>Qui monte dans la voiture de Sophie ?</strong>
+        <div class="ptr-row"><label class="box hand" style="flex:1"><span class="cb"></span><span><strong>Tom</strong><span class="small-muted">Sans voiture</span></span></label><span class="ptr-tag hand-tag">main</span></div>
+        <div class="ptr-row"><div class="btn inactive" style="flex:1">Placer</div><span class="ptr-tag">flèche</span></div>
+        <div class="ptr-row"><div class="btn hand" style="flex:1">Placer 1 personne</div><span class="ptr-tag hand-tag">main</span></div>
+        <div class="ptr-row"><div class="field" style="flex:1"><label>Prénom</label><input class="input text-field" value="Tom" aria-label="Prénom (exemple)"></div><span class="ptr-tag">texte</span></div>
+        <div class="ptr-row"><div class="btn outline hand" style="flex:1">Fermer</div><span class="ptr-tag hand-tag">main</span></div>
+        <div class="cut" style="padding-top:6px;border-top:1px dashed var(--app-border)">une autre feuille</div>
+        <strong>Proposer une voiture</strong>
+        <div class="ptr-row"><div class="field" style="flex:1"><label>Heure de départ</label><input type="time" class="input text-field" value="07:30" aria-label="Heure de départ (exemple)"></div><span class="ptr-tag">flèche</span></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Inactifs : la flèche</h3>
+      <p>Un bouton <code>disabled</code> (« Créer » sans JavaScript, le bouton de langue pendant le changement, une place libre pendant la lecture de vos inscriptions) ou <code>aria-disabled</code> (« Actualiser » pendant une lecture) : la flèche, comme sur le système. <span class="crit">P1.3, P1.5, P1.9</span></p>
+      <div class="phone"><div class="screen" style="gap:10px">
+        <div class="ptr-row"><div class="btn" style="flex:1;opacity:.5;cursor:default">Créer</div><span class="ptr-tag">flèche</span></div>
+        <div class="ptr-row"><span class="seat" style="opacity:.5;cursor:default">+ Place libre</span><span class="ptr-tag">flèche</span></div>
+        <div class="ptr-row"><span class="btn outline" style="flex:none;padding:0 12px;cursor:default">Actualiser</span><span class="ptr-tag">flèche</span></div>
+        <div class="ptr-row"><span class="sw disabled" style="cursor:default" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span><span class="ptr-tag">flèche</span></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>La barre et la confirmation</h3>
+      <p>« Annuler » (#340) et « Fermer » de la barre, « Retirer la voiture » et « Annuler » de la confirmation : la main. Pendant l’envoi, « Retirer la voiture » est inactif : la flèche. La liste des messages ne change pas. <span class="crit">P1.7, P1.8</span></p>
+      <div class="phone"><div class="screen" style="gap:12px">
+        <div class="ptr-row"><div class="mbar" style="flex:1"><div class="msgs"><p class="mrow"><span class="t">Tom est dans la voiture de Sophie</span><span class="undo hand">Annuler</span></p></div><span class="x hand" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div><span class="ptr-tag hand-tag">main</span></div>
+        <div class="dialog"><strong>Retirer la voiture ?</strong><p>2 personnes redeviendront sans voiture.</p><div class="foot-btns"><div class="ptr-row"><div class="btn danger hand" style="flex:1">Retirer la voiture</div><span class="ptr-tag hand-tag">main</span></div><div class="ptr-row"><div class="btn outline hand" style="flex:1">Annuler</div><span class="ptr-tag hand-tag">main</span></div><div class="ptr-row"><div class="btn danger" style="flex:1;opacity:.5;cursor:default">Retirer la voiture</div><span class="ptr-tag">flèche, pendant l’envoi</span></div></div></div>
+      </div></div>
+    </div>
+  </div>
+  <div class="note">Non dessinés : les pages <code>/</code>, <code>/nouveau</code> et <code>/e/{id}/admin</code> suivent la même règle (P1.1 à P1.3, P1.9) ; sur un écran tactile, aucun pointeur n’est dessiné, et la valeur calculée est la même qu’à l’ordinateur (P1.10).</div>
 
   <h2 id="anneau">L’anneau de focus (v3.3.1, #236)</h2>
   <p class="lead">Une personne qui se déplace au clavier ne voyait presque pas où était le focus : le halo de shadcn, <code>ring-ring/50</code>, fait 1,54:1 sur blanc, quand WCAG 1.4.11 demande 3:1. La v3 le remplace, sur tous les écrans, par un <strong>contour plein de 2 px, à 2 px du bord, en <code>#737373</code></strong> (le jeton <code>--ring</code>, opaque). Cette maquette le porte parce qu’elle est la plus globale : son bouton est sur toutes les pages, elle dessine déjà toutes les pages, et l’anneau mesuré par #236 est le sien (décision 7). Aucun mot nouveau.</p>
@@ -230,6 +330,35 @@
     </div>
 
     <div class="state">
+      <h3>« Annuler » de la barre : un contour entier (v3.3.4, #350)</h3>
+      <p>« Annuler » est dans la liste des messages, qui défile et rogne ce qui dépasse, sur les côtés aussi. Contre le bord droit de la liste, son contour à 0 px perdait son côté droit (en haut, la v3.3.3, dessinée avec un vrai défilement). Sa rangée prend 2 px de marge à droite, et le bouton <code>scroll-my-1</code> pour quand la liste défile (maquette suivante) : le contour est entier, sur le fond sombre d’une réussite seule (3,78:1) comme sur le blanc d’une barre en échec (4,74:1), à 2 px au moins de la bordure rouge. Le contour à l’intérieur est écarté : sur la barre sombre, il se confondrait avec la bordure du bouton (décision 21). <span class="crit">F1.19</span></p>
+      <div class="phone"><div class="screen" style="gap:12px">
+        <span class="small-muted">Avant (v3.3.3) : le côté droit est coupé</span>
+        <div class="mbar"><div class="msgs ugrid"><p class="mrow"><span class="t">Tom est dans la voiture de Sophie</span></p><div class="urow flush"><span class="undo ring zero">Annuler</span></div></div><span class="x" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        <span class="small-muted">Après : réussite seule</span>
+        <div class="mbar"><div class="msgs ugrid"><p class="mrow"><span class="t">Tom est dans la voiture de Sophie</span></p><div class="urow"><span class="undo ring zero">Annuler</span></div></div><span class="x" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        <span class="small-muted">Après : barre en échec, l’« Annuler » de l’échec</span>
+        <div class="mbar err"><div class="msgs ugrid"><p class="mrow" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».</span></p><div class="urow"><span class="undo ring zero">Annuler</span></div><p class="mrow span2 sep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg><span class="t" style="font-weight:500">Tom est dans la voiture de Sophie</span></p></div><span class="x" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+      </div></div>
+    </div>
+
+
+    <div class="state">
+      <h3>« Annuler » quand la liste défile (v3.3.4, #350)</h3>
+      <p>« Annuler » est coupé par un bord de la liste, puis atteint au clavier : Tab au bord bas (3a), Maj+Tab depuis « Fermer » au bord haut (3b). Chromium l’amène en vue collé au bord, et le contour y est coupé. Avec <code>scroll-my-1</code> sur le bouton, il s’arrête à 4 px du bord, et le contour est entier. Ces maquettes défilent vraiment : la position est celle que Chromium a mesurée. <span class="crit">F1.19</span></p>
+      <div class="phone"><div class="screen" style="gap:12px">
+        <span class="small-muted">3a, bord bas, sans <code>scroll-my-1</code> : 0 px, le côté bas est coupé</span>
+        <div class="mbar err"><div class="msgs ugrid edge" style="max-height:150px" data-edge="bottom" data-gap="0"><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Léa · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Hugo · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Inès · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».</span></p><div class="urow sep"><span class="undo ring zero">Annuler</span></div><p class="mrow span2 sep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg><span class="t" style="font-weight:500">Tom est dans la voiture de Sophie</span></p></div><span class="x" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        <span class="small-muted">3a, bord bas, avec <code>scroll-my-1</code> : 4 px</span>
+        <div class="mbar err"><div class="msgs ugrid edge" style="max-height:150px" data-edge="bottom" data-gap="4"><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Léa · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Hugo · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Inès · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».</span></p><div class="urow sep"><span class="undo ring zero">Annuler</span></div><p class="mrow span2 sep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg><span class="t" style="font-weight:500">Tom est dans la voiture de Sophie</span></p></div><span class="x" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        <span class="small-muted">3b, bord haut, sans <code>scroll-my-1</code> : 0 px, le côté haut est coupé</span>
+        <div class="mbar err"><div class="msgs ugrid edge" style="max-height:150px" data-edge="top" data-gap="0"><p class="mrow sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».</span></p><div class="urow sep"><span class="undo ring zero">Annuler</span></div><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Léa · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Hugo · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Inès · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg><span class="t" style="font-weight:500">Tom est dans la voiture de Sophie</span></p></div><span class="x" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        <span class="small-muted">3b, bord haut, avec <code>scroll-my-1</code> : 4 px</span>
+        <div class="mbar err"><div class="msgs ugrid edge" style="max-height:150px" data-edge="top" data-gap="4"><p class="mrow sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».</span></p><div class="urow sep"><span class="undo ring zero">Annuler</span></div><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Léa · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Hugo · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep" style="align-items:flex-start"><svg style="margin-top:12px" viewBox="0 0 24 24" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg><span class="t">Inès · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Vérifiez la connexion, puis réessayez.</span></p><p class="mrow span2 sep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg><span class="t" style="font-weight:500">Tom est dans la voiture de Sophie</span></p></div><span class="x" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+      </div></div>
+    </div>
+
+    <div class="state">
       <h3>Le bouton rouge de la confirmation</h3>
       <p>Le contour est à 2 px du bouton rouge : il touche le blanc de la boîte (<code>bg-popover</code>, 4,74:1), jamais le rouge (1,01:1). « Annuler », dessous, touche le même blanc : la boîte n’a pas de pied gris. <span class="crit">F1.5</span></p>
       <div class="phone"><div class="screen">
@@ -257,7 +386,7 @@
     </div>
     <div class="state">
       <h3>« Placer » inactif, sans translucidité</h3>
-      <p>Aucune case cochée : « Placer » est inactif (<code>aria-disabled</code>) mais garde le focus. Il ne le dit plus par l’opacité, qui pâlirait aussi le contour (1,96:1), mais par ses couleurs : fond <code>muted</code>, texte <code>muted-foreground</code> (4,35:1), même libellé. Actif, il redevient noir. <span class="crit">F1.9</span></p>
+      <p>Aucune case cochée : « Placer » est inactif (<code>aria-disabled</code>) mais garde le focus. Il ne le dit plus par l’opacité, qui pâlirait aussi le contour (1,96:1), mais par ses couleurs : fond <code>muted</code>, texte <code>muted-foreground</code> (4,35:1), même libellé ; au survol, la flèche (v3.3.3). Actif, il redevient noir. <span class="crit">F1.9</span></p>
       <div class="phone"><div class="screen" style="gap:10px">
         <span class="small-muted">Inactif</span><div class="btn inactive" style="flex:none">Placer</div>
         <span class="small-muted">Inactif, au focus</span><div class="btn inactive ring" style="flex:none">Placer</div>
@@ -631,6 +760,16 @@
     <li><strong>Les repères de #314 suivent la même règle</strong> ; leurs critères sont F1.17.</li>
     <li><strong>Les tests lisent les couleurs en sRGB par un canevas</strong> : le navigateur les rend en <code>oklch</code>.</li>
   </ol>
+  <h3 style="margin-top:24px">Nouvelles en v3.3.3 (#347)</h3>
+  <ol class="decisions" start="18">
+    <li><strong>Le pointeur est porté par cette maquette</strong>, à côté de l’anneau : une règle de toute l’application, posée une fois dans <code>globals.css</code> ; une maquette d’écran n’en couvrirait qu’un.</li>
+    <li><strong>Un élément inactif montre la flèche</strong> (<code>default</code>), pas <code>not-allowed</code>, « Placer » compris : la convention des systèmes et du <code>preflight</code> de Tailwind 3 ; un bouton <code>disabled</code> laisse déjà passer le survol (<code>pointer-events: none</code>) et montre la flèche, et un seul pointeur vaut pour un même état.</li>
+    <li><strong>Aucune condition de média</strong> (<code>hover</code>, <code>pointer: fine</code>) : un écran tactile ne dessine pas de pointeur ; sans condition, le projet <code>e2e</code> (Pixel 7) lit la même valeur qu’un ordinateur, et P1.10 le vérifie au bureau.</li>
+  </ol>
+  <h3 style="margin-top:24px">Nouvelle en v3.3.4 (#350)</h3>
+  <ol class="decisions" start="21">
+    <li><strong>La rangée d’« Annuler » prend 2 px de marge à droite</strong> (<code>pr-0.5</code>), et le contour reste à 0 px, comme « Fermer » : c’est le seul côté coupé, et la marge ne coûte que 2 px au texte de cette ligne. Le contour à l’intérieur (−2 px) est écarté : sur la barre sombre, il recouvrirait la bordure du bouton, presque de la même couleur (1,15:1), et le focus se verrait à peine. Une marge sur toute la liste prendrait 2 px à chaque ligne. Le bouton prend aussi <code>scroll-my-1</code> : quand la liste défile, Chromium colle au bord un bouton qu’il amène en vue depuis une partie coupée (mesuré).</li>
+  </ol>
 
   <h2>Hors périmètre</h2>
   <ul style="max-width:80ch">
@@ -639,6 +778,24 @@
     <li>L’affichage des champs date et heure natifs, qui suit le navigateur et non la page.</li>
     <li>Les autres onglets déjà ouverts : ils prennent la nouvelle langue à leur prochain chargement.</li>
     <li>Le 404 générique de Next pour une adresse hors de <code>/e/…</code> (par exemple <code>/abc</code>), qui n’a pas de bas de page.</li>
-    <li>v3.1 : la palette sombre ; le survol ; le widget Crisp ; redessiner les maquettes <code>event-board</code>, <code>home</code> et <code>organizer-view</code>, qui renvoient ici. (Les repères de #314 sont désormais dans la règle.)</li>
+    <li>v3.1 : la palette sombre ; les couleurs au survol (le pointeur au survol est la v3.3.3) ; le widget Crisp ; redessiner les maquettes <code>event-board</code>, <code>home</code> et <code>organizer-view</code>, qui renvoient ici. (Les repères de #314 sont désormais dans la règle.)</li>
+    <li>v3.3.3 : les couleurs au survol, inchangées ; les champs et libellés inactifs (aucun n’existe) ; le fond d’une feuille, qui la ferme au clic et garde la flèche ; le widget Crisp, qui n’est pas à nous.</li>
+    <li>v3.3.4 : l’anneau de la liste et de « Fermer », déjà entiers (F1.6) ; le style d’« Annuler » hors focus et au survol.</li>
   </ul>
 </div>
+
+<script>
+/* v3.3.4 (#350): place each scene-3 list where Chromium leaves it after the keyboard brings « Annuler » into view. */
+(function () {
+  function place() {
+    document.querySelectorAll(".msgs.edge").forEach(function (list) {
+      var b = list.querySelector(".undo"); if (!b) return;
+      var gap = Number(list.dataset.gap), l = list.getBoundingClientRect(), r = b.getBoundingClientRect();
+      if (list.dataset.edge === "bottom") list.scrollTop += (r.bottom - l.bottom) + gap;
+      else list.scrollTop += (r.top - l.top) - gap;
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", place); else place();
+  window.addEventListener("load", place);
+})();
+</script>
