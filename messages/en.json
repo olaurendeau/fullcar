@@ -340,6 +340,7 @@
     "cookiesBlocked": "Votre navigateur bloque les cookies, qui retiennent le choix de la langue. Autorisez-les pour ce site, puis réessayez."
   },
   "Contact": {
+    "home": "Home",
     "link": "Contact us",
     "newTab": "(opens in a new tab)"
   },

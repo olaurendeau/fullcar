@@ -12,13 +12,14 @@ const noSubscription = () => () => {};
 type Problem = "failed" | "cookiesBlocked";
 
 /**
- * The footer's row (#113): a button that names the other language in that language, then
- * `children`, the contact link. A tap asks the server to remember the language; its answer
- * is the page already rendered in it, applied in place, without reloading the document.
+ * The footer's row (#113): `before`, the home link (#232), then a button that names the
+ * other language in that language, then `children`, the contact link. A tap asks the server
+ * to remember the language; its answer is the page already rendered in it, applied in place,
+ * without reloading the document.
  * Nothing else happens on the client: no refresh, no navigation, and nothing read from the URL.
  * When it does not work, a message above the row says why, in the language asked for (#129).
  */
-export function LanguageSwitch({ children }: { children: ReactNode }) {
+export function LanguageSwitch({ before, children }: { before?: ReactNode; children: ReactNode }) {
   const t = useTranslations("LanguageSwitch");
   const locale = useLocale();
   const next = otherLocale(isLocale(locale) ? locale : defaultLocale);
@@ -74,6 +75,7 @@ export function LanguageSwitch({ children }: { children: ReactNode }) {
         </p>
       )}
       <div className="flex flex-wrap justify-center">
+        {before}
         <button
           ref={button}
           type="button"
