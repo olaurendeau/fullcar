@@ -330,11 +330,13 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     });
   }
 
-  for (const viewport of [
-    { width: 360, height: 780 },
-    { width: 1280, height: 800 },
-  ]) {
-    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the organiser scrolls up in the very frame the browser pulls the scroll back: the car moves by that scroll alone (#297)`, async ({
+  for (const [viewport, bar] of [
+    [{ width: 360, height: 780 }, "measured before"],
+    [{ width: 1280, height: 800 }, "measured before"],
+    [{ width: 360, height: 780 }, "measured in that frame"],
+    [{ width: 1280, height: 800 }, "measured in that frame"],
+  ] as const) {
+    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the organiser scrolls up in the very frame the browser pulls the scroll back, the bar of messages ${bar}: the car moves by that scroll alone (#297, #316)`, async ({
       page,
       seededEvent,
     }) => {
@@ -355,19 +357,30 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
 
       // In the task that commits the withdrawal, before the next frame's observers: the layout
       // clamps the scroll to the end of a shorter page, then the organiser scrolls 60 px up.
-      await panel(page).evaluate((element) => {
+      // « measured in that frame »: the room kept below for the bar, opened by the seat, is only
+      // measured then, before the panel's observer, as a loaded machine makes it (#316). The
+      // clamp is made without that room, and the page is longer again when the observer runs.
+      const measured = await panel(page).evaluate((element, late) => {
         const height = element.getBoundingClientRect().height;
         const end = () => document.documentElement.scrollHeight - window.innerHeight;
         const atStart = window.scrollY;
+        const room = document.documentElement.style;
+        const measured = room.getPropertyValue("--message-bar-height");
         const observer = new MutationObserver(() => {
           const after = element.getBoundingClientRect().height;
           if (after > height - 100) return;
           observer.disconnect();
+          if (late) {
+            room.removeProperty("--message-bar-height");
+            requestAnimationFrame(() => room.setProperty("--message-bar-height", measured));
+          }
           Object.assign(window, { pulledBack: Math.max(0, atStart - end()), withdrawn: height - after });
           window.scrollBy({ top: -60, behavior: "instant" });
         });
         observer.observe(element, { subtree: true, childList: true });
-      });
+        return parseFloat(measured);
+      }, bar === "measured in that frame");
+      expect(measured).toBeGreaterThan(0);
       await reads.fail();
       await expectWithdrawn(page);
       // Pulled back by part of the withdrawn height only: the case where the sum is wrong without #297.
