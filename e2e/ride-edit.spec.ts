@@ -370,6 +370,38 @@ test.describe("edit a car", () => {
     });
   }
 
+  // Rule 2 (v4.4.5): nothing changed is not checked either. A place of a zero-width space alone,
+  // which the database takes and `validateRide` reads as empty, closes the sheet.
+  test("nothing changed is not checked: a place stored that the form refuses closes the sheet, and nothing is sent", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await db.updateTable("ride").set({ location: "​" }).where("id", "=", scene.car).execute();
+    await page.goto(`/e/${seededEvent.id}`);
+    const before = await rowsOf(db, seededEvent.id);
+    const sent = changes(page, scene.car);
+    const openInvisible = async () => {
+      await editButton(page).click();
+      const form = dialog(page, "Modifier la voiture");
+      await expect(form.getByLabel("Lieu de départ")).toHaveValue("​");
+      return form;
+    };
+    await (await openInvisible()).getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(editButton(page)).toBeFocused();
+    await expect(alerts(page)).toHaveCount(0);
+    expect(await rowsOf(db, seededEvent.id)).toEqual(before);
+
+    // As `nothingSentBefore`, with a place the form takes: one request, the second.
+    const form = await openInvisible();
+    await form.getByLabel("Lieu de départ").fill(GARE);
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(sent.length).toBe(1);
+    expect(!!sent[0].postData()?.includes(GARE)).toBe(true);
+  });
+
   test("W1.5: offline, nothing changed: the sheet closes, and nothing is said", async ({ context, page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     const sent = changes(page, scene.car);
