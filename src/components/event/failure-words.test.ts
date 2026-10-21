@@ -213,12 +213,12 @@ describe("offerWhy: « Proposer une voiture » (C11.11)", () => {
   });
 
   for (const row of offers) {
-    // The passengers ticked in « Qui monte avec vous ? », which the form does not ask yet (#171).
-    for (const source of sources(row.failure).filter((source) => source !== "alreadyInCar")) {
+    // `alreadyInCar` names the passengers ticked in « Qui monte avec vous ? » (#171).
+    for (const source of sources(row.failure)) {
       it(`${row.action}, ${source}`, () => {
-        const { notDone } = ACTIONS[row.action];
+        const { notDone, passengers = [] } = ACTIONS[row.action];
         if (notDone.kind !== "offerRide") throw new Error(row.action);
-        const why = offerWhy(source as Parameters<typeof offerWhy>[0], notDone.driver);
+        const why = offerWhy(source as Parameters<typeof offerWhy>[0], notDone.driver, passengers);
         expect(failureText(words("fr"), notDone, why)).toBe(row.fr);
         expect(failureText(words("en"), notDone, why)).toBe(row.en);
       });
@@ -226,7 +226,7 @@ describe("offerWhy: « Proposer une voiture » (C11.11)", () => {
   }
 
   it("gives `alreadyInCar`, with no passenger ticked to name, the generic reason", () => {
-    expect(offerWhy("alreadyInCar", "Marc")).toEqual({ kind: "failed" });
+    expect(offerWhy("alreadyInCar", "Marc", [])).toEqual({ kind: "failed" });
   });
 });
 
@@ -310,7 +310,7 @@ const NO_RETOUR: Record<string, () => [NotDone, Why]> = {
     { kind: "seats", names: ["Tom", "Léa"], driver: "Sophie" },
     whyOf("noRetour"),
   ],
-  "« Proposer une voiture » depuis le Retour : Marc": () => [{ kind: "offerRide", driver: "Marc", legs: "retour" }, offerWhy("noRetour", "Marc")],
+  "« Proposer une voiture » depuis le Retour : Marc": () => [{ kind: "offerRide", driver: "Marc", legs: "retour" }, offerWhy("noRetour", "Marc", [])],
   "« Ajouter une personne » depuis le Retour : Inès": () => [{ kind: "addPerson", firstName: "Inès" }, personWhy("noRetour")],
   "« Modifier » la voiture : Sophie, retour": () => [{ kind: "editRide", driver: "Sophie", leg: "retour" }, whyOf("noRetour")],
 };

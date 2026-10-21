@@ -188,7 +188,8 @@
     "seats": "Seats, driver not included",
     "seatsHint": "From 1 to 8.",
     "note": "Note (optional)",
-    "noteHint": "What passengers should know."
+    "noteHint": "What passengers should know.",
+    "passengers": "Who rides with you?"
   },
   "FormErrors": {
     "required": "Required.",
@@ -197,7 +198,8 @@
     "invalidPhone": "Not a valid number: 6 to 15 digits, with only spaces and + . - ( )",
     "invalidTime": "Not a valid time.",
     "seats": "From 1 to 8 seats.",
-    "chooseDriver": "Choose who drives."
+    "chooseDriver": "Choose who drives.",
+    "tooManyPassengers": "{seats, plural, one {Only # seat} other {Only # seats}}: untick someone or add seats."
   },
   "Actions": {
     "submit": "Confirm",

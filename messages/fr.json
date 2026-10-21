@@ -188,7 +188,8 @@
     "seats": "Places, sans compter qui conduit",
     "seatsHint": "De 1 à 8.",
     "note": "Note (facultatif)",
-    "noteHint": "Ce que les personnes à bord doivent savoir."
+    "noteHint": "Ce que les personnes à bord doivent savoir.",
+    "passengers": "Qui monte avec vous ?"
   },
   "FormErrors": {
     "required": "Champ requis.",
@@ -197,7 +198,8 @@
     "invalidPhone": "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )",
     "invalidTime": "Heure non valide.",
     "seats": "De 1 à 8 places.",
-    "chooseDriver": "Choisissez qui conduit."
+    "chooseDriver": "Choisissez qui conduit.",
+    "tooManyPassengers": "{seats, plural, one {# place seulement} other {# places seulement}} : décochez quelqu’un ou ajoutez des places."
   },
   "Actions": {
     "submit": "Valider",
