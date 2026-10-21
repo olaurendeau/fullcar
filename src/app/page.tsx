@@ -43,8 +43,8 @@ export default function Home() {
         </ol>
       </div>
       <p className="text-muted-foreground">{t("deleted")}</p>
-      {/* The last link of the page (#69, K1): after the steps. */}
-      <ContactFooter />
+      {/* The last link of the page (#69, K1): after the steps. No home link on the home page (A3.2). */}
+      <ContactFooter withHomeLink={false} />
     </main>
   );
 }
