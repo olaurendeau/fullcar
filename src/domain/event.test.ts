@@ -314,6 +314,31 @@ describe("validateEventChange", () => {
       });
     });
 
+    it("accepts kept dates beyond the upper bound: an event created in Tokyo, changed from Montréal the same day", () => {
+      const at = new Date("2026-10-21T01:00:00Z"); // 10:00 on the 21st in Tokyo, 21:00 on the 20th in Montréal
+      const saved = process.env.TZ;
+      try {
+        process.env.TZ = "Asia/Tokyo";
+        const { title, location, allerAt, retourAt } = eventOf(
+          { ...valid, allerDate: "2027-10-21", retourDate: "2027-10-21" },
+          deviceBounds(at),
+        );
+        const created: EventHeader = { title, location, allerAt, retourAt };
+        process.env.TZ = "America/Toronto";
+        const montreal = deviceBounds(at);
+        expect(montreal.max).toBe("2027-10-20");
+        const result = validateEventChange(
+          { ...valid, title: "Tournoi de Rennes U13", allerDate: "2027-10-21", retourDate: "2027-10-21" },
+          montreal,
+          created,
+        );
+        expect(result).toEqual({ ok: true, event: { ...created, title: "Tournoi de Rennes U13" } });
+      } finally {
+        if (saved === undefined) delete process.env.TZ;
+        else process.env.TZ = saved;
+      }
+    });
+
     it("still bounds a start that matches nothing saved", () => {
       expect(changeErrors({ ...kept, allerDate: "2026-10-12" }, { ...before, allerAt: "2026-12-12 07:30:00" })).toEqual({
         allerDate: "tooEarly",
