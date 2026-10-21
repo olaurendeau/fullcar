@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Withdrawal } from "./bar-state";
-import { coverPage, forget, onWithdraw, sendAbout, whenPageShown } from "./hidden-page";
+import { aboutOf, coverPage, forget, onWithdraw, sendAbout, whenPageShown } from "./hidden-page";
 
 /** Once the microtask a sheet leaves at its unmount has run. */
 const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -145,6 +145,33 @@ describe("sendAbout (#208, #216)", () => {
     uncover();
     await settled();
     expect(said).toEqual(["Tom"]);
+  });
+
+  it("sends(fields, subjects): each subject, then each of its fields", () => {
+    expect(aboutOf(["person:tom"])).toEqual(["person:tom"]);
+    expect(aboutOf(["person:tom"], ["firstName", "phone"])).toEqual(["person:tom", "person:tom:firstName", "person:tom:phone"]);
+    expect(aboutOf(["offer:aller:new:Marc", "offer:retour:new:Marc"])).toEqual(["offer:aller:new:Marc", "offer:retour:new:Marc"]);
+  });
+
+  // « Le sujet d’un échec », line « Proposer une voiture »: one subject per leg of the offer (#228).
+  it("an offer on both legs is withdrawn by one on both, in either order; neither by one on a leg, nor by another driver's", async () => {
+    const uncover = coverPage();
+    const said: string[] = [];
+    const both = ["offer:aller:new:Marc", "offer:retour:new:Marc"];
+    sendAbout(aboutOf(both)).whenClosed(() => said.push("both"));
+    sendAbout(aboutOf(["offer:aller:new:Marc"])).whenClosed(() => said.push("aller"));
+    sendAbout(aboutOf(["offer:retour:new:Marc", "offer:aller:claire"]));
+    sendAbout(aboutOf(["offer:aller:claire"]));
+    uncover();
+    await settled();
+    expect(said).toEqual(["both", "aller"]);
+
+    const again = coverPage();
+    sendAbout(aboutOf(both)).whenClosed(() => said.push("both again"));
+    sendAbout(aboutOf([...both].reverse()));
+    again();
+    await settled();
+    expect(said).toEqual(["both", "aller"]);
   });
 
   it("a car removed: what was sent about it, waiting or on its way, is never said; what is sent since is", async () => {
