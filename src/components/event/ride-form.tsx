@@ -328,6 +328,10 @@ function RideForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (mode.kind === "edit") {
+      // Nothing changed, character for character, since the form showed: the sheet closes, the
+      // focus back on « Modifier »; nothing is checked nor sent, the step does not open, and the
+      // bar keeps what it holds (v4.4.5, #313).
+      if (shown && RIDE_FIELDS.every((name) => values[name] === shown[name])) return onDone();
       const ride = validateRide(values);
       if (!ride.ok) return showErrors(ride.errors, false, ride.first);
       showErrors({}, false, undefined);

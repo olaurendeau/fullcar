@@ -1,8 +1,8 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -69,6 +69,34 @@ async function openStep(page: Page, seats: string) {
   const step = dialog(page, STEP);
   await expect(step.getByRole("checkbox", { name: "Nina" })).toBeFocused();
   return step;
+}
+
+const NOTE = "Gilets jaunes";
+
+/**
+ * The changes of the car the page sends, from now on: server actions whose body carries its id.
+ * Started at the click on « Modifier » that opens the criterion's form (v4.4.5, H6).
+ */
+function changes(page: Page, rideId: string): Request[] {
+  const sent: Request[] = [];
+  page.on("request", (request) => {
+    if (request.headers()["next-action"] && request.postData()?.includes(rideId)) sent.push(request);
+  });
+  return sent;
+}
+
+/**
+ * « Aucune requête » (v4.4.5): the note, sent after from a reopened form. Once it is done, `sent`
+ * holds it alone; had the « Valider » before sent anything, it would hold two. Counted by its
+ * length, and only a boolean is printed: a body carries the device's token (#363).
+ */
+async function nothingSentBefore(page: Page, sent: Request[]) {
+  const form = await openForm(page);
+  await form.getByLabel("Note (facultatif)").fill(NOTE);
+  await form.getByRole("button", { name: "Valider" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(sent.length).toBe(1);
+  expect(!!sent[0].postData()?.includes(NOTE)).toBe(true);
 }
 
 test.describe("edit a car", () => {
@@ -303,4 +331,80 @@ test.describe("edit a car", () => {
       });
     }
   }
+
+  // #313 (v4.4.5, H6): « Valider » with nothing changed closes « Modifier la voiture », and sends
+  // and checks nothing. A field changed, then put back as the form showed it, is not changed.
+  const alerts = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
+  const unchanged = {
+    "W1.1: « Valider »": (form: Locator) => form.getByRole("button", { name: "Valider" }).click(),
+    "W1.2: Enter in « Lieu de départ »": (form: Locator) => form.getByLabel("Lieu de départ").press("Enter"),
+    "W1.3: « Valider » after the place and the time changed, then put back": async (form: Locator) => {
+      await form.getByLabel("Lieu de départ").fill(GARE);
+      await form.getByLabel("Lieu de départ").fill("Mairie de Cesson");
+      await form.getByLabel("Heure de départ").fill("07:15");
+      await form.getByLabel("Heure de départ").fill("07:00");
+      await form.getByRole("button", { name: "Valider" }).click();
+    },
+    "W1.4: back from the step, the seats put back, « Valider »": async (form: Locator) => {
+      const page = form.page();
+      await form.getByLabel(SEATS).fill("1");
+      await form.getByRole("button", { name: "Valider" }).click();
+      await dialog(page, STEP).getByRole("button", { name: "Annuler" }).click();
+      const back = dialog(page, "Modifier la voiture");
+      await back.getByLabel(SEATS).fill("3");
+      await back.getByRole("button", { name: "Valider" }).click();
+    },
+  };
+  for (const [title, validate] of Object.entries(unchanged)) {
+    test(`${title} with nothing changed: the sheet closes, the focus on « Modifier », nothing sent`, async ({ db, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      const before = await rowsOf(db, seededEvent.id);
+      const sent = changes(page, scene.car);
+      await validate(await openForm(page));
+      // The step did not open again: no sheet is left.
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(editButton(page)).toBeFocused();
+      await expect(alerts(page)).toHaveCount(0);
+      expect(await rowsOf(db, seededEvent.id)).toEqual(before);
+      await nothingSentBefore(page, sent);
+    });
+  }
+
+  test("W1.5: offline, nothing changed: the sheet closes, and nothing is said", async ({ context, page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    const sent = changes(page, scene.car);
+    const form = await openForm(page);
+    await context.setOffline(true);
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(editButton(page)).toBeFocused();
+    await expect(alerts(page)).toHaveCount(0);
+    await expect(messages(page)).toHaveCount(0);
+    await expect(page.getByText("Action impossible, vérifiez la connexion")).toHaveCount(0);
+
+    // Back online before the note's request.
+    await context.setOffline(false);
+    await nothingSentBefore(page, sent);
+  });
+
+  test("W1.6: nothing changed, under a failure of this car in the bar: the bar does not change", async ({ page, seededEvent }) => {
+    const answer = await holdFirst(page, GARE, true);
+    await page.goto(`/e/${seededEvent.id}`);
+    // Sent before the count starts.
+    await sendThenClose(page);
+    await failHeld(page, answer);
+    await expect(messages(page)).toHaveText([BAR_FAILED]);
+    // Said too: the region is written after its line shows.
+    await expect(bar(page)).toHaveText(BAR_FAILED);
+
+    const sent = changes(page, scene.car);
+    const form = await openForm(page);
+    const record = await recordBar(page);
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(editButton(page)).toBeFocused();
+    await expect(messages(page)).toHaveText([BAR_FAILED]);
+    expect(await record()).toEqual({ writes: [], lines: [] });
+    await nothingSentBefore(page, sent);
+  });
 });
