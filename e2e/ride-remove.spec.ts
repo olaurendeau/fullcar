@@ -180,6 +180,8 @@ test.describe("remove a car", () => {
       await page.goto(`/e/${seededEvent.id}`);
       await removeButton(car(panel(page), "Claire")).click();
       await confirm(page).click();
+      // Hidden by the confirmation, the car is « gone » before the answer: reloaded then, the other device would see it (#295).
+      await expect(confirmation(page)).toHaveCount(0);
       await expect(car(panel(page), "Claire")).toHaveCount(0);
 
       await other.reload();
@@ -366,9 +368,12 @@ test.describe("an offer sent again after a removal", () => {
     await form(page).getByLabel("Lieu de départ", { exact: true }).fill("Mairie de Vitré");
     await form(page).getByRole("button", { name: "Valider" }).click();
   }
+  // While the confirmation is open, Radix hides the page from role queries: the car is « gone »
+  // before the removal is answered (#295). The confirmation closes once it is: only then is a car not found a car removed.
   async function remove(page: Page) {
     await removeButton(car(panel(page), "Marc")).click();
     await confirm(page).click();
+    await expect(confirmation(page)).toHaveCount(0);
     await expect(car(panel(page), "Marc")).toHaveCount(0);
   }
 
