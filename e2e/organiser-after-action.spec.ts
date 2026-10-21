@@ -330,6 +330,57 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     });
   }
 
+  for (const viewport of [
+    { width: 360, height: 780 },
+    { width: 1280, height: 800 },
+  ]) {
+    test(`O1.11: at ${viewport.width} px, at the bottom of the page, the organiser scrolls up in the very frame the browser pulls the scroll back: the car moves by that scroll alone (#297)`, async ({
+      page,
+      seededEvent,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.addStyleTag({ content: "html, main { overflow-anchor: none !important; }" });
+      const title = carTitle(page, "Anaïs");
+      const y = async () => {
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        return (await title.boundingBox())!.y;
+      };
+      const reads = await holdPanelReads(page, seededEvent);
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      expect(await panel(page).evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThan(0);
+      await expect(title).toBeInViewport();
+      const before = await y();
+      await takeSeat(page, "Anaïs");
+      await expect.poll(reads.held).toBe(1);
+
+      // In the task that commits the withdrawal, before the next frame's observers: the layout
+      // clamps the scroll to the end of a shorter page, then the organiser scrolls 60 px up.
+      await panel(page).evaluate((element) => {
+        const height = element.getBoundingClientRect().height;
+        const end = () => document.documentElement.scrollHeight - window.innerHeight;
+        const atStart = window.scrollY;
+        const observer = new MutationObserver(() => {
+          const after = element.getBoundingClientRect().height;
+          if (after > height - 100) return;
+          observer.disconnect();
+          Object.assign(window, { pulledBack: Math.max(0, atStart - end()), withdrawn: height - after });
+          window.scrollBy({ top: -60, behavior: "instant" });
+        });
+        observer.observe(element, { subtree: true, childList: true });
+      });
+      await reads.fail();
+      await expectWithdrawn(page);
+      // Pulled back by part of the withdrawn height only: the case where the sum is wrong without #297.
+      const { pulledBack, withdrawn } = await page.evaluate(() => {
+        const { pulledBack, withdrawn } = window as unknown as { pulledBack: number; withdrawn: number };
+        return { pulledBack, withdrawn };
+      });
+      expect(pulledBack).toBeGreaterThan(1);
+      expect(pulledBack).toBeLessThan(withdrawn - 1);
+      expect(Math.abs((await y()) - before - 60)).toBeLessThanOrEqual(1);
+    });
+  }
+
   test.describe("at 1280 px", () => {
     test.use({ viewport: { width: 1280, height: 800 } });
 
