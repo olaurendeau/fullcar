@@ -297,7 +297,7 @@ test.describe("the organiser's token on the network", () => {
     const where = traffic.flatMap(({ at, ...parts }) =>
       Object.entries({ url: at, ...parts })
         .filter(([, text]) => text.includes(token))
-        .map(([part]) => `${at} ${part}`),
+        .map(([part]) => `${at.replaceAll(token, "{token}")} ${part}`),
     );
     expect(where).toEqual(["POST /nouveau responseBody", `POST ${admin} requestBody`, `POST ${admin} requestBody`]);
 
@@ -323,7 +323,7 @@ test.describe("the organiser's token on the network", () => {
 
     await page.goto(`${admin}#${token}`, { waitUntil: "networkidle" });
     await expect(page.getByRole("region", { name: WORDS.fr.panel })).toBeVisible();
-    expect(checks()).toHaveLength(1);
+    expect(checks().length, "checks carrying the token").toBe(1);
     const before = traffic.length;
 
     await expect(page.getByRole("button", { name: "English", exact: true })).toBeEnabled();
@@ -334,14 +334,14 @@ test.describe("the organiser's token on the network", () => {
 
     const after = traffic.slice(before);
     // Watched: the switch is in what was recorded.
-    expect(after.map(({ at, requestBody }) => `${at} ${requestBody}`)).toContain(`POST ${admin} ["en"]`);
+    expect(after.map(({ at, requestBody }) => `${at} ${requestBody}`.replaceAll(token, "{token}"))).toContain(`POST ${admin} ["en"]`);
     const where = after.flatMap(({ at, ...parts }) =>
       Object.entries({ url: at, ...parts })
         .filter(([, text]) => text.includes(token))
-        .map(([part]) => `${at} ${part}`),
+        .map(([part]) => `${at.replaceAll(token, "{token}")} ${part}`),
     );
     expect(where).toEqual([]);
-    expect(checks()).toHaveLength(1);
+    expect(checks().length, "checks carrying the token").toBe(1);
     expect(JSON.stringify(await context.cookies())).not.toContain(token);
   });
 });
