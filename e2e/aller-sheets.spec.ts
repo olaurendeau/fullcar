@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
-import { seedPerson, seedPlacement } from "@/db/test-participants";
+import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
@@ -224,6 +224,7 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     seededEvent,
   }) => {
     const scope = await open(page, seededEvent.id);
+    const seen = await watchAlerts(page);
     await scope.getByRole("button", { name: FR.add, exact: true }).click();
     await dialog(page, FR.add).getByLabel("Prénom").fill("Inès");
     await expect(dialog(page, FR.add).getByRole("checkbox", { name: FR.both })).toBeChecked();
@@ -242,6 +243,8 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     expect(await legsOf(db, seededEvent.id, "Inès")).toEqual(["aller"]);
     await expect(lines(page)).toHaveCount(0);
     await expectFocusStays(page, title(page));
+    // Said in the sheet, and nothing written in the bar under it.
+    expect(await seen()).toEqual({ inSheet: true, barHidden: false });
   });
 
   test("M7.8: « Aller et retour », the sheet closed before the answer: the bar says to add Inès again", async ({ page, db, seededEvent }) => {
@@ -263,6 +266,83 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
   });
 });
 
+// Review of #351: the same person form, in a free seat's sheet of the aller (seat-sheet.tsx), stays
+// as « Ajouter une personne » does. Sophie, of another device, drives the aller (3 seats).
+test.describe("a free seat's sheet of the Aller, with « Aller et retour », the retour removed meanwhile", () => {
+  test.use({ locale: "fr-FR" });
+  const seat = (page: Page) => page.getByRole("tabpanel").getByRole("button", { name: "Place libre : prendre une place dans la voiture de Sophie" }).first();
+  const seedSophie = async (db: Db, eventId: string) => {
+    const sophie = (await seedPerson(db, eventId, { firstName: "Sophie" })).id;
+    return seedRide(db, eventId, sophie, { leg: "aller" });
+  };
+  /** The form refused: « Aller et retour » gone, the first name kept, the alert said, and « Valider » focused. */
+  async function expectRefused(page: Page, form: Locator) {
+    await expect(form.getByRole("alert")).toHaveText(FR.noRetour);
+    await expect(form.getByRole("checkbox", { name: FR.both })).toHaveCount(0);
+    await expect(form.getByLabel("Prénom")).toHaveValue("Inès");
+    await expectFocusStays(page, form.getByRole("button", { name: "Valider" }));
+  }
+
+  test("the first registration from a seat stays; a second « Valider » seats Inès at the aller", async ({ page, db, seededEvent }) => {
+    const rideId = await seedSophie(db, seededEvent.id);
+    await open(page, seededEvent.id);
+    const seen = await watchAlerts(page);
+    await seat(page).click();
+    const form = dialog(page, FR.add);
+    await form.getByLabel("Prénom").fill("Inès");
+    await expect(form.getByRole("checkbox", { name: FR.both })).toBeChecked();
+    await removeRetourInDb(db, seededEvent.id);
+    await form.getByLabel("Prénom").press("Enter");
+
+    await expectRefused(page, form);
+    expect(await legsOf(db, seededEvent.id, "Inès")).toEqual([]);
+
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const placed = await db
+      .selectFrom("placement")
+      .innerJoin("person", "person.id", "placement.person_id")
+      .select(["placement.leg", "placement.ride_id"])
+      .where("person.event_id", "=", seededEvent.id)
+      .where("person.first_name", "=", "Inès")
+      .execute();
+    expect(placed).toEqual([{ leg: "aller", ride_id: rideId }]);
+    expect(await seen()).toEqual({ inSheet: true, barHidden: false });
+  });
+
+  test("« Ajouter une personne » in « Qui monte… ? » stays; a second « Valider » adds Inès to its list, at the aller", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    await seedSophie(db, seededEvent.id);
+    const token = newToken();
+    for (const firstName of ["Tom", "Léa"]) {
+      const personId = (await seedPerson(db, seededEvent.id, { firstName }, token)).id;
+      await seedPlacement(db, { personId, eventId: seededEvent.id, leg: "aller", rideId: null });
+    }
+    await holdToken(page, seededEvent.id, token);
+    await open(page, seededEvent.id);
+    const seen = await watchAlerts(page);
+    await seat(page).click();
+    const sheet = dialog(page, "Qui monte dans la voiture de Sophie ?");
+    await sheet.getByRole("button", { name: FR.add, exact: true }).click();
+    // The same sheet, titled after the form while it shows it.
+    const form = dialog(page, FR.add);
+    await form.getByLabel("Prénom").fill("Inès");
+    await removeRetourInDb(db, seededEvent.id);
+    await form.getByLabel("Prénom").press("Enter");
+
+    await expectRefused(page, form);
+    expect(await legsOf(db, seededEvent.id, "Inès")).toEqual([]);
+
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expectFocusStays(page, sheet.getByRole("checkbox", { name: "Inès", exact: true }));
+    expect(await legsOf(db, seededEvent.id, "Inès")).toEqual(["aller"]);
+    expect(await seen()).toEqual({ inSheet: true, barHidden: false });
+  });
+});
+
 // Review of #330: the aller's panel mounts anew as the tabs come, and the sheet in it with it;
 // Radix then gave the focus back to a trigger no longer in the page, and it fell to <body>.
 test.describe("a sheet of the Aller, a retour added meanwhile", () => {
@@ -271,6 +351,7 @@ test.describe("a sheet of the Aller, a retour added meanwhile", () => {
   test("the sheet stays as it opened, its focus kept; closed, the tabs come and the title has the focus", async ({ page, db, seededEvent }) => {
     const allerAlone = (each: Page) => each.getByRole("region", { name: "Aller", exact: true });
     const scope = await open(page, seededEvent.id, allerAlone);
+    const seen = await watchAlerts(page);
     const answer = await sendHeldRegistration(page, scope, "Inès", false);
     await scope.getByRole("button", { name: FR.offer, exact: true }).click();
     const place = dialog(page, FR.offer).getByLabel("Lieu de départ", { exact: true });
@@ -289,5 +370,7 @@ test.describe("a sheet of the Aller, a retour added meanwhile", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(tabs(page)).toHaveCount(2);
     await expectFocusStays(page, title(page));
+    // The registration done, nothing to say: no alert anywhere, nor a line under the sheet.
+    expect(await seen()).toEqual({ inSheet: false, barHidden: false });
   });
 });

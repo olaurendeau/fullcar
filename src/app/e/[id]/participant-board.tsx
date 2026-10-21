@@ -9,7 +9,7 @@ import {
   cellWhy,
   failureText,
   nameList,
-  noRetourAgain,
+  noRetourWhy,
   offerWhy,
   personWhy,
   undoWhy,
@@ -188,7 +188,8 @@ export function ParticipantBoard({
   // What became of a person's form, sent from `sheet`. In the bar, the failure names who, and
   // the fields sent for a change, then why; the form keeps the generic words. Sent from the
   // retour's tab once it is gone, the sheet closes (rule 9); from the aller's, « Aller et retour »
-  // goes from the sheet, and, closed, the bar says to add the person again (decision 47).
+  // goes from the sheet, and, closed, the bar says to add the person again (decision 47). A
+  // person's change, sent on no leg, says neither (`noRetourWhy`).
   function personFormOutcome(
     sent: Sent<PersonOutcome> | undefined,
     sheet: FromSheet & { notDone: NotDone },
@@ -206,10 +207,8 @@ export function ParticipantBoard({
     // The page shows the state a refusal carries.
     const problem = sent.ok ? "failed" : sent.problem;
     const why = outcome ? personWhy(outcome.error) : whyOf(problem);
-    const gone = why.kind === "noRetour";
-    const closes = gone && leg === "retour";
-    failedIn(sheet, { notDone: sheet.notDone, why: gone && !closes ? noRetourAgain("addPerson") : why, landmark, closes });
-    return gone ? { kind: "noRetour" } : { kind: "problem", problem };
+    failedIn(sheet, { notDone: sheet.notDone, landmark, ...noRetourWhy(why, leg, "addPerson") });
+    return why.kind === "noRetour" && leg ? { kind: "noRetour" } : { kind: "problem", problem };
   }
 
   // Each action runs once per sheet (`FromSheet.key`): one on its way never drops the action
@@ -279,10 +278,8 @@ export function ParticipantBoard({
     const why = outcome ? offerWhy(outcome.error, notDone.driver) : whyOf(problem);
     // Offered from the retour's tab once it is gone, the sheet closes (rule 9). From the aller's,
     // the retour goes from the sheet; closed, the bar says to offer the car again (decision 47).
-    const gone = why.kind === "noRetour";
-    const closes = gone && car.leg === "retour";
-    failedIn(sheet, { notDone, why: gone && !closes ? noRetourAgain("offerRide") : why, landmark, closes });
-    return gone ? { kind: "noRetour" } : { kind: "problem", problem };
+    failedIn(sheet, { notDone, landmark, ...noRetourWhy(why, car.leg, "offerRide") });
+    return why.kind === "noRetour" ? { kind: "noRetour" } : { kind: "problem", problem };
   };
 
   // « Annuler » (C5.10, rule 6): the persons placed get their state before on the leg back, if

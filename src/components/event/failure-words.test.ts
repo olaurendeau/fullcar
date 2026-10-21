@@ -13,6 +13,7 @@ import {
   failureText,
   nameList,
   noRetourAgain,
+  noRetourWhy,
   offerWhy,
   personWhy,
   undoWhy,
@@ -301,6 +302,26 @@ describe("undoWhy: « Annuler » (C5.10, C11.11)", () => {
     const leave: NotDone = { kind: "leave", names: ["Tom"], driver: "Paul" };
     expect(failureText(words("fr"), leave, undoWhy("noRetour"))).toBe("Tom n’a pas pu sortir de la voiture de Paul. Il n’y a plus de retour pour cet événement.");
     expect(failureText(words("en"), leave, undoWhy("noRetour"))).toBe("Tom could not leave Paul’s car. This event no longer has a return trip.");
+  });
+});
+
+// Rule 9 and decision 47 (#265, #266): what a form's `noRetour` says, by the leg it was sent on.
+describe("noRetourWhy", () => {
+  const noRetour = whyOf("noRetour");
+
+  it("sent on the retour: the sheet closes, and the bar says why", () => {
+    expect(noRetourWhy(noRetour, "retour", "addPerson")).toEqual({ why: noRetour, closes: true });
+  });
+
+  it("sent from the aller: the sheet stays, and closed, the bar says to send again for the aller alone", () => {
+    expect(noRetourWhy(noRetour, "aller", "addPerson")).toEqual({ why: noRetourAgain("addPerson"), closes: false });
+    expect(noRetourWhy(noRetour, "aller", "offerRide")).toEqual({ why: noRetourAgain("offerRide"), closes: false });
+  });
+
+  // Review of #351: a person's change goes on no leg, and never says to add her again.
+  it("sent on no leg, or another reason: as it is", () => {
+    expect(noRetourWhy(noRetour, undefined, "addPerson")).toEqual({ why: noRetour, closes: false });
+    expect(noRetourWhy(whyOf("offline"), "retour", "offerRide")).toEqual({ why: whyOf("offline"), closes: false });
   });
 });
 

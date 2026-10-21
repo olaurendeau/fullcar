@@ -60,6 +60,16 @@ export function undoWhy(error: "offline" | "failed" | "invalid" | "forbidden" | 
  */
 export const noRetourAgain = (action: "offerRide" | "addPerson"): Why => ({ kind: "noRetourAgain", action });
 
+/**
+ * What a form's `why` says, sent on `leg`: `noRetour` from a sheet of the retour closes it, and
+ * the bar says why (rule 9); from the aller, closed, the bar says to send `action` again for the
+ * aller alone (decision 47). Sent on no leg (a person's change), or any other reason: as it is.
+ */
+export function noRetourWhy(why: Why, leg: Leg | undefined, action: "offerRide" | "addPerson"): { why: Why; closes: boolean } {
+  if (why.kind !== "noRetour" || leg === undefined) return { why, closes: false };
+  return leg === "retour" ? { why, closes: true } : { why: noRetourAgain(action), closes: false };
+}
+
 /** A cell of « Vos inscriptions » as its sheet showed it at the send: the person, the leg, and her state there. */
 export interface Cell {
   firstName: string;
