@@ -33,9 +33,11 @@ export function compensation({
  * jumps on screen. Whatever changed it, sections withdrawn or rendered, lists, alert, tiles.
  * The browser's clamp only pulls the scroll back, to the end of a page that got shorter, and
  * the organiser may scroll in that same frame (#297): so the scroll before the change is the
- * last one seen while the frame had the height this observer knew, the clamp is how far that
- * scroll is past the end of the page now, and whatever else moved meanwhile is the organiser's
- * own, kept as it is.
+ * last one seen while the frame had the height this observer knew, and whatever else moved
+ * meanwhile is the organiser's own, kept as it is. The clamp is how far that scroll is past
+ * the end of the page as the first scroll event after the change sees it: later in the frame,
+ * before this observer, another one may lengthen the page again, as the bar of messages does
+ * once measured (#316). Without such an event, nothing but the clamp has scrolled.
  */
 export function useKeepBoardInPlace(ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -43,16 +45,23 @@ export function useKeepBoardInPlace(ref: RefObject<HTMLElement | null>) {
     if (!frame) return;
     let height = frame.getBoundingClientRect().height;
     let scrolled = window.scrollY;
+    let end: number | null = null;
     const onScroll = () => {
-      if (frame.getBoundingClientRect().height === height) scrolled = window.scrollY;
+      if (frame.getBoundingClientRect().height === height) {
+        scrolled = window.scrollY;
+        // The height back to what the observer knew, before it ran: no end of a change is kept.
+        end = null;
+      } else {
+        // The end of the page is at least where the scroll is, whatever a scrollbar takes.
+        end ??= Math.max(window.scrollY, document.documentElement.scrollHeight - window.innerHeight);
+      }
     };
     const observer = new ResizeObserver(() => {
       const { top, height: after } = frame.getBoundingClientRect();
-      // The end of the page is at least where the scroll is, whatever a scrollbar takes.
-      const end = Math.max(window.scrollY, document.documentElement.scrollHeight - window.innerHeight);
-      const clamped = after < height ? Math.min(0, end - scrolled) : 0;
+      const clamped = after < height ? Math.min(0, (end ?? window.scrollY) - scrolled) : 0;
       const delta = compensation({ top: top + window.scrollY - scrolled, before: height, after, clamped });
       height = after;
+      end = null;
       if (delta !== 0) window.scrollBy({ top: delta, behavior: "instant" });
       scrolled = window.scrollY;
     });

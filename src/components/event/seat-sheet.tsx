@@ -101,8 +101,6 @@ type Opening = { kind: "sheet" | "register"; rideId: string; driver: string; sea
 export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRetour: boolean) {
   const t = useTranslations();
   const [opening, setOpening] = useState<Opening | null>(null);
-  // The cars a tap is on its way to: a tap again meanwhile sends nothing, and withdraws nothing.
-  const tapping = useRef(new Set<string>());
   // Once the page shows what a tap's answer carried, the focus goes to the car, if the seat
   // still had it or it fell with the seat: never from a sheet opened meanwhile (C5.2, C5.7).
   const [landed, setLanded] = useState<{ seat: HTMLElement; rideId: string } | null>(null);
@@ -116,22 +114,17 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
     setOpening((current) => ({ kind, rideId: car.id, driver: car.driver.firstName, seat, open: true, count: (current?.count ?? 0) + 1 }));
 
   // One tap, no other step (C5.2): what comes back is the bar's, as from a sheet closed meanwhile.
+  // A tap again while it is on its way sends nothing: `runAction` drops the run of the same key.
   async function place(car: VisibleCar, seat: HTMLElement, person: { id: string; firstName: string }) {
     const { id: rideId } = car;
-    if (tapping.current.has(rideId)) return;
-    tapping.current.add(rideId);
     const driver = car.driver.firstName;
     const placed = t("Seat.placed", { firstName: person.firstName, driver });
-    try {
-      const taken = await device.takeSeats(
-        { rideId, leg: board.leg, personIds: [person.id] },
-        toBar(`tap:${rideId}`, rideId, person, driver, placed),
-      );
-      // Offline or a server error changes nothing on the page: the focus stays where it is.
-      if (taken && taken.kind !== "problem") setLanded({ seat, rideId });
-    } finally {
-      tapping.current.delete(rideId);
-    }
+    const taken = await device.takeSeats(
+      { rideId, leg: board.leg, personIds: [person.id] },
+      toBar(`tap:${rideId}`, rideId, person, driver, placed),
+    );
+    // Offline or a server error changes nothing on the page: the focus stays where it is.
+    if (taken && taken.kind !== "problem") setLanded({ seat, rideId });
   }
 
   function tap(car: VisibleCar, seat: HTMLElement) {
