@@ -159,11 +159,11 @@ export async function undoSeats(
   token: unknown,
   rideId: unknown,
   leg: unknown,
-  persons: unknown,
+  undone: unknown,
 ): Promise<UndoSeatsResult | changeRide.EventNotFound> {
   if (!isPublicId(id)) return changeRide.EVENT_NOT_FOUND;
   try {
-    return await undoSeatsInRide(getDb(), id, token, rideId, leg, persons);
+    return await undoSeatsInRide(getDb(), id, token, rideId, leg, undone);
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("undoSeats: the seats could not be given back", error);

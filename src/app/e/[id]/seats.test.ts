@@ -655,6 +655,22 @@ describe("undoSeats", () => {
         expect(await standing(db, eventId, "aller")).toEqual({ [lea.id]: r2 });
       });
     });
+
+    // The Ride alone, no Placement: without the undo's lock on the car, nothing would make it wait.
+    it("waits for a session that holds the Ride alone, then undoes", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { lea, ines, r1, undo } = await seatedCommitted(db, eventId);
+
+        const result = await whileHeld(
+          db,
+          (trx) => lockRide(trx, { id: r1, eventId, leg: "aller" }),
+          () => undoSeats(db, eventId, lea.token, r1, "aller", undo),
+        );
+
+        expect(result).toMatchObject({ ok: true, undoneIds: [lea.id, ines.id] });
+        expect(await standing(db, eventId, "aller")).toEqual({ [lea.id]: null });
+      });
+    });
   });
 });
 

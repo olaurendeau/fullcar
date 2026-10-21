@@ -1,0 +1,295 @@
+import type { Page } from "@playwright/test";
+import type { Kysely } from "kysely";
+import type { Database } from "@/db/schema";
+import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { failHeld, holdFirst, holdToken, messages, newToken } from "./device";
+import { expect, leaveNoToken, test } from "./fixtures";
+
+leaveNoToken();
+
+// #170: « Annuler » in the bar after a placement (« Un tap, et « Annuler » », « La barre de
+// messages », rule 6 and rule 8; C5.2 and C5.10 amended, C3.5, C9.4, C11.10, C11.11).
+
+type Db = Kysely<Database>;
+
+/**
+ * The device holds Tom, without a car at the aller and in Paul's car at the retour, and Hugo, who
+ * does not do the aller. Aller: Sophie (3 seats) and Marc (2 seats) drive nobody. With `lea`, the
+ * device holds Léa too, without a car at the aller, between them.
+ */
+async function seedScene(db: Db, eventId: string, token: string, lea = false) {
+  const other = async (firstName: string) => (await seedPerson(db, eventId, { firstName })).id;
+  const mine = async (firstName: string) => (await seedPerson(db, eventId, { firstName }, token)).id;
+  const tom = await mine("Tom");
+  const persons = { tom, lea: lea ? await mine("Léa") : "", hugo: await mine("Hugo") };
+  const cars = {
+    sophie: await seedRide(db, eventId, await other("Sophie"), { departureTime: "07:00:00" }),
+    marc: await seedRide(db, eventId, await other("Marc"), { departureTime: "07:15:00", seats: 2 }),
+    paul: await seedRide(db, eventId, await other("Paul"), { leg: "retour" }),
+  };
+  await seedPlacement(db, { personId: tom, eventId, leg: "aller", rideId: null });
+  await seedPlacement(db, { personId: tom, eventId, leg: "retour", rideId: cars.paul });
+  if (lea) await seedPlacement(db, { personId: persons.lea, eventId, leg: "aller", rideId: null });
+  return { persons, cars };
+}
+
+/** A person's Placements, by leg: a Ride's id, `null` without a car; a leg left out is not concerned. */
+async function placements(db: Db, eventId: string, personId: string) {
+  const rows = await db.selectFrom("placement").select(["leg", "ride_id"]).where("event_id", "=", eventId).where("person_id", "=", personId).execute();
+  return Object.fromEntries(rows.map((row) => [row.leg, row.ride_id]));
+}
+
+const panel = (page: Page) => page.getByRole("tabpanel");
+const car = (page: Page, driver: string) => panel(page).getByRole("article", { name: `Voiture de ${driver}` });
+const seat = (page: Page, driver: string) => car(page, driver).getByRole("button", { name: /^Place libre/ }).first();
+const title = (page: Page, driver: string) => page.getByRole("heading", { name: `Voiture de ${driver}` });
+const banner = (page: Page) => panel(page).getByRole("status").filter({ hasText: /\S/ });
+const tab = (page: Page, leg: "Aller" | "Retour") => page.getByRole("tab", { name: new RegExp(`^${leg}`) });
+const cell = (page: Page, firstName: string, leg: "Aller" | "Retour") =>
+  page.getByRole("region", { name: "Vos inscriptions" }).getByRole("button", { name: new RegExp(`^${firstName}, ${leg} : `) });
+const sheet = (page: Page, driver: string) => page.getByRole("dialog", { name: `Qui monte dans la voiture de ${driver} ?` });
+const bar = (page: Page) => page.locator("[data-message-bar]");
+/** The bar's status region, where a success goes. */
+const barStatus = (page: Page) => page.locator('[role="status"]:has(+ [role="alert"])');
+/** Every « Annuler » of the bar, top to bottom: out of its regions, between the lines and « Fermer ». */
+const undo = (page: Page) => bar(page).getByRole("button", { name: "Annuler" });
+
+/** Opens `driver`'s sheet from a free seat, ticks exactly `names`, and sends them. */
+async function sendFromSheet(page: Page, driver: string, names: string[]) {
+  await seat(page, driver).click();
+  const dialog = sheet(page, driver);
+  const submit = dialog.getByRole("button", { name: /^Placer/ });
+  await expect(submit).toBeVisible();
+  for (const name of ["Tom", "Léa", "Hugo"]) {
+    const box = dialog.getByRole("checkbox", { name, exact: true });
+    if (await box.count()) await box.setChecked(names.includes(name));
+  }
+  await submit.click();
+}
+
+/** Answers the cell's sheet of `firstName` on `leg` with `button`. */
+async function cellAction(page: Page, firstName: string, leg: "Aller" | "Retour", button: string) {
+  await cell(page, firstName, leg).click();
+  await page.getByRole("dialog", { name: `${firstName} · ${leg}` }).getByRole("button", { name: button }).click();
+}
+
+const PLACED = "Tom est dans la voiture de Sophie";
+const UNDONE = "Tom n’est plus dans la voiture de Sophie";
+const UNDO_OFFLINE = "Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».";
+
+test.describe("« Annuler »", () => {
+  test.use({ locale: "fr-FR" });
+  const token = newToken();
+  let scene: Awaited<ReturnType<typeof seedScene>>;
+
+  test.beforeEach(async ({ page, seededEvent }) => {
+    await holdToken(page, seededEvent.id, token);
+  });
+
+  test.describe("after a tap", () => {
+    test.beforeEach(async ({ db, seededEvent }) => {
+      scene = await seedScene(db, seededEvent.id, token);
+    });
+
+    test("C5.2, C5.10, C9.4, C3.5: « Annuler » gives Tom back without a car, the seat is free again, the retour does not change", async ({ db, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await expect(messages(page)).toHaveText([PLACED]);
+      await expect(undo(page)).toHaveCount(1);
+      await expect(undo(page)).toHaveAccessibleDescription(PLACED);
+      await expect(banner(page)).toHaveText("Tout le monde a une place · 4 places libres");
+
+      await undo(page).click();
+      await expect(messages(page)).toHaveText([UNDONE]);
+      await expect(barStatus(page)).toHaveText(UNDONE);
+      await expect(undo(page)).toHaveCount(0);
+      await expect(title(page, "Sophie")).toBeFocused();
+      await expect(car(page, "Sophie").getByRole("listitem")).toHaveText(["Place libre", "Place libre", "Place libre"]);
+      await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
+      await expect(cell(page, "Tom", "Retour")).toHaveAccessibleName("Tom, Retour : Avec Paul");
+      await expect(banner(page)).toHaveText("1 sans voiture · 5 places libres");
+      await expect(tab(page, "Aller")).toHaveAccessibleName("Aller 1 sans voiture");
+      expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: scene.cars.paul });
+    });
+
+    for (const closing of ["« Fermer »", "Escape"] as const) {
+      test(`C5.10: the success and « Annuler » are still there 10 s later and after another action fails; ${closing} takes them`, async ({ page, seededEvent }) => {
+        await page.clock.install();
+        const hugo = await holdFirst(page, scene.persons.hugo, true);
+        await page.goto(`/e/${seededEvent.id}`);
+        await seat(page, "Sophie").click();
+        await expect(messages(page)).toHaveText([PLACED]);
+        await page.clock.fastForward(10_000);
+        // Its sheet closed before the answer, the failure goes to the bar.
+        await cellAction(page, "Hugo", "Aller", "Je cherche une place");
+        await page.keyboard.press("Escape");
+        await failHeld(page, hugo);
+        const failed = "Hugo · Aller : « Je cherche une place » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
+        await expect(messages(page)).toHaveText([failed, PLACED]);
+        await expect(undo(page)).toHaveAccessibleDescription(PLACED);
+
+        if (closing === "Escape") {
+          await undo(page).focus();
+          await page.keyboard.press("Escape");
+        } else await bar(page).getByRole("button", { name: "Fermer" }).click();
+        await expect(messages(page)).toHaveCount(0);
+        await expect(undo(page)).toHaveCount(0);
+      });
+    }
+
+    test("C5.10: the next action that succeeds takes the success and its « Annuler »", async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await expect(undo(page)).toHaveCount(1);
+      await cellAction(page, "Tom", "Aller", "Sortir de la voiture");
+      await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
+      await expect(messages(page)).toHaveCount(0);
+      await expect(undo(page)).toHaveCount(0);
+    });
+
+    test("C5.10, two contexts: Tom moved to Marc's car meanwhile is not touched; nobody undone, the bar closes", async ({ browser, baseURL, db, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await expect(undo(page)).toHaveCount(1);
+      const context = await browser.newContext({ locale: "fr-FR", baseURL });
+      try {
+        const other = await context.newPage();
+        await holdToken(other, seededEvent.id, token);
+        await other.goto(`/e/${seededEvent.id}`);
+        // Nobody of the device without a car: « Vos inscriptions » starts folded there.
+        await other.getByRole("region", { name: "Vos inscriptions" }).getByRole("button", { name: /^Vos inscriptions/ }).click();
+        await cellAction(other, "Tom", "Aller", "Sortir de la voiture");
+        await expect(cell(other, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
+        await seat(other, "Marc").click();
+        await expect(messages(other)).toHaveText(["Tom est dans la voiture de Marc"]);
+      } finally {
+        for (const other of context.pages()) await other.goto("about:blank").catch(() => other.close());
+        await context.close();
+      }
+
+      await undo(page).click();
+      await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Avec Marc");
+      await expect(messages(page)).toHaveCount(0);
+      await expect(title(page, "Sophie")).toBeFocused();
+      expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: scene.cars.marc, retour: scene.cars.paul });
+    });
+
+    // Rule 6: offline, the failure gets its own « Annuler », which the success loses; a seat taken
+    // since for Hugo leaves both; sent again from the keyboard, it shows nowhere until the answer.
+    test("C5.10, C11.10, C11.11: « Annuler » offline, then again from its failure, its answer held", async ({ context, db, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await expect(messages(page)).toHaveText([PLACED]);
+      await context.setOffline(true);
+      await undo(page).click();
+      await expect(messages(page)).toHaveText([UNDO_OFFLINE, PLACED]);
+      await expect(undo(page)).toHaveCount(1);
+      await expect(undo(page)).toHaveAccessibleDescription(UNDO_OFFLINE);
+      await expect(title(page, "Sophie")).toBeFocused();
+      await context.setOffline(false);
+
+      await sendFromSheet(page, "Marc", ["Hugo"]);
+      await expect(messages(page)).toHaveText([UNDO_OFFLINE, "Hugo est dans la voiture de Marc"]);
+      await expect(undo(page)).toHaveCount(2);
+
+      const answer = await holdFirst(page, scene.cars.sophie, false);
+      await undo(page).first().focus();
+      await page.keyboard.press("Enter");
+      await expect(messages(page)).toHaveText(["Hugo est dans la voiture de Marc"]);
+      await expect(undo(page)).toHaveCount(1);
+      await expect(undo(page)).toHaveAccessibleDescription("Hugo est dans la voiture de Marc");
+      await expect(title(page, "Sophie")).toBeFocused();
+      answer();
+      await expect(messages(page)).toHaveText([UNDONE]);
+      await expect(title(page, "Sophie")).toBeFocused();
+      expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: scene.cars.paul });
+    });
+
+    // « Le sujet d’un échec »: « Sortir de la voiture » leaves the failure of « Annuler », and
+    // « Annuler » in Sophie's car leaves the failure of a seat there.
+    test("C11.10: neither a cell's action nor « Annuler » withdraws the other's failure", async ({ context, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await expect(messages(page)).toHaveText([PLACED]);
+      const hugo = await holdFirst(page, scene.persons.hugo, true);
+      await sendFromSheet(page, "Sophie", ["Hugo"]);
+      await page.keyboard.press("Escape");
+      await failHeld(page, hugo);
+      const hugoFailed = "Hugo n’a pas pu monter dans la voiture de Sophie. Une erreur est survenue : réessayez dans un instant.";
+      await context.setOffline(true);
+      await undo(page).click();
+      await expect(messages(page)).toHaveText([UNDO_OFFLINE, hugoFailed, PLACED]);
+      await context.setOffline(false);
+
+      await cellAction(page, "Tom", "Aller", "Sortir de la voiture");
+      await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
+      await expect(messages(page)).toHaveText([UNDO_OFFLINE, hugoFailed]);
+
+      await undo(page).click();
+      await expect(messages(page)).toHaveText([hugoFailed]);
+      await expect(title(page, "Sophie")).toBeFocused();
+    });
+
+    test("rule 8: « Annuler » after a change of tab: the focus on the active tab, the tab kept; back on the aller, on the car's title", async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await tab(page, "Retour").click();
+      await undo(page).click();
+      await expect(messages(page)).toHaveText([UNDONE]);
+      await expect(tab(page, "Retour")).toBeFocused();
+      await expect(tab(page, "Retour")).toHaveAttribute("aria-selected", "true");
+
+      await tab(page, "Aller").click();
+      await seat(page, "Sophie").click();
+      await expect(messages(page)).toHaveText([PLACED]);
+      await tab(page, "Retour").click();
+      await tab(page, "Aller").click();
+      await undo(page).click();
+      await expect(messages(page)).toHaveText([UNDONE]);
+      await expect(title(page, "Sophie")).toBeFocused();
+      await expect(title(page, "Sophie")).toBeVisible();
+    });
+  });
+
+  test.describe("after the sheet", () => {
+    test.beforeEach(async ({ db, seededEvent }) => {
+      scene = await seedScene(db, seededEvent.id, token, true);
+    });
+
+    test("C5.10: Tom, without a car before, and Hugo, not concerned, each get their state back; Léa is not touched", async ({ db, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await sendFromSheet(page, "Sophie", ["Tom", "Hugo"]);
+      await expect(messages(page)).toHaveText(["Tom et Hugo sont dans la voiture de Sophie"]);
+
+      await undo(page).click();
+      await expect(messages(page)).toHaveText(["Tom et Hugo ne sont plus dans la voiture de Sophie"]);
+      await expect(undo(page)).toHaveCount(0);
+      await expect(title(page, "Sophie")).toBeFocused();
+      await expect(cell(page, "Hugo", "Aller")).toHaveAccessibleName("Hugo, Aller : Ne fait pas l’aller");
+      await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Sans voiture");
+      expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: scene.cars.paul });
+      expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({});
+      expect(await placements(db, seededEvent.id, scene.persons.lea)).toEqual({ aller: null });
+    });
+
+    // Rule 8, in the order of #311's review: the line of the element that had the focus first,
+    // before the line written in the same render. Next sends Marc's seats once Sophie's are answered.
+    test("rule 8: a late answer replaces the success whose « Annuler » has the focus: the focus on that success's car", async ({ page, seededEvent }) => {
+      const sophie = await holdFirst(page, scene.cars.sophie, false);
+      const marc = await holdFirst(page, scene.cars.marc, false);
+      await page.goto(`/e/${seededEvent.id}`);
+      for (const [driver, name] of [["Sophie", "Tom"], ["Marc", "Léa"]]) {
+        await sendFromSheet(page, driver, [name]);
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+      }
+      sophie();
+      await expect(messages(page)).toHaveText([PLACED]);
+      await undo(page).focus();
+
+      marc();
+      await expect(messages(page)).toHaveText(["Léa est dans la voiture de Marc"]);
+      await expect(title(page, "Sophie")).toBeFocused();
+    });
+  });
+});

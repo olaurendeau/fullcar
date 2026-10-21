@@ -6,7 +6,7 @@ import { cellActions, type CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
-import { cellNotDone, cellWhy, editedFields, failureText, nameList, offerWhy, personWhy, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
+import { cellNotDone, cellWhy, editedFields, failureText, nameList, offerWhy, personWhy, undoWhy, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
 
 // C11.11: every failure in the bar, word for word as « Chaque échec, mot pour mot » says it
 // (docs/design/event-board/README.md, v4.2), in French and in English.
@@ -76,8 +76,8 @@ function whyFor(source: string, action: Action): Why {
   if (source === "notEnoughSeats") return { kind: "notEnoughSeats", free: 1 };
   if (source === "drives") return { kind: "drives", ...action.drives! };
   if (source === "alreadyDriving" && action.notDone.kind === "offerRide") return { kind: "alreadyDriving", driver: action.notDone.driver };
-  const why = whyOf(source as Parameters<typeof whyOf>[0]);
-  return action.undo && (why.kind === "offline" || why.kind === "failed") ? { kind: "retryUndo", problem: why.kind } : why;
+  if (action.undo) return undoWhy(source as Parameters<typeof undoWhy>[0]);
+  return whyOf(source as Parameters<typeof whyOf>[0]);
 }
 
 /** The failures of a row's second column: offline; a server error, a network one, and each refusal given the same words; a refusal. */
@@ -283,6 +283,14 @@ describe("nameList: from one to five persons (C11.11)", () => {
       });
     }
   }
+});
+
+describe("undoWhy: « Annuler » (C5.10, C11.11)", () => {
+  it("names the button offline and on an error, `invalid` included; keeps a refusal's reason, as `whyOf` gives it", () => {
+    expect(undoWhy("offline")).toEqual({ kind: "retryUndo", problem: "offline" });
+    for (const error of ["failed", "invalid"] as const) expect(undoWhy(error)).toEqual({ kind: "retryUndo", problem: "failed" });
+    for (const error of ["forbidden", "eventNotFound", "noRetour"] as const) expect(undoWhy(error)).toEqual(whyOf(error));
+  });
 });
 
 describe("whyOf", () => {

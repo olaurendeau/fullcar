@@ -44,6 +44,15 @@ export function whyOf(error: Plain | "invalid" | "idTaken" | "noRetour"): Why {
   return { kind: error === "invalid" || error === "idTaken" || error === "noRetour" ? "failed" : error };
 }
 
+/**
+ * Why « Annuler » was not done (C5.10): offline or on an error, `invalid` included, the reason
+ * names the button to use again (`retryUndo`); a refusal, as `whyOf` gives it.
+ */
+export function undoWhy(error: "offline" | "failed" | "invalid" | "forbidden" | "eventNotFound" | "noRetour"): Why {
+  if (error === "offline" || error === "failed" || error === "invalid") return { kind: "retryUndo", problem: error === "offline" ? "offline" : "failed" };
+  return whyOf(error);
+}
+
 /** A cell of « Vos inscriptions » as its sheet showed it at the send: the person, the leg, and her state there. */
 export interface Cell {
   firstName: string;
