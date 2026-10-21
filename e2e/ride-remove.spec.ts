@@ -163,6 +163,8 @@ test.describe("remove a car", () => {
     await removeButton(car(panel(page), "Claire")).click();
     await confirm(page).click();
 
+    // Hidden by the confirmation, the car is « gone » before the answer (#295).
+    await expect(confirmation(page)).toHaveCount(0);
     await expect(car(panel(page), "Claire")).toHaveCount(0);
     await expect(toggle(page)).toBeFocused();
     await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
@@ -259,8 +261,9 @@ test.describe("remove a car", () => {
       await expect(trigger).toBeFocused();
       if (when === "reopened") await trigger.click();
       answer();
-      await expect(car(panel(page), "Claire")).toHaveCount(0);
+      // Reopened, the confirmation hides the car from role queries until it closes (#295).
       await expect(confirmation(page)).toHaveCount(0);
+      await expect(car(panel(page), "Claire")).toHaveCount(0);
       await expect(cell(page, "Claire, Aller : Ne fait pas l’aller")).toBeFocused();
       await expect(alerts(page)).toHaveCount(0);
     });
