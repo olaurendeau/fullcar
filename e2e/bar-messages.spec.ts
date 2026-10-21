@@ -109,7 +109,9 @@ test.describe("the bar's messages", () => {
       await tab(page, "Retour").click();
       await expect(tab(page, "Retour")).toHaveAttribute("aria-selected", "true", { timeout: 500 });
     }).toPass();
-    await sendThenClose(page, "Paul");
+    // Tom alone is without a car at the retour: one tap sends him, with no sheet (C5.2, #92).
+    await panel(page).getByRole("article", { name: "Voiture de Paul" }).getByRole("button", { name: /^Place libre/ }).first().click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await tab(page, "Aller").click();
     await sendThenClose(page, "Sophie");
     await tab(page, "Retour").click();

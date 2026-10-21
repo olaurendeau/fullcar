@@ -43,16 +43,14 @@ const board = (page: Page) => page.getByRole("tabpanel");
 const carTitle = (page: Page, driver: string) => board(page).getByRole("heading", { name: `Voiture de ${driver}` });
 
 /**
- * Oriane takes a seat in `driver`'s car, the first with a free seat without one: through the
- * sheet, ticked for her, until a tap does it alone (#92). The sheet closed, the board shows it.
+ * Oriane takes a seat in `driver`'s car, the first with a free seat without one: in one tap, the
+ * only person of the device without a car at the aller (C5.2, #92). The bar says so.
  */
 async function takeSeat(page: Page, driver?: string) {
   const name = `Place libre : prendre une place dans la voiture de ${driver ?? ""}`;
   await board(page).getByRole("button", { name: driver ? name : new RegExp(`^${name}`) }).first().click();
-  const sheet = page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ });
-  await sheet.getByRole("button", { name: /^Placer/ }).click();
-  await expect(sheet).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Messages" }).getByText(new RegExp(`^${ORGANISER} est dans la voiture de`))).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
 const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
@@ -98,11 +96,9 @@ async function openAsOrganiser(page: Page, db: Kysely<Database>, event: SeededEv
   return id;
 }
 
-/** Oriane's seat in Anaïs's car sent from the sheet, then the sheet closed before the answer. */
-async function sendSeatThenClose(page: Page) {
+/** Oriane's seat in Anaïs's car, sent in one tap (C5.2, #92): no sheet waits for the answer. */
+async function sendSeat(page: Page) {
   await board(page).getByRole("button", { name: "Place libre : prendre une place dans la voiture de Anaïs" }).click();
-  await page.getByRole("dialog", { name: /^Qui monte dans la voiture de/ }).getByRole("button", { name: /^Placer/ }).click();
-  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
@@ -216,7 +212,7 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     page,
   }) => {
     const seat = await holdActionsWith(page, oriane);
-    await sendSeatThenClose(page);
+    await sendSeat(page);
     await expect.poll(seat.held).toBe(1);
     await refresh(page).click();
     await expect(panel(page).getByRole("status")).toHaveText(FR.refreshing);
@@ -407,7 +403,7 @@ test("O1.10: a seat taken while the area loads, answered once it is there, reads
   await page.goto(organiserPath(seededEvent));
   await expect(ownPersons(page).getByText(ORGANISER)).toBeVisible();
   await expect(page.getByText("Chargement de l’espace organisateur…")).toBeVisible();
-  await sendSeatThenClose(page);
+  await sendSeat(page);
 
   // The area read before the seat is taken; the seat's answer comes once it is shown.
   await reads.release();
