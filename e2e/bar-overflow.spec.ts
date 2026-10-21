@@ -98,6 +98,22 @@ async function fourFailuresThenASuccess(page: Page, scene: Scene) {
   return { actions, scrolled };
 }
 
+/**
+ * The window loses the focus, as by Alt+Tab, which Playwright's page never does: the element
+ * that has the focus gets `blur` and `focusout` without `relatedTarget` while
+ * `document.hasFocus()` is false, and stays the document's active element.
+ */
+async function leaveWindow(focused: Locator) {
+  await focused.evaluate((element) => {
+    const hasFocus = document.hasFocus;
+    document.hasFocus = () => false;
+    element.dispatchEvent(new FocusEvent("blur"));
+    element.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    document.hasFocus = hasFocus;
+  });
+  await expect(focused).toBeFocused();
+}
+
 /** Whether `inner` is entirely inside `outer`, as shown. */
 async function within(inner: Locator, outer: Locator) {
   const [a, b] = [(await inner.boundingBox())!, (await outer.boundingBox())!];
@@ -180,27 +196,38 @@ test.describe("a bar of many lines", () => {
     });
   }
 
-  test("rule 8: the list keeps its tabIndex while it has the focus, even once it no longer overflows", async ({ page, seededEvent }) => {
-    await page.goto(`/e/${seededEvent.id}`);
-    await fourFailuresThenASuccess(page, scene);
-    await list(page).focus();
-    await expect(list(page)).toBeFocused();
+  for (const away of [false, true]) {
+    test(`rule 8: the list keeps its tabIndex while it has the focus, even once it no longer overflows${away ? ", the window left meanwhile" : ""}`, async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await fourFailuresThenASuccess(page, scene);
+      await list(page).focus();
+      await expect(list(page)).toBeFocused();
 
-    // 40dvh is 800 px now: the list no longer overflows.
-    await page.setViewportSize({ width: 360, height: 2000 });
-    await expect.poll(() => list(page).evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(false);
-    await expect(list(page)).toHaveAttribute("tabindex", "0");
-    await expect(list(page)).toBeFocused();
+      // 40dvh is 800 px now: the list no longer overflows. Two frames: for its ResizeObserver, and
+      // the render after it, lest an attribute not yet removed pass for one kept.
+      await page.setViewportSize({ width: 360, height: 2000 });
+      await expect.poll(() => list(page).evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(false);
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      if (away) await leaveWindow(list(page));
+      await expect(list(page)).toHaveAttribute("tabindex", "0");
+      await expect(list(page)).toBeFocused();
 
-    // Once the focus is elsewhere, it no longer takes it.
-    await barClose(page).focus();
-    await expect(list(page)).not.toHaveAttribute("tabindex");
-  });
+      // Once the focus is elsewhere, it no longer takes it.
+      await barClose(page).focus();
+      await expect(list(page)).not.toHaveAttribute("tabindex");
+    });
+  }
 
   // #255's review: an action without words empties the bar while « Fermer » has the focus. A
-  // focus put on nothing since, as a tap on the page's text does on a phone, stays there.
-  for (const blurred of [false, true]) {
-    const what = blurred ? "had the focus, then the focus put on nothing: it stays there" : "has the focus: the focus goes to the landmark of the line gone";
+  // focus put on nothing since, as a tap on the page's text does on a phone, stays there; the
+  // window left meanwhile (Alt+Tab), the focus is still « Fermer »'s (#311's review).
+  const WHAT = {
+    kept: "has the focus: the focus goes to the landmark of the line gone",
+    blurred: "had the focus, then the focus put on nothing: it stays there",
+    away: "has the focus, the window left meanwhile: the focus goes to the landmark of the line gone",
+  };
+  for (const [how, what] of Object.entries(WHAT)) {
+    const blurred = how === "blurred";
     test(`rule 8, C11.10: an action without words empties the bar while « Fermer » ${what}`, async ({ page, seededEvent }) => {
       await page.goto(`/e/${seededEvent.id}`);
       const actions = await gate(page, scene);
@@ -215,6 +242,7 @@ test.describe("a bar of many lines", () => {
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await barClose(page).focus();
       if (blurred) await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+      if (how === "away") await leaveWindow(barClose(page));
       const scrolled = await page.evaluate(() => window.scrollY);
       actions.fails = false;
       actions.release();

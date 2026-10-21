@@ -79,7 +79,8 @@ function MessageList({ lines, failing, written, label }: { lines: bar.Line[]; fa
       aria-label={label}
       tabIndex={overflows || focused ? 0 : undefined}
       onFocus={(event) => event.target === event.currentTarget && setFocused(true)}
-      onBlur={(event) => event.target === event.currentTarget && setFocused(false)}
+      // The window left (Alt+Tab): the list is still the active element, and gets the focus back with the window.
+      onBlur={(event) => event.target === event.currentTarget && document.hasFocus() && setFocused(false)}
       className="max-h-[40dvh] min-w-0 flex-1 overflow-y-auto rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       {lines.map((line) => {
@@ -164,7 +165,8 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
     };
     const forget = (event: FocusEvent) => {
       const lost = focused.current;
-      if (event.relatedTarget || lost?.element !== event.target) return;
+      // The window left (Alt+Tab) is no focus put on nothing: the element gets it back with the window.
+      if (event.relatedTarget || !document.hasFocus() || lost?.element !== event.target) return;
       queueMicrotask(() => void (focused.current === lost && !fell(lost.element) && (focused.current = null)));
     };
     document.addEventListener("focusin", remember);
