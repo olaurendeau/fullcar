@@ -4,6 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, messages, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { expectRing, pressUntil, rgba } from "./focus-ring";
 import { organiserPath } from "./organiser";
 
 leaveNoToken();
@@ -114,10 +115,23 @@ async function leaveWindow(focused: Locator) {
   await expect(focused).toBeFocused();
 }
 
-/** Whether `inner` is entirely inside `outer`, as shown. */
-async function within(inner: Locator, outer: Locator) {
+/**
+ * Whether `inner` is entirely inside `outer`, as shown, from its top to its bottom. With
+ * `ring`, on every side, `inner` grown by its outline of `ring` px stays `ring` px at least
+ * inside `outer` less its border: `ring` px of `outer`'s background between the outline and
+ * the border (F1.6). The boxes are in sub-pixels: 0.5 px is tolerated.
+ */
+async function within(inner: Locator, outer: Locator, { ring = 0 } = {}) {
   const [a, b] = [(await inner.boundingBox())!, (await outer.boundingBox())!];
-  return a.y >= b.y - 0.5 && a.y + a.height <= b.y + b.height + 0.5;
+  const [top, right, bottom, left] = ring
+    ? await outer.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth].map(parseFloat);
+      })
+    : [0, 0, 0, 0];
+  const gaps = [a.y - ring - (b.y + top), b.y + b.height - bottom - (a.y + a.height + ring)];
+  if (ring) gaps.push(a.x - ring - (b.x + left), b.x + b.width - right - (a.x + a.width + ring));
+  return gaps.every((gap) => gap >= ring - 0.5);
 }
 
 test.describe("a bar of many lines", () => {
@@ -168,6 +182,43 @@ test.describe("a bar of many lines", () => {
     await expect(messages(page).first()).toHaveText(NINA_FAILED);
     expect(await list(page).evaluate((element) => element.scrollTop)).toBe(0);
     expect(await within(messages(page).first(), list(page))).toBe(true);
+  });
+
+  // F1.6, epic #236: in the bar, the ring is at 0 px, and 2 px of the bar's background stay
+  // between it and the bar's border, red with a failure (language-switch design, v3.3.1).
+  for (const failing of [false, true]) {
+    test(`F1.6: with ${failing ? "a failure, the bar white and bordered in red" : "a success alone, the bar dark"}, « Fermer » reached from the keyboard shows the ring at 0 px, 2 px inside the border`, async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      const actions = await gate(page, scene);
+      if (failing) {
+        actions.shut();
+        await cellThenClose(page, "Nina", "Aller", "Ne fait pas l’aller");
+        actions.release();
+        await expect(messages(page)).toHaveText([NINA_FAILED]);
+        expect(await rgba(board(page), "border-top-color")).toEqual({ r: 231, g: 0, b: 11, a: 1 });
+      } else {
+        await seatsThenClose(page, "Marc", ["Tom"]);
+        await expect(messages(page)).toHaveText(["Tom est dans la voiture de Marc"]);
+      }
+
+      await pressUntil(page, "Shift+Tab", barClose(page));
+      const ring = await expectRing(barClose(page), { offset: 0 });
+      expect(ring.background).toBe(failing ? "rgb(255, 255, 255)" : "rgb(23, 23, 23)");
+      if (!failing) expect(ring.ratio).toBeGreaterThanOrEqual(3.7);
+      expect(await within(barClose(page), board(page), { ring: 2 }), "1.5 px at least between the ring and the border").toBe(true);
+    });
+  }
+
+  test("F1.6: four failures and a success at 360 × 780: the list that scrolls, reached from the keyboard, shows the ring at 0 px, 2 px inside the red border", async ({ page, seededEvent }) => {
+    expect(page.viewportSize()).toEqual({ width: 360, height: 780 });
+    await page.goto(`/e/${seededEvent.id}`);
+    await fourFailuresThenASuccess(page, scene);
+    await expect(list(page)).toHaveAttribute("tabindex", "0");
+
+    await pressUntil(page, "Shift+Tab", list(page));
+    const ring = await expectRing(list(page), { offset: 0 });
+    expect(ring.background).toBe("rgb(255, 255, 255)");
+    expect(await within(list(page), board(page), { ring: 2 }), "1.5 px at least between the ring and the border").toBe(true);
   });
 
   for (const where of ["/e/{id}", "/e/{id}/admin"] as const) {
