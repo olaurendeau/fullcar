@@ -195,7 +195,7 @@ describe("editedFields and personWhy: a person's form (C11.11)", () => {
     expect(editedFields(["firstName", "phone"])).toBe("both");
   });
 
-  it("is never reached with nothing changed: the form closes before, and sends nothing (v4.4, #298)", () => {
+  it("throws with nothing changed: nothing is sent then (v4.4, #298)", () => {
     expect(() => editedFields([])).toThrow();
   });
 

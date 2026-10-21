@@ -378,6 +378,35 @@ test.describe("edit a person", () => {
     });
   }
 
+  // Rule 2 (v4.4): nothing changed is not checked either. A first name of invisible characters
+  // alone, which the database takes and `validatePerson` reads as empty, closes the form.
+  test("nothing changed is not checked: a first name stored that the form refuses closes the form, and nothing is sent", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await db.updateTable("person").set({ first_name: "​" }).where("id", "=", scene.claire).execute();
+    const sent = changes(page, scene.claire);
+    await page.goto(`/e/${seededEvent.id}`);
+    const name = page.locator(`[data-person-name="${scene.claire}"]`);
+    const openInvisible = async () => {
+      await name.click();
+      await page.getByRole("dialog").getByRole("button", { name: "Modifier", exact: true }).click();
+      return page.getByRole("dialog");
+    };
+    await (await openInvisible()).getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(name).toBeFocused();
+
+    // As `nothingSentBefore`, with a first name the form takes: one request, the second.
+    const form = await openInvisible();
+    await form.getByLabel("Prénom").fill("Claire");
+    await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
+    await form.getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(sent.map((request) => !!request.postData()?.includes(NEW_PHONE))).toEqual([true]);
+  });
+
   test("V1.4: offline, nothing changed: the form closes, and nothing is said", async ({ context, page, seededEvent }) => {
     const sent = changes(page, scene.claire);
     await page.goto(`/e/${seededEvent.id}`);
@@ -406,7 +435,8 @@ test.describe("edit a person", () => {
     await page.goto(`/e/${seededEvent.id}`);
     await selectTab(page, "Retour");
     await car(page.getByRole("tabpanel"), "Marc").getByRole("button", { name: /^Place libre/ }).click();
-    // Léa, who does not make the retour, is offered too: the sheet opens, Claire ticked.
+    // The tap always opens the sheet until #92 (PR #306) builds the direct tap, which will place
+    // Claire, alone without a car, without it: this step changes then.
     await page.getByRole("dialog").getByRole("button", { name: "Placer 1 personne" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(messages(page)).toHaveText(["Claire est dans la voiture de Marc"]);
