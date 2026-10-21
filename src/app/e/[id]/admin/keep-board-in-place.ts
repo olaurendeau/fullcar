@@ -37,7 +37,10 @@ export function compensation({
  * meanwhile is the organiser's own, kept as it is. The clamp is how far that scroll is past
  * the end of the page as the first scroll event after the change sees it: later in the frame,
  * before this observer, another one may lengthen the page again, as the bar of messages does
- * once measured (#316). Without such an event, nothing but the clamp has scrolled.
+ * once measured (#316). Without such an event, nothing but the clamp has scrolled. That end is
+ * kept with the frame's height it was read at, and is the end of this change only at that
+ * height: a change undone before this observer, without a scroll event since, leaves an end
+ * that is not the next one's (#331).
  */
 export function useKeepBoardInPlace(ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -45,20 +48,22 @@ export function useKeepBoardInPlace(ref: RefObject<HTMLElement | null>) {
     if (!frame) return;
     let height = frame.getBoundingClientRect().height;
     let scrolled = window.scrollY;
-    let end: number | null = null;
+    let end: { at: number; top: number } | null = null;
     const onScroll = () => {
-      if (frame.getBoundingClientRect().height === height) {
+      const now = frame.getBoundingClientRect().height;
+      if (now === height) {
         scrolled = window.scrollY;
         // The height back to what the observer knew, before it ran: no end of a change is kept.
         end = null;
-      } else {
+      } else if (end?.at !== now) {
         // The end of the page is at least where the scroll is, whatever a scrollbar takes.
-        end ??= Math.max(window.scrollY, document.documentElement.scrollHeight - window.innerHeight);
+        end = { at: now, top: Math.max(window.scrollY, document.documentElement.scrollHeight - window.innerHeight) };
       }
     };
     const observer = new ResizeObserver(() => {
       const { top, height: after } = frame.getBoundingClientRect();
-      const clamped = after < height ? Math.min(0, (end ?? window.scrollY) - scrolled) : 0;
+      const last = end?.at === after ? end.top : window.scrollY;
+      const clamped = after < height ? Math.min(0, last - scrolled) : 0;
       const delta = compensation({ top: top + window.scrollY - scrolled, before: height, after, clamped });
       height = after;
       end = null;
