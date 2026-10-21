@@ -20,7 +20,9 @@ export type LockedLegs = { ok: true; legs: Leg[] } | { ok: false; error: LegRefu
  * The first step of every write on a leg: the Event under `lockEvent(…, "share")`, then
  * whether every leg the write touches exists. `noRetour` comes before any other refusal of the transaction,
  * `rideGone` and `forbidden` included (decision 40): the cause is the retour, not the car.
- * Gives the event's legs.
+ * Only a malformed request (`invalid`) comes before it, wherever it is read: before the
+ * transaction, or in it after this lock, as `addPerson` and `setPersonLeg` do; and the
+ * field errors, read before the transaction. Gives the event's legs.
  */
 export async function lockLegs(trx: Kysely<Database>, eventId: string, touched: readonly Leg[]): Promise<LockedLegs> {
   const event = await lockEvent(trx, eventId, "share");
