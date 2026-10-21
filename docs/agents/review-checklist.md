@@ -96,6 +96,26 @@ celui qui écrit le code.
   désactivés.
 - La route de purge refuse tout appel sans le bon `CRON_SECRET`.
 
+## Sentry (à partir de #234)
+
+- Sans `NEXT_PUBLIC_SENTRY_DSN`, rien ne charge le SDK : `@sentry/nextjs` n'est importé
+  qu'avec `import()`, après la vérification du DSN, et `withSentryConfig` ne s'applique pas.
+  Ailleurs que dans un test, un `import` de `@sentry/…` qui n'est pas un `import type` est
+  bloquant.
+- Les options viennent de `sentryOptions` (`src/observability/options.ts`) : `dataCollection`
+  entièrement coupé, `tracePropagationTargets: []`, `traceLifecycle: "stream"`. Une option
+  qui rouvre une collecte, une option `replays*`, une intégration hors des listes exactes
+  (`SERVER_INTEGRATIONS`, `BROWSER_INTEGRATIONS`) ou des sessions sont bloquantes.
+- Les hooks restent ceux de `scrub.ts` (`beforeSend`, `beforeSendSpan`, `beforeBreadcrumb`),
+  plus `createDsc` et `beforeEnvelope`, posés par `registerHooks`. Un hook retiré, ou une
+  donnée de personne passée au SDK à la main (`setUser`, `setTag`, `setExtra`, `setContext`,
+  `captureMessage`), est bloquant.
+- Une erreur qui peut partir a un `name` qui finit par `Error` : sinon le SDK lit la première
+  ligne de sa pile comme une frame, et son message avec (#239).
+- Le navigateur ne parle qu'à notre origine (`tunnelRoute: "/monitoring"`). Aucun DSN ni
+  jeton Sentry écrit en dur ; `SENTRY_AUTH_TOKEN` n'est lu qu'au build, et sans lui aucune
+  source map n'est produite.
+
 ## Postgres
 
 - Les migrations ont une descente, et elle est testée.
