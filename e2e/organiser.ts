@@ -233,7 +233,8 @@ interface Sent {
  * Records every request of the context, and the answer to each that has one: a request the
  * browser gives up on (a favicon, a page left mid-load) only has its path and headers.
  * A server action's answer is read as Playwright fetches it (`route.fetch()`): Chromium may
- * drop it before `response.text()` asks. An action routed by the test itself, ahead of this
+ * drop it before `response.text()` asks, once it reports the request aborted after React has
+ * read the whole answer (#303, see `watchRequests` in `organiser-fold.spec.ts`). An action routed by the test itself, ahead of this
  * route, is read by `response.text()`, and fails if it cannot be.
  */
 async function record(context: BrowserContext, hide: (text: string) => string) {
