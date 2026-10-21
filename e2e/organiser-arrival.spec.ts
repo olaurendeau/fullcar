@@ -210,12 +210,12 @@ test("O5.3, O5.8, O7.4, O7.7: offline, the failed check and « Réessayer », wh
   await expect(retry(page)).toBeFocused();
   await expect(retry(page)).not.toHaveAttribute("aria-disabled", "true");
 
-  // The connection is back: the panel, in the same document, and the focus on its title.
+  // The connection is back: the panel, in the same document, and the focus on its title's button.
   await goOffline(false);
   await page.evaluate(() => Object.assign(window, { sameDocument: true }));
   await page.keyboard.press("Enter");
   await expect(panel(page)).toBeVisible();
-  await expect(panel(page).getByRole("heading", { level: 2, name: FR.panel })).toBeFocused();
+  await expect(panel(page).getByRole("button", { name: FR.panel, exact: true })).toBeFocused();
   await expect(alert(page)).toHaveCount(0);
   expect(await page.evaluate(() => "sameDocument" in window)).toBe(true);
 });
@@ -247,7 +247,7 @@ test("O5.3, O5.8: while « Réessayer » reads, its label stays, it is aria-disa
 
   await reads.release();
   await expect(panel(page)).toBeVisible();
-  await expect(panel(page).getByRole("heading", { level: 2, name: FR.panel })).toBeFocused();
+  await expect(panel(page).getByRole("button", { name: FR.panel, exact: true })).toBeFocused();
   await expect(loading(page)).toHaveCount(0);
   // Next sends a page's actions one after the other: a read started by the second press
   // would leave only once the held one is answered. None does.
@@ -255,7 +255,7 @@ test("O5.3, O5.8: while « Réessayer » reads, its label stays, it is aria-disa
   expect(reads.sent(), "reads of the panel").toBe(2);
 });
 
-test("O5.8: « Réessayer » clicked, then the panel: the focus goes to its title, never by <body>", async ({
+test("O5.8: « Réessayer » clicked, then the panel: the focus goes to its title's button, never by <body>", async ({
   page,
   seededEvent,
 }) => {
@@ -277,7 +277,7 @@ test("O5.8: « Réessayer » clicked, then the panel: the focus goes to its titl
     );
   });
   await retry(page).click();
-  await expect(panel(page).getByRole("heading", { level: 2, name: FR.panel })).toBeFocused();
+  await expect(panel(page).getByRole("button", { name: FR.panel, exact: true })).toBeFocused();
   const seen = await page.evaluate(() => (window as unknown as { focusSeen: string[] }).focusSeen);
   expect(seen.length).toBeGreaterThan(0);
   expect(seen).not.toContain("BODY");
