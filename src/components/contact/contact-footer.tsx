@@ -17,7 +17,8 @@ export const CRISP_CHAT_URL = "https://go.crisp.chat/chat/embed/?website_id=3c4a
  *
  * First of the row, a link to the home page (#232, A3), in the same tab, at the fixed address
  * `/`: it takes nothing of the current address along. Left out of `/` itself
- * (`withHomeLink={false}`), where it would lead nowhere.
+ * (`withHomeLink={false}`), where it would lead nowhere. Not prefetched: no page, the
+ * organiser's included, asks for the home page before a tap on it.
  */
 export function ContactFooter({ withHomeLink = true }: { withHomeLink?: boolean }) {
   const t = useTranslations("Contact");
@@ -29,6 +30,7 @@ export function ContactFooter({ withHomeLink = true }: { withHomeLink?: boolean 
           withHomeLink && (
             <Link
               href="/"
+              prefetch={false}
               className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-muted-foreground underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               {t("home")}

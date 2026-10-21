@@ -248,6 +248,11 @@ test.describe("the home link, in a browser set to French", () => {
 
     context.off("request", watch);
     await Promise.all(watching);
+    // Not prefetched: the organiser's page asks nothing of `/` before the tap.
+    const homePage = /^GET \/(\?|$)/;
+    expect(sent.filter((each) => each.phase === "organiser" && homePage.test(each.path)).map((each) => each.path)).toEqual(
+      [],
+    );
     const home = sent.filter((each) => each.phase === "home");
     expect(home.length, "requests after the tap").toBeGreaterThan(0);
     expect(home.filter((each) => each.inUrl || each.inHeaders || each.inBody).map((each) => each.path)).toEqual([]);
