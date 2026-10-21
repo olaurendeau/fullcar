@@ -364,7 +364,7 @@ function SeatSheet({
             {!gone && candidates.length > 0 && (
               // Never `disabled`: the focus would fall out of the sheet while it is sent.
               <Button
-                className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground aria-disabled:cursor-not-allowed"
+                className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
                 aria-disabled={sending || submit.kind !== "ready" || undefined}
                 onClick={() => void place()}
               >

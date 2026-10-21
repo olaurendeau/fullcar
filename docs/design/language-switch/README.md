@@ -4,9 +4,189 @@
 - Epic : https://github.com/olaurendeau/fullcar/issues/113
 - v3, revue en v3.1, v3.2, v3.3 et v3.3.1 (approuvée) : l’anneau de focus, pour toute l’application. Tâche :
   https://github.com/olaurendeau/fullcar/issues/236 ; inclut la règle de #314
+- v3.3.2 : F1.12 lit aussi les fichiers `.ts` de `src/`, sauf les `.test.ts` et `.spec.ts`
+  (#337, PR #342)
+- v3.3.3 : le pointeur, pour toute l’application (#347) : la main sur ce qui se clique, la
+  flèche sur ce qui est inactif ; « Placer » inactif passe de `not-allowed` à la flèche
 - Page : `index.html` (autonome, maquettes à 360 px de large). Les sections de la v2
   montrent l’écran tel qu’il était le 17/10 (en-tête « Aller » / « Retour », bas de page sans
-  « Accueil ») : seule la section « L’anneau de focus (v3) » est à jour de l’écran actuel.
+  « Accueil ») : seules les sections « L’anneau de focus (v3) » et « Le pointeur (v3.3.3) »
+  sont à jour de l’écran actuel.
+
+## Ce qui change en v3.3.3 : le pointeur (#347)
+
+### Pourquoi dans cette maquette
+
+Pour la même raison que l’anneau (décision 7) : c’est une règle de toute l’application, posée
+une fois dans `src/app/globals.css`, et cette maquette dessine toutes les pages. Une maquette
+d’écran (`event-board`, `organizer-view`) n’en porterait qu’un morceau (décision 18).
+
+### Le problème
+
+Sur ordinateur, à la souris, le pointeur reste une flèche au survol d’un bouton. Depuis
+Tailwind 4, `preflight` ne donne plus `cursor: pointer` à `<button>`, et aucun composant ne le
+remet. Une personne qui survole une place libre, une cellule de la matrice, un onglet ou
+« Fermer » ne voit pas que c’est cliquable. Les liens (`<a href>`) ont déjà la main, que leur
+donne le navigateur ; les `<label>` des cases et des boutons radio aussi (`cursor-pointer`).
+
+### La règle
+
+1. **La main** (`cursor: pointer`) sur tout `<button>` et tout élément `role="button"`
+   **actifs**. Cela couvre, sans classe de plus : les boutons de toutes les variantes ; les
+   onglets, les cases et les boutons radio (Radix en fait des `<button>`) ; les prénoms et
+   les cellules de la matrice ; le bouton de « Vos inscriptions » ; les places libres ; les
+   tuiles de l’espace organisateur et le bouton qui le replie ; le bouton de langue ; ce qui
+   ouvre une feuille ou la confirmation (« Modifier », « Retirer la voiture », « Ajouter une
+   personne », « Proposer une voiture », « Voir la voiture ») ; « Fermer » des feuilles et de la
+   barre ; « Annuler », celui de la confirmation « Retirer la voiture ? » comme celui de la
+   barre, après une réussite (#340) ; « Copier », « Partager », « Actualiser », « Réessayer », « Afficher
+   les N autres ». Ce que contient le bouton (icône, texte) hérite de la main.
+2. **Les liens** (« Accueil », « Nous contacter », `tel:`, « Créer un événement ») et les
+   `<label>` qui portent une case ou un bouton radio gardent la main qu’ils ont déjà.
+3. **Inactif** (`disabled` ou `aria-disabled="true"`) : la flèche (`cursor: default`),
+   jamais la main, jamais `not-allowed`. C’est la convention des systèmes (un bouton inactif
+   de macOS ou de Windows montre la flèche) et celle du `preflight` de Tailwind 3. « Placer »
+   inactif passe donc de `not-allowed` à la flèche (règle 7 de la v3, décision 19).
+4. **Les champs** gardent le curseur du navigateur ; la règle ne les touche pas. Un champ de
+   texte, de téléphone ou une zone de texte montre le curseur texte (`text`) ; un champ de
+   date ou d’heure, la flèche (`default`), que Chromium lui donne. Le libellé d’un champ
+   (« Titre ») garde la flèche (`default`) du navigateur.
+5. **Ce qui n’est pas cliquable ne change pas** : le panneau d’onglet, la liste de la barre,
+   les titres et les repères, même focalisables, gardent `auto`.
+6. **Sans condition de média** : la règle ne teste ni `hover` ni `pointer: fine`. Un écran
+   tactile ne dessine aucun pointeur ; la condition n’ajouterait qu’une branche que le projet
+   e2e (Pixel 7, tactile) ne pourrait pas lire (décision 20).
+
+### Où le pointeur change
+
+| fichier | élément | aujourd’hui | v3.3.3 |
+|---|---|---|---|
+| `src/app/globals.css` | règle de base | aucune règle de pointeur | la main sur `button` et `[role="button"]` ; la flèche s’ils sont inactifs |
+| `src/components/event/seat-sheet.tsx:367` | « Placer » inactif | `aria-disabled:cursor-not-allowed` | classe retirée : la flèche, par la règle de base |
+| `src/components/ui/checkbox.tsx`, `radio-group.tsx` | case, bouton radio inactifs (aucun ne l’est aujourd’hui) | `disabled:cursor-not-allowed` | classe retirée : la flèche |
+| `src/components/ui/button.tsx` | bouton `disabled` | `disabled:pointer-events-none` | inchangé : le survol traverse le bouton, et la flèche reste |
+| `src/components/ui/input.tsx`, `textarea.tsx`, `label.tsx` | champ, libellé inactifs (aucun ne l’est) | `disabled:cursor-not-allowed`, `peer-disabled:cursor-not-allowed` | inchangés, hors périmètre |
+| `event-fields.tsx:143`, `leaving-step.tsx:60`, `ride-form.tsx:464`, `ride-form.tsx:506` | `<label>` d’une case ou d’un bouton radio | `cursor-pointer` | inchangés |
+
+### Les états
+
+| état | ce qui se voit à la souris | critère |
+|---|---|---|
+| un bouton, un onglet, une case, une cellule, une place libre, actifs | la main | P1.1 à P1.9 |
+| un lien | la main (inchangé) | P1.1, P1.2, P1.4 |
+| le libellé d’une case ou d’un bouton radio | la main (inchangé) | P1.2, P1.6 |
+| un champ de texte, de téléphone, une zone de texte | le curseur texte, `text` (inchangé) | P1.2, P1.6 |
+| un champ de date, d’heure ; le libellé d’un champ | la flèche, `default` (inchangé) | P1.2, P1.6 |
+| un bouton `disabled` : avant le chargement, sans JavaScript, pendant un envoi, pendant la lecture des personnes de l’appareil | la flèche | P1.3, P1.5, P1.7 |
+| un bouton `aria-disabled` : « Placer » sans case cochée, « Actualiser » pendant une lecture | la flèche | P1.6, P1.9 |
+| ce qui n’est pas cliquable : panneau d’onglet, titre, liste de la barre | inchangé, `auto` | P1.1, P1.4, P1.8 |
+| un écran tactile | aucun pointeur ; la valeur calculée est la même | P1.10 |
+| vide, hors ligne, échec | sans objet : le pointeur ne dépend d’aucune donnée | — |
+
+### Les mots de la v3.3.3
+
+Aucun. Le pointeur n’a pas de texte, et aucun nom accessible ne change.
+
+### Critères de la v3.3.3
+
+**H2. Voir ce qui se clique.** En tant que personne qui utilise une souris, je vois au survol,
+à la main, ce qui réagit à un clic, et à la flèche ce qui est inactif.
+
+**La lecture** : `cursorOf(locator)`, une aide de test dans `e2e/`, rend
+`getComputedStyle(element).cursor`, lu une fois l’élément visible. La valeur calculée ne
+dépend pas du survol : le test n’a pas besoin de `hover()`. Les valeurs attendues, chacune
+exacte : **la main** = `pointer` ; **la flèche** = `default` ; **le texte** = `text` ;
+`auto` est nommé là où il est attendu. Ce que le navigateur donne sans la règle, mesuré en
+revue dans le Chromium de Playwright 1.64 (Pixel 7 et Desktop Chrome) : `text` pour un champ
+de texte, de téléphone et une zone de texte ; `default` pour un champ de date ou d’heure et
+pour un `<label>` ; `auto` pour un titre, un paragraphe et un `role="tabpanel"` ; `pointer`
+pour un lien. Les tests tournent dans le projet `e2e` (Pixel 7), page en français
+(`locale: "fr-FR"`) ; P1.10 dans un contexte de bureau.
+
+- **P1.1** `/` : « Créer un événement » (lien), « English » et « Nous contacter » ont la
+  main. Le titre « Fullcar » a `auto`.
+- **P1.2** `/nouveau`, une fois la page hydratée (« Créer » actif) :
+  - la main : « Créer » ; la case « Retour » (`role="checkbox"`) et le `<label>` qui la
+    contient ; la case « Rehausseurs » et son `<label>` ; « Accueil » ; « English » ;
+  - le texte : le champ « Titre » ;
+  - la flèche : les champs « Date de début » (date) et « Heure de début » (heure), et le
+    libellé « Titre » (`<label>` d’un champ), tels que le navigateur les donne.
+- **P1.3** `/nouveau` sans JavaScript (`javaScriptEnabled: false`) : « Créer » et « English »
+  sont `disabled` (L4.3) et ont la flèche ; « Accueil » et « Nous contacter » ont la main.
+- **P1.4** `/e/{id}`, la scène de F1.3 (Claire conduit à l’aller, Léa est passagère de Marc et
+  a un numéro), onglet Aller :
+  - la main : les onglets « Aller » et « Retour » (`role="tab"`) ; le bouton de « Vos
+    inscriptions » ; le prénom « Claire » et la cellule « Léa, Aller : Avec Marc » de la
+    matrice ; une place libre de la voiture de Claire (« Place libre : prendre une place dans
+    la voiture de Claire ») ; « Modifier » et « Retirer la voiture » de sa carte ; le lien
+    « Appeler Léa au 07 22 33 44 55 » ; « Ajouter une personne » ; « Proposer une voiture » ;
+    « Accueil », « English », « Nous contacter » ;
+  - `auto` : le panneau d’onglet (`role="tabpanel"`) et le titre de l’événement.
+- **P1.5** `/e/{id}`, pendant la lecture des personnes de l’appareil : la scène de P1.4, les
+  actions serveur retenues avant le chargement (`holdActions`, `e2e/device.ts:21`, comme
+  C5.9) : « Ajouter une personne », « Proposer une voiture » et chaque place libre sont
+  `disabled` et ont la flèche. Les actions relâchées, ils sont actifs et ont la main.
+- **P1.6** Les feuilles :
+  - « Proposer une voiture », ouverte dans la scène de P1.4 : un bouton radio de « Qui
+    conduit ? » et le `<label>` qui le contient, « Valider » et « Fermer » ont la main ;
+    « Lieu de départ » (texte) et « Note (facultatif) » (zone de texte) ont le texte ;
+    « Heure de départ » (heure) a la flèche ;
+  - la feuille des places, dans la scène de F1.9 (Tom et Léa sans voiture, la voiture de
+    Sophie) : chaque case, son `<label>` et « Fermer » ont la main. Toutes les cases
+    décochées, « Placer » (`aria-disabled="true"`) a la flèche ; la case de Tom seule
+    cochée, « Placer 1 personne » a la main ;
+  - la feuille d’une personne, ouverte par le prénom « Claire » (scène de P1.4) :
+    « Modifier » a la main ; après « Modifier », « Prénom » a le texte, « Valider » et
+    « Fermer » ont la main.
+- **P1.7** La confirmation « Retirer la voiture ? », ouverte depuis la carte de Claire (scène
+  de P1.4) : « Retirer la voiture » et « Annuler » ont la main. Les actions retenues
+  (`holdActions`), « Retirer la voiture » activé : il est `disabled` pendant l’envoi et a la
+  flèche.
+- **P1.8** La barre de messages : à la suite de P1.6 (feuille des places), « Placer
+  1 personne » activé, la feuille se ferme et la barre (`[data-message-bar]`) affiche « Tom
+  est dans la voiture de Sophie ». Son « Annuler » (#340) et son « Fermer » ont la main ; la
+  liste des messages (le groupe « Messages ») a `auto`.
+- **P1.9** `/e/{id}/admin` avec un lien valide, `navigator.share` simulé comme en F1.7, et une
+  liste « Sans voiture » de plus de cinq lignes : le bouton qui replie l’espace (« Espace
+  organisateur »), une tuile, « Copier », « Partager », « Actualiser » et « Afficher les N
+  autres » ont la main. Les lectures du panneau retenues (`holdActionsWith` sur le jeton,
+  comme `holdPanelReads`), « Actualiser » activé : il est `aria-disabled="true"` et a la
+  flèche ; la lecture relâchée, il a la main.
+- **P1.10** Sur ordinateur : un contexte `devices["Desktop Chrome"]`, sans écran tactile,
+  où le test vérifie d’abord que `matchMedia("(pointer: fine)").matches` vaut `true`. Sur
+  `/`, « Créer un événement » et « English » ont la main : la règle ne dépend pas de
+  l’appareil.
+- **P1.11** Le scan de F1.12 (les fichiers `.tsx`, `.css` et `.ts` de `src/`, sauf les
+  `.test.ts` et `.spec.ts`) ne trouve l’utilitaire `cursor-not-allowed`, quelles que soient
+  ses variantes, que dans `input.tsx`, `textarea.tsx` et `label.tsx`. Ailleurs, une classe de
+  composant battrait la règle de base, qui est dans la couche `base`.
+
+**Non prouvable par un test** : que la main se voie au survol réel d’une souris. La valeur
+calculée en est la mesure ; un survol à l’œil sur ordinateur, une fois, reste utile.
+
+### Pour le développement
+
+- La règle, dans la couche `base` de `src/app/globals.css` :
+
+  ```css
+  button, [role="button"] { cursor: pointer; }
+  :is(button, [role="button"]):is(:disabled, [aria-disabled="true"]) { cursor: default; }
+  ```
+
+  La seconde ligne est plus spécifique que la première et l’emporte sur un élément inactif.
+- Retirer `aria-disabled:cursor-not-allowed` de « Placer » (`seat-sheet.tsx:367`), et
+  `disabled:cursor-not-allowed` de `checkbox.tsx` et `radio-group.tsx` : un utilitaire est
+  dans la couche `utilities`, qui bat `base`.
+- Ne pas ajouter `cursor-pointer` composant par composant : une seule règle (P1.11 garde
+  l’autre sens).
+
+### Hors périmètre de la v3.3.3
+
+- Le survol lui-même (couleurs de fond au survol) : inchangé.
+- Les champs et libellés inactifs : aucun n’existe ; leurs classes shadcn restent.
+- Le fond de la feuille (`overlay`), qui la ferme au clic : la flèche, comme le veut la
+  convention d’un fond de boîte de dialogue.
+- Le widget Crisp, qui n’est pas à nous.
 
 ## Ce qui change en v3 : l’anneau de focus (#236), revu en v3.1
 
@@ -69,9 +249,12 @@ Aujourd’hui, rien ne remplace l’anneau : la personne cherche à l’œil que
      « Actualiser », sans espace entre eux (décision 26 d’organizer-view). Un contour
      extérieur passerait sur la bordure d’« Actualiser ».
 
-   Le jour où un élément focalisable sera **dans** la liste de la barre (« Annuler »), il
-   prendra −2 px, puisque la liste défile et couperait un contour extérieur. Rien de tel
-   n’est construit aujourd’hui ; ce n’est pas un critère.
+   « Annuler », **dans** la liste de la barre depuis #340, prend 0 px comme « Fermer » : le
+   code lui donne `focus-visible:outline-offset-0` (`message-bar.tsx`), et sa rangée lui
+   laisse 4 px en haut et en bas. Son côté droit, lui, est coupé par la liste, qui défile et
+   ne lui laisse aucune marge à droite : le contour n’est pas entier, ce que la mesure a
+   confirmé ; voir l’issue ouverte, liée sur la PR de #347. Aucun critère F1 ne le mesure
+   (corrigé en v3.3.3 : la v3 le disait non construit et lui prédisait −2 px).
 5. **Partout où un élément reçoit le focus** : boutons de toutes les variantes,
    `destructive` compris ; liens (« Accueil », « Nous contacter », `tel:`, « Créer un
    événement ») ; champs, zone de texte, cases, boutons radio ; onglets et **panneau
@@ -91,7 +274,8 @@ Aujourd’hui, rien ne remplace l’anneau : la personne cherche à l’œil que
    s’appliquerait aussi au contour (1,96:1 à 50 %). Un bouton **inactif** qui garde le focus,
    `aria-disabled` (« Placer » de la feuille des places), le dit par ses couleurs et non plus
    par son opacité : fond `muted` (`#f5f5f5`), texte `muted-foreground` (`#737373`, 4,35:1),
-   même libellé, curseur `not-allowed`. Actif, il reste noir (`primary`). Le contour
+   même libellé, curseur flèche (`default` depuis la v3.3.3, qui remplace `not-allowed` :
+   règle 3 du pointeur, décision 19). Actif, il reste noir (`primary`). Le contour
    l’entoure comme les autres, sur le blanc de la feuille (décision 15).
 8. **À la souris, rien ne change** : le contour suit `:focus-visible`. Un clic sur un bouton
    ne le montre pas ; un clic dans un champ de texte le montre, comme le fait le navigateur.
@@ -274,8 +458,10 @@ Critères :
   `outlineStyle` vaut `none` tant qu’aucune touche n’a été pressée.
 - **F1.11** `page.emulateMedia({ forcedColors: "active" })`, puis Tab jusqu’à ce bouton :
   `outlineStyle` = `solid` et `outlineWidth` = `2px`.
-- **F1.12** Un test Vitest lit chaque fichier `.tsx` et `.css` de `src/`, coupe chaque classe
-  en variantes et utilitaire (`a:b:utilitaire`), et n’y trouve aucune de celles-ci :
+- **F1.12** Un test Vitest lit chaque fichier `.tsx`, `.css` et `.ts` de `src/`, sauf les
+  `.test.ts` et `.spec.ts`, qui citent les anciennes classes pour les trouver (v3.3.2, #337).
+  Il coupe chaque classe en variantes et utilitaire (`a:b:utilitaire`), et n’y trouve aucune
+  de celles-ci :
   - l’utilitaire `ring-ring/50` ou `outline-ring/50`, quelles que soient les variantes ;
   - l’utilitaire `outline-none` ;
   - un utilitaire qui commence par `ring` (`ring-3`, `ring-[3px]`, `ring-ring…`,
@@ -283,7 +469,9 @@ Critères :
     La variante `not-focus-visible` n’est pas `focus-visible` : le halo d’erreur
     `aria-invalid:not-focus-visible:ring-3` est permis.
 
-  Le rapport liste les fichiers et les classes fautifs.
+  Le rapport liste les fichiers et les classes fautifs. Un second test fixe, par leur nom, les
+  fichiers lus : `button.tsx`, `globals.css`, `classes.ts` et `page.test.tsx` le sont ;
+  `focus-ring.test.ts`, `rows.spec.ts` et `README.md` ne le sont pas.
 - **F1.13** `globals.css` : `--ring` vaut `oklch(0.556 0 0)` dans `:root` (Vitest) ; c’est
   aussi ce que lit F1.1, `rgb(115, 115, 115)`.
 - **F1.16** Les repères qui ont déjà un anneau, focalisés **comme l’application le fait**,
@@ -372,14 +560,15 @@ plein soleil, reste utile.
   seul qui ne doit pas le montrer, le contenu d’une boîte de dialogue que Radix focalise en
   repli, prend `outline-hidden` : Tailwind 4 lui garde un contour transparent, visible en
   couleurs forcées.
-- « Placer » inactif : `aria-disabled:bg-muted aria-disabled:text-muted-foreground
-  aria-disabled:cursor-not-allowed`, sans `opacity`.
+- « Placer » inactif : `aria-disabled:bg-muted aria-disabled:text-muted-foreground`, sans
+  `opacity`. Sa flèche vient de la règle de base du pointeur (v3.3.3), sans classe à lui.
 - La palette `.dark` n’est jamais appliquée : elle n’est pas touchée.
 
 ### Hors périmètre de la v3
 
 - La palette sombre (`.dark`).
-- Le survol, et les couleurs des boutons hors focus, sauf « Placer » inactif (règle 7).
+- Les couleurs au survol, et celles des boutons hors focus, sauf « Placer » inactif
+  (règle 7). Le pointeur au survol est la v3.3.3.
 - Le widget de discussion Crisp, qui n’est pas à nous.
 - Redessiner les maquettes `event-board`, `home` et `organizer-view` : elles renvoient ici.
 
@@ -409,6 +598,7 @@ Les couleurs des maquettes sont celles de `src/app/globals.css` (`--muted-foregr
 | cookies refusés | idem | L4.2 |
 | sans JavaScript, avant hydratation | idem | L4.3 |
 
+| v3.3.3 : le pointeur, la main sur un bouton, un lien, un onglet, une case et son libellé ; la flèche sur « Placer » inactif et « Créer » sans JavaScript ; le texte sur un champ | « Le pointeur (v3.3.3) » | P1.1 à P1.11 |
 | v3.1 : l’anneau de focus sur fond blanc, `muted` et sombre ; avant / après ; confirmation ; barre en réussite et en échec, liste qui défile ; champ en erreur ; contour intérieur ; « Placer » inactif | « L’anneau de focus (v3) » | F1.1 à F1.11, F1.16 |
 
 Non dessiné, parce que sans UI propre : la persistance au rechargement et à la visite
@@ -498,6 +688,22 @@ et se place au-dessus de la ligne du bas de page, jamais après « Nous contacte
 17. Décision : les couleurs lues par les tests passent en sRGB par un canevas. — Raison :
     `getComputedStyle` rend `oklch` et `oklab`, avec opacité ; c’est déjà la méthode de
     `ride-remove.spec.ts`.
+
+### Nouvelles en v3.3.3 (#347)
+
+18. Décision : le pointeur est porté par cette maquette, à côté de l’anneau. — Raison : c’est
+    une règle de toute l’application, posée une fois dans `globals.css` ; cette maquette
+    dessine toutes les pages et porte déjà la règle de focus. Dans `event-board` ou
+    `organizer-view`, elle ne couvrirait qu’un écran, et l’autre maquette l’ignorerait.
+19. Décision : un élément inactif montre la flèche (`default`), pas `not-allowed`, « Placer »
+    compris. — Raison : c’est la convention des systèmes et du `preflight` de Tailwind 3. Un
+    bouton `disabled` de `button.tsx` a `pointer-events: none` : le survol le traverse et
+    montre la flèche quoi qu’on écrive ; `not-allowed` ne se verrait que sur les `aria-disabled`
+    (« Placer », « Actualiser »), et l’application aurait deux pointeurs pour un même état.
+20. Décision : la règle ne dépend d’aucune condition de média (`hover`, `pointer: fine`). —
+    Raison : un écran tactile ne dessine pas de pointeur, la condition ne changerait rien de
+    visible ; sans elle, les tests du projet `e2e` (Pixel 7) lisent la même valeur qu’un
+    ordinateur, et P1.10 le vérifie sur un contexte de bureau.
 
 ## Révisions
 
@@ -602,3 +808,48 @@ et se place au-dessus de la ligne du bas de page, jamais après « Nous contacte
     le jeton (comme `holdActionsWith`).
   - Revue de design : **approuvée**, sans autre cycle (décision du coordinateur). Republiée
     à la même URL.
+- v3.3.2 (2026-10-21) : F1.12 seul, sans rien redessiner. Le scan lit aussi les fichiers
+  `.ts` de `src/`, sauf les `.test.ts` et `.spec.ts` (#337, PR #342) : une liste de classes
+  peut vivre dans un `.ts`. Un second test fixe les fichiers lus et ceux qui sont exclus. La
+  page ne change que son numéro de version et sa phrase d’introduction : elle ne détaille
+  pas F1.12, et renvoie au README pour F1.1 à F1.18. Pas encore relue en revue de design.
+  Republiée à la même URL.
+- v3.3.2 (suite) : revue de design : **approuvée**. Une correction de texte, appliquée sans
+  nouvelle revue : l’en-tête du README et la page disaient « sauf les tests » et « tests
+  exclus », alors que F1.12 lit les `.test.tsx` ; ils disent désormais « sauf les `.test.ts`
+  et `.spec.ts` ». Cette ligne de révisions dit aussi que la page renvoie à F1.12 sans le
+  détailler. Republiée à la même URL.
+- v3.3.3 (2026-10-21) : le pointeur, pour toute l’application (#347), signalé par le
+  propriétaire : sur ordinateur, les boutons ne donnent pas la main au survol (Tailwind 4).
+  - La règle : la main sur `button` et `[role="button"]` actifs, par la couche `base` de
+    `globals.css` ; la flèche sur un élément `disabled` ou `aria-disabled` ; les liens, les
+    libellés de case et les champs de texte gardent ce qu’ils ont. Sans condition de média.
+  - Une règle de la v3 change : « Placer » inactif passe de `not-allowed` à la flèche
+    (règle 7, décision 19). Les classes `cursor-not-allowed` de `seat-sheet.tsx`,
+    `checkbox.tsx` et `radio-group.tsx` sont retirées.
+  - Critères P1.1 à P1.11 : la valeur calculée de `cursor`, sur un échantillon nommé de
+    chaque page (`/`, `/nouveau`, `/e/{id}`, `/e/{id}/admin`), des feuilles, de la
+    confirmation et de la barre, inactifs compris ; un contexte de bureau ; le scan de F1.12.
+  - La page ajoute la section « Le pointeur (v3.3.3) », dont les exemples portent la vraie
+    règle (un survol à la souris la montre), et le dessin de « Placer » inactif prend la
+    flèche. Pas encore relue en revue de design. Republiée à la même URL.
+- v3.3.3 (suite) : revue de design : changements demandés. Deux bloquants, mesurés par le
+  relecteur dans le Chromium de Playwright 1.64 : un champ de date ou d’heure et un `<label>`
+  donnent `default`, pas `auto` ni `text`. Cinq suggestions. Corrigé sur place, sans changer
+  de numéro : la v3.3.3 n’avait pas été copiée dans le dépôt.
+  - La lecture : chaque valeur attendue est exacte (`text`, `default`, `auto`, `pointer`),
+    avec ce que le navigateur donne sans la règle. Règle 4 et tableau des états alignés.
+  - P1.2 : « Titre » a `text` ; « Date de début », « Heure de début » et le libellé
+    « Titre » ont la flèche. P1.6 : « Heure de départ » a la flèche ; la case de Tom seule
+    cochée.
+  - Suggestions appliquées, sans en refuser aucune : « Annuler » de la barre (#340) dans
+    P1.8, dans la règle 1 et dessiné ; la règle 4 de la v3 alignée sur le code (0 px) ; la
+    page reçoit les décisions 18 à 20 et le hors-périmètre de la v3.3.3, et sa ligne v3.1
+    parle des couleurs au survol ; `seat-sheet.tsx:367`.
+  - Republiée à la même URL.
+- v3.3.3 : **approuvée** par la revue de design. Deux corrections appliquées sans nouvelle
+  version ni nouvelle revue : sur la page, l’exemple du champ « Heure de départ » est sorti
+  du dessin de la feuille des places et placé sous un titre « Proposer une voiture », la
+  feuille d’où il vient ; la règle 4 de la v3 dit que le contour d’« Annuler » dans la barre
+  est coupé à droite par la liste (mesuré ; suivi dans une issue ouverte). Republiée à la
+  même URL.
