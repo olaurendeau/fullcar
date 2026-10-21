@@ -42,7 +42,7 @@ export function EventView({ title, location, allerAt, retourAt, board, device, m
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <h1 id="event-title" tabIndex={-1} className="text-2xl font-bold wrap-anywhere outline-none">{title}</h1>
+          <h1 id="event-title" tabIndex={-1} className="rounded-sm text-2xl font-bold wrap-anywhere focus-visible:focus-ring">{title}</h1>
           <p className="flex items-start gap-2">
             <MapPin className="mt-1 size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 wrap-anywhere">{location}</span>
