@@ -1982,3 +1982,4 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
     and 2 others ») est noté par la revue et gardé (décision v4.4-5).
   - Rendu vérifié avec Chrome headless, à 1280 et 500 px : aucun débordement horizontal.
     Republiée à la même URL.
+- v4.4.1 (suite) : revue de design : **approuvée**.
