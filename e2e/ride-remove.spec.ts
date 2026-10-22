@@ -68,7 +68,12 @@ const banner = (page: Page) => panel(page).getByRole("status").filter({ hasText:
 const withoutCar = (page: Page) => panel(page).getByRole("region", { name: "Sans voiture" }).getByRole("listitem");
 const tab = (page: Page, leg: "Aller" | "Retour") => page.getByRole("tab", { name: new RegExp(`^${leg}`) });
 const alerts = (scope: Page | Locator) => scope.getByRole("alert").filter({ hasText: /\S/ });
-const slowClose = '[role="alertdialog"][data-state="closed"] { animation-duration: 2s !important; }';
+const overlay = (page: Page) => page.locator('[data-slot="alert-dialog-overlay"]');
+// The confirmation and its overlay close together, each in its own portal: the one that ended its
+// closing first comes back last in the page when reopened, and an overlay there covers the
+// confirmation (#368). Both are slowed, as the page closes both at once.
+const slowClose =
+  '[role="alertdialog"][data-state="closed"], [data-slot="alert-dialog-overlay"][data-state="closed"] { animation-duration: 2s !important; }';
 
 /** A computed colour in sRGB, whatever space the style writes it in (oklch). */
 const rgb = (locator: Locator, property: string) =>
@@ -230,13 +235,16 @@ test.describe("remove a car", () => {
       await trigger.click();
       await confirm(page).click();
       await page.keyboard.press("Escape");
-      if (closing) await expect(page.locator('[role="alertdialog"]')).toHaveAttribute("data-state", "closed");
-      else await expect(trigger).toBeFocused();
+      if (closing) {
+        await expect(page.locator('[role="alertdialog"]')).toHaveAttribute("data-state", "closed");
+        await expect(overlay(page)).toHaveAttribute("data-state", "closed");
+      } else await expect(trigger).toBeFocused();
       if (when.startsWith("reopened")) {
         // Hidden from role queries while the first one closes: found by its card.
         await page.locator(`article[aria-labelledby="car-${scene.cars.claire}"] button`, { hasText: REMOVE }).focus();
         await page.keyboard.press("Enter");
         await expect(confirmation(page)).toHaveAttribute("data-state", "open");
+        await expect(overlay(page)).toHaveAttribute("data-state", "open");
         // Still on its way: the new confirmation cannot send it again.
         await expect(confirm(page)).toBeDisabled();
       }

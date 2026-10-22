@@ -4,7 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView } from "@/components/event/event-view";
-import { offerChanges, personLeg, type Undo } from "@/components/event/bar-state";
+import { offerChanges, personLeg, type Message, type Undo } from "@/components/event/bar-state";
 import {
   cellWhy,
   failureText,
@@ -14,6 +14,7 @@ import {
   offerWhy,
   personWhy,
   undoWhy,
+  undoneText,
   whyOf,
   wordsOf,
   type NotDone,
@@ -57,10 +58,14 @@ import { actionRunner, sendAction, stateOf, stateRead, stateShown, withTabsHeld,
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
  * sees and applies nothing, `apply(state)` shows it. The personal token stays in this file.
+ * `applyEvent(event)` shows the header the organiser just saved, on the legs it keeps (epic
+ * #250), and `succeed(message)` writes the success of the organiser's action in the bar.
  */
 export interface BoardHandle {
   read(): Promise<Sent<EventState | undefined>>;
   apply(state: EventState): void;
+  applyEvent(event: EventHeader): void;
+  succeed(message: Message): void;
 }
 
 /**
@@ -134,10 +139,16 @@ export function ParticipantBoard({
       release();
     };
   });
+  const { succeed } = messages;
   useImperativeHandle(
     ref,
-    () => ({ read: () => sendAction(() => loadEventState(id, readDeviceToken(id))), apply: setBoard }),
-    [id, setBoard],
+    () => ({
+      read: () => sendAction(() => loadEventState(id, readDeviceToken(id))),
+      apply: setBoard,
+      applyEvent: (event) => setBoard({ event, legs: latest.current.legs.filter(({ leg }) => leg === "aller" || event.retourAt) }),
+      succeed,
+    }),
+    [id, setBoard, succeed],
   );
 
   useLayoutEffect(() => {
@@ -336,7 +347,7 @@ export function ParticipantBoard({
 
   // « Annuler » (C5.10, rule 6): the persons placed get their state before on the leg back, if
   // still in the car. Its failure names them and the car, and carries the same « Annuler »; its
-  // success, those given back, the focus on the car's title once the page shows it.
+  // success, those given back, or all of them already out (v4.4.4), the focus on the car's title once the page shows it.
   const [undoneIn, setUndoneIn] = useState<{ landmark: () => boolean } | null>(null);
   useEffect(() => {
     if (undoneIn && (document.activeElement === null || document.activeElement === document.body)) focusFirstShown([undoneIn.landmark]);
@@ -363,11 +374,11 @@ export function ParticipantBoard({
       // rule 2 (v4.4.5) from depending on that order.
       send.changed(undoneIds.map((personId) => personLeg(personId, leg)));
       const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
-      const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });
+      const text = undoneText(words, { names, undone, driver });
       send.whenClosed(() => {
-        // Nobody given back, there is no success to say: the success goes. The failures stay, and
-        // an information written since « Annuler » left too (rule 4, v4.4.2): the bar closes only without them.
-        messages.succeed(undone.length > 0 ? { text, landmark, leg } : null);
+        // Nobody given back, it says so, never silent (v4.4.4): it replaces the success shown, whatever
+        // it is. The failures stay, and an information written since « Annuler » left too (rule 4, v4.4.2).
+        messages.succeed({ text, landmark, leg });
         setUndoneIn({ landmark });
       });
     }

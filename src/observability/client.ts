@@ -1,5 +1,5 @@
 import type * as Sentry from "@sentry/nextjs";
-import { exactIntegrations, registerHooks, sentryOptions, type SentryEnv } from "./options";
+import { codeFramesOnly, exactIntegrations, registerHooks, sentryOptions, type SentryEnv } from "./options";
 import { scrubText } from "./scrub";
 
 /*
@@ -48,5 +48,6 @@ export async function startBrowserSentry(env: SentryEnv, load: Load = () => impo
   });
   if (!client) return undefined;
   registerHooks(client);
+  client.addEventProcessor(codeFramesOnly);
   return sentry;
 }

@@ -181,7 +181,7 @@ test.describe("the tiles", () => {
     }
   });
 
-  test("O4.1: under 1024 px, top to bottom: the title, the tiles, both links, the warning, then the sections", async ({
+  test("O4.1 (amended by #250): under 1024 px, top to bottom: the title, the tiles, both links, the warning, « Modifier l’événement », then the sections", async ({
     page,
     seededEvent,
   }) => {
@@ -193,6 +193,7 @@ test.describe("the tiles", () => {
       linkGroup(page, FR.shareLink),
       linkGroup(page, FR.adminLink),
       panel(page).getByRole("note"),
+      panel(page).getByRole("button", { name: "Modifier l’événement", exact: true }),
       heading(page, "Aller"),
       heading(page, "Retour"),
     ];

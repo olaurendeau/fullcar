@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { EventErrors, EventField, EventFields as SentFields } from "@/domain/event";
+import { EVENT_FIELDS, type EventErrors, type EventField, type EventFields as SentFields, type EventHeader } from "@/domain/event";
+import { wallClockParts } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { eventErrorMessage } from "./event-error";
 
@@ -26,6 +27,39 @@ export const BLANK_EVENT_FIELDS: EventFieldsState = {
   values: { title: "", location: "", allerDate: "", allerTime: "", retourDate: "", retourTime: "", retour: true },
   retourDateFollows: true,
 };
+
+/**
+ * The fields of a form opened on saved values (organizer-view v3.3.6, « Le formulaire »): the box
+ * Retour checked if and only if there is a retour. The end date follows the start date when both
+ * were on the same day (decision 43), or when there is no end yet: checking the box shows the
+ * start's date, then the end's time empty (M1.6).
+ */
+export function loadedEventFields({ title, location, allerAt, retourAt }: EventHeader): EventFieldsState {
+  const aller = wallClockParts(allerAt);
+  const retour = retourAt === null ? undefined : wallClockParts(retourAt);
+  return {
+    values: {
+      title,
+      location,
+      allerDate: aller.date,
+      allerTime: aller.time,
+      retour: retour !== undefined,
+      retourDate: retour?.date ?? aller.date,
+      retourTime: retour?.time ?? "",
+    },
+    retourDateFollows: retour === undefined || retour.date === aller.date,
+  };
+}
+
+/**
+ * Whether a field differs from its loaded value: one put back as it was is not changed (M2.5).
+ * The end's fields count only while the box is checked: unchecked, they are neither shown nor saved.
+ */
+export function eventFieldsChanged(values: EventFieldValues, loaded: EventFieldValues): boolean {
+  const shown = (each: EventFieldValues) =>
+    EVENT_FIELDS.filter((name) => each.retour || (name !== "retourDate" && name !== "retourTime")).map((name) => each[name]);
+  return values.retour !== loaded.retour || shown(values).some((value, n) => value !== shown(loaded)[n]);
+}
 
 /**
  * A change of the fields, applied to the state current when it runs, not to the one of the

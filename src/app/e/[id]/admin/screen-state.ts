@@ -1,7 +1,9 @@
+import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
+import { isWallClock } from "@/domain/wall-clock";
 import type { EventState } from "../event-state";
-import { stateRead, type Sent } from "../run-action";
+import { stateRead, type ActionProblem, type Sent } from "../run-action";
 import type { AdminLinkCheck } from "./admin-link";
 
 /*
@@ -149,6 +151,36 @@ export function screenRead(
   const state = stateRead(board);
   if (!legs || !state) return undefined;
   return { legs, board: state };
+}
+
+/**
+ * What came of « Valider » in « Modifier l’événement » (organizer-view v3.3.6, « Enregistrer »):
+ * saved, with the values the server stored; a field refused; or a problem, said in the sheet.
+ */
+export type EditAnswer =
+  | { kind: "saved"; event: EventHeader }
+  | { kind: "errors"; errors: EventErrors }
+  | { kind: "problem"; problem: ActionProblem };
+
+function isHeader(value: unknown): value is EventHeader {
+  if (typeof value !== "object" || value === null) return false;
+  const { title, location, allerAt, retourAt } = value as Record<string, unknown>;
+  return typeof title === "string" && typeof location === "string" && isWallClock(allerAt) && (retourAt === null || isWallClock(retourAt));
+}
+
+/**
+ * The answer of `updateEvent`, as the sheet takes it. Decision: `changed`, `confirmRetour`,
+ * `invalid` and `eventNotFound` are the generic failure until #269 and #270 give them their
+ * words. Reason: the epic's « Comportement transitoire »; nothing was written, the typing stays.
+ */
+export function editAnswer(sent: Sent<unknown>): EditAnswer {
+  if (!sent.ok) return { kind: "problem", problem: sent.problem };
+  const answer = sent.value as { ok?: unknown; event?: unknown; errors?: unknown } | null | undefined;
+  if (answer?.ok === true && isHeader(answer.event)) return { kind: "saved", event: answer.event };
+  if (answer?.ok === false && typeof answer.errors === "object" && answer.errors !== null) {
+    return { kind: "errors", errors: answer.errors as EventErrors };
+  }
+  return { kind: "problem", problem: "failed" };
 }
 
 /**
