@@ -18,6 +18,7 @@ import {
   offerWhy,
   personWhy,
   undoWhy,
+  undoneText,
   whyOf,
   wordsOf,
   type NotDone,
@@ -287,8 +288,33 @@ describe("nameList: from one to five persons (C11.11)", () => {
           );
         }
       });
+
+      it(`${locale}, ${count}: the success of « Annuler » agrees with all of them, given back or already out (v4.4.4)`, () => {
+        const say = (undone: string[]) => undoneText(words(locale), { names, undone, driver: "Sophie" });
+        if (locale === "fr") {
+          expect(say(names)).toBe(`${list} ${one ? "n’est plus" : "ne sont plus"} dans la voiture de Sophie`);
+          expect(say([])).toBe(`${list} ${one ? "n’était" : "n’étaient"} déjà plus dans la voiture de Sophie`);
+        } else {
+          expect(say(names)).toBe(`${list} ${one ? "is" : "are"} no longer in Sophie’s car`);
+          expect(say([])).toBe(`${list} ${one ? "was" : "were"} already out of Sophie’s car`);
+        }
+      });
     }
   }
+});
+
+// « Un « Annuler » renvoyé depuis une ligne d’échec » (v4.4.4): the success names those given
+// back, `Seat.undone`; nobody given back, every person of the « Annuler », `Seat.alreadyOut`.
+describe("undoneText: the success of « Annuler » (C5.10, B1.1 to B1.3)", () => {
+  const say = (locale: Locale, undone: string[]) => undoneText(words(locale), { names: ["Tom", "Léa"], undone, driver: "Sophie" });
+
+  it("names all, a part, or, nobody given back, all of them already out", () => {
+    expect(say("fr", ["Tom", "Léa"])).toBe("Tom et Léa ne sont plus dans la voiture de Sophie");
+    expect(say("fr", ["Tom"])).toBe("Tom n’est plus dans la voiture de Sophie");
+    expect(say("fr", [])).toBe("Tom et Léa n’étaient déjà plus dans la voiture de Sophie");
+    expect(say("en", [])).toBe("Tom and Léa were already out of Sophie’s car");
+    expect(undoneText(words("fr"), { names: FIVE.slice(0, 4), undone: [], driver: "Sophie" })).toBe("Tom, Léa et 2 autres n’étaient déjà plus dans la voiture de Sophie");
+  });
 });
 
 describe("undoWhy: « Annuler » (C5.10, C11.11)", () => {
