@@ -2,7 +2,7 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { failHeld, holdFirst, holdToken, loseFirst, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdFirst, holdToken, loseFirst, messages, newToken, recordBar, said, watchAlerts } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -30,7 +30,30 @@ const FR = {
   withoutCar: "Je cherche une place",
   notConcerned: "Je ne fais pas le retour",
   noRetour: "Il n’y a plus de retour pour cet événement : rien n’a changé.",
+  submit: "Valider",
+  place: "Lieu de départ",
+  seats: "Places, sans compter qui conduit",
+  note: "Note (facultatif)",
+  firstName: "Prénom",
+  listed: "Sans voiture",
 };
+/** The words the scene of N1.1 needs in English (event-board v4.4.6). */
+const EN: Words = {
+  offer: "Offer a car",
+  add: "Add a person",
+  both: "Outbound and return",
+  retour: "On the return trip",
+  drive: "I drive back too",
+  withoutCar: "I need a seat",
+  notConcerned: "I’m not doing the return trip",
+  submit: "Confirm",
+  place: "Departure place",
+  seats: "Seats, driver not included",
+  note: "Note (optional)",
+  firstName: "First name",
+  listed: "Without a car",
+};
+type Words = Omit<typeof FR, "noRetour">;
 const AGAIN = "Il n’y a plus de retour pour cet événement :";
 const TEXT = {
   offerBoth: `Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. ${AGAIN} proposez de nouveau la voiture, pour l’aller seulement.`,
@@ -41,16 +64,16 @@ const PLACE = "Parking du stade";
 
 const title = (page: Page) => page.getByRole("heading", { level: 1 });
 const dialog = (page: Page, name: string) => page.getByRole("dialog", { name });
-const submit = (page: Page, name: string) => dialog(page, name).getByRole("button", { name: "Valider" });
+const submit = (page: Page, name: string, words: Words = FR) => dialog(page, name).getByRole("button", { name: words.submit });
 /** The bar's lines and the tabs, found by their CSS: an open sheet hides them from role queries. */
 const lines = (page: Page) => page.locator('[data-message-bar] [role="group"] > p');
 const tabs = (page: Page) => page.locator('[role="tab"]');
-const retourGroup = (page: Page) => dialog(page, FR.offer).getByRole("radiogroup", { name: FR.retour });
+const retourGroup = (page: Page, words: Words = FR) => dialog(page, words.offer).getByRole("radiogroup", { name: words.retour });
 
 /** The page open on the aller, its device known: « Ajouter une personne » waits for it (C5.9). */
-async function open(page: Page, eventId: string, scope: (page: Page) => Locator = (each) => each.getByRole("tabpanel")) {
+async function open(page: Page, eventId: string, scope: (page: Page) => Locator = (each) => each.getByRole("tabpanel"), words: Words = FR) {
   await page.goto(`/e/${eventId}`);
-  await expect(scope(page).getByRole("button", { name: FR.add, exact: true })).toBeEnabled();
+  await expect(scope(page).getByRole("button", { name: words.add, exact: true })).toBeEnabled();
   return scope(page);
 }
 
@@ -69,17 +92,17 @@ async function seedClaire(db: Db, page: Page, eventId: string, retour: "withoutC
 }
 
 /** `firstName` is shown without a car at the aller, under the sheet: the answer is applied. */
-const registered = (page: Page, firstName: string) =>
-  expect(page.getByRole("region", { name: "Sans voiture", includeHidden: true }).getByText(firstName)).toBeAttached();
+const registered = (page: Page, firstName: string, words: Words = FR) =>
+  expect(page.getByRole("region", { name: words.listed, includeHidden: true }).getByText(firstName)).toBeAttached();
 
 /** « Proposer une voiture » from the aller, Claire driving, with `choice` au retour. */
-async function fillOffer(page: Page, scope: Locator, choice: string) {
-  await scope.getByRole("button", { name: FR.offer, exact: true }).click();
-  const form = dialog(page, FR.offer);
-  await form.getByLabel("Lieu de départ", { exact: true }).fill(PLACE);
-  await form.getByLabel("Places, sans compter qui conduit", { exact: true }).fill("3");
-  await form.getByLabel("Note (facultatif)", { exact: true }).fill("Départ à l’heure");
-  await retourGroup(page).getByRole("radio", { name: choice, exact: true }).check();
+async function fillOffer(page: Page, scope: Locator, choice: string, words: Words = FR) {
+  await scope.getByRole("button", { name: words.offer, exact: true }).click();
+  const form = dialog(page, words.offer);
+  await form.getByLabel(words.place, { exact: true }).fill(PLACE);
+  await form.getByLabel(words.seats, { exact: true }).fill("3");
+  await form.getByLabel(words.note, { exact: true }).fill("Départ à l’heure");
+  await retourGroup(page, words).getByRole("radio", { name: choice, exact: true }).check();
 }
 
 /** What the offer's sheet kept of the aller: its place, its seats and its note. */
@@ -98,12 +121,12 @@ async function expectFocusStays(page: Page, locator: Locator) {
 }
 
 /** Registers `firstName` from `scope`, for the aller alone, its answer held until `answer()`; the sheet closed meanwhile. */
-async function sendHeldRegistration(page: Page, scope: Locator, firstName: string, hasRetour: boolean) {
+async function sendHeldRegistration(page: Page, scope: Locator, firstName: string, hasRetour: boolean, words: Words = FR) {
   const answer = await holdFirst(page, firstName, false);
-  await scope.getByRole("button", { name: FR.add, exact: true }).click();
-  await dialog(page, FR.add).getByLabel("Prénom").fill(firstName);
-  if (hasRetour) await dialog(page, FR.add).getByRole("checkbox", { name: FR.both }).uncheck();
-  await submit(page, FR.add).click();
+  await scope.getByRole("button", { name: words.add, exact: true }).click();
+  await dialog(page, words.add).getByLabel(words.firstName).fill(firstName);
+  if (hasRetour) await dialog(page, words.add).getByRole("checkbox", { name: words.both }).uncheck();
+  await submit(page, words.add, words).click();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const answered = page.waitForResponse((response) => !!response.request().postData()?.includes(firstName));
@@ -284,8 +307,9 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
   // The owner's decision on #267 (review of #371): an offer on both legs failed while the retour
   // was there, offline or on an error (#373), stays once it goes, cut to its aller part, which the
   // aller sent again withdraws.
-  const failures: Record<string, { why: string; hold: (page: Page, context: BrowserContext) => Promise<() => Promise<void>> }> = {
+  const failures: Record<string, { label: string; why: string; hold: (page: Page, context: BrowserContext) => Promise<() => Promise<void>> }> = {
     offline: {
+      label: "N1.6: ",
       why: "Vérifiez la connexion, puis réessayez.",
       hold: async (page, context) => {
         const lose = await loseFirst(page, PLACE);
@@ -296,6 +320,7 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
       },
     },
     "on an error": {
+      label: "",
       why: "Une erreur est survenue : réessayez dans un instant.",
       hold: async (page) => {
         const answer = await holdFirst(page, PLACE, true);
@@ -303,8 +328,8 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
       },
     },
   };
-  for (const [how, { why, hold }] of Object.entries(failures)) {
-    test(`« Je ramène aussi » failed ${how}, then the retour removed: the line stays, about the aller alone`, async ({ page, context, db, seededEvent }) => {
+  for (const [how, { label, why, hold }] of Object.entries(failures)) {
+    test(`${label}« Je ramène aussi » failed ${how}, then the retour removed: the line stays, about the aller alone`, async ({ page, context, db, seededEvent }) => {
       await seedClaire(db, page, seededEvent.id);
       const scope = await open(page, seededEvent.id);
       const fail = await hold(page, context);
@@ -337,8 +362,13 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
 
   // Offline or an error alone keeps the aller part: a refusal's reason may hold only with the
   // retour. Claire drives there meanwhile; the retour gone, she drives nothing (decision 44).
-  test("« Je ramène aussi » refused by `alreadyDriving`, then the retour removed: the line goes with it", async ({ page, db, seededEvent }) => {
+  test("N1.5: « Je ramène aussi » refused by `alreadyDriving`, then the retour removed: the line goes with it, and `alert` is emptied", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
     const claire = await seedClaire(db, page, seededEvent.id);
+    await page.clock.install();
     const scope = await open(page, seededEvent.id);
     const answer = await holdFirst(page, PLACE, false);
     await fillOffer(page, scope, FR.drive);
@@ -347,18 +377,24 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await seedRide(db, seededEvent.id, claire, { leg: "retour" });
     answer();
-    await expect(lines(page)).toHaveText(["Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture."]);
+    const refused = "Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture.";
+    await expect(lines(page)).toHaveText([refused]);
+    await expect(bar(page)).toHaveText(refused);
+    const record = await recordBar(page);
     await removeRetourInDb(db, seededEvent.id);
     await (await sendHeldRegistration(page, scope, "Inès", true))();
 
     await registered(page, "Inès");
     await expect(tabs(page)).toHaveCount(0);
+    await page.clock.runFor(1_000);
     await expect(lines(page)).toHaveCount(0);
+    expect(said((await record()).writes, "alert")).toEqual([]);
+    await expect(bar(page)).toBeEmpty();
   });
 
   // Offered from the Retour tab, the line cut to the aller has the aller's « Proposer une voiture »
   // for landmark: the Retour's is gone with the tabs (rule 8).
-  test("« J’emmène aussi » from the Retour failed offline, then the retour removed: « Fermer » gives the focus to the aller's « Proposer une voiture »", async ({
+  test("N1.6: « J’emmène aussi » from the Retour failed offline, then the retour removed: « Fermer » gives the focus to the aller's « Proposer une voiture »", async ({
     page,
     context,
     db,
@@ -390,6 +426,149 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     await expect(lines(page)).toHaveText([`La voiture de Claire pour l’aller n’a pas été proposée. ${offline}`]);
     await page.locator("[data-message-bar]").getByRole("button", { name: "Fermer" }).click();
     await expect(page.getByRole("region", { name: "Aller", exact: true }).getByRole("button", { name: FR.offer, exact: true })).toBeFocused();
+  });
+});
+
+/*
+ * Event-board v4.4.6 (#372, H7): cutting a line to its aller part is not writing it. The region
+ * `alert` that said the whole line is emptied, and nothing is written after; one that waits to
+ * say it says the cut words, once; one that says another failure is left alone. « Ensuite »:
+ * no tabs left, then the clock moves on by 1 000 ms. Inès's answer brings the state without the retour.
+ */
+test.describe("event-board v4.4.6: a failure line cut to its aller part is not announced", () => {
+  const OFFLINE = { "fr-FR": "Vérifiez la connexion, puis réessayez.", "en-US": "Check your connection, then try again." };
+  const WHOLE = {
+    "fr-FR": "Les voitures de Claire pour l’aller et le retour n’ont pas été proposées.",
+    "en-US": "Claire’s cars for the outbound and return trips were not offered.",
+  };
+  const CUT = { "fr-FR": "La voiture de Claire pour l’aller n’a pas été proposée.", "en-US": "Claire’s car for the outbound trip was not offered." };
+  const FAILED = "Une erreur est survenue : réessayez dans un instant.";
+  const HUGO = `Hugo n’a pas pu rejoindre vos inscriptions. ${OFFLINE["fr-FR"]}`;
+
+  /** Claire's offer on both legs from the Aller, « Valider », then the sheet closed before its answer. */
+  async function sendOffer(page: Page, scope: Locator, words: Words = FR) {
+    await fillOffer(page, scope, words.drive, words);
+    await submit(page, words.offer, words).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+
+  /** Online, the retour removed, Inès registered at the aller: then « Ensuite », the page without tabs and 1 000 ms gone by. */
+  async function removeRetour(page: Page, context: BrowserContext, db: Db, eventId: string, scope: Locator, words: Words = FR) {
+    await context.setOffline(false);
+    await removeRetourInDb(db, eventId);
+    await (await sendHeldRegistration(page, scope, "Inès", true, words))();
+    await registered(page, "Inès", words);
+    await expect(tabs(page)).toHaveCount(0);
+    await page.clock.runFor(1_000);
+  }
+
+  for (const [locale, words] of [
+    ["fr-FR", FR],
+    ["en-US", EN],
+  ] as const) {
+    test.describe(locale, () => {
+      test.use({ locale });
+
+      test("N1.1: offline, said in `alert`, then the retour removed: the line is cut, `alert` emptied with nothing written, `status` untouched", async ({
+        page,
+        context,
+        db,
+        seededEvent,
+      }) => {
+        await seedClaire(db, page, seededEvent.id);
+        await page.clock.install();
+        const scope = await open(page, seededEvent.id, undefined, words);
+        const lose = await loseFirst(page, PLACE);
+        await sendOffer(page, scope, words);
+        await context.setOffline(true);
+        lose();
+        await expect(bar(page)).toHaveText(`${WHOLE[locale]} ${OFFLINE[locale]}`);
+        const record = await recordBar(page);
+        await removeRetour(page, context, db, seededEvent.id, scope, words);
+
+        await expect(messages(page)).toHaveText([`${CUT[locale]} ${OFFLINE[locale]}`]);
+        const { writes } = await record();
+        expect(said(writes, "alert")).toEqual([]);
+        expect(said(writes, "status")).toEqual([]);
+        await expect(bar(page)).toBeEmpty();
+      });
+    });
+  }
+
+  test.describe("fr-FR", () => {
+    test.use({ locale: "fr-FR" });
+
+    test("N1.2: an error, said in `alert`, then the retour removed: the line is cut, `alert` emptied with nothing written", async ({
+      page,
+      context,
+      db,
+      seededEvent,
+    }) => {
+      await seedClaire(db, page, seededEvent.id);
+      await page.clock.install();
+      const scope = await open(page, seededEvent.id);
+      const answer = await holdFirst(page, PLACE, true);
+      await sendOffer(page, scope);
+      await failHeld(page, answer);
+      await expect(bar(page)).toHaveText(`${WHOLE["fr-FR"]} ${FAILED}`);
+      const record = await recordBar(page);
+      await removeRetour(page, context, db, seededEvent.id, scope);
+
+      await expect(messages(page)).toHaveText([`${CUT["fr-FR"]} ${FAILED}`]);
+      expect(said((await record()).writes, "alert")).toEqual([]);
+      await expect(bar(page)).toBeEmpty();
+    });
+
+    test("N1.3: the failure not said yet as its line is cut: `alert` says the cut words once, never the whole line", async ({ page, db, seededEvent }) => {
+      await seedClaire(db, page, seededEvent.id);
+      await page.clock.install();
+      const scope = await open(page, seededEvent.id);
+      const claire = await holdFirst(page, PLACE, true);
+      await sendOffer(page, scope);
+      await removeRetourInDb(db, seededEvent.id);
+      // The page's actions leave one at a time: Inès's, after Claire's answer.
+      const ines = await sendHeldRegistration(page, scope, "Inès", true);
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+      const record = await recordBar(page);
+      await failHeld(page, claire);
+      await expect(messages(page)).toHaveText([`${WHOLE["fr-FR"]} ${FAILED}`]);
+      await ines();
+      await expect(tabs(page)).toHaveCount(0);
+      await page.clock.runFor(1_000);
+
+      const cut = `${CUT["fr-FR"]} ${FAILED}`;
+      expect(said((await record()).writes, "alert")).toEqual([cut]);
+      await expect(messages(page)).toHaveText([cut]);
+    });
+
+    test("N1.4: another failure said in `alert` as Claire's line is cut: `alert` is not touched", async ({ page, context, db, seededEvent }) => {
+      await seedClaire(db, page, seededEvent.id);
+      await page.clock.install();
+      const scope = await open(page, seededEvent.id);
+      const loseClaire = await loseFirst(page, PLACE);
+      await sendOffer(page, scope);
+      await context.setOffline(true);
+      loseClaire();
+      await expect(messages(page)).toHaveText([`${WHOLE["fr-FR"]} ${OFFLINE["fr-FR"]}`]);
+      await context.setOffline(false);
+      const loseHugo = await loseFirst(page, "Hugo");
+      await scope.getByRole("button", { name: FR.add, exact: true }).click();
+      await dialog(page, FR.add).getByLabel(FR.firstName).fill("Hugo");
+      await expect(dialog(page, FR.add).getByRole("checkbox", { name: FR.both })).toBeChecked();
+      await submit(page, FR.add).click();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await context.setOffline(true);
+      loseHugo();
+      await expect(bar(page)).toHaveText(HUGO);
+      const record = await recordBar(page);
+      await removeRetour(page, context, db, seededEvent.id, scope);
+
+      await expect(messages(page)).toHaveText([HUGO, `${CUT["fr-FR"]} ${OFFLINE["fr-FR"]}`]);
+      expect((await record()).writes.filter((write) => write.region === "alert")).toEqual([]);
+      await expect(bar(page)).toHaveText(HUGO);
+    });
   });
 });
 

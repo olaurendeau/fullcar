@@ -5,10 +5,12 @@ import {
 } from "@sentry/nextjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, startBrowserSentry } from "./client";
-import { type Integration, registerHooks, scrubEnvelopeHeader, sentryOptions, type SentryEnv, tracesSampleRate } from "./options";
+import {
+  codeFramesOnly, type Integration, registerHooks, scrubEnvelopeHeader, sentryOptions, type SentryEnv, tracesSampleRate,
+} from "./options";
 import { scrubBreadcrumb, scrubCreatedDsc, scrubEvent, scrubSpan } from "./scrub";
 import {
-  codeFramesOnly, databaseErrors, registerServerHooks, reportRequestError, SERVER_INTEGRATIONS, type ServerSdk, serverEnv,
+  databaseErrors, registerServerHooks, reportRequestError, SERVER_INTEGRATIONS, type ServerSdk, serverEnv,
   startServerSentry,
 } from "./server";
 import { drawSecrets, leakedKinds, RELEASE } from "./test-secrets";
@@ -174,7 +176,7 @@ describe("in the browser, with a DSN", () => {
     "Dedupe", "HttpContext", "CultureContext", "BrowserSession", "BrowserTracing", "NextjsClientStackFrameNormalization", "Replay",
   ];
 
-  it("calls init once, with the options, our scripts only, and registers the same hooks", async () => {
+  it("calls init once, with the options, our scripts only, registers the same hooks, and keeps the frames of code alone", async () => {
     const { sdk, client, load } = fakeBrowserSdk();
     expect(await startBrowserSentry(ENV, load)).toBe(sdk);
     expect(sdk.init).toHaveBeenCalledTimes(1);
@@ -182,6 +184,7 @@ describe("in the browser, with a DSN", () => {
     expect(options).toEqual(sentryOptions(ENV));
     expect([typeof integrations, allowUrls]).toEqual(["function", [/\/_next\//]]);
     expect(client.on.mock.calls).toEqual([["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader]]);
+    expect(client.addEventProcessor.mock.calls).toEqual([[codeFramesOnly]]);
   });
 
   it("keeps the exact list of integrations, page loads and navigations named without their URL", async () => {

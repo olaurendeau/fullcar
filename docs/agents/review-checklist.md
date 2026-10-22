@@ -16,8 +16,10 @@ celui qui écrit le code.
 - À partir de #154, le jeton d'admin n'entre que dans le corps de `loadOrganiserPanel`, et,
   à partir de #263, dans celui d'`updateEvent`. Pour un jeton d'admin faux, absent ou mal
   formé, la réponse ne contient que `{ state: "invalid" }` pour `loadOrganiserPanel`, et que
-  `{ ok: false, error: "invalid" }` pour `updateEvent`, qui n'écrit alors rien. La réponse
-  du panneau n'est ni stockée dans le navigateur, ni journalisée (O6.4).
+  `{ ok: false, error: "invalid" }` pour `updateEvent`, qui n'écrit alors rien. Un
+  identifiant d'événement inconnu ou mal formé reçoit `{ ok: false, error: "eventNotFound" }`
+  d'`updateEvent`, avant la vérification du jeton. La réponse du panneau n'est ni stockée
+  dans le navigateur, ni journalisée (O6.4).
 - À partir de #66, le jeton personnel est tiré **par le navigateur** avec
   `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
   avant l'envoi. Un jeton personnel tiré
@@ -116,9 +118,10 @@ celui qui écrit le code.
 - Dans le navigateur, une erreur qui peut partir a un `name` qui finit par `Error` :
   `@sentry/browser` ne retire la première ligne de sa pile que si elle contient `Error: `,
   sinon il la lit comme une frame, et son message avec (#239). Sur le serveur, `@sentry/core`
-  saute toujours la première ligne, mais fait une frame de toute autre ligne du message qui en
-  a l'air : `codeFramesOnly` (`src/observability/server.ts`) ne garde de toute erreur que les
-  frames de code, et `databaseErrors` ne garde du `DatabaseError` de pg que son code.
+  saute toujours la première ligne. Des deux côtés, toute autre ligne du message qui a l'air
+  d'une frame en devient une : `codeFramesOnly` (`src/observability/options.ts`), posé par
+  `startServerSentry` et `startBrowserSentry`, ne garde de toute erreur que les frames de code
+  (#361), et sur le serveur `databaseErrors` ne garde du `DatabaseError` de pg que son code.
 - Le navigateur ne parle qu'à notre origine (`tunnelRoute: "/monitoring"`). Aucun DSN ni
   jeton Sentry écrit en dur ; `SENTRY_AUTH_TOKEN` n'est lu qu'au build, et sans lui aucune
   source map n'est produite.

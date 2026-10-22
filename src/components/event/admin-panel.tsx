@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Lock, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Lock, Pencil, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useId, useRef, type ReactNode, type Ref, type RefObject } from "react";
 import type { Said } from "@/app/e/[id]/admin/screen-state";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
 import type { WallClock } from "@/domain/wall-clock";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CopyableLink, ShareButton } from "./copyable-link";
 import { OrganiserLegs } from "./organiser-leg";
@@ -26,7 +27,8 @@ import { ReadButton } from "./read-button";
  * of the title, reads the screen again (O1.8); `said` is what the title line's live regions say
  * of it (O1.9, O5.4), and `shown` what the alert's frame shows meanwhile. Withdrawn (`legs`
  * null), the tiles and the sections go, the links stay, and a sentence says why, not live,
- * unless the alert shows in its place (O1.10, O5.4).
+ * unless the alert shows in its place (O1.10, O5.4). « Modifier l’événement » follows « Gardez
+ * ce lien », with the links: it stays when the panel is withdrawn, and folds with them (v3.3).
  */
 export function AdminPanel({
   publicUrl,
@@ -43,6 +45,8 @@ export function AdminPanel({
   onToggle,
   folded,
   onToggleFolded,
+  editRef,
+  onEdit,
 }: {
   publicUrl: string;
   adminUrl: string;
@@ -58,6 +62,9 @@ export function AdminPanel({
   onToggle: (key: string) => void;
   folded: boolean;
   onToggleFolded: () => void;
+  /** « Modifier l’événement », which opens the sheet (epic #250): the focus's place once it closes. */
+  editRef: RefObject<HTMLButtonElement | null>;
+  onEdit: () => void;
 }) {
   const t = useTranslations("Admin");
   const titleId = useId();
@@ -146,6 +153,11 @@ export function AdminPanel({
             <Notice title={t("keep.title")} body={t("keep.body")} />
           </div>
         </div>
+        {/* After « Gardez ce lien », before the sections; from 1024 px, under both columns, at its width (v3.3). */}
+        <Button ref={editRef} type="button" variant="outline" className="h-11 w-full lg:w-fit lg:self-start" onClick={onEdit}>
+          <Pencil aria-hidden />
+          {t("edit")}
+        </Button>
         {(legs || !framed) && <hr className="hidden lg:block" />}
         {legs ? (
           <OrganiserLegs legs={legs} allerAt={allerAt} retourAt={retourAt} expanded={expanded} onToggle={onToggle} />

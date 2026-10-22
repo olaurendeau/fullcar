@@ -267,7 +267,8 @@
   "Seat": {
     "placed": "{firstName} is in {driver}’s car",
     "undo": "Undo",
-    "undone": "{names} {count, plural, one {is} other {are}} no longer in {driver}’s car"
+    "undone": "{names} {count, plural, one {is} other {are}} no longer in {driver}’s car",
+    "alreadyOut": "{names} {count, plural, one {was} other {were}} already out of {driver}’s car"
   },
   "RideChanges": {
     "leaving": {
@@ -343,7 +344,12 @@
     "tile": {
       "free": "{free, plural, one {# free seat} other {# free seats}}",
       "missing": "{missing, plural, one {# seat missing} other {# seats missing}}"
-    }
+    },
+    "edit": "Edit the event"
+  },
+  "EditEvent": {
+    "title": "Edit the event",
+    "saved": "Event updated. Nobody is notified: remember to tell the group."
   },
   "EventNotFound": {
     "title": "Event not found",
