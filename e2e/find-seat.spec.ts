@@ -321,6 +321,7 @@ test.describe("« Trouver une place »", () => {
       await holdToken(page, seededEvent.id, token);
       await page.goto(`/e/${seededEvent.id}`);
       const seen = await watchAlerts(page);
+      const record = await recordBar(page);
       const answer = await holdFirst(page, scene.tom, false);
       await cell(page, "Tom", "Retour").click();
       await sheet(page, "Tom · Retour").getByRole("button", { name: "Je cherche une place" }).click();
@@ -342,6 +343,8 @@ test.describe("« Trouver une place »", () => {
       await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
       await expect(messages(page)).toHaveText([TOM_NO_RETOUR]);
       await expect(bar(page)).toHaveText(TOM_NO_RETOUR);
+      // B1.5 (v4.4.4): the information of a retour gone is never announced either.
+      expect(said((await record()).writes, "status").filter((text) => text.includes(NO_SEAT))).toEqual([]);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
       await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
     });
