@@ -270,7 +270,7 @@ describe("whenStillTrue", () => {
   });
 
   // Sends shaped as « Annuler » (rule 6): `undo:{rideId}`, then who it gives back, if anyone.
-  it("an « Annuler » sent since that gave Tom back on that leg: Tom's success is never said; a placement sent after it is", async () => {
+  it("an « Annuler » sent since that gave Tom back on that leg: Tom's success is never said; a placement at the retour sent after it is", async () => {
     const [tom, back] = [personLeg("tom-5", "aller"), personLeg("tom-5", "retour")];
     const uncover = coverPage();
     const said: string[] = [];
