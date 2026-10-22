@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
-import { actionRunner, sendAction, stateOf, stateRead, stateShown, withRetourHeld } from "./run-action";
+import { actionRunner, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -92,21 +92,30 @@ describe("stateShown", () => {
 });
 
 // #265, § 5 of the epic's design: while a sheet hides the page, the retour it may be on stays.
-describe("withRetourHeld", () => {
+// #266: nor does a retour come, which would mount the aller's panel anew, and its sheet with it.
+describe("withTabsHeld", () => {
   const leg = (name: "aller" | "retour", rideId: string) => ({ leg: name, cars: [], withoutCar: [], device: [], rideId });
   const shown = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [leg("aller", "old"), leg("retour", "old")] } as never as EventState;
   const next = { event: { ...header, title: "Tournoi de Vannes" }, legs: [leg("aller", "new")] } as never as EventState;
 
-  it("shows the next state, with the end and the retour leg shown", () => {
-    expect(withRetourHeld(shown, next)).toStrictEqual({
+  it("the retour removed: shows the next state, with the end and the retour leg shown", () => {
+    expect(withTabsHeld(shown, next)).toStrictEqual({
       event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-12 18:00:00" },
       legs: [leg("aller", "new"), leg("retour", "old")],
     });
   });
 
-  it("holds nothing when the retour stays, nor when none was shown", () => {
-    expect(withRetourHeld(shown, shown)).toBeUndefined();
-    expect(withRetourHeld(next, next)).toBeUndefined();
+  it("a retour added: shows the next state, without its end nor its retour leg", () => {
+    const added = { event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-13 19:00:00" }, legs: [leg("aller", "new"), leg("retour", "new")] };
+    expect(withTabsHeld(next, added as never as EventState)).toStrictEqual({
+      event: { ...header, title: "Tournoi de Vannes", retourAt: null },
+      legs: [leg("aller", "new")],
+    });
+  });
+
+  it("holds nothing when the tabs stay", () => {
+    expect(withTabsHeld(shown, shown)).toBeUndefined();
+    expect(withTabsHeld(next, next)).toBeUndefined();
   });
 });
 

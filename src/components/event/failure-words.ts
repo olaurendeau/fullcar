@@ -33,7 +33,8 @@ export type Why =
   | { kind: "alreadyInCar"; names: readonly string[] }
   | { kind: "passengerInCar"; names: readonly string[] }
   | { kind: "drives"; firstName: string; leg: Leg }
-  | { kind: "alreadyDriving"; driver: string };
+  | { kind: "alreadyDriving"; driver: string }
+  | { kind: "noRetourAgain"; action: "offerRide" | "addPerson" };
 
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
@@ -51,6 +52,22 @@ export function whyOf(error: Plain | "invalid" | "idTaken"): Why {
 export function undoWhy(error: "offline" | "failed" | "invalid" | "forbidden" | "eventNotFound" | "noRetour"): Why {
   if (error === "offline" || error === "failed" || error === "invalid") return { kind: "retryUndo", problem: error === "offline" ? "offline" : "failed" };
   return whyOf(error);
+}
+
+/**
+ * Why a sheet of the aller that sent on the retour too, closed before its `noRetour`, did
+ * nothing: the retour is gone, and what to do, send `action` again for the aller alone (decision 47).
+ */
+export const noRetourAgain = (action: "offerRide" | "addPerson"): Why => ({ kind: "noRetourAgain", action });
+
+/**
+ * What a form's `why` says, sent on `leg`: `noRetour` from a sheet of the retour closes it, and
+ * the bar says why (rule 9); from the aller, closed, the bar says to send `action` again for the
+ * aller alone (decision 47). Sent on no leg (a person's change), or any other reason: as it is.
+ */
+export function noRetourWhy(why: Why, leg: Leg | undefined, action: "offerRide" | "addPerson"): { why: Why; closes: boolean } {
+  if (why.kind !== "noRetour" || leg === undefined) return { why, closes: false };
+  return leg === "retour" ? { why, closes: true } : { why: noRetourAgain(action), closes: false };
 }
 
 /** A cell of « Vos inscriptions » as its sheet showed it at the send: the person, the leg, and her state there. */

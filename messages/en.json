@@ -212,6 +212,7 @@
     "offline": "Action failed, check your connection",
     "failed": "Something went wrong and nothing has changed. Try again in a moment.",
     "rideGone": "This car is no longer offered",
+    "noRetour": "This event no longer has a return trip: nothing has changed.",
     "alreadyInCar": "{count, plural, one {This person is already in a car} other {One of these people is already in a car}}: nothing has changed.",
     "failure": "{notDone} {why}",
     "notDone": {
@@ -239,7 +240,8 @@
       "passengersChanged": "Someone took or left a seat in the meantime: edit the car again.",
       "forbidden": "This device cannot make this change: reload the page.",
       "eventNotFound": "This event can no longer be found: it may have been deleted.",
-      "noRetour": "This event no longer has a return trip."
+      "noRetour": "This event no longer has a return trip.",
+      "noRetourAgain": "This event no longer has a return trip: {action, select, offerRide {offer the car again, for the outbound trip only.} other {add this person again, for the outbound trip only.}}"
     },
     "names": {
       "andOthers": "{first}, {second} and {others, plural, one {# other} other {# others}}"
