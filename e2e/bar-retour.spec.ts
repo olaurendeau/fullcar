@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
+import { bar, holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
 import { removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { organiserPath, test as organiserTest } from "./organiser";
@@ -278,6 +278,8 @@ test.describe("the bar, the retour removed meanwhile", () => {
     await undo(page).click();
     await expect(messages(page)).toHaveText([TEXT.undoOffline, TEXT.placed]);
     await expect(undo(page)).toHaveAccessibleDescription(TEXT.undoOffline);
+    // Said in `alert` 100 ms after its line: before the recording starts, not counted as a write since the send.
+    await expect(bar(page)).toHaveText(TEXT.undoOffline);
     await context.setOffline(false);
     await removeRetourInDb(db, seededEvent.id);
     const record = await recordBar(page);
