@@ -1,13 +1,16 @@
 import { isDeepStrictEqual } from "node:util";
 import {
-  captureException, continueTrace, createTransport, getDefaultIntegrations, initWithoutDefaultIntegrations, startSpan,
-  type NodeClient,
+  captureException, continueTrace, createTransport, defaultStackParser, getDefaultIntegrations, initWithoutDefaultIntegrations,
+  startSpan, type NodeClient,
 } from "@sentry/nextjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, startBrowserSentry } from "./client";
 import { type Integration, registerHooks, scrubEnvelopeHeader, sentryOptions, type SentryEnv, tracesSampleRate } from "./options";
 import { scrubBreadcrumb, scrubCreatedDsc, scrubEvent, scrubSpan } from "./scrub";
-import { databaseErrors, reportRequestError, SERVER_INTEGRATIONS, type ServerSdk, serverEnv, startServerSentry } from "./server";
+import {
+  codeFramesOnly, databaseErrors, registerServerHooks, reportRequestError, SERVER_INTEGRATIONS, type ServerSdk, serverEnv,
+  startServerSentry,
+} from "./server";
 import { drawSecrets, leakedKinds, RELEASE } from "./test-secrets";
 
 const DSN = "https://public@o1.ingest.de.sentry.io/2";
@@ -108,7 +111,7 @@ describe("on the server, with a DSN", () => {
     expect(options).toEqual(sentryOptions(ENV));
     expect(typeof integrations).toBe("function");
     expect(client.on.mock.calls).toEqual([["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader]]);
-    expect(client.addEventProcessor.mock.calls).toEqual([[databaseErrors]]);
+    expect(client.addEventProcessor.mock.calls).toEqual([[codeFramesOnly], [databaseErrors]]);
   });
 
   it("keeps the exact list of integrations, Http without sessions", async () => {
@@ -126,6 +129,35 @@ describe("on the server, with a DSN", () => {
     expect(values({ code: "23505", message: "duplicate key" })).toEqual(["cause", "database error (SQLSTATE 23505)"]);
     expect(values({ code: "ECONNREFUSED", errno: -111 })).toEqual(["cause", "database error (errno -111)"]);
     expect(values(new Error("thrown"))).toEqual(["cause", "thrown"]);
+  });
+
+  it("keeps of every error's stack the frames of code alone, none of the lines of its message", () => {
+    // The parser skips the first line of a stack, whatever the error's name, and only that one.
+    const frames = (...lines: string[]) =>
+      defaultStackParser([...lines.slice(0, 1), "    at Marc (depuis 10:30)", "    at row 12", ...lines.slice(1)].join("\n"), 1);
+    const event = {
+      exception: {
+        values: [
+          {
+            type: "error",
+            value: "cause",
+            stacktrace: {
+              frames: frames('error: invalid input syntax: "seat', "    at Parser.parse (/var/task/node_modules/pg-protocol/dist/parser.js:285:98)"),
+            },
+          },
+          {
+            type: "Error",
+            value: "thrown",
+            stacktrace: {
+              frames: frames("Error: Le trajet a échoué", "    at async loadEvent (/var/task/.next/server/chunks/ssr/4821.js:1:2345)"),
+            },
+          },
+        ],
+      },
+    };
+    const functions = (each: typeof event) => each.exception.values.map(({ stacktrace }) => stacktrace.frames.map((frame) => frame.function));
+    expect(functions(event).flat()).toContain("Marc");
+    expect(functions(codeFramesOnly(event))).toEqual([["Parser.parse"], ["loadEvent"]]);
   });
 
   it("hands a request's error to captureRequestError", async () => {
@@ -220,6 +252,27 @@ describe("what the SDK sends with these options", () => {
       "https://fullcar.example/e/[id]/admin", "https://fullcar.example/e/[id]/admin",
     ])).toBe(true);
     expect(leakedKinds(sent.join("\n"), secrets)).toEqual([]);
+  });
+
+  /** The functions of the frames sent for an error whose message holds a line that reads as a frame, a first name in it. */
+  async function framesOfErrorWithFrameInMessage() {
+    captureException(new Error("Le trajet a échoué\n    at Marc (depuis 10:30)"));
+    await client?.flush(2000);
+    const items = sent.flatMap((body) => body.split("\n").filter(Boolean).map((line) => JSON.parse(line) as { exception?: unknown }));
+    const { exception } = items.find((item) => item.exception) as { exception: { values: { stacktrace: { frames: { function?: string }[] } }[] } };
+    return exception.values.flatMap(({ stacktrace }) => stacktrace.frames.map((frame) => frame.function));
+  }
+
+  it("sends no line of an error's message as a frame from the server", async () => {
+    start(registerServerHooks);
+    const functions = await framesOfErrorWithFrameInMessage();
+    expect(functions.length).toBeGreaterThan(0);
+    expect(functions).not.toContain("Marc");
+  });
+
+  it("sends it as a frame without codeFramesOnly, so that the test above means something", async () => {
+    start();
+    expect(await framesOfErrorWithFrameInMessage()).toContain("Marc");
   });
 
   it("leaks it without the envelope's hook, so that [] above means something", async () => {

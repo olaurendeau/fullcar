@@ -248,7 +248,7 @@ function scrubFunctionName(name: string, code: boolean): string {
  * A frame of code: a line number in a file of the build or of Node. A line of a message may
  * carry a line number (`at x (since 10:30)`), never such a file without a space in it.
  */
-function inCode(frame: StackFrame): boolean {
+export function inCode(frame: StackFrame): boolean {
   return finite(frame.lineno) !== undefined && buildFile(frame.filename ?? frame.abs_path) !== undefined;
 }
 
