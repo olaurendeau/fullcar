@@ -358,6 +358,9 @@ export function ParticipantBoard({
         return;
       }
       const { undoneIds } = answer;
+      // No visible effect while the server actions run one at a time, as Next 16 sends them: this
+      // success, answered after a placement's held one, replaces it as both are written. It keeps
+      // rule 2 (v4.4.5) from depending on that order.
       send.changed(undoneIds.map((personId) => personLeg(personId, leg)));
       const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
       const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });

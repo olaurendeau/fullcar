@@ -269,15 +269,13 @@ describe("whenStillTrue", () => {
     expect(said).toEqual([]);
   });
 
-  // Rule 6: « Annuler » from a failure line, sent after Tom was placed again in the same car, gives him back.
-  it("an « Annuler » sent since that gave Tom back on that leg: never said; one that gave nobody back: said", async () => {
+  // Sends shaped as « Annuler » (rule 6): `undo:{rideId}`, then who it gives back, if anyone.
+  it("an « Annuler » sent since that gave Tom back on that leg: Tom's success is never said; a placement sent after it is", async () => {
     const tom = personLeg("tom-5", "aller");
     const uncover = coverPage();
     const said: string[] = [];
     const placed = sendAbout(aboutOf(["seats:sophie-5"], ["tom-5"]));
     placed.changed([tom]);
-    const nobody = sendAbout(aboutOf(["undo:claire-5"], ["tom-5"]));
-    nobody.changed([]);
     placed.whenStillTrue([tom], () => said.push("Tom, before the undo"));
     sendAbout(aboutOf(["undo:sophie-5"], ["tom-5"])).changed([tom]);
     const again = sendAbout(aboutOf(["seats:sophie-5"], ["tom-5"]));
@@ -286,6 +284,19 @@ describe("whenStillTrue", () => {
     uncover();
     await settled();
     expect(said).toEqual(["Tom, after the undo"]);
+  });
+
+  it("an « Annuler » sent since that gave nobody back: the success it alone comes after is said", async () => {
+    const lea = personLeg("lea-6", "aller");
+    const uncover = coverPage();
+    const said: string[] = [];
+    const placed = sendAbout(aboutOf(["seats:sophie-6"], ["lea-6"]));
+    placed.changed([lea]);
+    placed.whenStillTrue([lea], () => said.push("Léa"));
+    sendAbout(aboutOf(["undo:sophie-6"], ["lea-6"])).changed([]);
+    uncover();
+    await settled();
+    expect(said).toEqual(["Léa"]);
   });
 
   it("a send made before it, answered after it: it is said, at once with no sheet", () => {
