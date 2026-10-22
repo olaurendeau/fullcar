@@ -149,6 +149,15 @@ export function nameList({ t, list }: Words, names: readonly string[]): string {
   return t("Actions.names.andOthers", { first: names[0], second: names[1], others: names.length - 2 });
 }
 
+/**
+ * The success of « Annuler » (C5.10, v4.4.4): those of `names` given back, `Seat.undone`; nobody
+ * given back, every person of the « Annuler », already out of the car, `Seat.alreadyOut`.
+ */
+export function undoneText(words: Words, { names, undone, driver }: { names: readonly string[]; undone: readonly string[]; driver: string }): string {
+  const [key, said] = undone.length > 0 ? (["Seat.undone", undone] as const) : (["Seat.alreadyOut", names] as const);
+  return words.t(key, { names: nameList(words, said), count: said.length, driver });
+}
+
 function notDoneText(words: Words, notDone: NotDone): string {
   const { t } = words;
   switch (notDone.kind) {

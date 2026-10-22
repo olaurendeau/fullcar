@@ -1,5 +1,5 @@
-import type { addIntegration, getClient, NodeOptions } from "@sentry/nextjs";
-import { scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan } from "./scrub";
+import type { addIntegration, Event, getClient, NodeOptions } from "@sentry/nextjs";
+import { inCode, scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan } from "./scrub";
 
 /*
  * Sentry's options, the same on the server and in the browser (#231, #234). The SDK collects
@@ -61,6 +61,21 @@ export function scrubEnvelopeHeader([header]: readonly [object, ...unknown[]]): 
   if (!("trace" in headers)) return;
   const trace = headers.trace;
   headers.trace = scrubDsc(trace !== null && typeof trace === "object" ? (trace as Record<string, unknown>) : {});
+}
+
+/**
+ * Of every error's stack, and of its causes', the frames of code alone (#360, #361). Both
+ * sides' parsers skip a line with `Error: ` in it, the server's the first line too, and make
+ * a frame of any other line of a message that reads as one: `    at Marc (…)` would send a
+ * first name as a function's. In the browser, a cause's frames escape `allowUrls`, which
+ * looks at the thrown error's top frame alone. A processor of the client runs after those of
+ * the integrations: by then the browser's frames of code are `app:///_next/…`.
+ */
+export function codeFramesOnly<E extends Event>(event: E): E {
+  for (const value of event.exception?.values ?? []) {
+    if (value.stacktrace?.frames) value.stacktrace.frames = value.stacktrace.frames.filter(inCode);
+  }
+  return event;
 }
 
 /** The two hooks the options cannot carry: the sampling context, and every envelope's header. */

@@ -4,13 +4,15 @@ import { LoaderCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
-import { usePageHidden } from "@/components/event/hidden-page";
+import { EditEventSheet } from "@/components/event/edit-event-sheet";
+import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
+import type { EventFields, EventHeader } from "@/domain/event";
 import type { EventState } from "../event-state";
 import { ParticipantBoard, type BoardHandle } from "../participant-board";
 import { useAdminLinkCheck } from "./admin-link";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
 import { keepFolded, readFolded } from "./organiser-fold";
-import { alertShown, announcement, panelRead, screenRead, screenReducer } from "./screen-state";
+import { alertShown, announcement, editAnswer, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
 
 /**
  * The organiser's screen (epic #154): the organiser area, then the event's board, with
@@ -32,6 +34,8 @@ import { alertShown, announcement, panelRead, screenRead, screenReducer } from "
  * - While a sheet hides the page, the live regions keep what they said: their next words wait
  *   for it to show. The legs' dates are the page's, from the header of the state the board
  *   shows last (epic #250): the panel's answer does not carry them.
+ * - « Modifier l’événement » opens a sheet loaded with the header shown; a change saved shows at
+ *   once, the bar says so, and the screen is read again (epic #250, v3.3).
  */
 export function OrganiserScreen({ id, state, children }: { id: string; state: EventState; children: ReactNode }) {
   const t = useTranslations("Admin");
@@ -98,6 +102,44 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const [said, setSaid] = useState(now);
   if (!hidden && said !== now) setSaid(now);
 
+  // « Modifier l’événement » (epic #250): the sheet, and what a change saved does to the screen.
+  const tEdit = useTranslations("EditEvent");
+  const editButton = useRef<HTMLButtonElement>(null);
+  const [editing, setEditing] = useState(false);
+  const focusEdit = () => {
+    editButton.current?.focus();
+    return !!editButton.current && document.activeElement === editButton.current;
+  };
+
+  /**
+   * Sends the change. Saved, the board shows the header saved at once, the bar says so once no
+   * sheet hides the page, and a read of the screen follows, as one block (O1.9): should it fail,
+   * the header stays the answer's, and the panel is withdrawn as after an action (O1.10).
+   */
+  async function edit(fields: EventFields, before: EventHeader): Promise<EditAnswer> {
+    const send = sendAbout(["event:edit"]);
+    send.leaves();
+    const answer = editAnswer(await link.edit(fields, before));
+    send.answered();
+    const handle = boardRef.current;
+    if (answer.kind !== "saved" || !handle) return answer;
+    handle.applyEvent(answer.event);
+    send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: focusEdit }));
+    void readScreen(handle);
+    return answer;
+  }
+
+  async function readScreen(handle: BoardHandle) {
+    if (current.current.state !== "ready") return;
+    const read = ++latest.current;
+    const [panel, board] = await Promise.all([link.read(), handle.read()]);
+    if (read !== latest.current) return;
+    const outcome = screenRead(panel, board);
+    noteFocus();
+    if (outcome) handle.apply(outcome.board);
+    dispatch({ type: "reread", legs: outcome?.legs });
+  }
+
   async function refresh() {
     const handle = boardRef.current;
     if (screen.state !== "ready" || screen.refreshing !== null || !handle) return;
@@ -133,6 +175,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           dispatch({ type: "toggleFolded" });
           keepFolded(id, !screen.folded);
         }}
+        editRef={editButton}
+        onEdit={() => setEditing(true)}
       />
     );
   } else if (screen.state === "loading") {
@@ -164,6 +208,9 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
       <div ref={frame} className="flex flex-col">
         {area}
       </div>
+      {screen.state === "ready" && (
+        <EditEventSheet open={editing} onOpenChange={setEditing} event={event} onEdit={edit} onClosed={focusEdit} />
+      )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">
         <ParticipantBoard ref={boardRef} id={id} state={state} onAction={reread} onState={setEvent} />
         {children}

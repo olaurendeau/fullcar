@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BLANK_EVENT_FIELDS,
+  eventFieldsChanged,
+  loadedEventFields,
   withEventField,
   withRetour,
   type EventFieldsState,
@@ -63,5 +65,57 @@ describe("updates in one tick", () => {
     const merged: EventFieldsState = { ...saved(false), values: { ...saved(false).values, location: "Gymnase" } };
     const next = queued(saved(true), () => merged, withEventField("title", "Tournoi"));
     expect(next).toEqual({ values: { ...merged.values, title: "Tournoi" }, retourDateFollows: false });
+  });
+});
+
+describe("loadedEventFields", () => {
+  const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00" };
+  const values = { title: "Tournoi de Rennes", location: "Gymnase", allerDate: "2026-12-12", allerTime: "07:30" };
+
+  // M1.5: the fields show what is saved, the box checked with a retour; M1.7: on one day, the end date follows.
+  it("shows the saved values, and the end date follows on a one-day event", () => {
+    expect(loadedEventFields({ ...header, retourAt: "2026-12-12 18:00:00" })).toEqual({
+      values: { ...values, retour: true, retourDate: "2026-12-12", retourTime: "18:00" },
+      retourDateFollows: true,
+    });
+  });
+
+  // M1.7: an end on another day is meant; following it would be guessing.
+  it("does not let the end date follow when the end is another day", () => {
+    expect(loadedEventFields({ ...header, retourAt: "2026-12-13 18:00:00" })).toEqual({
+      values: { ...values, retour: true, retourDate: "2026-12-13", retourTime: "18:00" },
+      retourDateFollows: false,
+    });
+  });
+
+  // M1.6: without a retour, the box unchecked; checked, the end date is the start's and follows it, its time empty.
+  it("without a retour, the box unchecked, the end date the start's and following, no end time", () => {
+    expect(loadedEventFields({ ...header, retourAt: null })).toEqual({
+      values: { ...values, retour: false, retourDate: "2026-12-12", retourTime: "" },
+      retourDateFollows: true,
+    });
+  });
+});
+
+describe("eventFieldsChanged", () => {
+  const loaded = loadedEventFields({ title: "T", location: "L", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
+
+  // M2.5: a field changed, then put back as it was loaded, is not changed.
+  it("is false for the loaded values", () => {
+    expect(eventFieldsChanged({ ...loaded }, loaded)).toBe(false);
+  });
+
+  it.each(["title", "location", "allerDate", "allerTime", "retourDate", "retourTime"] as const)("is true once %s differs", (name) => {
+    expect(eventFieldsChanged({ ...loaded, [name]: "x" }, loaded)).toBe(true);
+  });
+
+  it("is true once the box Retour differs", () => {
+    expect(eventFieldsChanged({ ...loaded, retour: false }, loaded)).toBe(true);
+  });
+
+  // Unchecked, the end's fields are neither shown nor saved: what they hold changes nothing.
+  it("ignores the end's fields while the box is unchecked on both sides", () => {
+    const without = { ...loaded, retour: false };
+    expect(eventFieldsChanged({ ...without, retourDate: "2026-12-20", retourTime: "" }, without)).toBe(false);
   });
 });

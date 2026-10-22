@@ -5,6 +5,7 @@ import type { AdminLinkCheck } from "./admin-link";
 import {
   alertShown,
   announcement,
+  editAnswer,
   listKey,
   panelRead,
   screenRead,
@@ -264,6 +265,42 @@ describe("screenRead", () => {
     ["the board's state has no header (epic #250)", { ok: true, value: panel }, { ok: true, value: [] }],
   ])("is nothing when %s", (_, panelSent, boardSent) => {
     expect(screenRead(panelSent as never, boardSent as never)).toBeUndefined();
+  });
+});
+
+describe("editAnswer", () => {
+  const event = { title: "Tournoi de Rennes U13", location: "Gymnase", allerAt: "2026-12-12 14:00:00", retourAt: null };
+
+  // M2.1: saved, with the values the server stored.
+  it("is saved, with the stored values, on `ok`", () => {
+    expect(editAnswer({ ok: true, value: { ok: true, event } })).toStrictEqual({ kind: "saved", event });
+  });
+
+  // M2.3: the server's errors show by their field.
+  it("is the errors on a field refused", () => {
+    expect(editAnswer({ ok: true, value: { ok: false, errors: { title: "required" } } })).toStrictEqual({
+      kind: "errors",
+      errors: { title: "required" },
+    });
+  });
+
+  // M8.1: offline, or the server failed.
+  it.each(["offline", "failed"] as const)("is the problem %s when the request failed", (problem) => {
+    expect(editAnswer({ ok: false, problem })).toStrictEqual({ kind: "problem", problem });
+  });
+
+  // Until #269 and #270 give them their words (epic #250, « Comportement transitoire »): nothing
+  // was written, and the sheet says the generic failure.
+  it.each<[string, unknown]>([
+    ["changed", { ok: false, error: "changed", event }],
+    ["confirmRetour", { ok: false, error: "confirmRetour", cars: 1, persons: 2 }],
+    ["invalid", { ok: false, error: "invalid" }],
+    ["eventNotFound", { ok: false, error: "eventNotFound" }],
+    ["`ok` without a header", { ok: true }],
+    ["`ok` with a header missing its title", { ok: true, event: { ...event, title: undefined } }],
+    ["no answer", undefined],
+  ])("is the failure on %s", (_, value) => {
+    expect(editAnswer({ ok: true, value })).toStrictEqual({ kind: "problem", problem: "failed" });
   });
 });
 

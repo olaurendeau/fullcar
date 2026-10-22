@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
+import { bar, holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
 import { removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { organiserPath, test as organiserTest } from "./organiser";
@@ -14,7 +14,8 @@ leaveNoToken();
  * page applies a state without the retour its last one had, and the bar's lines about the retour
  * go, once; the failures `noRetour` written by that answer or later stay. A send whose aim holds
  * without the retour leaves no failure: the bar says an information. The organiser removes the
- * retour in the database (`removeRetourInDb`), as `updateEvent` does. Nothing here prints a
+ * retour in the database (`removeRetourInDb`), as `updateEvent` does, or, on `/admin`, with
+ * « Modifier l’événement » (#268). Nothing here prints a
  * token, the admin link or a number.
  */
 
@@ -278,6 +279,8 @@ test.describe("the bar, the retour removed meanwhile", () => {
     await undo(page).click();
     await expect(messages(page)).toHaveText([TEXT.undoOffline, TEXT.placed]);
     await expect(undo(page)).toHaveAccessibleDescription(TEXT.undoOffline);
+    // Said in `alert` 100 ms after its line: before the recording starts, not counted as a write since the send.
+    await expect(bar(page)).toHaveText(TEXT.undoOffline);
     await context.setOffline(false);
     await removeRetourInDb(db, seededEvent.id);
     const record = await recordBar(page);
@@ -310,7 +313,11 @@ test.describe("the bar, the retour removed meanwhile", () => {
 organiserTest.describe("the organiser's bar, the retour removed meanwhile", () => {
   organiserTest.use({ locale: "fr-FR" });
 
-  organiserTest("M7.9, on /admin: the state « Actualiser » applies takes the failure of the cell Retour away", async ({ page, db, seededEvent }) => {
+  organiserTest("M7.9, on /admin: the retour removed by « Modifier l’événement » takes the failure of the cell Retour away", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
     const token = newToken();
     const tom = (await seedPerson(db, seededEvent.id, { firstName: "Tom" }, token)).id;
     // Without a car at the aller, which unfolds « Vos inscriptions »; not concerned at the retour.
@@ -319,10 +326,14 @@ organiserTest.describe("the organiser's bar, the retour removed meanwhile", () =
     await page.goto(organiserPath(seededEvent));
     await expect(cell(page, "Tom", "Retour")).toBeVisible();
     await failOffline(page, tom, "Je cherche une place", TEXT.lookingOffline);
-    await removeRetourInDb(db, seededEvent.id);
-    await page.getByRole("region", { name: "Espace organisateur" }).getByRole("button", { name: "Actualiser" }).click();
+    // The retour holds nothing: unchecked, it is removed with no confirmation.
+    await page.getByRole("button", { name: "Modifier l’événement", exact: true }).click();
+    await sheet(page, "Modifier l’événement").getByRole("checkbox", { name: "Retour", exact: true }).uncheck();
+    await sheet(page, "Modifier l’événement").getByRole("button", { name: "Valider", exact: true }).click();
 
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(tabs(page)).toHaveCount(0);
-    await expect(page.locator('[data-message-bar] [role="group"] > p')).toHaveCount(0);
+    await expect(messages(page)).toHaveText(["Événement modifié. Personne n’est prévenu : pensez à le dire au groupe."]);
+    expect((await db.selectFrom("event").select("retour_at").where("id", "=", seededEvent.id).executeTakeFirstOrThrow()).retour_at).toBeNull();
   });
 });
