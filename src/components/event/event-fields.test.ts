@@ -152,10 +152,19 @@ describe("withSavedFields", () => {
     expect(withSavedFields(loaded.values, without)(typed({ title: "Tournoi" })).values).toEqual({ ...without.values, title: "Tournoi" });
   });
 
-  // M6.2: a retour removed there is never added back unless the box is checked again here.
-  it("keeps the box checked here, with the end typed, when the event had no retour", () => {
+  // M6.2: a retour removed there is never added back unless the box is checked again here: an
+  // end typed here, the box untouched, does not bring it back.
+  it("unchecks the box not changed when the retour was removed there, even with an end typed here", () => {
+    const next = withSavedFields(loaded.values, without)(typed({ retourTime: "19:00" }));
+    expect(next.values).toEqual({ ...without.values, retourTime: "19:00" });
+    expect(next.values.retour).toBe(false);
+  });
+
+  // M6.2: the box checked here is a field changed: it stays, with its end, whatever changed there.
+  it("keeps the box checked here, with the end typed, when the other device changed the title", () => {
+    const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13", retourAt: null });
     const checkedHere = typed({ retour: true, retourTime: "19:00" }, without);
-    expect(withSavedFields(without.values, without)(checkedHere).values).toEqual(checkedHere.values);
+    expect(withSavedFields(without.values, saved)(checkedHere).values).toEqual({ ...checkedHere.values, title: "Tournoi de Rennes U13" });
   });
 
   // M6.2, the other way: a retour added there at 18:00, the box untouched here.

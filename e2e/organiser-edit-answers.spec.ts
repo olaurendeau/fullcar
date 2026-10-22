@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Request } from "@playwright/test";
 import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
 import { expect, isAction, oneCharOff, organiserPath, test } from "./organiser";
@@ -47,9 +47,34 @@ const cancel = (page: Page) => sheet(page).getByRole("button", { name: FR.cancel
 const notice = (page: Page) => sheet(page).getByRole("alert").locator("p");
 // Under an open sheet, the page is `aria-hidden`: read by its elements, not by their roles.
 const header = (page: Page) => page.locator("main header").first();
+const legSections = (page: Page) => page.locator('section[aria-labelledby^="organiser-leg-"]');
 
-/** The organiser's page, then the sheet opened once its panel shows. */
+/** The changes sent from now on: the server actions whose body carries the form's fields. Counted, never shown. */
+function edits(page: Page): Request[] {
+  const sent: Request[] = [];
+  page.on("request", (request) => {
+    if (isAction(request) && (request.postData() ?? "").includes('"allerDate"')) sent.push(request);
+  });
+  return sent;
+}
+
+/** A saves `title` from a sheet opened anew, and the bar says so. */
+async function saveTitle(page: Page, title: string) {
+  await page.bringToFront();
+  await editButton(page).click();
+  await field(page, "Titre").fill(title);
+  await submit(page).click();
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
+}
+
+/**
+ * The organiser's page, then the sheet opened once its panel shows. Each device of M6 is brought
+ * to the front before it acts: the browser throttles a page behind another, whose sheet then
+ * takes seconds to open or close.
+ */
 async function openSheet(page: Page, path: string, name = FR.edit) {
+  await page.bringToFront();
   await page.goto(path);
   await editButton(page, name).click();
   await expect(sheet(page, name)).toBeVisible();
@@ -67,10 +92,12 @@ test.describe("M6: two devices", () => {
       const other = await context.newPage();
       await openSheet(page, organiserPath(seededEvent));
       await openSheet(other, organiserPath(seededEvent));
+      await page.bringToFront();
       await field(page, "Titre").fill(U13);
       await submit(page).click();
       await expect(messages(page)).toHaveText([FR.saved]);
 
+      await other.bringToFront();
       if (variant !== "the place changed") {
         await field(other, "Titre").fill("Tournoi de Vannes");
         await field(other, "Titre").fill("Tournoi de Rennes");
@@ -91,6 +118,64 @@ test.describe("M6: two devices", () => {
     });
   }
 
+  test("M6.1, twice: A saves a title, then another; each `changed` gives B A's newest title, and B's place stays", async ({
+    page,
+    context,
+    db,
+    seededEvent,
+  }) => {
+    const stored = () => db.selectFrom("event").select(["title", "location"]).where("id", "=", seededEvent.id).executeTakeFirstOrThrow();
+    const other = await context.newPage();
+    await openSheet(other, organiserPath(seededEvent));
+    await page.goto(organiserPath(seededEvent));
+    await saveTitle(page, U13);
+    await other.bringToFront();
+    await field(other, "Lieu").fill("Salle Carrel");
+    await submit(other).click();
+    await expect(notice(other)).toHaveText(FR.changed);
+    await expect(field(other, "Titre")).toHaveValue(U13);
+
+    // The title B now shows is the one loaded, not B's typing: the next `changed` replaces it.
+    await saveTitle(page, "Tournoi de Rennes U15");
+    await other.bringToFront();
+    await submit(other).click();
+    await expect(field(other, "Titre")).toHaveValue("Tournoi de Rennes U15");
+    await expect(field(other, "Lieu")).toHaveValue("Salle Carrel");
+    await expect(submit(other)).toBeFocused();
+    expect(await stored()).toEqual({ title: "Tournoi de Rennes U15", location: "Gymnase des Gayeulles" });
+
+    await submit(other).click();
+    await expect(sheet(other)).toHaveCount(0);
+    expect(await stored()).toEqual({ title: "Tournoi de Rennes U15", location: "Salle Carrel" });
+  });
+
+  test("M6.1, then M2.5: after `changed`, B puts its place back: « Valider » closes the sheet, with no request and no message", async ({
+    page,
+    context,
+    db,
+    seededEvent,
+  }) => {
+    const other = await context.newPage();
+    await openSheet(other, organiserPath(seededEvent));
+    await page.goto(organiserPath(seededEvent));
+    await saveTitle(page, U13);
+    await other.bringToFront();
+    await field(other, "Lieu").fill("Salle Carrel");
+    await submit(other).click();
+    await expect(notice(other)).toHaveText(FR.changed);
+
+    const sent = edits(other);
+    await field(other, "Lieu").fill("Gymnase des Gayeulles");
+    await submit(other).click();
+    await expect(sheet(other)).toHaveCount(0);
+    await expect(editButton(other)).toBeFocused();
+    await other.waitForLoadState("networkidle");
+    expect(sent.length).toBe(0);
+    await expect(messages(other)).toHaveCount(0);
+    const stored = await db.selectFrom("event").select(["title", "location"]).where("id", "=", seededEvent.id).executeTakeFirstOrThrow();
+    expect(stored).toEqual({ title: U13, location: "Gymnase des Gayeulles" });
+  });
+
   test("M6.2: A removed the empty retour, B changed the title: B's box unchecks; again, B's title saved, still no retour", async ({
     page,
     context,
@@ -101,17 +186,22 @@ test.describe("M6: two devices", () => {
     const other = await context.newPage();
     await openSheet(page, organiserPath(seededEvent));
     await openSheet(other, organiserPath(seededEvent));
+    await page.bringToFront();
     await retourBox(page).click();
     await submit(page).click();
     await expect(messages(page)).toHaveText([FR.saved]);
     expect(await stored()).toEqual({ title: "Tournoi de Rennes", retour_at: null });
 
+    await other.bringToFront();
     await field(other, "Titre").fill(U13);
     await submit(other).click();
     await expect(notice(other)).toHaveText(FR.changed);
     await expect(retourBox(other)).not.toBeChecked();
     await expect(field(other, "Date de fin")).toHaveCount(0);
     await expect(field(other, "Heure de fin")).toHaveCount(0);
+    // The panel, read again after `changed`, has one section at once. The tabs and « Fin » wait
+    // for the sheet to close: a sheet open on the page keeps the legs it opened with (decision 41).
+    await expect(legSections(other)).toHaveCount(1);
 
     await submit(other).click();
     await expect(sheet(other)).toHaveCount(0);
@@ -132,11 +222,13 @@ test.describe("M6: two devices", () => {
       const other = await context.newPage();
       await openSheet(page, organiserPath(seededEvent));
       await openSheet(other, organiserPath(seededEvent));
+      await page.bringToFront();
       await retourBox(page).click();
       await field(page, "Heure de fin").fill("18:00");
       await submit(page).click();
       await expect(messages(page)).toHaveText([FR.saved]);
 
+      await other.bringToFront();
       await field(other, "Titre").fill(U13);
       await submit(other).click();
       await expect(notice(other)).toHaveText(FR.changed);
@@ -148,6 +240,7 @@ test.describe("M6: two devices", () => {
       await expect(sheet(other)).toHaveCount(0);
       await expect(other.getByRole("tab")).toHaveCount(2);
       await expect(header(other).locator("dt")).toHaveText(["Début", "Fin"]);
+      await expect(panel(other).getByRole("heading", { level: 3 })).toHaveCount(2);
     });
   });
 });
