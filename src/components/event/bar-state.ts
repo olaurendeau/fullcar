@@ -3,7 +3,7 @@
  * v4.2.3, #216): the last success, the last information and every failure still waiting. The
  * only place that decides it: pure functions over a state that `useMessageBar` keeps.
  */
-import type { Leg } from "@/domain/leg";
+import { otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 
 /**
  * « Annuler » of a placement (rule 6): what it sends. One per placement: the success's and the
@@ -76,6 +76,29 @@ export function covers(withdrawal: Withdrawal, { about, sent }: Sent): boolean {
 
 /** A person's state on a leg, the key of what a placement's success says (rule 2, v4.4.5). */
 export const personLeg = (personId: string, leg: Leg): string => `${personId}:${leg}`;
+
+/**
+ * What « Proposer une voiture » changes once it succeeds (rule 2, v4.4.5, item 1): who drives, the
+ * device's or the new person drawn, and who boards, on the car's leg; and who drives on the other
+ * leg, unless she stays as she was there (`keep`, « Je reste dans la voiture de… » included).
+ */
+export function offerChanges({
+  driver,
+  newPersonId,
+  passengerIds,
+  leg,
+  otherLeg,
+}: {
+  driver: { kind: "new" } | { kind: "device"; personId: string };
+  newPersonId: string;
+  passengerIds: readonly string[];
+  leg: Leg;
+  otherLeg?: { kind: string };
+}): string[] {
+  const driverId = driver.kind === "new" ? newPersonId : driver.personId;
+  const there = otherLeg && otherLeg.kind !== "keep" ? [personLeg(driverId, otherLegOf(leg))] : [];
+  return [driverId, ...passengerIds].map((personId) => personLeg(personId, leg)).concat(there);
+}
 
 /**
  * What a send changed once it succeeded, each person on a leg (`personLeg`), and its number; or

@@ -4,7 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView } from "@/components/event/event-view";
-import { personLeg, type Undo } from "@/components/event/bar-state";
+import { offerChanges, personLeg, type Undo } from "@/components/event/bar-state";
 import {
   cellWhy,
   failureText,
@@ -37,7 +37,7 @@ import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
 import type { EventHeader } from "@/domain/event";
-import { otherLeg as otherLegOf, type Leg } from "@/domain/leg";
+import type { Leg } from "@/domain/leg";
 import {
   addPerson as storePerson,
   loadEventState,
@@ -309,12 +309,8 @@ export function ParticipantBoard({
     const names = passengers.map((person) => person.firstName);
     if (outcome?.ok) {
       // The car sent, whose ids stay the form's until a success; its passengers were without a car (v4-10).
-      const { rideId, personId: newId } = creationIds();
-      // Who drives and who boards, on the car's leg; she on the other leg too, unless she stays as she was there (v4.4.5).
-      const driverId = driver.kind === "new" ? newId : driver.personId;
-      const boarded = passengerIds.map((personId) => personLeg(personId, car.leg));
-      const there = otherLeg && otherLeg.kind !== "keep" ? [personLeg(driverId, otherLegOf(car.leg))] : [];
-      sheet.changed([personLeg(driverId, car.leg), ...boarded, ...there]);
+      const { rideId, personId: newPersonId } = creationIds();
+      sheet.changed(offerChanges({ driver, newPersonId, passengerIds, leg: car.leg, otherLeg }));
       device.registered();
       if (names.length === 0) {
         messages.succeed(null);
@@ -325,6 +321,7 @@ export function ParticipantBoard({
       const text =
         names.length === 1 ? words.t("Seat.placed", { firstName: names[0], driver: firstName }) : words.t("Sheet.placed", { names: nameList(words, names), driver: firstName });
       const undo = undoOf(sheet.seq, { rideId, leg: car.leg, persons }, { names, driver: firstName });
+      const boarded = passengerIds.map((personId) => personLeg(personId, car.leg));
       sheet.whenStillTrue(boarded, () => messages.succeed({ text, landmark: focusCar(car.leg, rideId), undo }));
       return { kind: "done" };
     }

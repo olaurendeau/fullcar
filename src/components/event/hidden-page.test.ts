@@ -269,6 +269,25 @@ describe("whenStillTrue", () => {
     expect(said).toEqual([]);
   });
 
+  // Rule 6: « Annuler » from a failure line, sent after Tom was placed again in the same car, gives him back.
+  it("an « Annuler » sent since that gave Tom back on that leg: never said; one that gave nobody back: said", async () => {
+    const tom = personLeg("tom-5", "aller");
+    const uncover = coverPage();
+    const said: string[] = [];
+    const placed = sendAbout(aboutOf(["seats:sophie-5"], ["tom-5"]));
+    placed.changed([tom]);
+    const nobody = sendAbout(aboutOf(["undo:claire-5"], ["tom-5"]));
+    nobody.changed([]);
+    placed.whenStillTrue([tom], () => said.push("Tom, before the undo"));
+    sendAbout(aboutOf(["undo:sophie-5"], ["tom-5"])).changed([tom]);
+    const again = sendAbout(aboutOf(["seats:sophie-5"], ["tom-5"]));
+    again.changed([tom]);
+    again.whenStillTrue([tom], () => said.push("Tom, after the undo"));
+    uncover();
+    await settled();
+    expect(said).toEqual(["Tom, after the undo"]);
+  });
+
   it("a send made before it, answered after it: it is said, at once with no sheet", () => {
     const zoe = personLeg("zoe-4", "aller");
     const said: string[] = [];

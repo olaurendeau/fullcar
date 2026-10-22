@@ -162,6 +162,31 @@ test.describe("H5: a held placement's success, made untrue since", () => {
     expect((await db.selectFrom("ride").select("seats").where("id", "=", marcsCar).executeTakeFirstOrThrow()).seats).toBe(1);
   });
 
+  test("rule 2, v4.4.5, item 1: Tom placed, then « Proposer une voiture » with Tom driving: he leaves Sophie's car, and the bar says nothing", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const answer = await holdFirst(page, scene.sophie, false);
+    await page.goto(`/e/${id}`);
+    const record = await recordBar(page);
+    await placeThenClose(page, "Sophie", ["Tom"]);
+
+    await panel(page).getByRole("button", { name: "Proposer une voiture", exact: true }).click();
+    const form = page.getByRole("dialog", { name: "Proposer une voiture" });
+    const answered = answerOf(page, scene.sophie);
+    answer();
+    await answered;
+    await form.getByRole("radiogroup", { name: "Qui conduit ?" }).getByRole("radio", { name: "Tom", exact: true }).check();
+    await form.getByLabel("Lieu de départ", { exact: true }).fill("Mairie de Vitré");
+    await form.getByRole("button", { name: "Valider" }).click();
+    await settle(page);
+
+    await expect(lines(page)).toHaveCount(0);
+    await expect(barButtons(page).filter({ hasText: "Annuler" })).toHaveCount(0);
+    expect(said((await record()).writes, "status")).not.toContain("Tom est dans la voiture de Sophie");
+    const cars = await db.selectFrom("ride").select("id").where("event_id", "=", id).where("driver_id", "=", scene.persons.tom).where("leg", "=", "aller").execute();
+    expect(cars.length).toBe(1);
+    expect(await where(db, scene.persons.tom, "aller")).toBeUndefined();
+  });
+
   test("S1.4: Tom placed, then « Sortir de la voiture » offline: the success and its « Annuler », once closed", async ({ context, db, page, seededEvent }) => {
     const answer = await holdFirst(page, scene.sophie, false);
     await page.goto(`/e/${seededEvent.id}`);

@@ -8,6 +8,7 @@ import {
   inform,
   lines,
   madeUntrue,
+  offerChanges,
   personLeg,
   regions,
   retourGone,
@@ -254,5 +255,28 @@ describe("madeUntrue", () => {
   it("a send made before it, or itself, does not make it untrue", () => {
     expect(madeUntrue(held, [{ persons: [tom], sent: 1 }, held])).toBe(false);
     expect(madeUntrue(held, [])).toBe(false);
+  });
+});
+
+// Rule 2, v4.4.5, item 1: what « Proposer une voiture » changes once it succeeds.
+describe("offerChanges", () => {
+  const device = { kind: "device", personId: "marc" } as const;
+  const offer = { driver: device, newPersonId: "drawn", passengerIds: ["tom", "lea"], leg: "aller" } as const;
+
+  it("who drives, the device's or a new person, and who boards, on the car's leg", () => {
+    expect(offerChanges(offer)).toEqual(["marc:aller", "tom:aller", "lea:aller"]);
+    expect(offerChanges({ ...offer, driver: { kind: "new" }, passengerIds: [], leg: "retour" })).toEqual(["drawn:retour"]);
+  });
+
+  it("who drives on the other leg too, when the offer sets it: drive, without a car, not concerned", () => {
+    for (const kind of ["drive", "withoutCar", "notConcerned"] as const) {
+      expect(offerChanges({ ...offer, passengerIds: [], otherLeg: { kind } })).toEqual(["marc:aller", "marc:retour"]);
+      expect(offerChanges({ ...offer, driver: { kind: "new" }, passengerIds: [], leg: "retour", otherLeg: { kind } })).toEqual(["drawn:retour", "drawn:aller"]);
+    }
+  });
+
+  it("« Je reste dans la voiture de… », or her state there unchanged (`keep`), or no other leg: nothing there", () => {
+    expect(offerChanges({ ...offer, passengerIds: [], otherLeg: { kind: "keep" } })).toEqual(["marc:aller"]);
+    expect(offerChanges({ ...offer, passengerIds: [] })).toEqual(["marc:aller"]);
   });
 });
