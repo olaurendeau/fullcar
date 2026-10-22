@@ -1,8 +1,8 @@
-import type { Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { failHeld, holdFirst, holdToken, messages, newToken } from "./device";
+import { failHeld, holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
 import { removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -38,6 +38,11 @@ async function seedScene(db: Db, eventId: string, token: string, lea = false) {
 async function placements(db: Db, eventId: string, personId: string) {
   const rows = await db.selectFrom("placement").select(["leg", "ride_id"]).where("event_id", "=", eventId).where("person_id", "=", personId).execute();
   return Object.fromEntries(rows.map((row) => [row.leg, row.ride_id]));
+}
+
+/** `personIds` leave their car of the aller from another device: in base only, the page reads nothing. */
+async function leaveInDb(db: Db, eventId: string, personIds: string[]) {
+  await db.updateTable("placement").set({ ride_id: null }).where("event_id", "=", eventId).where("leg", "=", "aller").where("person_id", "in", personIds).execute();
 }
 
 const panel = (page: Page) => page.getByRole("tabpanel");
@@ -78,6 +83,8 @@ async function cellAction(page: Page, firstName: string, leg: "Aller" | "Retour"
 
 const PLACED = "Tom est dans la voiture de Sophie";
 const UNDONE = "Tom n’est plus dans la voiture de Sophie";
+/** Nobody given back: the success of « Annuler » says so (`Seat.alreadyOut`, v4.4.4). */
+const ALREADY_OUT = "Tom n’était déjà plus dans la voiture de Sophie";
 const UNDO_OFFLINE = "Tom n’a pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».";
 
 test.describe("« Annuler »", () => {
@@ -150,7 +157,7 @@ test.describe("« Annuler »", () => {
       await expect(undo(page)).toHaveCount(0);
     });
 
-    test("C5.10, two contexts: Tom moved to Marc's car meanwhile is not touched; nobody undone, the bar closes", async ({ browser, baseURL, db, page, seededEvent }) => {
+    test("C5.10, two contexts: Tom moved to Marc's car meanwhile is not touched; nobody undone, the bar says so", async ({ browser, baseURL, db, page, seededEvent }) => {
       await page.goto(`/e/${seededEvent.id}`);
       await seat(page, "Sophie").click();
       await expect(undo(page)).toHaveCount(1);
@@ -172,9 +179,25 @@ test.describe("« Annuler »", () => {
 
       await undo(page).click();
       await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Avec Marc");
-      await expect(messages(page)).toHaveCount(0);
+      await expect(messages(page)).toHaveText([ALREADY_OUT]);
       await expect(title(page, "Sophie")).toBeFocused();
       expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: scene.cars.marc, retour: scene.cars.paul });
+    });
+
+    test("B1.3: « Annuler » of a success that gives nobody back says Tom was already out", async ({ db, page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await seat(page, "Sophie").click();
+      await expect(messages(page)).toHaveText([PLACED]);
+      await expect(undo(page)).toHaveCount(1);
+      await leaveInDb(db, seededEvent.id, [scene.persons.tom]);
+
+      await undo(page).focus();
+      await page.keyboard.press("Enter");
+      await expect(messages(page)).toHaveText([ALREADY_OUT]);
+      const buttons = bar(page).getByRole("button");
+      await expect(buttons).toHaveCount(1);
+      await expect(buttons).toHaveAccessibleName("Fermer");
+      await expect(title(page, "Sophie")).toBeFocused();
     });
 
     // Rule 6: offline, the failure gets its own « Annuler », which the success loses; a seat taken
@@ -229,7 +252,7 @@ test.describe("« Annuler »", () => {
       await expect(messages(page)).toHaveText([UNDO_OFFLINE, hugoFailed]);
 
       await undo(page).click();
-      await expect(messages(page)).toHaveText([hugoFailed]);
+      await expect(messages(page)).toHaveText([hugoFailed, ALREADY_OUT]);
       await expect(title(page, "Sophie")).toBeFocused();
     });
 
@@ -406,3 +429,109 @@ test.describe("« Annuler »", () => {
     });
   });
 });
+
+// v4.4.4 (#341, #357): « Annuler » sent again from its failure's line replaces the newer success,
+// Hugo's, and its « Annuler »; Hugo stays in Marc's car. Nobody given back, the success says the
+// persons were already out (`Seat.alreadyOut`) instead of leaving the bar silent.
+const B1 = {
+  fr: {
+    locale: "fr-FR",
+    car: (driver: string) => `Voiture de ${driver}`,
+    freeSeat: /^Place libre/,
+    sheet: "Qui monte dans la voiture de Sophie ?",
+    submit: /^Placer/,
+    undo: "Annuler",
+    close: "Fermer",
+    placed: "Tom et Léa sont dans la voiture de Sophie",
+    failed: "Tom et Léa n’ont pas pu sortir de la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ».",
+    hugo: "Hugo est dans la voiture de Marc",
+    undone: "Tom et Léa ne sont plus dans la voiture de Sophie",
+    alreadyOut: "Tom et Léa n’étaient déjà plus dans la voiture de Sophie",
+  },
+  en: {
+    locale: "en-GB",
+    car: (driver: string) => `${driver}’s car`,
+    freeSeat: /^Free seat/,
+    sheet: "Who gets in Sophie’s car?",
+    submit: /^Seat/,
+    undo: "Undo",
+    close: "Close",
+    placed: "Tom and Léa are in Sophie’s car",
+    failed: "Tom and Léa could not leave Sophie’s car. Check your connection, then use “Undo” again.",
+    hugo: "Hugo is in Marc’s car",
+    undone: "Tom and Léa are no longer in Sophie’s car",
+    alreadyOut: "Tom and Léa were already out of Sophie’s car",
+  },
+};
+
+for (const language of ["fr", "en"] as const) {
+  const words = B1[language];
+
+  test.describe(`« Annuler » from a failure's line, after a newer success (${language})`, () => {
+    test.use({ locale: words.locale });
+    const token = newToken();
+    let scene: Awaited<ReturnType<typeof seedScene>>;
+
+    // Tom, Léa and Hugo, without a car at the aller: once Tom and Léa are in Sophie's car, Hugo boards Marc's in one tap.
+    test.beforeEach(async ({ db, page, seededEvent }) => {
+      await holdToken(page, seededEvent.id, token);
+      scene = await seedScene(db, seededEvent.id, token, true);
+      await seedPlacement(db, { personId: scene.persons.hugo, eventId: seededEvent.id, leg: "aller", rideId: null });
+    });
+
+    const car = (page: Page, driver: string) => panel(page).getByRole("article", { name: words.car(driver), exact: true });
+    const undoes = (page: Page) => bar(page).getByRole("button", { name: words.undo });
+
+    /** Tom and Léa by the sheet in Sophie's car, their « Annuler » failed offline, then Hugo in Marc's car. */
+    async function failThenHugo(page: Page, context: BrowserContext, eventId: string) {
+      await page.goto(`/e/${eventId}`);
+      await car(page, "Sophie").getByRole("button", { name: words.freeSeat }).first().click();
+      const dialog = page.getByRole("dialog", { name: words.sheet });
+      await expect(dialog.getByRole("button", { name: words.submit })).toBeVisible();
+      for (const name of ["Tom", "Léa", "Hugo"]) await dialog.getByRole("checkbox", { name, exact: true }).setChecked(name !== "Hugo");
+      await dialog.getByRole("button", { name: words.submit }).click();
+      await expect(messages(page)).toHaveText([words.placed]);
+      await context.setOffline(true);
+      await undoes(page).click();
+      await expect(messages(page)).toHaveText([words.failed, words.placed]);
+      // Said in `alert` 100 ms after its line, before anything is recorded.
+      await expect(page.locator('[role="status"] + [role="alert"]')).toHaveText(words.failed);
+      await context.setOffline(false);
+      await car(page, "Marc").getByRole("button", { name: words.freeSeat }).first().click();
+      await expect(messages(page)).toHaveText([words.failed, words.hugo]);
+      await expect(undoes(page)).toHaveCount(2);
+    }
+
+    /** The failure's « Annuler », from the keyboard: the bar then says `text` alone, with « Fermer », the focus on Sophie's car. */
+    async function undoFromFailure(page: Page, text: string) {
+      const record = await recordBar(page);
+      await undoes(page).first().focus();
+      await page.keyboard.press("Enter");
+      await expect(messages(page)).toHaveText([text]);
+      const buttons = bar(page).getByRole("button");
+      await expect(buttons).toHaveCount(1);
+      await expect(buttons).toHaveAccessibleName(words.close);
+      await expect(page.getByRole("heading", { name: words.car("Sophie"), exact: true })).toBeFocused();
+      await expect(barStatus(page)).toHaveText(text);
+      return (await record()).writes;
+    }
+
+    if (language === "fr") {
+      test("B1.1: Tom and Léa given back, their success replaces Hugo's and its « Annuler »; Hugo stays in Marc's car", async ({ context, db, page, seededEvent }) => {
+        await failThenHugo(page, context, seededEvent.id);
+        await undoFromFailure(page, words.undone);
+        expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({ aller: scene.cars.marc });
+        expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: scene.cars.paul });
+        expect(await placements(db, seededEvent.id, scene.persons.lea)).toEqual({ aller: null });
+      });
+    }
+
+    test("B1.2: Tom and Léa out of Sophie's car from another device, nobody given back: the bar says they were already out", async ({ context, db, page, seededEvent }) => {
+      await failThenHugo(page, context, seededEvent.id);
+      await leaveInDb(db, seededEvent.id, [scene.persons.tom, scene.persons.lea]);
+      const writes = await undoFromFailure(page, words.alreadyOut);
+      expect(said(writes, "alert")).toEqual([]);
+      expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({ aller: scene.cars.marc });
+    });
+  });
+}

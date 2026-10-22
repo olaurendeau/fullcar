@@ -14,6 +14,7 @@ import {
   offerWhy,
   personWhy,
   undoWhy,
+  undoneText,
   whyOf,
   wordsOf,
   type NotDone,
@@ -344,7 +345,7 @@ export function ParticipantBoard({
 
   // « Annuler » (C5.10, rule 6): the persons placed get their state before on the leg back, if
   // still in the car. Its failure names them and the car, and carries the same « Annuler »; its
-  // success, those given back, the focus on the car's title once the page shows it.
+  // success, those given back, or all of them already out (v4.4.4), the focus on the car's title once the page shows it.
   const [undoneIn, setUndoneIn] = useState<{ landmark: () => boolean } | null>(null);
   useEffect(() => {
     if (undoneIn && (document.activeElement === null || document.activeElement === document.body)) focusFirstShown([undoneIn.landmark]);
@@ -367,11 +368,11 @@ export function ParticipantBoard({
       }
       const { undoneIds } = answer;
       const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
-      const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });
+      const text = undoneText(words, { names, undone, driver });
       send.whenClosed(() => {
-        // Nobody given back, there is no success to say: the success goes. The failures stay, and
-        // an information written since « Annuler » left too (rule 4, v4.4.2): the bar closes only without them.
-        messages.succeed(undone.length > 0 ? { text, landmark, leg } : null);
+        // Nobody given back, it says so, never silent (v4.4.4): it replaces the success shown, whatever
+        // it is. The failures stay, and an information written since « Annuler » left too (rule 4, v4.4.2).
+        messages.succeed({ text, landmark, leg });
         setUndoneIn({ landmark });
       });
     }
