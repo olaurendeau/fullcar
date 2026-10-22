@@ -4,7 +4,7 @@ import {
   startSpan, type NodeClient,
 } from "@sentry/nextjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, startBrowserSentry } from "./client";
+import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, messagesWithoutFrames, startBrowserSentry } from "./client";
 import {
   codeFramesOnly, type Integration, registerHooks, scrubEnvelopeHeader, sentryOptions, type SentryEnv, tracesSampleRate,
 } from "./options";
@@ -190,7 +190,7 @@ describe("in the browser, with a DSN", () => {
     sdk.defaultStackParser.mockReturnValueOnce([{ filename: "depuis 10" }, { filename: "chrome-extension://abcdefgh/content.js" }]);
     expect(stackParser("the stack")).toEqual([{ filename: "chrome-extension://abcdefgh/content.js" }]);
     expect(client.on.mock.calls).toEqual([["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader]]);
-    expect(client.addEventProcessor.mock.calls).toEqual([[codeFramesOnly]]);
+    expect(client.addEventProcessor.mock.calls).toEqual([[codeFramesOnly], [messagesWithoutFrames]]);
   });
 
   it("keeps the exact list of integrations, page loads and navigations named without their URL", async () => {

@@ -44,9 +44,30 @@ const SCRIPT_FILE = /^[a-z][\w+.-]*:\S+$/i;
  * The SDK's stack parser, without the frames it reads from a line of a message (#379). V8
  * writes the message at the top of the stack: `    at Marc (depuis 10:30)` would be the
  * thrown error's top frame, the only one `allowUrls` looks at, and the error never sent.
+ * A stack without a frame of a script keeps its frames: `allowUrls` then drops it, as before.
  */
 export function scriptFramesOnly(parse: StackParser): StackParser {
-  return (...args) => parse(...args).filter(({ filename }) => SCRIPT_FILE.test(filename ?? ""));
+  return (...args) => {
+    const frames = parse(...args);
+    const scripts = frames.filter(({ filename }) => SCRIPT_FILE.test(filename ?? ""));
+    return scripts.length > 0 ? scripts : frames;
+  };
+}
+
+/** A line of a stack: V8's `    at …`, SpiderMonkey's and JavaScriptCore's `name@file:line:column`. */
+const FRAME_LINE = /^\s*at\s|^\s*[^\s@]*@.*:\d+(?::\d+)?\s*$/;
+
+/**
+ * Of every error's message, and of its causes', the lines after the first that read as a
+ * frame (#379): `scriptFramesOnly` leaves out the frame made of such a line, and this the
+ * line itself, which `scrubText` would send with the first name in it.
+ */
+export function messagesWithoutFrames<E extends Sentry.Event>(event: E): E {
+  for (const exception of event.exception?.values ?? []) {
+    if (typeof exception.value !== "string") continue;
+    exception.value = exception.value.split("\n").filter((line, index) => index === 0 || !FRAME_LINE.test(line)).join("\n");
+  }
+  return event;
 }
 
 /** The SDK, once started; `undefined` without a DSN, and `load` then never called. */
@@ -65,5 +86,6 @@ export async function startBrowserSentry(env: SentryEnv, load: Load = () => impo
   if (!client) return undefined;
   registerHooks(client);
   client.addEventProcessor(codeFramesOnly);
+  client.addEventProcessor(messagesWithoutFrames);
   return sentry;
 }
