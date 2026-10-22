@@ -4,7 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView } from "@/components/event/event-view";
-import type { Undo } from "@/components/event/bar-state";
+import { personLeg, type Undo } from "@/components/event/bar-state";
 import {
   cellWhy,
   failureText,
@@ -37,7 +37,7 @@ import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
 import type { EventHeader } from "@/domain/event";
-import type { Leg } from "@/domain/leg";
+import { otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import {
   addPerson as storePerson,
   loadEventState,
@@ -278,6 +278,7 @@ export function ParticipantBoard({
     sheet.answered();
     if (sent.ok && sent.value.ok) {
       messages.succeed(null);
+      sheet.changed([personLeg(change.personId, change.leg)]);
       return null;
     }
     const error = !sent.ok ? sent.problem : "error" in sent.value ? sent.value.error : "failed";
@@ -306,21 +307,25 @@ export function ParticipantBoard({
     sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
     const names = passengers.map((person) => person.firstName);
-    if (outcome?.ok && names.length === 0) {
-      messages.succeed(null);
-      device.registered();
-      return { kind: "done" };
-    }
     if (outcome?.ok) {
+      // The car sent, whose ids stay the form's until a success; its passengers were without a car (v4-10).
+      const { rideId, personId: newId } = creationIds();
+      // Who drives and who boards, on the car's leg; she on the other leg too, unless she stays as she was there (v4.4.5).
+      const driverId = driver.kind === "new" ? newId : driver.personId;
+      const boarded = passengerIds.map((personId) => personLeg(personId, car.leg));
+      const there = otherLeg && otherLeg.kind !== "keep" ? [personLeg(driverId, otherLegOf(car.leg))] : [];
+      sheet.changed([personLeg(driverId, car.leg), ...boarded, ...there]);
       device.registered();
-      // The car sent, whose id stays the form's until a success; its passengers were without a car (v4-10).
-      const { rideId } = creationIds();
+      if (names.length === 0) {
+        messages.succeed(null);
+        return { kind: "done" };
+      }
       const { driver: firstName } = notDone;
       const persons = passengerIds.map((personId) => ({ personId, before: "withoutCar" as const }));
       const text =
         names.length === 1 ? words.t("Seat.placed", { firstName: names[0], driver: firstName }) : words.t("Sheet.placed", { names: nameList(words, names), driver: firstName });
       const undo = undoOf(sheet.seq, { rideId, leg: car.leg, persons }, { names, driver: firstName });
-      sheet.whenClosed(() => messages.succeed({ text, landmark: focusCar(car.leg, rideId), undo }));
+      sheet.whenStillTrue(boarded, () => messages.succeed({ text, landmark: focusCar(car.leg, rideId), undo }));
       return { kind: "done" };
     }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
@@ -356,6 +361,7 @@ export function ParticipantBoard({
         return;
       }
       const { undoneIds } = answer;
+      send.changed(undoneIds.map((personId) => personLeg(personId, leg)));
       const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
       const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });
       send.whenClosed(() => {
@@ -371,7 +377,8 @@ export function ParticipantBoard({
 
   // A success waits for the page to show, as a failure does, and replaces the success alone: it
   // never takes a failure away (#216). A refusal or a failure is said in the sheet that sent
-  // while it shows it, in the bar otherwise. A success carries its « Annuler ».
+  // while it shows it, in the bar otherwise. A success carries its « Annuler », and is never written
+  // once a send made since has succeeded in changing one of its persons on its leg (v4.4.5).
   const takeSeats: TakeSeats = async (request, { sending, seats, placed, ...sheet }) => {
     const { rideId, leg, persons } = request;
     const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, persons.map(({ personId }) => personId));
@@ -380,8 +387,11 @@ export function ParticipantBoard({
     sheet.answered();
     const taken = seatsTaken(sent, seats.names);
     const landmark = focusCar(leg, rideId);
-    if (taken.kind === "done") sheet.whenClosed(() => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats) }));
-    else failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes: taken.kind === "noRetour", leg });
+    if (taken.kind === "done") {
+      const seated = persons.map(({ personId }) => personLeg(personId, leg));
+      sheet.changed(seated);
+      sheet.whenStillTrue(seated, () => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats) }));
+    } else failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes: taken.kind === "noRetour", leg });
     return taken;
   };
 
@@ -425,6 +435,8 @@ export function ParticipantBoard({
     const outcome = sent.ok ? sent.value : undefined;
     if (outcome?.ok) {
       messages.succeed(null);
+      // Those ticked in « Qui sort de la voiture ? » are without a car on its leg (v4.4.5).
+      sheet.changed(leaving.map((personId) => personLeg(personId, leg)));
       return { kind: "done" };
     }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };

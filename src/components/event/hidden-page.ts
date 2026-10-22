@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useSyncExternalStore } from "react";
-import { covers, type Sent, type Withdrawal } from "./bar-state";
+import { covers, madeUntrue, type Change, type Sent, type Withdrawal } from "./bar-state";
 
 /*
  * Whether a sheet hides the rest of the page (#193, #195). Radix hides it from screen readers
@@ -84,6 +84,16 @@ export interface Send {
    * is never said: that send withdrew it, and its own answer says what came of it (rule 5).
    */
   whenClosed: (then: () => void, failure?: boolean) => void;
+  /**
+   * Its answer said it succeeded in changing `persons`, each on a leg (`personLeg`): a placement's
+   * success from an earlier send, about one of them, is no longer true (rule 2, v4.4.5).
+   */
+  changed: (persons: readonly string[]) => void;
+  /**
+   * A placement's success about `persons` on its leg, written as `whenClosed` says unless, by then,
+   * a send made since has `changed` one of them: nothing is said instead (v4.4.5-1).
+   */
+  whenStillTrue: (persons: readonly string[], then: () => void) => void;
 }
 
 /** What an action sent from a sheet is given to say its failure, in the sheet or in the bar. */
@@ -100,6 +110,8 @@ export interface FromSheet extends Send {
 let sends = 0;
 /** Every send that left (`Send.leaves`), for a failure that comes after a send that covers it. */
 const made = new Set<Sent>();
+/** What every send that succeeded changed, for a placement's success that comes after (v4.4.5). */
+const changes = new Set<Change>();
 /** What waits for the bar, each with what its send was about (#208). */
 const left = new Set<Sent & { withdraw: () => void }>();
 /** The subjects of a car removed, and the first send made since: what an earlier one says, nothing says. */
@@ -132,21 +144,28 @@ export function sendAbout(about: readonly string[]): Send {
   const seq = (sends += 1);
   withdraw({ about });
   const sent = { about, sent: seq };
+  const whenClosed: Send["whenClosed"] = (then, failure = false) => {
+    if ((gone.get(about[0]) ?? 0) > seq) return;
+    if (failure && [...made].some((since) => since.sent > seq && covers({ about: since.about }, sent))) return;
+    const entry = { about, sent: seq, withdraw: () => {} };
+    left.add(entry);
+    entry.withdraw = whenPageShown(() => {
+      left.delete(entry);
+      then();
+    }, failure);
+  };
   return {
     about,
     seq,
     leaves: () => void made.add(sent),
     answered: () => withdraw({ about, before: seq }),
-    whenClosed: (then, failure = false) => {
-      if ((gone.get(about[0]) ?? 0) > seq) return;
-      if (failure && [...made].some((since) => since.sent > seq && covers({ about: since.about }, sent))) return;
-      const entry = { about, sent: seq, withdraw: () => {} };
-      left.add(entry);
-      entry.withdraw = whenPageShown(() => {
-        left.delete(entry);
-        then();
-      }, failure);
-    },
+    whenClosed,
+    changed: (persons) => void changes.add({ persons, sent: seq }),
+    // Decided as it would be written, once no sheet hides the page: a send answered meanwhile counts.
+    whenStillTrue: (persons, then) =>
+      whenClosed(() => {
+        if (!madeUntrue({ persons, sent: seq }, changes)) then();
+      }),
   };
 }
 

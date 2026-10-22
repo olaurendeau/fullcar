@@ -74,6 +74,26 @@ export function covers(withdrawal: Withdrawal, { about, sent }: Sent): boolean {
   return about.every((subject) => withdrawal.about.includes(subject));
 }
 
+/** A person's state on a leg, the key of what a placement's success says (rule 2, v4.4.5). */
+export const personLeg = (personId: string, leg: Leg): string => `${personId}:${leg}`;
+
+/**
+ * What a send changed once it succeeded, each person on a leg (`personLeg`), and its number; or
+ * what a placement's success held under a sheet says, and its send's number.
+ */
+export interface Change {
+  persons: readonly string[];
+  sent: number;
+}
+
+/**
+ * Rule 2 (v4.4.5-1, -2, -4): a placement's success that waits is never written once a send made
+ * after it has succeeded in changing one of its persons on its leg, the whole success. Other
+ * persons, or the other leg, leave it true. A send that failed or was refused changed nothing.
+ */
+export const madeUntrue = (held: Change, since: Iterable<Change>): boolean =>
+  [...since].some((change) => change.sent > held.sent && change.persons.some((person) => held.persons.includes(person)));
+
 const keep = (state: BarState, kept: (line: Line) => boolean): BarState => ({ ...state, lines: state.lines.filter(kept) });
 
 function write(state: BarState, line: Line, kept: (line: Line) => boolean): BarState {

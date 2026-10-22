@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { covers, type Withdrawal } from "./bar-state";
+import { covers, personLeg, type Withdrawal } from "./bar-state";
 import { aboutOf, allerPart, coverPage, forget, offersRetour, onWithdraw, sendAbout, whenPageShown } from "./hidden-page";
 
 /** Once the microtask a sheet leaves at its unmount has run. */
@@ -221,5 +221,61 @@ describe("an offer's legs", () => {
 
   it("an offer is about the retour when one of its subjects is the retour's", () => {
     expect([both, ["offer:retour:new:Marc"], ["offer:aller:claire"], ["cell:tom:retour"]].map(offersRetour)).toEqual([true, true, false, false]);
+  });
+});
+
+// Rule 2, v4.4.5 (#359): a placement's success held under a sheet is never written once a send
+// made after it has succeeded in changing one of its persons on its leg.
+describe("whenStillTrue", () => {
+  it("a send made since that succeeded for Tom on that leg: never said, nor for Léa with him", async () => {
+    const [tom, lea] = [personLeg("tom-1", "aller"), personLeg("lea-1", "aller")];
+    const uncover = coverPage();
+    const said: string[] = [];
+    const placed = sendAbout(["seats:sophie"]);
+    placed.changed([tom, lea]);
+    sendAbout(["cell:tom-1:aller"]).changed([tom]);
+    placed.whenStillTrue([tom, lea], () => said.push("Tom et Léa"));
+    uncover();
+    await settled();
+    expect(said).toEqual([]);
+  });
+
+  it("a send made since that failed, or one for another person or on the other leg: said once the page shows (v4.4.5-2, -3)", async () => {
+    const lea = personLeg("lea-2", "aller");
+    const uncover = coverPage();
+    const said: string[] = [];
+    const placed = sendAbout(["seats:sophie"]);
+    placed.changed([lea]);
+    // Failed or refused: it left, and its answer changed nothing.
+    sendAbout(["cell:lea-2:aller"]).leaves();
+    sendAbout(["cell:hugo-2:aller"]).changed([personLeg("hugo-2", "aller")]);
+    sendAbout(["cell:lea-2:retour"]).changed([personLeg("lea-2", "retour")]);
+    placed.whenStillTrue([lea], () => said.push("Léa"));
+    expect(said).toEqual([]);
+    uncover();
+    await settled();
+    expect(said).toEqual(["Léa"]);
+  });
+
+  it("decided once the page shows: a send for Tom that succeeds while it waits withdraws it", async () => {
+    const tom = personLeg("tom-3", "aller");
+    const uncover = coverPage();
+    const said: string[] = [];
+    const placed = sendAbout(["seats:marc"]);
+    placed.whenStillTrue([tom], () => said.push("Tom"));
+    sendAbout(["cell:tom-3:aller"]).changed([tom]);
+    uncover();
+    await settled();
+    expect(said).toEqual([]);
+  });
+
+  it("a send made before it, answered after it: it is said, at once with no sheet", () => {
+    const zoe = personLeg("zoe-4", "aller");
+    const said: string[] = [];
+    const before = sendAbout(["cell:zoe-4:aller"]);
+    const placed = sendAbout(["seats:paul"]);
+    before.changed([zoe]);
+    placed.whenStillTrue([zoe], () => said.push("Zoé"));
+    expect(said).toEqual(["Zoé"]);
   });
 });

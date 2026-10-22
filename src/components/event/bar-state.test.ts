@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { close, covers, emptyBar, ended, fail, inform, lines, regions, retourGone, succeed, undoing, withdraw, type BarState, type Undo } from "./bar-state";
+import {
+  close,
+  covers,
+  emptyBar,
+  ended,
+  fail,
+  inform,
+  lines,
+  madeUntrue,
+  personLeg,
+  regions,
+  retourGone,
+  succeed,
+  undoing,
+  withdraw,
+  type BarState,
+  type Undo,
+} from "./bar-state";
 
 // The rules of « La barre de messages » (docs/design/event-board/README.md, v4.2.3, #216).
 
@@ -215,5 +232,27 @@ describe("decision 44: the retour gone, the bar's lines about it go", () => {
     state = inform(state, { ...info("Aucune place libre au retour"), ...retour });
     state = fail(state, { ...failure("Hugo · Retour", ["cell:hugo:retour"]), ...retour });
     expect(regions(retourGone(state))).toEqual({ alert: "", status: "" });
+  });
+});
+
+// Rule 2, v4.4.5 (#359): a placement's success held under a sheet, made untrue by a send made since.
+describe("madeUntrue", () => {
+  const tom = personLeg("tom", "aller");
+  const lea = personLeg("lea", "aller");
+  const held = { persons: [tom, lea], sent: 2 };
+
+  it("a send made after it, which succeeded in changing one of its persons on its leg: the whole success goes (v4.4.5-1, -4)", () => {
+    expect(madeUntrue(held, [{ persons: [tom], sent: 3 }])).toBe(true);
+    expect(madeUntrue(held, [{ persons: [personLeg("hugo", "aller"), lea], sent: 5 }])).toBe(true);
+  });
+
+  it("another person, or the other leg: it stays true (v4.4.5-2)", () => {
+    expect(madeUntrue(held, [{ persons: [personLeg("hugo", "aller")], sent: 3 }])).toBe(false);
+    expect(madeUntrue(held, [{ persons: [personLeg("tom", "retour"), personLeg("lea", "retour")], sent: 3 }])).toBe(false);
+  });
+
+  it("a send made before it, or itself, does not make it untrue", () => {
+    expect(madeUntrue(held, [{ persons: [tom], sent: 1 }, held])).toBe(false);
+    expect(madeUntrue(held, [])).toBe(false);
   });
 });
