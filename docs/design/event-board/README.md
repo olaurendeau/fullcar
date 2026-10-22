@@ -25,9 +25,216 @@
   envoyée après elle, réussie, a déjà changé l’état d’une de ses personnes sur son leg (#359) ;
   « Valider » sans changement dans « Modifier la voiture » n’envoie rien (#313). Voir « Ce qui
   change en v4.4.5 »
+- v4.4.6 : quand le retour est supprimé, l’échec hors ligne ou en erreur d’une offre sur les
+  deux legs reste, réduit à l’aller (décision du propriétaire sur #267, construite par PR
+  #371), et cette réduction n’est pas annoncée (#372). Voir « Ce qui change en v4.4.6 »
 - Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
   la maquette `language-switch` depuis sa v3 (#236)
 - Page : `index.html` (autonome, maquettes à 360 px de large)
+
+## Ce qui change en v4.4.6 : une ligne d’échec réduite à l’aller (#372)
+
+Un amendement de la barre, sans mot nouveau. Il inscrit ici une décision du propriétaire
+déjà construite (#267, PR #371), et tranche ce qu’en disent les régions vivantes : rien.
+Issue : https://github.com/olaurendeau/fullcar/issues/372.
+
+### Le cas
+
+Claire, personne de l’appareil, propose sa voiture sur les deux legs : depuis l’onglet Aller
+avec « Je ramène aussi », ou depuis l’onglet Retour avec « J’emmène aussi ». L’envoi échoue
+hors ligne, ou sur une erreur. La barre dit « Les voitures de Claire pour l’aller et le retour
+n’ont pas été proposées. Vérifiez la connexion, puis réessayez. », et la région `alert`
+l’annonce. Puis l’organisateur supprime le retour. La page l’apprend par la réponse d’une
+autre action, par exemple l’inscription d’Inès à l’aller, une réussite sans message
+(règle 2) : c’est la transition vers un état sans retour (règle 5 ; organizer-view,
+décision 44).
+
+### Ce que devient la ligne (décision du propriétaire, #267)
+
+La ligne **reste, réduite à l’aller**, pour que Claire sache toujours que sa voiture n’a pas
+été proposée pour l’aller.
+
+- **Ses mots** : `Actions.notDone.offerRide` avec `legs` = `aller`, puis la même raison
+  (`Actions.why.offline` ou `Actions.why.failed`). Voir « Les mots de la v4.4.6 ».
+- **Son sujet** : sa seule partie aller (`offer:aller:{personId}`, ou
+  `offer:aller:new:{prénom}`). Proposer de nouveau la voiture pour l’aller la retire dès
+  l’envoi (règle 5), comme l’échec `noRetourAgain` (v4.4.4-5).
+- **Son repère** : le bouton « Proposer une voiture » de l’aller, d’où que l’offre soit
+  partie. Celui du retour est parti avec les onglets (règle 8).
+- **Son rang, son icône et sa couleur ne changent pas** : `WifiOff` hors ligne,
+  `TriangleAlert` sur une erreur. La ligne n’est pas écrite de nouveau (règle 1) : elle garde
+  sa place parmi les échecs.
+- **Seules ces deux raisons sont réduites.** Tout autre échec d’une offre sur les deux legs part
+  avec le retour, comme tout message sur le retour : un refus peut ne valoir qu’avec le retour (« Claire
+  conduit déjà une voiture. », quand c’est au retour qu’elle conduisait).
+- **Une seule fois.** Réduite, la ligne ne porte plus sur le retour.
+- « Ajouter une personne » n’est pas touché : son échec ne nomme pas de leg, et son sujet
+  (`person:new:{prénom}`) n’en a pas. Sa ligne reste telle quelle.
+
+### Ce qu’entend un lecteur d’écran : rien
+
+**Le problème** (relecture de PR #371). Aujourd’hui, si la ligne réduite est le dernier échec
+écrit, la région `alert` la relit : son texte change, elle est vidée, puis réécrite 100 ms plus
+tard. Deux défauts :
+
+- l’annonce tombe juste après une action qui a réussi. Avec l’inscription d’Inès, qui réussit
+  sans un mot, on entend « La voiture de Claire pour l’aller n’a pas été proposée. Vérifiez la
+  connexion, puis réessayez. ». On peut croire que c’est l’inscription d’Inès qui a échoué, ou
+  que la voiture de Claire a été renvoyée et a échoué de nouveau ;
+- si la ligne réduite n’est pas le dernier échec écrit, rien n’est annoncé. Le même changement
+  est donc dit ou tu selon l’ordre des échecs.
+
+**Décision : réduire une ligne n’est pas l’écrire. Rien n’est annoncé** (v4.4.6-2).
+
+- L’échec a déjà été annoncé quand il a été écrit, et ce qu’il dit reste vrai pour l’aller.
+  La réduction ne dit rien de nouveau sur la voiture de Claire.
+- L’écran non plus n’ajoute aucun message : la transition retire et réduit des lignes sans
+  rien dire (organizer-view, décision 44 et M7.4). Le lecteur d’écran entend ce que l’écran
+  dit.
+- La ligne réduite se relit dans la liste visible, comme tout message.
+
+Au moment de la transition :
+
+| la région `alert`, juste avant | ce qu’elle fait | critère |
+|---|---|---|
+| contient le texte entier de la ligne réduite (annonce faite) | elle est vidée, et rien n’y est écrit ensuite. Elle ne garde pas le texte « aller et retour », que la barre ne montre plus, y compris en mode navigation | N1.1, N1.2 |
+| attend d’écrire cette ligne : son écriture est en attente, quelle qu’en soit la raison (les 100 ms du point 3, ou une feuille qui cache la page, `whenPageShown`) | l’écriture en attente écrit le texte réduit, à son heure. L’échec n’a pas encore été annoncé : il l’est une fois, dans les mots que la barre montre, jamais dans le texte entier | N1.3 |
+| contient ou attend un autre échec, ou est vide | elle n’est pas touchée : ni vidée, ni réécrite, et son écriture en attente non plus | N1.4 |
+
+- La région `status` n’est pas touchée par la réduction.
+- Le message de la réponse qui apporte la transition s’écrit ensuite selon les règles
+  habituelles. Une réussite va dans la région `status` (`EditEvent.saved`, sur `/admin`). Un
+  échec va dans la région `alert` : c’est une écriture plus récente, qui annule une écriture
+  en attente de la ligne réduite (point 3), comme pour deux échecs du même passage. Une
+  réussite sans message, comme l’inscription d’Inès, n’écrit rien.
+- Un échec qui part avec le retour (un refus) suit la règle d’avant : si la région `alert`
+  l’annonçait encore, elle est vidée (point 4, N1.5).
+
+### Les mots de la v4.4.6
+
+Aucun mot nouveau, aucun mot changé, et aucun texte n’est annoncé à la réduction. La ligne
+réduite reprend `Actions.notDone.offerRide` (`legs` = `aller`) et la raison de l’échec :
+
+| échec | avant la transition | après, fr | après, en |
+|---|---|---|---|
+| hors ligne | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Vérifiez la connexion, puis réessayez. | La voiture de Claire pour l’aller n’a pas été proposée. Vérifiez la connexion, puis réessayez. | Claire’s car for the outbound trip was not offered. Check your connection, then try again. |
+| erreur | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Une erreur est survenue : réessayez dans un instant. | La voiture de Claire pour l’aller n’a pas été proposée. Une erreur est survenue : réessayez dans un instant. | Claire’s car for the outbound trip was not offered. Something went wrong: try again in a moment. |
+
+En anglais, avant la transition : « Claire’s cars for the outbound and return trips were not
+offered. » suivi de la même raison.
+
+### Les états de la v4.4.6
+
+| état | la barre | les régions | critère |
+|---|---|---|---|
+| échec hors ligne d’une offre sur les deux legs, déjà annoncé, puis l’état sans retour | la ligne reste, réduite à l’aller, à son rang ; la page n’a plus d’onglets | `alert` vidée, rien d’écrit ; `status` inchangée | N1.1 |
+| la même chose, sur une erreur | idem, avec « Une erreur est survenue : réessayez dans un instant. » | idem | N1.2 |
+| la même chose, l’échec pas encore annoncé | idem | `alert` écrit une fois le texte réduit | N1.3 |
+| un autre échec écrit après celui de Claire | les deux lignes, la plus récente en haut ; celle de Claire réduite | `alert` garde l’autre échec, sans changement | N1.4 |
+| un refus sur les deux legs (`alreadyDriving`), puis l’état sans retour | la ligne part | `alert` vidée, rien d’écrit | N1.5 |
+| la ligne réduite, puis la voiture proposée de nouveau pour l’aller ; ou « Fermer » | la ligne part dès l’envoi ; « Fermer » donne le focus à « Proposer une voiture » de l’aller | inchangé | N1.6 |
+
+### Critères de la v4.4.6
+
+Prouvés par Playwright, dans `e2e/aller-sheets.spec.ts`, avec la scène des tests de PR #371 :
+
+- Claire, personne de l’appareil (`seedClaire`) ;
+- « Proposer une voiture » depuis l’onglet Aller, Claire conduit, « Je ramène aussi » ;
+  « Valider », puis Échap ferme la feuille avant la réponse ;
+- l’échec : hors ligne (`loseFirst`, `context.setOffline`) ou sur une erreur
+  (`holdFirst(page, PLACE, true)`, `failHeld`) ;
+- le retour supprimé en base (`removeRetourInDb`), puis Inès inscrite à l’aller seul
+  (`sendHeldRegistration`) : sa réponse apporte l’état sans retour.
+
+`messages(page)` donne les textes de la liste de la barre. Les régions sont observées par
+`recordBar`, et `said(writes, region)` donne les textes non vides écrits dans une région. Le
+temps est piloté par `page.clock`. « Ensuite » veut dire : la page n’a plus d’onglets, puis
+l’horloge avance de 1 000 ms.
+
+**H7. Ne pas entendre un échec que personne n’a provoqué.** En tant que personne qui utilise
+un lecteur d’écran, quand le retour disparaît, je n’entends pas de nouveau l’échec de la
+voiture de Claire. Je l’ai déjà entendu, et je pourrais le prendre pour l’échec de ce que je
+viens de faire.
+
+- **N1.1** Hors ligne. Quand la région `alert` contient « Les voitures de Claire pour l’aller
+  et le retour n’ont pas été proposées. Vérifiez la connexion, puis réessayez. »,
+  `recordBar` commence. On repasse en ligne, puis le retour est supprimé et Inès inscrite.
+  Ensuite :
+  - `messages(page)` = [« La voiture de Claire pour l’aller n’a pas été proposée. Vérifiez la
+    connexion, puis réessayez. »] ;
+  - `said(writes, "alert")` = [] : aucun texte écrit dans la région `alert` depuis le début
+    de l’enregistrement. Elle est vide à la fin ;
+  - `said(writes, "status")` = [] ;
+  - en anglais (`locale: "en-US"`), `messages(page)` = [« Claire’s car for the outbound trip
+    was not offered. Check your connection, then try again. »], et les régions sont les mêmes.
+
+  Sur `main`, la région `alert` reçoit le texte réduit : le test échoue.
+- **N1.2** La scène de N1.1, l’échec venant d’une erreur (500). Avant la transition, la région
+  `alert` contient « Les voitures de Claire pour l’aller et le retour n’ont pas été
+  proposées. Une erreur est survenue : réessayez dans un instant. ». Ensuite :
+  - `messages(page)` = [« La voiture de Claire pour l’aller n’a pas été proposée. Une erreur
+    est survenue : réessayez dans un instant. »] ;
+  - `said(writes, "alert")` = [], et la région est vide à la fin.
+
+  Sur `main`, le test échoue comme N1.1. Il couvre aussi la moitié « erreur » de la condition
+  de PR #371 (#373) : si elle disparaît, la ligne part avec le retour, et `messages(page)`
+  est vide.
+- **N1.3** L’échec pas encore annoncé. L’offre de Claire part, réponse retenue (500), et le
+  retour est supprimé en base. L’inscription d’Inès est envoyée, sa réponse retenue elle
+  aussi : les actions de la page partent une à une, elle part donc après la réponse de
+  Claire. L’horloge est arrêtée (`page.clock`) et `recordBar` commence. L’offre de Claire
+  échoue (`failHeld`) : la ligne entière est dans la barre, et la région `alert` attend de
+  l’écrire. Sans avancer l’horloge, la réponse d’Inès est relâchée, et la page n’a plus
+  d’onglets. Puis l’horloge avance de 1 000 ms :
+  - `said(writes, "alert")` = [« La voiture de Claire pour l’aller n’a pas été proposée. Une
+    erreur est survenue : réessayez dans un instant. »]. Le texte réduit est écrit une seule
+    fois, et le texte entier ne l’a jamais été ;
+  - `messages(page)` = [ce même texte].
+
+  Ce critère passe sur `main` : c’est une garde. Il fait échouer une correction qui viderait
+  la région à chaque réduction, puisque l’échec ne serait alors jamais annoncé.
+- **N1.4** Un autre échec annoncé. Après l’échec hors ligne de Claire, de nouveau en ligne,
+  l’envoi d’Hugo est retenu (`loseFirst(page, "Hugo")`). « Ajouter une personne » depuis
+  l’onglet Aller, « Hugo », « Aller et retour » coché (sa valeur par défaut) ; « Valider »,
+  puis Échap ferme la feuille avant la réponse, comme pour Claire. `context.setOffline(true)`,
+  puis l’envoi est perdu : la barre dit aussi « Hugo n’a pas pu rejoindre vos inscriptions.
+  Vérifiez la connexion, puis réessayez. », et la région `alert` le contient. `recordBar`
+  commence. On repasse en ligne, puis le retour est supprimé
+  et Inès inscrite. Ensuite :
+  - `messages(page)` = [« Hugo n’a pas pu rejoindre vos inscriptions. Vérifiez la connexion,
+    puis réessayez. », « La voiture de Claire pour l’aller n’a pas été proposée. Vérifiez la
+    connexion, puis réessayez. »]. Hugo est en haut, car plus récent, et Claire garde son
+    rang ;
+  - aucun changement de la région `alert` n’est enregistré, et elle contient toujours l’échec
+    d’Hugo.
+
+  Ce critère passe sur `main` : c’est une garde.
+- **N1.5** Le test de PR #371 « refused by `alreadyDriving` » : la barre dit « Les voitures de
+  Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture. »,
+  et la région `alert` la contient. `recordBar` commence. Après la transition,
+  `messages(page)` est vide, `said(writes, "alert")` = [], et la région `alert` est vide.
+  C’est une garde.
+- **N1.6** Les deux autres tests de PR #371, sans changement. Proposer de nouveau la voiture
+  de Claire pour l’aller retire la ligne réduite dès l’envoi, avant la réponse. Depuis l’onglet
+  Retour, avec « J’emmène aussi », « Fermer » donne le focus au bouton « Proposer une voiture »
+  de l’aller. Ce sont des gardes.
+
+**Non prouvable par un test** : ce que prononce un lecteur d’écran. On vérifie en revue,
+avec VoiceOver (iOS, Safari), TalkBack (Android, Chrome) et NVDA (Windows, Chrome), la scène
+de N1.1. Après l’inscription d’Inès, la barre ne fait rien dire. En mode navigation, la ligne
+réduite se lit une fois, dans la liste, puisque la région `alert` est vide.
+
+### Pour le développement de la v4.4.6
+
+- Une petite tâche, sur `main`. N1.1 et N1.2 échouent aujourd’hui ; N1.3 à N1.6 sont des
+  gardes, vertes avant comme après.
+- La règle est dans `bar-state.ts` (`retourGone`, `regions`) et dans `message-bar.tsx`
+  (`createAnnouncer`). Aujourd’hui, la région `alert` suit le texte de la ligne qu’elle
+  désigne (`state.alert`) : le texte change, donc elle est réécrite. Il faut distinguer deux
+  cas : le texte est déjà écrit, et la région est vidée sans écriture ; l’écriture est en
+  attente, et elle prend le texte réduit sans repartir de zéro. Le choix du mécanisme revient
+  à l’architecte.
+- N1.2 remplace le test demandé par #373.
 
 ## Ce qui change en v4.4.5 : une réussite retenue devenue fausse (#359), et « Valider » sans changement dans « Modifier la voiture » (#313)
 
@@ -1288,7 +1495,10 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
      la barre tout message sur le retour, avant d’écrire le message de cette réponse :
      réussite, information et échecs, avec leurs « Annuler ». C’est une transition, une
      seule fois : les échecs `noRetour` écrits par cette réponse ou par les suivantes
-     restent, jusqu’à un envoi sur leur sujet ou « Fermer » ;
+     restent, jusqu’à un envoi sur leur sujet ou « Fermer ». **Une exception** (v4.4.6,
+     décision du propriétaire sur #267) : l’échec hors ligne ou en erreur d’une offre sur
+     les deux legs reste, réduit à l’aller (mots, sujet `offer:aller:…`, repère), à son
+     rang, et sa réduction n’est pas annoncée (« Lecteurs d’écran », point 4) ;
    - « Fermer », ou Échap.
 
    Rien d’autre ne le retire : ni une réussite d’une autre action, ni une information, ni un
@@ -1373,7 +1583,7 @@ est affiché (règle 8).
 | une action de cellule, en échec | la cellule ; section repliée : le bouton « Vos inscriptions » |
 | « Modifier » une personne, en échec | son prénom dans la matrice ; section repliée : le bouton « Vos inscriptions » |
 | « Ajouter une personne », en échec | envoyé depuis le tableau : le bouton « Ajouter une personne » du leg d’où il est parti ; depuis une place ou la feuille : le titre de la carte de cette voiture |
-| « Proposer une voiture », en échec | le bouton « Proposer une voiture » du leg d’où il est parti |
+| « Proposer une voiture », en échec | le bouton « Proposer une voiture » du leg d’où il est parti ; réduit à l’aller par la transition (v4.4.6) : celui de l’aller |
 | « Réessayer » de « Vos inscriptions », en échec | le bouton « Réessayer » de l’alerte de la section, hors des onglets, affiché tant que « Vos inscriptions » est en échec |
 | « Aucune place libre à l’aller / au retour pour l’instant. » | le bouton « Proposer une voiture » de ce leg |
 
@@ -1396,7 +1606,7 @@ tests Playwright (C11.10) :
 | une action de cellule (« Ne fait pas l’aller / le retour », « Je cherche une place », « Sortir de la voiture ») | la cellule (`cell:{personId}:{leg}`) | après l’échec de « Ne fait pas l’aller » pour Tom · Aller, « Ne fait pas l’aller » depuis la même cellule, rouverte | une action depuis Tom · Retour ; une place prise pour Tom par un tap |
 | « Ajouter une personne » (depuis le tableau, une place ou la feuille) | le prénom envoyé, espaces de début et de fin retirés (`person:new:{prénom}`) | « Inès » échoue depuis le bouton de l’onglet Aller ; « Inès » (avec des espaces autour) est renvoyé depuis la feuille d’une place de l’onglet Retour | « Hugo » envoyé depuis le même bouton |
 | « Modifier » une personne | la personne et chaque champ envoyé (`person:{personId}` + champs) | après l’échec du prénom et du téléphone de Tom, un « Modifier » de Tom qui envoie les deux | un « Modifier » de Tom qui n’envoie que le téléphone ; un « Modifier » de Léa ; un « Valider » sans changement de Tom, qui n’envoie rien (v4.4, V1.5) |
-| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi » depuis l’onglet Aller, Marc avec « J’emmène aussi » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs (hors ligne ou erreur, avec un retour qui existe). Exception, un échec `noRetourAgain` : son sujet est la seule partie aller, et Claire à l’aller seul le retire (v4.4.4, B1.7) |
+| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi » depuis l’onglet Aller, Marc avec « J’emmène aussi » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs (hors ligne ou erreur, avec un retour qui existe). Exception, un échec `noRetourAgain` : son sujet est la seule partie aller, et Claire à l’aller seul le retire (v4.4.4, B1.7). De même pour un échec sur les deux legs réduit à l’aller par la transition (v4.4.6, N1.6) |
 | « Modifier » la voiture (#93) | la modification de cette voiture (`ride:{rideId}:edit`, comme PR #218) | un nouveau « Modifier » de la même voiture | « Retirer la voiture » de cette voiture, **qui échoue** (`ride-remove.spec.ts:350`) ; « Modifier » d’une autre voiture ; un « Valider » sans changement de cette voiture, qui n’envoie rien (v4.4.5, W1.6). Un retrait **réussi** retire l’échec (règle 5, v4.4.1) |
 | « Retirer la voiture » | le retrait de cette voiture (`ride:{rideId}`, comme PR #213) | un nouveau « Retirer la voiture » de la même voiture | « Modifier » de cette voiture |
 | « Réessayer » de « Vos inscriptions » | la lecture de « Vos inscriptions » (`device:read`) | le « Réessayer » suivant | le retour du réseau (`setOffline(false)`, évènement `online`) |
@@ -1534,7 +1744,8 @@ message à annoncer**. La v4.2.2 en fixe le moment d’écriture.
    - `role="status"` ne contient que le texte du **dernier message poli écrit**, réussite ou
      information.
    
-   Chacune se vide quand son message quitte la barre.
+   Chacune se vide quand son message quitte la barre. La région `alert` se vide aussi quand
+   la transition réduit à l’aller l’échec dont elle a déjà écrit le texte (point 4, v4.4.6).
 3. **Le moment d’écriture** (v4.2.2). Chaque écriture dans une région suit ces trois temps :
    1. la région est vidée aussitôt ;
    2. le texte est écrit **100 ms plus tard**, par une minuterie ;
@@ -1563,6 +1774,15 @@ message à annoncer**. La v4.2.2 en fixe le moment d’écriture.
    dans la région `alert`. Un deuxième échec
    remplace le texte du premier dans la région `alert` : seul le deuxième est lu, et le
    premier reste dans la liste visible, où on le relit.
+
+   **Une ligne réduite à l’aller** (v4.4.6). Réduire une ligne n’est pas l’écrire : rien
+   n’est annoncé, ni dans la région `alert`, ni dans la région `status`.
+   - Si la région `alert` contient déjà le texte entier de cette ligne, elle est vidée, et
+     rien n’y est écrit ensuite.
+   - Si elle attend encore d’écrire cette ligne, l’écriture en attente écrit le texte réduit,
+     à son heure : l’échec est annoncé une fois, dans les mots que la barre montre. Une
+     écriture plus récente l’annule, comme toujours (point 3).
+   - Si elle annonce un autre échec, ou rien, elle n’est pas touchée.
 5. **Réussite, puis échec.** La réussite est polie, l’échec assertif, et il peut couper sa
    lecture. La réussite reste alors dans la liste visible, où on la relit.
 6. **Échec, puis réussite** (le cas de #216 dans son ordre). La réussite, polie, attend la fin
@@ -1681,6 +1901,7 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | « Modifier » sans changement : avant « Valider », après (feuille fermée, focus sur le prénom, barre inchangée), hors ligne (v4.4) | « Valider » sans changement | V1.1 à V1.6, V1.8 |
 | v4.4.5 : une réussite retenue, puis « Sortir de la voiture » pour la même personne : la barre ne dit rien ; la même suite en échec : la réussite s’écrit | Réussite retenue, et « Modifier la voiture » sans changement (v4.4.5) | S1.1 à S1.5 |
 | v4.4.5 : « Modifier la voiture » sans changement : avant « Valider », après (feuille fermée, focus sur « Modifier », barre inchangée) | Réussite retenue, et « Modifier la voiture » sans changement (v4.4.5) | W1.1 à W1.6 |
+| v4.4.6 : l’échec hors ligne d’une offre sur les deux legs, avant et après la suppression du retour (réduit à l’aller, rien d’annoncé) ; avec un échec plus récent d’Hugo | Une ligne d’échec réduite à l’aller (v4.4.6) | N1.1 à N1.4 |
 
 ## Les mots
 
@@ -2164,6 +2385,14 @@ v4.4.5-5. Décision : la réussite d’un « Annuler » (`Seat.undone`, `Seat.al
 
 v4.4.5-6. Décision : « Valider » sans aucun champ changé ferme « Modifier la voiture » et n’envoie rien. Rien n’est dit, l’étape « Qui sort de la voiture ? » ne s’ouvre pas, et le focus va sur « Modifier » de la carte. — Raison : la même règle que la v4.4 (« Modifier » une personne) et qu’organizer-view M2.5 (« Modifier l’événement ») : trois formulaires de modification, une seule règle. Un message ajouterait une ligne à la barre pour ne rien dire (v4.4-3). Un « Valider » inactif tant que rien ne change a été écarté : un bouton inactif ne dit pas pourquoi, Entrée n’y ferait rien, et les deux autres formulaires ne le font pas.
 
+### Nouvelles en v4.4.6 (une ligne d’échec réduite à l’aller, #372)
+
+v4.4.6-1. Décision du propriétaire sur #267 (relecture de PR #371), inscrite ici : quand le retour est supprimé, l’échec d’une offre sur les deux legs, hors ligne ou sur une erreur, reste, réduit à sa partie aller (mots, sujet, repère), et garde son rang. Tout autre échec d’une offre sur les deux legs part avec le retour. — Raison : Claire doit toujours savoir que sa voiture n’a pas été proposée pour l’aller. « Vérifiez la connexion » et « Une erreur est survenue » restent vrais sans le retour ; un refus peut ne valoir qu’avec lui.
+
+v4.4.6-2. Décision : réduire une ligne n’est pas l’écrire. Rien n’est annoncé, et la région `alert` qui contient déjà le texte entier est vidée sans être réécrite. — Raison : l’échec a déjà été annoncé, et rien de nouveau n’est arrivé à la voiture de Claire. Une annonce assertive juste après une action réussie, comme l’inscription d’Inès, se lirait comme l’échec de cette action. L’écran n’ajoute aucun message non plus. Vider plutôt que garder l’ancien texte : la région ne dit jamais ce que la barre ne montre plus, y compris en mode navigation. Annoncer de nouveau a été écarté pour la confusion, et parce que l’annonce dépendrait de l’ordre des échecs. D’autres mots, comme « Il n’y a plus de retour… », ont été écartés : ce serait un message que l’écran ne montre pas.
+
+v4.4.6-3. Décision : si l’écriture de cet échec est encore en attente, elle écrit le texte réduit, à son heure. — Raison : la réduction ne doit pas faire taire un échec qui n’a pas encore été annoncé. Il l’est donc dans les mots que la barre montre, et jamais dans le texte entier, que la barre ne montre plus. Seule exception, inchangée : une écriture plus récente dans la région `alert` annule l’écriture en attente (point 3), et seul ce nouvel échec est annoncé, comme pour deux échecs du même passage ; la ligne réduite se relit alors dans la liste.
+
 ## Écarts par rapport à la revue
 
 1. « Chaque personne sur une ligne (prénom, état, menu) » : dans la matrice, le « menu » est
@@ -2364,6 +2593,16 @@ v4.4.5-6. Décision : « Valider » sans aucun champ changé ferme « Modifier l
   une réussite de placement abandonnée selon la règle 2 n’est jamais écrite ».
 - **Nouveaux** : S1.1 à S1.5 et W1.1 à W1.7, dans « Critères de la v4.4.5 ».
 
+### v4.4.6 (#372), une ligne d’échec réduite à l’aller
+
+- **C11.10** : ajouter, à la puce de la transition : « sauf l’échec hors ligne ou en erreur
+  d’une offre sur les deux legs, qui reste, réduit à l’aller, à son rang ».
+- **C11.12** : ajouter : « Une ligne réduite à l’aller par la transition n’est pas écrite :
+  rien n’est annoncé. Si la région `alert` contient déjà son texte entier, elle est vidée sans
+  être réécrite ; si son écriture est en attente, elle écrit le texte réduit ; si elle annonce
+  un autre échec, elle n’est pas touchée. »
+- **Nouveaux** : N1.1 à N1.6, dans « Critères de la v4.4.6 ».
+
 ### v4.3 (#235), début et fin : critères de #3 amendés
 
 - **R1**, table des champs :
@@ -2396,6 +2635,16 @@ v4.4.5-6. Décision : « Valider » sans aucun champ changé ferme « Modifier l
 - **Nouveaux** : D1.1 à D1.8 et D2.1 à D2.5, dans « Critères de la v4.3 ».
 
 ## Hors périmètre
+
+En v4.4.6 :
+
+- Dire, à l’écran ou au lecteur d’écran, que le retour vient d’être supprimé : la transition
+  ne dit rien (organizer-view, M7.4 ; les notifications sont hors V1).
+- Marquer à l’écran qu’une ligne a été réduite.
+- Réduire un refus sur les deux legs (`alreadyDriving`, ou `passengerInCar` depuis #356) :
+  il part avec le retour (v4.4.6-1).
+- Une ligne réduite quand le retour **revient**, puis repart : elle ne porte plus sur le
+  retour, et reste telle quelle (#271).
 
 En v4.4.5 :
 
@@ -2818,3 +3067,39 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
 - v4.4.5 (suite, 2) : revue de design : **approuvée**. Une correction de texte, appliquée sans
   nouvelle revue : S1.3 dit « Un tap sur la place libre de la voiture de Marc », puisque la
   voiture de Sophie a aussi des places libres. Republiée à la même URL.
+- v4.4.6 (2026-10-22) : #372, suite de la relecture de PR #371 (#267).
+  - La décision du propriétaire sur #267 est inscrite (v4.4.6-1) : l’échec hors ligne ou en
+    erreur d’une offre sur les deux legs reste, réduit à l’aller, quand le retour est
+    supprimé. Règle 5, table des repères et table des sujets alignées.
+  - L’annonce est tranchée : réduire une ligne n’est pas l’écrire, et rien n’est annoncé.
+    Une région `alert` qui contient déjà le texte entier est vidée sans être réécrite. Une
+    écriture en attente écrit le texte réduit. Une région qui annonce un autre échec n’est
+    pas touchée (v4.4.6-2, v4.4.6-3, « Lecteurs d’écran », points 2 et 4).
+  - Critères N1.1 à N1.6 ; C11.10 et C11.12 amendés ; états, hors-périmètre alignés. Aucun
+    mot nouveau.
+  - La page ajoute la section « Une ligne d’échec réduite à l’aller (v4.4.6) », avec trois
+    maquettes de la barre. Pas encore relue en revue de design. Republiée à la même URL.
+- v4.4.6 (suite) : revue de design : **approuvée**, avec organizer-view v3.3.7. Sept
+  suggestions retenues par le coordinateur, appliquées sans nouvelle revue et sans changer de
+  numéro, puisque la v4.4.6 n’a pas été copiée dans le dépôt :
+  - les critères A1.1 à A1.6 deviennent N1.1 à N1.6. A1.x existait déjà dans
+    `docs/design/home/` et dans les titres de `e2e/home.spec.ts` et `e2e/create-event.spec.ts`.
+    K1, essayé d’abord, est le critère de « Nous contacter » (#69), dans `e2e/contact.spec.ts`,
+    `docs/design/home/` et `docs/design/language-switch/`. N1 n’apparaît nulle part dans
+    `docs`, `e2e` ni `src` ;
+  - v4.4.6-1 et « Ce que devient la ligne » : « tout autre échec **d’une offre** sur les deux
+    legs ». « Ajouter une personne » avec « Aller et retour » n’est pas visé ;
+  - la table de l’annonce : une écriture en attente l’est pour toute raison (les 100 ms, ou
+    une feuille qui cache la page, `whenPageShown`), pas seulement pendant 100 ms ;
+  - N1.4 : l’envoi d’Hugo est retenu (`loseFirst(page, "Hugo")`), la feuille fermée avant la
+    réponse, puis l’envoi perdu hors ligne ; « Aller et retour » est coché. Hors ligne, un
+    envoi d’une feuille ouverte répond aussitôt dans la feuille et n’atteint pas la barre ;
+  - la raison de v4.4.6-3 reconnaît l’exception du point 3 : une écriture plus récente annule
+    l’écriture en attente ;
+  - hors-périmètre : `passengerInCar` est sur `main` depuis #356.
+
+  organizer-view passe en v3.3.8 : « la réduction n’est pas annoncée », et la même précision
+  « d’une offre ». La décision du propriétaire ne change pas. Republiée à la même URL.
+- v4.4.6 (suite, 2) : relecture : **approuvée**. Corrections de texte, sans nouvelle revue :
+  les critères deviennent N1.1 à N1.6 (K1 est celui de « Nous contacter », #69), et « la
+  scène de N1.1 » remplace l’élision. Republiée à la même URL.
