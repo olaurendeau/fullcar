@@ -33,9 +33,14 @@ export interface Sent {
   sent: number;
 }
 
-/** A failure, with what its send was about, and whether nothing left for want of a connection. */
+/**
+ * A failure, with what its send was about, and whether nothing left for want of a connection.
+ * One about the aller too has its `aller` part: what it says, and is about, once the retour is
+ * gone (the owner's decision on #267).
+ */
 export interface Failure extends Message, Sent {
   offline?: boolean;
+  aller?: { text: string; about: readonly string[] };
 }
 
 /** An information, and when it was written, on the clock that also stamps when each action begins (`ended`). */
@@ -119,9 +124,16 @@ export const undoing = (state: BarState, undo: Undo): BarState => ({
  * Rule 5 (organizer-view v3.3.6, decision 44; event-board v4.4.4): the page applies a state
  * that no longer has the retour the one before had. Every line about the retour goes, success,
  * « Annuler », information and failures, before the answer that brings it writes its own; once,
- * as the page calls it on that change alone.
+ * as the page calls it on that change alone. A failure with an `aller` part stays, cut to it,
+ * about no leg any more: an offer on both legs (the owner's decision on #267).
  */
-export const retourGone = (state: BarState): BarState => keep(state, (line) => (line.leg ?? line.undo?.leg) !== "retour");
+export const retourGone = (state: BarState): BarState => ({
+  ...state,
+  lines: state.lines.flatMap((line): Line[] => {
+    if ((line.leg ?? line.undo?.leg) !== "retour") return [line];
+    return line.kind === "failure" && line.aller ? [{ ...line, ...line.aller, leg: undefined, aller: undefined }] : [];
+  }),
+});
 
 /** Rule 7: « Fermer », or Escape, removes every line. */
 export const close = (state: BarState): BarState => keep(state, () => false);

@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { holdFirst, holdToken, loseFirst, newToken, watchAlerts } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -278,6 +278,40 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     await expectFocusStays(page, title(page));
     expect(await legsOf(db, seededEvent.id, "Inès")).toEqual([]);
     expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+  });
+
+  // The owner's decision on #267 (review of #371): an offer on both legs failed while the retour
+  // was there stays once it goes, cut to its aller part, which the aller sent again withdraws.
+  test("« Je ramène aussi » failed offline, then the retour removed: the line stays, about the aller alone", async ({ page, context, db, seededEvent }) => {
+    const offline = "Vérifiez la connexion, puis réessayez.";
+    await seedClaire(db, page, seededEvent.id);
+    const scope = await open(page, seededEvent.id);
+    const lose = await loseFirst(page, PLACE);
+    await fillOffer(page, scope, FR.drive);
+    await submit(page, FR.offer).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await context.setOffline(true);
+    lose();
+    await expect(lines(page)).toHaveText([`Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. ${offline}`]);
+    await context.setOffline(false);
+    await removeRetourInDb(db, seededEvent.id);
+    const answer = await sendHeldRegistration(page, scope, "Inès", true);
+    await answer();
+
+    await registered(page, "Inès");
+    await expect(tabs(page)).toHaveCount(0);
+    await expect(lines(page)).toHaveText([`La voiture de Claire pour l’aller n’a pas été proposée. ${offline}`]);
+
+    const again = await holdFirst(page, PLACE, false);
+    await page.getByRole("region", { name: "Aller", exact: true }).getByRole("button", { name: FR.offer, exact: true }).click();
+    // Inès is of the device too: who drives is chosen.
+    await dialog(page, FR.offer).getByRole("radiogroup", { name: "Qui conduit ?" }).getByRole("radio", { name: "Claire", exact: true }).check();
+    await dialog(page, FR.offer).getByLabel("Lieu de départ", { exact: true }).fill(PLACE);
+    await submit(page, FR.offer).click();
+    await expect(lines(page)).toHaveCount(0);
+    again();
+    await expect.poll(() => rides(db, seededEvent.id)).toEqual([{ leg: "aller", location: PLACE }]);
   });
 });
 

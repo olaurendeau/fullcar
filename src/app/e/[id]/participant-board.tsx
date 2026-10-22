@@ -179,7 +179,10 @@ export function ParticipantBoard({
     const saysRetourGone = why.kind === "noRetour" || why.kind === "noRetourAgain";
     const leg = saysRetourGone ? undefined : (failure.leg ?? (offersRetour(sheet.about) ? "retour" : undefined));
     const about = why.kind === "noRetourAgain" ? allerPart(sheet.about) : sheet.about;
-    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about, sent: sheet.seq, undo, leg }), true);
+    // An offer on both legs keeps its aller part once the retour is gone (the owner's decision on #267).
+    const both = leg === "retour" && notDone.kind === "offerRide" && notDone.legs === "both";
+    const aller = both ? { text: failureText(words, { ...notDone, legs: "aller" }, why), about: allerPart(sheet.about) } : undefined;
+    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about, sent: sheet.seq, undo, leg, aller }), true);
   }
 
   // What a send refused by `noRetour` asked holds without the retour: no failure, an information,
