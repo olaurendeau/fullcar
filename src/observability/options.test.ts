@@ -39,6 +39,7 @@ function fakeBrowserSdk(client = fakeClient()) {
     init: vi.fn(() => client),
     browserTracingIntegration: vi.fn((options?: object) => named("BrowserTracing", options)),
     captureRouterTransitionStart: vi.fn(),
+    defaultStackParser: vi.fn((): { filename?: string }[] => []),
   };
   return { sdk, client, load: vi.fn(async () => sdk as unknown as BrowserSdk) };
 }
@@ -176,13 +177,18 @@ describe("in the browser, with a DSN", () => {
     "Dedupe", "HttpContext", "CultureContext", "BrowserSession", "BrowserTracing", "NextjsClientStackFrameNormalization", "Replay",
   ];
 
-  it("calls init once, with the options, our scripts only, registers the same hooks, and keeps the frames of code alone", async () => {
+  it("calls init once, with the options, our scripts only, their frames, the same hooks, and the frames of code alone", async () => {
     const { sdk, client, load } = fakeBrowserSdk();
     expect(await startBrowserSentry(ENV, load)).toBe(sdk);
     expect(sdk.init).toHaveBeenCalledTimes(1);
-    const { integrations, allowUrls, ...options } = initOptions(sdk.init) as Options & { allowUrls: RegExp[] };
+    const { integrations, allowUrls, stackParser, ...options } = initOptions(sdk.init) as Options & {
+      allowUrls: RegExp[];
+      stackParser: (stack: string) => unknown[];
+    };
     expect(options).toEqual(sentryOptions(ENV));
     expect([typeof integrations, allowUrls]).toEqual(["function", [/\/_next\//]]);
+    sdk.defaultStackParser.mockReturnValueOnce([{ filename: "depuis 10" }, { filename: "chrome-extension://abcdefgh/content.js" }]);
+    expect(stackParser("the stack")).toEqual([{ filename: "chrome-extension://abcdefgh/content.js" }]);
     expect(client.on.mock.calls).toEqual([["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader]]);
     expect(client.addEventProcessor.mock.calls).toEqual([[codeFramesOnly]]);
   });
