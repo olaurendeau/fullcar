@@ -234,7 +234,7 @@ test.describe("« Annuler »", () => {
     });
 
     // With #330: « Annuler » comes from the bar, never from a sheet, so nothing holds the retour for it.
-    test("C5.10, M7.10: « Annuler » on the retour; once the retour is gone, its failure says so, and the focus is not lost", async ({ db, page, seededEvent }) => {
+    test("C5.10, M7.10: « Annuler » on the retour; once the retour is gone, no failure, the information, and the focus on the title", async ({ db, page, seededEvent }) => {
       await page.goto(`/e/${seededEvent.id}`);
       await tab(page, "Retour").click();
       await cellAction(page, "Tom", "Retour", "Sortir de la voiture");
@@ -250,11 +250,12 @@ test.describe("« Annuler »", () => {
       await expect(messages(page)).toHaveText(["Tom est dans la voiture de Paul"]);
       await removeRetourInDb(db, seededEvent.id);
       await undo(page).click();
-      const gone = "Tom n’a pas pu sortir de la voiture de Paul. Il n’y a plus de retour pour cet événement.";
-      await expect(messages(page)).toHaveText([gone, "Tom est dans la voiture de Paul"]);
-      await expect(undo(page)).toHaveAccessibleDescription(gone);
+      await expect(messages(page)).toHaveText(["Il n’y a plus de retour pour cet événement : la voiture de Paul n’est plus proposée."]);
+      await expect(undo(page)).toHaveCount(0);
       await expect(page.getByRole("tab")).toHaveCount(0);
       await expect(page.locator("#event-title")).toBeFocused();
+      // Refused by `noRetour`, nothing written: the retour went with its Placements.
+      expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null });
     });
 
     test("rule 8: « Annuler » after a change of tab: the focus on the active tab, the tab kept; back on the aller, on the car's title", async ({ page, seededEvent }) => {

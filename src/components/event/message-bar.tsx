@@ -27,8 +27,10 @@ export function useMessageBar() {
       fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
       inform: (message: bar.Message) => {
         const at = (clock += 1);
-        setState((current) => bar.inform(current, { text: message.text, landmark: message.landmark, at }));
+        setState((current) => bar.inform(current, { text: message.text, landmark: message.landmark, leg: message.leg, at }));
       },
+      /** The page shows a state without the retour its last one had (decision 44): once, before what its answer says. */
+      retourGone: () => setState(bar.retourGone),
       /** An action begins: call what it returns once it ends. */
       begins: () => {
         const began = (clock += 1);

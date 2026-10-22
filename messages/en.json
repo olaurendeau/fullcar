@@ -245,6 +245,10 @@
       "noRetour": "This event no longer has a return trip.",
       "noRetourAgain": "This event no longer has a return trip: {action, select, offerRide {offer the car again, for the outbound trip only.} other {add this person again, for the outbound trip only.}}"
     },
+    "info": {
+      "noRetour": "This event no longer has a return trip: {driver}’s car is no longer offered.",
+      "noRetourLeg": "This event no longer has a return trip."
+    },
     "names": {
       "andOthers": "{first}, {second} and {others, plural, one {# other} other {# others}}"
     }

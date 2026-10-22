@@ -13,6 +13,7 @@ import {
   failureText,
   nameList,
   noRetourAgain,
+  noRetourInfo,
   noRetourWhy,
   offerWhy,
   personWhy,
@@ -296,12 +297,32 @@ describe("undoWhy: « Annuler » (C5.10, C11.11)", () => {
     for (const error of ["failed", "invalid"] as const) expect(undoWhy(error)).toEqual({ kind: "retryUndo", problem: "failed" });
     for (const error of ["forbidden", "eventNotFound", "noRetour"] as const) expect(undoWhy(error)).toEqual(whyOf(error));
   });
+});
 
-  // The retour gone meanwhile (#330): its own words, never « réessayez ».
-  it("says the retour is gone with `noRetour`", () => {
-    const leave: NotDone = { kind: "leave", names: ["Tom"], driver: "Paul" };
-    expect(failureText(words("fr"), leave, undoWhy("noRetour"))).toBe("Tom n’a pas pu sortir de la voiture de Paul. Il n’y a plus de retour pour cet événement.");
-    expect(failureText(words("en"), leave, undoWhy("noRetour"))).toBe("Tom could not leave Paul’s car. This event no longer has a return trip.");
+// Decision 45 (organizer-view v3.3.6, #267): a send refused by `noRetour` whose aim holds without
+// the retour says an information, word for word as « Les mots » says it; the others fail.
+describe("noRetourInfo", () => {
+  const cell = (state: DeviceState) => ({ firstName: "Léa", leg: "retour" as const, state });
+  const passenger: DeviceState = { kind: "passenger", rideId: "claire", driver: { id: "claire", firstName: "Claire" } };
+
+  it("« Annuler », « Sortir de la voiture » and « Retirer la voiture »: the car is no longer offered", () => {
+    for (const notDone of [{ kind: "leave", names: ["Tom", "Léa"], driver: "Claire" } as const, cellNotDone("leaveCar", cell(passenger)), { kind: "removeRide", driver: "Claire", leg: "retour" } as const]) {
+      expect(noRetourInfo(words("fr"), notDone)).toBe("Il n’y a plus de retour pour cet événement : la voiture de Claire n’est plus proposée.");
+      expect(noRetourInfo(words("en"), notDone)).toBe("This event no longer has a return trip: Claire’s car is no longer offered.");
+    }
+  });
+
+  it("« Ne fait pas le retour »: the retour is gone; « Je cherche une place » and what creates fail", () => {
+    expect(noRetourInfo(words("fr"), cellNotDone("notConcerned", cell(passenger)))).toBe("Il n’y a plus de retour pour cet événement.");
+    expect(noRetourInfo(words("en"), cellNotDone("notConcerned", cell({ kind: "withoutCar" })))).toBe("This event no longer has a return trip.");
+    const failing: NotDone[] = [
+      cellNotDone("lookingForSeat", cell({ kind: "notConcerned" })),
+      { kind: "seats", names: ["Tom"], driver: "Sophie" },
+      { kind: "offerRide", driver: "Marc", legs: "retour" },
+      { kind: "editRide", driver: "Sophie", leg: "retour" },
+      { kind: "addPerson", firstName: "Inès" },
+    ];
+    expect(failing.map((notDone) => noRetourInfo(words("fr"), notDone))).toEqual(failing.map(() => undefined));
   });
 });
 

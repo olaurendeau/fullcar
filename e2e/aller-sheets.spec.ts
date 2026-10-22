@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { holdFirst, holdToken, loseFirst, newToken, watchAlerts } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -65,6 +65,7 @@ async function seedClaire(db: Db, page: Page, eventId: string, retour: "withoutC
   await seedPlacement(db, { personId: claire, eventId, leg: "aller", rideId: null });
   if (retour === "withoutCar") await seedPlacement(db, { personId: claire, eventId, leg: "retour", rideId: null });
   await holdToken(page, eventId, token);
+  return claire;
 }
 
 /** `firstName` is shown without a car at the aller, under the sheet: the answer is applied. */
@@ -165,7 +166,11 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     [FR.drive, TEXT.offerBoth],
     [FR.withoutCar, TEXT.offerAller],
   ]) {
-    test(`M7.6: « ${choice} », the sheet closed before the answer: the bar says to offer the car again`, async ({ page, db, seededEvent }) => {
+    test(`M7.6, B1.7: « ${choice} », the sheet closed before the answer: the bar says to offer the car again; offered again, the line goes`, async ({
+      page,
+      db,
+      seededEvent,
+    }) => {
       await seedClaire(db, page, seededEvent.id);
       const scope = await open(page, seededEvent.id);
       const seen = await watchAlerts(page);
@@ -182,6 +187,17 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
       await expectFocusStays(page, title(page));
       expect(await rides(db, seededEvent.id)).toEqual([]);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+
+      // B1.7: the car offered again for the aller, the one leg left, its answer held: the line goes as it leaves.
+      const again = await holdFirst(page, PLACE, false);
+      await page.getByRole("region", { name: "Aller", exact: true }).getByRole("button", { name: FR.offer, exact: true }).click();
+      await dialog(page, FR.offer).getByLabel("Lieu de départ", { exact: true }).fill(PLACE);
+      await expect(retourGroup(page)).toHaveCount(0);
+      await submit(page, FR.offer).click();
+      await expect(lines(page)).toHaveCount(0);
+      expect(await rides(db, seededEvent.id)).toEqual([]);
+      again();
+      await expect.poll(() => rides(db, seededEvent.id)).toEqual([{ leg: "aller", location: PLACE }]);
     });
   }
 
@@ -263,6 +279,97 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     await expectFocusStays(page, title(page));
     expect(await legsOf(db, seededEvent.id, "Inès")).toEqual([]);
     expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+  });
+
+  // The owner's decision on #267 (review of #371): an offer on both legs failed while the retour
+  // was there stays once it goes, cut to its aller part, which the aller sent again withdraws.
+  test("« Je ramène aussi » failed offline, then the retour removed: the line stays, about the aller alone", async ({ page, context, db, seededEvent }) => {
+    const offline = "Vérifiez la connexion, puis réessayez.";
+    await seedClaire(db, page, seededEvent.id);
+    const scope = await open(page, seededEvent.id);
+    const lose = await loseFirst(page, PLACE);
+    await fillOffer(page, scope, FR.drive);
+    await submit(page, FR.offer).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await context.setOffline(true);
+    lose();
+    await expect(lines(page)).toHaveText([`Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. ${offline}`]);
+    await context.setOffline(false);
+    await removeRetourInDb(db, seededEvent.id);
+    const answer = await sendHeldRegistration(page, scope, "Inès", true);
+    await answer();
+
+    await registered(page, "Inès");
+    await expect(tabs(page)).toHaveCount(0);
+    await expect(lines(page)).toHaveText([`La voiture de Claire pour l’aller n’a pas été proposée. ${offline}`]);
+
+    const again = await holdFirst(page, PLACE, false);
+    await page.getByRole("region", { name: "Aller", exact: true }).getByRole("button", { name: FR.offer, exact: true }).click();
+    // Inès is of the device too: who drives is chosen.
+    await dialog(page, FR.offer).getByRole("radiogroup", { name: "Qui conduit ?" }).getByRole("radio", { name: "Claire", exact: true }).check();
+    await dialog(page, FR.offer).getByLabel("Lieu de départ", { exact: true }).fill(PLACE);
+    await submit(page, FR.offer).click();
+    await expect(lines(page)).toHaveCount(0);
+    again();
+    await expect.poll(() => rides(db, seededEvent.id)).toEqual([{ leg: "aller", location: PLACE }]);
+  });
+
+  // Offline or an error alone keeps the aller part: a refusal's reason may hold only with the
+  // retour. Claire drives there meanwhile; the retour gone, she drives nothing (decision 44).
+  test("« Je ramène aussi » refused by `alreadyDriving`, then the retour removed: the line goes with it", async ({ page, db, seededEvent }) => {
+    const claire = await seedClaire(db, page, seededEvent.id);
+    const scope = await open(page, seededEvent.id);
+    const answer = await holdFirst(page, PLACE, false);
+    await fillOffer(page, scope, FR.drive);
+    await submit(page, FR.offer).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await seedRide(db, seededEvent.id, claire, { leg: "retour" });
+    answer();
+    await expect(lines(page)).toHaveText(["Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture."]);
+    await removeRetourInDb(db, seededEvent.id);
+    await (await sendHeldRegistration(page, scope, "Inès", true))();
+
+    await registered(page, "Inès");
+    await expect(tabs(page)).toHaveCount(0);
+    await expect(lines(page)).toHaveCount(0);
+  });
+
+  // Offered from the Retour tab, the line cut to the aller has the aller's « Proposer une voiture »
+  // for landmark: the Retour's is gone with the tabs (rule 8).
+  test("« J’emmène aussi » from the Retour failed offline, then the retour removed: « Fermer » gives the focus to the aller's « Proposer une voiture »", async ({
+    page,
+    context,
+    db,
+    seededEvent,
+  }) => {
+    const offline = "Vérifiez la connexion, puis réessayez.";
+    await seedClaire(db, page, seededEvent.id);
+    const scope = await open(page, seededEvent.id);
+    await expect(async () => {
+      await page.getByRole("tab", { name: /^Retour/ }).click();
+      await expect(page.getByRole("tab", { name: /^Retour/ })).toHaveAttribute("aria-selected", "true", { timeout: 500 });
+    }).toPass();
+    const lose = await loseFirst(page, PLACE);
+    await scope.getByRole("button", { name: FR.offer, exact: true }).click();
+    await dialog(page, FR.offer).getByLabel("Lieu de dépose", { exact: true }).fill(PLACE);
+    await dialog(page, FR.offer).getByRole("radiogroup", { name: "À l’aller" }).getByRole("radio", { name: "J’emmène aussi", exact: true }).check();
+    await submit(page, FR.offer).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await context.setOffline(true);
+    lose();
+    await expect(lines(page)).toHaveText([`Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. ${offline}`]);
+    await context.setOffline(false);
+    await removeRetourInDb(db, seededEvent.id);
+    await page.getByRole("tab", { name: /^Aller/ }).click();
+    await (await sendHeldRegistration(page, scope, "Inès", true))();
+
+    await registered(page, "Inès");
+    await expect(lines(page)).toHaveText([`La voiture de Claire pour l’aller n’a pas été proposée. ${offline}`]);
+    await page.locator("[data-message-bar]").getByRole("button", { name: "Fermer" }).click();
+    await expect(page.getByRole("region", { name: "Aller", exact: true }).getByRole("button", { name: FR.offer, exact: true })).toBeFocused();
   });
 });
 

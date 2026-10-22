@@ -346,4 +346,101 @@ test.describe("« Trouver une place »", () => {
       await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
     });
   }
+
+  // B1.6 (event-board v4.4.4, #267): the retour's information goes with the state without the
+  // retour, whatever the answer that brings it and whenever its action began; `status` no longer
+  // says it, and a write of it still due is cancelled. The aller's information stays.
+  const taken = async (db: Db, eventId: string, rideId: string) => {
+    for (const firstName of ["Ana", "Bob", "Cyd"]) await seedPlacement(db, { personId: (await seedPerson(db, eventId, { firstName })).id, eventId, leg: "aller", rideId });
+  };
+
+  test("B1.6: Tom's tap, sent before the information of the retour, succeeds with the state without it: the information goes", async ({ db, page, seededEvent }) => {
+    const scene = await seedScene(db, seededEvent.id, token, [{ driver: "Marc", time: "17:00:00", free: 0 }]);
+    await holdToken(page, seededEvent.id, token);
+    const tom = await holdFirst(page, scene.sophie, false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await seat(page, "Sophie").click();
+    await removeRetourInDb(db, seededEvent.id);
+    await findSeat(page);
+    await expect(barStatus(page)).toHaveText(NO_SEAT);
+    const record = await recordBar(page);
+    tom();
+
+    await expect(messages(page)).toHaveText([TOM_PLACED]);
+    const buttons = page.locator("[data-message-bar]").getByRole("button");
+    await expect(buttons).toHaveCount(2);
+    await expect(buttons.nth(0)).toHaveAccessibleName("Annuler");
+    await expect(buttons.nth(1)).toHaveAccessibleName("Fermer");
+    await expect(buttons.nth(0)).toHaveAccessibleDescription(TOM_PLACED);
+    await expect(barStatus(page)).toHaveText(TOM_PLACED);
+    const status = (await record()).writes.filter((write) => write.region === "status");
+    expect(status[0]?.text).toBe("");
+    expect(said(status, "status")).toEqual([TOM_PLACED]);
+    await expect(page.locator('[role="tab"]')).toHaveCount(0);
+    await expect(page.locator("body")).not.toBeFocused();
+  });
+
+  test("B1.6: Tom's tap refused within 100 ms of the information of the retour, with the state without it: `status` never says it", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    const scene = await seedScene(db, seededEvent.id, token, [{ driver: "Marc", time: "17:00:00", free: 0 }]);
+    await holdToken(page, seededEvent.id, token);
+    await page.clock.install();
+    const tom = await holdFirst(page, scene.sophie, false);
+    await page.goto(`/e/${seededEvent.id}`);
+    await seat(page, "Sophie").click();
+    await removeRetourInDb(db, seededEvent.id);
+    await taken(db, seededEvent.id, scene.sophie);
+    await cell(page, "Léa", "Retour").click();
+    const record = await recordBar(page);
+    // The clock paused, the information's write in `status` stays due. From the keyboard: a click would wait for a stable frame.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+    await sheet(page, "Léa · Retour").getByRole("button", { name: "Trouver une place" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(messages(page)).toHaveText([NO_SEAT]);
+    const answered = page.waitForResponse((response) => !!response.request().postData()?.includes(scene.sophie));
+    tom();
+    await answered;
+
+    const refused = "Tom n’a pas pu monter dans la voiture de Sophie. Cette place vient d’être prise.";
+    await expect(messages(page)).toHaveText([refused]);
+    await page.clock.runFor(100);
+    await expect(bar(page)).toHaveText(refused);
+    await page.clock.runFor(1_000);
+    await expect(barStatus(page)).toBeEmpty();
+    expect(said((await record()).writes, "status")).toEqual([]);
+    await expect(page.locator('[role="tab"]')).toHaveCount(0);
+    await expect(page.locator("body")).not.toBeFocused();
+  });
+
+  test("B1.6, on the aller: Tom's change, sent before the information of the aller, leaves it with the state without the retour", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    const scene = await seedScene(db, seededEvent.id, token, []);
+    await seedPlacement(db, { personId: scene.lea, eventId: seededEvent.id, leg: "aller", rideId: null });
+    await taken(db, seededEvent.id, scene.sophie);
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const answer = await holdFirst(page, scene.tom, false);
+    await cell(page, "Tom", "Aller").click();
+    await sheet(page, "Tom · Aller").getByRole("button", { name: "Ne fait pas l’aller" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await removeRetourInDb(db, seededEvent.id);
+    await cell(page, "Léa", "Aller").click();
+    await sheet(page, "Léa · Aller").getByRole("button", { name: "Trouver une place" }).click();
+    const allerNoSeat = "Aucune place libre à l’aller pour l’instant.";
+    await expect(messages(page)).toHaveText([allerNoSeat]);
+    const answered = page.waitForResponse((response) => !!response.request().postData()?.includes(scene.tom));
+    answer();
+    await answered;
+
+    await expect(page.locator('[role="tab"]')).toHaveCount(0);
+    await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Ne fait pas l’aller");
+    await expect(messages(page)).toHaveText([allerNoSeat]);
+  });
 });

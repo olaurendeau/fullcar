@@ -3,6 +3,7 @@
  * v4.2.3, #216): the last success, the last information and every failure still waiting. The
  * only place that decides it: pure functions over a state that `useMessageBar` keeps.
  */
+import type { Leg } from "@/domain/leg";
 
 /**
  * « Annuler » of a placement (rule 6): what it sends. One per placement: the success's and the
@@ -10,13 +11,20 @@
  */
 export interface Undo {
   run: () => void;
+  /** The leg of the placement: a line that carries it is about that leg (`retourGone`). */
+  leg?: Leg;
 }
 
-/** A message: its words, its landmark, which takes the focus and says whether it is shown (rule 8), and its « Annuler ». */
+/**
+ * A message: its words, its landmark, which takes the focus and says whether it is shown (rule
+ * 8), its « Annuler », and the leg it is about, if one: those about the retour go with it
+ * (`retourGone`). What says that the retour is gone is about no leg.
+ */
 export interface Message {
   text: string;
   landmark: () => boolean;
   undo?: Undo;
+  leg?: Leg;
 }
 
 /** What a send was about: its subjects, each subject's fields after it (#208), and its number. */
@@ -25,9 +33,14 @@ export interface Sent {
   sent: number;
 }
 
-/** A failure, with what its send was about, and whether nothing left for want of a connection. */
+/**
+ * A failure, with what its send was about, and whether nothing left for want of a connection.
+ * One about the aller too has its `aller` part: what it says, is about, and takes the focus to,
+ * once the retour is gone (the owner's decision on #267).
+ */
 export interface Failure extends Message, Sent {
   offline?: boolean;
+  aller?: { text: string; about: readonly string[]; landmark: () => boolean };
 }
 
 /** An information, and when it was written, on the clock that also stamps when each action begins (`ended`). */
@@ -100,10 +113,26 @@ export const withdraw = (state: BarState, withdrawal: Withdrawal): BarState =>
 /**
  * Rule 6: an « Annuler » sent shows on no line any more: the success keeps its words without it,
  * and its send withdraws its failure. Its answer brings a success, or a failure with it again.
+ * The line is still about the placement's leg.
  */
 export const undoing = (state: BarState, undo: Undo): BarState => ({
   ...state,
-  lines: state.lines.map((line) => (line.undo === undo ? { ...line, undo: undefined } : line)),
+  lines: state.lines.map((line) => (line.undo === undo ? { ...line, undo: undefined, leg: line.leg ?? undo.leg } : line)),
+});
+
+/**
+ * Rule 5 (organizer-view v3.3.6, decision 44; event-board v4.4.4): the page applies a state
+ * that no longer has the retour the one before had. Every line about the retour goes, success,
+ * « Annuler », information and failures, before the answer that brings it writes its own; once,
+ * as the page calls it on that change alone. A failure with an `aller` part stays, cut to it,
+ * about no leg any more: an offer on both legs (the owner's decision on #267).
+ */
+export const retourGone = (state: BarState): BarState => ({
+  ...state,
+  lines: state.lines.flatMap((line): Line[] => {
+    if ((line.leg ?? line.undo?.leg) !== "retour") return [line];
+    return line.kind === "failure" && line.aller ? [{ ...line, ...line.aller, leg: undefined, aller: undefined }] : [];
+  }),
 });
 
 /** Rule 7: « Fermer », or Escape, removes every line. */

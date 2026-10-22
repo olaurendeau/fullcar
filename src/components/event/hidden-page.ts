@@ -187,3 +187,12 @@ export function useSends(
 /** What a send is about: each of its subjects, then each of that subject's `fields` (`subject:field`), as `sendAbout` reads them. */
 export const aboutOf = (subjects: readonly string[], fields: readonly string[] = []): string[] =>
   subjects.flatMap((subject) => [subject, ...fields.map((field) => `${subject}:${field}`)]);
+
+/** Whether an offer's send is about the retour: one of its subjects is the retour's (`offer:retour:…`). */
+export const offersRetour = (about: readonly string[]): boolean => about.some((subject) => subject.startsWith("offer:retour:"));
+
+/**
+ * What a failure `noRetourAgain` is about: its send's subjects but the retour's offer, which can
+ * never be sent again. Its aller sent again alone covers it (event-board v4.4.4, B1.7).
+ */
+export const allerPart = (about: readonly string[]): string[] => about.filter((subject) => !offersRetour([subject]));
