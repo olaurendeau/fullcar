@@ -343,8 +343,9 @@ test.describe("« Trouver une place »", () => {
       await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
       await expect(messages(page)).toHaveText([TOM_NO_RETOUR]);
       await expect(bar(page)).toHaveText(TOM_NO_RETOUR);
-      // B1.5 (v4.4.4): the information of a retour gone is never announced either.
-      expect(said((await record()).writes, "status").filter((text) => text.includes(NO_SEAT))).toEqual([]);
+      // B1.5 (v4.4.4): `status` receives nothing at all, in either variant: neither the
+      // information of a retour gone, without a free seat, nor Tom's failure, which `alert` says.
+      expect(said((await record()).writes, "status")).toEqual([]);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
       await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
     });
