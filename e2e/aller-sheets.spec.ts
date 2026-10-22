@@ -1,8 +1,8 @@
-import type { Locator, Page } from "@playwright/test";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { holdFirst, holdToken, loseFirst, newToken, watchAlerts } from "./device";
+import { failHeld, holdFirst, holdToken, loseFirst, newToken, watchAlerts } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -282,38 +282,58 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
   });
 
   // The owner's decision on #267 (review of #371): an offer on both legs failed while the retour
-  // was there stays once it goes, cut to its aller part, which the aller sent again withdraws.
-  test("« Je ramène aussi » failed offline, then the retour removed: the line stays, about the aller alone", async ({ page, context, db, seededEvent }) => {
-    const offline = "Vérifiez la connexion, puis réessayez.";
-    await seedClaire(db, page, seededEvent.id);
-    const scope = await open(page, seededEvent.id);
-    const lose = await loseFirst(page, PLACE);
-    await fillOffer(page, scope, FR.drive);
-    await submit(page, FR.offer).click();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await context.setOffline(true);
-    lose();
-    await expect(lines(page)).toHaveText([`Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. ${offline}`]);
-    await context.setOffline(false);
-    await removeRetourInDb(db, seededEvent.id);
-    const answer = await sendHeldRegistration(page, scope, "Inès", true);
-    await answer();
+  // was there, offline or on an error (#373), stays once it goes, cut to its aller part, which the
+  // aller sent again withdraws.
+  const failures: Record<string, { why: string; hold: (page: Page, context: BrowserContext) => Promise<() => Promise<void>> }> = {
+    offline: {
+      why: "Vérifiez la connexion, puis réessayez.",
+      hold: async (page, context) => {
+        const lose = await loseFirst(page, PLACE);
+        return async () => {
+          await context.setOffline(true);
+          lose();
+        };
+      },
+    },
+    "on an error": {
+      why: "Une erreur est survenue : réessayez dans un instant.",
+      hold: async (page) => {
+        const answer = await holdFirst(page, PLACE, true);
+        return () => failHeld(page, answer);
+      },
+    },
+  };
+  for (const [how, { why, hold }] of Object.entries(failures)) {
+    test(`« Je ramène aussi » failed ${how}, then the retour removed: the line stays, about the aller alone`, async ({ page, context, db, seededEvent }) => {
+      await seedClaire(db, page, seededEvent.id);
+      const scope = await open(page, seededEvent.id);
+      const fail = await hold(page, context);
+      await fillOffer(page, scope, FR.drive);
+      await submit(page, FR.offer).click();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await fail();
+      await expect(lines(page)).toHaveText([`Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. ${why}`]);
+      await context.setOffline(false);
+      await removeRetourInDb(db, seededEvent.id);
+      const answer = await sendHeldRegistration(page, scope, "Inès", true);
+      await answer();
 
-    await registered(page, "Inès");
-    await expect(tabs(page)).toHaveCount(0);
-    await expect(lines(page)).toHaveText([`La voiture de Claire pour l’aller n’a pas été proposée. ${offline}`]);
+      await registered(page, "Inès");
+      await expect(tabs(page)).toHaveCount(0);
+      await expect(lines(page)).toHaveText([`La voiture de Claire pour l’aller n’a pas été proposée. ${why}`]);
 
-    const again = await holdFirst(page, PLACE, false);
-    await page.getByRole("region", { name: "Aller", exact: true }).getByRole("button", { name: FR.offer, exact: true }).click();
-    // Inès is of the device too: who drives is chosen.
-    await dialog(page, FR.offer).getByRole("radiogroup", { name: "Qui conduit ?" }).getByRole("radio", { name: "Claire", exact: true }).check();
-    await dialog(page, FR.offer).getByLabel("Lieu de départ", { exact: true }).fill(PLACE);
-    await submit(page, FR.offer).click();
-    await expect(lines(page)).toHaveCount(0);
-    again();
-    await expect.poll(() => rides(db, seededEvent.id)).toEqual([{ leg: "aller", location: PLACE }]);
-  });
+      const again = await holdFirst(page, PLACE, false);
+      await page.getByRole("region", { name: "Aller", exact: true }).getByRole("button", { name: FR.offer, exact: true }).click();
+      // Inès is of the device too: who drives is chosen.
+      await dialog(page, FR.offer).getByRole("radiogroup", { name: "Qui conduit ?" }).getByRole("radio", { name: "Claire", exact: true }).check();
+      await dialog(page, FR.offer).getByLabel("Lieu de départ", { exact: true }).fill(PLACE);
+      await submit(page, FR.offer).click();
+      await expect(lines(page)).toHaveCount(0);
+      again();
+      await expect.poll(() => rides(db, seededEvent.id)).toEqual([{ leg: "aller", location: PLACE }]);
+    });
+  }
 
   // Offline or an error alone keeps the aller part: a refusal's reason may hold only with the
   // retour. Claire drives there meanwhile; the retour gone, she drives nothing (decision 44).
