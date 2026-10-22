@@ -146,7 +146,7 @@ test.describe("the language switch, in a browser set to French", () => {
     await switchTo(page, FR, EN, "en");
     const panel = page.getByRole("region", { name: EN.panel });
     await expect(panel).toBeVisible();
-    expect(page.url()).toBe(before);
+    expect(page.url() === before, "the URL is the same, fragment included").toBe(true);
     expect(await panel.evaluate((section) => (section as HTMLElement & { kept?: string }).kept)).toBe("the same node");
   });
 
@@ -164,7 +164,7 @@ test.describe("the language switch, in a browser set to French", () => {
 
       await switchTo(page, FR, EN, "en");
       await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(EN.invalid);
-      expect(page.url()).toBe(before);
+      expect(page.url() === before, "the URL is the same, fragment included").toBe(true);
     });
   }
 

@@ -6,7 +6,22 @@ import { cellActions, type CellAction } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
-import { cellNotDone, cellWhy, editedFields, failureText, nameList, offerWhy, personWhy, undoWhy, whyOf, wordsOf, type NotDone, type Why } from "./failure-words";
+import {
+  cellNotDone,
+  cellWhy,
+  editedFields,
+  failureText,
+  nameList,
+  noRetourAgain,
+  noRetourWhy,
+  offerWhy,
+  personWhy,
+  undoWhy,
+  whyOf,
+  wordsOf,
+  type NotDone,
+  type Why,
+} from "./failure-words";
 
 // C11.11: every failure in the bar, word for word as « Chaque échec, mot pour mot » says it
 // (docs/design/event-board/README.md, v4.2), in French and in English.
@@ -290,6 +305,26 @@ describe("undoWhy: « Annuler » (C5.10, C11.11)", () => {
   });
 });
 
+// Rule 9 and decision 47 (#265, #266): what a form's `noRetour` says, by the leg it was sent on.
+describe("noRetourWhy", () => {
+  const noRetour = whyOf("noRetour");
+
+  it("sent on the retour: the sheet closes, and the bar says why", () => {
+    expect(noRetourWhy(noRetour, "retour", "addPerson")).toEqual({ why: noRetour, closes: true });
+  });
+
+  it("sent from the aller: the sheet stays, and closed, the bar says to send again for the aller alone", () => {
+    expect(noRetourWhy(noRetour, "aller", "addPerson")).toEqual({ why: noRetourAgain("addPerson"), closes: false });
+    expect(noRetourWhy(noRetour, "aller", "offerRide")).toEqual({ why: noRetourAgain("offerRide"), closes: false });
+  });
+
+  // Review of #351: a person's change goes on no leg, and never says to add her again.
+  it("sent on no leg, or another reason: as it is", () => {
+    expect(noRetourWhy(noRetour, undefined, "addPerson")).toEqual({ why: noRetour, closes: false });
+    expect(noRetourWhy(whyOf("offline"), "retour", "offerRide")).toEqual({ why: whyOf("offline"), closes: false });
+  });
+});
+
 describe("whyOf", () => {
   it("gives `invalid` and `idTaken` the generic reason, and keeps the others", () => {
     for (const error of ["invalid", "idTaken", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
@@ -313,22 +348,36 @@ const NO_RETOUR: Record<string, () => [NotDone, Why]> = {
   "« Proposer une voiture » depuis le Retour : Marc": () => [{ kind: "offerRide", driver: "Marc", legs: "retour" }, offerWhy("noRetour", "Marc", [])],
   "« Ajouter une personne » depuis le Retour : Inès": () => [{ kind: "addPerson", firstName: "Inès" }, personWhy("noRetour")],
   "« Modifier » la voiture : Sophie, retour": () => [{ kind: "editRide", driver: "Sophie", leg: "retour" }, whyOf("noRetour")],
+  // #266, decision 47: a sheet of the aller that sent on the retour too, closed before the answer.
+  "« Proposer une voiture » depuis l’Aller, « Je ramène aussi », feuille fermée : Claire": () => [
+    { kind: "offerRide", driver: "Claire", legs: "both" },
+    noRetourAgain("offerRide"),
+  ],
+  "« Proposer une voiture » depuis l’Aller, « Je cherche une place » au retour, feuille fermée : Claire": () => [
+    { kind: "offerRide", driver: "Claire", legs: "aller" },
+    noRetourAgain("offerRide"),
+  ],
+  "« Ajouter une personne » depuis l’Aller, « Aller et retour », feuille fermée : Inès": () => [
+    { kind: "addPerson", firstName: "Inès" },
+    noRetourAgain("addPerson"),
+  ],
 };
 
 // #265, decision 40: a sheet of the retour refused by `noRetour` says what was not done, then
 // `Actions.why.noRetour`, word for word as « Chaque échec de la v3.3, mot pour mot » says it
-// (docs/design/organizer-view/README.md, v3.3.6). The rows that say what to do again are #266's.
-describe("failureText: each `noRetour` failure of the retour, word for word (v3.3)", () => {
+// (docs/design/organizer-view/README.md, v3.3.6). #266, decision 47: a sheet of the aller closed
+// before its answer says what to do again, `Actions.why.noRetourAgain`.
+describe("failureText: each `noRetour` failure, word for word (v3.3)", () => {
   const readme = readFileSync(new URL("../../../docs/design/organizer-view/README.md", import.meta.url), "utf8").split("\n");
   const start = readme.indexOf("### Chaque échec de la v3.3, mot pour mot (amendement de C11.11)");
   const end = readme.findIndex((line, index) => index > start && line.startsWith("### "));
   const table = readme
     .slice(start, end)
-    .filter((line) => line.startsWith("| ") && line.includes("`why.noRetour`"))
+    .filter((line) => line.startsWith("| ") && /`why\.noRetour(Again)?`/.test(line))
     .map((line) => line.split("|").map((cell) => cell.trim()))
     .map(([, action, failure, fr, en]) => ({ action, failure, fr, en }));
 
-  it("reads every row of `why.noRetour`, and knows each", () => {
+  it("reads every row of `why.noRetour` and `why.noRetourAgain`, and knows each", () => {
     expect(new Set(table.map((row) => row.action))).toEqual(new Set(Object.keys(NO_RETOUR)));
   });
 

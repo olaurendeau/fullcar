@@ -19,17 +19,29 @@ export type BarProblem = "offline" | "failed";
 export function useMessageBar() {
   const [state, setState] = useState(bar.emptyBar);
   useEffect(() => onWithdraw((withdrawal) => setState((current) => bar.withdraw(current, withdrawal))), []);
-  const [write] = useState(() => ({
-    succeed: (message: bar.Message | null) => setState((current) => bar.succeed(current, message)),
-    fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
-    ended: () => setState(bar.ended),
-    close: () => setState(bar.close),
-    // Rule 6: gone from every line as it is sent, in the same render as the failure its send withdraws.
-    undo: (undo: bar.Undo) => {
-      setState((current) => bar.undoing(current, undo));
-      undo.run();
-    },
-  }));
+  const [write] = useState(() => {
+    // One clock for the information and the actions: one that began before an information leaves it (rule 4).
+    let clock = 0;
+    return {
+      succeed: (message: bar.Message | null) => setState((current) => bar.succeed(current, message)),
+      fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
+      inform: (message: bar.Message) => {
+        const at = (clock += 1);
+        setState((current) => bar.inform(current, { text: message.text, landmark: message.landmark, at }));
+      },
+      /** An action begins: call what it returns once it ends. */
+      begins: () => {
+        const began = (clock += 1);
+        return () => setState((current) => bar.ended(current, began));
+      },
+      close: () => setState(bar.close),
+      // Rule 6: gone from every line as it is sent, in the same render as the failure its send withdraws.
+      undo: (undo: bar.Undo) => {
+        setState((current) => bar.undoing(current, undo));
+        undo.run();
+      },
+    };
+  });
   return { state, ...write };
 }
 
@@ -117,12 +129,13 @@ function MessageList({
               </span>
             </p>
             {/* Rule 6: after its line's text, out of the regions; a sibling of the line, which keeps its words alone. */}
+            {/* The list clips its ring at 0 px: 2 px on the right, and 4 px above or below once the keyboard scrolls to it (#350). */}
             {line.undo && (
-              <div data-bar-line={line.id} className="flex items-center border-t py-1 pl-2 [p:first-child+&]:border-t-0">
+              <div data-bar-line={line.id} className="flex items-center border-t py-1 pr-0.5 pl-2 [p:first-child+&]:border-t-0">
                 <Button
                   variant="outline"
                   className={cn(
-                    "h-11 px-3 focus-visible:outline-offset-0",
+                    "h-11 scroll-my-1 px-3 focus-visible:outline-offset-0",
                     !failing && "border-primary-foreground/45 bg-transparent text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground",
                   )}
                   aria-describedby={text}

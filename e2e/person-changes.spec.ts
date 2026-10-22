@@ -135,7 +135,7 @@ test.describe("person changes", () => {
     await cell(page, "Tom", "Aller").click();
     const tom = sheet(page, "Tom · Aller");
     await expect(tom.getByText("Sans voiture", { exact: true })).toBeVisible();
-    expect(await actions(tom)).toEqual(["Ne fait pas l’aller", "Fermer"]);
+    expect(await actions(tom)).toEqual(["Trouver une place", "Ne fait pas l’aller", "Fermer"]);
     await tom.getByRole("button", { name: "Ne fait pas l’aller" }).click();
 
     await expect(tom).toHaveCount(0);

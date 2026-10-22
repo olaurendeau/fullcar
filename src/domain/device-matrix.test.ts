@@ -100,7 +100,7 @@ describe("matrixSummary and startsExpanded (C3.6)", () => {
 
 describe("cellActions (C3.1, C3.2, C7.1, C7.2): a cell's sheet, its actions in the README's order", () => {
   it.each<[string, DeviceState, CellAction[]]>([
-    ["without a car: not on this leg (« Trouver une place » comes with #172)", WITHOUT_CAR, ["notConcerned"]],
+    ["without a car: find a seat first (#172), then not on this leg", WITHOUT_CAR, ["findSeat", "notConcerned"]],
     ["a passenger: see the car, leave it, not on this leg", WITH_MARC, ["seeCar", "leaveCar", "notConcerned"]],
     ["a driver: see the car, managed on its card", DRIVER, ["seeCar"]],
     ["not concerned: looking for a seat", NOT_CONCERNED, ["lookingForSeat"]],

@@ -5,7 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { htmlByLegSection } from "./organiser";
+import { hideToken, htmlByLegSection } from "./organiser";
 
 leaveNoToken();
 
@@ -281,7 +281,7 @@ const LEAKS = digitsToo(Object.values(PHONES));
 const DRIVERS_NUMBERS = digitsToo([PHONES.marc, PHONES.zoe]);
 
 function expectNoNumber(where: string, text: string, leaks = LEAKS) {
-  for (const leak of leaks) expect(text, `${where} holds ${leak}`).not.toContain(leak);
+  expect(leaks.filter((leak) => text.includes(leak)).length, `seeded numbers in ${where}`).toBe(0);
 }
 
 /** `loadOrganiserPanel`: a server action, posted to the organiser's page of event `id`. */
@@ -341,13 +341,13 @@ for (const javaScriptEnabled of [true, false]) {
           async (route) => {
             if (!isPanelRead(route.request(), id)) return route.fallback();
             const answer = route.fetch();
-            panelReads.push(body(route.request().url(), answer.then((response) => response.text())));
+            panelReads.push(body(hideToken(route.request().url(), seededEvent.token), answer.then((response) => response.text())));
             await route.fulfill({ response: await answer });
           },
         );
         const bodies: Promise<Body>[] = [];
         page.on("response", (response) => {
-          if (!isPanelRead(response.request(), id)) bodies.push(body(response.url(), response.text()));
+          if (!isPanelRead(response.request(), id)) bodies.push(body(hideToken(response.url(), seededEvent.token), response.text()));
         });
         await page.goto(path(seededEvent), { waitUntil: "networkidle" });
         // With JavaScript, the link's check answered: its panel shows.
@@ -356,7 +356,7 @@ for (const javaScriptEnabled of [true, false]) {
         }
 
         const dom = await page.content();
-        expect(dom).toContain("Marc");
+        expect(dom.includes("Marc"), "the DOM holds Marc").toBe(true);
         if (javaScriptEnabled && organiser) {
           // The panel's sections list Tom's and Léa's numbers (#179, DO1), each in its own leg's
           // only, visible or hidden: Tom's at the aller, Léa's at the retour. No driver's, and
@@ -381,11 +381,11 @@ for (const javaScriptEnabled of [true, false]) {
         for (const read of received) expectNoNumber(read.url, readText(read));
 
         const panels = await Promise.all(panelReads);
-        expect(panels).toHaveLength(javaScriptEnabled && organiser ? 1 : 0);
+        expect(panels.length, "reads of the panel").toBe(javaScriptEnabled && organiser ? 1 : 0);
         for (const read of panels) {
           const text = readText(read);
-          expect(text, "the panel holds Tom's number").toContain(PHONES.tom);
-          expect(text, "the panel holds Léa's number").toContain(PHONES.lea);
+          expect(text.includes(PHONES.tom), "the panel holds Tom's number").toBe(true);
+          expect(text.includes(PHONES.lea), "the panel holds Léa's number").toBe(true);
           expectNoNumber(`the panel at ${read.url}`, text, DRIVERS_NUMBERS);
         }
       });
@@ -403,7 +403,7 @@ test.describe("board, no number in the RSC payload", () => {
       const response = await request.get(path(seededEvent), { headers: { RSC: "1" } });
       expect(response.headers()["content-type"]).toContain("text/x-component");
       const payload = await response.text();
-      expect(payload).toContain("Marc");
+      expect(payload.includes("Marc"), "the RSC payload holds Marc").toBe(true);
       expectNoNumber("the RSC payload", payload);
     });
   }

@@ -123,7 +123,7 @@ test.describe("contact link", () => {
       await expectDiscreet(button);
 
       // K5: the page asked nothing of Crisp.
-      expect(crisp.map((request) => request.url())).toEqual([]);
+      expect(crisp.length, "requests to Crisp").toBe(0);
     });
   }
 
@@ -148,7 +148,7 @@ test.describe("contact link", () => {
       await expect(link).toHaveAttribute("href", before!);
       await expectLastAndDiscreet(page, link);
       await expectDiscreet(languageSwitch(page, SWITCH.en));
-      expect(crisp.map((request) => request.url())).toEqual([]);
+      expect(crisp.length, "requests to Crisp").toBe(0);
     });
   }
 
@@ -158,7 +158,7 @@ test.describe("contact link", () => {
     await expect(page.getByRole("region", { name: PANEL }).getByRole("link", { name: FR })).toHaveCount(0);
     await expect(page.getByRole("region", { name: PANEL }).getByRole("button", { name: SWITCH.fr })).toHaveCount(0);
     await expect(page.getByRole("banner")).toHaveCount(0);
-    expect(crisp.map((request) => request.url())).toEqual([]);
+    expect(crisp.length, "requests to Crisp").toBe(0);
   });
 
   test("K4, K6: from the organiser's page, opens Crisp alone in a new tab, and the page stays", async ({
@@ -175,18 +175,18 @@ test.describe("contact link", () => {
     const [tab] = await Promise.all([context.waitForEvent("page"), contactLink(page).click()]);
     await tab.waitForLoadState();
 
-    expect(tab.url()).toBe(CRISP_CHAT);
+    expect(tab.url() === CRISP_CHAT, "the new tab is Crisp's chat").toBe(true);
     expect(await tab.evaluate(() => window.opener)).toBeNull();
-    expect(crisp).toHaveLength(1);
+    expect(crisp.length).toBe(1);
     const request = crisp[0];
-    expect(request.url()).toBe(CRISP_CHAT);
+    expect(request.url() === CRISP_CHAT, "the request is for Crisp's chat").toBe(true);
     expect(await request.headerValue("referer")).toBeNull();
     const sent = `${request.url()} ${JSON.stringify(await request.allHeaders())} ${request.postData() ?? ""}`;
-    expect(sent).not.toContain(seededEvent.token);
-    expect(sent).not.toContain(seededEvent.id);
+    expect(sent.includes(seededEvent.token), "what Crisp receives holds the token").toBe(false);
+    expect(sent.includes(seededEvent.id), "what Crisp receives holds the event's id").toBe(false);
 
     // K6: the organiser's tab has not moved.
-    expect(page.url()).toBe(`${new URL(baseURL!).origin}${path}`);
+    expect(page.url() === `${new URL(baseURL!).origin}${path}`, "the organiser's tab is still on the organiser's link").toBe(true);
     await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
   });
 
@@ -195,7 +195,7 @@ test.describe("contact link", () => {
     page.on("request", (request) => origins.add(new URL(request.url()).origin));
     await page.goto("/", { waitUntil: "networkidle" });
     expect([...origins]).toEqual([new URL(baseURL!).origin]);
-    expect(crisp.map((request) => request.url())).toEqual([]);
+    expect(crisp.length, "requests to Crisp").toBe(0);
   });
 });
 
