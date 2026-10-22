@@ -141,8 +141,8 @@ test.describe("remove a car", () => {
     expect((await rides(db, seededEvent.id)).map((ride) => `${ride.leg} ${ride.first_name}`)).toEqual(["aller Marc", "retour Claire", "retour Tom"]);
     // The token went in the body, never in the URL.
     expect(sent.length).toBe(1);
-    expect(sent[0].body).toContain(token);
-    expect(sent[0].url).not.toContain(token);
+    expect(sent[0].body.includes(token), "the removal's body carries the device's token").toBe(true);
+    expect(sent[0].url.includes(token), "the removal's URL holds the device's token").toBe(false);
   });
 
   test("C8.6, C8.7: the confirmation counts 0 and 1 person; « Annuler » changes nothing", async ({ db, page, seededEvent }) => {
