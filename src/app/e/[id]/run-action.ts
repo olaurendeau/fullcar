@@ -24,10 +24,13 @@ export async function sendAction<T>(
   }
 }
 
-/** What an action changes on the page: the board, and the bar's information, which goes once an action ends. */
+/**
+ * What an action changes on the page: the board, and the bar's information, which goes once an
+ * action that began after it ends (rule 4): `begins` is told as it leaves, what it returns once it ends.
+ */
 export interface ActionPage {
   state: (state: EventState) => void;
-  ended: () => void;
+  begins: () => () => void;
 }
 
 /**
@@ -47,6 +50,7 @@ export function actionRunner(page: ActionPage, online?: () => boolean) {
   ): Promise<Sent<T> | undefined> {
     if (inFlight.has(key)) return undefined;
     inFlight.add(key);
+    const ends = page.begins();
     leaves?.();
     sending?.(true);
     try {
@@ -57,7 +61,7 @@ export function actionRunner(page: ActionPage, online?: () => boolean) {
     } finally {
       inFlight.delete(key);
       sending?.(false);
-      page.ended();
+      ends();
     }
   };
 }

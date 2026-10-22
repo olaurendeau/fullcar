@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { deviceMatrix, matrixSummary, startsExpanded } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
+import { findSeat } from "@/domain/tap";
 import { cn } from "@/lib/utils";
 import { CellSheet } from "./cell-sheet";
 import type { BoardDevice } from "./leg-panel";
@@ -27,7 +28,8 @@ function personOf(board: readonly VisibleLegBoard[], id: string) {
  * it first has rows if a cell is « Sans voiture », folded otherwise; then only that button
  * changes it, and nothing keeps it (v4-3): an action of a cell's sheet that empties the last
  * cell « Sans voiture » does not fold it. A first name opens the person's sheet, a cell the
- * sheet of that person on that leg (#89). While the persons are read, a line in its place
+ * sheet of that person on that leg (#89), whose « Trouver une place » goes to the first car of
+ * that leg with a free seat (#172). While the persons are read, a line in its place
  * (C5.9); if the read fails, an alert with « Réessayer ».
  *
  * « Réessayer » goes away as it is pressed: the focus follows what takes its place (the
@@ -37,7 +39,7 @@ function personOf(board: readonly VisibleLegBoard[], id: string) {
  */
 export function DevicePersons({
   board,
-  device: { status, retry, refocus, setPersonLeg, updatePerson },
+  device: { status, retry, refocus, setPersonLeg, updatePerson, inform },
   showLeg,
 }: {
   board: readonly VisibleLegBoard[];
@@ -180,6 +182,8 @@ export function DevicePersons({
           }
           setPersonLeg={setPersonLeg}
           showLeg={showLeg}
+          freeCar={findSeat(board.find((leg) => leg.leg === cell.leg) ?? { cars: [] })?.id}
+          inform={inform}
         />
       )}
     </section>

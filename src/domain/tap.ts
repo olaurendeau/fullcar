@@ -3,7 +3,7 @@
  * (R6). Pure decisions on the leg's device section (`LegBoard.device`): the view asks,
  * the server still decides at the write (C5.7, C6.5).
  */
-import type { BoardPerson, DevicePerson } from "./board";
+import type { BoardCar, BoardPerson, DevicePerson } from "./board";
 
 /**
  * What the page knows of the device's persons on this event.
@@ -53,6 +53,16 @@ export function tapOutcome(status: DeviceStatus, device: readonly DevicePerson[]
   if (device.length === 0) return { kind: "register" };
   const toPlace = device.filter((person) => person.state.kind === "withoutCar");
   return toPlace.length === 1 ? { kind: "place", personId: toPlace[0].id } : { kind: "sheet" };
+}
+
+/**
+ * « Trouver une place » (C3.8, v4-6): the first car of the leg with a free seat, by departure
+ * time, the leg's order between two that leave together; nothing when every car is full. It
+ * takes no seat: the page gives the focus to that car's first free seat.
+ */
+export function findSeat<Car extends Pick<BoardCar, "departureTime" | "freeSeats">>(board: { cars: readonly Car[] }): Car | undefined {
+  const byTime = [...board.cars].sort((a, b) => (a.departureTime < b.departureTime ? -1 : a.departureTime > b.departureTime ? 1 : 0));
+  return byTime.find((car) => car.freeSeats > 0);
 }
 
 export interface SheetCandidate {

@@ -127,7 +127,7 @@ export function ParticipantBoard({
 
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
-  const [runner] = useState(() => actionRunner({ state: setBoard, ended: messages.ended }));
+  const [runner] = useState(() => actionRunner({ state: setBoard, begins: messages.begins }));
   // Once the runner has shown the state an action answered, refusal included.
   const runAction: typeof runner = async (...run) => {
     const sent = await runner(...run);
@@ -288,7 +288,8 @@ export function ParticipantBoard({
       const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
       const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });
       send.whenClosed(() => {
-        // Nobody given back, the bar has nothing to say: it closes.
+        // Nobody given back, there is no success to say: the success goes. The failures stay, and
+        // an information written since « Annuler » left too (rule 4, v4.4.2): the bar closes only without them.
         messages.succeed(undone.length > 0 ? { text, landmark } : null);
         setUndoneIn({ landmark });
       });
@@ -377,6 +378,11 @@ export function ParticipantBoard({
           device.retry();
         },
         refocus: focusLandmark,
+        inform: (message, leg) =>
+          void whenPageShown(() => {
+            // The retour may have gone under the sheet: its tab goes as it closes, and nothing is said about it.
+            if (leg === "aller" || latest.current.event.retourAt) messages.inform(message);
+          }),
         addPerson,
         updatePerson,
         setPersonLeg,
