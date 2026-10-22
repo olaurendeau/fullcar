@@ -343,7 +343,12 @@
     "tile": {
       "free": "{free, plural, one {# free seat} other {# free seats}}",
       "missing": "{missing, plural, one {# seat missing} other {# seats missing}}"
-    }
+    },
+    "edit": "Edit the event"
+  },
+  "EditEvent": {
+    "title": "Edit the event",
+    "saved": "Event updated. Nobody is notified: remember to tell the group."
   },
   "EventNotFound": {
     "title": "Event not found",
