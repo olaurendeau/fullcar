@@ -2,8 +2,9 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import type * as Sentry from "@sentry/nextjs";
 import { afterEach, describe, expect, it } from "vitest";
-import { type BrowserSdk, startBrowserSentry } from "./client";
+import { type BrowserSdk, messagesWithoutFrames, startBrowserSentry } from "./client";
 import { type SentryEnv } from "./options";
+import { scrubText } from "./scrub";
 import { ORIGIN, RELEASE } from "./test-secrets";
 
 /*
@@ -77,16 +78,29 @@ function thrownByAnExtension() {
   return error;
 }
 
-/** The frames sent for `error`, of the error and of its causes; `undefined` if nothing is sent. */
-async function framesSent(error: Error = errorWithFrameInMessage(), bare?: boolean) {
+/** An error typed in the console: its one frame names no script by a URL. */
+function thrownInTheConsole() {
+  const error = new TypeError("x is undefined");
+  error.stack = `TypeError: ${error.message}\n    at evaluate (debugger eval code:1:5)`;
+  return error;
+}
+
+type Frame = { function?: string; filename?: string };
+type Sent = { exception: { values: { value?: string; stacktrace: { frames: Frame[] } }[] } };
+
+/** What is sent for `error`: every body as it leaves, and its error event, if any. */
+async function send(error: Error, bare?: boolean) {
   sent = [];
   await startBrowserSentry(ENV, load(bare));
   browser.captureException(error);
   await browser.flush(2000);
   const items = sent.flatMap((body) => body.split("\n").filter(Boolean).map((line) => JSON.parse(line) as { exception?: unknown }));
-  const event = items.find((item) => item.exception) as
-    | { exception: { values: { stacktrace: { frames: { function?: string; filename?: string }[] } }[] } }
-    | undefined;
+  return { payload: sent.join("\n"), event: items.find((item) => item.exception) as Sent | undefined };
+}
+
+/** The frames sent for `error`, of the error and of its causes; `undefined` if nothing is sent. */
+async function framesSent(error: Error = errorWithFrameInMessage(), bare?: boolean) {
+  const { event } = await send(error, bare);
   return event?.exception.values.flatMap(({ stacktrace }) => stacktrace.frames);
 }
 
@@ -111,12 +125,47 @@ describe("what the browser sends for an error", () => {
     expect(frames).toEqual([{ filename: FILENAME, function: "onSubmit", lineno: 1, colno: 4410, in_app: true }]);
   });
 
+  it("sends the messages without that line, and the first name nowhere, of the error or of its cause (#379)", async () => {
+    const thrown = await send(thrownWithFrameInMessage());
+    const caused = await send(errorWithFrameInMessage());
+    expect([thrown, caused].map(({ event }) => event?.exception.values.map(({ value }) => value))).toEqual([
+      ["Le trajet a échoué"],
+      ["Le trajet a échoué", scrubText("Impossible d'afficher le trajet")],
+    ]);
+    // A boolean: a failing assertion prints no part of what was sent (#233).
+    expect([thrown, caused].map(({ payload }) => payload.includes("Marc"))).toEqual([false, false]);
+  });
+
   it("sends no error thrown by another script, an extension's, though ours called it", async () => {
     expect(await framesSent(thrownByAnExtension())).toBeUndefined();
+  });
+
+  it("sends no error none of whose frames names a script by a URL, as the SDK alone", async () => {
+    expect(await framesSent(thrownInTheConsole())).toBeUndefined();
   });
 
   it("sends that line as a frame with the SDK alone, so that the tests above mean something", async () => {
     const frames = await framesSent(errorWithFrameInMessage(), true);
     expect(frames?.map((frame) => frame.function)).toContain("Marc");
+  });
+});
+
+describe("messagesWithoutFrames", () => {
+  it("keeps of each message its first line and every line that reads as no frame, of V8 or of SpiderMonkey", () => {
+    const message = (value: string) => ({ value, type: "Error" });
+    const event = {
+      exception: {
+        values: [
+          message("Échec du trajet\n    at Marc (depuis 10:30)\nMarc@depuis 10:30\n@debugger eval code:1:5\nRéessayez plus tard"),
+          message("    at Marc (depuis 10:30)\nat Marc\nonSubmit@https://fullcar.example/_next/a.js:1:2"),
+          { type: "Error" },
+        ],
+      },
+    };
+    expect(messagesWithoutFrames(event).exception.values).toEqual([
+      message("Échec du trajet\nRéessayez plus tard"),
+      message("    at Marc (depuis 10:30)"),
+      { type: "Error" },
+    ]);
   });
 });
