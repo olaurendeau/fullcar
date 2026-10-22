@@ -110,10 +110,12 @@ celui qui écrit le code.
   plus `createDsc` et `beforeEnvelope`, posés par `registerHooks`. Un hook retiré, ou une
   donnée de personne passée au SDK à la main (`setUser`, `setTag`, `setExtra`, `setContext`,
   `captureMessage`), est bloquant.
-- Une erreur qui peut partir a un `name` qui finit par `Error` : sinon le SDK lit la première
-  ligne de sa pile comme une frame, et son message avec (#239). Seule exception, le
-  `DatabaseError` de pg, qui s'appelle `error` : `databaseErrors` (`src/observability/server.ts`)
-  n'en garde que le code et les frames de code.
+- Dans le navigateur, une erreur qui peut partir a un `name` qui finit par `Error` :
+  `@sentry/browser` ne retire la première ligne de sa pile que si elle contient `Error: `,
+  sinon il la lit comme une frame, et son message avec (#239). Sur le serveur, `@sentry/core`
+  saute toujours la première ligne, mais fait une frame de toute autre ligne du message qui en
+  a l'air : `codeFramesOnly` (`src/observability/server.ts`) ne garde de toute erreur que les
+  frames de code, et `databaseErrors` ne garde du `DatabaseError` de pg que son code.
 - Le navigateur ne parle qu'à notre origine (`tunnelRoute: "/monitoring"`). Aucun DSN ni
   jeton Sentry écrit en dur ; `SENTRY_AUTH_TOKEN` n'est lu qu'au build, et sans lui aucune
   source map n'est produite.
