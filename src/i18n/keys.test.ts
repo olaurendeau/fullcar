@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import en from "../../messages/en.json";
+import fr from "../../messages/fr.json";
 import { diffMessages, flattenKeys } from "./keys";
+
+type Messages = Parameters<typeof diffMessages>[0];
 
 describe("flattenKeys", () => {
   it("dots nested keys", () => {
@@ -22,5 +26,13 @@ describe("diffMessages", () => {
       extra: [],
       empty: [],
     });
+  });
+});
+
+describe("messages/fr.json and messages/en.json (#390)", () => {
+  it("have exactly the same keys, at every depth", () => {
+    // Key paths only: a failure names the keys, never the text of a message.
+    const { missing, extra } = diffMessages(fr as Messages, en as Messages);
+    expect({ onlyInFr: missing, onlyInEn: extra }).toEqual({ onlyInFr: [], onlyInEn: [] });
   });
 });
