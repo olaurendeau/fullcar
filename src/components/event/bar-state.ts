@@ -35,12 +35,12 @@ export interface Sent {
 
 /**
  * A failure, with what its send was about, and whether nothing left for want of a connection.
- * One about the aller too has its `aller` part: what it says, and is about, once the retour is
- * gone (the owner's decision on #267).
+ * One about the aller too has its `aller` part: what it says, is about, and takes the focus to,
+ * once the retour is gone (the owner's decision on #267).
  */
 export interface Failure extends Message, Sent {
   offline?: boolean;
-  aller?: { text: string; about: readonly string[] };
+  aller?: { text: string; about: readonly string[]; landmark: () => boolean };
 }
 
 /** An information, and when it was written, on the clock that also stamps when each action begins (`ended`). */

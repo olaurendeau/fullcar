@@ -185,12 +185,14 @@ describe("decision 44: the retour gone, the bar's lines about it go", () => {
   });
 
   // The owner's decision on #267 (review of #371): an offer on both legs keeps its aller part.
-  it("a failure with an aller part stays, cut to it: its words and its subjects, about no leg any more", () => {
+  it("a failure with an aller part stays, cut to it: its words, its subjects and its landmark, about no leg any more", () => {
     const both = ["offer:aller:claire", "offer:retour:claire"];
-    const aller = { text: "La voiture de Claire pour l’aller…", about: ["offer:aller:claire"] };
+    const offerAller = () => true;
+    const aller = { text: "La voiture de Claire pour l’aller…", about: ["offer:aller:claire"], landmark: offerAller };
     let state = fail(emptyBar, { ...failure("Les voitures de Claire pour l’aller et le retour…", both), ...retour, aller });
     state = retourGone(state);
     expect(texts(state)).toEqual(["La voiture de Claire pour l’aller…"]);
+    expect(lines(state)[0].landmark).toBe(offerAller);
     expect(regions(state).alert).toBe("La voiture de Claire pour l’aller…");
     expect(texts(retourGone(state))).toEqual(["La voiture de Claire pour l’aller…"]);
     expect(lines(withdraw(state, { about: ["offer:aller:claire"] }))).toEqual([]);

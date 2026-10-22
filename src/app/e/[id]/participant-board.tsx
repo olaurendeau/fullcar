@@ -19,7 +19,7 @@ import {
   type NotDone,
   type Why,
 } from "@/components/event/failure-words";
-import { focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusRetry, focusTitle } from "@/components/event/focus";
+import { focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusOffer, focusRetry, focusTitle } from "@/components/event/focus";
 import {
   aboutOf,
   allerPart,
@@ -179,9 +179,13 @@ export function ParticipantBoard({
     const saysRetourGone = why.kind === "noRetour" || why.kind === "noRetourAgain";
     const leg = saysRetourGone ? undefined : (failure.leg ?? (offersRetour(sheet.about) ? "retour" : undefined));
     const about = why.kind === "noRetourAgain" ? allerPart(sheet.about) : sheet.about;
-    // An offer on both legs keeps its aller part once the retour is gone (the owner's decision on #267).
-    const both = leg === "retour" && notDone.kind === "offerRide" && notDone.legs === "both";
-    const aller = both ? { text: failureText(words, { ...notDone, legs: "aller" }, why), about: allerPart(sheet.about) } : undefined;
+    // An offer on both legs, offline or on an error, keeps its aller part once the retour is gone,
+    // the aller's « Proposer une voiture » for landmark (the owner's decision on #267). A refusal's
+    // reason may hold only with the retour (`alreadyDriving`): that line goes with it.
+    const both = leg === "retour" && notDone.kind === "offerRide" && notDone.legs === "both" && (why.kind === "offline" || why.kind === "failed");
+    const aller = both
+      ? { text: failureText(words, { ...notDone, legs: "aller" }, why), about: allerPart(sheet.about), landmark: () => focusOffer("aller") }
+      : undefined;
     sheet.whenClosed(() => messages.fail({ text, landmark, offline, about, sent: sheet.seq, undo, leg, aller }), true);
   }
 
