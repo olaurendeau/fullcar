@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { covers, type Withdrawal } from "./bar-state";
-import { aboutOf, coverPage, forget, onWithdraw, sendAbout, whenPageShown } from "./hidden-page";
+import { aboutOf, allerPart, coverPage, forget, offersRetour, onWithdraw, sendAbout, whenPageShown } from "./hidden-page";
 
 /** Once the microtask a sheet leaves at its unmount has run. */
 const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -205,5 +205,21 @@ describe("aboutOf", () => {
     stop();
     const failed = { about: aboutOf(["seats:sophie"], ["tom", "lea"]), sent: 0 };
     expect(told.map((withdrawal) => covers(withdrawal, failed))).toEqual([false, true]);
+  });
+});
+
+// « Le sujet d’un échec », line « Proposer une voiture » (event-board v4.4.4, B1.7).
+describe("an offer's legs", () => {
+  const both = aboutOf(["offer:aller:claire", "offer:retour:claire"]);
+
+  it("a failure `noRetourAgain` is about its aller part alone, which the aller sent again covers", () => {
+    expect(allerPart(both)).toEqual(["offer:aller:claire"]);
+    expect(covers({ about: ["offer:aller:claire"] }, { about: allerPart(both), sent: 1 })).toBe(true);
+    expect(covers({ about: ["offer:aller:claire"] }, { about: both, sent: 1 })).toBe(false);
+    expect(allerPart(["person:new:Inès"])).toEqual(["person:new:Inès"]);
+  });
+
+  it("an offer is about the retour when one of its subjects is the retour's", () => {
+    expect([both, ["offer:retour:new:Marc"], ["offer:aller:claire"], ["cell:tom:retour"]].map(offersRetour)).toEqual([true, true, false, false]);
   });
 });

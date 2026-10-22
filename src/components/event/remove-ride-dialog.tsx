@@ -19,7 +19,8 @@ import { HidesPage, useSends, type FromSheet } from "./hidden-page";
 import type { BarProblem } from "./message-bar";
 
 /**
- * Removes one of the device's cars (`removeRide`, C8.6): `null` once done, the problem to show
+ * Removes one of the device's cars (`removeRide`, C8.6): `null` once done, a car of a retour
+ * since removed included, which the bar says (decision 45, M7.12); the problem to show
  * otherwise, `undefined` when it is on its way already. `removed` is called as soon as the car
  * is known to be gone, before the page takes the state without it. A problem the confirmation
  * no longer shows goes to the bar.

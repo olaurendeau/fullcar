@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { close, covers, emptyBar, ended, fail, inform, lines, regions, succeed, undoing, withdraw, type BarState, type Undo } from "./bar-state";
+import { close, covers, emptyBar, ended, fail, inform, lines, regions, retourGone, succeed, undoing, withdraw, type BarState, type Undo } from "./bar-state";
 
 // The rules of « La barre de messages » (docs/design/event-board/README.md, v4.2.3, #216).
 
@@ -159,5 +159,47 @@ describe("rule 6: one « Annuler » per placement", () => {
     // Sent again from the failure: its send withdraws it, and no line shows « Annuler ».
     state = withdraw(undoing(state, tom), { about: ["undo:sophie", "undo:sophie:tom"] });
     expect(undoOf(state)).toEqual(["Hugo est dans la voiture de Marc"]);
+  });
+});
+
+// organizer-view v3.3.6, decision 44; event-board v4.4.4, rule 5: the page applies a state that no
+// longer has the retour the one before had (`retourGone`, once).
+describe("decision 44: the retour gone, the bar's lines about it go", () => {
+  const retour = { leg: "retour" as const };
+
+  it("its success with its « Annuler », its information and its failures go; the aller's stay, its « Annuler » too", () => {
+    const hugo = { run: () => {}, leg: "aller" as const };
+    let state = fail(emptyBar, { ...failure("Tom · Retour", ["cell:tom:retour"]), ...retour });
+    state = fail(state, { ...failure("Léa · Aller", ["cell:lea:aller"], 2), leg: "aller" });
+    state = inform(state, { ...info("Aucune place libre au retour"), ...retour });
+    state = succeed(state, { ...success("Tom est dans la voiture de Sophie"), undo: { run: () => {}, ...retour } });
+    expect(texts(retourGone(state))).toEqual(["Léa · Aller"]);
+
+    state = succeed(state, { ...success("Hugo est dans la voiture de Marc"), undo: hugo });
+    state = inform(state, { ...info("Aucune place libre à l’aller"), leg: "aller" });
+    expect(lines(retourGone(state)).map((line) => [line.text, line.undo === hugo])).toEqual([
+      ["Léa · Aller", false],
+      ["Aucune place libre à l’aller", false],
+      ["Hugo est dans la voiture de Marc", true],
+    ]);
+  });
+
+  it("a success whose « Annuler » is on its way is still about its leg (M7.10)", () => {
+    const tom = { run: () => {}, ...retour };
+    const state = undoing(succeed(emptyBar, { ...success("Tom est dans la voiture de Sophie"), undo: tom }), tom);
+    expect(texts(retourGone(state))).toEqual([]);
+  });
+
+  it("a line about no leg stays: what says that the retour is gone, or a person's change", () => {
+    let state = fail(emptyBar, failure("Tom · Retour : « Je cherche une place »… Il n’y a plus de retour", ["cell:tom:retour"]));
+    state = inform(state, info("Il n’y a plus de retour pour cet événement."));
+    expect(texts(retourGone(state))).toEqual(["Tom · Retour : « Je cherche une place »… Il n’y a plus de retour", "Il n’y a plus de retour pour cet événement."]);
+  });
+
+  it("a region that said a line gone empties, the one still waiting to say it too (B1.6)", () => {
+    let state = succeed(emptyBar, success("Tom est dans la voiture de Marc"));
+    state = inform(state, { ...info("Aucune place libre au retour"), ...retour });
+    state = fail(state, { ...failure("Hugo · Retour", ["cell:hugo:retour"]), ...retour });
+    expect(regions(retourGone(state))).toEqual({ alert: "", status: "" });
   });
 });

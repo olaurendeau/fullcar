@@ -9,6 +9,7 @@ import {
   cellWhy,
   failureText,
   nameList,
+  noRetourInfo,
   noRetourWhy,
   offerWhy,
   personWhy,
@@ -18,8 +19,18 @@ import {
   type NotDone,
   type Why,
 } from "@/components/event/failure-words";
-import { focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusRetry } from "@/components/event/focus";
-import { aboutOf, forget, pageHidden, sendAbout, whenPageShown, type FromSheet } from "@/components/event/hidden-page";
+import { focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusRetry, focusTitle } from "@/components/event/focus";
+import {
+  aboutOf,
+  allerPart,
+  forget,
+  offersRetour,
+  pageHidden,
+  sendAbout,
+  whenPageShown,
+  type FromSheet,
+  type Send,
+} from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
@@ -86,6 +97,7 @@ export function ParticipantBoard({
   const latest = useRef(rendered);
   const displayed = useRef(rendered);
   const focused = useRef<Element | null>(null);
+  const messages = useMessageBar();
   // Every state the page shows goes through here: an action's, a read's, `apply`.
   // What is not a state (the legs alone, from a server not yet deployed) is not shown.
   const [setBoard] = useState(() => {
@@ -94,6 +106,8 @@ export function ParticipantBoard({
         // The aller's panel mounts anew, in or out of the tabs; without a retour, the aller shows.
         focused.current = document.activeElement;
         setTab("aller");
+        // The retour gone, the bar's lines about it go, once, before what this state's answer says (decision 44).
+        if (!next.event.retourAt) messages.retourGone();
       }
       displayed.current = next;
       setState(next);
@@ -125,7 +139,6 @@ export function ParticipantBoard({
     () => ({ read: () => sendAction(() => loadEventState(id, readDeviceToken(id))), apply: setBoard }),
     [id, setBoard],
   );
-  const messages = useMessageBar();
 
   useLayoutEffect(() => {
     const element = focused.current;
@@ -154,13 +167,27 @@ export function ParticipantBoard({
   // there, and only a send that covers it, or « Fermer », takes it away (#167, #208, #216).
   // What was not done, then why (C11.11): no failure of the bar is generic. A sheet whose leg
   // is gone `closes`, and its failure goes to the bar all the same (rule 9). A failure of
-  // « Annuler » carries it again (rule 6).
-  function failedIn(sheet: FromSheet, failure: { notDone: NotDone; why: Why; landmark: () => boolean; closes?: boolean; undo?: Undo }) {
+  // « Annuler » carries it again (rule 6). A failure is about the `leg` it was sent on, an offer's
+  // named by its subjects, and goes with the retour (decision 44); one that says the retour is
+  // gone comes with the state without it, and stays. One `noRetourAgain` is about the aller's
+  // part of its send alone, which the aller sent again withdraws (B1.7).
+  function failedIn(sheet: FromSheet, failure: { notDone: NotDone; why: Why; landmark: () => boolean; closes?: boolean; undo?: Undo; leg?: Leg }) {
     const { notDone, why, landmark, closes, undo } = failure;
     if (!closes && sheet.inSheet()) return;
     const offline = why.kind === "offline" || (why.kind === "retryUndo" && why.problem === "offline");
     const text = failureText(words, notDone, why);
-    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about: sheet.about, sent: sheet.seq, undo }), true);
+    const saysRetourGone = why.kind === "noRetour" || why.kind === "noRetourAgain";
+    const leg = saysRetourGone ? undefined : (failure.leg ?? (offersRetour(sheet.about) ? "retour" : undefined));
+    const about = why.kind === "noRetourAgain" ? allerPart(sheet.about) : sheet.about;
+    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about, sent: sheet.seq, undo, leg }), true);
+  }
+
+  // What a send refused by `noRetour` asked holds without the retour: no failure, an information,
+  // whose landmark is the event's title (decision 45). It removes no other line (rule 4).
+  function informed(send: Send, notDone: NotDone, why: Why): boolean {
+    const text = why.kind === "noRetour" ? noRetourInfo(words, notDone) : undefined;
+    if (text) send.whenClosed(() => messages.inform({ text, landmark: focusTitle }));
+    return text !== undefined;
   }
 
   const device = useDevice(
@@ -249,7 +276,7 @@ export function ParticipantBoard({
     const error = !sent.ok ? sent.problem : "error" in sent.value ? sent.value.error : "failed";
     const landmark = () => focusCell(change.personId, change.leg);
     const why = cellWhy(error, cell);
-    failedIn(sheet, { notDone, why, landmark, closes: why.kind === "noRetour" });
+    if (!informed(sheet, notDone, why)) failedIn(sheet, { notDone, why, landmark, closes: why.kind === "noRetour", leg: change.leg });
     if (why.kind === "noRetour") return "noRetour";
     return sent.ok ? "failed" : sent.problem;
   };
@@ -298,18 +325,24 @@ export function ParticipantBoard({
       if (sent === undefined) return;
       send.answered();
       const answer = sent.ok ? sent.value : { ok: false as const, error: sent.problem };
-      if (!answer.ok) return failedIn(send, { notDone: { kind: "leave", names, driver }, why: undoWhy(answer.error), landmark, undo });
+      const notDone: NotDone = { kind: "leave", names, driver };
+      if (!answer.ok) {
+        // Refused by `noRetour`, nobody is left in the car: the information, and no « Annuler » that could only fail (rule 6).
+        const why = undoWhy(answer.error);
+        if (!informed(send, notDone, why)) failedIn(send, { notDone, why, landmark, undo });
+        return;
+      }
       const { undoneIds } = answer;
       const undone = names.filter((_, index) => undoneIds.includes(personIds[index]));
       const text = words.t("Seat.undone", { names: nameList(words, undone), count: undone.length, driver });
       send.whenClosed(() => {
         // Nobody given back, there is no success to say: the success goes. The failures stay, and
         // an information written since « Annuler » left too (rule 4, v4.4.2): the bar closes only without them.
-        messages.succeed(undone.length > 0 ? { text, landmark } : null);
+        messages.succeed(undone.length > 0 ? { text, landmark, leg } : null);
         setUndoneIn({ landmark });
       });
     }
-    const undo: Undo = { run: () => void giveBack() };
+    const undo: Undo = { run: () => void giveBack(), leg };
     return undo;
   }
 
@@ -325,7 +358,7 @@ export function ParticipantBoard({
     const taken = seatsTaken(sent, seats.names);
     const landmark = focusCar(leg, rideId);
     if (taken.kind === "done") sheet.whenClosed(() => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats) }));
-    else failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes: taken.kind === "noRetour" });
+    else failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes: taken.kind === "noRetour", leg });
     return taken;
   };
 
@@ -348,8 +381,10 @@ export function ParticipantBoard({
       return null;
     }
     // In the bar, the failure names the car and its leg, then why, a refusal included; the confirmation keeps the generic words.
+    // A car of the retour once it is gone is removed as a second removal is (decision 45): the confirmation closes.
     const why = whyOf(!sent.ok ? sent.problem : "error" in sent.value ? sent.value.error : "failed");
-    failedIn(confirmation, { notDone, why, landmark: focusCar(leg, rideId) });
+    if (informed(confirmation, notDone, why)) return null;
+    failedIn(confirmation, { notDone, why, landmark: focusCar(leg, rideId), leg });
     return sent.ok ? "failed" : sent.problem;
   };
 
@@ -375,7 +410,7 @@ export function ParticipantBoard({
     const problem = sent.ok ? "failed" : sent.problem;
     const why = outcome ? whyOf(outcome.error) : whyOf(problem);
     // A car of the retour once it is gone: the sheet closes (rule 9).
-    failedIn(sheet, { notDone, why, landmark: focusCar(leg, rideId), closes: why.kind === "noRetour" });
+    failedIn(sheet, { notDone, why, landmark: focusCar(leg, rideId), closes: why.kind === "noRetour", leg });
     if (outcome?.error === "passengersChanged") return { kind: "passengersChanged", passengers: outcome.passengerIds.length };
     return why.kind === "noRetour" ? { kind: "noRetour" } : { kind: "problem", problem };
   };
@@ -396,7 +431,7 @@ export function ParticipantBoard({
         inform: (message, leg) =>
           void whenPageShown(() => {
             // The retour may have gone under the sheet: its tab goes as it closes, and nothing is said about it.
-            if (leg === "aller" || latest.current.event.retourAt) messages.inform(message);
+            if (leg === "aller" || latest.current.event.retourAt) messages.inform({ ...message, leg });
           }),
         addPerson,
         updatePerson,

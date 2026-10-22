@@ -22,7 +22,8 @@ export interface CellSending extends FromSheet {
 /**
  * Declares one of the device's persons without a car, or not concerned, on a leg
  * (`setPersonLeg`). `null` once done; `noRetour` when the leg is gone, which closes the sheet
- * as the bar says why (rule 9); the problem to show otherwise; `undefined` when a change from
+ * as the bar says why (rule 9), or, out of a car or not doing the retour, that the retour is
+ * gone, an information (decision 45); the problem to show otherwise; `undefined` when a change from
  * this sheet is already on its way (#167). A problem the sheet no longer shows goes to the bar.
  */
 export type SetPersonLeg = (

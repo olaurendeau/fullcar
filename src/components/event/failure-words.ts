@@ -70,6 +70,18 @@ export function noRetourWhy(why: Why, leg: Leg | undefined, action: "offerRide" 
   return leg === "retour" ? { why, closes: true } : { why: noRetourAgain(action), closes: false };
 }
 
+/**
+ * What a send refused by `noRetour` says when what it asked holds without the retour (decision
+ * 45): no failure, an information. « Annuler », « Sortir de la voiture » and « Retirer la voiture »:
+ * the car is no longer offered; « Ne fait pas le retour »: the retour is gone. Nothing for the
+ * others, which fail: « Je cherche une place », a car changed, or what would create something.
+ */
+export function noRetourInfo({ t }: Words, notDone: NotDone): string | undefined {
+  if (notDone.kind === "leave" || notDone.kind === "removeRide") return t("Actions.info.noRetour", { driver: notDone.driver });
+  if (notDone.kind === "choice" && notDone.choice === "notConcerned") return t("Actions.info.noRetourLeg");
+  return undefined;
+}
+
 /** A cell of « Vos inscriptions » as its sheet showed it at the send: the person, the leg, and her state there. */
 export interface Cell {
   firstName: string;

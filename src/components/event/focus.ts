@@ -19,6 +19,9 @@ export function focusLandmark(): boolean {
   return focus(document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? document.getElementById("event-title"));
 }
 
+/** The event's title, the landmark of what says that the retour is gone (organizer-view v3.3.6, decision 45). */
+export const focusTitle = (): boolean => focus(document.getElementById("event-title"));
+
 /**
  * Rule 8 of the bar (v4.2.2): the first of `landmarks` shown, else the active tab, or the
  * event's title. Never <body>; no tab is made active, no section unfolded.

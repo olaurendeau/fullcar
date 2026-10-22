@@ -165,7 +165,11 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     [FR.drive, TEXT.offerBoth],
     [FR.withoutCar, TEXT.offerAller],
   ]) {
-    test(`M7.6: « ${choice} », the sheet closed before the answer: the bar says to offer the car again`, async ({ page, db, seededEvent }) => {
+    test(`M7.6, B1.7: « ${choice} », the sheet closed before the answer: the bar says to offer the car again; offered again, the line goes`, async ({
+      page,
+      db,
+      seededEvent,
+    }) => {
       await seedClaire(db, page, seededEvent.id);
       const scope = await open(page, seededEvent.id);
       const seen = await watchAlerts(page);
@@ -182,6 +186,17 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
       await expectFocusStays(page, title(page));
       expect(await rides(db, seededEvent.id)).toEqual([]);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });
+
+      // B1.7: the car offered again for the aller, the one leg left, its answer held: the line goes as it leaves.
+      const again = await holdFirst(page, PLACE, false);
+      await page.getByRole("region", { name: "Aller", exact: true }).getByRole("button", { name: FR.offer, exact: true }).click();
+      await dialog(page, FR.offer).getByLabel("Lieu de départ", { exact: true }).fill(PLACE);
+      await expect(retourGroup(page)).toHaveCount(0);
+      await submit(page, FR.offer).click();
+      await expect(lines(page)).toHaveCount(0);
+      expect(await rides(db, seededEvent.id)).toEqual([]);
+      again();
+      await expect.poll(() => rides(db, seededEvent.id)).toEqual([{ leg: "aller", location: PLACE }]);
     });
   }
 
