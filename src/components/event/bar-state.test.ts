@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { close, covers, emptyBar, ended, fail, inform, lines, regions, retourGone, succeed, undoing, withdraw, type BarState, type Undo } from "./bar-state";
+import {
+  close,
+  covers,
+  emptyBar,
+  ended,
+  fail,
+  inform,
+  lines,
+  madeUntrue,
+  offerChanges,
+  personLeg,
+  regions,
+  retourGone,
+  succeed,
+  undoing,
+  withdraw,
+  type BarState,
+  type Undo,
+} from "./bar-state";
 
 // The rules of « La barre de messages » (docs/design/event-board/README.md, v4.2.3, #216).
 
@@ -215,5 +233,50 @@ describe("decision 44: the retour gone, the bar's lines about it go", () => {
     state = inform(state, { ...info("Aucune place libre au retour"), ...retour });
     state = fail(state, { ...failure("Hugo · Retour", ["cell:hugo:retour"]), ...retour });
     expect(regions(retourGone(state))).toEqual({ alert: "", status: "" });
+  });
+});
+
+// Rule 2, v4.4.5 (#359): a placement's success held under a sheet, made untrue by a send made since.
+describe("madeUntrue", () => {
+  const tom = personLeg("tom", "aller");
+  const lea = personLeg("lea", "aller");
+  const held = { persons: [tom, lea], sent: 2 };
+
+  it("a send made after it, which succeeded in changing one of its persons on its leg: the whole success goes (v4.4.5-1, -4)", () => {
+    expect(madeUntrue(held, [{ persons: [tom], sent: 3 }])).toBe(true);
+    expect(madeUntrue(held, [{ persons: [personLeg("hugo", "aller"), lea], sent: 5 }])).toBe(true);
+  });
+
+  it("another person, or the other leg: it stays true (v4.4.5-2)", () => {
+    expect(madeUntrue(held, [{ persons: [personLeg("hugo", "aller")], sent: 3 }])).toBe(false);
+    expect(madeUntrue(held, [{ persons: [personLeg("tom", "retour"), personLeg("lea", "retour")], sent: 3 }])).toBe(false);
+  });
+
+  it("a send made before it, or itself, does not make it untrue", () => {
+    expect(madeUntrue(held, [{ persons: [tom], sent: 1 }, held])).toBe(false);
+    expect(madeUntrue(held, [])).toBe(false);
+  });
+});
+
+// Rule 2, v4.4.5, item 1: what « Proposer une voiture » changes once it succeeds.
+describe("offerChanges", () => {
+  const device = { kind: "device", personId: "marc" } as const;
+  const offer = { driver: device, newPersonId: "drawn", passengerIds: ["tom", "lea"], leg: "aller" } as const;
+
+  it("who drives, the device's or a new person, and who boards, on the car's leg", () => {
+    expect(offerChanges(offer)).toEqual(["marc:aller", "tom:aller", "lea:aller"]);
+    expect(offerChanges({ ...offer, driver: { kind: "new" }, passengerIds: [], leg: "retour" })).toEqual(["drawn:retour"]);
+  });
+
+  it("who drives on the other leg too, when the offer sets it: drive, without a car, not concerned", () => {
+    for (const kind of ["drive", "withoutCar", "notConcerned"] as const) {
+      expect(offerChanges({ ...offer, passengerIds: [], otherLeg: { kind } })).toEqual(["marc:aller", "marc:retour"]);
+      expect(offerChanges({ ...offer, driver: { kind: "new" }, passengerIds: [], leg: "retour", otherLeg: { kind } })).toEqual(["drawn:retour", "drawn:aller"]);
+    }
+  });
+
+  it("« Je reste dans la voiture de… », or her state there unchanged (`keep`), or no other leg: nothing there", () => {
+    expect(offerChanges({ ...offer, passengerIds: [], otherLeg: { kind: "keep" } })).toEqual(["marc:aller"]);
+    expect(offerChanges({ ...offer, passengerIds: [] })).toEqual(["marc:aller"]);
   });
 });
