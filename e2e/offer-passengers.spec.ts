@@ -108,7 +108,7 @@ test.describe("« Qui monte avec vous ? »", () => {
     await expect(lines(page)).toHaveText(["Léa et Tom sont dans la voiture de Claire"]);
     await expect(undo(page)).toBeVisible();
     await expect(title(page, "Claire")).toBeFocused();
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
     expect(sentKeys(sent[0])).toContain("passengerIds");
     const [clairesCar] = await driven(db, id, claire);
     expect(await where(db, [lea, tom, hugo], "aller")).toEqual([clairesCar, clairesCar, undefined]);
@@ -152,7 +152,7 @@ test.describe("« Qui monte avec vous ? »", () => {
     await expect(form(page)).toHaveCount(0);
     await expect(panel(page).getByRole("button", { name: "Proposer une voiture", exact: true })).toBeFocused();
     await expect(lines(page)).toHaveCount(0);
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
     expect(sentKeys(sent[0])).not.toContain("passengerIds");
     expect(await driven(db, id, claire)).toHaveLength(1);
     expect(await where(db, [lea], "aller")).toEqual([null]);
@@ -180,7 +180,7 @@ test.describe("« Qui monte avec vous ? »", () => {
     await expect(freeSeats(car(page, "Marc"))).toHaveCount(3);
     const [leasCar] = await driven(db, id, lea);
     expect(await where(db, [lea, tom, ines], "aller")).toEqual([undefined, leasCar, leasCar]);
-    expect(sent).toHaveLength(1);
+    expect(sent.length).toBe(1);
   });
 
   test("C4.13: more ticked than seats: nothing created, the message under the group, the focus and the values kept", async ({ db, page, seededEvent }) => {
@@ -204,7 +204,7 @@ test.describe("« Qui monte avec vous ? »", () => {
     await expect(box(page, "Léa")).toBeFocused();
     await expect(box(page, "Tom")).toBeChecked();
     await expect(field(page, "Lieu de départ")).toHaveValue("Mairie");
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
     expect(await driven(db, id, claire)).toEqual([]);
 
     // The message counts the seats sent, not those typed since.
