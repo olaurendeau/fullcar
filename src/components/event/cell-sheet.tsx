@@ -3,12 +3,13 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { DeviceState } from "@/domain/board";
-import { cellActions, declaredBy, type CellAction } from "@/domain/device-matrix";
+import { cellActions, declaredBy, type CellAction, type CellChange } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { cellNotDone, type Cell, type NotDone } from "./failure-words";
-import { focusCarTitle, focusCell } from "./focus";
+import type { Message } from "./bar-state";
+import { focusCarTitle, focusCell, focusFirstShown, focusFreeSeat, focusOffer } from "./focus";
 import { useSends, type FromSheet } from "./hidden-page";
 import type { BarProblem } from "./message-bar";
 
@@ -36,6 +37,11 @@ export type SetPersonLeg = (
  * reads its new state; one refused keeps it open with its message, over the page's current
  * state, and the focus on the first action if the one it was on is gone. « Voir la voiture »
  * makes the leg's tab active and gives the focus to the car's title. Closed by « Fermer » or Escape, it gives the focus back to the cell.
+ *
+ * « Trouver une place » (C3.8, v4-6) sends nothing and places nobody: it closes, makes the leg's
+ * tab active, and gives the focus to the first free seat of `freeCar`, scrolled into view. With
+ * no free seat on the leg, the bar says so, an information, and the focus goes to « Proposer une
+ * voiture » of the leg; never to <body> (rule 8).
  */
 export function CellSheet({
   person,
@@ -45,6 +51,8 @@ export function CellSheet({
   onOpenChange,
   setPersonLeg,
   showLeg,
+  freeCar,
+  inform,
 }: {
   person: { id: string; firstName: string };
   leg: Leg;
@@ -55,12 +63,16 @@ export function CellSheet({
   setPersonLeg: SetPersonLeg;
   /** Makes `leg`'s tab the active one. */
   showLeg: (leg: Leg) => void;
+  /** The first car of `leg` with a free seat (`findSeat`), if any. */
+  freeCar: string | undefined;
+  /** Writes an information about `leg` in the bar, once no sheet hides the page. */
+  inform: (message: Message, leg: Leg) => void;
 }) {
   const t = useTranslations("DevicePersons");
   const tLegs = useTranslations("Event.legs");
   const tActions = useTranslations("Actions");
   const [problem, setProblem] = useState<BarProblem | null>(null);
-  const afterClose = useRef(() => focusCell(person.id, leg));
+  const afterClose = useRef<() => unknown>(() => focusCell(person.id, leg));
   const first = useRef<HTMLButtonElement>(null);
   const isOpen = useRef(open);
   // Each opening is a new sheet (`key`): the one that sent may be gone. What it says is about the cell.
@@ -76,7 +88,7 @@ export function CellSheet({
     if (problem && (active === document.body || active?.getAttribute("role") === "dialog")) first.current?.focus();
   }, [problem, state.kind]);
 
-  async function declare(action: Exclude<CellAction, "seeCar">) {
+  async function declare(action: CellChange) {
     const change = { personId: person.id, leg, kind: declaredBy(action) };
     const cell = { firstName: person.firstName, leg, state };
     const sheet = { ...sends(), cell, notDone: cellNotDone(action, cell) };
@@ -93,8 +105,19 @@ export function CellSheet({
     onOpenChange(false);
   }
 
+  // Nothing sent, nobody placed (v4-6). Without a free seat, an information, written once the sheet is gone.
+  function findSeat() {
+    const car = freeCar;
+    const offer = () => focusOffer(leg);
+    showLeg(leg);
+    if (car === undefined) inform({ text: t(`noFreeSeat.${leg}`), landmark: offer }, leg);
+    afterClose.current = () => focusFirstShown(car === undefined ? [offer] : [() => focusFreeSeat(leg, car), offer]);
+    onOpenChange(false);
+  }
+
   const label: Record<CellAction, string> = {
     seeCar: t("seeCar"),
+    findSeat: t("findSeat"),
     leaveCar: t("leaveCar"),
     notConcerned: t(`notConcerned.${leg}`),
     lookingForSeat: t("lookingForSeat"),
@@ -135,10 +158,11 @@ export function CellSheet({
         <Button
           key={action}
           ref={index === 0 ? first : undefined}
-          variant="outline"
+          variant={action === "findSeat" ? "default" : "outline"}
           className="h-auto min-h-11 w-full whitespace-normal"
           onClick={() => {
-            if (action !== "seeCar") void declare(action);
+            if (action === "findSeat") findSeat();
+            else if (action !== "seeCar") void declare(action);
             else if (state.kind === "driver" || state.kind === "passenger") seeCar(state.rideId);
           }}
         >

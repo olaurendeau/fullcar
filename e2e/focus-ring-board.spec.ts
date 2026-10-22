@@ -5,6 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { expectRing, noteUnfocused, press, pressUntil, walk, type Ring } from "./focus-ring";
+import { withoutNumbers } from "./without-numbers";
 
 leaveNoToken();
 
@@ -55,9 +56,6 @@ const button = (scope: Page | Locator, name: string) => scope.getByRole("button"
 const dialog = (page: Page, name: string) => page.getByRole("dialog", { name, exact: true });
 /** « Nous contacter » as `walk` names it, its name cut at 40 characters. */
 const contactReached = /^<a> "Nous contacter/;
-
-/** Any number in a name or a message, hidden: an assertion never prints a phone number. */
-const withoutNumbers = (text: string) => text.replace(/\+?\d[\d .\-()]{4,}\d/g, "<numéro>");
 
 /** `run`, its failure rethrown with the numbers hidden: a `tel:` link is named by its number. */
 async function quiet<T>(run: () => Promise<T>): Promise<T> {

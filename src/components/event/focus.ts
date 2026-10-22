@@ -57,6 +57,19 @@ export function focusCarTitle(leg: Leg, rideId: string): boolean {
   return focus(document.querySelector<HTMLElement>(`[data-car-title="${CSS.escape(rideId)}"][data-leg="${leg}"]`));
 }
 
+/**
+ * The first free seat of car `rideId` on `leg` (« Trouver une place », C3.8): the car, then the
+ * seat, scrolled into view above the bar (`scroll-margin-bottom`, C11.4). False when it is not shown.
+ */
+export function focusFreeSeat(leg: Leg, rideId: string): boolean {
+  const seat = document.querySelector<HTMLElement>(`[data-free-seat="${CSS.escape(rideId)}"][data-leg="${leg}"]`);
+  seat?.focus({ preventScroll: true });
+  if (!seat || document.activeElement !== seat) return false;
+  seat.closest("article")?.scrollIntoView({ block: "nearest" });
+  seat.scrollIntoView({ block: "nearest" });
+  return true;
+}
+
 /** The coverage banner of `leg`, focusable by `tabIndex={-1}`; false when the leg shows none. */
 export function focusBanner(leg: Leg): boolean {
   return focus(document.querySelector<HTMLElement>(`[data-leg-banner="${leg}"]`));

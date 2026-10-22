@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { BrowserContext, Page, Response } from "@playwright/test";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, expectText, expectUrl, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
 
@@ -140,13 +140,13 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
       await toForm();
       // Hydrated: "Créer" stays inactive until then. Waiting is not an action.
       await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
-      await expect(page).toHaveURL(/\/nouveau$/);
+      await expectUrl(page, /\/nouveau$/, "the creation form");
       for (const action of onForm) await action();
 
       const shareLink = page.getByRole("region", { name: words.panel }).getByRole("group", { name: words.shareLink });
-      await expect(page).toHaveURL(ARRIVAL);
+      await expectUrl(page, ARRIVAL, "the organiser's link");
       const id = ARRIVAL.exec(page.url())![1];
-      await expect(shareLink.getByTestId("link")).toHaveText(`${origin}/e/${id}`);
+      await expectText(shareLink.getByTestId("link"), `${origin}/e/${id}`, "the share link is shown");
       expect(Date.now() - start).toBeLessThan(30_000);
 
       // C1.12: 07:30 and 18:00, as typed, from a server in UTC+14 to a browser elsewhere.
@@ -268,7 +268,7 @@ test.describe("the organiser's token on the network", () => {
     await page.goto("/");
     await page.getByRole("link", { name: words.newEvent, exact: true }).click();
     await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
-    await expect(page).toHaveURL(/\/nouveau$/);
+    await expectUrl(page, /\/nouveau$/, "the creation form");
     await field(page, words.title).fill("Sortie ski du club");
     await field(page, words.location).fill("La Clusaz");
     await field(page, words.allerDate).fill(await deviceDate(page, 7));
@@ -289,7 +289,7 @@ test.describe("the organiser's token on the network", () => {
 
     const { pathname, hash } = new URL(page.url());
     const token = hash.slice(1);
-    expect(token).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(/^[A-Za-z0-9_-]{22}$/.test(token), "the fragment is a well-formed token").toBe(true);
     const admin = pathname;
     expect(admin).toMatch(/^\/e\/\w{8}\/admin$/);
 
@@ -297,7 +297,7 @@ test.describe("the organiser's token on the network", () => {
     const where = traffic.flatMap(({ at, ...parts }) =>
       Object.entries({ url: at, ...parts })
         .filter(([, text]) => text.includes(token))
-        .map(([part]) => `${at} ${part}`),
+        .map(([part]) => `${at.replaceAll(token, "{token}")} ${part}`),
     );
     expect(where).toEqual(["POST /nouveau responseBody", `POST ${admin} requestBody`, `POST ${admin} requestBody`]);
 
@@ -307,7 +307,7 @@ test.describe("the organiser's token on the network", () => {
     expect(ats).toEqual(
       expect.arrayContaining(["GET /", "POST /nouveau", `GET ${admin}?_rsc=`, `POST ${admin}`, `GET ${admin}`]),
     );
-    expect(JSON.stringify(await context.cookies())).not.toContain(token);
+    expect(JSON.stringify(await context.cookies()).includes(token), "the cookies hold the token").toBe(false);
   });
 
   test("L3.2: changing the language sends the token nowhere, and does not check it again", async ({
@@ -323,7 +323,7 @@ test.describe("the organiser's token on the network", () => {
 
     await page.goto(`${admin}#${token}`, { waitUntil: "networkidle" });
     await expect(page.getByRole("region", { name: WORDS.fr.panel })).toBeVisible();
-    expect(checks()).toHaveLength(1);
+    expect(checks().length, "checks carrying the token").toBe(1);
     const before = traffic.length;
 
     await expect(page.getByRole("button", { name: "English", exact: true })).toBeEnabled();
@@ -334,15 +334,15 @@ test.describe("the organiser's token on the network", () => {
 
     const after = traffic.slice(before);
     // Watched: the switch is in what was recorded.
-    expect(after.map(({ at, requestBody }) => `${at} ${requestBody}`)).toContain(`POST ${admin} ["en"]`);
+    expect(after.map(({ at, requestBody }) => `${at} ${requestBody}`.replaceAll(token, "{token}"))).toContain(`POST ${admin} ["en"]`);
     const where = after.flatMap(({ at, ...parts }) =>
       Object.entries({ url: at, ...parts })
         .filter(([, text]) => text.includes(token))
-        .map(([part]) => `${at} ${part}`),
+        .map(([part]) => `${at.replaceAll(token, "{token}")} ${part}`),
     );
     expect(where).toEqual([]);
-    expect(checks()).toHaveLength(1);
-    expect(JSON.stringify(await context.cookies())).not.toContain(token);
+    expect(checks().length, "checks carrying the token").toBe(1);
+    expect(JSON.stringify(await context.cookies()).includes(token), "the cookies hold the token").toBe(false);
   });
 });
 
@@ -361,7 +361,7 @@ test.describe("an event with its three options", () => {
     await field(page, words.retourTime).fill("18:00");
     if (withOptions) for (const option of words.options) await field(page, option).check();
     await page.getByRole("button", { name: words.create }).click();
-    await expect(page).toHaveURL(ARRIVAL);
+    await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("region", { name: words.panel })).toBeVisible();
     return page.url();
   }

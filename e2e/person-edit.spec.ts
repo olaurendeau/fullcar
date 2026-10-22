@@ -189,7 +189,7 @@ test.describe("edit a person", () => {
     await expect(firstName).not.toHaveAttribute("aria-invalid");
     await expect(firstName).toHaveValue("Clara");
     await expect(form).toBeVisible();
-    expect(sent).toHaveLength(0);
+    expect(sent.length).toBe(0);
     expect(await stored(db, scene.claire)).toEqual({ first_name: "Claire", phone: CLAIRE_PHONE });
   });
 

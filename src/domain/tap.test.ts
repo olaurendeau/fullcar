@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { DevicePerson, DeviceState } from "./board";
-import { afterRegistration, currentDriver, deviceKnown, driverChoice, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
+import type { BoardCar, DevicePerson, DeviceState } from "./board";
+import { afterRegistration, currentDriver, deviceKnown, driverChoice, findSeat, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
 
 function of(id: string, state: DeviceState): DevicePerson {
   return { id, firstName: id.toUpperCase(), state };
@@ -149,5 +149,27 @@ describe("currentDriver (#169, review of #200)", () => {
   it("goes back to a new person when nobody is left who can drive", () => {
     expect(currentDriver([], "lea")).toBe("new");
     expect(currentDriver([], undefined)).toBe("new");
+  });
+});
+
+describe("findSeat (C3.8, v4-6): « Trouver une place »", () => {
+  const car = (id: string, departureTime: string, freeSeats: number) =>
+    ({ id, departureTime, freeSeats, full: freeSeats === 0 }) as Pick<BoardCar, "id" | "departureTime" | "freeSeats" | "full">;
+
+  it("finds nothing on a leg without a car", () => {
+    expect(findSeat({ cars: [] })).toBeUndefined();
+  });
+
+  it("finds nothing when every car is full", () => {
+    expect(findSeat({ cars: [car("a", "07:00:00", 0), car("b", "07:30:00", 0)] })).toBeUndefined();
+  });
+
+  it("finds the first car with a free seat by departure time: the second one, the first being full", () => {
+    const cars = [car("late", "09:00:00", 2), car("full", "07:00:00", 0), car("second", "08:00:00", 1)];
+    expect(findSeat({ cars })?.id).toBe("second");
+  });
+
+  it("keeps the leg's order between two cars that leave at the same time", () => {
+    expect(findSeat({ cars: [car("a", "08:00:00", 1), car("b", "08:00:00", 3)] })?.id).toBe("a");
   });
 });

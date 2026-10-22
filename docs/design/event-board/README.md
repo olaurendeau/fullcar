@@ -13,9 +13,573 @@
 - v4.4 : « Valider » sans changement dans « Modifier » une personne n’envoie rien. Tâche :
   https://github.com/olaurendeau/fullcar/issues/298 ; même règle que « Modifier l’événement »
   (organizer-view v3.3, M2.5). Deux corrections du README notées sur #216 y sont reportées
+- v4.4.2 : les règles 2 et 3 de la barre suivent la règle 4. L’information n’est retirée
+  qu’à la fin d’une action commencée après elle. Décision du propriétaire sur PR #339
+  (« Trouver une place », #172) :
+  https://github.com/olaurendeau/fullcar/pull/339. « Annuler » est construit (#170, PR #340).
+  v4.4.3 : après la revue, la région `status` n’est vidée que si elle annonce encore
+  l’information.
+- v4.4.4 : « Annuler » et l’information, quatre cas tranchés (#341), et le sujet d’un échec
+  `noRetourAgain`, pour #267. Voir « Ce qui change en v4.4.4 »
+- v4.4.5 : une réussite de placement retenue sous une feuille n’est pas écrite si une action
+  envoyée après elle, réussie, a déjà changé l’état d’une de ses personnes sur son leg (#359) ;
+  « Valider » sans changement dans « Modifier la voiture » n’envoie rien (#313). Voir « Ce qui
+  change en v4.4.5 »
 - Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
   la maquette `language-switch` depuis sa v3 (#236)
 - Page : `index.html` (autonome, maquettes à 360 px de large)
+
+## Ce qui change en v4.4.5 : une réussite retenue devenue fausse (#359), et « Valider » sans changement dans « Modifier la voiture » (#313)
+
+Deux amendements, sans mot nouveau ni mot changé. Le premier touche la règle 2 de la barre ;
+le second applique à la voiture la règle de la v4.4.
+
+### 1. Une réussite retenue sous une feuille, devenue fausse (#359)
+
+**Le cas** (relecture de #356, #171) :
+
+1. Marc propose une voiture à l’aller en cochant Tom dans « Qui monte avec vous ? », et ferme
+   le formulaire avant la réponse ;
+2. il ouvre la cellule Tom · Aller ; la réponse arrive pendant ce temps, et la cellule montre
+   Tom dans la voiture de Marc ;
+3. il touche « Sortir de la voiture », qui réussit ;
+4. à la fermeture de la cellule, la barre dit « Tom est dans la voiture de Marc », avec
+   « Annuler ». Tom en est pourtant sorti.
+
+Le même schéma vaut pour une place prise (un tap, la feuille) : `takeSeats` et `offerRide`
+dans `participant-board.tsx`.
+
+**Pourquoi.** Une réussite qui a un message (un placement) attend qu’aucune feuille ne cache
+la page (règle 9). Une réussite sans message (une action de cellule, « Modifier » la voiture)
+agit à sa réponse : elle retire la réussite affichée (règle 2), mais pas celle qui attend.
+Celle-ci s’écrit donc après une action envoyée après elle, et décrit l’état d’avant cette
+action.
+
+**La règle (règle 2, v4.4.5).** Une réussite de placement qui attend n’est **jamais écrite**
+si, avant qu’elle le soit, une action **envoyée après elle** a **réussi** en changeant l’état
+d’**au moins une de ses personnes, sur son leg**. « Envoyée après » se lit au numéro d’envoi
+(`seq`).
+
+1. **Les actions qui changent l’état d’une personne sur un leg** : une action de cellule de
+   cette personne sur ce leg (« Ne fait pas l’aller / le retour », « Je cherche une place »,
+   « Sortir de la voiture ») ; « Modifier » la voiture de ce leg, avec cette personne dans
+   « Qui sort de la voiture ? » ; un placement ou un « Annuler » qui la porte sur ce leg ;
+   « Proposer une voiture » qui la fait conduire ou monter sur ce leg, ou qui règle ce leg
+   comme l’autre leg de qui conduit (« J’emmène aussi », « Je cherche une place », « Je ne
+   fais pas l’aller »…, sauf « Je reste dans la voiture de… », qui ne change rien).
+   « Retirer la voiture » est déjà réglé par la règle 5. « Modifier » une personne (prénom,
+   téléphone) ne change pas son état sur un leg : il n’en fait pas partie.
+2. **Toute la réussite part**, même si une seule de ses personnes est touchée. « Tom et Léa
+   sont dans la voiture de Marc » n’est pas écrite si Tom seul est sorti. Léa reste dans la
+   voiture et en sort, au besoin, par sa cellule.
+3. **La barre ne dit rien à la place.** Pas de ligne, pas d’« Annuler », aucune écriture dans
+   les régions `status` et `alert`. La réussite abandonnée ne retire rien : ni la réussite
+   affichée, ni l’information, ni un échec. La barre est celle qu’aurait laissée la même suite
+   sans feuille ouverte : la réussite écrite à sa réponse, puis retirée par l’action suivante
+   (règle 2).
+4. **L’action envoyée après échoue, ou est refusée** : la réussite est écrite à la fermeture,
+   avec son « Annuler ». Le placement tient, comme quand un « Annuler » échoue (règle 6).
+5. **L’action envoyée après porte sur d’autres personnes, ou sur l’autre leg** : la réussite
+   est écrite, comme aujourd’hui (règle 1).
+6. **Le focus** suit l’action envoyée après : la cellule, qui lit son nouvel état ; « Modifier »
+   sur la carte, après « Qui sort de la voiture ? ». La réussite abandonnée ne le déplace pas.
+
+**Avec « Annuler » (#340).** L’« Annuler » part avec sa réussite, sans jamais s’afficher.
+Il n’y a rien à défaire : l’action envoyée après a déjà changé l’état. La réussite d’un
+« Annuler » (`Seat.undone`, `Seat.alreadyOut`) n’est pas visée. Elle dit où les personnes ne
+sont plus, et cela reste vrai après une action sans message. La seule action qui la rendrait
+fausse les replace dans cette voiture : elle a son propre message, et sa réponse arrive après,
+puisque les actions de la page partent une à une.
+
+**Avec l’information (v4.4.2-1, v4.4.4).** Inchangé. L’information part à la **fin** d’une
+action commencée après elle, c’est-à-dire à sa réponse, pas à l’écriture de sa réussite. Une
+réussite abandonnée a déjà fait à sa réponse ce que la règle 4 lui demande, et ne pas
+l’écrire n’y change rien. La transition vers un état sans retour s’applique, elle aussi, à la
+réponse (v4.4.4).
+
+**Avec la règle 1.** « Au plus une réussite, la dernière » : la dernière **écrite**, sans
+changement. Une réussite abandonnée n’est pas écrite, donc elle ne devient jamais la
+dernière. Ordonner toutes les réussites par numéro d’envoi est écarté (décision v4.4.5-2).
+
+**Le précédent.** Un échec que couvre un envoi fait depuis n’est jamais dit (`whenClosed`,
+règle 5). La v4.4.5 fait de même pour une réussite que contredit une action réussie depuis.
+
+### 2. « Valider » sans changement dans « Modifier la voiture » (#313)
+
+**Le problème.** Relevé en concevant #298. Le conducteur ouvre « Modifier » sur sa voiture,
+ne change rien, puis touche « Valider ». Une requête part quand même. Hors ligne, elle échoue,
+et la barre dit « Les changements de la voiture de Claire pour l’aller n’ont pas été
+enregistrés. Vérifiez la connexion, puis réessayez. » : un échec pour une action que personne
+n’a faite.
+
+**La règle.** La même que la v4.4 pour « Modifier » une personne, et qu’organizer-view
+(v3.3, M2.5) pour « Modifier l’événement ».
+
+1. **Un champ est changé** (« Lieu de départ » ou « Lieu de dépose », « Heure de départ »,
+   « Places, sans compter qui conduit », « Note (facultatif) ») quand sa valeur diffère,
+   caractère pour caractère, de celle que le formulaire montrait à son ouverture. Changé puis
+   remis, il n’est pas changé. Une espace ajoutée est un changement, et part (v4.4-2).
+2. **Aucun champ changé** : la feuille se ferme, et rien n’est envoyé, ni requête, ni
+   vérification des champs. L’étape « Qui sort de la voiture ? » ne s’ouvre pas. Le focus va
+   sur le bouton « Modifier » de la carte de cette voiture, comme après un « Valider » qui
+   enregistre.
+3. **La barre ne change pas.** Aucune ligne n’y entre, aucune n’en sort, l’échec d’un
+   « Modifier » précédent de cette voiture compris (sujet `ride:{rideId}:edit`). Rien n’est
+   écrit dans les régions `status` et `alert`.
+4. **Hors ligne** : la même chose, et rien n’est dit, ni dans la feuille ni dans la barre.
+5. **Retour de l’étape** : les places baissées sous le nombre de personnes à bord ouvrent
+   « Qui sort de la voiture ? » ; son « Annuler » ramène au formulaire. Si les places sont
+   remises à leur valeur, « Valider » ferme la feuille sans rien envoyer.
+6. **Au moins un champ changé** : inchangé. Seuls les champs changés partent, avec les
+   personnes vues à bord, et l’étape s’ouvre sous le nombre de personnes à bord.
+7. **Sans JavaScript** : sans objet. « Modifier » n’apparaît que sur les voitures de
+   l’appareil, que le serveur ne connaît pas sans JavaScript.
+
+**Ce que voit la personne** : la feuille qui se ferme, et rien d’autre. Ni message, ni
+« Valider » inactif (décision v4.4.5-6).
+
+### Les mots de la v4.4.5
+
+Aucun mot nouveau, aucun mot changé. Ces écrans gardent leurs textes :
+
+| clé | fr | en |
+|---|---|---|
+| `Board.car.edit` | Modifier | Edit |
+| `RideForm.title.edit` | Modifier la voiture | Edit the car |
+| `RideForm.location.aller` / `.retour` | Lieu de départ / Lieu de dépose | Departure place / Drop-off place |
+| `RideForm.time` | Heure de départ | Departure time |
+| `RideForm.seats` | Places, sans compter qui conduit | Seats, driver not included |
+| `RideForm.note` | Note (facultatif) | Note (optional) |
+| `Actions.submit` | Valider | Confirm |
+| `Actions.close` | Fermer | Close |
+| `DevicePersons.leaveCar` | Sortir de la voiture | Leave the car |
+| `Seat.placed` | {firstName} est dans la voiture de {driver} | {firstName} is in {driver}’s car |
+| `Sheet.placed` | {names} sont dans la voiture de {driver} | {names} are in {driver}’s car |
+
+Pas de « Rien n’a changé » dans « Modifier la voiture » (v4.4-3), et rien à la place d’une
+réussite abandonnée.
+
+### Les états de la v4.4.5
+
+| état | la barre, le focus | critère |
+|---|---|---|
+| placement retenu, puis « Sortir de la voiture » réussi pour la même personne et le même leg | aucune ligne ; focus sur la cellule, « Sans voiture » | S1.1 |
+| la même chose après la feuille de places, deux personnes, une seule sortie | aucune ligne ; Léa reste dans la voiture de Sophie | S1.2 |
+| placement retenu, puis « Qui sort de la voiture ? » qui la fait sortir | aucune ligne ; focus sur « Modifier » | S1.3 |
+| placement retenu, puis « Sortir de la voiture » en échec hors ligne | la réussite et son « Annuler », à la fermeture | S1.4 |
+| placement retenu, puis une action réussie sur une autre personne ou sur l’autre leg | la réussite et son « Annuler », à la fermeture (inchangé) | S1.5 |
+| « Modifier la voiture », rien changé, « Valider » ou Entrée | la feuille se ferme, rien n’est envoyé, focus sur « Modifier » | W1.1, W1.2 |
+| changé puis remis ; places baissées, retour de l’étape, places remises | idem | W1.3, W1.4 |
+| rien changé, hors ligne | idem ; rien n’est dit | W1.5 |
+| rien changé, la barre porte déjà l’échec d’un « Modifier » de cette voiture | la barre ne change pas | W1.6 |
+| un champ changé | inchangé : il part seul | W1.7 (tests existants) |
+
+### Critères de la v4.4.5
+
+Prouvés par Playwright. `messages(page)`, « les boutons de la barre » et l’observation des
+régions sont ceux de la v4.4.4 (B1). Une réponse est retenue par `page.route`.
+
+**H5. Ne lire que ce qui est vrai.** En tant que parent qui place quelqu’un puis le fait
+sortir avant d’avoir lu la réussite, je ne lis jamais qu’il est encore dans la voiture.
+
+Scène : sur l’appareil, Marc, Tom et Léa. À l’aller, Tom et Léa sont « Sans voiture », et
+Marc « Ne fait pas l’aller ». Au retour, Tom et Léa sont « Sans voiture », et Marc « Ne fait
+pas le retour ». Une voiture de Sophie, d’un autre appareil, a 3 places libres à l’aller.
+
+**Ordre.** #359 se construit **après #356** (#171), qui ajoute « Qui monte avec vous ? » et la
+réussite retenue de `offerRide`. Sur `main` aujourd’hui, `offerRide` dit `succeed(null)` et ne
+retient rien : S1.1 ne s’y écrit pas. S1.2 à S1.5 passent par `takeSeats`, qui retient déjà sa
+réussite sur `main`, et s’écrivent dès maintenant.
+
+| critère | sur `main` aujourd’hui | après #356, avant #359 | après #359 |
+|---|---|---|---|
+| S1.1 | ne s’écrit pas (pas de « Qui monte avec vous ? ») | échoue : la barre dit « Tom est dans la voiture de Marc » | passe |
+| S1.2, S1.3 | échouent : la barre dit la réussite | échouent | passent |
+| S1.4, S1.5 | passent (gardes de la règle étroite) | passent | passent |
+
+- **S1.1** « Proposer une voiture » à l’aller, Marc qui conduit, 3 places, Tom coché dans
+  « Qui monte avec vous ? », « Valider » avec la réponse retenue ; Échap ferme le formulaire.
+  On ouvre la cellule Tom · Aller, puis on relâche la réponse. Quand la cellule propose
+  « Sortir de la voiture », on le touche. Après la fermeture de la cellule :
+  - la liste de la barre a 0 ligne, et la barre n’a aucun bouton « Annuler » ;
+  - la cellule Tom · Aller a le focus et dit « Sans voiture » ;
+  - un `MutationObserver` posé sur la région `status` avant « Valider » n’a jamais vu « Tom
+    est dans la voiture de Marc », 1 s après la fermeture (`page.clock`) ;
+  - en base, la voiture de Marc existe à l’aller, et Tom y est sans voiture.
+
+  Demande #356. Sur la branche de #356, et sur `main` une fois #356 fusionnée, la barre dit
+  « Tom est dans la voiture de Marc » : le test échoue jusqu’à #359.
+- **S1.2** La variante `takeSeats`, sur `main`. Un tap sur une place libre de la voiture de
+  Sophie ouvre la feuille, Tom et Léa cochés ; « Placer
+  2 personnes », réponse retenue ; Échap. On ouvre Tom · Aller, on relâche, puis « Sortir de
+  la voiture ». Après la fermeture :
+  - la liste de la barre a 0 ligne, et aucun « Annuler » ;
+  - la région `status` n’a jamais reçu « Tom et Léa sont dans la voiture de Sophie » ;
+  - en base, Tom est sans voiture à l’aller, et Léa est dans la voiture de Sophie ;
+  - la cellule Léa · Aller dit « Avec Sophie ».
+
+  Sur `main`, la barre dit « Tom et Léa sont dans la voiture de Sophie » : le test échoue.
+- **S1.3** Par « Modifier » la voiture, sur `main`. La scène change : Marc conduit à l’aller
+  (2 places), avec Nina, d’un autre appareil. Un tap sur la place libre de la voiture de
+  Marc ouvre la feuille ; Léa décochée, « Placer
+  1 personne », réponse retenue ; Échap. « Modifier » sur la voiture de Marc, puis on relâche
+  la réponse. « Places, sans compter qui conduit » = 1, « Valider » ; quand « Qui sort de la
+  voiture ? » liste Nina et Tom, on coche Tom, puis « Valider ». Après la fermeture :
+  - la liste de la barre a 0 ligne ;
+  - « Modifier » de la voiture de Marc a le focus ;
+  - en base, Tom est sans voiture à l’aller, Nina est dans la voiture, qui a 1 place.
+
+  Sur `main`, la barre dit « Tom est dans la voiture de Marc » : le test échoue.
+- **S1.4** Sur `main`. Un tap sur une place libre de la voiture de Sophie ouvre la feuille ;
+  Léa décochée, « Placer 1 personne », réponse retenue ; Échap. On ouvre Tom · Aller, on
+  relâche, et quand la cellule propose « Sortir de la voiture », `setOffline(true)` puis
+  « Sortir de la voiture » : la cellule dit son échec. Échap :
+  - `messages(page)` = [« Tom est dans la voiture de Sophie »], et les boutons de la barre
+    sont [« Annuler », « Fermer »] ;
+  - en base, Tom est dans la voiture de Sophie.
+- **S1.5** Sur `main`. Le placement de S1.4, mais on ouvre une autre cellule. Deux variantes,
+  Léa · Aller puis « Ne fait pas l’aller », et Tom · Retour puis « Ne fait pas le retour » :
+  - après la fermeture, `messages(page)` = [« Tom est dans la voiture de Sophie »], et les
+    boutons de la barre sont [« Annuler », « Fermer »].
+
+  S1.4 et S1.5 passent déjà sur `main` : ce sont les gardes de la règle étroite, qui doivent
+  rester vertes après #359.
+
+**Non prouvable par un test** : que personne ne croie Tom encore dans la voiture. Ce que
+S1.1 prouve, c’est que la barre ne le dit pas.
+
+**H6. Fermer sa voiture sans rien changer.** En tant que conducteur qui ouvre « Modifier »
+pour relire l’heure, je touche « Valider » sans rien changer, et rien ne se passe d’autre que
+la fermeture : aucun message ne me dit que quelque chose a échoué.
+
+Scène : celle de `ride-edit.spec.ts` (la voiture de Claire à l’aller, « Mairie de Cesson »,
+07:00, 3 places, Nina et Paul). « Aucune requête » se prouve comme en V1 : on enregistre les
+requêtes `next-action` dont le corps contient l’identifiant de la voiture, **à partir du clic
+sur « Modifier » qui ouvre le formulaire du critère** : un envoi fait avant, comme celui qui
+prépare W1.6, n’est pas compté. Après le « Valider » sans changement, on rouvre « Modifier la
+voiture », on remplit « Note (facultatif) » avec `Gilets jaunes`, puis « Valider ». Une fois
+la feuille fermée, la liste a **exactement une** requête, qui porte `Gilets jaunes`.
+
+- **W1.1** « Modifier », puis « Valider » sans toucher aux champs :
+  - `getByRole("dialog")` a 0 élément ;
+  - « Modifier » de la carte de Claire a le focus ;
+  - aucune requête n’a été envoyée (preuve ci-dessus) ;
+  - en base, la voiture est inchangée (`rowsOf`).
+- **W1.2** La même chose avec Entrée dans « Lieu de départ ».
+- **W1.3** « Lieu de départ » rempli avec `Gare de Cesson`, puis de nouveau avec `Mairie de
+  Cesson` ; « Heure de départ » = 07:15, puis 07:00 ; puis « Valider » : mêmes assertions
+  qu’en W1.1.
+- **W1.4** « Places, sans compter qui conduit » = 1, « Valider » : l’étape s’ouvre. Son
+  « Annuler », puis les places remises à 3, puis « Valider » : mêmes assertions qu’en W1.1, et
+  l’étape ne s’est pas rouverte.
+- **W1.5** `context.setOffline(true)`, puis « Valider » sans changement :
+  - la feuille se ferme, et « Modifier » a le focus ;
+  - `getByRole("alert").filter({ hasText: /\S/ })` a 0 élément ;
+  - la liste de la barre a 0 ligne ;
+  - le texte « Action impossible, vérifiez la connexion » n’apparaît nulle part ;
+  - puis `context.setOffline(false)`, avant la requête qui suit (la note `Gilets jaunes`) :
+    la liste a exactement une requête.
+- **W1.6** La barre porte déjà « Les changements de la voiture de Claire pour l’aller n’ont
+  pas été enregistrés. Une erreur est survenue : réessayez dans un instant. » (un changement
+  de lieu, réponse retenue, Échap, `failHeld`, comme le test existant ; cette requête-là est
+  faite avant que le compte commence). Puis « Modifier », et « Valider » sans changement :
+  - `messages(page)` a le même texte, seul ;
+  - aucune requête comptée avant celle de la note ;
+  - un `MutationObserver` posé sur les deux régions avant le clic n’a vu aucune écriture.
+- **W1.7** Inchangés, et toujours verts : C8.2 à C8.5 et « a change made since the form showed
+  stays: only what the form changed is sent ».
+
+**Non prouvable par un test** : qu’une personne comprenne qu’il n’y avait rien à enregistrer.
+La feuille qui se ferme le dit, comme « Fermer » (v4.4-3).
+
+### Pour le développement de la v4.4.5
+
+- S1 : dans `participant-board.tsx`, `takeSeats` et `offerRide` écrivent leur réussite par
+  `sheet.whenClosed`. Avant d’écrire, elles regardent si une action envoyée après elles
+  (`seq` plus grand) a réussi en changeant l’état d’une de leurs personnes sur leur leg. La
+  paire (personne, leg) est la clé ; les sujets de `useSends` (`seats:…`, `cell:…`) ne se
+  recoupent pas. Le mécanisme ressemble à celui des échecs dans `hidden-page.ts` (`made`),
+  limité aux envois réussis. Un Vitest couvre la règle : action plus récente réussie ou en
+  échec, même personne ou non, même leg ou non.
+- W1 : dans `ride-form.tsx`, en mode `edit`, avec aucun champ de `RIDE_FIELDS` différent de
+  `shown`, `submit` appelle `onDone()` avant `validateRide` et avant l’étape, sans
+  `updateRide`. Rien ne change côté serveur : `updateRide` sans champ reste accepté.
+- Deux tâches. #313 (W1) part de `main` ; W1.1 échoue sur `main`. #359 (S1) part de `main`
+  **une fois #356 fusionnée** : sinon S1.1 ne peut pas s’écrire. S1.2 et S1.3 échouent sur
+  `main` dès aujourd’hui ; S1.1 échoue après #356 ; S1.4 et S1.5 sont des gardes, vertes
+  avant comme après.
+
+## Ce qui change en v4.4.4 : « Annuler » et l’information (#341)
+
+Ces cas viennent des relectures de #340 (« Annuler », #170) et de #339 (« Trouver une place »,
+#172) : la v4.4.3 en laissait quatre ouverts, et PR #351 en ajoute un pour #267. Ils ne
+touchent que la barre. Une seule clé est nouvelle, `Seat.alreadyOut`.
+
+### 1. Un « Annuler » renvoyé depuis une ligne d’échec
+
+**Le cas.** Tom et Léa sont placés dans la voiture de Sophie, puis leur « Annuler » échoue :
+la ligne d’échec porte son propre « Annuler » (règle 6). Hugo est ensuite placé dans la
+voiture de Marc, et sa réussite, avec son « Annuler », remplace celle de Tom et Léa. On touche
+alors l’« Annuler » de la ligne d’échec. Sa réussite remplace celle d’Hugo, et l’« Annuler »
+d’Hugo part avec elle (règle 2). Si Tom et Léa ne sont déjà plus dans la voiture de Sophie
+(sortis depuis leur cellule ou depuis un autre appareil), le serveur ne rend personne, et
+aujourd’hui la barre se vide sans un mot. La ligne d’échec est partie à l’envoi, celle d’Hugo
+à la réponse. Rien ne dit ce qui s’est passé, et la ligne d’Hugo qui disparaît juste après
+un « Annuler » laisse croire qu’Hugo est sorti de la voiture.
+
+**Décision.** Le remplacement est confirmé : la barre ne garde qu’une réussite, la dernière
+(règle 1), et la dernière action est cet « Annuler ». Hugo reste dans la voiture de Marc, et
+il en sort au besoin par « Sortir de la voiture », dans sa cellule. Mais le remplacement n’est
+**jamais muet** : quand personne n’est rendu, la réussite de l’« Annuler » le dit. Cela vaut
+pour tout « Annuler », sur une réussite comme sur un échec : aujourd’hui, l’« Annuler » d’une
+réussite qui ne rend personne vide aussi la barre sans un mot.
+
+| personnes rendues | la barre dit |
+|---|---|
+| toutes | « Tom et Léa ne sont plus dans la voiture de Sophie » (`Seat.undone`, inchangé) |
+| une partie (Léa était déjà sortie) | « Tom n’est plus dans la voiture de Sophie » (`Seat.undone`, inchangé) |
+| aucune | « Tom et Léa n’étaient déjà plus dans la voiture de Sophie » (`Seat.alreadyOut`, nouveau) |
+
+Dans les trois cas, c’est la réussite de l’« Annuler » : icône `CircleCheck`, sans
+« Annuler », annoncée par la région `status`, avec pour repère le titre de la carte de cette
+voiture. Elle remplace la réussite affichée, quelle qu’elle soit. Elle ne retire aucun
+échec, ni une information écrite après le départ de l’« Annuler » (règles 2 et 4).
+
+### 2. « Annuler » quand il n’y a plus de retour
+
+**Le cas.** Un « Annuler » sur un placement du retour, après la suppression du retour : le
+serveur répond `noRetour`. Aujourd’hui (#340, puis #330), la barre ajoute « Tom n’a pas pu
+sortir de la voiture de Sophie. Il n’y a plus de retour pour cet événement. », avec un
+« Annuler » qui échouera toujours.
+
+**Décision.** Le bouton ne reste pas, et il n’y a pas d’échec du tout. organizer-view v3.3.6
+l’a déjà décidé (décision 44, M7.10), et #267 le construit. La réponse apporte l’état sans
+retour, qui retire de la barre toutes les lignes sur le retour, réussites, échecs et leurs
+« Annuler ». La barre dit alors l’information « Il n’y a plus de retour pour cet événement :
+la voiture de Sophie n’est plus proposée. » (`Actions.info.noRetour`), et le focus va sur le
+titre de l’événement. Il en va de même quand l’« Annuler » était sur la réussite (M7.10) et
+quand il était sur une ligne d’échec (B1.4). La v4.4.4 l’inscrit dans les règles 5 et 6,
+sans mot nouveau. Rien n’est corrigé sur `main` avant #267, qui remplace ce chemin.
+
+### 3. Une information sur un retour déjà supprimé, au moment de l’écrire
+
+Décision du coordinateur sur #339, inscrite ici. On touche « Trouver une place » depuis une
+cellule du retour. Si le dernier état reçu par la page n’a plus de retour au moment où
+l’information « Aucune place libre au retour pour l’instant. » serait écrite (la feuille
+fermée), elle n’est pas écrite : la barre ne change pas, et le focus va sur le titre de
+l’événement, puisque la page n’a plus d’onglets. Il en va de même avec une place libre au
+retour. — Raison : à côté de « Il n’y a plus de retour… », elle parlerait d’un leg qui
+n’existe plus. Déjà construit par #339.
+
+### 4. Une information sur le retour, écrite avant que la page apprenne sa suppression
+
+**Le cas** (relecture de #339) :
+
+1. Tom est placé d’un tap à l’aller, et la réponse tarde ;
+2. l’organisateur supprime le retour ;
+3. « Trouver une place » pour Léa écrit « Aucune place libre au retour pour l’instant. » : la
+   page ne sait pas encore que le retour n’existe plus ;
+4. la réponse pour Tom apporte l’état sans retour.
+
+Selon la v4.4.2-1, l’information reste, puisque l’action de Tom a commencé avant elle. Elle
+parle pourtant d’un leg qui n’existe plus.
+
+**Décision.** L’information part avec la transition. L’état sans retour retire tous les
+messages sur le retour (organizer-view, décision 44), et « Aucune place libre au retour pour
+l’instant. » en est un, puisque son leg est le retour. Elle part quel que soit le moment où a
+commencé l’action qui apporte cet état. La règle 4 protège l’information de la réussite ou de
+l’échec d’une action commencée avant elle, pas de l’état que cette action apporte. Une
+information sur l’aller reste.
+
+**La région `status`.** Quelle que soit la réponse qui apporte l’état sans retour (réussite,
+échec, refus ou lecture), si la région `status` annonce encore cette information, par son texte
+ou par une écriture en attente, la transition la vide et annule l’écriture en attente
+(« Lecteurs d’écran », points 2 et 4). Puis la réponse écrit son propre message. Une réussite
+s’écrit dans la région `status`. Un échec s’écrit dans la région `alert` seulement, et la
+région `status` reste vide. — Raison : c’est le cas 3 vu dans l’autre ordre. Sans cette
+règle, un même état donnerait deux barres différentes selon l’ordre des réponses. Le focus
+reste sûr (règle 8). #267 le construit, avec l’étiquette `leg` des messages. Aucun mot.
+
+### 5. Pour #267 : renvoyer pour l’aller seul retire l’échec `noRetourAgain`
+
+**Le cas** (PR #351). « Proposer une voiture » depuis l’onglet Aller, avec « Je ramène
+aussi », et la feuille fermée avant la réponse, est refusé par `noRetour`. La barre dit « Les
+voitures de Claire pour l’aller et le retour n’ont pas été proposées. Il n’y a plus de retour
+pour cet événement : proposez de nouveau la voiture, pour l’aller seulement. » Le sujet de cet
+échec est `offer:aller:…` et `offer:retour:…`. Une nouvelle offre pour l’aller seul ne couvre
+que `offer:aller:…` : elle ne retire donc pas la ligne, alors que la personne a fait ce que
+la ligne lui demandait.
+
+**Décision.** Un échec `noRetourAgain` a pour sujet sa seule partie aller
+(`offer:aller:{personId}`, ou `offer:aller:new:{prénom}`). Le renvoi pour l’aller seul le
+retire dès l’envoi, comme tout envoi sur le même sujet (règle 5). Les mots ne changent pas. —
+Raison : la partie retour ne pourra plus jamais être renvoyée, donc un sujet qui la garde ne
+serait jamais couvert. La ligne dit quoi faire, et le faire doit la retirer. « Ajouter une
+personne » n’est pas touché : son sujet (`person:new:{prénom}`) n’a pas de leg, et le renvoi
+retire déjà son `noRetourAgain`. Les autres échecs sur les deux legs (hors ligne ou erreur,
+avec un retour qui existe toujours) gardent leurs deux sujets : Marc à l’aller seul ne retire
+pas l’échec de Marc sur les deux legs (inchangé).
+
+### Les mots de la v4.4.4
+
+| clé | fr | en |
+|---|---|---|
+| `Seat.alreadyOut` (nouvelle) | {names} {count, plural, one {n’était déjà plus} other {n’étaient déjà plus}} dans la voiture de {driver} | {names} {count, plural, one {was} other {were}} already out of {driver}’s car |
+
+- Le texte est épicène (C11.9), puisque « n’était déjà plus » est invariable. `{names}` suit
+  « Plusieurs prénoms », et `count` compte toutes les personnes de l’« Annuler ». Il n’y a
+  pas de point final, comme pour `Seat.undone`.
+- Ces mots ne changent pas, mais la v4.4.4 dit quand ils s’affichent : `Seat.undone`,
+  `Actions.info.noRetour` (organizer-view), `DevicePersons.noFreeSeat.retour` (« Aucune
+  place libre au retour pour l’instant. ») et `Actions.why.noRetourAgain` (organizer-view).
+
+### Les états de la v4.4.4
+
+| état | la barre | critère |
+|---|---|---|
+| « Annuler » d’une ligne d’échec, toutes les personnes rendues, après une réussite plus récente | « Tom et Léa ne sont plus dans la voiture de Sophie », sans « Annuler » ; la réussite d’Hugo et son « Annuler » sont partis | B1.1 |
+| la même chose, personne n’est rendu | « Tom et Léa n’étaient déjà plus dans la voiture de Sophie », sans « Annuler » | B1.2 |
+| « Annuler » d’une réussite, personne n’est rendu | « Tom n’était déjà plus dans la voiture de Sophie » | B1.3 |
+| « Annuler » d’une ligne d’échec, refusé par `noRetour` | l’information `Actions.info.noRetour` seule, sans « Annuler » ni échec | B1.4 |
+| « Trouver une place » au retour, déjà supprimé dans le dernier état reçu | inchangée ; focus sur le titre de l’événement | B1.5 |
+| l’information du retour, puis l’état sans retour apporté par une action plus ancienne, réussie ou en échec | l’information part, et la région `status` ne l’annonce plus ; une information de l’aller reste | B1.6 |
+| échec `noRetourAgain`, puis l’offre renvoyée pour l’aller seul | la ligne part dès l’envoi | B1.7 |
+
+### Critères de la v4.4.4
+
+Prouvés par Playwright. `messages(page)` donne les textes de la liste de la barre, dans
+l’ordre. « Les boutons de la barre » sont les noms de `[data-message-bar] button`. Les
+régions sont observées comme en C11.12 (`page.clock`, `MutationObserver`).
+
+**H4. Savoir ce qu’a fait « Annuler ».** En tant que parent qui touche « Annuler », je lis ce
+qui est arrivé à ceux que j’annulais, même s’ils étaient déjà sortis, et la barre ne m’offre
+jamais un bouton qui ne peut qu’échouer.
+
+- **B1.1** Tom et Léa sont placés par la feuille dans la voiture de Sophie, à l’aller.
+  `setOffline(true)`, puis « Annuler » : la barre porte « Tom et Léa n’ont pas pu sortir de
+  la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ». », avec
+  son « Annuler ». `setOffline(false)`, puis Hugo est placé d’un tap dans la voiture de Marc.
+  Enfin, l’« Annuler » de la ligne d’échec, activé au clavier :
+  - `messages(page)` = [« Tom et Léa ne sont plus dans la voiture de Sophie »] ;
+  - les boutons de la barre sont [« Fermer »] ;
+  - en base, Hugo est toujours passager de la voiture de Marc, et Tom et Léa sont sans
+    voiture à l’aller ;
+  - le titre de la carte de Sophie a le focus ;
+  - 100 ms après la réponse, la région `status` contient « Tom et Léa ne sont plus dans la
+    voiture de Sophie ».
+
+  C’est le comportement de `main` : le critère le garde.
+- **B1.2** La scène de B1.1. Avant l’« Annuler » de la ligne d’échec, Tom et Léa sortent de
+  la voiture de Sophie par un autre appareil : en base, ils sont sans voiture à l’aller, et
+  la page ne relit rien. Puis l’« Annuler » de la ligne d’échec :
+  - `messages(page)` = [« Tom et Léa n’étaient déjà plus dans la voiture de Sophie »] ;
+  - les boutons de la barre sont [« Fermer »] ;
+  - en base, Hugo est toujours passager de la voiture de Marc ;
+  - le titre de la carte de Sophie a le focus ;
+  - 100 ms après la réponse, la région `status` contient ce texte, et la région `alert` n’a
+    reçu aucun texte depuis l’envoi ;
+  - en anglais, le texte est « Tom and Léa were already out of Sophie’s car ».
+
+  Sur `main`, la barre se vide : le test échoue.
+- **B1.3** Tom est placé d’un tap dans la voiture de Sophie, et la barre dit « Tom est dans la
+  voiture de Sophie », avec « Annuler ». En base, Tom sort de cette voiture par un autre
+  appareil. Puis « Annuler », activé au clavier :
+  - `messages(page)` = [« Tom n’était déjà plus dans la voiture de Sophie »] ;
+  - les boutons de la barre sont [« Fermer »] ;
+  - le titre de la carte de Sophie a le focus.
+- **B1.4** Ce critère complète M7.10 d’organizer-view, et #267 le construit. Tom est placé
+  d’un tap dans la voiture de Sophie, **au retour**. Hors ligne, son « Annuler » échoue, et
+  la ligne d’échec porte son « Annuler ». On repasse en ligne, et l’organisateur supprime le
+  retour, en base ; aucune action n’applique l’état sur cette page. Puis l’« Annuler » de la
+  ligne d’échec, activé au clavier :
+  - `messages(page)` = [« Il n’y a plus de retour pour cet événement : la voiture de Sophie
+    n’est plus proposée. »] ;
+  - aucun bouton « Annuler » dans la barre ;
+  - la région `alert` n’a reçu aucun texte depuis l’envoi ;
+  - la page n’a plus d’onglets, et le titre de l’événement a le focus.
+- **B1.5** #339 le construit. Son test (`e2e/find-seat.spec.ts`, « #330: « Trouver une
+  place » on the retour while it goes ») couvre tout ce qui suit, sauf la région `status`,
+  à y ajouter. Le retour a une voiture de Marc, à 17:00, complète (variante : une place
+  libre). Au retour, Tom « Ne fait pas le retour » (aucun Placement : `seedScene`, sans
+  `tomWithoutCar`), et Léa seule est « Sans voiture ».
+  1. Tom · Retour, « Je cherche une place », offert par la feuille d’une cellule « Ne fait
+     pas le retour », avec la réponse retenue ; Échap ferme la feuille de Tom.
+  2. On ouvre la cellule Léa · Retour.
+  3. Pendant qu’elle est ouverte, l’organisateur supprime le retour, en base, et la réponse
+     pour Tom est relâchée. Refusée par `noRetour`, elle apporte l’état sans retour, et son
+     échec attend la fermeture de la feuille. La page garde ses onglets sous la feuille, et
+     la barre n’a aucune ligne.
+  4. Puis « Trouver une place ». Ensuite :
+     - la feuille est fermée, la page n’a plus d’onglets, et le titre de l’événement a le
+       focus ;
+     - `messages(page)` = [« Tom · Retour : « Je cherche une place » n’a pas été enregistré.
+       Il n’y a plus de retour pour cet événement. »]. C’est l’échec de Tom, écrit à la
+       fermeture, et non « Aucune place libre au retour pour l’instant. » ;
+     - la région `status` n’a jamais reçu « Aucune place libre au retour pour l’instant. »
+       (à ajouter au test de #339) ;
+     - rien n’est écrit sous `aria-hidden` (`watchAlerts`).
+- **B1.6** #267 le construit. Une voiture de Marc à l’aller, avec une seule place libre ;
+  aucune place libre au retour. Tom et Léa sont « Sans voiture ». Tom est placé d’un tap
+  dans la voiture de Marc, avec la réponse retenue. L’organisateur supprime le retour, en
+  base. « Trouver une place » pour Léa · Retour écrit « Aucune place libre au retour pour
+  l’instant. ». La page a encore ses onglets. Deux variantes, avec `page.clock` :
+  - **réussie**, réponse relâchée 100 ms au moins après l’information, quand la région
+    `status` contient son texte :
+    - `messages(page)` = [« Tom est dans la voiture de Marc »], et les boutons de la barre
+      sont [« Annuler », « Fermer »] ;
+    - à la réponse, l’observateur voit la région `status` vidée. 100 ms après, elle contient
+      « Tom est dans la voiture de Marc », et elle n’a pas reçu de nouveau le texte de
+      l’information. Ces assertions sur la région passeraient aussi sans la règle, puisque la
+      réussite vide et écrit de toute façon la région `status` : dans cette variante, c’est
+      `messages(page)` qui attrape une règle absente (l’information resterait dans la
+      liste). La variante en échec est celle qui attrape l’oubli de la région `status` ;
+  - **en échec** : avant de relâcher, la dernière place de Marc est prise en base par une
+    autre personne. La réponse est relâchée moins de 100 ms après l’écriture de
+    l’information, dont l’écriture dans la région `status` est encore en attente. La
+    réponse est le refus `seatTaken`, avec l’état sans retour :
+    - `messages(page)` = [« Tom n’a pas pu monter dans la voiture de Marc. Cette place vient
+      d’être prise. »] ;
+    - l’observateur n’a jamais vu le texte de l’information dans la région `status` :
+      l’écriture en attente est annulée. La région `status` reste vide jusqu’à la fin du
+      test ;
+    - 100 ms après la réponse, la région `alert` contient l’échec de Tom.
+
+  Dans les deux variantes, la page n’a plus d’onglets, et le focus n’est jamais sur
+  `<body>`. Sans la règle, la variante en échec laisserait « Aucune place libre au retour
+  pour l’instant. » dans la région `status`.
+
+  Variante sur l’aller : aucune voiture n’a de place libre à l’aller, et Tom est « Sans
+  voiture » à l’aller. On ouvre la cellule Tom · Aller et on touche « Ne fait pas l’aller »,
+  avec la réponse retenue. Échap ferme la feuille de Tom avant qu’on ouvre la cellule Léa ·
+  Aller. Le retour est supprimé en base, et « Trouver une place » pour Léa · Aller écrit
+  « Aucune place libre à l’aller pour l’instant. ». Puis la réponse est relâchée :
+  `messages(page)` = [« Aucune place libre à l’aller pour l’instant. »]. L’information de
+  l’aller reste (v4.4.2-1).
+- **B1.7** #267 le construit. C’est la scène de M7.6 (organizer-view). Claire, depuis
+  l’onglet Aller, avec « Je ramène aussi » ; le retour est supprimé en base, et la feuille
+  est fermée avant la réponse. La barre dit « Les voitures de Claire pour l’aller et le retour
+  n’ont pas été proposées. Il n’y a plus de retour pour cet événement : proposez de nouveau
+  la voiture, pour l’aller seulement. ». La page n’a plus d’onglets. Puis « Proposer une
+  voiture », le bouton du seul leg qui reste, l’aller, avec Claire qui conduit, sans « Au
+  retour » ; « Valider » part, et la réponse est retenue (`page.route`) :
+  - la ligne a quitté la barre avant la réponse ;
+  - le test « ne retire pas » de la table des sujets reste vert : Marc échoue hors ligne sur
+    les deux legs, avec un retour qui existe ; Marc à l’aller seul laisse l’échec après sa
+    réponse.
+
+**Non prouvable par un test** : qu’une personne ne croie plus Hugo sorti. Le texte de B1.2
+le dit, sans plus.
+
+### Pour le développement de la v4.4.4
+
+- B1.2 et B1.3 : dans `participant-board.tsx` (`giveBack`), quand `undoneIds` est vide, la
+  réussite prend le texte de `Seat.alreadyOut`, avec tous les prénoms de l’« Annuler »,
+  au lieu de `messages.succeed(null)`. Une petite tâche à ouvrir : #341 la demande quand le
+  comportement change.
+- B1.4, B1.6 et B1.7 vont dans #267. B1.6 en échec demande que la transition vide la région
+  `status` si elle annonce encore l’information du retour, quelle que soit la réponse.
+- B1.5 est dans #339 ; il manque à son test l’observation de la région `status`.
+- C11.11 : le Vitest des prénoms couvre aussi `Seat.alreadyOut`.
 
 ## Ce qui change en v4.4 : « Valider » sans changement (#298)
 
@@ -157,6 +721,15 @@ aucune requête, aucun message dans la barre ». Il devrait dire aussi, comme V1
 où va le focus (le bouton « Modifier l’événement », qui a ouvert la feuille), et que les
 lignes déjà dans la barre restent, mêmes textes, même ordre, sans écriture dans les régions.
 Relevé à la revue de la v4.4 ; la maquette organizer-view n’est pas changée ici.
+
+Décision v4.4.4-5 (#341, pour #267). M7.6, et la ligne « Proposer une voiture » depuis
+l’Aller avec « Je ramène aussi », feuille fermée, de sa table « mot pour mot », devraient
+dire que cet échec `noRetourAgain` a pour sujet sa seule partie aller
+(`offer:aller:{personId}` ou `offer:aller:new:{prénom}`). La voiture proposée de nouveau
+pour l’aller seul le retire donc dès l’envoi (B1.7 ici). Les mots ne changent pas. La
+décision 44 d’organizer-view pourrait aussi dire que la transition retire l’information
+« Aucune place libre au retour pour l’instant. » et vide la région `status` qui l’annonce
+encore (v4.4.4-4). La maquette organizer-view n’est pas changée ici.
 
 ## Ce qui change en v4.3 : « Début » et « Fin »
 
@@ -607,11 +1180,14 @@ indisponible garde son avertissement en tête (C1.14, D5).
   échec qui arrive entre-temps s’y ajoute sans l’effacer.
 - Après **tout placement réussi** (un tap, la feuille, « Qui monte avec vous ? »), la barre
   porte un bouton « Annuler » (`Seat.undo`, 44 px, contour clair sur le fond sombre), entre
-  le message et la croix, **hors** de la région `status`.
+  le message et la croix, **hors** de la région `status`. Sauf si sa réussite est abandonnée
+  avant d’être écrite (règle 2, v4.4.5) : ni la réussite ni « Annuler » ne s’affichent.
 - « Annuler » rend à chaque personne placée son état d’avant sur ce leg (sans voiture, ou ne
   fait pas ce leg si elle avait été cochée dans la feuille). Une personne qui n’est plus dans
   cette voiture n’est pas touchée (comme C7.4). Ensuite la barre dit `Seat.undone`, sans
-  « Annuler ». « Annuler » ne défait pas la voiture proposée elle-même.
+  « Annuler ». Si personne n’est rendu, elle dit `Seat.alreadyOut` (« Tom n’était déjà plus
+  dans la voiture de Sophie »), jamais rien (v4.4.4). « Annuler » ne défait pas la voiture
+  proposée elle-même.
 - « Annuler » disparaît à l’action suivante qui réussit, avec le message qu’il accompagne ;
   un échec ne l’emporte pas (v4.2).
 
@@ -643,7 +1219,8 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
 - l’**information**, qui ne vient d’aucun envoi. Aujourd’hui, il n’y en a qu’une : « Aucune
   place libre à l’aller / au retour pour l’instant. », écrite par « Trouver une place ».
 
-1. **Ce que la barre contient** : **au plus une réussite** (la dernière), **au plus une
+1. **Ce que la barre contient** : **au plus une réussite** (la dernière écrite ; une réussite
+   abandonnée selon la règle 2 n’est jamais écrite, v4.4.5), **au plus une
    information** (la dernière) et **tous les échecs en attente**. De haut en bas : les
    échecs, du plus récent au plus ancien, puis l’information, puis la réussite. « Récent »
    se mesure au moment où le message est **écrit dans la barre**, ni à l’envoi ni à la
@@ -652,17 +1229,47 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
 2. **Une action qui réussit** remplace la réussite affichée par la sienne (« Hugo est dans la
    voiture de Marc »). Si elle n’a pas de message, elle la retire : c’est le cas d’une action
    de cellule, d’« Ajouter une personne », de « Modifier », de « Proposer une voiture » sans
-   passager et de « Retirer la voiture ». Elle retire aussi l’information, qui ne décrit plus
-   l’état de la page. Elle ne retire **aucun échec**.
-3. **Une action qui échoue** ajoute son échec et retire l’information. Elle ne retire **ni la
-   réussite, ni les autres échecs**.
+   passager et de « Retirer la voiture ». Elle ne retire **aucun échec**. Elle retire
+   l’information seulement si elle a commencé **après** elle (règle 4) : la réussite d’une
+   action commencée avant l’information la laisse en place (v4.4.2).
+
+   **Une réussite de placement qui attend** la fermeture d’une feuille (règle 9) n’est jamais
+   écrite si, avant qu’elle le soit, une action envoyée après elle (`seq`) a réussi en changeant
+   l’état d’au moins une de ses personnes sur son leg (v4.4.5, #359). Toute la réussite part,
+   avec son « Annuler », et rien ne la remplace. Une action envoyée après qui échoue ou est
+   refusée, ou qui porte sur d’autres personnes ou sur l’autre leg, la laisse s’écrire.
+3. **Une action qui échoue** ajoute son échec. Elle ne retire **ni la réussite, ni les autres
+   échecs**. Elle retire l’information seulement si elle a commencé **après** elle (règle 4) :
+   l’échec d’une action commencée avant l’information la laisse en place (v4.4.2).
 4. **Une information** (v4.2.2) remplace l’information d’avant. Elle ne retire **rien
    d’autre** : ni la réussite, ni son « Annuler », ni aucun échec. Elle part à la fin de
-   l’action suivante, réussie ou non, ou par « Fermer » / Échap. « Trouver une place » qui
-   trouve une place libre n’écrit rien dans la barre et n’y touche pas.
+   l’action suivante **commencée après elle**, réussie ou non, ou par « Fermer » / Échap.
+   Une action commence quand elle part au serveur ; l’information compte du moment où elle
+   est écrite dans la barre (règle 1). Une action commencée avant l’information, et finie
+   après, la laisse en place, qu’elle réussisse ou qu’elle échoue (v4.4.2). « Trouver une
+   place » qui trouve une place libre n’écrit rien dans la barre et n’y touche pas.
+
+   Cas accepté (v4.4.2) : une action lente, commencée avant l’information, libère une place ;
+   l’information reste, alors qu’elle est devenue fausse. « pour l’instant » l’atténue, et
+   la prochaine action commencée après elle la retire.
 
    Exemple : Tom est placé, avec son « Annuler » ; « Trouver une place » pour Léa ne retire
    ni l’un ni l’autre, qu’il y ait une place libre ou non.
+
+   **Le leg d’une information** (v4.4.4). Ce qui suit vaut pour l’information de « Trouver
+   une place », `DevicePersons.noFreeSeat.*` (« Aucune place libre à l’aller / au retour pour
+   l’instant. »), qui parle d’un leg :
+   - si, au moment de l’écrire, le dernier état reçu n’a plus ce leg, elle n’est pas écrite
+     (décision du coordinateur sur #339) ;
+   - écrite, elle part quand la page applique un état qui n’a plus ce leg. C’est la
+     transition d’organizer-view (décision 44, règle 5), qui retire tout message sur le
+     retour. Peu importent le moment où l’action qui apporte cet état a commencé et sa
+     réponse : réussite, échec, refus ou lecture. Si la région `status` l’annonce encore,
+     elle est vidée (« Lecteurs d’écran », point 4).
+
+   Les informations `Actions.info.noRetour` et `Actions.info.noRetourLeg` (organizer-view)
+   ne sont pas concernées. Elles disent que le retour n’existe plus, et la réponse qui
+   apporte la transition les écrit après elle (B1.4, M7.10).
 5. **Ce qui retire un échec** :
    - l’envoi d’une action sur **le même sujet** (table « Le sujet d’un échec »), **dès
      l’envoi**. Ce que devient ce nouvel envoi est dit par son propre message, dans sa
@@ -675,6 +1282,13 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
      réponse du retrait ; un tel message ne s’affiche jamais. Un envoi parti après cette
      réponse dit son propre échec (`rideGone`). La voiture n’existe plus : ces messages ne
      décrivent plus rien ;
+   - **la transition vers un état sans retour** (organizer-view, décision 44 ; v4.4.4). La
+     page applique un état qui n’a plus le retour que l’état précédent avait : réponse d’une
+     action, lecture, ou enregistrement de l’organisateur sur `/admin`. Elle retire alors de
+     la barre tout message sur le retour, avant d’écrire le message de cette réponse :
+     réussite, information et échecs, avec leurs « Annuler ». C’est une transition, une
+     seule fois : les échecs `noRetour` écrits par cette réponse ou par les suivantes
+     restent, jusqu’à un envoi sur leur sujet ou « Fermer » ;
    - « Fermer », ou Échap.
 
    Rien d’autre ne le retire : ni une réussite d’une autre action, ni une information, ni un
@@ -687,12 +1301,24 @@ Une **action** est un envoi au serveur. La barre porte trois sortes de messages 
      raison nomme le bouton (`Actions.why.retryUndo`) : « Tom et Léa n’ont pas pu sortir de
      la voiture de Sophie. Vérifiez la connexion, puis utilisez de nouveau « Annuler ». »
    - **Pendant l’envoi d’un « Annuler »**, aucun « Annuler » n’est affiché pour ce
-     placement : ni sur l’échec, parti à l’envoi, ni sur la réussite. À la réponse, la
-     réussite « … ne sont plus… » remplace celle du placement, ou un nouvel échec arrive avec
-     son « Annuler ».
+     placement : ni sur l’échec, parti à l’envoi, ni sur la réussite. À la réponse :
+     - réussie, la réussite « … ne sont plus… » (`Seat.undone`) remplace la réussite
+       affichée ; si personne n’est rendu, c’est « … n’étai(en)t déjà plus… »
+       (`Seat.alreadyOut`, v4.4.4) ;
+     - en échec (hors ligne, erreur), un nouvel échec arrive avec son « Annuler » ;
+     - refusée par `noRetour`, il n’y a aucun échec. La transition retire les lignes du
+       retour, et la barre dit l’information `Actions.info.noRetour` (v4.4.4).
    - Si une réussite ultérieure remplace celle du placement, l’échec et son « Annuler »
      restent : la raison désigne toujours un bouton présent dans la même ligne.
    - Le bouton a pour nom « Annuler » et `aria-describedby` vers le texte de sa ligne.
+   - Un « Annuler » renvoyé depuis une ligne d’échec réussit : sa réussite remplace la
+     réussite affichée, même celle d’un placement plus récent, et l’« Annuler » de celle-ci
+     part avec elle (règle 2). Comme celle de tout « Annuler », elle n’est jamais muette : si
+     personne n’est rendu, elle dit `Seat.alreadyOut` (v4.4.4).
+   - Un « Annuler » refusé par `noRetour` n’écrit aucun échec et ne laisse aucun
+     « Annuler ». L’état sans retour retire les lignes du retour, et la barre dit
+     l’information `Actions.info.noRetour` (organizer-view v3.3.6, décision 44 et M7.10 ;
+     v4.4.4).
 7. **« Fermer », ou Échap** avec le focus dans la barre, retire **tous** les messages,
    réussite, information et échecs. Rien n’est envoyé ni défait. Le focus suit la règle 8.
    Échap avec le focus ailleurs ferme la barre sans déplacer le focus.
@@ -770,8 +1396,8 @@ tests Playwright (C11.10) :
 | une action de cellule (« Ne fait pas l’aller / le retour », « Je cherche une place », « Sortir de la voiture ») | la cellule (`cell:{personId}:{leg}`) | après l’échec de « Ne fait pas l’aller » pour Tom · Aller, « Ne fait pas l’aller » depuis la même cellule, rouverte | une action depuis Tom · Retour ; une place prise pour Tom par un tap |
 | « Ajouter une personne » (depuis le tableau, une place ou la feuille) | le prénom envoyé, espaces de début et de fin retirés (`person:new:{prénom}`) | « Inès » échoue depuis le bouton de l’onglet Aller ; « Inès » (avec des espaces autour) est renvoyé depuis la feuille d’une place de l’onglet Retour | « Hugo » envoyé depuis le même bouton |
 | « Modifier » une personne | la personne et chaque champ envoyé (`person:{personId}` + champs) | après l’échec du prénom et du téléphone de Tom, un « Modifier » de Tom qui envoie les deux | un « Modifier » de Tom qui n’envoie que le téléphone ; un « Modifier » de Léa ; un « Valider » sans changement de Tom, qui n’envoie rien (v4.4, V1.5) |
-| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi » depuis l’onglet Aller, Marc avec « J’emmène aussi » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs |
-| « Modifier » la voiture (#93) | la modification de cette voiture (`ride:{rideId}:edit`, comme PR #218) | un nouveau « Modifier » de la même voiture | « Retirer la voiture » de cette voiture, **qui échoue** (`ride-remove.spec.ts:350`) ; « Modifier » d’une autre voiture. Un retrait **réussi** retire l’échec (règle 5, v4.4.1) |
+| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi » depuis l’onglet Aller, Marc avec « J’emmène aussi » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs (hors ligne ou erreur, avec un retour qui existe). Exception, un échec `noRetourAgain` : son sujet est la seule partie aller, et Claire à l’aller seul le retire (v4.4.4, B1.7) |
+| « Modifier » la voiture (#93) | la modification de cette voiture (`ride:{rideId}:edit`, comme PR #218) | un nouveau « Modifier » de la même voiture | « Retirer la voiture » de cette voiture, **qui échoue** (`ride-remove.spec.ts:350`) ; « Modifier » d’une autre voiture ; un « Valider » sans changement de cette voiture, qui n’envoie rien (v4.4.5, W1.6). Un retrait **réussi** retire l’échec (règle 5, v4.4.1) |
 | « Retirer la voiture » | le retrait de cette voiture (`ride:{rideId}`, comme PR #213) | un nouveau « Retirer la voiture » de la même voiture | « Modifier » de cette voiture |
 | « Réessayer » de « Vos inscriptions » | la lecture de « Vos inscriptions » (`device:read`) | le « Réessayer » suivant | le retour du réseau (`setOffline(false)`, évènement `online`) |
 
@@ -827,7 +1453,9 @@ mots »).
 ### Plusieurs prénoms
 
 Cette règle vaut pour `{names}`, dans `Actions.notDone.seats`, `Actions.notDone.leave`,
-`Actions.why.alreadyInCar`, `Actions.why.passengerInCar`, `Sheet.placed` et `Seat.undone`.
+`Actions.why.alreadyInCar`, `Actions.why.passengerInCar`, `Sheet.placed`, `Seat.undone` et
+`Seat.alreadyOut` (v4.4.4 : « Tom, Léa et 2 autres n’étaient déjà plus dans la voiture de
+Sophie », « Tom, Léa and 2 others were already out of Sophie’s car »).
 
 | personnes | fr | en | comment |
 |---|---|---|---|
@@ -855,7 +1483,10 @@ téléphone de 360 × 780 :
 
 - **Largeurs** : la barre fait 336 px. Le texte d’un échec dispose de 232 px, soit environ
   32 caractères par ligne. Celui d’une ligne qui porte « Annuler » dispose de 145 px (161 px
-  en anglais, avec « Undo »).
+  en anglais, avec « Undo »). Depuis language-switch v3.3.4 (#350), la rangée d’« Annuler »
+  prend 2 px de marge à droite pour son anneau de focus : 143 et 159 px. Mesuré en v4.4.4
+  (Chrome headless, même police) : les textes de cette section gardent leur nombre de lignes
+  à 143 et 159 px, donc les hauteurs ci-dessous ne changent pas.
 - **Une ligne de la barre par message**, séparée de la suivante par un filet de 1 px.
 - **Style** :
   - avec au moins un échec, toute la barre prend le style d’erreur de v2 (`bg-background`,
@@ -869,7 +1500,7 @@ téléphone de 360 × 780 :
   | un échec de 3 lignes (« Tom n’a pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez. ») | 90 px |
   | un échec de 4 lignes (une action de cellule, erreur serveur) | 110 px |
   | le cas de #216 : un échec de 4 lignes, et une réussite de 2 lignes avec « Annuler » | 171 px |
-  | « Annuler » qui échoue : l’échec de 6 lignes avec son « Annuler » (145 px de texte, la raison nomme le bouton), et la réussite sans « Annuler » | 211 px |
+  | « Annuler » qui échoue : l’échec de 6 lignes avec son « Annuler » (143 px de texte depuis language-switch v3.3.4, 145 px avant, 6 lignes dans les deux cas ; la raison nomme le bouton), et la réussite sans « Annuler » | 211 px |
   | quatre échecs (dont « Tom, Léa et 2 autres » et un prénom de 40 caractères sans espace, qui prend 2 lignes à lui seul) et une réussite : 424 px de contenu | 322 px, la liste plafonnée à 312 px |
 
 - **La liste des messages** est un `role="group"` nommé `Actions.messages` (« Messages »).
@@ -918,8 +1549,18 @@ message à annoncer**. La v4.2.2 en fixe le moment d’écriture.
    Deux échecs écrits dans le même passage : le second annule l’écriture du premier, et seul
    le second est annoncé. Le premier reste dans la liste visible.
 4. **Aucune écriture n’écrit de texte dans l’autre région.** Un échec n’écrit rien dans la
-   région `status` : il peut seulement la vider, quand il retire l’information qu’elle annonce
-   (règle 3). Une réussite ou une information n’écrit rien dans la région `alert`. Un deuxième échec
+   région `status`. Il la vide dans deux cas, et seulement si la région `status` annonce
+   encore l’information qu’il retire, par son texte ou par son écriture en attente :
+   - son action a commencé après l’information, et il la retire (règle 4) ;
+   - sa réponse apporte l’état sans retour, et l’information est celle du retour : la
+     transition la retire, quel que soit le moment où l’action a commencé (règles 4 et 5,
+     v4.4.4).
+
+   Plus généralement, la transition vide toute région qui annonce encore un message qu’elle
+   retire, quelle que soit la réponse qui l’apporte (point 2). Si la région annonce un autre
+   message, par exemple une réussite écrite après l’information (v4.4.2), l’échec n’y touche
+   pas, ni à son texte ni à son écriture en attente : ce message est encore dans la barre. Une réussite ou une information n’écrit rien
+   dans la région `alert`. Un deuxième échec
    remplace le texte du premier dans la région `alert` : seul le deuxième est lu, et le
    premier reste dans la liste visible, où on le relit.
 5. **Réussite, puis échec.** La réussite est polie, l’échec assertif, et il peut couper sa
@@ -975,7 +1616,7 @@ rendu focalisable par `tabIndex={-1}` ; feuille et confirmation passent par leur
 | un refus qui supprime la cible (place prise, voiture retirée) | le titre de la carte si elle existe encore, sinon le bandeau du leg |
 | croix « Fermer » de la barre, ou Échap avec le focus dans la barre (tous les messages partent) ; et tout élément de la barre qui a le focus et disparaît : « Annuler » d’un échec envoyé, réussite remplacée par une réponse tardive, barre vidée par une action sans message | la règle 8 de la barre : le premier repère affiché parmi celui du message de l’élément, puis ceux des autres messages, du plus récent au plus ancien ; sinon l’onglet actif ; sans onglets, le titre de l’événement. Jamais `<body>`, jamais de changement d’onglet (v4.2.2) |
 | Échap avec le focus ailleurs | ne bouge pas ; la barre se ferme |
-| feuille fermée sans effet ; ajouter, proposer, modifier validés sans passager | le bouton qui l’a ouverte (défaut de Radix) |
+| feuille fermée sans effet ; ajouter, proposer, modifier validés sans passager ; « Modifier la voiture » validé sans changement (v4.4.5) | le bouton qui l’a ouverte (défaut de Radix) |
 | « Valider » dans la feuille après « Ajouter une personne » | la case de la nouvelle personne, cochée |
 | refus dans une feuille | ne bouge pas ; un formulaire en erreur : premier champ en erreur |
 
@@ -1029,6 +1670,8 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | la barre : après « Fermer », repère sur l’autre onglet | La barre de messages | C11.10 |
 | la barre : « Réessayer » qui échoue | La barre de messages | C5.9, C11.11 |
 | aucune place libre : l’information au-dessus de la réussite de Tom et de son « Annuler » | Trouver une place | C3.8, C11.10 |
+| la barre : une action commencée avant l’information finit après, réussie ou non ; l’information reste (v4.4.2). Réussie : la barre est celle de la maquette « Aucune place libre sur ce leg », l’information au-dessus de la réussite de Tom. Échouée : sans maquette, la règle 4 le dit | Trouver une place ; La barre de messages | C11.10, C11.12 |
+| v4.4.4 : « Annuler » d’une ligne d’échec après une réussite plus récente, quelqu’un rendu ou personne ; « Annuler » d’une réussite qui ne rend personne ; « Annuler » refusé par `noRetour` ; l’information du retour retirée par la transition | « Annuler » et l’information (v4.4.4) | B1.1 à B1.4, B1.6 |
 | la barre avec une réussite seule (après le tap, après « Annuler », 15 voitures, en anglais) | Un tap et « Annuler », Erreurs et chargement, En anglais | C5.2, C5.10, C11.4, C11.1 |
 | la barre en anglais | La barre de messages | C11.1, C11.11 |
 | place prise, le message amendé | Un tap et « Annuler » | C5.7 |
@@ -1036,6 +1679,8 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | en-tête : même jour, deux jours, après minuit, sans retour, `/admin`, en anglais (v4.3) | Début et fin | D1.1 à D1.8 |
 | formulaire de création : champs de date, fin avant le début, en anglais (v4.3) | Début et fin | D2.1, D2.2 |
 | « Modifier » sans changement : avant « Valider », après (feuille fermée, focus sur le prénom, barre inchangée), hors ligne (v4.4) | « Valider » sans changement | V1.1 à V1.6, V1.8 |
+| v4.4.5 : une réussite retenue, puis « Sortir de la voiture » pour la même personne : la barre ne dit rien ; la même suite en échec : la réussite s’écrit | Réussite retenue, et « Modifier la voiture » sans changement (v4.4.5) | S1.1 à S1.5 |
+| v4.4.5 : « Modifier la voiture » sans changement : avant « Valider », après (feuille fermée, focus sur « Modifier », barre inchangée) | Réussite retenue, et « Modifier la voiture » sans changement (v4.4.5) | W1.1 à W1.6 |
 
 ## Les mots
 
@@ -1147,6 +1792,7 @@ ou changé dans cette version.
 | `Seat.placed` | {firstName} est dans la voiture de {driver} | {firstName} is in {driver}’s car | C5.2 | #92 |
 | `Seat.undo` | Annuler | Undo | revue (WCAG 2.2.1) — v4 | #92 |
 | `Seat.undone` | {names} {count, plural, one {n’est plus} other {ne sont plus}} dans la voiture de {driver} | {names} {count, plural, one {is} other {are}} no longer in {driver}’s car | nouveau — v4 ; {names} suit la règle des prénoms — v4.2 | #92, #216 |
+| `Seat.alreadyOut` | {names} {count, plural, one {n’était déjà plus} other {n’étaient déjà plus}} dans la voiture de {driver} | {names} {count, plural, one {was} other {were}} already out of {driver}’s car | « Annuler » qui ne rend personne (B1.2, B1.3) — v4.4.4 | #341 |
 | `RideChanges.leaving.title` | Qui sort de la voiture ? | Who leaves the car? | C8.4 | #93 |
 | `RideChanges.leaving.body` | {passengers, plural, one {# personne} other {# personnes}} pour {seats, plural, one {# place} other {# places}} : cochez {leaving, plural, one {la personne qui sort} other {les # personnes qui sortent}}. | {passengers, plural, one {# passenger} other {# passengers}} for {seats, plural, one {# seat} other {# seats}}: tick {leaving, plural, one {the person who leaves} other {the # people who leave}}. | C8.4, épicène (FR seulement) — v4 | #93 |
 | `RideChanges.leaving.rule` | Les personnes qui sortent redeviennent sans voiture. | Those who leave are without a car again. | C8.4 | #93 |
@@ -1486,7 +2132,37 @@ v4.4-3. Décision : rien n’est dit, ni « Rien n’a changé » ni autre chose
 
 v4.4-4. Décision : la règle 5 de la barre écrit ce que fait un retrait de voiture réussi : il retire tous les messages sur cette voiture, échecs compris. — Raison : c’est la décision du propriétaire sur #221, construite dans PR #255. Le README disait « Rien d’autre ne le retire », ce qui n’était plus vrai (noté sur #216).
 
+v4.4.2-1. Décision : l’information (« Aucune place libre… ») n’est retirée qu’à la fin d’une action commencée **après** elle (règle 4). La réussite ou l’échec d’une action commencée avant elle la laisse en place (règles 2 et 3). Cas accepté : une action lente, commencée avant, libère une place, et l’information reste alors qu’elle est devenue fausse. — Raison : décision du propriétaire sur PR #339 (« Trouver une place », #172). Sinon, l’information peut disparaître presque aussitôt, sans être annoncée. Les règles 2 et 3 contredisaient la règle 4 et C11.10. Précise la décision v4.2.2-5 (« part à la fin de l’action suivante »).
+
 v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.list` : « Tom, Léa, and Hugo » en anglais. `Actions.names.andOthers` garde « Tom, Léa and 2 others ». — Raison : #280 ; le README écrivait « Tom, Léa and Hugo », que `format.list` ne produit pas en `en`. La clé `andOthers` est un texte écrit, hors de cette correction : la changer serait un changement de mots, que rien n’a demandé.
+
+### Nouvelles en v4.4.4 (« Annuler » et l’information, #341)
+
+v4.4.4-1. Décision : la réussite d’un « Annuler » renvoyé depuis une ligne d’échec remplace la réussite affichée, même celle d’un placement plus récent, et son « Annuler » avec elle. — Raison : la barre garde une réussite, la dernière (règle 1). Garder deux « Annuler » demanderait deux réussites, contre la décision de #216. Le placement plus récent se défait toujours depuis sa cellule.
+
+v4.4.4-2. Décision : un « Annuler » qui ne rend personne le dit (`Seat.alreadyOut`), au lieu de vider la barre, qu’il vienne d’une réussite ou d’un échec. — Raison : sans un mot, la ligne remplacée semble défaite (« Hugo est sorti ? »), et la personne ne sait pas ce qu’est devenu son « Annuler ». Le texte parle de l’état d’avant l’envoi, et reste vrai.
+
+v4.4.4-3. Décision : un « Annuler » refusé par `noRetour` n’écrit pas d’échec et ne laisse pas d’« Annuler », qu’il ait été sur la réussite ou sur une ligne d’échec. — Raison : organizer-view v3.3.6, décision 44 et M7.10, déjà décidé. La v4.4.4 l’inscrit ici pour que les deux maquettes disent la même chose.
+
+v4.4.4-4. Décision : une information sur un leg qui n’existe plus dans le dernier état reçu n’est pas écrite. Écrite, elle part avec la transition vers un état sans ce leg, quel que soit le moment où l’action qui l’apporte a commencé. — Raison : décision du coordinateur sur #339 pour le premier cas. Le second est le même vu dans l’autre ordre, et la barre ne parle pas d’un leg qui n’existe plus (décision 44). La v4.4.2-1 vaut pour la réussite ou l’échec d’une action, pas pour l’état qu’elle apporte. La règle ne vise que `DevicePersons.noFreeSeat.*`. Quelle que soit la réponse qui apporte la transition, la région `status` est vidée si elle annonce encore cette information (revue de la v4.4.4).
+
+v4.4.4-5. Décision : un échec `noRetourAgain` a pour sujet sa seule partie aller. — Raison : ce que la ligne demande (renvoyer pour l’aller seul) doit la retirer, et la partie retour ne peut plus jamais être envoyée. Les mots ne changent pas.
+
+v4.4.4-6. Décision : la transition vers un état sans retour est la quatrième façon de retirer un échec (règle 5, C11.10). — Raison : la règle 6 et organizer-view (décision 44) le disaient déjà. La règle 5 disait « Rien d’autre ne le retire », et le README donnait deux réponses pour un même échec (revue de la v4.4.4).
+
+### Nouvelles en v4.4.5 (réussite retenue, #359 ; « Modifier la voiture » sans changement, #313)
+
+v4.4.5-1. Décision : une réussite de placement qui attend sous une feuille n’est jamais écrite si, avant qu’elle le soit, une action envoyée après elle (`seq`) a réussi en changeant l’état d’au moins une de ses personnes sur son leg. La barre ne dit rien à la place. — Raison : pour ces personnes sur ce leg, elle décrirait l’état d’avant cette action, et son « Annuler » viserait des personnes déjà sorties. Pour elles, la même suite sans feuille ouverte donne déjà une barre vide (règle 2). Avec d’autres personnes ou l’autre leg, la réussite reste vraie : c’est la v4.4.5-2. Les échecs suivent déjà cette règle (`whenClosed`, règle 5).
+
+v4.4.5-2. Décision : la règle ne vise que les mêmes personnes sur le même leg. Les réussites ne sont pas toutes ordonnées par numéro d’envoi. — Raison : avec d’autres personnes, la réussite reste vraie et son « Annuler » reste utile ; tout ordonner retirerait des réussites vraies et changerait la règle 1 pour tous les cas, ce que personne n’a demandé. Cas accepté : sans feuille, une action de cellule sur Léa retire la réussite de Tom (règle 2) ; avec une feuille ouverte, la réussite de Tom s’écrit après. Les deux barres disent vrai.
+
+v4.4.5-3. Décision : seule une action envoyée après **et réussie** abandonne la réussite. Un échec ou un refus la laisse s’écrire, avec son « Annuler ». — Raison : rien n’a changé en base, et le placement tient, comme quand un « Annuler » échoue (règle 6).
+
+v4.4.5-4. Décision : toute la réussite part, même si une seule de ses personnes est touchée ; elle n’est pas réécrite pour les autres. — Raison : un texte refait pour les seules personnes restantes serait un nouveau message, écrit sans nouvelle action. Les personnes restantes sortent par leur cellule, comme après la v4.4.4-1, qui fait déjà perdre un « Annuler ».
+
+v4.4.5-5. Décision : la réussite d’un « Annuler » (`Seat.undone`, `Seat.alreadyOut`) n’est pas visée. — Raison : elle dit où les personnes ne sont plus, et cela reste vrai après toute action sans message. La seule action qui la rendrait fausse les replace dans cette voiture, avec son propre message, et sa réponse arrive après, puisque les actions de la page partent une à une.
+
+v4.4.5-6. Décision : « Valider » sans aucun champ changé ferme « Modifier la voiture » et n’envoie rien. Rien n’est dit, l’étape « Qui sort de la voiture ? » ne s’ouvre pas, et le focus va sur « Modifier » de la carte. — Raison : la même règle que la v4.4 (« Modifier » une personne) et qu’organizer-view M2.5 (« Modifier l’événement ») : trois formulaires de modification, une seule règle. Un message ajouterait une ligne à la barre pour ne rien dire (v4.4-3). Un « Valider » inactif tant que rien ne change a été écarté : un bouton inactif ne dit pas pourquoi, Entrée n’y ferait rien, et les deux autres formulaires ne le font pas.
 
 ## Écarts par rapport à la revue
 
@@ -1611,10 +2287,10 @@ v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.lis
   - l’espace réservé en bas de la page vaut `1rem` + la hauteur de la barre + 12 px + `env(safe-area-inset-bottom)`, et « Nous contacter » défile entièrement au-dessus de la barre.
 - **États à concevoir, « hors ligne » et « erreur serveur »** : dans la barre, le message nomme ce qui n’a pas été fait, puis donne la raison, par exemple « Tom n’a pas pu monter dans la voiture de Sophie. Vérifiez la connexion, puis réessayez. » Dans une feuille ou un formulaire ouverts, rien ne change (« Action impossible, vérifiez la connexion »). La colonne « critère » de ces deux lignes renvoie à C11.10 et C11.11.
 - **Nouveau C11.10** (#216) La barre de messages montre ensemble au plus une réussite (la dernière), au plus une information (la dernière) et tous les échecs en attente. De haut en bas : les échecs, du plus récent au plus ancien, puis l’information, puis la réussite. « Récent » se mesure au moment où le message est écrit dans la barre. Une action est un envoi au serveur.
-  - Une action qui réussit remplace ou retire la réussite, retire l’information, et ne retire aucun échec.
-  - Une action qui échoue ajoute son échec, retire l’information, et rien d’autre.
+  - Une action qui réussit remplace ou retire la réussite, et ne retire aucun échec. Elle retire l’information seulement si elle a commencé après elle (v4.4.2).
+  - Une action qui échoue ajoute son échec. Elle ne retire rien d’autre que l’information, et celle-ci seulement si l’action a commencé après elle (v4.4.2).
   - Une information (« Aucune place libre… ») ne vient d’aucun envoi : elle remplace l’information d’avant et ne retire ni la réussite, ni son « Annuler », ni aucun échec. « Trouver une place » qui trouve une place ne touche pas à la barre.
-  - Un échec n’est retiré que de trois façons : dès l’envoi d’une action sur le même sujet qui couvre au moins ce qu’il portait (table « Le sujet d’un échec » du README) ; par un retrait réussi de sa voiture, qui retire tous les messages sur elle (v4.4) ; ou par « Fermer » / Échap, qui retirent tous les messages et n’envoient rien.
+  - Un échec n’est retiré que de quatre façons : dès l’envoi d’une action sur le même sujet qui couvre au moins ce qu’il portait (table « Le sujet d’un échec » du README) ; par un retrait réussi de sa voiture, qui retire tous les messages sur elle (v4.4) ; par la transition vers un état sans retour, qui retire une fois tout message sur le retour, les échecs `noRetour` écrits par cette réponse ou après restant (organizer-view, décision 44 ; v4.4.4) ; ou par « Fermer » / Échap, qui retirent tous les messages et n’envoient rien.
   - Quand l’élément de la barre qui a le focus disparaît, quelle qu’en soit la raison, le focus va au premier repère affiché (sur l’onglet actif ou hors des onglets, et pas dans une section repliée) dans cet ordre : celui du message de cet élément ; ceux des autres messages, encore là ou qui viennent de partir, du plus récent au plus ancien ; l’onglet actif ; sans onglets, le titre de l’événement. Jamais `<body>`, et jamais de changement d’onglet.
 
   Playwright :
@@ -1623,13 +2299,14 @@ v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.lis
   - trois échecs écrits dans l’ordre A, B, C s’affichent C, B, A ; un échec qui attendait la fermeture d’une feuille prend son rang à cette fermeture ;
   - un échec hors ligne reste après `context.setOffline(false)` et l’évènement `online` ;
   - Tom placé, puis « Trouver une place » pour Léa : avec une place libre, la barre ne change pas ; sans place libre, l’information s’ajoute, et la réussite de Tom et son « Annuler » restent ; l’action suivante retire l’information ;
+  - un tap pour Tom, réponse retenue, puis « Trouver une place » pour Léa sans place libre, puis la réponse pour Tom : la barre garde l’information et la réussite de Tom, et la région `status` contient la réussite de Tom (v4.4.2) ;
   - le focus ne tombe jamais sur `<body>`, et va au repère attendu, dans six cas : « Fermer » avec le repère le plus récent sur l’autre onglet ; « Fermer » sur un échec d’« Ajouter une personne », de « Proposer une voiture » et de « Réessayer » ; l’« Annuler » d’un échec, activé au clavier ; une réponse tardive qui remplace la réussite dont l’« Annuler » a le focus ; une action sans message qui vide la barre, le focus sur « Fermer » ; un « Annuler » réussi après un changement d’onglet.
 - **Nouveau C11.11** (#216) Un échec dit dans la barre ce qui n’a pas été fait, puis pourquoi et quoi faire, mot pour mot comme la table « Chaque échec, mot pour mot » du README. Aucun échec de la barre n’est générique, « Réessayer » compris.
   - `alreadyInCar` nomme les personnes : la personne d’un tap, et les personnes cochées de « Qui monte avec vous ? ».
   - « Modifier » une personne nomme les champs envoyés.
   - Un « Annuler » qui échoue nomme son bouton.
-  - Les prénoms : un seul ; deux (« Tom et Léa ») ; trois (« Tom, Léa et Hugo », « Tom, Léa, and Hugo » en anglais, le texte de `format.list`) ; au-delà, les deux premiers et « et N autres » ; toujours dans l’ordre de « Vos inscriptions ». La même règle vaut pour « {prénoms} sont dans la voiture de… » et « … ne sont plus… ».
-  - Vitest : la fonction qui compose le texte, sur chaque ligne de cette table, en français et en anglais, et pour 1 à 5 personnes.
+  - Les prénoms : un seul ; deux (« Tom et Léa ») ; trois (« Tom, Léa et Hugo », « Tom, Léa, and Hugo » en anglais, le texte de `format.list`) ; au-delà, les deux premiers et « et N autres » ; toujours dans l’ordre de « Vos inscriptions ». La même règle vaut pour « {prénoms} sont dans la voiture de… », « … ne sont plus… » et « … n’étai(en)t déjà plus… » (v4.4.4).
+  - Vitest : la fonction qui compose le texte, sur chaque ligne de cette table, en français et en anglais, et pour 1 à 5 personnes ; de même `Seat.undone` et `Seat.alreadyOut`, pour 1 à 5 personnes (« Tom, Léa et 2 autres n’étaient déjà plus dans la voiture de Sophie ») (v4.4.4).
   - Playwright : le texte exact hors ligne (`setOffline`), sur une erreur serveur (réponse 500 par `page.route`), sur `alreadyInCar` (un tap, et « Proposer une voiture » avec deux personnes cochées) et sur une place prise, pour un tap et pour une feuille fermée avant la réponse ; « Réessayer » hors ligne ; un renvoi partiel de « Modifier » qui donne deux lignes différentes.
 - **Nouveau C11.12** (#216) La liste visible de la barre n’est pas une région vivante. Deux régions masquées visuellement, toujours montées, placées après « Fermer », annoncent :
   - `role="alert"` ne contient que le texte du dernier échec écrit dans la barre ;
@@ -1641,8 +2318,9 @@ v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.lis
   - deux échecs écrits dans le même passage : à +100 ms, la région `alert` ne contient que le second, et l’observateur n’a jamais vu le texte du premier ;
   - « Fermer » moins de 100 ms après un échec : la région reste vide ;
   - un renvoi hors ligne qui échoue de la même façon : l’observateur voit la région vide, puis le même texte ;
-  - une réussite ne modifie pas la région `alert` ; un échec n’écrit aucun texte dans la région `status` (sans information affichée, il ne la modifie pas ; avec « Aucune place libre » affichée, il la vide) ; une information s’écrit dans la région `status` ;
-  - un échec et une réussite libérés à la fermeture d’une même feuille : l’échec est écrit d’abord.
+  - une réussite n’écrit rien dans la région `alert`. Elle ne la vide que si elle retire l’échec que cette région annonce encore, comme le fait déjà un retrait de voiture réussi : c’est aussi le cas d’une réussite qui apporte la transition vers un état sans retour et retire un échec du retour (point 2, v4.4.4). Dans tous les autres cas elle ne la modifie pas ; un échec n’écrit aucun texte dans la région `status`. Il la vide seulement si elle annonce encore l’information qu’il retire, texte ou écriture en attente, dans deux cas : son action a commencé après l’information ; ou sa réponse apporte l’état sans retour et l’information est celle du retour, quel que soit le moment où son action a commencé (v4.4.4, B1.6). Dans tous les autres cas il ne la modifie pas ; une information s’écrit dans la région `status` ;
+  - un échec et une réussite libérés à la fermeture d’une même feuille : l’échec est écrit d’abord ;
+  - Tom placé, réponse retenue ; « Trouver une place » pour Léa, sans place libre, écrit l’information ; la réponse pour Tom arrive, l’information reste ; puis, moins de 100 ms après, un tap pour Hugo, commencé après l’information, échoue. La barre perd l’information et garde la réussite de Tom. Avec `page.clock` : 100 ms après la réponse pour Tom, la région `status` contient le texte de sa réussite, donc l’écriture en attente n’a pas été annulée ; ensuite, jusqu’à la fin du test, l’observateur ne la voit jamais vidée. La région `alert` contient l’échec d’Hugo (v4.4.3).
 
   *Non prouvable par un test* : ce que prononce un lecteur d’écran. Revue avec VoiceOver (iOS, Safari), TalkBack (Android, Chrome) et NVDA (Windows, Chrome), sur le cas de #216 dans les deux ordres d’arrivée : chaque message est annoncé une fois, et aucun n’est relu quand un autre arrive. En mode navigation (NVDA, rotor VoiceOver), chaque message se lit deux fois, dans la liste puis dans sa région : on vérifie que cette lecture reste compréhensible.
 - Aucun critère de l’epic ne disait ce que fait la barre d’un échec : C11.10 à C11.12 sont les seuls nouveaux. Le reste amende C5.7, C5.10, C11.4 et les deux lignes d’états. C11.9 ne change pas : les nouvelles clés sont dans `Actions`, déjà vérifié.
@@ -1657,6 +2335,34 @@ v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.lis
 - **C11.11** : « trois (« Tom, Léa et Hugo ») » précise : le texte de `format.list` dans la
   langue (« Tom, Léa, and Hugo » en anglais).
 - **Nouveaux** : V1.1 à V1.8, dans « Critères de la v4.4 ».
+
+### v4.4.4 (#341), « Annuler » et l’information
+
+- **C5.10** : ajouter : « Un “Annuler” qui ne rend personne dit “{prénoms} n’étai(en)t déjà
+  plus dans la voiture de {conducteur}” ; refusé parce que le retour n’existe plus, il
+  n’ajoute aucun échec ni aucun “Annuler” (organizer-view M7.10). »
+- **C11.10** : ajouter, à la puce de l’information : « L’information de “Trouver une place”
+  n’est pas écrite si le dernier état reçu n’a plus son leg, et elle part quand la page
+  applique un état sans ce leg. » ; « Un échec n’est retiré que de trois façons » devient
+  « de quatre façons », avec la transition vers un état sans retour (organizer-view,
+  décision 44).
+- **C11.11** : la règle des prénoms et le Vitest « pour 1 à 5 personnes » couvrent aussi
+  `Seat.undone` et `Seat.alreadyOut`.
+- **C11.12** : un échec vide aussi la région `status` quand sa réponse apporte l’état sans
+  retour et que la région annonce encore l’information du retour, quel que soit le moment où
+  son action a commencé.
+- **Nouveaux** : B1.1 à B1.7, dans « Critères de la v4.4.4 ».
+
+### v4.4.5 (#359, #313)
+
+- **C4.13** et **C5.10** : ajouter : « Sauf si, avant que la réussite s’affiche, une action
+  envoyée après le placement a réussi en changeant l’état d’une de ses personnes sur ce leg :
+  ni la réussite ni “Annuler” ne s’affichent (v4.4.5). »
+- **C8.2** : ajouter : « “Valider” sans aucun champ changé ferme “Modifier la voiture” sans
+  rien envoyer ; le focus va sur “Modifier”, et la barre ne change pas. »
+- **C11.10** : ajouter, à la puce de la réussite : « au plus une réussite, la dernière écrite ;
+  une réussite de placement abandonnée selon la règle 2 n’est jamais écrite ».
+- **Nouveaux** : S1.1 à S1.5 et W1.1 à W1.7, dans « Critères de la v4.4.5 ».
 
 ### v4.3 (#235), début et fin : critères de #3 amendés
 
@@ -1691,12 +2397,27 @@ v4.4-5. Décision : jusqu’à trois prénoms, le texte est celui de `format.lis
 
 ## Hors périmètre
 
+En v4.4.5 :
+
+- Ordonner toutes les réussites par numéro d’envoi (écarté, v4.4.5-2).
+- Réécrire une réussite pour les seules personnes restantes (écarté, v4.4.5-4).
+- Une réussite que rend fausse un autre appareil, appris par une lecture : inchangé. Son
+  « Annuler » dit alors « … n’était déjà plus… » (B1.3).
+- « Modifier la voiture » : un « Valider » inactif, ou un message « Rien n’a changé » (écartés,
+  v4.4.5-6).
+
+En v4.4.4 :
+
+- L’échec d’un « Annuler » refusé par `forbidden` (« … rechargez la page ») ou par
+  `eventNotFound` garde son « Annuler », qui échouera lui aussi. Le même raisonnement que pour
+  `noRetour` s’y appliquerait, mais personne ne l’a demandé : c’est à décider à part.
+- Deux « Annuler » à la fois, un par placement : écarté (v4.4.4-1).
+- Corriger sur `main` l’échec `noRetour` d’« Annuler » avant #267.
+- La transition quand le retour **revient** : rien n’est retiré, comme aujourd’hui.
+
 En v4.4 :
 
-- « Modifier » la voiture sans changement : elle envoie encore une requête. Son échec ne
-  nomme aucun champ (« Les changements de la voiture de Claire… »), donc ses mots ne sont pas
-  faux ; la même règle s’y appliquerait, mais elle touche l’étape « qui sort » et
-  `passengersChanged`. À traiter dans une tâche à part.
+- « Modifier » la voiture sans changement : traité en v4.4.5 (#313, W1).
 - « Ajouter une personne » : un formulaire vide est une erreur (« Champ requis. »), pas une
   absence de changement.
 - L’anneau de focus (#236), défini dans la maquette `language-switch` v3.
@@ -1974,8 +2695,9 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
     la page.
   - V1.8 nouveau : « Claire » suivi d’une espace part, et la base garde « Claire ».
   - V1.5 concret : Claire placée dans la voiture de Marc au retour, puis l’échec retenu de
-    « Clara ». Le test ne dépend plus d’« Annuler », qui n’est pas construit ; la maquette
-    « Après » le montre sans « Annuler ».
+    « Clara ». Le test ne dépendait pas d’« Annuler », pas encore construit, et la maquette
+    « Après » le montrait sans « Annuler ». Depuis #170 (PR #340) et la v4.4.2, V1.5 attend
+    « Annuler » puis « Fermer », et la maquette montre « Annuler ».
   - Note pour la prochaine révision d’organizer-view : M2.5 doit dire où va le focus et que
     les lignes de la barre restent.
   - Le mélange de virgules entre trois prénoms (« Tom, Léa, and Hugo ») et quatre (« Tom, Léa
@@ -1983,3 +2705,116 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
   - Rendu vérifié avec Chrome headless, à 1280 et 500 px : aucun débordement horizontal.
     Republiée à la même URL.
 - v4.4.1 (suite) : revue de design : **approuvée**.
+- v4.4.2 (2026-10-21) : deux amendements de texte, sans rien redessiner.
+  - Règles 2 et 3 de la barre : la réussite ou l’échec d’une action commencée avant
+    l’information la laisse en place ; seule une action commencée après elle la retire
+    (règle 4). Décision du propriétaire sur PR #339 (« Trouver une place », #172). La règle 4
+    dit quand une action commence, et le cas accepté. Même correction dans C11.10 (deux
+    puces, et un cas Playwright de plus), C11.12, le point 4 de « Lecteurs d’écran » et la
+    table des états. Nouvelle décision v4.4.2-1.
+  - « Annuler » est construit (#170, PR #340) : V1.5 attend « Annuler » puis « Fermer », la
+    règle 5 nomme `undo:{rideId}` pour « Annuler », et l’entrée v4.4.1 ci-dessus ne dit plus
+    qu’il n’est pas construit. La maquette « Après » de V1.5 montre « Annuler » sur la
+    réussite.
+  - La page reprend les mêmes textes (règles 2 à 4, « Lecteurs d’écran », C11.10, C11.12,
+    décisions, version).
+  - Rendu vérifié avec Chrome headless, à 500 et 1280 px : aucun débordement horizontal, et
+    la barre de V1.5 tient avec « Annuler ». Pas encore relue en revue de design. Republiée à
+    la même URL.
+- v4.4.2 (suite) : revue de design : changements demandés. Un bloquant : C11.12 et le point 4
+  de « Lecteurs d’écran » faisaient vider la région `status` selon le moment où l’action
+  avait commencé, et non selon ce qu’elle annonce. Avec une réussite arrivée après
+  l’information, l’échec suivant aurait vidé l’annonce de cette réussite, encore dans la
+  barre, et pu annuler son écriture en attente. Deux suggestions retenues ; la suggestion de
+  ne pas dire « Annuler » construit est écartée par le coordinateur (#340 est mergée avant
+  que #339 copie cette maquette).
+- v4.4.3 (2026-10-21) : le bloquant est corrigé, et les suggestions retenues sont appliquées.
+  - Point 4 et C11.12 : un échec vide la région `status` seulement s’il retire l’information
+    et que la région annonce encore cette information (texte ou écriture en attente). Un cas
+    Playwright de plus dans C11.12 : Tom, l’information, la réussite de Tom, puis l’échec
+    d’Hugo moins de 100 ms après ; la région `status` garde la réussite de Tom.
+  - La règle 4 de la page dit, comme le README, quand une action commence.
+  - Table des états : la variante réussie renvoie à la maquette « Aucune place libre sur ce
+    leg » ; la variante échouée reste sans maquette, comme avant la v4.4.2.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.4.3 (suite) : revue de design : **approuvée**. Deux corrections de texte, appliquées
+  sans nouvelle revue : « Deux suggestions retenues » au lieu de « Trois » dans l’entrée
+  v4.4.2 (suite), et le point final de la ligne v4.4.3 de l’en-tête. Republiée à la même URL.
+- v4.4.4 (2026-10-21) : #341 tranché, et une décision pour #267.
+  - « Annuler » renvoyé depuis une ligne d’échec : le remplacement de la réussite plus récente
+    est confirmé, mais il n’est plus muet. Nouvelle clé `Seat.alreadyOut`, quand personne
+    n’est rendu (v4.4.4-1, v4.4.4-2).
+  - `noRetour` sur « Annuler » : pas d’échec, pas d’« Annuler ». C’est la décision 44
+    d’organizer-view, inscrite dans la règle 6 (v4.4.4-3).
+  - L’information sur un retour supprimé : elle n’est pas écrite (décision du coordinateur sur
+    #339), ou elle part avec la transition (v4.4.4-4).
+  - Pour #267 : un échec `noRetourAgain` a pour sujet sa seule partie aller (v4.4.4-5).
+  - Critères B1.1 à B1.7 ; C5.10 et C11.10 amendés ; table des sujets, règles 4 et 6, mots,
+    états et hors-périmètre alignés. Les largeurs à 360 px notent la marge d’« Annuler » de
+    language-switch v3.3.4.
+  - La page ajoute la section « « Annuler » et l’information (v4.4.4) », avec quatre
+    maquettes de la barre. Pas encore relue en revue de design. Republiée à la même URL.
+- v4.4.4 (suite) : revue de design : changements demandés. Trois bloquants :
+  - C11.12 et le point 4 de « Lecteurs d’écran » laissaient la région `status` annoncer
+    l’information du retour après la transition, quand l’état sans retour arrivait par un
+    échec ;
+  - la règle 5 et C11.10 ignoraient la transition, que la règle 6 citait ;
+  - B1.5 ne décrivait pas le test de #339.
+
+  Neuf suggestions. Corrigé sur place, sans changer de numéro, puisque la v4.4.4 n’a pas été
+  copiée dans le dépôt :
+  - **Bloquants.** Point 4 et C11.12 : la transition vide la région `status` si elle annonce
+    encore l’information qu’elle retire, quelle que soit la réponse ; B1.6 a une variante en
+    échec (`seatTaken`, écriture en attente annulée). La règle 5 et C11.10 ajoutent la
+    transition comme quatrième façon de retirer un échec (v4.4.4-6). B1.5 reprend la scène
+    du test de #339 (le refus `noRetour` de Tom · Retour, son échec écrit à la fermeture),
+    et dit que l’observation de la région `status` reste à y ajouter.
+  - **Suggestions, toutes appliquées.** La règle 4 ne vise que `DevicePersons.noFreeSeat.*`.
+    `Seat.alreadyOut` entre dans « Plusieurs prénoms », dans C11.11 et dans son Vitest. B1.2
+    dit « aucun texte ». La variante aller de B1.6 dit qu’Échap ferme la feuille de Tom et
+    que Tom est « Sans voiture ». B1.7 n’emploie plus d’onglet après la transition. La règle 6
+    dit ce que donne la réponse (`Seat.alreadyOut`, information `noRetour`). Le tableau des
+    hauteurs dit 143 px ; les nombres de lignes, mesurés, ne changent pas. v4.4.4-5 est
+    notée pour la prochaine révision d’organizer-view.
+  - **La page s’aligne sur le README** : règles 4, 5 et 6, « Lecteurs d’écran », la section
+    « Un tap et « Annuler » », une maquette pour B1.3, la variante en échec de B1.6, C11.10
+    à C11.12. Republiée à la même URL.
+- v4.4.4 (suite, 2) : revue de design : changements demandés. Un bloquant : B1.5 donnait
+  Tom « Sans voiture » au retour, alors que la feuille d’une cellule « Sans voiture » n’offre
+  pas « Je cherche une place ». Trois suggestions. Corrigé sur place :
+  - B1.5 : Tom « Ne fait pas le retour » au retour (comme `seedScene` de #339), et Léa seule
+    « Sans voiture ».
+  - C11.12 : une réussite qui apporte la transition et retire un échec du retour vide la
+    région `alert`, comme un retrait de voiture réussi.
+  - B1.6 réussie : dit que les assertions sur la région `status` ne distinguent pas une
+    règle absente, et que `messages(page)` et la variante en échec le font.
+  - La page : décision 4 limitée à `DevicePersons.noFreeSeat.*`, décision v4.4.4-6
+    ajoutée, C11.12 aligné (la page ne détaille pas B1.5). Republiée à la même URL. Pas encore relue de nouveau.
+- v4.4.5 (2026-10-21) : #359 et #313 tranchés, en amendement.
+  - Une réussite de placement retenue sous une feuille n’est jamais écrite si une action
+    envoyée après elle, réussie, a changé l’état d’une de ses personnes sur son leg. La barre
+    ne dit rien à la place (v4.4.5-1 à v4.4.5-5, règles 1 et 2, critères S1.1 à S1.5).
+  - « Valider » sans changement dans « Modifier la voiture » : la feuille se ferme, rien n’est
+    envoyé ni dit, le focus va sur « Modifier » (v4.4.5-6, critères W1.1 à W1.7). Retiré du
+    hors-périmètre de la v4.4.
+  - Aucun mot nouveau. Table des sujets, focus, états, critères de l’epic et hors-périmètre
+    alignés. La page ajoute la section « Réussite retenue, et « Modifier la voiture » sans
+    changement (v4.4.5) », avec cinq maquettes. Republiée à la même URL. Pas encore relue en
+    revue de design.
+- v4.4.5 (suite) : revue de design : changements demandés. Un bloquant : S1.1, S1.4 et S1.5
+  reposaient sur « Qui monte avec vous ? », qui n’existe que dans PR #356, et le README comme
+  la page disaient « échoue sur `main` ». Sept suggestions. Corrigé sur place :
+  - **Bloquant.** #359 se construit après #356 (#171) ; une table dit, pour chaque critère, son
+    état sur `main`, après #356 et après #359. S1.1 garde le scénario de l’issue. S1.4 et S1.5
+    passent sur la scène `takeSeats` (voiture de Sophie) et s’écrivent sur `main`, où ils
+    passent déjà : ce sont des gardes.
+  - **Suggestions, toutes appliquées.** « Valider » inactif renvoie à v4.4.5-6. La table du
+    focus de la page a la ligne « Modifier la voiture » sans changement. Le résumé des
+    maquettes dit « 2 sans voiture » (`matrixSummary`). W1 dit quand le compte des requêtes
+    commence, et W1.5 repasse en ligne avant la requête suivante. La scène H5 donne Marc « Ne
+    fait pas le retour ». Les états de S1.2 (Léa avec Sophie) et de S1.3 (focus sur
+    « Modifier », barre vide) sont dessinés. La raison de v4.4.5-1 se limite aux mêmes
+    personnes sur le même leg. Republiée à la même URL. Pas encore relue de nouveau.
+- v4.4.5 (suite, 2) : revue de design : **approuvée**. Une correction de texte, appliquée sans
+  nouvelle revue : S1.3 dit « Un tap sur la place libre de la voiture de Marc », puisque la
+  voiture de Sophie a aussi des places libres. Republiée à la même URL.

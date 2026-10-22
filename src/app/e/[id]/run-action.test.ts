@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
-import { actionRunner, sendAction, stateOf, stateRead, stateShown, withRetourHeld } from "./run-action";
+import { actionRunner, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -92,33 +92,60 @@ describe("stateShown", () => {
 });
 
 // #265, § 5 of the epic's design: while a sheet hides the page, the retour it may be on stays.
-describe("withRetourHeld", () => {
+// #266: nor does a retour come, which would mount the aller's panel anew, and its sheet with it.
+describe("withTabsHeld", () => {
   const leg = (name: "aller" | "retour", rideId: string) => ({ leg: name, cars: [], withoutCar: [], device: [], rideId });
   const shown = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [leg("aller", "old"), leg("retour", "old")] } as never as EventState;
   const next = { event: { ...header, title: "Tournoi de Vannes" }, legs: [leg("aller", "new")] } as never as EventState;
 
-  it("shows the next state, with the end and the retour leg shown", () => {
-    expect(withRetourHeld(shown, next)).toStrictEqual({
+  it("the retour removed: shows the next state, with the end and the retour leg shown", () => {
+    expect(withTabsHeld(shown, next)).toStrictEqual({
       event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-12 18:00:00" },
       legs: [leg("aller", "new"), leg("retour", "old")],
     });
   });
 
-  it("holds nothing when the retour stays, nor when none was shown", () => {
-    expect(withRetourHeld(shown, shown)).toBeUndefined();
-    expect(withRetourHeld(next, next)).toBeUndefined();
+  it("a retour added: shows the next state, without its end nor its retour leg", () => {
+    const added = { event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-13 19:00:00" }, legs: [leg("aller", "new"), leg("retour", "new")] };
+    expect(withTabsHeld(next, added as never as EventState)).toStrictEqual({
+      event: { ...header, title: "Tournoi de Vannes", retourAt: null },
+      legs: [leg("aller", "new")],
+    });
+  });
+
+  it("holds nothing when the tabs stay", () => {
+    expect(withTabsHeld(shown, shown)).toBeUndefined();
+    expect(withTabsHeld(next, next)).toBeUndefined();
   });
 });
 
 describe("actionRunner", () => {
   const state: EventState = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
-  /** A page that records the states the runner gives it and each action that ends, and a connection that can be cut. */
+  /** A page that records the states the runner gives it and each action that begins and ends, and a connection that can be cut. */
   function page() {
-    const told = { states: [] as EventState[], ended: 0, connected: true };
-    const run = actionRunner({ state: (next) => told.states.push(next), ended: () => (told.ended += 1) }, () => told.connected);
+    const told = { states: [] as EventState[], begun: 0, ended: 0, connected: true };
+    const begins = () => {
+      told.begun += 1;
+      return () => void (told.ended += 1);
+    };
+    const run = actionRunner({ state: (next) => told.states.push(next), begins }, () => told.connected);
     return { told, run };
   }
+
+  // The bar's information goes at the end of an action that began after it was written (rule 4, #339).
+  it("an action begins before it is sent, and ends once its answer is in", async () => {
+    const { told, run } = page();
+    let answer: (value: unknown) => void = () => {};
+    const sent = run("seat", () => {
+      expect(told).toMatchObject({ begun: 1, ended: 0 });
+      return new Promise((resolve) => (answer = resolve));
+    });
+    expect(told).toMatchObject({ begun: 1, ended: 0 });
+    answer({ ok: true, state });
+    await sent;
+    expect(told).toMatchObject({ begun: 1, ended: 1 });
+  });
 
   // The page says what came of an action, in the bar or in its sheet (#216): the runner writes nothing there.
   it("each action that runs ends once, whatever came of it; a second run of it meanwhile does not", async () => {
@@ -131,7 +158,7 @@ describe("actionRunner", () => {
     await run("seat", async () => ({ ok: true, state }));
     answer({ ok: false, error: "seatTaken", state });
     await first;
-    expect(told.ended).toBe(2);
+    expect(told).toMatchObject({ begun: 2, ended: 2 });
   });
 
   it("an answer gives the page the state the server sends, refusal included", async () => {
