@@ -226,7 +226,8 @@
       "offerRide": "{legs, select, both {Les voitures de {driver} pour l’aller et le retour n’ont pas été proposées.} aller {La voiture de {driver} pour l’aller n’a pas été proposée.} other {La voiture de {driver} pour le retour n’a pas été proposée.}}",
       "removeRide": "{leg, select, aller {La voiture de {driver} pour l’aller n’a pas été retirée.} other {La voiture de {driver} pour le retour n’a pas été retirée.}}",
       "editRide": "{leg, select, aller {Les changements de la voiture de {driver} pour l’aller n’ont pas été enregistrés.} other {Les changements de la voiture de {driver} pour le retour n’ont pas été enregistrés.}}",
-      "readDevice": "Vos inscriptions n’ont pas pu être chargées."
+      "readDevice": "Vos inscriptions n’ont pas pu être chargées.",
+      "editEvent": "L’événement n’a pas été modifié."
     },
     "why": {
       "offline": "Vérifiez la connexion, puis réessayez.",
@@ -348,7 +349,11 @@
   },
   "EditEvent": {
     "title": "Modifier l’événement",
-    "saved": "Événement modifié. Personne n’est prévenu : pensez à le dire au groupe."
+    "saved": "Événement modifié. Personne n’est prévenu : pensez à le dire au groupe.",
+    "changed": {
+      "title": "L’événement vient d’être modifié depuis un autre appareil.",
+      "body": "Rien n’a été enregistré. Les champs que vous n’aviez pas changés montrent maintenant la version enregistrée : vérifiez, puis validez de nouveau."
+    }
   },
   "EventNotFound": {
     "title": "Événement introuvable",

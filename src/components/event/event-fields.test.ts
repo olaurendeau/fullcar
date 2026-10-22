@@ -1,13 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BLANK_EVENT_FIELDS,
+  EventFormFields,
   eventFieldsChanged,
   loadedEventFields,
   withEventField,
   withRetour,
+  withSavedFields,
   type EventFieldsState,
   type EventFieldsUpdate,
 } from "./event-fields";
+
+vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 
 const saved = (retourDateFollows: boolean): EventFieldsState => ({
   values: { ...BLANK_EVENT_FIELDS.values, allerDate: "2026-11-07", retourDate: "2026-11-08" },
@@ -117,5 +121,96 @@ describe("eventFieldsChanged", () => {
   it("ignores the end's fields while the box is unchecked on both sides", () => {
     const without = { ...loaded, retour: false };
     expect(eventFieldsChanged({ ...without, retourDate: "2026-12-20", retourTime: "" }, without)).toBe(false);
+  });
+});
+
+// M6.1, M6.2: the server answers `changed` with the saved values, and the form takes them in.
+describe("withSavedFields", () => {
+  const event = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" };
+  const loaded = loadedEventFields(event);
+  const without = loadedEventFields({ ...event, retourAt: null });
+  const typed = (values: Partial<EventFieldsState["values"]>, from = loaded): EventFieldsState => ({
+    values: { ...from.values, ...values },
+    retourDateFollows: from.retourDateFollows,
+  });
+
+  // M6.1: the title of the other device, the place typed here.
+  it("gives each field not changed the saved value, and keeps each field changed", () => {
+    const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13", location: "Salle Carrel" });
+    const next = withSavedFields(loaded.values, saved)(typed({ location: "Salle Colette-Besson" }));
+    expect(next.values).toEqual({ ...saved.values, location: "Salle Colette-Besson" });
+  });
+
+  // M6.1, variant: a field changed, then put back as it was loaded, is not changed.
+  it("gives the saved value to a field put back as it was loaded", () => {
+    const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13" });
+    expect(withSavedFields(loaded.values, saved)(typed({ title: "Tournoi de Rennes" })).values.title).toBe("Tournoi de Rennes U13");
+  });
+
+  // M6.2: the retour removed there, the box untouched here: it unchecks.
+  it("unchecks the box not changed when the retour was removed there", () => {
+    expect(withSavedFields(loaded.values, without)(typed({ title: "Tournoi" })).values).toEqual({ ...without.values, title: "Tournoi" });
+  });
+
+  // M6.2: a retour removed there is never added back unless the box is checked again here.
+  it("keeps the box checked here, with the end typed, when the event had no retour", () => {
+    const checkedHere = typed({ retour: true, retourTime: "19:00" }, without);
+    expect(withSavedFields(without.values, without)(checkedHere).values).toEqual(checkedHere.values);
+  });
+
+  // M6.2, the other way: a retour added there at 18:00, the box untouched here.
+  it("checks the box not changed when a retour was added there, with its end", () => {
+    const next = withSavedFields(without.values, loaded)(typed({ title: "Tournoi" }, without));
+    expect(next.values).toEqual({ ...loaded.values, title: "Tournoi" });
+  });
+
+  it("lets the end date follow as the saved values have it, unless it was typed", () => {
+    const otherDay = loadedEventFields({ ...event, retourAt: "2026-12-13 18:00:00" });
+    expect(withSavedFields(loaded.values, otherDay)(typed({})).retourDateFollows).toBe(false);
+    const moved = loadedEventFields({ ...event, allerAt: "2026-12-13 07:30:00", retourAt: "2026-12-13 18:00:00" });
+    const typedEnd = { ...typed({ retourDate: "2026-12-14" }), retourDateFollows: false };
+    expect(withSavedFields(loaded.values, moved)(typedEnd)).toEqual({
+      values: { ...moved.values, retourDate: "2026-12-14" },
+      retourDateFollows: false,
+    });
+  });
+
+  // Applied to the state current when it runs: a keystroke made before it is kept.
+  it("keeps a change made before it runs", () => {
+    const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13" });
+    const next = queued(typed({}), withEventField("location", "Salle Carrel"), withSavedFields(loaded.values, saved));
+    expect(next.values).toEqual({ ...saved.values, location: "Salle Carrel" });
+  });
+});
+
+// #293 review: the fields hand `onChange` an update of the state it is given when it runs, never
+// one that captured the state they rendered with: it would undo a merge made meanwhile (M6.1).
+describe("EventFormFields", () => {
+  type Element = { props?: { id?: string; onChange?: (value: unknown) => void; children?: unknown } };
+  const elements = (node: unknown): Element[] => {
+    if (Array.isArray(node)) return node.flatMap(elements);
+    if (typeof node !== "object" || node === null) return [];
+    const element = node as Element;
+    return [element, ...elements(element.props?.children)];
+  };
+  const rendered = loadedEventFields({ title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" });
+  const meanwhile: EventFieldsState = { values: { ...rendered.values, location: "Salle Carrel", retourTime: "19:00" }, retourDateFollows: false };
+
+  /** Renders the fields with `rendered`, changes the one named `name`, and applies its update to `meanwhile`. */
+  function change(name: string, value: unknown): EventFieldsState {
+    const updates: EventFieldsUpdate[] = [];
+    const tree = EventFormFields({ idOf: (id) => `f-${id}`, state: rendered, errors: {}, onChange: (update) => updates.push(update) });
+    const field = elements(tree).find((each) => each.props?.id === `f-${name}` && each.props.onChange);
+    field?.props?.onChange?.(value);
+    expect(updates.length).toBe(1);
+    return updates[0](meanwhile);
+  }
+
+  it.each(["title", "location", "allerDate", "allerTime", "retourDate", "retourTime"] as const)("%s: the keystroke applies to the state given", (name) => {
+    expect(change(name, { target: { value: "x" } })).toEqual({ ...meanwhile, values: { ...meanwhile.values, [name]: "x" } });
+  });
+
+  it("Retour: the tick applies to the state given", () => {
+    expect(change("retour", false)).toEqual({ ...meanwhile, values: { ...meanwhile.values, retour: false } });
   });
 });

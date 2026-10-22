@@ -226,7 +226,8 @@
       "offerRide": "{legs, select, both {{driver}’s cars for the outbound and return trips were not offered.} aller {{driver}’s car for the outbound trip was not offered.} other {{driver}’s car for the return trip was not offered.}}",
       "removeRide": "{leg, select, aller {{driver}’s car for the outbound trip was not removed.} other {{driver}’s car for the return trip was not removed.}}",
       "editRide": "{leg, select, aller {The changes to {driver}’s car for the outbound trip were not saved.} other {The changes to {driver}’s car for the return trip were not saved.}}",
-      "readDevice": "Your sign-ups could not be loaded."
+      "readDevice": "Your sign-ups could not be loaded.",
+      "editEvent": "The event was not changed."
     },
     "why": {
       "offline": "Check your connection, then try again.",
@@ -348,7 +349,11 @@
   },
   "EditEvent": {
     "title": "Edit the event",
-    "saved": "Event updated. Nobody is notified: remember to tell the group."
+    "saved": "Event updated. Nobody is notified: remember to tell the group.",
+    "changed": {
+      "title": "The event has just been changed from another device.",
+      "body": "Nothing was saved. The fields you had not changed now show the saved version: check them, then confirm again."
+    }
   },
   "EventNotFound": {
     "title": "Event not found",
