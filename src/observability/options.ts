@@ -93,7 +93,9 @@ const readsAsFrame = (parse: ParseStack, line: string) => parse(`${AROUND}\n${li
  * SDK's own stack parser, makes a frame of (#379, #393): `codeFramesOnly` leaves out that
  * frame, and this the line itself, which `scrubText` would send with the first name in it.
  * Node's parser reads `at ` anywhere in a line, a browser's a line ending in a path: no
- * pattern of ours says it as they do. The first line is the message's own, which the parsers
+ * pattern of ours says it as they do. Reading `at ` anywhere has a cost: lines such as
+ * « Le format attendu » or « Un état incohérent » go too, which the project accepts (privacy
+ * over diagnostics). The first line is the message's own, which the parsers
  * skip: on the server always, in the browser after the `…Error: ` of the error's name (#239).
  */
 export function messagesWithoutFrames(parse: ParseStack) {

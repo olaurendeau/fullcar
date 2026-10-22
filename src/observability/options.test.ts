@@ -352,9 +352,11 @@ describe("what the SDK sends with these options", () => {
     expect((await sendEach(withFrameInMessage())).map(({ leaks }) => leaks)).toEqual([true, true, true]);
   });
 
-  it("sends as it is a line the server's parser makes no frame of, though the browser's would (#393)", async () => {
+  it("sends, on purpose, a first name in a line of plain text that Node's parser reads as no frame (#393)", async () => {
     start(registerServerHooks);
     // Gecko's parser makes a frame of a line that ends in a path; Node's only of one with `at `.
+    // Such a line is plain text, and a first name in plain text is sent: the limit of plain
+    // text accepted by #231 and #239, and on #396. Only that « Marc » is there is checked.
     expect(defaultStackParser("Marc revient le 12/03")).toEqual([]);
     const [{ leaks }] = await sendEach([new Error("Le trajet a échoué\nMarc revient le 12/03")]);
     expect(leaks).toBe(true);
