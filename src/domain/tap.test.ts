@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BoardCar, DevicePerson, DeviceState } from "./board";
-import { afterRegistration, currentDriver, deviceKnown, driverChoice, findSeat, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
+import { afterRegistration, currentDriver, deviceKnown, driverChoice, findSeat, NEW_DRIVER, passengerCandidates, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
 
 function of(id: string, state: DeviceState): DevicePerson {
   return { id, firstName: id.toUpperCase(), state };
@@ -92,6 +92,31 @@ describe("sheetCandidates (C6.1)", () => {
   it("is empty when every person of the device drives or is in a car (C6.7)", () => {
     expect(sheetCandidates([driver("marc"), passenger("zoe")])).toEqual([]);
     expect(sheetCandidates([])).toEqual([]);
+  });
+});
+
+describe("passengerCandidates (C4.13, v4-10)", () => {
+  const device = [withoutCar("lea"), driver("marc"), withoutCar("tom"), passenger("zoe"), notConcerned("hugo"), withoutCar("ines")];
+
+  it("lists the device's persons without a car on the leg, in its order, but the one who drives", () => {
+    expect(passengerCandidates(device, "tom")).toEqual([
+      { id: "lea", firstName: "LEA" },
+      { id: "ines", firstName: "INES" },
+    ]);
+  });
+
+  it("leaves out a driver, a passenger and a person not concerned on the leg", () => {
+    expect(passengerCandidates([driver("marc"), passenger("zoe"), notConcerned("hugo")], undefined)).toEqual([]);
+  });
+
+  it("lists every person without a car while nobody, or someone new, drives", () => {
+    const all = [
+      { id: "lea", firstName: "LEA" },
+      { id: "tom", firstName: "TOM" },
+      { id: "ines", firstName: "INES" },
+    ];
+    expect(passengerCandidates(device, undefined)).toEqual(all);
+    expect(passengerCandidates(device, NEW_DRIVER)).toEqual(all);
   });
 });
 

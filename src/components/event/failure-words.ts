@@ -107,11 +107,16 @@ export function personWhy(error: Parameters<typeof whyOf>[0] | "drives"): Why {
 
 /**
  * Why « Proposer une voiture » was not done: as `whyOf`, and `alreadyDriving` names who drives.
- * `alreadyInCar` is about the passengers ticked in « Qui monte avec vous ? », which the form does
- * not ask yet (#171): the generic reason until then.
+ * `alreadyInCar` names the passengers ticked in « Qui monte avec vous ? » (#171), in the order of
+ * « Vos inscriptions »; none ticked, only a forged request gets it: the generic reason.
  */
-export function offerWhy(error: Parameters<typeof whyOf>[0] | "alreadyDriving" | "alreadyInCar", driver: string): Why {
+export function offerWhy(
+  error: Parameters<typeof whyOf>[0] | "alreadyDriving" | "alreadyInCar",
+  driver: string,
+  passengers: readonly string[],
+): Why {
   if (error === "alreadyDriving") return { kind: "alreadyDriving", driver };
+  if (error === "alreadyInCar" && passengers.length > 0) return { kind: "passengerInCar", names: passengers };
   return whyOf(error === "alreadyInCar" ? "invalid" : error);
 }
 

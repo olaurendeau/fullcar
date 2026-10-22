@@ -84,6 +84,15 @@ export function sheetCandidates(device: readonly DevicePerson[]): SheetCandidate
   );
 }
 
+/**
+ * « Qui monte avec vous ? » in « Proposer une voiture » (C4.13, v4-10): the device's persons
+ * without a car on the leg, in its order, but the one chosen to drive. All unticked: the form
+ * ticks none. Nobody chosen yet, or someone new, leaves nobody out.
+ */
+export function passengerCandidates(device: readonly DevicePerson[], driverId: string | undefined): BoardPerson[] {
+  return device.flatMap(({ id, firstName, state }) => (state.kind === "withoutCar" && id !== driverId ? [{ id, firstName }] : []));
+}
+
 export type SheetSubmit =
   /** « Placer {count} personnes ». */
   | { kind: "ready"; count: number }

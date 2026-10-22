@@ -8,18 +8,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import type { DevicePerson } from "@/domain/board";
+import type { BoardPerson, DevicePerson } from "@/domain/board";
 import { otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import { otherLegField, otherLegKind, type OtherLegChoice } from "@/domain/offer";
 import { validatePerson } from "@/domain/person";
 import type { VisibleCar } from "@/domain/phone-visibility";
-import { RIDE_FIELDS, RIDE_SEATS_DEFAULT, validateRide, validSeats, type RideField } from "@/domain/ride";
-import { currentDriver, driverChoice, NEW_DRIVER } from "@/domain/tap";
+import { passengersFit, RIDE_FIELDS, RIDE_SEATS_DEFAULT, validateRide, validSeats, type RideField } from "@/domain/ride";
+import { currentDriver, driverChoice, NEW_DRIVER, passengerCandidates } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
+import { Box } from "./event-fields";
 import type { NotDone } from "./failure-words";
-import { focusOffer } from "./focus";
+import { focusCar, focusFirstShown, focusOffer } from "./focus";
 import { useSends, type FromSheet } from "./hidden-page";
 import { LeavingStep } from "./leaving-step";
 import { personErrorMessage } from "./person-error";
@@ -39,6 +40,8 @@ export interface RideDraft extends Record<"location" | "time" | "seats" | "note"
 /** An offer as the form sends it; sending, and where a failure is said, as for a registration. */
 export interface Offering extends FromSheet, Pick<Registering, "sending"> {
   offer: RideDraft;
+  /** Those ticked in « Qui monte avec vous ? », in the order of « Vos inscriptions »: they board the car (C4.13). */
+  passengers: BoardPerson[];
   /** What the bar says was not done: who drives, as the form named her, and each leg offered (C11.11). */
   notDone: NotDone & { kind: "offerRide" };
   /** Where the focus goes from the bar: « Proposer une voiture » of the leg it was sent from. */
@@ -127,6 +130,8 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
   const [kept, setKept] = useState(true);
   // Read when an answer comes, as for « Ajouter une personne »: once the sheet is closing, a failure goes to the bar.
   const isOpen = useRef(false);
+  // Where the focus lands once closed, if not on this button: the new car's title, after passengers boarded it.
+  const landing = useRef<(() => void) | undefined>(undefined);
   const toggle = (next: boolean) => {
     isOpen.current = next;
     setOpen(next);
@@ -152,9 +157,25 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
         </Button>
       }
       title={t("RideForm.title.offer")}
+      onCloseAutoFocus={(event) => {
+        const land = landing.current;
+        landing.current = undefined;
+        if (!land) return;
+        event.preventDefault();
+        land();
+      }}
     >
       {!kept && <StorageNotice title={t("RideForm.storage.title")} body={t("RideForm.storage.body")} />}
-      <RideForm leg={form.leg} at={form.at} mode={{ kind: "offer", ...form }} open={() => isOpen.current} onDone={() => toggle(false)} />
+      <RideForm
+        leg={form.leg}
+        at={form.at}
+        mode={{ kind: "offer", ...form }}
+        open={() => isOpen.current}
+        onDone={(land) => {
+          landing.current = land;
+          toggle(false);
+        }}
+      />
     </BottomSheet>
   );
 }
@@ -204,7 +225,7 @@ export function EditRideButton({ car, at, updateRide }: { car: VisibleCar; at: W
 
 /**
  * The fields of R4, in its order: who drives, the place, the time, the seats, the note, then
- * the other leg (#169). None of an option (C4.9). Errors, failures and creation ids as in
+ * the other leg (#169), then « Qui monte avec vous ? » (#171). None of an option (C4.9). Errors, failures and creation ids as in
  * « Ajouter une personne » (C4.7, C4.10).
  *
  * In `edit` mode (C8.2), the place, the time, the seats and the note alone, filled with the
@@ -217,12 +238,19 @@ function RideForm({
   open,
   onDone,
   onStep,
-}: Pick<FormProps, "leg" | "at"> & { mode: FormMode; open: () => boolean; onDone: () => void; onStep?: (choosing: boolean) => void }) {
+}: Pick<FormProps, "leg" | "at"> & {
+  mode: FormMode;
+  open: () => boolean;
+  /** Closes the form; `land`, where the focus goes then, if not back on the button that opened it. */
+  onDone: (land?: () => void) => void;
+  onStep?: (choosing: boolean) => void;
+}) {
   const t = useTranslations("RideForm");
   const tPerson = useTranslations("PersonForm");
   const tErrors = useTranslations("FormErrors");
   const tActions = useTranslations("Actions");
   const tChanges = useTranslations("RideChanges.leaving");
+  const tStates = useTranslations("DevicePersons.state");
   const format = useFormatter();
   const ids = useId();
   const idOf = (name: string) => `${ids}-${name}`;
@@ -257,7 +285,12 @@ function RideForm({
   const kept = otherPick && otherPick.driver === driver && otherField?.choices.includes(otherPick.choice);
   const otherChoice = kept ? otherPick.choice : otherField?.chosen;
   const drivesThere = otherChoice === "drive";
+  // « Qui monte avec vous ? »: those without a car on the leg but who drives, unticked until ticked (v4-10).
+  const passengerChoices = editing ? [] : passengerCandidates(persons, driver);
+  const [ticked, setTicked] = useState<Record<string, boolean>>({});
+  const boarding = passengerChoices.filter((person) => ticked[person.id]);
   const [errors, setErrors] = useState<OfferErrors>({});
+  const [seatsSent, setSeatsSent] = useState(0);
   const [noDriver, setNoDriver] = useState(false);
   const [sending, setSending] = useState(false);
   // In `edit` mode: the step shown, by its round, a new one at each refusal (C8.5), and that refusal said.
@@ -298,7 +331,10 @@ function RideForm({
     setProblem(null);
     setErrors(found);
     setNoDriver(missing);
-    const target = missing ? `driver-${candidates[0]?.id}` : first;
+    // The seats sent, which the message of too many ticked counts, whatever is typed since.
+    setSeatsSent(validSeats(values.seats) ?? 0);
+    // Too many ticked: the group's first box, as the first radio button when nobody drives.
+    const target = missing ? `driver-${candidates[0]?.id}` : first === "passengers" ? `passenger-${passengerChoices[0]?.id}` : first;
     if (target) document.getElementById(idOf(target))?.focus();
   }
 
@@ -354,10 +390,13 @@ function RideForm({
     const person = isNew ? validatePerson(values) : undefined;
     const ride = validateRide(values);
     const otherErrors = drivesThere ? otherLegErrors(values) : {};
-    const otherFirst = otherErrors.otherLocation ? "otherLocation" : otherErrors.otherTime ? "otherTime" : undefined;
-    if (driver === undefined || person?.ok === false || !ride.ok || otherFirst) {
-      const found = { ...(person?.ok === false && person.errors), ...(!ride.ok && ride.errors), ...otherErrors };
-      return showErrors(found, driver === undefined, person?.ok === false ? person.first : !ride.ok ? ride.first : otherFirst);
+    // More ticked than seats, counted as the server does (C4.13): the last field of the form.
+    const seats = validSeats(values.seats);
+    const tooMany: OfferErrors = seats !== undefined && !passengersFit(boarding.length, seats) ? { passengers: "tooMany" } : {};
+    const lastFirst = otherErrors.otherLocation ? "otherLocation" : otherErrors.otherTime ? "otherTime" : tooMany.passengers && "passengers";
+    if (driver === undefined || person?.ok === false || !ride.ok || lastFirst) {
+      const found = { ...(person?.ok === false && person.errors), ...(!ride.ok && ride.errors), ...otherErrors, ...tooMany };
+      return showErrors(found, driver === undefined, person?.ok === false ? person.first : !ride.ok ? ride.first : lastFirst);
     }
     showErrors({}, false, undefined);
     const { firstName, phone, otherLocation, otherTime, ...car } = values;
@@ -369,6 +408,7 @@ function RideForm({
     const sheet = sends([], legs.map((offered) => `offer:${offered}:${isNew ? `new:${name}` : driver}`));
     const answer = await mode.offerRide({
       offer: { leg, ...car, driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver }, otherLeg },
+      passengers: boarding,
       notDone: { kind: "offerRide", driver: name, legs: kind === "drive" ? "both" : leg },
       landmark: () => focusOffer(leg),
       creationIds: () => (creationIds.current ??= { rideId: newCreationId(), personId: newCreationId(), otherRideId: newCreationId() }),
@@ -376,9 +416,10 @@ function RideForm({
       ...sheet,
     });
     if (answer?.kind === "done") {
+      const rideId = creationIds.current?.rideId;
       creationIds.current = undefined;
-      // Not the sheet opened since: it shows another form.
-      if (sheet.inSheet()) onDone();
+      // Not the sheet opened since: it shows another form. With passengers, the new car's title takes the focus.
+      if (sheet.inSheet()) onDone(boarding.length > 0 && rideId ? () => focusFirstShown([focusCar(leg, rideId)]) : undefined);
     } else if (answer?.kind === "errors") showErrors(answer.errors, false, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
     // The retour is gone. Offered on it, the sheet closes (rule 9); from the aller, it stays without
@@ -471,6 +512,8 @@ function RideForm({
               onValueChange={(next) => {
                 setDriver(next);
                 setNoDriver(false);
+                // Who drives leaves « Qui monte avec vous ? », and her tick with her.
+                setTicked((current) => ({ ...current, [next]: false }));
                 setOtherPick((pick) => (pick && pick.driver === undefined ? { ...pick, driver: next } : pick));
               }}
               aria-labelledby={idOf("driver")}
@@ -545,6 +588,34 @@ function RideForm({
               );
             })}
           </RadioGroup>
+        </div>
+      )}
+      {passengerChoices.length > 0 && (
+        <div
+          role="group"
+          aria-labelledby={idOf("passengers")}
+          aria-describedby={errors.passengers ? idOf("passengers-error") : undefined}
+          className={cn("flex flex-col gap-1 rounded-xl border px-3.5 py-2", errors.passengers && "border-destructive")}
+        >
+          <span id={idOf("passengers")} className={cn("pt-1.5 text-sm font-semibold", errors.passengers && "text-destructive")}>
+            {t("passengers")}
+          </span>
+          {passengerChoices.map((person) => (
+            <Box
+              key={person.id}
+              id={idOf(`passenger-${person.id}`)}
+              label={person.firstName}
+              hint={tStates("withoutCar")}
+              checked={ticked[person.id] ?? false}
+              onChange={(value) => setTicked((current) => ({ ...current, [person.id]: value }))}
+              invalid={!!errors.passengers}
+            />
+          ))}
+          {errors.passengers && (
+            <p id={idOf("passengers-error")} className="text-[13px] leading-[18px] text-destructive">
+              {tErrors("tooManyPassengers", { seats: seatsSent })}
+            </p>
+          )}
         </div>
       )}
       {alert && (

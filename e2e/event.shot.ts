@@ -109,21 +109,30 @@ test("« Proposer une voiture » with errors", async ({ db, page, seededEvent },
   await shoot(page, testInfo, "proposer-voiture-erreurs");
 });
 
-// C11.2, #169: Léa, a passenger of Marc on the retour, also drives back: « Au retour » unfolded.
-test("« Proposer une voiture » with « Au retour » unfolded", async ({ db, page, seededEvent }, testInfo) => {
+// C11.2, #169, #171: Léa, a passenger of Marc on the retour, also drives back: « Au retour »
+// unfolded; Tom and Nina, of her device, without a car at the aller, ride with her.
+test("« Proposer une voiture » with « Au retour » unfolded and « Qui monte avec vous ? »", async ({ db, page, seededEvent }, testInfo) => {
   const { id } = seededEvent;
   const token = newToken();
   const marc = await seedPerson(db, id, { firstName: "Marc" });
   const lea = await seedPerson(db, id, { firstName: "Léa" }, token);
   await seedPlacement(db, { personId: lea.id, eventId: id, leg: "retour", rideId: await seedRide(db, id, marc.id, { leg: "retour" }) });
+  for (const firstName of ["Tom", "Nina"]) {
+    const { id: personId } = await seedPerson(db, id, { firstName }, token);
+    await seedPlacement(db, { personId, eventId: id, leg: "aller", rideId: null });
+  }
   await holdToken(page, id, token);
   await page.goto(`/e/${id}`, { waitUntil: "networkidle" });
   await page.getByRole("tabpanel").getByRole("button", { name: "Proposer une voiture" }).click();
   const sheet = page.getByRole("dialog", { name: "Proposer une voiture" });
+  await sheet.getByRole("radio", { name: "Léa", exact: true }).check();
+  for (const name of ["Tom", "Nina"]) await sheet.getByRole("checkbox", { name, exact: true }).check();
   await sheet.getByLabel("Lieu de départ", { exact: true }).fill("Église de Saint-Grégoire");
   await sheet.getByRole("radio", { name: "Je ramène aussi" }).check();
   await expect(sheet.getByLabel("Lieu de dépose", { exact: true })).toHaveValue("Église de Saint-Grégoire");
   expect(await sheet.evaluate((element) => element.scrollWidth - element.clientWidth), "the sheet scrolls sideways").toBe(0);
+  // The sheet scrolls inside it: its end in view, « Au retour » unfolded above « Qui monte avec vous ? ».
+  await sheet.getByRole("button", { name: "Valider" }).scrollIntoViewIfNeeded();
   await shoot(page, testInfo, "proposer-voiture-au-retour");
 });
 

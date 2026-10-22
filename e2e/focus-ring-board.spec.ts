@@ -176,38 +176,49 @@ test.describe("the focus ring on the event's page", () => {
       expect((await selectedTabRing(page, tab(page, "Aller"))).background).toBe(MUTED);
     });
 
-    test("F1.4: « Proposer une voiture » opened from the keyboard; « Qui conduit ? » by the arrows, the note, « Valider » and « Fermer » show the ring", async ({
+    test("F1.4: « Proposer une voiture » opened from the keyboard; « Qui conduit ? » by the arrows, the note, the boxes of « Qui monte avec vous ? », « Valider » and « Fermer » show the ring", async ({
+      db,
       page,
       seededEvent,
     }) => {
+      // Tom, of the device, without a car at the aller: « Qui monte avec vous ? » has his box (#171).
+      const tom = await seedPerson(db, seededEvent.id, { firstName: "Tom" }, token);
+      await seedPlacement(db, { personId: tom.id, eventId: seededEvent.id, leg: "aller", rideId: null });
       await open(page, seededEvent.id);
       await pressUntil(page, "Tab", button(panel(page), "Proposer une voiture"), 60);
       await press(page, "Enter");
       const sheet = dialog(page, "Proposer une voiture");
       await expect(sheet).toBeVisible();
 
-      // Claire drives at the aller: Léa is chosen, and has the focus as the sheet opens.
+      // Claire drives at the aller: Léa and Tom can, nobody is chosen, and Léa, the first, has the focus as the sheet opens.
       const driver = sheet.getByRole("radiogroup", { name: "Qui conduit ?" });
       const lea = driver.getByRole("radio", { name: "Léa", exact: true });
+      const tomDrives = driver.getByRole("radio", { name: "Tom", exact: true });
       const someoneNew = driver.getByRole("radio", { name: "Une nouvelle personne", exact: true });
       await expect(lea).toBeFocused();
       expect((await expectRing(lea)).background).toBe(WHITE);
+      await arrow(page, "ArrowDown", tomDrives);
       await arrow(page, "ArrowDown", someoneNew);
       await expect(someoneNew).toBeChecked();
       expect((await expectRing(someoneNew)).background).toBe(WHITE);
+      await arrow(page, "ArrowUp", tomDrives);
       await arrow(page, "ArrowUp", lea);
       await expect(lea).toBeChecked();
       expect((await expectRing(lea)).background).toBe(WHITE);
 
       const { reached, rings } = await walkThrough(
         page,
-        [sheet.getByLabel("Note (facultatif)", { exact: true }), button(sheet, "Valider")],
+        [
+          sheet.getByLabel("Note (facultatif)", { exact: true }),
+          sheet.getByRole("group", { name: "Qui monte avec vous ?" }).getByRole("checkbox", { name: "Tom", exact: true }),
+          button(sheet, "Valider"),
+        ],
         button(sheet, "Fermer"),
       );
-      expect(rings.map(background)).toEqual([WHITE, WHITE]);
-      // The place, the time and the seats, then the note; « Au retour », its radio buttons, by its chosen one.
-      // No box of « Qui monte avec vous ? »: the form does not ask it yet (#171).
-      expect(reached).toEqual(["<input>", "<input>", "<input>", "<textarea>", "<button>", '<button> "Valider"', '<button> "Fermer"']);
+      expect(rings.map(background)).toEqual([WHITE, WHITE, WHITE]);
+      // The place, the time and the seats, then the note; « Au retour », its radio buttons, by its
+      // chosen one; then Tom's box, a Radix button.
+      expect(reached).toEqual(["<input>", "<input>", "<input>", "<textarea>", "<button>", "<button>", '<button> "Valider"', '<button> "Fermer"']);
     });
 
     test("F1.5: the confirmation « Retirer la voiture ? » opened from the keyboard: the red button and « Annuler » touch the box's white", async ({

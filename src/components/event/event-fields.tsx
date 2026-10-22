@@ -132,12 +132,15 @@ export function Box({
   hint,
   checked,
   onChange,
+  invalid,
 }: {
   id: string;
   label: ReactNode;
   hint: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  /** In a group in error (« Qui monte avec vous ? », C4.13): each box says so, as a radio group does. */
+  invalid?: boolean;
 }) {
   return (
     <label htmlFor={id} className="flex min-h-11 cursor-pointer items-start gap-2.5 py-1">
@@ -148,6 +151,7 @@ export function Box({
         onCheckedChange={(value) => onChange(value === true)}
         aria-labelledby={`${id}-label`}
         aria-describedby={`${id}-hint`}
+        aria-invalid={invalid || undefined}
       />
       <span className="flex flex-col gap-1">
         <span id={`${id}-label`} className="text-sm leading-5 font-medium">

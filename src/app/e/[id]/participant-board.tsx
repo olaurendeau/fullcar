@@ -255,27 +255,43 @@ export function ParticipantBoard({
   };
 
   // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
-  // In the bar, the failure names who drives and each leg offered, then why, `alreadyDriving` included.
-  const offerRide: OfferRide = async ({ offer: { driver, otherLeg, ...car }, creationIds, sending, notDone, landmark, ...sheet }) => {
+  // In the bar, the failure names who drives and each leg offered, then why, `alreadyDriving` included,
+  // and `alreadyInCar` the passengers ticked. A success with passengers says who boarded, with « Annuler » (C4.13).
+  const offerRide: OfferRide = async ({ offer: { driver, otherLeg, ...car }, passengers, creationIds, sending, notDone, landmark, ...sheet }) => {
+    const passengerIds = passengers.map((person) => person.id);
     const send = () => {
       const { rideId, personId, otherRideId } = creationIds();
       // The car on the other leg has its own creation id (C4.10).
       const ride = { ...car, otherLeg: otherLeg?.kind === "drive" ? { ...otherLeg, rideId: otherRideId } : otherLeg };
       const token = driver.kind === "new" ? ensureDeviceToken(id) : readDeviceToken(id);
-      return storeRideOffer(id, token, { ...ride, rideId, driver: driver.kind === "new" ? { ...driver, personId } : driver });
+      const boarding = passengerIds.length > 0 ? { passengerIds } : {};
+      return storeRideOffer(id, token, { ...ride, ...boarding, rideId, driver: driver.kind === "new" ? { ...driver, personId } : driver });
     };
     const sent = await runAction(`offerRide:${sheet.key}`, send, sending, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
-    if (outcome?.ok) {
+    const names = passengers.map((person) => person.firstName);
+    if (outcome?.ok && names.length === 0) {
       messages.succeed(null);
       device.registered();
       return { kind: "done" };
     }
+    if (outcome?.ok) {
+      device.registered();
+      // The car sent, whose id stays the form's until a success; its passengers were without a car (v4-10).
+      const { rideId } = creationIds();
+      const { driver: firstName } = notDone;
+      const persons = passengerIds.map((personId) => ({ personId, before: "withoutCar" as const }));
+      const text =
+        names.length === 1 ? words.t("Seat.placed", { firstName: names[0], driver: firstName }) : words.t("Sheet.placed", { names: nameList(words, names), driver: firstName });
+      const undo = undoOf(sheet.seq, { rideId, leg: car.leg, persons }, { names, driver: firstName });
+      sheet.whenClosed(() => messages.succeed({ text, landmark: focusCar(car.leg, rideId), undo }));
+      return { kind: "done" };
+    }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     const problem = sent.ok ? "failed" : sent.problem;
-    const why = outcome ? offerWhy(outcome.error, notDone.driver) : whyOf(problem);
+    const why = outcome ? offerWhy(outcome.error, notDone.driver, names) : whyOf(problem);
     // Offered from the retour's tab once it is gone, the sheet closes (rule 9). From the aller's,
     // the retour goes from the sheet; closed, the bar says to offer the car again (decision 47).
     failedIn(sheet, { notDone, landmark, ...noRetourWhy(why, car.leg, "offerRide") });
