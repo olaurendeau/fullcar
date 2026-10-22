@@ -133,7 +133,7 @@ test.describe("the scene of O2.5", () => {
   });
 
   for (const viewport of [{ width: 360, height: 780 }, { width: 1280, height: 800 }]) {
-    test(`O8.1, O8.2, O8.4: at ${viewport.width} px, a click, Enter and Space fold and unfold, in place, with no request; folded, only the title line and the summary`, async ({
+    test(`O8.1, O8.2, O8.4, M1.2: at ${viewport.width} px, a click, Enter and Space fold and unfold, in place, with no request; folded, only the title line and the summary`, async ({
       page,
       seededEvent,
     }) => {
@@ -166,9 +166,12 @@ test.describe("the scene of O2.5", () => {
         panel(page).getByRole("note"),
         panel(page).getByRole("region"),
         panel(page).getByRole("heading", { level: 3 }),
+        // O8.2 amended by #250, M1.2.
+        page.getByRole("button", { name: "Modifier l’événement" }),
       ]) {
         await expect(hidden).toHaveCount(0);
       }
+      await expect(panel(page).locator("button", { hasText: "Modifier l’événement" })).toBeHidden();
       for (const link of await panel(page).getByTestId("link").all()) await expect(link).toBeHidden();
 
       // From the keyboard: the ring is inside the button; Tab goes to « Actualiser », then out of the panel.
@@ -204,6 +207,15 @@ test.describe("the scene of O2.5", () => {
       expect(sent, "requests sent by folding").toBe(0);
     });
   }
+
+  // A click that does not focus the button, as Safari's (#302): the focus in what folds goes to the title's button.
+  test("O8.1: folded by a click that leaves the focus on « Copier », the focus goes to the title's button", async ({ page, seededEvent }) => {
+    await page.goto(organiserPath(seededEvent));
+    await panel(page).getByRole("button", { name: "Copier", exact: true }).first().focus();
+    await toggle(page).evaluate((button: HTMLElement) => button.click());
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
+    await expect(toggle(page)).toBeFocused();
+  });
 
   test("O8.3: each folded line reads as its tile; the pill is the tab's, nothing else amber; no button, link nor status", async ({
     page,
