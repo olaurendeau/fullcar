@@ -7,8 +7,11 @@ import { scrubText } from "./scrub";
  * is never called: the SDK is neither downloaded nor initialised.
  */
 
-export type BrowserSdk = Pick<typeof Sentry, "init" | "browserTracingIntegration" | "captureRouterTransitionStart">;
+export type BrowserSdk = Pick<
+  typeof Sentry, "init" | "browserTracingIntegration" | "captureRouterTransitionStart" | "defaultStackParser"
+>;
 type Load = () => Promise<BrowserSdk>;
+type StackParser = BrowserSdk["defaultStackParser"];
 
 /**
  * The browser's variables, each written out in full: Next.js inlines `process.env.NEXT_PUBLIC_…`
@@ -34,6 +37,18 @@ export function beforeStartSpan<O extends { name: string }>(options: O): O {
   return { ...options, name: scrubText(options.name) };
 }
 
+/** The file of a script's frame: a URL, without a space (`https://…`, `chrome-extension://…`, `blob:…`). */
+const SCRIPT_FILE = /^[a-z][\w+.-]*:\S+$/i;
+
+/**
+ * The SDK's stack parser, without the frames it reads from a line of a message (#379). V8
+ * writes the message at the top of the stack: `    at Marc (depuis 10:30)` would be the
+ * thrown error's top frame, the only one `allowUrls` looks at, and the error never sent.
+ */
+export function scriptFramesOnly(parse: StackParser): StackParser {
+  return (...args) => parse(...args).filter(({ filename }) => SCRIPT_FILE.test(filename ?? ""));
+}
+
 /** The SDK, once started; `undefined` without a DSN, and `load` then never called. */
 export async function startBrowserSentry(env: SentryEnv, load: Load = () => import("@sentry/nextjs")): Promise<BrowserSdk | undefined> {
   const options = sentryOptions(env);
@@ -44,6 +59,7 @@ export async function startBrowserSentry(env: SentryEnv, load: Load = () => impo
     ...options,
     // Errors of our own scripts only, not of an extension or of another origin.
     allowUrls: [/\/_next\//],
+    stackParser: scriptFramesOnly(sentry.defaultStackParser),
     integrations: exactIntegrations(BROWSER_INTEGRATIONS, [tracing]),
   });
   if (!client) return undefined;
