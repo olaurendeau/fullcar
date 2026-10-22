@@ -297,7 +297,6 @@ describe("undoWhy: « Annuler » (C5.10, C11.11)", () => {
     for (const error of ["failed", "invalid"] as const) expect(undoWhy(error)).toEqual({ kind: "retryUndo", problem: "failed" });
     for (const error of ["forbidden", "eventNotFound", "noRetour"] as const) expect(undoWhy(error)).toEqual(whyOf(error));
   });
-
 });
 
 // Decision 45 (organizer-view v3.3.6, #267): a send refused by `noRetour` whose aim holds without

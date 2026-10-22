@@ -367,7 +367,11 @@ test.describe("« Trouver une place »", () => {
     tom();
 
     await expect(messages(page)).toHaveText([TOM_PLACED]);
-    await expect(page.locator("[data-message-bar]").getByRole("button", { name: "Annuler" })).toHaveAccessibleDescription(TOM_PLACED);
+    const buttons = page.locator("[data-message-bar]").getByRole("button");
+    await expect(buttons).toHaveCount(2);
+    await expect(buttons.nth(0)).toHaveAccessibleName("Annuler");
+    await expect(buttons.nth(1)).toHaveAccessibleName("Fermer");
+    await expect(buttons.nth(0)).toHaveAccessibleDescription(TOM_PLACED);
     await expect(barStatus(page)).toHaveText(TOM_PLACED);
     const status = (await record()).writes.filter((write) => write.region === "status");
     expect(status[0]?.text).toBe("");
