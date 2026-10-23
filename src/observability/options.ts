@@ -78,6 +78,37 @@ export function codeFramesOnly<E extends Event>(event: E): E {
   return event;
 }
 
+/** A stack parser of the SDK, as it is: the frames it reads from a stack. */
+export type ParseStack = (stack: string) => readonly unknown[];
+
+/*
+ * A frame of our own around the line: the parser drops a frame of `captureException` or of
+ * `sentryWrapped` at either end of a stack, and would make none of `    at Marc.captureException (…)`.
+ */
+const AROUND = "    at around (/around.js:1:1)";
+const readsAsFrame = (parse: ParseStack, line: string) => parse(`${AROUND}\n${line}\n${AROUND}`).length > 2;
+
+/**
+ * Of every error's message, and of its causes', the lines after the first that `parse`, the
+ * SDK's own stack parser, makes a frame of (#379, #393): `codeFramesOnly` leaves out that
+ * frame, and this the line itself, which `scrubText` would send with the first name in it.
+ * Node's parser reads `at ` anywhere in a line, a browser's a line ending in a path: no
+ * pattern of ours says it as they do. Reading `at ` anywhere has a cost: lines such as
+ * « Le format attendu » or « Un état incohérent » go too, which the project accepts (privacy
+ * over diagnostics). The first line is the message's own, which the parsers
+ * skip: on the server always, in the browser after the `…Error: ` of the error's name (#239).
+ */
+export function messagesWithoutFrames(parse: ParseStack) {
+  return <E extends Event>(event: E): E => {
+    for (const exception of event.exception?.values ?? []) {
+      if (typeof exception.value !== "string") continue;
+      const lines = exception.value.split("\n");
+      exception.value = lines.filter((line, index) => index === 0 || !readsAsFrame(parse, line)).join("\n");
+    }
+    return event;
+  };
+}
+
 /** The two hooks the options cannot carry: the sampling context, and every envelope's header. */
 export function registerHooks(client: Pick<Client, "on">): void {
   client.on("createDsc", scrubCreatedDsc);

@@ -1,6 +1,8 @@
 import type * as Sentry from "@sentry/nextjs";
 import { errorCode } from "@/db/failure";
-import { codeFramesOnly, exactIntegrations, registerHooks, sentryOptions, type SentryEnv } from "./options";
+import {
+  codeFramesOnly, exactIntegrations, messagesWithoutFrames, registerHooks, sentryOptions, type SentryEnv,
+} from "./options";
 
 /*
  * Sentry on the server (Node.js runtime), started by `register()` in `src/instrumentation.ts`.
@@ -44,10 +46,14 @@ export function databaseErrors<E extends Sentry.Event>(event: E, hint: Sentry.Ev
   return event;
 }
 
-/** The hooks of `registerHooks`, and the server's event processors. */
-export function registerServerHooks(client: Pick<Sentry.NodeClient, "on" | "addEventProcessor">): void {
+/**
+ * The hooks of `registerHooks`, and the server's event processors. The client's stack parser
+ * is the SDK's own, `defaultStackParser`: the one that made the frames of every error.
+ */
+export function registerServerHooks(client: Pick<Sentry.NodeClient, "on" | "addEventProcessor" | "getOptions">): void {
   registerHooks(client);
   client.addEventProcessor(codeFramesOnly);
+  client.addEventProcessor(messagesWithoutFrames(client.getOptions().stackParser));
   client.addEventProcessor(databaseErrors);
 }
 

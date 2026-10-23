@@ -73,4 +73,42 @@ describe("createAnnouncer", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(alert.writes.filter(Boolean)).toEqual(["A"]);
   });
+
+  // Event-board v4.4.6 (#372): a line cut to its aller part is not written again.
+  describe("amend", () => {
+    it("the text already written: the region empties, and nothing is written after", () => {
+      const alert = region();
+      const announcer = createAnnouncer(alert.write);
+      announcer.say("Aller et retour.");
+      vi.advanceTimersByTime(100);
+      announcer.amend("Aller.");
+      vi.advanceTimersByTime(1_000);
+      expect(alert.writes).toEqual(["", "Aller et retour.", ""]);
+    });
+
+    it("the text waiting its 100 ms: the amended text is written at its hour, once, and never the first", () => {
+      const alert = region();
+      const announcer = createAnnouncer(alert.write);
+      announcer.say("Aller et retour.");
+      vi.advanceTimersByTime(60);
+      announcer.amend("Aller.");
+      vi.advanceTimersByTime(39);
+      expect(alert.writes).toEqual([""]);
+      vi.advanceTimersByTime(1_000);
+      expect(alert.writes).toEqual(["", "Aller."]);
+    });
+
+    it("the text waiting for a sheet to close: the amended text is written as it closes", async () => {
+      const alert = region();
+      const announcer = createAnnouncer(alert.write);
+      announcer.say("Aller et retour.");
+      const uncover = coverPage();
+      vi.advanceTimersByTime(100);
+      announcer.amend("Aller.");
+      expect(alert.writes).toEqual([""]);
+      uncover();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(alert.writes).toEqual(["", "Aller."]);
+    });
+  });
 });
