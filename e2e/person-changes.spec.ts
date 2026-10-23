@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { bar, failHeld, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failHeld, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -87,8 +87,6 @@ async function selectTab(page: Page, leg: "Aller" | "Retour") {
 
 /** A cell, found while a sheet hides the page from role queries. */
 const hiddenCell = (page: Page, name: string) => page.locator(`button[aria-label="${name}"]`);
-/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
-const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /** The sheet's actions, « Fermer » last. */
 async function actions(dialog: Locator) {

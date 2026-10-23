@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
+import { bar, failHeld, holdClose, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -66,8 +66,6 @@ const barClose = (page: Page) => page.locator("[data-message-bar]").getByRole("b
 const title = (page: Page, driver: string) => page.getByRole("heading", { name: `Voiture de ${driver}` });
 /** A free seat, found while a sheet hides the page from role queries. */
 const hiddenSeat = (page: Page, driver: string) => page.locator(`button[aria-label="${seatName(driver)}"]`).first();
-/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
-const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /** The checkboxes of a sheet, each with its first name, the state under it (its description), and whether it is ticked. */
 async function candidates(dialog: Locator) {

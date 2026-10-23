@@ -120,6 +120,9 @@ export async function failHeld(page: Page, answer: () => void) {
   await responded;
 }
 
+/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
+export const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
+
 /** Answers every server action with a 500 while `failing.on`; the page and its scripts load. */
 export async function failActions(page: Page) {
   const failing = { on: true };
