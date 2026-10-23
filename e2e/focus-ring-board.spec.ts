@@ -46,6 +46,8 @@ async function seedScene(db: Db, eventId: string, token: string, marcsToken: str
 
 const contact = (page: Page) => page.getByRole("link", { name: "Nous contacter (s’ouvre dans un nouvel onglet)", exact: true });
 const home = (page: Page) => page.getByRole("link", { name: "Accueil", exact: true });
+const source = (page: Page) =>
+  page.getByRole("link", { name: "Code source sur GitHub (s’ouvre dans un nouvel onglet)", exact: true });
 const languageSwitch = (page: Page) => page.getByRole("button", { name: "English", exact: true });
 const section = (page: Page) => page.getByRole("region", { name: "Vos inscriptions" });
 const tab = (page: Page, leg: "Aller" | "Retour") => page.getByRole("tab", { name: new RegExp(`^${leg}`) });
@@ -56,6 +58,8 @@ const button = (scope: Page | Locator, name: string) => scope.getByRole("button"
 const dialog = (page: Page, name: string) => page.getByRole("dialog", { name, exact: true });
 /** « Nous contacter » as `walk` names it, its name cut at 40 characters. */
 const contactReached = /^<a> "Nous contacter/;
+/** « Code source sur GitHub » (#489), as `walk` names it. */
+const sourceReached = /^<a> "Code source sur GitHub/;
 
 /** `run`, its failure rethrown with the numbers hidden: a `tel:` link is named by its number. */
 async function quiet<T>(run: () => Promise<T>): Promise<T> {
@@ -152,6 +156,7 @@ test.describe("the focus ring on the event's page", () => {
       );
       expect(aller.rings.map(background)).toEqual([WHITE, WHITE, WHITE, MUTED, WHITE, WHITE, WHITE, WHITE, MUTED]);
       expect(aller.reached).toContain('<a> "Appeler Léa au <numéro>"');
+      expect(aller.reached.at(-2)).toMatch(sourceReached);
       expect(aller.reached.at(-1)).toMatch(contactReached);
 
       // 2. The retour's tab: back to « Aller », then the right arrow selects « Retour ».
@@ -167,6 +172,7 @@ test.describe("the focus ring on the event's page", () => {
         contact(page),
       );
       expect(retour.rings.map(background)).toEqual([WHITE, WHITE, WHITE]);
+      expect(retour.reached.at(-2)).toMatch(sourceReached);
       expect(retour.reached.at(-1)).toMatch(contactReached);
 
       // 3. The left arrow from « Retour » gives « Aller » back.
@@ -294,7 +300,7 @@ test.describe("the focus ring on the event's page", () => {
 test.describe("the focus ring on the event's page, without JavaScript", () => {
   test.use({ locale: "fr-FR", javaScriptEnabled: false });
 
-  test("F1.18: « Accueil » and « Nous contacter » reached by Tab show the ring; the inactive language switch is not reached", async ({
+  test("F1.18: « Accueil », « Code source sur GitHub » and « Nous contacter » reached by Tab show the ring; the inactive language switch is not reached", async ({
     db,
     page,
     seededEvent,
@@ -305,6 +311,9 @@ test.describe("the focus ring on the event's page, without JavaScript", () => {
 
     await pressUntil(page, "Tab", home(page), 60);
     expect((await expectRing(home(page))).background).toBe(WHITE);
+    await press(page, "Tab");
+    await expect(source(page)).toBeFocused();
+    expect((await expectRing(source(page))).background).toBe(WHITE);
     await press(page, "Tab");
     await expect(contact(page)).toBeFocused();
     expect((await expectRing(contact(page))).background).toBe(WHITE);

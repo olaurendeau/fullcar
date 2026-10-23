@@ -9,16 +9,24 @@ import { LanguageSwitch } from "@/components/i18n/language-switch";
  */
 export const CRISP_CHAT_URL = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
 
+/** The public repository of Fullcar (#489): a fixed address, nothing of the page taken along. */
+export const SOURCE_CODE_URL = "https://github.com/olaurendeau/fullcar";
+
+const outLink = "inline-flex min-h-11 items-center px-3 text-sm text-muted-foreground underline underline-offset-4";
+
 /**
- * The last thing of a page: the language switch (#113), then a discreet "contact us" link
- * (#69, K1 to K3), the last link of the page. A new tab, with neither opener nor referrer:
- * Crisp's page can reach back to the organiser's page, its fragment included, through none
- * of them (K4).
+ * The last thing of a page, on two lines at every width (#489, design github-link).
  *
- * First of the row, a link to the home page (#232, A3), in the same tab, at the fixed address
- * `/`: it takes nothing of the current address along. Left out of `/` itself
- * (`withHomeLink={false}`), where it would lead nowhere. Not prefetched: no page, the
- * organiser's included, asks for the home page before a tap on it.
+ * Line 1, what stays in the app: a link to the home page (#232, A3), in the same tab, at the
+ * fixed address `/`, then the language switch (#113). The home link takes nothing of the
+ * current address along, is left out of `/` itself (`withHomeLink={false}`), where it would
+ * lead nowhere, and is not prefetched: no page, the organiser's included, asks for the home
+ * page before a tap on it.
+ *
+ * Line 2, what leaves it: the source code on GitHub, then a discreet "contact us" link (#69,
+ * K1 to K3), the last link of the page. Both open a new tab, with neither opener nor
+ * referrer: the page they open can reach back to the organiser's page, its fragment
+ * included, through none of them (K4, G7). Nothing is asked of GitHub before a tap (G8).
  */
 export function ContactFooter({ withHomeLink = true }: { withHomeLink?: boolean }) {
   const t = useTranslations("Contact");
@@ -37,17 +45,17 @@ export function ContactFooter({ withHomeLink = true }: { withHomeLink?: boolean 
             </Link>
           )
         }
-      >
-        <a
-          href={CRISP_CHAT_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex min-h-11 items-center px-3 text-sm text-muted-foreground underline underline-offset-4"
-        >
+      />
+      <div className="flex flex-wrap justify-center">
+        <a href={SOURCE_CODE_URL} target="_blank" rel="noopener noreferrer" className={outLink}>
+          {t("sourceCode")}
+          <span className="sr-only"> {t("newTab")}</span>
+        </a>
+        <a href={CRISP_CHAT_URL} target="_blank" rel="noopener noreferrer" className={outLink}>
           {t("link")}
           <span className="sr-only"> {t("newTab")}</span>
         </a>
-      </LanguageSwitch>
+      </div>
     </footer>
   );
 }

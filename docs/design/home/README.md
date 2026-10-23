@@ -74,7 +74,8 @@ Les mêmes, dans le même ordre, que la section « Décisions » de `index.html`
 7. Décision : présent partout ailleurs, « Événement introuvable » comprise. — Raison : un bas
    de page identique ; son bouton mène à `/nouveau`, « Accueil » à `/`.
 8. Décision : ordre « Accueil », langue, « Nous contacter ». — Raison : on lit d’abord où
-   aller ; K1 de #69 tient.
+   aller ; K1 de #69 tient. Prolongé par `github-link` (#489) en « Accueil », langue, « Code
+   source sur GitHub », « Nous contacter ».
 9. Décision : le focus de « Accueil » est l’anneau du bouton de langue, seul
    (`outline-none focus-visible:ring-3 focus-visible:ring-ring/50`, `rounded-lg`). — Raison :
    un seul style de focus dans la ligne.

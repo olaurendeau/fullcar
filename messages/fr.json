@@ -387,7 +387,8 @@
   "Contact": {
     "home": "Accueil",
     "link": "Nous contacter",
-    "newTab": "(s’ouvre dans un nouvel onglet)"
+    "newTab": "(s’ouvre dans un nouvel onglet)",
+    "sourceCode": "Code source sur GitHub"
   },
   "NewEvent": {
     "title": "Créer un événement"
