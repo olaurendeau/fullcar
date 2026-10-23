@@ -137,7 +137,7 @@ test.describe("the fake Photon", () => {
     const started = Date.now();
     expect(await (await search(text)).json()).toEqual({ type: "FeatureCollection", features: [] });
     expect(Date.now() - started).toBeLessThan(1000);
-    // The longest a timer holds is still a delay.
+    // The longest a timer holds is still accepted.
     await answerFor(textOf("Presque jamais"), { delayMs: 2 ** 31 - 1 });
   });
 
