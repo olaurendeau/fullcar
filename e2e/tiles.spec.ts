@@ -1,20 +1,12 @@
 import type { APIResponse } from "@playwright/test";
 import { BLANK_TILE } from "@/app/tuiles/[z]/[x]/[y]/blank-tile";
 import { expect, test } from "./fixtures";
-import { answerTiles, placeOf, requestsForTile, tileAt, type IgnAnswer } from "./ign";
+import { answerTiles, PNG_SIGNATURE, requestsForTile, tileOf, type IgnAnswer } from "./ign";
 
 // #475: `GET /tuiles/{z}/{x}/{y}` (event-map v11, « Les tuiles », CA2.6, CA3.2) against the
 // slot's fake IGN, through `next start`: what the IGN receives, and what the route answers to
 // each of its answers. Each test sets only the tiles it asks for itself, around `placeOf` its
 // own event (#238, « Capacité du faux IGN »): never an area.
-
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
-/** A tile of this test's own, `z/x/y` at z 18, and `dx` columns further east. */
-function tileOf(eventId: string, dx = 0) {
-  const [z, x, y] = tileAt(placeOf(eventId), 18).split("/").map(Number);
-  return `${z}/${x + dx}/${y}`;
-}
 
 type Coordinates = { z: number; x: number; y: number };
 
@@ -54,10 +46,11 @@ test.describe("GET /tuiles/{z}/{x}/{y} against the fake IGN", () => {
     ];
     const cases = misread.map((pathOf, dx) => pathOf(coordinatesOf(tileOf(seededEvent.id, dx))));
 
+    // Soft: one run reports each path a mutant lets through, not only the first.
     for (const [path, tile] of cases) {
       const response = await request.get(path);
-      expect(response.status(), path).toBe(404);
-      expect(await requestsForTile(tile), path).toEqual([]);
+      expect.soft(response.status(), path).toBe(404);
+      expect.soft((await requestsForTile(tile)).length, path).toBe(0);
     }
   });
 
@@ -73,7 +66,7 @@ test.describe("GET /tuiles/{z}/{x}/{y} against the fake IGN", () => {
     expect(response.status()).toBe(200);
 
     const received = await requestsForTile(tile);
-    expect(received).toHaveLength(1);
+    expect(received.length).toBe(1);
     const [{ query, headers }] = received;
     const parameters = new URLSearchParams(query);
     expect(parameters.get("TILEMATRIXSET")).toBe("PM_0_19");
@@ -106,7 +99,7 @@ test.describe("GET /tuiles/{z}/{x}/{y} against the fake IGN", () => {
     expect(answer.cache).toBe("public, max-age=86400");
     expect(answer.cdn).toBe("public, s-maxage=86400");
     expect(answer.body.equals(Buffer.from(BLANK_TILE))).toBe(true);
-    expect(await requestsForTile(tile)).toHaveLength(1);
+    expect((await requestsForTile(tile)).length).toBe(1);
   });
 
   test("answers the blank tile, stored nowhere, to a 404 without that report", async ({ request, seededEvent }) => {
@@ -130,7 +123,7 @@ test.describe("GET /tuiles/{z}/{x}/{y} against the fake IGN", () => {
       expect(answer.status).toBe(502);
       expect(answer.cache).toBe("no-store");
       expect(answer.cdn).toBeUndefined();
-      expect(await requestsForTile(tile)).toHaveLength(1);
+      expect((await requestsForTile(tile)).length).toBe(1);
     });
   }
 });
