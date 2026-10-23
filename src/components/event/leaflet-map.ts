@@ -38,6 +38,32 @@ const WORLD: L.LatLngBoundsExpression = [
 /** The touch target of a zoom button, in CSS pixels (CA1.8). */
 const ZOOM_TARGET = "44px";
 
+/** Leaflet 1.9.4's keyboard handler, `L.Map.Keyboard`, which @types/leaflet does not declare. */
+const LeafletKeyboard = (L.Map as unknown as { Keyboard: typeof L.Handler }).Keyboard;
+type KeyboardHandler = L.Handler & { _map: L.Map; _onKeyDown(event: KeyboardEvent): void };
+
+/**
+ * Leaflet's keyboard, but its arrow keys pan at once (CA1.10, decision 24 of organizer-view).
+ * Leaflet 1.9.4 has no option for it: its `_onKeyDown` calls `map.panBy(offset)`, animated for
+ * 250 ms. Ours runs that same `_onKeyDown`, so Shift (three times the distance), the `maxBounds`
+ * limit and + / − for zoom stay Leaflet's, with `panBy` made still for the time of the key.
+ * This overrides an internal of Leaflet, and is safe only because package.json pins `leaflet`
+ * to exactly 1.9.4: an upgrade reads this again, and e2e/event-map-touch.spec.ts tests the
+ * arrows, Shift, + and −.
+ */
+const StillKeyboard = LeafletKeyboard.extend({
+  _onKeyDown(this: KeyboardHandler, event: KeyboardEvent) {
+    const map = this._map;
+    const panBy = map.panBy;
+    map.panBy = (offset, options) => panBy.call(map, offset, { ...options, animate: false });
+    try {
+      (LeafletKeyboard.prototype as KeyboardHandler)._onKeyDown.call(this, event);
+    } finally {
+      map.panBy = panBy;
+    }
+  },
+}) as typeof L.Handler;
+
 /** Leaflet writes the attribution as HTML: ours is text, and stays text. */
 function asText(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -59,8 +85,8 @@ function flagIcon(label: string): L.DivIcon {
  * alone is framed at zoom 14 (`framing`). The container is a region, focusable (arrows, + and −);
  * the flag is not a button and stays out of the Tab order.
  * Nothing moves by degrees (CA1.10, decision 24 of organizer-view): no zoom, fade or marker
- * animation, no inertia, every framing `{ animate: false }`, and every pan too (`panBy`, below).
- * The wheel scrolls the page.
+ * animation, no inertia, every framing `{ animate: false }`, and the arrow keys' pans at once
+ * (`StillKeyboard`). The wheel scrolls the page.
  * At touch, one finger scrolls the page too, and two move and zoom the map (CA1.11): dragging
  * follows `touchQuery`, also when it changes, the map staying as it is.
  */
@@ -75,14 +101,13 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     markerZoomAnimation: false,
     inertia: false,
     scrollWheelZoom: false,
+    // Ours instead, below: `StillKeyboard`.
+    keyboard: false,
     dragging: !touch.matches,
     touchZoom: true,
   });
-  // Leaflet's arrow keys call `map.panBy(offset)`, animated for 250 ms, and no option says
-  // otherwise. Relies on that internal of Leaflet 1.9.4 (Map.Keyboard `_onKeyDown`): every pan
-  // of this map, the keyboard's included, happens at once.
-  const panBy = map.panBy.bind(map);
-  map.panBy = (offset, panOptions) => panBy(offset, { ...panOptions, animate: false });
+  map.addHandler("keyboard", StillKeyboard);
+  map.keyboard.enable();
   const pointerChanged = () => (touch.matches ? map.dragging.disable() : map.dragging.enable());
   touch.addEventListener("change", pointerChanged);
 
