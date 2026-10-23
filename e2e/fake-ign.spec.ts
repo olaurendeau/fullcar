@@ -210,7 +210,7 @@ test.describe("the fake IGN", () => {
     const started = Date.now();
     await expectTile(await getTile(tile));
     expect(Date.now() - started).toBeLessThan(1000);
-    // The longest a timer holds is still a delay.
+    // The longest a timer holds is still accepted.
     await answerTiles([tileOf(seededEvent.id, 1)], { delayMs: 2 ** 31 - 1 });
   });
 

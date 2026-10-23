@@ -131,7 +131,7 @@ test.describe("the fake Photon", () => {
 
   test("refuses a delay longer than a timer holds, which Node would cut to 1 ms", async () => {
     const text = textOf("Jamais");
-    await expect(answerFor(text, { delayMs: 2 ** 31, features: [lilas] })).rejects.toThrow();
+    await expect(answerFor(text, { delayMs: 2 ** 31, features: [lilas] })).rejects.toThrow("(400)");
 
     // Nothing was set: the text is answered at once, empty.
     const started = Date.now();
