@@ -120,6 +120,42 @@ test.describe("the subject of « Ajouter une personne » and « Proposer une voi
   });
 
   /**
+   * Checks « Une nouvelle personne » in the form `form`. #446, a diagnostic: once in CI the click
+   * left the radio unchecked, and Playwright reads the state of the element it clicked, attached or
+   * not. Should it fail again, its message says, by booleans and ids alone, whether the form was
+   * remounted or closed meanwhile: the dialog and the radio tagged before the click, then whether
+   * they are still attached, the dialog's `data-state`, and the `aria-checked` of the radio as
+   * clicked and of the one shown now.
+   */
+  async function checkNewDriver(form: Locator, radio: Locator) {
+    await radio.evaluate((element) => {
+      const tagged = window as unknown as { offerTagged?: { dialog: Element | null; radio: Element } };
+      tagged.offerTagged = { dialog: element.closest('[role="dialog"]'), radio: element };
+    });
+    try {
+      await radio.check();
+    } catch (error) {
+      const facts = await form.page().evaluate(() => {
+        const { dialog, radio } = (window as unknown as { offerTagged: { dialog: Element | null; radio: Element } }).offerTagged;
+        const dialogs = [...document.querySelectorAll('[role="dialog"]')];
+        const shown = document.getElementById(radio.id);
+        return {
+          dialogs: dialogs.length,
+          dialogAttached: !!dialog?.isConnected,
+          dialogState: dialog?.getAttribute("data-state") ?? null,
+          sameDialogShown: !!dialog && dialogs.includes(dialog),
+          radioId: radio.id,
+          radioAttached: radio.isConnected,
+          radioChecked: radio.getAttribute("aria-checked"),
+          sameRadioShown: shown === radio,
+          shownRadioChecked: shown?.getAttribute("aria-checked") ?? null,
+        };
+      });
+      throw new Error(`${(error as Error).message}\n#446 diagnostic: ${JSON.stringify(facts)}`, { cause: error });
+    }
+  }
+
+  /**
    * Opens « Proposer une voiture » on the active tab, `leg`, for `driver` (Marc, a new person, or
    * Claire, of the device), fills the place, and with `both` drives on the other leg too.
    */
@@ -128,7 +164,7 @@ test.describe("the subject of « Ajouter une personne » and « Proposer une voi
     const form = page.getByRole("dialog", { name: "Proposer une voiture" });
     const drivers = form.getByRole("radiogroup", { name: "Qui conduit ?" });
     if (driver.trim() === "Marc") {
-      await drivers.getByRole("radio", { name: "Une nouvelle personne", exact: true }).check();
+      await checkNewDriver(form, drivers.getByRole("radio", { name: "Une nouvelle personne", exact: true }));
       await form.getByLabel("Prénom", { exact: true }).fill(driver);
     } else await drivers.getByRole("radio", { name: driver, exact: true }).check();
     await form.getByLabel(leg === "Aller" ? "Lieu de départ" : "Lieu de dépose", { exact: true }).fill(location);

@@ -181,6 +181,11 @@ describe("suggestionsOf: the label", () => {
     expect(labelsOf(collection(brindas, sion))).toEqual(["Mairie, 69126 Brindas", "Mairie, 1950 Sion, Suisse"]);
   });
 
+  it("tells France by its code, whatever the country's name", () => {
+    const brindas = feature({ name: "Mairie", postcode: "69126", city: "Brindas", type: "house", country: "Frankreich", countrycode: "FR" });
+    expect(labelsOf(collection(brindas))).toEqual(["Mairie, 69126 Brindas"]);
+  });
+
   it("without a country code, tells France by its name", () => {
     const brindas = feature({ name: "Mairie", postcode: "69126", city: "Brindas", type: "house", country: "France" });
     const geneva = feature({ name: "Mairie", city: "Genève", type: "house", country: "Suisse" });
