@@ -99,6 +99,8 @@ describe("participant tables", () => {
       { name: "seats", type: "smallint", nullable: "NO", default: null },
       { name: "note", type: "text", nullable: "YES", default: null },
       { name: "created_at", type: "timestamp with time zone", nullable: "NO", default: "now()" },
+      { name: "location_lat", type: "double precision", nullable: "YES", default: null },
+      { name: "location_lng", type: "double precision", nullable: "YES", default: null },
     ]);
     const { rows: precision } = await withRollback((trx) =>
       sql<{ precision: number }>`
@@ -120,9 +122,11 @@ describe("participant tables", () => {
     ]);
   });
 
-  it("types the leg, and never lets the timestamps be written", () => {
+  it("types the leg and the position, and never lets the timestamps be written", () => {
     expectTypeOf<Selectable<RideTable>["leg"]>().toEqualTypeOf<Leg>();
     expectTypeOf<Selectable<PlacementTable>["leg"]>().toEqualTypeOf<Leg>();
+    expectTypeOf<Selectable<RideTable>["location_lat"]>().toEqualTypeOf<number | null>();
+    expectTypeOf<Selectable<RideTable>["location_lng"]>().toEqualTypeOf<number | null>();
     expectTypeOf<Insertable<PersonTable>>().not.toHaveProperty("created_at");
     expectTypeOf<Insertable<RideTable>>().not.toHaveProperty("created_at");
     expectTypeOf<Insertable<PlacementTable>>().not.toHaveProperty("placed_at");
@@ -316,6 +320,39 @@ describe("participant tables", () => {
       });
       expect(legs).toEqual([{ leg: "aller" }, { leg: "retour" }]);
     });
+
+    // D4: a position is both coordinates or neither, each within its bounds. The rounding
+    // to 5 decimals is the domain's, not checked here.
+    it.each([
+      ["a latitude without longitude", { location_lat: 48.1, location_lng: null }, "ride_location_position_pair"],
+      ["a longitude without latitude", { location_lat: null, location_lng: -1.6 }, "ride_location_position_pair"],
+      ["a latitude of -90.0001", { location_lat: -90.0001, location_lng: 0 }, "ride_location_lat_range"],
+      ["a latitude of 90.0001", { location_lat: 90.0001, location_lng: 0 }, "ride_location_lat_range"],
+      ["a longitude of -180.0001", { location_lat: 0, location_lng: -180.0001 }, "ride_location_lng_range"],
+      ["a longitude of 180.0001", { location_lat: 0, location_lng: 180.0001 }, "ride_location_lng_range"],
+    ])("refuses %s", async (_, position, constraint) => {
+      await expectRefusedBy(async (trx) => {
+        const { eventId, personId } = await anEvent(trx);
+        await addRide(trx, eventId, personId, position);
+      }, constraint);
+    });
+
+    it.each([
+      ["no position", { location_lat: null, location_lng: null }],
+      ["the lowest bounds", { location_lat: -90, location_lng: -180 }],
+      ["the highest bounds", { location_lat: 90, location_lng: 180 }],
+    ])("accepts %s, and gives it back as written", async (_, position) => {
+      const stored = await withRollback(async (trx) => {
+        const { eventId, personId } = await anEvent(trx);
+        const id = await addRide(trx, eventId, personId, position);
+        return trx
+          .selectFrom("ride")
+          .select(["location_lat", "location_lng"])
+          .where("id", "=", id)
+          .executeTakeFirstOrThrow();
+      });
+      expect(stored).toEqual(position);
+    });
   });
 
   describe("placement", () => {
@@ -486,6 +523,17 @@ describe("participant tables", () => {
         );
       });
       expect(left).toEqual([0, 0, 0]);
+    });
+
+    // AL6.5: a car's position lives on its row, which the event takes with it.
+    it("the event takes the positions of its cars", async () => {
+      const left = await withRollback(async (trx) => {
+        const { eventId, personId } = await anEvent(trx);
+        const rideId = await addRide(trx, eventId, personId, { location_lat: 48.13451, location_lng: -1.60372 });
+        await trx.deleteFrom("event").where("id", "=", eventId).execute();
+        return trx.selectFrom("ride").select(["location_lat", "location_lng"]).where("id", "=", rideId).execute();
+      });
+      expect(left).toEqual([]);
     });
 
     it("a ride leaves its passengers without a car, on the same leg and event", async () => {
