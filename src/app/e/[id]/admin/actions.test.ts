@@ -208,6 +208,7 @@ describe("updateEvent", () => {
   const BEFORE = {
     title: "Tournoi de Rennes",
     location: "Gymnase des Gayeulles",
+    locationPosition: null,
     allerAt: "2026-12-12 07:30:00",
     retourAt: "2026-12-12 18:00:00",
   };
