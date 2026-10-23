@@ -45,9 +45,35 @@ function changes(update: ReturnType<typeof mapUpdate<Car>>): [string, string][] 
 }
 
 describe("pointKey", () => {
-  it("is the ids of the point's cars, in the order of the cards", () => {
+  it("is the ids of the point's cars, whatever the order of their cards", () => {
     const { points } = map([car("nina", BRINDAS), car("paul", BRINDAS), car("lea", ECULLY)]);
     expect(points.map(pointKey)).toEqual(["nina paul", "lea"]);
+    expect(map([car("paul", BRINDAS), car("nina", BRINDAS)]).points.map(pointKey)).toEqual(["nina paul"]);
+  });
+});
+
+describe("the cards change order", () => {
+  it("keeps the points, and puts them back in the order of the cards", () => {
+    const before = map([car("nina", BRINDAS), car("lea", ECULLY)]);
+    const update = mapUpdate(before, map([car("lea", ECULLY), car("nina", BRINDAS)]), focused({ kind: "point", key: "nina" }));
+    expect(changes(update)).toEqual([
+      ["lea", "kept"],
+      ["nina", "kept"],
+    ]);
+    expect(update.reorder).toBe(true);
+    expect(update.removed).toEqual([]);
+    expect(update.focus).toEqual({ kind: "point", key: "nina" });
+  });
+
+  it("keeps a group whose cars swap, open bubble and focus with it; it moves with its new first car", () => {
+    const before = map([car("nina", BRINDAS), car("paul", north(BRINDAS, 10))]);
+    const after = map([car("paul", north(BRINDAS, 10)), car("nina", BRINDAS)]);
+    const update = mapUpdate(before, after, focused({ kind: "bubble", car: "paul" }, { bubble: "nina paul" }));
+    expect(changes(update)).toEqual([["nina paul", "moved"]]);
+    expect(update.points[0].point.cars.map(({ id }) => id)).toEqual(["paul", "nina"]);
+    expect(update.closeBubble).toBe(false);
+    expect(update.focus).toEqual({ kind: "bubble", car: "paul" });
+    expect(update.reorder).toBe(false);
   });
 });
 
@@ -194,10 +220,43 @@ describe("grouping, or splitting", () => {
     expect(mapUpdate(apart, grouped, focused({ kind: "point", key: "nina" })).focus).toEqual({ kind: "point", key: "nina paul" });
   });
 
-  it("sends the focus a group had to the point of its first car still on the map", () => {
-    expect(mapUpdate(grouped, apart, focused({ kind: "point", key: "nina paul" })).focus).toEqual({ kind: "point", key: "nina" });
+  it("sends the focus a group had to the point of the car that left it", () => {
+    expect(mapUpdate(grouped, apart, focused({ kind: "point", key: "nina paul" })).focus).toEqual({ kind: "point", key: "paul" });
+    const ninaLeft = map([car("nina", VAUGNERAY), car("paul", north(BRINDAS, 10)), car("lea", ECULLY)]);
+    expect(mapUpdate(grouped, ninaLeft, focused({ kind: "point", key: "nina paul" })).focus).toEqual({ kind: "point", key: "nina" });
     const ninaGone = map([car("paul", VAUGNERAY), car("lea", ECULLY)]);
     expect(mapUpdate(grouped, ninaGone, focused({ kind: "point", key: "nina paul" })).focus).toEqual({ kind: "point", key: "paul" });
+  });
+
+  it("follows the middle car of three that leaves", () => {
+    const three = map([car("nina", BRINDAS), car("paul", north(BRINDAS, 10)), car("lea", north(BRINDAS, 5))]);
+    const paulLeft = map([car("nina", BRINDAS), car("paul", VAUGNERAY), car("lea", north(BRINDAS, 5))]);
+    expect(mapUpdate(three, paulLeft, focused({ kind: "point", key: "lea nina paul" })).focus).toEqual({ kind: "point", key: "paul" });
+  });
+
+  it("follows the first of two cars that leave, in the order of the cards", () => {
+    const three = map([car("nina", BRINDAS), car("paul", north(BRINDAS, 10)), car("lea", north(BRINDAS, 5))]);
+    const twoLeft = map([car("nina", BRINDAS), car("paul", VAUGNERAY), car("lea", ECULLY)]);
+    expect(mapUpdate(three, twoLeft, focused({ kind: "point", key: "lea nina paul" })).focus).toEqual({ kind: "point", key: "paul" });
+  });
+
+  it("sends the focus of a group split by a car removed, none moving, to its first car still on the map", () => {
+    const three = map([car("nina", BRINDAS), car("paul", north(BRINDAS, 20)), car("lea", north(BRINDAS, -20))]);
+    const ninaGone = map([car("paul", north(BRINDAS, 20)), car("lea", north(BRINDAS, -20))]);
+    const update = mapUpdate(three, ninaGone, focused({ kind: "point", key: "lea nina paul" }));
+    expect(changes(update)).toEqual([
+      ["paul", "created"],
+      ["lea", "created"],
+    ]);
+    expect(update.focus).toEqual({ kind: "point", key: "paul" });
+  });
+
+  it("sends the focus a group had to its first car still on the map when none of its cars moved", () => {
+    const joined = map([car("nina", BRINDAS), car("paul", north(BRINDAS, 10)), car("lea", north(BRINDAS, 5))]);
+    expect(mapUpdate(grouped, joined, focused({ kind: "point", key: "nina paul" })).focus).toEqual({
+      kind: "point",
+      key: "lea nina paul",
+    });
   });
 
   it("recreates a group that loses a car, and sends its focus to what is left", () => {
@@ -228,7 +287,7 @@ describe("an open bubble whose list changes", () => {
     expect(mapUpdate(pair, left, focused({ kind: "close" }, { bubble })).focus).toEqual({ kind: "point", key: "nina" });
     expect(mapUpdate(pair, third, focused({ kind: "bubble", car: "paul" }, { bubble })).focus).toEqual({
       kind: "point",
-      key: "nina paul lea",
+      key: "lea nina paul",
     });
   });
 

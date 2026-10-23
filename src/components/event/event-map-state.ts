@@ -46,13 +46,20 @@ export interface MapUpdate<Car extends MapCar> {
   focus: MapFocus | null;
 }
 
-/** A point is its cars: the same cars in the same order are the same point, wherever it is. */
+/**
+ * A point is its cars: the same cars are the same point, wherever it is and whatever the order
+ * of their cards, which only changes the order of its bubble.
+ */
 export function pointKey(point: MapPoint<MapCar>): string {
-  return point.cars.map((car) => car.id).join(" ");
+  return point.cars
+    .map((car) => car.id)
+    .sort()
+    .join(" ");
 }
 
-function samePosition(a: Position, b: Position): boolean {
-  return a.lat === b.lat && a.lng === b.lng;
+/** A car of a point always has a position: `null` is only allowed for the type. */
+function samePosition(a: Position | null, b: Position | null): boolean {
+  return a?.lat === b?.lat && a?.lng === b?.lng;
 }
 
 function carIds<Car extends MapCar>(map: EventMapPoints<Car>): Set<string> {
@@ -62,16 +69,19 @@ function carIds<Car extends MapCar>(map: EventMapPoints<Car>): Set<string> {
 const CONTAINER: MapFocus = { kind: "container" };
 
 /**
- * The focus a point had: to the point that now holds the first of its cars still on the map,
- * itself while it stays; none left, to the container.
+ * The focus a point had: to the point that now holds « cette voiture », the first of its cars
+ * whose position changed; none moved, the first still on the map, so itself while it stays;
+ * none left, to the container.
  */
 function pointFocus<Car extends MapCar>(key: string, before: EventMapPoints<Car>, after: EventMapPoints<Car>): MapFocus {
   const cars = before.points.find((point) => pointKey(point) === key)?.cars ?? [];
-  for (const { id } of cars) {
-    const holder = after.points.find((point) => point.cars.some((car) => car.id === id));
-    if (holder) return { kind: "point", key: pointKey(holder) };
-  }
-  return CONTAINER;
+  const still = cars.flatMap((was) =>
+    after.points.flatMap((holder) =>
+      holder.cars.filter((car) => car.id === was.id).map((car) => ({ holder, moved: !samePosition(was.position, car.position) })),
+    ),
+  );
+  const target = still.find(({ moved }) => moved) ?? still[0];
+  return target ? { kind: "point", key: pointKey(target.holder) } : CONTAINER;
 }
 
 /** The focus the closed bubble had: the first point less than 25 m from its point's position, else the container. */
