@@ -188,6 +188,7 @@
       "aller": "Departure place",
       "retour": "Drop-off place"
     },
+    "locationHint": "Visible to everyone who has the link.",
     "time": "Departure time",
     "timeHint": "On {date}",
     "seats": "Seats, driver not included",

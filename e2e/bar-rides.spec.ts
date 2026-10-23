@@ -44,7 +44,8 @@ async function offerAsMarc(page: Page, location: string) {
   await offerButton(panel(page)).click();
   // The bar names her without the spaces typed around.
   await form(page).getByLabel("Prénom", { exact: true }).fill("  Marc  ");
-  await form(page).getByRole("textbox", { name: /^Lieu de/ }).fill(location);
+  // A combobox since its places propose suggestions (place-autocomplete, AL1.2).
+  await form(page).getByRole("combobox", { name: /^Lieu de/ }).fill(location);
 }
 
 test.describe("an offer's failure in the bar", () => {
