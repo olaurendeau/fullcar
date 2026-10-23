@@ -72,7 +72,11 @@ test("M3.1: a retour with no car and no Placement, unchecked: saved with no conf
   await expect(panel(page).getByRole("button", { name: /^(Aller|Retour)\b/ })).toHaveCount(1);
   await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller"]);
   await expect(panel(page).getByText("Retour", { exact: true })).toHaveCount(0);
-  await expect(board(page).getByText(/Retour|retour/)).toHaveCount(0);
+  // Without a retour, the board is the aller's section, not a tab panel.
+  const onlyLeg = page.locator('main section[aria-labelledby="leg-aller"]');
+  await expect(onlyLeg).toBeVisible();
+  await expect(onlyLeg).toContainText(/Ajouter une personne/);
+  await expect(onlyLeg).not.toContainText(/retour/i);
   const stored = await db.selectFrom("event").select("retour_at").where("id", "=", seededEvent.id).executeTakeFirstOrThrow();
   expect(stored.retour_at).toBeNull();
 

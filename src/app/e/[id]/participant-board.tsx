@@ -113,7 +113,7 @@ export function ParticipantBoard({
         setTab("aller");
         // The retour gone, the bar's lines about it go, once, before what this state's answer says (decision 44).
         if (!next.event.retourAt) messages.retourGone();
-        // The retour back, what said it was gone goes (#271).
+        // The retour back, the information that said it was gone goes; its failures stay (#271).
         else messages.retourBack();
       }
       displayed.current = next;
@@ -182,7 +182,7 @@ export function ParticipantBoard({
   // is gone `closes`, and its failure goes to the bar all the same (rule 9). A failure of
   // « Annuler » carries it again (rule 6). A failure is about the `leg` it was sent on, an offer's
   // named by its subjects, and goes with the retour (decision 44); one that says the retour is
-  // gone comes with the state without it, and stays until the retour is back (#271). One `noRetourAgain` is about the aller's
+  // gone comes with the state without it, and stays. One `noRetourAgain` is about the aller's
   // part of its send alone, which the aller sent again withdraws (B1.7).
   function failedIn(sheet: FromSheet, failure: { notDone: NotDone; why: Why; landmark: () => boolean; closes?: boolean; undo?: Undo; leg?: Leg }) {
     const { notDone, why, landmark, closes, undo } = failure;
@@ -199,8 +199,7 @@ export function ParticipantBoard({
     const aller = both
       ? { text: failureText(words, { ...notDone, legs: "aller" }, why), about: allerPart(sheet.about), landmark: () => focusOffer("aller") }
       : undefined;
-    const says = saysRetourGone ? ({ saysRetourGone } as const) : {};
-    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about, sent: sheet.seq, undo, leg, aller, ...says }), true);
+    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about, sent: sheet.seq, undo, leg, aller }), true);
   }
 
   // What a send refused by `noRetour` asked holds without the retour: no failure, an information,

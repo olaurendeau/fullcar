@@ -18,15 +18,13 @@ export interface Undo {
 /**
  * A message: its words, its landmark, which takes the focus and says whether it is shown (rule
  * 8), its « Annuler », and the leg it is about, if one: those about the retour go with it
- * (`retourGone`). What says that the retour is gone is about no leg, and goes once it is back
- * (`retourBack`).
+ * (`retourGone`). What says that the retour is gone is about no leg.
  */
 export interface Message {
   text: string;
   landmark: () => boolean;
   undo?: Undo;
   leg?: Leg;
-  saysRetourGone?: true;
 }
 
 /** What a send was about: its subjects, each subject's fields after it (#208), and its number. */
@@ -50,6 +48,8 @@ export interface Failure extends Message, Sent {
 /** An information, and when it was written, on the clock that also stamps when each action begins (`ended`). */
 export interface Information extends Message {
   at: number;
+  /** It says the retour is gone (`Actions.info.noRetour*`, decision 45): it goes once it is back (`retourBack`). */
+  saysRetourGone?: true;
 }
 
 /** A line of the bar; `id` is the order in which it was written, which makes it recent (rule 1). */
@@ -183,11 +183,12 @@ export const retourGone = (state: BarState): BarState => ({
 });
 
 /**
- * The page applies a state that has the retour the one before had not (#271, M4): every line that
- * said the retour was gone, failure or information, is no longer true, and goes. They are about
- * no leg, so that the transition that wrote them leaves them (decision 44); this return takes them.
+ * The page applies a state that has the retour the one before had not (#271, M4): the information
+ * that said the retour was gone goes, its aim reached (decision 45). A failure `noRetour` or
+ * `noRetourAgain` stays, the owner's decision on #271: only a send about its subject, or
+ * « Fermer », takes it away (rule 5).
  */
-export const retourBack = (state: BarState): BarState => keep(state, (line) => !line.saysRetourGone);
+export const retourBack = (state: BarState): BarState => keep(state, (line) => !(line.kind === "info" && line.saysRetourGone));
 
 /** Rule 7: « Fermer », or Escape, removes every line. */
 export const close = (state: BarState): BarState => keep(state, () => false);

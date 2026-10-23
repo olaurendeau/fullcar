@@ -243,9 +243,10 @@ test.describe("the bar, the retour removed meanwhile", () => {
     await expect(messages(page)).toHaveText([TEXT.lookingRefused]);
   });
 
-  // #271 (review of #371): the failure is about no leg, so that its transition leaves it; the
-  // retour added back makes it untrue, and the state that brings the retour takes it away.
-  test("the retour added back: the next state with it takes away the failure `noRetour`, and the information", async ({ page, db, seededEvent }) => {
+  // #271, the owner's decision (review of #409): the failure is about no leg, so that its
+  // transition leaves it. The retour added back leaves it too (Vitest: the information goes);
+  // a send about its subject takes it away, as for any failure (rule 5).
+  test("the retour added back: the failure `noRetour` stays, then goes with a send about its subject", async ({ page, db, seededEvent }) => {
     await seedScene(db, seededEvent.id, token, "notConcerned");
     await holdToken(page, seededEvent.id, token);
     await page.goto(`/e/${seededEvent.id}`);
@@ -258,8 +259,12 @@ test.describe("the bar, the retour removed meanwhile", () => {
     await editEventInDb(db, seededEvent.id, { retourAt: "2026-12-12 18:00:00" });
     await send(page, "Tom", "Aller", "Ne fait pas l’aller");
     await expect(tabs(page)).toHaveCount(2);
-    await expect(messages(page)).toHaveCount(0);
-    await expect(cell(page, "Tom", "Retour")).toBeVisible();
+    await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Ne fait pas l’aller");
+    await expect(messages(page)).toHaveText([TEXT.lookingRefused]);
+
+    await send(page, "Tom", "Retour", "Je cherche une place");
+    await expect(cell(page, "Tom", "Retour")).toHaveAccessibleName(/^Tom, Retour : (?!Ne fait pas le retour)/);
+    await expect(messages(page).filter({ hasText: TEXT.lookingRefused })).toHaveCount(0);
   });
 
   test("M7.9, page C, M7.3: « Sortir de la voiture » of Léa · Retour: the aller's success stays with its « Annuler », and the information", async ({
