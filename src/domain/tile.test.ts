@@ -221,6 +221,17 @@ describe("isNotFoundReport", () => {
   ])("is false for a body that is %s", (_, text) => {
     expect(isNotFoundReport(text)).toBe(false);
   });
+
+  it("reads a report up to 4096 characters, and nothing longer", () => {
+    expect(isNotFoundReport(RELEVE.padEnd(4096, " "))).toBe(true);
+    expect(isNotFoundReport(RELEVE.padEnd(4097, " "))).toBe(false);
+  });
+
+  it("answers false at once for a long body that would make the reader copy its namespaces at every element", () => {
+    const prefixes = Array.from({ length: 5000 }, (_, n) => ` xmlns:p${n}="u"`).join("");
+    const body = `<ExceptionReport xmlns="${OWS}"${prefixes}>${"<b/>".repeat(20000)}<Exception exceptionCode="Not Found"/></ExceptionReport>`;
+    expect(isNotFoundReport(body)).toBe(false);
+  });
 });
 
 /** Whole months from `updated` (`YYYY-MM`) to the month of `now`, in UTC. */

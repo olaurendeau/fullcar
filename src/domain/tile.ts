@@ -68,13 +68,23 @@ const OWS = "http://www.opengis.net/ows/1.1";
 const XML = "http://www.w3.org/XML/1998/namespace";
 
 /**
+ * The longest body read, in characters. The real report is 138; one with a version, an
+ * `xml:lang`, a schema location and an `ExceptionText` stays under 1 KiB. Past this, the body
+ * is not a report we know, and the reader's work stays bounded: each element copies its
+ * namespace scope, which on hundreds of kilobytes would take seconds, or the whole heap.
+ */
+const MAX_REPORT = 4096;
+
+/**
  * Whether `text` is an OWS 1.1 exception report saying the tile does not exist: an
  * `ExceptionReport` root in `http://www.opengis.net/ows/1.1`, default or prefixed, with a
  * child `Exception` of that same namespace whose `exceptionCode` attribute is `Not Found`.
  * The attribute is read, never the body compared as a string. A body this reader cannot read
- * (cut, not XML, a DTD) is `false`: the route then caches nothing on a doubt.
+ * (cut, not XML, a DTD, a reference in an attribute, longer than 4 KiB) is `false`: the route
+ * then caches nothing on a doubt.
  */
 export function isNotFoundReport(text: string): boolean {
+  if (text.length > MAX_REPORT) return false;
   const root = readXml(text);
   if (root === null || root.namespace !== OWS || root.local !== "ExceptionReport") return false;
   return root.children.some(
