@@ -3,6 +3,7 @@ import type { LegCounts } from "@/db/legs";
 import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
+import { positionOf } from "@/domain/place";
 import { isWallClock } from "@/domain/wall-clock";
 import type { EventState } from "../event-state";
 import { stateRead, type ActionProblem, type Sent } from "../run-action";
@@ -169,10 +170,17 @@ export type EditAnswer =
   | { kind: "refused"; reason: "invalid" | "eventNotFound" }
   | { kind: "problem"; problem: ActionProblem };
 
+/** A header with its position, `null` or one: the server always sends it. */
 function isHeader(value: unknown): value is EventHeader {
   if (typeof value !== "object" || value === null) return false;
-  const { title, location, allerAt, retourAt } = value as Record<string, unknown>;
-  return typeof title === "string" && typeof location === "string" && isWallClock(allerAt) && (retourAt === null || isWallClock(retourAt));
+  const { title, location, locationPosition, allerAt, retourAt } = value as Record<string, unknown>;
+  return (
+    typeof title === "string" &&
+    typeof location === "string" &&
+    !("error" in positionOf(locationPosition)) &&
+    isWallClock(allerAt) &&
+    (retourAt === null || isWallClock(retourAt))
+  );
 }
 
 const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;

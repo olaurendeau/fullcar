@@ -11,11 +11,14 @@ import { seedEvent } from "./test-events";
 
 const HASH = hashAdminToken("not a real token");
 
+const LYON = { lat: 45.7581, lng: 4.6894 };
+
 const event: NewEvent = {
   title: "Tournoi de Rennes",
   location: "Gymnase des Gayeulles",
   allerAt: "2026-12-12 07:30:00",
   retourAt: "2026-12-12 18:00:00",
+  locationPosition: null,
   boostersEnabled: true,
   participationEnabled: false,
   stopsEnabled: true,
@@ -49,11 +52,21 @@ describe("insertEvent", () => {
       location: "Gymnase des Gayeulles",
       aller_at: "2026-12-12 07:30:00",
       retour_at: "2026-12-12 18:00:00",
+      location_lat: null,
+      location_lng: null,
       boosters_enabled: true,
       participation_enabled: false,
       stops_enabled: true,
     });
     expect(row.admin_token_hash).toEqual(Buffer.from(HASH, "hex"));
+  });
+
+  it("AL1.7, AL2.1: stores the position of the location", async () => {
+    const row = await withRollback(async (trx) => {
+      const id = await insertEvent(trx, { ...event, locationPosition: { lat: 45.75813, lng: 4.68944 } }, HASH);
+      return trx.selectFrom("event").select(["location_lat", "location_lng"]).where("id", "=", id).executeTakeFirstOrThrow();
+    });
+    expect(row).toEqual({ location_lat: 45.75813, location_lng: 4.68944 });
   });
 
   it("stores an event without retour", async () => {
@@ -183,11 +196,36 @@ describe("writeEventFields", () => {
         location: "Stade",
         aller_at: "2026-12-13 14:00:00",
         retour_at: null,
+        location_lat: null,
+        location_lng: null,
         boosters_enabled: true,
         participation_enabled: false,
         stops_enabled: false,
       });
       expect(await readAdminTokenHash(trx, id)).toBe(hash);
+    });
+  });
+
+  it("AL5.2: writes the position sent with the place, null included", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const fields = { title: "Finale", location: "Stade", allerAt: "2026-12-13 14:00:00", retourAt: null };
+
+      await writeEventFields(trx, id, { ...fields, locationPosition: { lat: 48.1173, lng: -1.67779 } });
+      expect(await findEventById(trx, id)).toMatchObject({ location_lat: 48.1173, location_lng: -1.67779 });
+
+      await writeEventFields(trx, id, { ...fields, locationPosition: null });
+      expect(await findEventById(trx, id)).toMatchObject({ location_lat: null, location_lng: null });
+    });
+  });
+
+  it("AL5.6: keeps the position stored when none is sent, the place changed", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx, { locationPosition: LYON });
+      const fields = { title: "Finale", location: "Stade", allerAt: "2026-12-13 14:00:00", retourAt: null };
+
+      expect(await writeEventFields(trx, id, fields)).toBe(true);
+      expect(await findEventById(trx, id)).toMatchObject({ location: "Stade", location_lat: LYON.lat, location_lng: LYON.lng });
     });
   });
 

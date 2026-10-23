@@ -35,7 +35,10 @@ const BEFORE: EventHeader = {
   location: "Gymnase des Gayeulles",
   allerAt: "2026-12-12 07:30:00",
   retourAt: "2026-12-12 18:00:00",
+  locationPosition: null,
 };
+
+const LYON = { lat: 45.7581, lng: 4.6894 };
 
 /** The form as it opens on BEFORE. */
 const FORM = {
@@ -49,6 +52,14 @@ const FORM = {
 };
 
 const WITHOUT_RETOUR = { ...FORM, retour: false };
+
+/** What a page loaded before the positions sends: the header without `locationPosition`. */
+const BEFORE_WITHOUT_POSITION = {
+  title: BEFORE.title,
+  location: BEFORE.location,
+  allerAt: BEFORE.allerAt,
+  retourAt: BEFORE.retourAt,
+};
 
 /** Whether `answer`, as the browser receives it, carries `secret`: never printed, whatever the outcome. */
 function carries(answer: unknown, secret: string): boolean {
@@ -341,6 +352,93 @@ describe("editEvent", () => {
           expect((await findEventById(trx, eventId))?.retour_at).toBe(BEFORE.retourAt);
         },
         { retourAt: null },
+      );
+    });
+  });
+
+  describe("the position of the location (place-autocomplete)", () => {
+    it("AL5.2: writes the position sent with the location, rounded, and answers it", async () => {
+      await onSeeded(async (trx, eventId, token) => {
+        const fields = { ...FORM, location: "Salle Carrel", locationPosition: { lat: 48.117301, lng: -1.677794 } };
+
+        const answer = await editEvent(trx, eventId, token, fields, BEFORE);
+
+        const locationPosition = { lat: 48.1173, lng: -1.67779 };
+        expect(answer).toEqual({ ok: true, event: { ...BEFORE, location: "Salle Carrel", locationPosition } });
+        expect(await findEventById(trx, eventId)).toMatchObject({ location: "Salle Carrel", location_lat: 48.1173, location_lng: -1.67779 });
+      });
+    });
+
+    it("AL5.2: a position sent as null removes the one stored", async () => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const before = { ...BEFORE, locationPosition: LYON };
+
+          const answer = await editEvent(trx, eventId, token, { ...FORM, locationPosition: null }, before);
+
+          expect(answer).toEqual({ ok: true, event: BEFORE });
+          expect(await findEventById(trx, eventId)).toMatchObject({ location_lat: null, location_lng: null });
+        },
+        { locationPosition: LYON },
+      );
+    });
+
+    it.each<[string, unknown]>([
+      ["by a page from before the positions, which sends none in before", BEFORE_WITHOUT_POSITION],
+      ["by a page that sends the position in before", { ...BEFORE, locationPosition: LYON }],
+    ])("AL5.6: no position sent keeps the one stored, the text changed, %s", async (_, before) => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const answer = await editEvent(trx, eventId, token, { ...FORM, location: "Salle Carrel" }, before);
+
+          expect(answer).toEqual({ ok: true, event: { ...BEFORE, location: "Salle Carrel", locationPosition: LYON } });
+          expect(await findEventById(trx, eventId)).toMatchObject({
+            location: "Salle Carrel",
+            location_lat: LYON.lat,
+            location_lng: LYON.lng,
+          });
+        },
+        { locationPosition: LYON },
+      );
+    });
+
+    it.each<[string, EventHeader["locationPosition"], EventHeader["locationPosition"]]>([
+      ["AL5.3: removed on another device", LYON, null],
+      ["added on another device", null, LYON],
+      ["moved on another device", LYON, { lat: 45.75811, lng: 4.6894 }],
+    ])("%s: changed, with what is stored, and nothing written", async (_, loaded, stored) => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const rows = await rowsOf(trx, eventId);
+          const fields = { ...FORM, title: "Tournoi de Rennes U13" };
+
+          const answer = await editEvent(trx, eventId, token, fields, { ...BEFORE, locationPosition: loaded });
+
+          expect(answer).toEqual({ ok: false, error: "changed", event: { ...BEFORE, locationPosition: stored } });
+          expect(await rowsOf(trx, eventId)).toEqual(rows);
+        },
+        { locationPosition: stored },
+      );
+    });
+
+    it.each<[string, unknown, unknown]>([
+      ["a position in fields without a location", { ...FORM, location: undefined, locationPosition: LYON }, BEFORE],
+      ["a null position in fields without a location", { ...FORM, location: undefined, locationPosition: null }, BEFORE],
+      ["a malformed position in fields", { ...FORM, locationPosition: "45.7581,4.6894" }, BEFORE],
+      ["a position in fields with a key besides lat and lng", { ...FORM, locationPosition: { ...LYON, label: "x" } }, BEFORE],
+      ["a position in fields out of bounds", { ...FORM, locationPosition: { lat: 0, lng: 180.00001 } }, BEFORE],
+      ["a malformed position in before", FORM, { ...BEFORE, locationPosition: [45.7581, 4.6894] }],
+      ["a position in before out of bounds", FORM, { ...BEFORE, locationPosition: { lat: -90.00001, lng: 0 } }],
+    ])("AL6.4: answers invalid for %s, even with a field refused, and writes nothing", async (_, fields, before) => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const rows = await rowsOf(trx, eventId);
+          expect(await editEvent(trx, eventId, token, fields, before)).toEqual({ ok: false, error: "invalid" });
+          const refused = { ...(fields as object), title: "" };
+          expect(await editEvent(trx, eventId, token, refused, before)).toEqual({ ok: false, error: "invalid" });
+          expect(await rowsOf(trx, eventId)).toEqual(rows);
+        },
+        { locationPosition: LYON },
       );
     });
   });
