@@ -1,3 +1,4 @@
+import { whyOf, type Why } from "@/components/event/failure-words";
 import type { LegCounts } from "@/db/legs";
 import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
@@ -175,6 +176,26 @@ function isHeader(value: unknown): value is EventHeader {
 }
 
 const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+
+/**
+ * Why the change was not done, once its sheet is closed (« Une réponse qui arrive feuille
+ * fermée », M2.8, M2.9): after `Actions.notDone.editEvent`, in the bar. `invalid`, which only a
+ * forged request gets, takes the generic reason (decision 46).
+ */
+export function editWhy(answer: Exclude<EditAnswer, { kind: "saved" }>): Why {
+  switch (answer.kind) {
+    case "problem":
+      return whyOf(answer.problem);
+    case "refused":
+      return whyOf(answer.reason);
+    case "errors":
+      return whyOf("editErrors");
+    case "changed":
+      return whyOf("eventChanged");
+    case "confirmRetour":
+      return whyOf("retourNotConfirmed");
+  }
+}
 
 /** The answer of `updateEvent`, as the sheet takes it: anything else is the generic failure. */
 export function editAnswer(sent: Sent<unknown>): EditAnswer {

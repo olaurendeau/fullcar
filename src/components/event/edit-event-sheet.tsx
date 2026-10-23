@@ -72,7 +72,8 @@ type Said = ActionProblem | "changed" | "invalid" | "eventNotFound";
  * The form, mounted with each opening: what it loaded is what the page showed then. Nothing
  * changed, « Valider » closes it, with no request (M2.5). The fields are checked against the
  * device's date, a saved date kept even past (M2.4), then sent; while the request runs,
- * « Valider » is `aria-disabled` and keeps the focus, and a second tap or Enter sends nothing.
+ * « Valider » is `aria-disabled` and keeps the focus, and a second tap or Enter sends nothing;
+ * the fields are locked, and « Envoi en cours… », above it, describes it (M2.6, decision 52).
  * Saved, the sheet closes; a field refused shows under it, the focus on the first. Otherwise
  * the sheet says why above « Valider », which gets the focus, and what was typed stays:
  * offline, a failure, or the link refused (M8.2). Changed on another device (M6.1, M6.2), the
@@ -205,7 +206,7 @@ function EditEventForm({
   }
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-      <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} notes={notes} />
+      <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} notes={notes} locked={sending} />
       {(said === "offline" || said === "failed") && (
         <p role="alert" className="text-sm text-destructive">
           {tActions(said)}
@@ -213,11 +214,18 @@ function EditEventForm({
       )}
       {said === "changed" && <SheetNotice said={said} />}
       {(said === "invalid" || gone) && <SheetNotice said={said} destructive />}
+      {/* No live region: the focus stays on « Valider », which it describes (M2.6). */}
+      {sending && (
+        <p id={idOf("sending")} className="text-sm text-muted-foreground">
+          {tEdit("sending")}
+        </p>
+      )}
       <Button
         ref={submitButton}
         type="submit"
         className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
         aria-disabled={sending || undefined}
+        aria-describedby={sending ? idOf("sending") : undefined}
         disabled={gone}
       >
         {tActions("submit")}

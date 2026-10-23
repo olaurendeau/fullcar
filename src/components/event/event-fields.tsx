@@ -135,12 +135,15 @@ export function EventFormFields({
   errors,
   onChange,
   notes = {},
+  locked = false,
 }: {
   idOf: (name: string) => string;
   state: EventFieldsState;
   errors: EventErrors;
   onChange: (update: EventFieldsUpdate) => void;
   notes?: Partial<Record<Leg, string>>;
+  /** While a change is sent (M2.6, decision 52): each field read-only, the box `aria-disabled`, and no input taken. */
+  locked?: boolean;
 }) {
   const t = useTranslations("CreateEvent");
   const { values } = state;
@@ -170,7 +173,8 @@ export function EventFormFields({
           // longest value, past `min-w-0` and `w-full`: out of its column (#114).
           className={cn("h-10", type !== "text" && "appearance-none")}
           value={values[name]}
-          onChange={(e) => onChange(withEventField(name, e.target.value))}
+          readOnly={locked || undefined}
+          onChange={(e) => !locked && onChange(withEventField(name, e.target.value))}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
         />
@@ -197,7 +201,8 @@ export function EventFormFields({
         label={t("retour")}
         hint={t("retourHint")}
         checked={values.retour}
-        onChange={(retour) => onChange(withRetour(retour))}
+        onChange={(retour) => !locked && onChange(withRetour(retour))}
+        locked={locked}
       />
       {values.retour && (
         <div className="grid grid-cols-2 gap-3">
@@ -221,6 +226,7 @@ export function Box({
   checked,
   onChange,
   invalid,
+  locked,
 }: {
   id: string;
   label: ReactNode;
@@ -229,6 +235,8 @@ export function Box({
   onChange: (checked: boolean) => void;
   /** In a group in error (« Qui monte avec vous ? », C4.13): each box says so, as a radio group does. */
   invalid?: boolean;
+  /** Reachable and read, but not to be changed now: `aria-disabled`, its form ignoring what `onChange` says. */
+  locked?: boolean;
 }) {
   return (
     <label htmlFor={id} className="flex min-h-11 cursor-pointer items-start gap-2.5 py-1">
@@ -240,6 +248,7 @@ export function Box({
         aria-labelledby={`${id}-label`}
         aria-describedby={`${id}-hint`}
         aria-invalid={invalid || undefined}
+        aria-disabled={locked || undefined}
       />
       <span className="flex flex-col gap-1">
         <span id={`${id}-label`} className="text-sm leading-5 font-medium">
