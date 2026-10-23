@@ -5,6 +5,7 @@ import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import type { WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
+import type { LegMap } from "./event-map";
 import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabPanel } from "./leg-tab-panel";
 import { NoCarPill } from "./no-car-pill";
@@ -48,6 +49,8 @@ export function LegTabs(props: {
   device: BoardDevice;
   tab: Leg;
   onTab: (leg: Leg) => void;
+  /** The map of both legs, one open or folded state for the page. */
+  map?: LegMap;
 }) {
   const t = useTranslations("Event.legs");
   const legs = [
@@ -84,6 +87,7 @@ export function LegTabs(props: {
             device={props.device}
             hasRetour
             other={{ at: legs[1 - index].at, persons: legs[1 - index].board.device }}
+            map={props.map}
           />
         </LegTabPanel>
       ))}

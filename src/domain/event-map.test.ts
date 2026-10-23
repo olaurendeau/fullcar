@@ -95,6 +95,16 @@ describe("mapOf: cars less than 25 m apart make one point (CA1.6)", () => {
     expect(idsOf(mapOf(FLAG, [car("a", BRINDAS), car("b", east(BRINDAS, 26))]))).toEqual([["a"], ["b"]]);
   });
 
+  it("makes two points of two cars exactly 25 m apart: less than 25 m, not 25 m", () => {
+    // 25 m to the last bit of a double: `<=` instead of `<` would make one point of them.
+    const a: Position = { lat: 0, lng: 0 };
+    const b: Position = { lat: 0.0002248300909311345, lng: 0 };
+
+    expect(distanceMetres(a, b)).toBe(SAME_POSITION_METRES);
+    expect(idsOf(mapOf(FLAG, [car("a", a), car("b", b)]))).toEqual([["a"], ["b"]]);
+    expect(mapOf(a, [car("b", b)]).points[0].atFlag).toBe(false);
+  });
+
   it("makes two points of two cars 40 m apart", () => {
     expect(idsOf(mapOf(FLAG, [car("a", BRINDAS), car("b", east(BRINDAS, 40))]))).toEqual([["a"], ["b"]]);
   });
@@ -201,6 +211,12 @@ describe("framing", () => {
     const points = [{ position: { lat: 45.8, lng: 4.9 } }];
 
     expect(framing(FLAG, points)).toMatchObject({ south: FLAG.lat, west: FLAG.lng, north: 45.8, east: 4.9 });
+  });
+
+  it("takes the flag as the north edge when it is the farthest north", () => {
+    const points = [{ position: { lat: 45.7, lng: 4.7 } }];
+
+    expect(framing(FLAG, points)).toMatchObject({ south: 45.7, west: 4.7, north: FLAG.lat, east: FLAG.lng });
   });
 
   it("frames the points mapOf gives", () => {
