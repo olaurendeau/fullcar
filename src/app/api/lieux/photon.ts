@@ -150,8 +150,10 @@ export function createPhoton({ fetch, now, url, breakerMs }: PhotonOptions): Pho
  * anything else, `undefined`. `Date.parse` alone is not enough: Node reads « -1 » or « next
  * tuesday 3 » as dates in 2001.
  */
-function retryAfterMs(value: string | null, time: number): number | undefined {
-  if (value === null) return undefined;
+function retryAfterMs(raw: string | null, time: number): number | undefined {
+  if (raw === null) return undefined;
+  // HTTP allows whitespace around a field's value, and `fetch` may keep it.
+  const value = raw.trim();
   if (/^\d+$/.test(value)) return Number(value) * 1000;
   const date = Date.parse(value);
   // `toUTCString` writes an IMF-fixdate: any other text, a 30 February or a wrong day of the week, differs.

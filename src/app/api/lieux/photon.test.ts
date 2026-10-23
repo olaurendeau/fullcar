@@ -220,6 +220,18 @@ describe("the breaker (AL2.5)", () => {
     expect(await search()).toEqual(OK);
   });
 
+  it("reads Retry-After with the whitespace HTTP allows around it", async () => {
+    // `new Headers` would trim it; the headers of Node's `fetch` may keep it.
+    const raw = () => Object.defineProperty(status(429), "headers", { value: { get: () => "120 " } });
+    const { search, fetch, advance } = setup([raw]);
+    await search();
+    advance(2 * MINUTE - 1);
+    await search();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    advance(1);
+    expect(await search()).toEqual(OK);
+  });
+
   it.each([
     ["an integer of seconds longer than breakerMs", "2", 2_000],
     ["a decimal number, unread", "1.5", 1_000],
@@ -400,8 +412,9 @@ describe("what a failure leaves (AL6.3, AL6.6)", () => {
   });
 
   it("logs nothing when the cap answers", async () => {
-    const { search } = setup();
+    const { search, fetch } = setup();
     for (let n = 0; n < 6; n++) await search(query(`lieu ${n}`));
+    expect(fetch).toHaveBeenCalledTimes(5);
     expect(logs).toEqual([]);
   });
 
