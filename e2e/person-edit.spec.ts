@@ -2,7 +2,7 @@ import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
+import { bar, failHeld, holdClose, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -19,8 +19,6 @@ const INVALID_PHONE = "Numéro non valide : de 6 à 15 chiffres, avec seulement 
 const PHONE_HINT = "Visible seulement par l’organisateur et par les personnes de la même voiture.";
 /** In the bar, the failure of « Clara » names the field sent and the first name before it (C11.11, #225). */
 const FAILED = "Le prénom de Claire n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
-/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
-const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /**
  * The device holds Claire, with a number, and Léa, without one. Aller: Claire drives; Marc,
