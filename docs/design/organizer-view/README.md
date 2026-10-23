@@ -5,7 +5,7 @@
 - Origine : revue de design de l'humain sur #66 (section « Administrateur (vue globale) »), décision https://github.com/olaurendeau/fullcar/issues/66#issuecomment-6250124984
 - Tableau des participants dessiné dessous : #66 v4.1 (`event-board`, approuvée)
 - Page : `index.html` (autonome ; maquettes à 360 px de large, et des navigateurs de 1280 px montrés à 75 % et à 55 %)
-- Version : v3.3.8 (approuvée en revue de design ; v3.3.8 : sept suggestions de la revue de la v3.3.7 appliquées, tri du coordinateur sur #372 ; v3.3.7 : la décision 44 dit l'exception du propriétaire sur #267, et M1.1 et M1.3 sont reformulés après la relecture de PR #376, [#372](https://github.com/olaurendeau/fullcar/issues/372) ; v3.3.6 : approuvée en v3.3.5 ; la ligne « Envoi en cours… » et cinq précisions de test, tri du coordinateur sur #250 ; v3.3.5 : revue de la v3.3.4 appliquée ; v3.3.4 : approuvée en v3.3.3, dix suggestions de la revue appliquées ; v3.3.3 : revue de la v3.3.2 ; v3.3.2 : revue de la v3.3.1 ; v3.3.1 : DE1 et DE2 décidées par le propriétaire le 2026-10-20 ; v3.3 : modifier l'événement ; v3.2.2 : la carte se replie)
+- Version : v3.3.9 (approuvée en revue de design ; v3.3.9 : M2.8 reformulé, [#442](https://github.com/olaurendeau/fullcar/issues/442) ; v3.3.8 : sept suggestions de la revue de la v3.3.7 appliquées, tri du coordinateur sur #372 ; v3.3.7 : la décision 44 dit l'exception du propriétaire sur #267, et M1.1 et M1.3 sont reformulés après la relecture de PR #376, [#372](https://github.com/olaurendeau/fullcar/issues/372) ; v3.3.6 : approuvée en v3.3.5 ; la ligne « Envoi en cours… » et cinq précisions de test, tri du coordinateur sur #250 ; v3.3.5 : revue de la v3.3.4 appliquée ; v3.3.4 : approuvée en v3.3.3, dix suggestions de la revue appliquées ; v3.3.3 : revue de la v3.3.2 ; v3.3.2 : revue de la v3.3.1 ; v3.3.1 : DE1 et DE2 décidées par le propriétaire le 2026-10-20 ; v3.3 : modifier l'événement ; v3.2.2 : la carte se replie)
 - Epic de la v3.3 (modifier l'événement) : https://github.com/olaurendeau/fullcar/issues/250
 
 ## Décisions de l'humain (2026-10-18)
@@ -649,7 +649,7 @@ Tous par Playwright, à 360 × 780, sauf mention contraire. Scène : celle de O2
   - route qui répond 500 : « L’événement n’a pas été modifié. Une erreur est survenue : réessayez dans un instant. » ;
   - jeton altéré par la route : « L’événement n’a pas été modifié. Une erreur est survenue : réessayez dans un instant. » ;
   - événement supprimé en base avant de relâcher : « L’événement n’a pas été modifié. Cet événement est introuvable : il a peut-être été supprimé. » ;
-  - date de début mise à hier par une requête forgée (`errors`) : « L’événement n’a pas été modifié. Un champ n’a pas été accepté : utilisez de nouveau « Modifier l’événement ». » ;
+  - date de début mise par une requête forgée avant la borne du serveur (plus d’un jour avant la date UTC du jour ; par exemple, une semaine avant aujourd’hui) (`errors`) : « L’événement n’a pas été modifié. Un champ n’a pas été accepté : utilisez de nouveau « Modifier l’événement ». » ;
   - titre changé par un second contexte avant de relâcher (`changed`) : « L’événement n’a pas été modifié. Il venait d’être modifié depuis un autre appareil : la page montre la version enregistrée. », et le h1 a le titre du second contexte.
 - **M2.9** Le pire cas. Retour avec 2 voitures et 9 personnes : décocher « Retour », changer aussi le titre, « Valider », Échap avant la réponse, puis la réponse `confirmRetour`. Alors :
   - aucune confirmation ne s’ouvre ;
@@ -1330,3 +1330,4 @@ Les mots français sont épicènes. Le mot « Modifier » est celui de « Gardez
 
   La décision du propriétaire ne change pas. Republiée à la même URL.
 - v3.3.8 (suite) : relecture : **approuvée**. Corrections de texte, sans nouvelle revue : critères d'event-board renommés N1.1 à N1.6 (voir ci-dessus), et l'en-tête dit la v3.3.8 approuvée. Republiée à la même URL.
+- v3.3.9 (2026-10-23) : v3.3.8 approuvée. Correction de texte, sans nouvelle décision (#442) : dans M2.8, « date de début mise à hier par une requête forgée » ne pouvait pas se produire, `serverBounds` acceptant un jour de plus que l’appareil ; le cas devient une date « avant la borne du serveur (plus d’un jour avant la date UTC du jour ; par exemple, une semaine avant aujourd’hui) », comme l’avait proposé la revue de #414. Republiée à la même URL.
