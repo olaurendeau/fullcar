@@ -35,6 +35,16 @@ function aDrive(fields: Record<string, unknown> = {}) {
   return { kind: "drive" as const, rideId: randomUUID(), location: "Salle Paul Bert", time: "18:30", ...fields };
 }
 
+/** A point chosen among the suggestions, as the database keeps it, and as Photon gives it. */
+const VAUGNERAY = { lat: 45.73711, lng: 4.65622 };
+const VAUGNERAY_EXACT = { lat: 45.7371141, lng: 4.6562219 };
+
+/** Where a Ride is, as the database holds it; `rideId` as an offer holds it. */
+async function positionOf(db: Db, rideId: unknown) {
+  const id = String(rideId);
+  return db.selectFrom("ride").select(["location_lat", "location_lng"]).where("id", "=", id).executeTakeFirstOrThrow();
+}
+
 type Choice = "keep" | "withoutCar" | "notConcerned" | "drive";
 type Start = "new" | "notConcerned" | "withoutCar" | "passenger";
 
@@ -306,6 +316,19 @@ describe("offerRide", () => {
     ["a passenger id that is not a uuid", (offer) => ({ ...offer, passengerIds: [randomUUID(), "p1"] })],
     ["a passenger ticked twice", (offer) => ({ ...offer, passengerIds: Array<string>(2).fill(randomUUID()) })],
     ["the driver as a passenger", (offer) => ({ ...offer, passengerIds: [(offer.driver as { personId: string }).personId] })],
+    // AL6.4: a position that is not one, or without its place.
+    ["a position without its place", (offer) => ({ ...offer, location: undefined, position: VAUGNERAY })],
+    ["a null position without its place", (offer) => ({ ...offer, location: undefined, position: null })],
+    ["a position that is not an object", (offer) => ({ ...offer, position: "45.7,4.6" })],
+    ["a position without a longitude", (offer) => ({ ...offer, position: { lat: 45.7 } })],
+    ["a position with a latitude as text", (offer) => ({ ...offer, position: { lat: "45.7", lng: 4.6 } })],
+    ["a position with an infinite longitude", (offer) => ({ ...offer, position: { lat: 45.7, lng: Infinity } })],
+    ["a latitude above 90", (offer) => ({ ...offer, position: { lat: 90.1, lng: 4.6 } })],
+    ["a latitude below -90", (offer) => ({ ...offer, position: { lat: -90.1, lng: 4.6 } })],
+    ["a longitude above 180", (offer) => ({ ...offer, position: { lat: 45.7, lng: 180.1 } })],
+    ["a longitude below -180", (offer) => ({ ...offer, position: { lat: 45.7, lng: -180.1 } })],
+    ["a position on the other leg without its place", (offer) => ({ ...offer, otherLeg: aDrive({ location: undefined, position: VAUGNERAY }) })],
+    ["a position on the other leg out of bounds", (offer) => ({ ...offer, otherLeg: aDrive({ position: { lat: 91, lng: 0 } }) })],
   ])("refuses %s as invalid, as eventNotFound on an unknown event, and changes nothing", async (_, forge) => {
     await withRollback(async (trx) => {
       const { eventId, lea } = await aScene(trx);
@@ -502,6 +525,55 @@ describe("offerRide", () => {
         const rows = await rowsOf(trx, eventId);
         expect(rows.rides).toEqual([{ id: offer.rideId, leg: "aller", driver_id: id }]);
         expect(rows.placements).toEqual([]);
+      });
+    });
+  });
+
+  describe("the position (AL4.3)", () => {
+    it("AL4.3: the car, and the other leg's, have the position sent, rounded to 5 decimals", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, tom } = await aScene(trx);
+        const drive = aDrive({ position: { lat: 45.7581449, lng: 4.6893851 } });
+        const offer = anOffer("aller", { kind: "device", personId: tom.id }, { position: VAUGNERAY_EXACT, otherLeg: drive });
+
+        expect(await offerRide(trx, eventId, tom.token, offer)).toMatchObject({ ok: true });
+
+        expect(await positionOf(trx, offer.rideId)).toEqual({ location_lat: 45.73711, location_lng: 4.65622 });
+        expect(await positionOf(trx, drive.rideId)).toEqual({ location_lat: 45.75814, location_lng: 4.68939 });
+      });
+    });
+
+    it("AL4.3: without a position, or with a null one, the cars have none", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, tom, lea } = await aScene(trx);
+        const drive = aDrive();
+        const typed = anOffer("aller", { kind: "device", personId: tom.id }, { otherLeg: drive });
+        const nulls = anOffer("retour", { kind: "device", personId: lea.id }, { position: null });
+
+        expect(await offerRide(trx, eventId, tom.token, typed)).toMatchObject({ ok: true });
+        expect(await offerRide(trx, eventId, lea.token, nulls)).toMatchObject({ ok: true });
+
+        for (const rideId of [typed.rideId, drive.rideId, nulls.rideId]) {
+          expect(await positionOf(trx, rideId)).toEqual({ location_lat: null, location_lng: null });
+        }
+      });
+    });
+
+    it("C4.10: the same offer with a position sent again succeeds, and writes nothing more", async () => {
+      await withRollback(async (trx) => {
+        const { eventId } = await aScene(trx);
+        const token = newToken();
+        const drive = aDrive({ position: VAUGNERAY });
+        const offer = anOffer("aller", aNewDriver(), { position: VAUGNERAY, otherLeg: drive });
+        const first = await offerRide(trx, eventId, token, offer);
+        const once = await rowsOf(trx, eventId);
+
+        expect(first).toMatchObject({ ok: true });
+        expect(await offerRide(trx, eventId, token, offer)).toEqual(first);
+        expect(await rowsOf(trx, eventId)).toEqual(once);
+        for (const rideId of [offer.rideId, drive.rideId]) {
+          expect(await positionOf(trx, rideId)).toEqual({ location_lat: 45.73711, location_lng: 4.65622 });
+        }
       });
     });
   });
