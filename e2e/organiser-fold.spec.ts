@@ -149,6 +149,8 @@ test.describe("the scene of O2.5", () => {
       await expect(panel(page).getByRole("heading", { level: 2 }).getByRole("button")).toHaveAccessibleName(FR.panel);
       expect((await box(toggle(page))).height).toBeGreaterThanOrEqual(44);
       await expect(summary(page)).toBeHidden();
+      // Unfolded, « Modifier l’événement » is there: folding is what takes it out.
+      await expect(panel(page).getByRole("button", { name: "Modifier l’événement" })).toHaveCount(1);
       const at = await box(toggle(page));
 
       await setFolded(page, true);

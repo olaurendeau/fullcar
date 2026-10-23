@@ -289,13 +289,23 @@ describe("editAnswer", () => {
     expect(editAnswer({ ok: false, problem })).toStrictEqual({ kind: "problem", problem });
   });
 
-  // Until #269 and #270 give them their words (epic #250, « Comportement transitoire »): nothing
-  // was written, and the sheet says the generic failure.
+  // M6.1, M6.2: changed on another device, with what is stored.
+  it("is changed, with the stored values, on `changed`", () => {
+    expect(editAnswer({ ok: true, value: { ok: false, error: "changed", event } })).toStrictEqual({ kind: "changed", event });
+  });
+
+  // M8.2, M8.3: the link refused, or the event gone.
+  it.each(["invalid", "eventNotFound"] as const)("is the refusal %s", (reason) => {
+    expect(editAnswer({ ok: true, value: { ok: false, error: reason } })).toStrictEqual({ kind: "refused", reason });
+  });
+
+  // Until #270 gives it its words (epic #250, « Comportement transitoire »): nothing was written,
+  // and the sheet says the generic failure.
   it.each<[string, unknown]>([
-    ["changed", { ok: false, error: "changed", event }],
+    ["`changed` without a header", { ok: false, error: "changed" }],
+    ["`changed` with a header missing its place", { ok: false, error: "changed", event: { ...event, location: 1 } }],
     ["confirmRetour", { ok: false, error: "confirmRetour", cars: 1, persons: 2 }],
-    ["invalid", { ok: false, error: "invalid" }],
-    ["eventNotFound", { ok: false, error: "eventNotFound" }],
+    ["another error", { ok: false, error: "rideGone" }],
     ["`ok` without a header", { ok: true }],
     ["`ok` with a header missing its title", { ok: true, event: { ...event, title: undefined } }],
     ["no answer", undefined],
