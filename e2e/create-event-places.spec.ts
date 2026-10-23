@@ -1,172 +1,40 @@
 import { randomUUID } from "node:crypto";
-import type { Locator, Page, Request, Route } from "@playwright/test";
-import type { Kysely } from "kysely";
-import type { Database } from "@/db/schema";
 import { expect, expectUrl, leaveNoToken, test } from "./fixtures";
-import { answerFor, photonFeature, requestsFor, type PhotonFeature } from "./photon";
+import { answerFor, requestsFor } from "./photon";
+import {
+  ARRIVAL,
+  barContrast,
+  carries,
+  createButton,
+  created,
+  creations,
+  ECOLE,
+  fillTheRest,
+  FR,
+  holdCreation,
+  isSearch,
+  list,
+  MAIRIE,
+  openForm,
+  options,
+  place,
+  PLACES,
+  positionLine,
+  recordStatus,
+  removeButton,
+  SALLE,
+  searchedText,
+  searches,
+  status,
+  textOf,
+  typeAndList,
+} from "./place-field";
 
 // Each creation lands on the organiser's link, its token in the fragment.
 leaveNoToken();
 
 // #428: the place field of « Créer un événement », with suggestions (place-autocomplete, states 1
 // to 5, « Anatomie et clavier », « Les mots »), against the slot's fake Photon.
-
-const FR = {
-  place: "Lieu",
-  list: "Propositions pour Lieu",
-  remove: "Retirer la position (Lieu)",
-  added: "Position ajoutée.",
-  removed: "Position retirée.",
-  none: "Aucune proposition. Votre texte sera gardé tel quel.",
-  keepText: "Ou gardez votre texte tel quel.",
-  source: "Propositions : © les contributeurs d’OpenStreetMap",
-  create: "Créer",
-  failed: "Impossible de créer l’événement. Vérifiez la connexion, puis réessayez.",
-};
-
-const NEW_EVENT = "/nouveau";
-/** Where a new event lands: its id, then the organiser's token in the fragment. */
-const ARRIVAL = /\/e\/([2-9A-HJ-NP-Za-km-z]{8})\/admin#[A-Za-z0-9_-]{22}$/;
-
-/** A text of this test's own: the fake keeps its answers an hour, and the app its cache. */
-function textOf(label: string) {
-  return `${label} ${randomUUID()}`;
-}
-
-/** A named place in France, which the page writes « {name}, {postcode} {city} ». */
-function namedPlace(name: string, lat: number, lon: number): { feature: PhotonFeature; label: string } {
-  return {
-    feature: photonFeature({ lat, lon, name, postcode: "69670", city: "Vaugneray", countrycode: "FR", country: "France" }),
-    label: `${name}, 69670 Vaugneray`,
-  };
-}
-
-const SALLE = namedPlace("Salle des fêtes", 45.737912, 4.656163);
-const ECOLE = namedPlace("École primaire", 45.738456, 4.654321);
-const MAIRIE = namedPlace("Mairie", 45.737011, 4.659876);
-const PLACES = [SALLE, ECOLE, MAIRIE, namedPlace("Gymnase", 45.7391, 4.6512), namedPlace("Stade", 45.7402, 4.6623), namedPlace("Église", 45.7375, 4.6571)];
-
-const place = (page: Page, name = FR.place) => page.getByRole("combobox", { name, exact: true });
-const list = (page: Page, name = FR.list) => page.getByRole("listbox", { name, exact: true });
-const options = (page: Page) => list(page).getByRole("option");
-const status = (page: Page) => page.locator("form").getByRole("status");
-const positionLine = (page: Page) => page.locator("form").getByText(/^Position : /);
-const removeButton = (page: Page) => page.getByRole("button", { name: FR.remove, exact: true });
-const createButton = (page: Page, name = FR.create) => page.getByRole("button", { name, exact: true });
-
-/** The form, once hydrated: « Créer » stays inactive until then. */
-async function openForm(page: Page, create = FR.create) {
-  await page.goto(NEW_EVENT);
-  await expect(createButton(page, create)).toBeEnabled({ timeout: 15_000 });
-}
-
-/** Every field but the place: a title, a start a week from the device's today, an end the same day. */
-async function fillTheRest(page: Page, labels = { title: "Titre", date: "Date de début", time: "Heure de début", end: "Heure de fin" }) {
-  const date = await page.evaluate(() => {
-    const at = new Date();
-    at.setDate(at.getDate() + 7);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
-  });
-  await page.getByLabel(labels.title, { exact: true }).fill("Kermesse de l’école");
-  await page.getByLabel(labels.date, { exact: true }).fill(date);
-  await page.getByLabel(labels.time, { exact: true }).fill("10:00");
-  await page.getByLabel(labels.end, { exact: true }).fill("18:00");
-}
-
-const isSearch = (request: Request) => new URL(request.url()).pathname === "/api/lieux";
-const searchedText = (request: Request) => (request.postDataJSON() as { text: string }).text;
-
-/** The page's requests to `/api/lieux`, from now on. */
-function searches(page: Page): Request[] {
-  const sent: Request[] = [];
-  page.on("request", (request) => isSearch(request) && sent.push(request));
-  return sent;
-}
-
-/** The creation requests, a server action posted to the form's page, from now on. */
-function creations(page: Page): Request[] {
-  const sent: Request[] = [];
-  page.on("request", (request) => {
-    if (request.method() === "POST" && new URL(request.url()).pathname === NEW_EVENT && request.headers()["next-action"]) sent.push(request);
-  });
-  return sent;
-}
-
-/** Holds the creations until `fail` answers them 500; `stop` holds no more. */
-async function holdCreation(page: Page) {
-  const held: Route[] = [];
-  let arrived!: () => void;
-  const sent = new Promise<void>((resolve) => (arrived = resolve));
-  const isNewEvent = (url: URL) => url.pathname === NEW_EVENT;
-  const hold = (route: Route) => {
-    if (route.request().method() !== "POST") return route.fallback();
-    held.push(route);
-    arrived();
-  };
-  await page.route(isNewEvent, hold);
-  return {
-    sent,
-    fail: async () => {
-      for (const route of held.splice(0)) await route.fulfill({ status: 500, contentType: "text/plain", body: "" });
-    },
-    stop: () => page.unroute(isNewEvent, hold),
-  };
-}
-
-/** Each text the field's `status` region is given, from now on, in order. */
-async function recordStatus(page: Page) {
-  await status(page).evaluate((region) => {
-    const said: string[] = [];
-    (window as unknown as { said: string[] }).said = said;
-    new MutationObserver(() => region.textContent && said.push(region.textContent)).observe(region, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-  });
-  return () => page.evaluate(() => (window as unknown as { said: string[] }).said);
-}
-
-/** The event just created, as stored: its place's text and position. */
-async function created(page: Page, db: Kysely<Database>) {
-  await expectUrl(page, ARRIVAL, "the organiser's link");
-  const id = ARRIVAL.exec(page.url())![1];
-  return db.selectFrom("event").select(["location", "location_lat", "location_lng"]).where("id", "=", id).executeTakeFirstOrThrow();
-}
-
-/** `text` typed, its suggestions shown: `count` of them. */
-async function typeAndList(page: Page, text: string, count: number) {
-  await place(page).fill(text);
-  await expect(options(page)).toHaveCount(count);
-}
-
-/**
- * The contrast, as WCAG measures it, of the 3 px bar (`box-shadow`) of `option` with its
- * background, both drawn by the page on white to read their sRGB values.
- */
-function barContrast(option: Locator): Promise<number> {
-  return option.evaluate((element) => {
-    const style = getComputedStyle(element);
-    const bar = /^(\w+\([^)]*\)|#\w+|\w+)/.exec(style.boxShadow)?.[1] ?? "transparent";
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 1;
-    const context = canvas.getContext("2d", { willReadFrequently: true })!;
-    const luminance = (color: string) => {
-      context.fillStyle = "#fff";
-      context.fillRect(0, 0, 1, 1);
-      context.fillStyle = color;
-      context.fillRect(0, 0, 1, 1);
-      const [r, g, b] = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map((value) => {
-        const c = value / 255;
-        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-      });
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    };
-    const [light, dark] = [luminance(bar), luminance(style.backgroundColor)].sort((a, b) => b - a);
-    return (light + 0.05) / (dark + 0.05);
-  });
-}
 
 test.describe("the place field of « Créer un événement »", () => {
   test.use({ locale: "fr-FR" });
@@ -469,30 +337,3 @@ test.describe("the place field in a browser set to English", () => {
     expect(new URLSearchParams((await requestsFor(text))[0].query).get("lang")).toBe("en");
   });
 });
-
-/**
- * Whether `url` carries `text`: as typed, composed or decomposed, percent-encoded (either case,
- * spaces as `%20` or `+`, once or more), or in base64 or base64url.
- */
-function carries(url: string, text: string): boolean {
-  const forms = new Set<string>();
-  for (const each of [text, text.normalize("NFC"), text.normalize("NFD")]) {
-    forms.add(each);
-    forms.add(encodeURIComponent(each));
-    forms.add(encodeURI(each));
-    forms.add(new URLSearchParams({ q: each }).toString().slice(2));
-    forms.add(Buffer.from(each).toString("base64").replace(/=+$/, ""));
-    forms.add(Buffer.from(each).toString("base64url"));
-  }
-  const haystacks = [url];
-  let decoded = url;
-  for (let n = 0; n < 3; n++) {
-    try {
-      decoded = decodeURIComponent(decoded.replaceAll("+", " "));
-    } catch {
-      break;
-    }
-    haystacks.push(decoded);
-  }
-  return [...forms].some((form) => haystacks.some((haystack) => haystack.includes(form) || haystack.toLowerCase().includes(form.toLowerCase())));
-}
