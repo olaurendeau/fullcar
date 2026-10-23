@@ -1,5 +1,5 @@
 import type { Kysely } from "kysely";
-import type { Page, Request } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { messages } from "./device";
@@ -66,6 +66,16 @@ const cancelButton = (page: Page) => confirmation(page).getByRole("button", { na
 // Under a modal, the page is `aria-hidden`: read by its elements, not by their roles.
 const header = (page: Page) => page.locator("main header").first();
 const tabs = (page: Page) => page.locator('main [role="tab"]');
+
+/**
+ * The confirmation done appearing, as a person sees it open: its animation over. Radix gives it
+ * Escape only once it is the highest layer, two renders and their effects after it has taken the
+ * focus; until then Escape is the sheet's, which closes with the confirmation in it (#415). Its
+ * animation outlasts those renders.
+ */
+async function grownIn(dialog: Locator) {
+  await dialog.evaluate((element) => Promise.all(element.getAnimations().map((each) => each.finished)));
+}
 
 /** The removals sent from now on: the changes whose body carries confirmed numbers. Counted, never shown. */
 function removals(page: Page): Request[] {
@@ -174,6 +184,7 @@ test.describe("M3: removing a retour that holds cars and persons", () => {
     // Escape does the same.
     await submit(page).click();
     await expect(cancelButton(page)).toBeFocused();
+    await grownIn(confirmation(page));
     await page.keyboard.press("Escape");
     await expect(confirmation(page)).toHaveCount(0);
     await expect(submit(page)).toBeFocused();
@@ -406,7 +417,7 @@ test.describe("M9: the confirmation, readable everywhere", () => {
           const dialog = confirmation(page, words.question);
           await expect(dialog).toBeVisible();
           // Measured once it has grown in: it opens from 95 %.
-          await dialog.evaluate((element) => Promise.all(element.getAnimations().map((each) => each.finished)));
+          await grownIn(dialog);
           const sideways = await dialog.evaluate((element) => element.scrollWidth - element.clientWidth);
           expect(sideways, `the confirmation scrolls sideways at ${size}`).toBe(0);
           const pageSideways = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
