@@ -216,8 +216,9 @@ test.describe("POST /api/lieux against the fake Photon", () => {
         .then((response) => response.json())
         .then((answer) => ((window as Searched).searched = answer));
     }, text);
-    // Photon holds it now: the seat is taken while the search waits.
-    await expect.poll(async () => (await requestsFor(text)).length).toBe(1);
+    // Photon holds it now: the seat is taken while the search waits. Every 50 ms, not the default
+    // 100, 250, 500 and 1000 ms: seen 850 ms late, the hold would leave little time for the seat.
+    await expect.poll(async () => (await requestsFor(text)).length, { intervals: [50] }).toBe(1);
 
     await seat.click();
     await expect(messages(page)).toHaveText(["Tom est dans la voiture de Sophie"]);
