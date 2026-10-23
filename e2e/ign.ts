@@ -99,3 +99,16 @@ export function placeOf(eventId: string): Position {
     lng: FRANCE.west + fraction("lng") * (FRANCE.east - FRANCE.west),
   };
 }
+
+/**
+ * This test's own tile, `z/x/y` at z 18, and `dx` columns further east: the fake keeps its
+ * answers and requests for its whole life. At z 18, 256 times the tiles of z 14: a test needs
+ * no map view, only tiles of its own.
+ */
+export function tileOf(eventId: string, dx = 0): string {
+  const [z, x, y] = tileAt(placeOf(eventId), 18).split("/").map(Number);
+  return `${z}/${x + dx}/${y}`;
+}
+
+/** The eight bytes every PNG starts with. */
+export const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
