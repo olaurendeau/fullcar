@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./fixtures";
+import { isPublicId, PUBLIC_ID_ALPHABET } from "@/domain/public-id-format";
 import { answerTiles, placeOf, requestsForTile, tileAt, type IgnAnswer } from "./ign";
 
 // The fake IGN itself, as the app will reach it: `IGN_WMTS_URL` of `web` (compose.yaml).
@@ -9,9 +10,12 @@ const IGN_WMTS_URL = "http://ign:2324/wmts";
 const NOT_FOUND_BODY =
   '<ExceptionReport xmlns="http://www.opengis.net/ows/1.1"><Exception exceptionCode="Not Found" >No data found</Exception></ExceptionReport>';
 
-/** This test's own tile: the fake keeps its answers and requests for its whole life. */
+/**
+ * This test's own tile: the fake keeps its answers and requests for its whole life. At z 18,
+ * 256 times the tiles of z 14: the fake's tests need no map view, only tiles of their own.
+ */
 function tileOf(eventId: string, dx = 0) {
-  const [z, x, y] = tileAt(placeOf(eventId), 14).split("/").map(Number);
+  const [z, x, y] = tileAt(placeOf(eventId), 18).split("/").map(Number);
   return `${z}/${x + dx}/${y}`;
 }
 
@@ -131,6 +135,14 @@ test.describe("the fake IGN", () => {
     expect(body).toContain('exceptionCode="InvalidParameterValue"');
   });
 
+  test("answers the tile again once set back to it", async ({ seededEvent }) => {
+    const tile = tileOf(seededEvent.id);
+    await answerTiles([tile], { kind: "error" });
+    expect((await getTile(tile)).status).toBe(500);
+    await answerTiles([tile], { kind: "tile" });
+    await expectTile(await getTile(tile));
+  });
+
   test("answers a request it cannot read with an InvalidParameterValue report", async ({ seededEvent }) => {
     const tile = tileOf(seededEvent.id);
     const unreadable: [string, (url: URL) => void][] = [
@@ -241,20 +253,55 @@ test.describe("the tiles of a test", () => {
     expect(tileAt({ lat: -89, lng: -180 }, 2)).toBe("2/0/3");
   });
 
-  test("placeOf stays in France, and gives two events two zones", () => {
-    const ids = ["k7Rm2QpX9tLw", "B3nV8cZs4HfJ", "aaaaaaaaaaaa", "aaaaaaaaaaab", "ZZZZZZZZZZZZ"];
+  test("placeOf stays in France, the same place for the same event", () => {
+    const ids = publicIds(4000);
+    expect(ids.every(isPublicId)).toBe(true);
+    const outside = ids.filter((id) => {
+      const { lat, lng } = placeOf(id);
+      return !(lat >= 43.6 && lat <= 49 && lng >= -0.5 && lng <= 5.5);
+    });
+    expect(outside).toEqual([]);
+    expect(placeOf(ids[0])).toEqual(placeOf(ids[0]));
+  });
+
+  test("placeOf spreads events over the whole rectangle, tile by tile", () => {
+    const ids = publicIds(4000);
+    // About 97,800 tiles at z 14: drawn evenly, 4000 events share about 80 of them. Positions
+    // on a few lines, as with FNV-1a alone, share hundreds.
+    const tiles = new Set(ids.map((id) => tileAt(placeOf(id), 14)));
+    expect(tiles.size).toBeGreaterThanOrEqual(3850);
+
+    // 8 × 8 cells of the rectangle, about 62 events each when drawn evenly.
+    const cells = new Map<string, number>();
     for (const id of ids) {
       const { lat, lng } = placeOf(id);
-      expect(lat, id).toBeGreaterThanOrEqual(43.6);
-      expect(lat, id).toBeLessThanOrEqual(49);
-      expect(lng, id).toBeGreaterThanOrEqual(-0.5);
-      expect(lng, id).toBeLessThanOrEqual(5.5);
+      const cell = `${Math.floor(((lat - 43.6) / 5.4) * 8)}/${Math.floor(((lng + 0.5) / 6) * 8)}`;
+      cells.set(cell, (cells.get(cell) ?? 0) + 1);
     }
-    expect(placeOf(ids[0])).toEqual(placeOf(ids[0]));
+    expect(cells.size).toBe(64);
+    for (const [cell, count] of cells) {
+      expect(count, cell).toBeGreaterThanOrEqual(30);
+      expect(count, cell).toBeLessThanOrEqual(95);
+    }
 
-    // Two ids one character apart: tiles at z 14 more than a view apart.
-    const [, ax, ay] = tileAt(placeOf("aaaaaaaaaaaa"), 14).split("/").map(Number);
-    const [, bx, by] = tileAt(placeOf("aaaaaaaaaaab"), 14).split("/").map(Number);
-    expect(Math.max(Math.abs(ax - bx), Math.abs(ay - by))).toBeGreaterThan(4);
+    // Two events that FNV-1a alone put on the same tile (revue de #503).
+    expect(tileAt(placeOf("WQMcTPtp"), 14)).not.toBe(tileAt(placeOf("MrTH9oFo"), 14));
   });
 });
+
+/**
+ * `count` event ids in their real format, 8 symbols of PUBLIC_ID_ALPHABET, without drawing
+ * them: the numbers 0, 7,368,787, 2 × 7,368,787… written in base 57.
+ */
+function publicIds(count: number) {
+  const base = PUBLIC_ID_ALPHABET.length;
+  return Array.from({ length: count }, (_, i) => {
+    let n = i * 7_368_787;
+    let id = "";
+    for (let digit = 0; digit < 8; digit++) {
+      id = PUBLIC_ID_ALPHABET[n % base] + id;
+      n = Math.floor(n / base);
+    }
+    return id;
+  });
+}

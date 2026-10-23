@@ -69,13 +69,22 @@ export function tileAt(position: Position, z: number): string {
 // Caen, and from near Verdun to near Aix-en-Provence.
 const FRANCE = { south: 43.6, north: 49, west: -0.5, east: 5.5 };
 
-/** FNV-1a, 32 bits: plain arithmetic, the same number for the same text on every run. */
-function fnv1a(text: string): number {
+/**
+ * FNV-1a, 32 bits, then murmur3's finaliser (`fmix32`): plain arithmetic, the same number for
+ * the same text on every run. FNV-1a alone mixes its last bytes poorly: `id:lat` and `id:lng`
+ * would differ by one of a few dozen values, and the places would lie on as many lines.
+ */
+function hashOf(text: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     hash ^= text.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193);
   }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35);
+  hash ^= hash >>> 16;
   return hash >>> 0;
 }
 
@@ -84,7 +93,7 @@ function fnv1a(text: string): number {
  * tiles one test sets are not those another test looks at. Neither random nor a crypto hash.
  */
 export function placeOf(eventId: string): Position {
-  const fraction = (salt: string) => fnv1a(`${eventId}:${salt}`) / 2 ** 32;
+  const fraction = (salt: string) => hashOf(`${eventId}:${salt}`) / 2 ** 32;
   return {
     lat: FRANCE.south + fraction("lat") * (FRANCE.north - FRANCE.south),
     lng: FRANCE.west + fraction("lng") * (FRANCE.east - FRANCE.west),
