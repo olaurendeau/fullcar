@@ -1,11 +1,12 @@
 import { MapPin } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
 import { DevicePersons } from "./device-persons";
 import { EventDates } from "./event-dates";
+import type { LegMap } from "./event-map";
 import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabs } from "./leg-tabs";
 
@@ -33,10 +34,16 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
  * alone, without tabs, when there is no retour (C5.4). Each leg shows its coverage, its cars
  * and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
+ * When the place has a position, each leg has its map, folded on each load: one open or folded
+ * state for the page, in memory only, which outlives the remount of a leg's panel (#478).
  */
 export function EventView({ title, location, locationPosition, allerAt, retourAt, board, device, messageBar, tab, onTab }: EventViewProps) {
   const t = useTranslations("Event.legs");
   const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
+  const [mapOpen, setMapOpen] = useState(false);
+  const map: LegMap | undefined = locationPosition
+    ? { location, position: locationPosition, open: mapOpen, onToggle: () => setMapOpen((open) => !open) }
+    : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -62,6 +69,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           near={locationPosition}
           tab={tab}
           onTab={onTab}
+          map={map}
         />
       ) : (
         <section aria-labelledby="leg-aller" className="flex flex-col gap-4">
@@ -69,7 +77,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           <h2 id="leg-aller" className="sr-only">
             {t("aller")}
           </h2>
-          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} near={locationPosition} />
+          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} near={locationPosition} map={map} />
         </section>
       )}
     </div>
