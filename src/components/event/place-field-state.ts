@@ -19,7 +19,7 @@ export type PlaceRule = "event" | "car";
 /** The discreet line under the field: « Recherche de propositions… », « Aucune proposition… », « Propositions indisponibles… ». */
 export type PlaceLine = "searching" | "none" | "unavailable";
 
-/** What the field's `status` region says, its words being the view's (`PlaceField.*`). */
+/** What the field's `status` region says, its words being the view's (the `PlaceField` keys). */
 export type PlaceAnnouncement =
   | { kind: "count"; count: number }
   | { kind: "none" }

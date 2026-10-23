@@ -132,8 +132,8 @@ describe("the position, rule event", () => {
   });
 
   it("leaves when only invisible characters are left, as the domain reads an empty text", () => {
-    expect(typed(withChoice("event"), "​⁠").position).toBeNull();
-    expect(typed(withChoice("event"), "​Brindas").position).toEqual({ lat: 45.71989, lng: 4.69613 });
+    expect(typed(withChoice("event"), "\u200b\u2060").position).toBeNull();
+    expect(typed(withChoice("event"), "\u200bBrindas").position).toEqual({ lat: 45.71989, lng: 4.69613 });
     // The domain refuses a NUL character as invalid, not as empty: the form will say so, the position stays.
     expect(typed(withChoice("event"), "\u0000").position).toEqual({ lat: 45.71989, lng: 4.69613 });
   });

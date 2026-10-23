@@ -42,8 +42,7 @@ function suggestionOf(value: unknown): Suggestion | undefined {
 
 /**
  * The body of the route's 200, `null` for anything else (another status, a body that is not
- * JSON, the network gone, the request abandoned): anything but `ok` with a list of readable
- * suggestions is unavailable.
+ * JSON, the network gone): anything but `ok` with a list of readable suggestions is unavailable.
  */
 function resultOf(body: unknown): PlaceSearchResult {
   if (typeof body !== "object" || body === null) return UNAVAILABLE;
