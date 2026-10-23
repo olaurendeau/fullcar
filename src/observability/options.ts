@@ -1,5 +1,5 @@
-import type { addIntegration, Event, getClient, NodeOptions } from "@sentry/nextjs";
-import { inCode, scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan } from "./scrub";
+import type { addIntegration, Event, getClient, NodeOptions, StackFrame } from "@sentry/nextjs";
+import { inCode, inRuntime, RUNTIME_FILES, scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan } from "./scrub";
 
 /*
  * Sentry's options, the same on the server and in the browser (#231, #234). The SDK collects
@@ -69,24 +69,26 @@ export function scrubEnvelopeHeader([header]: readonly [object, ...unknown[]]): 
  * a frame of any other line of a message that reads as one: `    at Marc (…)` would send a
  * first name as a function's. In the browser, a cause's frames escape `allowUrls`, which
  * looks at the thrown error's top frame alone. A processor of the client runs after those of
- * the integrations: by then the browser's frames of code are `app:///_next/…`.
+ * the integrations: by then the browser's frames of code are `app:///_next/…`. The frames
+ * of the runtime stay too, those of a built-in only (#395): `JSON.parse (<anonymous>)`.
  */
 export function codeFramesOnly<E extends Event>(event: E): E {
   for (const value of event.exception?.values ?? []) {
-    if (value.stacktrace?.frames) value.stacktrace.frames = value.stacktrace.frames.filter(inCode);
+    if (value.stacktrace?.frames) value.stacktrace.frames = value.stacktrace.frames.filter((frame) => inCode(frame) || inRuntime(frame));
   }
   return event;
 }
 
 /** A stack parser of the SDK, as it is: the frames it reads from a stack. */
-export type ParseStack = (stack: string) => readonly unknown[];
+export type ParseStack = (stack: string) => readonly StackFrame[];
 
 /*
  * A frame of our own around the line: the parser drops a frame of `captureException` or of
  * `sentryWrapped` at either end of a stack, and would make none of `    at Marc.captureException (…)`.
  */
 const AROUND = "    at around (/around.js:1:1)";
-const readsAsFrame = (parse: ParseStack, line: string) => parse(`${AROUND}\n${line}\n${AROUND}`).length > 2;
+const framesOf = (parse: ParseStack, line: string) => parse(`${AROUND}\n${line}\n${AROUND}`).slice(1, -1);
+const sameFrame = (a: StackFrame) => (b: StackFrame) => a.function === b.function && a.filename === b.filename;
 
 /**
  * Of every error's message, and of its causes', the lines after the first that `parse`, the
@@ -97,13 +99,23 @@ const readsAsFrame = (parse: ParseStack, line: string) => parse(`${AROUND}\n${li
  * « Le format attendu » or « Un état incohérent » go too, which the project accepts (privacy
  * over diagnostics). The first line is the message's own, which the parsers
  * skip: on the server always, in the browser after the `…Error: ` of the error's name (#239).
+ * A frame of the runtime that such a line reads as leaves the stack too (#395): V8 writes
+ * the message at the top of it, and `    at JSON.parse (<anonymous>)` there is no frame.
+ * Only as far as the stack's text holds this message: when it does not (a `message` changed
+ * after `stack` was read, an empty `name`), a frame of the runtime read from a line of the
+ * stack's own copy may go out. Its words are then ECMAScript's alone (`inRuntime`), never a
+ * person's.
  */
 export function messagesWithoutFrames(parse: ParseStack) {
   return <E extends Event>(event: E): E => {
     for (const exception of event.exception?.values ?? []) {
       if (typeof exception.value !== "string") continue;
-      const lines = exception.value.split("\n");
-      exception.value = lines.filter((line, index) => index === 0 || !readsAsFrame(parse, line)).join("\n");
+      const [first = "", ...rest] = exception.value.split("\n");
+      const read = rest.map((line) => framesOf(parse, line));
+      exception.value = [first, ...rest.filter((_, index) => read[index].length === 0)].join("\n");
+      const fromMessage = read.flat().filter(({ filename }) => RUNTIME_FILES.has(filename));
+      const { stacktrace } = exception;
+      if (stacktrace?.frames) stacktrace.frames = stacktrace.frames.filter((frame) => !fromMessage.some(sameFrame(frame)));
     }
     return event;
   };
