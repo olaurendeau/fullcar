@@ -405,6 +405,8 @@ describe("what the SDK sends with these options", () => {
     new Error("Impossible d'afficher le trajet", { cause: new Error(`Le trajet a échoué${FRAME_LINE}`) }),
     new Error("Le trajet a échoué\nRésultat pour Marc : aucune place"),
     new Error("Le trajet a échoué\n    at Marc (/var/task/.next/server/chunks/ssr/4821.js:1:2)"),
+    // A frame without a file, which the parser gives the file of the line above it.
+    new Error("Le trajet a échoué\n    at a (/var/task/.next/server/chunks/ssr/1.js:1:2)\n    at Marc (file://:1:2)"),
   ];
   async function sendEach(errors: Error[]) {
     const each = [];
@@ -416,10 +418,11 @@ describe("what the SDK sends with these options", () => {
     start(registerServerHooks);
     const each = await sendEach(withFrameInMessage());
     // A boolean, first: a failing assertion prints no part of what was sent (#233).
-    expect(each.map(({ leaks }) => leaks)).toEqual([false, false, false, false]);
+    expect(each.map(({ leaks }) => leaks)).toEqual([false, false, false, false, false]);
     expect(each.map(({ values }) => values)).toEqual([
       ["Le trajet a échoué"],
       ["Le trajet a échoué", scrubText("Impossible d'afficher le trajet")],
+      ["Le trajet a échoué"],
       ["Le trajet a échoué"],
       ["Le trajet a échoué"],
     ]);
@@ -430,7 +433,7 @@ describe("what the SDK sends with these options", () => {
       registerHooks(each);
       each.addEventProcessor(codeFramesOnly);
     });
-    expect((await sendEach(withFrameInMessage())).map(({ leaks }) => leaks)).toEqual([true, true, true, true]);
+    expect((await sendEach(withFrameInMessage())).map(({ leaks }) => leaks)).toEqual([true, true, true, true, true]);
   });
 
   it("sends, on purpose, a first name in a line of plain text that Node's parser reads as no frame (#393)", async () => {
