@@ -155,11 +155,15 @@ export function screenRead(
 
 /**
  * What came of « Valider » in « Modifier l’événement » (organizer-view v3.3.6, « Enregistrer »):
- * saved, with the values the server stored; a field refused; or a problem, said in the sheet.
+ * saved, with the values the server stored; a field refused; changed on another device, with
+ * the values stored (M6.1); the link refused (M8.2) or the event gone (M8.3); or a problem, said
+ * in the sheet.
  */
 export type EditAnswer =
   | { kind: "saved"; event: EventHeader }
   | { kind: "errors"; errors: EventErrors }
+  | { kind: "changed"; event: EventHeader }
+  | { kind: "refused"; reason: "invalid" | "eventNotFound" }
   | { kind: "problem"; problem: ActionProblem };
 
 function isHeader(value: unknown): value is EventHeader {
@@ -169,16 +173,20 @@ function isHeader(value: unknown): value is EventHeader {
 }
 
 /**
- * The answer of `updateEvent`, as the sheet takes it. Decision: `changed`, `confirmRetour`,
- * `invalid` and `eventNotFound` are the generic failure until #269 and #270 give them their
- * words. Reason: the epic's « Comportement transitoire »; nothing was written, the typing stays.
+ * The answer of `updateEvent`, as the sheet takes it. Decision: `confirmRetour` is the generic
+ * failure until #270 gives it its words. Reason: the epic's « Comportement transitoire »;
+ * nothing was written, the typing stays.
  */
 export function editAnswer(sent: Sent<unknown>): EditAnswer {
   if (!sent.ok) return { kind: "problem", problem: sent.problem };
-  const answer = sent.value as { ok?: unknown; event?: unknown; errors?: unknown } | null | undefined;
+  const answer = sent.value as { ok?: unknown; event?: unknown; errors?: unknown; error?: unknown } | null | undefined;
   if (answer?.ok === true && isHeader(answer.event)) return { kind: "saved", event: answer.event };
   if (answer?.ok === false && typeof answer.errors === "object" && answer.errors !== null) {
     return { kind: "errors", errors: answer.errors as EventErrors };
+  }
+  if (answer?.ok === false && answer.error === "changed" && isHeader(answer.event)) return { kind: "changed", event: answer.event };
+  if (answer?.ok === false && (answer.error === "invalid" || answer.error === "eventNotFound")) {
+    return { kind: "refused", reason: answer.error };
   }
   return { kind: "problem", problem: "failed" };
 }
