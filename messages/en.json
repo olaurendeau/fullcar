@@ -248,6 +248,7 @@
       "editErrors": "A field was not accepted: use “Edit the event” again.",
       "eventChanged": "It had just been changed from another device: the page shows the saved version.",
       "retourNotConfirmed": "Removing the return trip was not confirmed: use “Edit the event” again.",
+      "retourChanged": "The return trip changed during the confirmation: it now has {cars, plural, one {# car} other {# cars}} and {persons, plural, one {# person} other {# people}}. {where, select, sheet {Use “Confirm” again.} other {Use “Edit the event” again.}}",
       "noRetourAgain": "This event no longer has a return trip: {action, select, offerRide {offer the car again, for the outbound trip only.} other {add this person again, for the outbound trip only.}}"
     },
     "info": {
