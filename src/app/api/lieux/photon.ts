@@ -29,6 +29,8 @@ export interface PhotonOptions {
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
 const BREAKER_MS = 60_000;
+/** However long `Retry-After` asks: an instance does not give up on Photon for longer. */
+const MAX_BREAKER_MS = 3_600_000;
 
 const USER_AGENT = `fullcar/${packageJson.version} (+https://github.com/olaurendeau/fullcar)`;
 
@@ -85,9 +87,12 @@ export function createPhoton({ fetch, now, url, breakerMs }: PhotonOptions): Pho
     return true;
   }
 
+  /** For `Retry-After`, or `breakerMs`, but never less than `breakerMs` nor more than an hour. */
   function open(retryAfter: string | null) {
     if (breakerMs === 0) return;
-    openUntil = now() + (retryAfterMs(retryAfter, now()) ?? breakerMs);
+    const ms = Math.min(Math.max(retryAfterMs(retryAfter, now()) ?? breakerMs, breakerMs), MAX_BREAKER_MS);
+    // A failure that comes back late does not shorten what an earlier one opened.
+    openUntil = Math.max(openUntil, now() + ms);
   }
 
   async function call(query: PlaceQuery): Promise<Suggestion[]> {
@@ -98,6 +103,8 @@ export function createPhoton({ fetch, now, url, breakerMs }: PhotonOptions): Pho
         headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
         // Next's data cache would keep the answer, keyed by the URL that holds the text.
         cache: "no-store",
+        // A redirect would carry the text to whatever host it names.
+        redirect: "error",
         signal: controller.signal,
       });
       if (response.status === 429 || response.status >= 500) open(response.headers.get("Retry-After"));
@@ -137,12 +144,18 @@ export function createPhoton({ fetch, now, url, breakerMs }: PhotonOptions): Pho
   };
 }
 
-/** `Retry-After` in milliseconds from `time`: seconds, or an HTTP date; anything else, `undefined`. */
+/**
+ * `Retry-After` in milliseconds from `time`: an integer of seconds, or an HTTP date as RFC 9110
+ * writes it (IMF-fixdate, `Fri, 23 Oct 2026 08:00:00 GMT`) that names a real day and time;
+ * anything else, `undefined`. `Date.parse` alone is not enough: Node reads « -1 » or « next
+ * tuesday 3 » as dates in 2001.
+ */
 function retryAfterMs(value: string | null, time: number): number | undefined {
   if (value === null) return undefined;
-  if (/^\d+$/.test(value.trim())) return Number(value.trim()) * 1000;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
   const date = Date.parse(value);
-  return Number.isNaN(date) ? undefined : Math.max(0, date - time);
+  // `toUTCString` writes an IMF-fixdate: any other text, a 30 February or a wrong day of the week, differs.
+  return !Number.isNaN(date) && new Date(date).toUTCString() === value ? date - time : undefined;
 }
 
 /** The body as text, read up to `MAX_BYTES`, and no further. */

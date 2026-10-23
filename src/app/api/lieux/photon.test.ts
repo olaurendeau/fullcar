@@ -78,6 +78,12 @@ describe("a search", () => {
     await search();
     expect(fetch.mock.calls[0][1].cache).toBe("no-store");
   });
+
+  it("follows no redirect: the text never leaves for another host", async () => {
+    const { search, fetch } = setup();
+    await search();
+    expect(fetch.mock.calls[0][1].redirect).toBe("error");
+  });
 });
 
 describe("the cache (AL2.5)", () => {
@@ -180,14 +186,59 @@ describe("the breaker (AL2.5)", () => {
     expect(await search()).toEqual(OK);
   });
 
-  it("falls back on its own duration when Retry-After cannot be read", async () => {
-    const { search, fetch, advance } = setup([() => status(429, { "Retry-After": "soon" })]);
+  it.each([
+    ["soon", "soon"],
+    ["a negative number", "-1"],
+    ["a decimal number", "1.5"],
+    ["words Node reads as a date", "next tuesday 3"],
+    ["a date that is not an HTTP date", new Date(START + 2 * MINUTE).toISOString()],
+    // 23 October 2026 is a Friday.
+    ["an HTTP date with the wrong day", "Thu, 23 Oct 2026 08:02:00 GMT"],
+    ["0", "0"],
+    ["a date already past", new Date(START - MINUTE).toUTCString()],
+  ])("stays open for its own duration, never less, when Retry-After is %s", async (_, retryAfter) => {
+    const { search, fetch, advance } = setup([() => status(429, { "Retry-After": retryAfter })]);
     await search();
     advance(MINUTE - 1);
     await search();
     expect(fetch).toHaveBeenCalledTimes(1);
     advance(1);
     expect(await search()).toEqual(OK);
+  });
+
+  it.each([
+    ["99999999999 seconds", "99999999999"],
+    ["400 digits", "9".repeat(400)],
+    ["a date in a year", new Date(START + 365 * 24 * HOUR).toUTCString()],
+  ])("stays open for an hour at most, when Retry-After is %s", async (_, retryAfter) => {
+    const { search, fetch, advance } = setup([() => status(429, { "Retry-After": retryAfter })]);
+    await search();
+    advance(HOUR - 1);
+    await search();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    advance(1);
+    expect(await search()).toEqual(OK);
+  });
+
+  it.each([
+    ["an integer of seconds longer than breakerMs", "2", 2_000],
+    ["a decimal number, unread", "1.5", 1_000],
+  ])("reads Retry-After as %s", async (_, retryAfter, ms) => {
+    const { search, fetch, advance } = setup([() => status(429, { "Retry-After": retryAfter })], { breakerMs: 1_000 });
+    await search();
+    advance(ms - 1);
+    await search();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    advance(1);
+    expect(await search()).toEqual(OK);
+  });
+
+  it("is not shortened by a failure that comes back after another", async () => {
+    const { search, fetch, advance } = setup([() => status(429, { "Retry-After": "120" }), () => status(503)]);
+    await Promise.all([search(), search(query("Brindas"))]);
+    advance(2 * MINUTE - 1);
+    expect(await search()).toEqual(UNAVAILABLE);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("stays open for breakerMs", async () => {
@@ -341,11 +392,17 @@ describe("what a failure leaves (AL6.3, AL6.6)", () => {
     expect(logs).toEqual([["photon: unavailable (timeout)"]]);
   });
 
-  it("logs nothing when the breaker or the cap answers", async () => {
+  it("logs nothing when the breaker answers", async () => {
     const { search } = setup([() => status(429)]);
     await search();
     await search();
     expect(logs).toEqual([["photon: unavailable (HTTP 429)"]]);
+  });
+
+  it("logs nothing when the cap answers", async () => {
+    const { search } = setup();
+    for (let n = 0; n < 6; n++) await search(query(`lieu ${n}`));
+    expect(logs).toEqual([]);
   });
 
   it("throws nothing, so no error carries the URL: a fetch that throws it is unavailable", async () => {
