@@ -26,6 +26,8 @@ async function shoot(page: Page, testInfo: TestInfo, name: string) {
     path: `var/shots/${name}-${testInfo.project.use.viewport?.width}.png`,
     fullPage: true,
     animations: "disabled",
+    // The links masked, the organiser's with its token: a capture may be shared in a PR or an issue.
+    mask: [page.getByTestId("link")],
   });
 }
 
