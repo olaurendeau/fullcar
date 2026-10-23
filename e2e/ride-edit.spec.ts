@@ -17,7 +17,8 @@ const BAR_FAILED =
   "Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Une erreur est survenue : réessayez dans un instant.";
 const CHANGED = "Quelqu’un a pris ou libéré une place entre-temps : rien n’a changé. Choisissez à nouveau parmi les personnes à bord.";
 const SEATS = "Places, sans compter qui conduit";
-const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
+const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /**
  * The device holds Claire. Aller: she drives Nina then Paul (3 seats), Marc drives nobody, Tom
@@ -274,7 +275,7 @@ test.describe("edit a car", () => {
     test(`a failure once the sheet is ${when}: in the bar, once no sheet hides the page`, async ({ db, page, seededEvent }) => {
       const answer = await holdFirst(page, GARE, true);
       await page.goto(`/e/${seededEvent.id}`);
-      if (when.endsWith("closing")) await page.addStyleTag({ content: slowClose });
+      const held = when.endsWith("closing") ? await page.addStyleTag({ content: holdClose }) : undefined;
       await sendThenClose(page, when.endsWith("closing"));
       const seen = await watchAlerts(page);
       if (when !== "reopened") await failHeld(page, answer);
@@ -285,6 +286,8 @@ test.describe("edit a car", () => {
         if (when === "reopened") await failHeld(page, answer);
         await page.keyboard.press("Escape");
       }
+      // Answered, and reopened if it is: the first sheet may end its closing.
+      await held?.evaluate((style) => style.parentNode?.removeChild(style));
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(bar(page)).toHaveText(BAR_FAILED);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });

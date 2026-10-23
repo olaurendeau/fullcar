@@ -71,9 +71,10 @@ const alerts = (scope: Page | Locator) => scope.getByRole("alert").filter({ hasT
 const overlay = (page: Page) => page.locator('[data-slot="alert-dialog-overlay"]');
 // The confirmation and its overlay close together, each in its own portal: the one that ended its
 // closing first comes back last in the page when reopened, and an overlay there covers the
-// confirmation (#368). Both are slowed, as the page closes both at once.
-const slowClose =
-  '[role="alertdialog"][data-state="closed"], [data-slot="alert-dialog-overlay"][data-state="closed"] { animation-duration: 2s !important; }';
+// confirmation (#368). Both are held, as the page closes both at once: paused, Radix keeps them
+// mounted until the style is removed.
+const holdClose =
+  '[role="alertdialog"][data-state="closed"], [data-slot="alert-dialog-overlay"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /** A computed colour in sRGB, whatever space the style writes it in (oklch). */
 const rgb = (locator: Locator, property: string) =>
@@ -223,14 +224,14 @@ test.describe("remove a car", () => {
     expect(await rides(db, seededEvent.id)).toHaveLength(4);
   });
 
-  // Radix keeps a closing confirmation mounted until its animation ends: slowed here, the answer
-  // comes meanwhile. Reopened, even while the first one closes, the confirmation is a new one.
+  // Radix keeps a closing confirmation mounted until its animation ends: held here until the answer
+  // has come, however long it takes (#398). Reopened, even while the first one closes, the confirmation is a new one.
   for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
     test(`a failure once the confirmation is ${when}: in the bar, once nothing hides the page`, async ({ page, seededEvent }) => {
       const answer = await holdFirst(page, scene.cars.claire, true);
       await page.goto(`/e/${seededEvent.id}`);
       const closing = when.endsWith("closing");
-      if (closing) await page.addStyleTag({ content: slowClose });
+      const held = closing ? await page.addStyleTag({ content: holdClose }) : undefined;
       const trigger = removeButton(car(panel(page), "Claire"));
       await trigger.click();
       await confirm(page).click();
@@ -252,6 +253,8 @@ test.describe("remove a car", () => {
       const responded = page.waitForResponse((response) => response.status() === 500);
       answer();
       await responded;
+      // Answered, and reopened if it is: the first confirmation may end its closing.
+      await held?.evaluate((style) => style.parentNode?.removeChild(style));
       if (when.startsWith("reopened")) {
         await expect(alerts(confirmation(page))).toHaveCount(0);
         await confirmation(page).getByRole("button", { name: "Annuler" }).click();
