@@ -9,6 +9,7 @@ import type { Message } from "./bar-state";
 import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
+import { EventMap, type LegMap } from "./event-map";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import type { RemoveRide } from "./remove-ride-dialog";
@@ -64,6 +65,8 @@ export function LegTime({ at }: { at: WallClock }) {
  * #3 instead, without a banner, under the same actions (C9.6). The actions come before the
  * cars, however many there are (C1.1), and are inactive until the device's persons are
  * known (C5.9). The device's persons are above the tabs (`DevicePersons`, #162).
+ * When the event's place has a position, its map comes after the actions, before the cards,
+ * « Aucune voiture… » or the empty state (#478, event-map v11).
  */
 export function LegPanel({
   at,
@@ -71,6 +74,7 @@ export function LegPanel({
   device,
   hasRetour,
   other,
+  map,
 }: {
   at: WallClock;
   board: VisibleLegBoard;
@@ -78,6 +82,8 @@ export function LegPanel({
   hasRetour: boolean;
   /** The other leg's date and time, and the device's persons there, for « Proposer une voiture » (#169). */
   other?: { at: WallClock; persons: readonly DevicePerson[] };
+  /** The event's place and the page's open or folded map; none without a position (CA2.1). */
+  map?: LegMap;
 }) {
   const t = useTranslations("Event");
   const tBoard = useTranslations("Board");
@@ -110,6 +116,7 @@ export function LegPanel({
       <noscript>
         <p className="text-sm text-muted-foreground">{tBoard("needsJavaScript")}</p>
       </noscript>
+      {map && <EventMap leg={leg} map={map} />}
       {hasBanner(board) ? (
         <>
           {cars.length > 0 ? (
