@@ -352,6 +352,10 @@
   "EditEvent": {
     "title": "Edit the event",
     "saved": "Event updated. Nobody is notified: remember to tell the group.",
+    "carTimes": {
+      "aller": "{count, plural, one {The car already offered for the outbound trip keeps its departure time.} other {The # cars already offered for the outbound trip keep their departure time.}} Let the drivers know.",
+      "retour": "{count, plural, one {The car already offered for the return trip keeps its departure time.} other {The # cars already offered for the return trip keep their departure time.}} Let the drivers know."
+    },
     "changed": {
       "title": "The event has just been changed from another device.",
       "body": "Nothing was saved. The fields you had not changed now show the saved version: check them, then confirm again."

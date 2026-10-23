@@ -118,10 +118,47 @@ celui qui écrit le code.
 - Dans le navigateur, une erreur qui peut partir a un `name` qui finit par `Error` :
   `@sentry/browser` ne retire la première ligne de sa pile que si elle contient `Error: `,
   sinon il la lit comme une frame, et son message avec (#239). Sur le serveur, `@sentry/core`
-  saute toujours la première ligne. Des deux côtés, toute autre ligne du message qui a l'air
-  d'une frame en devient une : `codeFramesOnly` (`src/observability/options.ts`), posé par
-  `startServerSentry` et `startBrowserSentry`, ne garde de toute erreur que les frames de code
-  (#361), et sur le serveur `databaseErrors` ne garde du `DatabaseError` de pg que son code.
+  saute toujours la première ligne. Des deux côtés, le parseur du SDK fait une frame de toute
+  autre ligne du message qui a l'air d'en être une. Trois règles traitent ces lignes et ces
+  frames. Retirer ou contourner l'une d'elles est bloquant :
+  - dans le navigateur, `startBrowserSentry` passe `stackParser: scriptFramesOnly(…)` à
+    `init` (`src/observability/client.ts`). Quand la pile a une frame de script, dont le
+    fichier est une URL sans espace, ce parseur ne garde que ces frames-là et celles dont le
+    fichier est `<anonymous>` ou `[native code]`. Pour une ligne du message sans URL,
+    `allowUrls: [/\/_next\//]` regarde alors la vraie frame du haut (#379). Une ligne avec
+    une URL, comme `    at Marc (https://…/_next/a.js:1:2)`, passe ce parseur : seul
+    `messagesWithoutFrames`, ci-dessous, en retire la frame ;
+  - `codeFramesOnly` (`src/observability/options.ts`), posé par `registerServerHooks`
+    (`src/observability/server.ts`) et par `startBrowserSentry`, ne garde de chaque erreur
+    et de ses causes que deux sortes de frames (#361, #395). Les frames de code ont une
+    ligne dans un fichier du build ou de Node (`inCode`). Les frames du runtime n'ont pas de
+    ligne, leur fichier est `<anonymous>` ou `[native code]`, et leur nom n'est fait que de
+    noms d'objets intégrés à ECMAScript et de leurs membres. Ces objets viennent d'une liste
+    fixe, et leurs membres sont lus une fois, au chargement (`inRuntime`,
+    `src/observability/scrub.ts`) ;
+  - `messagesWithoutFrames(parse)` (`src/observability/options.ts`) est posé avec
+    `client.on("preprocessEvent", …)` par `registerServerHooks` (`src/observability/server.ts`)
+    et par `startBrowserSentry` (`src/observability/client.ts`), avec le parseur du SDK tel
+    quel : `client.getOptions().stackParser` sur le serveur, `sentry.defaultStackParser` dans
+    le navigateur, jamais `scriptFramesOnly(…)`. `preprocessEvent` passe avant tout
+    processeur d'événement : dans le navigateur, `allowUrls` regarde donc la vraie frame du
+    haut, et les fichiers des frames sont encore ceux qu'a lus le parseur (#388). Le poser
+    d'un côté ou de l'autre avec `addEventProcessor` est bloquant. Les deux côtés restent
+    ainsi symétriques. Le serveur n'a pas d'`allowUrls`, et seul le test d'enregistrement de
+    `src/observability/options.test.ts` y garde ce point.
+    Après la première ligne, `messagesWithoutFrames` retire du message de chaque erreur et de
+    ses causes toute ligne que le parseur lit comme une frame (#393, #386). Le parseur de Node
+    lit `at ` n'importe où dans une ligne : des lignes comme « Le format attendu » ou « Un état
+    incohérent » quittent donc aussi le message. C'est un coût accepté, la vie privée avant le
+    diagnostic, et pas un défaut à relever. `messagesWithoutFrames` retire aussi de la pile toute
+    frame que ces lignes se lisent comme, comparée sur sa fonction, son fichier, sa ligne et
+    sa colonne (`readAs`, #395, #388). Une ligne sans fichier est comparée sans fichier : le
+    parseur lui donne celui d'une autre ligne. Une telle ligne retire donc toute frame de même
+    fonction, de même ligne et de même colonne, quel que soit son fichier, une des nôtres
+    comprise. C'est un coût accepté. Ce retrait de
+    la pile ne tient que si le texte de la pile contient le message.
+
+  Sur le serveur, `databaseErrors` ne garde du `DatabaseError` de pg que son code.
 - Le navigateur ne parle qu'à notre origine (`tunnelRoute: "/monitoring"`). Aucun DSN ni
   jeton Sentry écrit en dur ; `SENTRY_AUTH_TOKEN` n'est lu qu'au build, et sans lui aucune
   source map n'est produite.

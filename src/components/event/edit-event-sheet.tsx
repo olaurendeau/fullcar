@@ -14,9 +14,10 @@ import {
   type EventFields,
   type EventHeader,
 } from "@/domain/event";
+import type { Leg } from "@/domain/leg";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
-import { EventFormFields, eventFieldsChanged, loadedEventFields, withSavedFields } from "./event-fields";
+import { carTimesKept, EventFormFields, eventFieldsChanged, loadedEventFields, withSavedFields } from "./event-fields";
 import { RemoveRetourDialog, type RemovalSaid, type RetourCounts } from "./remove-retour-dialog";
 
 /**
@@ -35,12 +36,15 @@ export function EditEventSheet({
   open,
   onOpenChange,
   event,
+  cars,
   onEdit,
   onClosed,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   event: EventHeader;
+  /** The cars of each leg in the state the page shows last (« Les voitures gardent leur heure »). */
+  cars: Record<Leg, number>;
   onEdit: EditEvent;
   onClosed: () => void;
 }) {
@@ -56,7 +60,7 @@ export function EditEventSheet({
         onClosed();
       }}
     >
-      <EditEventForm event={event} onEdit={onEdit} onDone={() => onOpenChange(false)} />
+      <EditEventForm event={event} cars={cars} onEdit={onEdit} onDone={() => onOpenChange(false)} />
     </BottomSheet>
   );
 }
@@ -77,7 +81,18 @@ type Said = ActionProblem | "changed" | "invalid" | "eventNotFound";
  * unchecked still holding cars or persons, « Supprimer le retour ? » asks first (M3.2): its
  * « Annuler » and Escape come back to the sheet, the box still unchecked, the focus on « Valider ».
  */
-function EditEventForm({ event, onEdit, onDone }: { event: EventHeader; onEdit: EditEvent; onDone: () => void }) {
+function EditEventForm({
+  event,
+  cars,
+  onEdit,
+  onDone,
+}: {
+  event: EventHeader;
+  cars: Record<Leg, number>;
+  onEdit: EditEvent;
+  onDone: () => void;
+}) {
+  const tEdit = useTranslations("EditEvent");
   const tActions = useTranslations("Actions");
   const ids = useId();
   const idOf = (name: string) => `${ids}-${name}`;
@@ -183,9 +198,14 @@ function EditEventForm({ event, onEdit, onDone }: { event: EventHeader; onEdit: 
   }
 
   const gone = said === "eventNotFound";
+  // Under a leg moved with cars: they keep their time (M5.1).
+  const notes: Partial<Record<Leg, string>> = {};
+  for (const [leg, count] of Object.entries(carTimesKept(fields.values, loaded.values, cars)) as [Leg, number][]) {
+    notes[leg] = tEdit(`carTimes.${leg}`, { count });
+  }
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-      <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} />
+      <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} notes={notes} />
       {(said === "offline" || said === "failed") && (
         <p role="alert" className="text-sm text-destructive">
           {tActions(said)}
