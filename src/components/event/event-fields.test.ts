@@ -224,6 +224,26 @@ describe("EventFormFields", () => {
     expect(change("retour", false)).toEqual({ ...meanwhile, values: { ...meanwhile.values, retour: false } });
   });
 
+  // M2.6, decision 52, review of #293: while a change is sent, the fields are locked.
+  it("locked: each field is read-only, the box locked, and neither a keystroke nor a tick changes anything", () => {
+    const updates: EventFieldsUpdate[] = [];
+    const tree = EventFormFields({ idOf: (id) => `f-${id}`, state: rendered, errors: {}, onChange: (update) => updates.push(update), locked: true });
+    const props = (name: string) => elements(tree).find((each) => each.props?.id === `f-${name}` && each.props.onChange)?.props as Record<string, unknown>;
+    for (const name of ["title", "location", "allerDate", "allerTime", "retourDate", "retourTime"]) {
+      expect(props(name).readOnly, name).toBe(true);
+      (props(name).onChange as (value: unknown) => void)({ target: { value: "x" } });
+    }
+    expect(props("retour").locked).toBe(true);
+    (props("retour").onChange as (value: unknown) => void)(false);
+    expect(updates.length).toBe(0);
+  });
+
+  it("not locked: no field is read-only", () => {
+    const tree = EventFormFields({ idOf: (id) => `f-${id}`, state: rendered, errors: {}, onChange: () => {} });
+    const title = elements(tree).find((each) => each.props?.id === "f-title")?.props as Record<string, unknown>;
+    expect(title.readOnly).toBeFalsy();
+  });
+
   // M5.1, review of #293: a leg's sentence describes the two fields of that leg, after their error.
   it("a leg's sentence describes its date and its time, after their error; the other leg's fields keep theirs alone", () => {
     const tree = EventFormFields({

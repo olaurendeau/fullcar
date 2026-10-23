@@ -245,6 +245,9 @@
       "forbidden": "Cet appareil ne peut pas faire ce changement : rechargez la page.",
       "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé.",
       "noRetour": "Il n’y a plus de retour pour cet événement.",
+      "editErrors": "Un champ n’a pas été accepté : utilisez de nouveau « Modifier l’événement ».",
+      "eventChanged": "Il venait d’être modifié depuis un autre appareil : la page montre la version enregistrée.",
+      "retourNotConfirmed": "La suppression du retour n’a pas été confirmée : utilisez de nouveau « Modifier l’événement ».",
       "noRetourAgain": "Il n’y a plus de retour pour cet événement : {action, select, offerRide {proposez de nouveau la voiture, pour l’aller seulement.} other {ajoutez de nouveau cette personne, pour l’aller seulement.}}"
     },
     "info": {
@@ -352,6 +355,7 @@
   "EditEvent": {
     "title": "Modifier l’événement",
     "saved": "Événement modifié. Personne n’est prévenu : pensez à le dire au groupe.",
+    "sending": "Envoi en cours…",
     "carTimes": {
       "aller": "{count, plural, one {La voiture déjà proposée pour l’aller garde son heure de départ.} other {Les # voitures déjà proposées pour l’aller gardent leur heure de départ.}} Prévenez les personnes qui conduisent.",
       "retour": "{count, plural, one {La voiture déjà proposée pour le retour garde son heure de départ.} other {Les # voitures déjà proposées pour le retour gardent leur heure de départ.}} Prévenez les personnes qui conduisent."

@@ -269,6 +269,15 @@ describe("the retour back: the information that said it was gone goes, the failu
     expect(texts(withdraw(state, { about: ["cell:tom:retour"] }))).toEqual([]);
     expect(texts(close(state))).toEqual([]);
   });
+
+  // #272: the organiser's change is about the event, on no leg: neither transition takes its failure.
+  it("a failure of « Modifier l’événement » (`event:edit`) survives the retour gone and back", () => {
+    const edit = "L’événement n’a pas été modifié. Une erreur est survenue : réessayez dans un instant.";
+    const state = fail(emptyBar, failure(edit, ["event:edit"]));
+    expect(texts(retourGone(state))).toEqual([edit]);
+    expect(texts(retourBack(state))).toEqual([edit]);
+    expect(texts(retourBack(retourGone(state)))).toEqual([edit]);
+  });
 });
 
 // Event-board v4.4.6 (#385): cutting a line to its aller part is not writing it, and `retourGone`
