@@ -252,11 +252,47 @@ export function inCode(frame: StackFrame): boolean {
   return finite(frame.lineno) !== undefined && buildFile(frame.filename ?? frame.abs_path) !== undefined;
 }
 
+/** The files of the runtime's own frames, as the SDK's parsers write them, and as `allowUrls` skips them. */
+export const RUNTIME_FILES: ReadonlySet<unknown> = new Set(["<anonymous>", "[native code]"]);
+
+/** ECMAScript's own objects, a fixed list: a page's global, or an element's id, is none of them. */
+const BUILT_INS = `Array ArrayBuffer Atomics BigInt Boolean DataView Date Error EvalError FinalizationRegistry Float32Array
+  Float64Array Function Int8Array Int16Array Int32Array Intl Iterator JSON Map Math Number Object Promise Proxy RangeError
+  ReferenceError Reflect RegExp Set SharedArrayBuffer String Symbol SyntaxError TypeError URIError Uint8Array
+  Uint8ClampedArray Uint16Array Uint32Array WeakMap WeakRef WeakSet`.split(/\s+/);
+const builtIn = (name: string): object | undefined =>
+  BUILT_INS.includes(name) ? ((globalThis as Record<string, unknown>)[name] as object | undefined) : undefined;
+const memberOf = (object: object | undefined, name: string) =>
+  object !== undefined && [object, (object as { prototype?: object }).prototype].some((each) => each !== undefined && Object.hasOwn(each, name));
+
+/**
+ * A built-in's name, as V8 (`JSON.parse`, `Array.map`, `new Promise`) or Safari (`parse`)
+ * write it: each of its words one of the runtime's. A first name is none of them.
+ */
+function builtInName(name: string): boolean {
+  const constructed = /^new (\w+)$/.exec(name);
+  if (constructed) return builtIn(constructed[1]) !== undefined;
+  const [owner, member, ...rest] = name.split(".");
+  if (rest.length > 0) return false;
+  if (member !== undefined) return memberOf(builtIn(owner), member);
+  return builtIn(owner) !== undefined || BUILT_INS.some((each) => memberOf(builtIn(each), owner));
+}
+
+/**
+ * A frame of the runtime (#395): `JSON.parse (<anonymous>)`, `parse@[native code]`. No line,
+ * and a built-in's name: the SDK's parsers make `    at Marc (<anonymous>)` a frame too.
+ */
+export function inRuntime(frame: StackFrame): boolean {
+  return frame.lineno === undefined && RUNTIME_FILES.has(frame.filename) && builtInName(frame.function ?? "");
+}
+
 /**
  * Where the code ran, and nothing it held: no `vars`, no lines of source. Line and column
  * only in a frame of code: from a line of a message (`tel:0647812953:1`), they are its digits.
+ * A frame of the runtime as it is: its file is one of a fixed list, its name the runtime's.
  */
 function scrubFrame(frame: StackFrame): StackFrame {
+  if (inRuntime(frame)) return compact({ filename: frame.filename, function: frame.function, in_app: bool(frame.in_app) });
   const code = inCode(frame);
   return compact({
     filename: stringOr(frame.filename, scrubLocation),

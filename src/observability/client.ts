@@ -1,6 +1,6 @@
 import type * as Sentry from "@sentry/nextjs";
 import { codeFramesOnly, exactIntegrations, messagesWithoutFrames, registerHooks, sentryOptions, type SentryEnv } from "./options";
-import { scrubText } from "./scrub";
+import { RUNTIME_FILES, scrubText } from "./scrub";
 
 /*
  * Sentry in the browser, started by `src/instrumentation-client.ts`. Without a DSN, `load`
@@ -45,12 +45,14 @@ const SCRIPT_FILE = /^[a-z][\w+.-]*:\S+$/i;
  * writes the message at the top of the stack: `    at Marc (depuis 10:30)` would be the
  * thrown error's top frame, the only one `allowUrls` looks at, and the error never sent.
  * A stack without a frame of a script keeps its frames: `allowUrls` then drops it, as before.
+ * The frames of the runtime stay with those of scripts (#395): `allowUrls` skips them, and
+ * `codeFramesOnly` keeps those of a built-in alone.
  */
 export function scriptFramesOnly(parse: StackParser): StackParser {
   return (...args) => {
     const frames = parse(...args);
-    const scripts = frames.filter(({ filename }) => SCRIPT_FILE.test(filename ?? ""));
-    return scripts.length > 0 ? scripts : frames;
+    const script = ({ filename }: (typeof frames)[number]) => SCRIPT_FILE.test(filename ?? "");
+    return frames.some(script) ? frames.filter((frame) => script(frame) || RUNTIME_FILES.has(frame.filename)) : frames;
   };
 }
 

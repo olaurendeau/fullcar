@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import {
   captureException, continueTrace, createTransport, defaultStackParser, getDefaultIntegrations, initWithoutDefaultIntegrations,
-  linkedErrorsIntegration, startSpan, type NodeClient,
+  linkedErrorsIntegration, startSpan, type NodeClient, type StackFrame,
 } from "@sentry/nextjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, startBrowserSentry } from "./client";
@@ -168,6 +168,20 @@ describe("on the server, with a DSN", () => {
     expect(functions(codeFramesOnly(event))).toEqual([["Parser.parse"], ["loadEvent"]]);
   });
 
+  it("keeps the frames of the runtime that name a built-in, and those alone (#395)", () => {
+    const kept = ["JSON.parse", "Array.map", "new Promise", "Promise.all", "Object.keys"].map((name) => `    at ${name} (<anonymous>)`);
+    const dropped = ["Marc", "JSON.Marc", "Marc.parse", "new Marc", "JSON.parse.Marc", "?"].map((name) => `    at ${name} (<anonymous>)`);
+    dropped.push("    at JSON.parse (<anonymous>:1:2)", "    at JSON.parse (depuis 10)");
+    const stack = (lines: string[]) => defaultStackParser(["Error: x", ...lines].join("\n"), 1);
+    const event = (frames: StackFrame[]) => ({ exception: { values: [{ type: "Error", value: "x", stacktrace: { frames } }] } });
+    const safari = [{ filename: "[native code]", function: "parse" }, { filename: "[native code]", function: "Marc" }];
+    const [{ stacktrace }] = codeFramesOnly(event([...stack([...kept, ...dropped]), ...safari])).exception.values;
+    expect(stacktrace.frames.map((frame) => `${frame.function} ${frame.filename}`)).toEqual([
+      "Object.keys <anonymous>", "Promise.all <anonymous>", "new Promise <anonymous>", "Array.map <anonymous>", "JSON.parse <anonymous>",
+      "parse [native code]",
+    ]);
+  });
+
   it("keeps of each message its first line and every line the stack parser makes no frame of (#393)", () => {
     const message = (value: string) => ({ value, type: "Error" });
     const frames = [
@@ -315,6 +329,22 @@ describe("what the SDK sends with these options", () => {
     const functions = await framesOfErrorWithFrameInMessage();
     expect(functions.length).toBeGreaterThan(0);
     expect(functions).not.toContain("Marc");
+  });
+
+  it("sends from the server the frame of the runtime an error was thrown in, JSON.parse's (#395)", async () => {
+    start(registerServerHooks);
+    let thrown: unknown;
+    try {
+      JSON.parse("{");
+    } catch (error) {
+      thrown = error;
+    }
+    captureException(thrown);
+    await client?.flush(2000);
+    const items = sent.flatMap((body) => body.split("\n").filter(Boolean).map((line) => JSON.parse(line) as { exception?: unknown }));
+    const { exception } = items.find((item) => item.exception) as { exception: { values: { stacktrace: { frames: StackFrame[] } }[] } };
+    const [top] = exception.values[0].stacktrace.frames.slice(-1);
+    expect(top).toEqual({ filename: "<anonymous>", function: "JSON.parse", in_app: false });
   });
 
   it("sends it as a frame without codeFramesOnly, so that the test above means something", async () => {
