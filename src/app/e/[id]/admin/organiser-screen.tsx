@@ -6,6 +6,7 @@ import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "r
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
 import { EditEventSheet } from "@/components/event/edit-event-sheet";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
+import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
 import type { EventState } from "../event-state";
 import { ParticipantBoard, type BoardHandle } from "../participant-board";
@@ -118,10 +119,10 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
    * Changed on another device, the whole page takes the header stored, then the same read
    * (M6.1, M6.2).
    */
-  async function edit(fields: EventFields, before: EventHeader): Promise<EditAnswer> {
+  async function edit(fields: EventFields, before: EventHeader, removal?: LegCounts): Promise<EditAnswer> {
     const send = sendAbout(["event:edit"]);
     send.leaves();
-    const answer = editAnswer(await link.edit(fields, before));
+    const answer = editAnswer(await link.edit(fields, before, removal));
     send.answered();
     const handle = boardRef.current;
     if ((answer.kind !== "saved" && answer.kind !== "changed") || !handle) return answer;

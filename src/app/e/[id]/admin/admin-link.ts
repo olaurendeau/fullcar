@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
 import type { OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
 import type { EditEventOutcome } from "../edit-event";
@@ -67,14 +68,15 @@ export function retryFrom(check: AdminLinkCheck): AdminLinkCheck | undefined {
  * `retry()` checks again after a failure, with the token read again from the fragment,
  * without reloading the page (O5.3). `read()` reads the panel again with the token of the
  * fragment, and applies nothing (#182). `edit()` sends the organiser's change of the event
- * (epic #250) with the token of the fragment and `before`, the values the form loaded. Without a
- * confirmed removal of the retour (#270), the argument is omitted, never `null`.
+ * (epic #250) with the token of the fragment, `before`, the values the form loaded, and `removal`,
+ * the numbers a confirmation of the retour's removal showed (#270). Without one, the argument is
+ * omitted, never `null`.
  */
 export function useAdminLinkCheck(id: string): {
   check: AdminLinkCheck;
   retry: () => void;
   read: () => Promise<Sent<OrganiserPanelAnswer>>;
-  edit: (fields: EventFields, before: EventHeader) => Promise<Sent<EditEventOutcome>>;
+  edit: (fields: EventFields, before: EventHeader, removal?: LegCounts) => Promise<Sent<EditEventOutcome>>;
 } {
   const [check, setCheck] = useState<AdminLinkCheck>({ state: "checking" });
   const verifyAgain = useRef(() => {});
@@ -121,11 +123,12 @@ export function useAdminLinkCheck(id: string): {
   }, [id]);
 
   const edit = useCallback(
-    (fields: EventFields, before: EventHeader) => {
+    (fields: EventFields, before: EventHeader, removal?: LegCounts) => {
       const token = tokenInFragment(window.location.hash);
-      return sendAction<EditEventOutcome>(() =>
-        token ? updateEvent(id, token, fields, before) : Promise.resolve<EditEventOutcome>({ ok: false, error: "invalid" }),
-      );
+      return sendAction<EditEventOutcome>(() => {
+        if (!token) return Promise.resolve<EditEventOutcome>({ ok: false, error: "invalid" });
+        return removal ? updateEvent(id, token, fields, before, removal) : updateEvent(id, token, fields, before);
+      });
     },
     [id],
   );
