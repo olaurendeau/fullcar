@@ -407,9 +407,24 @@ test.describe("an event with its three options", () => {
   }
 
   /**
+   * React's scripts that reveal a Suspense boundary streamed after the page's shell, and Next's
+   * that then moves the icons into `<head>`. The page's metadata (`generateMetadata`, its own
+   * read of the event) streams that way when it resolves after the shell is sent, and is inlined
+   * in `<head>` otherwise: a race of the server, not something the options change (#463). What
+   * they reveal is compared all the same: in the DOM, and the metadata on its own.
+   */
+  const lateBoundary = [
+    /^\$RB=\[\];\$RV=function/,
+    /^\$RC\("B:\d+","S:\d+"\)$/,
+    /^requestAnimationFrame\(function\(\)\{\$RT=performance\.now\(\)\}\);$/,
+    /^document\.querySelectorAll\('body link\[rel="icon"\], body link\[rel="apple-touch-icon"\]'\)/,
+  ];
+
+  /**
    * The page's markup on each tab, its event's id and token replaced, the organiser's page
-   * first. On the event's page, the DOM is compared in full without its scripts, then its
-   * other scripts and its flight rows, both sorted.
+   * first. On the event's page, the DOM is compared in full without its scripts, and without its
+   * metadata, which lands in `<body>` when it streams late (`lateBoundary`); then its metadata
+   * wherever it is, its other scripts and its flight rows, the last two sorted.
    */
   async function markup(page: Page, adminUrl: string): Promise<string[]> {
     const { pathname, hash } = new URL(adminUrl);
@@ -427,17 +442,22 @@ test.describe("an event with its three options", () => {
     const withoutScripts = () =>
       page.locator("body").evaluate((body) => {
         const copy = body.cloneNode(true) as HTMLElement;
-        for (const script of copy.querySelectorAll("script")) script.remove();
+        for (const element of copy.querySelectorAll("script, title, meta")) element.remove();
         return copy.innerHTML;
       });
     const seen = [normalise(await page.locator("main").innerHTML())];
     await page.goto(`/e/${id}`, { waitUntil: "networkidle" });
     seen.push(normalise(await withoutScripts()));
+    // The metadata, in <head> or streamed into <body>, which changes its order, and where the
+    // page then holds its <title> twice, the same: each element once, sorted.
+    const metadata = await page.locator("title, meta").evaluateAll((all) => all.map((element) => element.outerHTML));
+    seen.push(normalise([...new Set(metadata)].sort().join("")));
     const scripts = await page
       .locator("script")
       .evaluateAll((all) => all.map(({ outerHTML, textContent }) => ({ outerHTML, text: textContent ?? "" })));
     const isFlight = ({ text }: { text: string }) => text.includes("self.__next_f");
-    const others = scripts.filter((script) => !isFlight(script)).map(({ outerHTML }) => normalise(outerHTML));
+    const isLate = ({ text }: { text: string }) => lateBoundary.some((script) => script.test(text));
+    const others = scripts.filter((script) => !isFlight(script) && !isLate(script)).map(({ outerHTML }) => normalise(outerHTML));
     const pushes = scripts.filter(isFlight).map(({ text }) => text);
     seen.push(...others.sort(), ...flightRows(pushes, normalise));
     await page.getByRole("tab", { name: WORDS.fr.retour }).click();
