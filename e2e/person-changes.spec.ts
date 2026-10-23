@@ -88,6 +88,8 @@ async function selectTab(page: Page, leg: "Aller" | "Retour") {
 /** A cell, found while a sheet hides the page from role queries. */
 const hiddenCell = (page: Page, name: string) => page.locator(`button[aria-label="${name}"]`);
 const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
+const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /** The sheet's actions, « Fermer » last. */
 async function actions(dialog: Locator) {
@@ -331,14 +333,14 @@ test.describe("person changes", () => {
     expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: scene.cars.zoe });
   });
 
-  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
-  // meanwhile. Reopened, even while the first one closes, the sheet is a new one.
+  // Radix keeps a closing sheet mounted until its animation ends: held here until the answer has
+  // come, however long it takes (#392). Reopened, even while the first one closes, the sheet is a new one.
   for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
     test(`a failure once the sheet is ${when}: in the bar, once no sheet hides the page`, async ({ page, seededEvent }) => {
       const answer = await holdFirst(page, scene.persons.tom, true);
       await page.goto(`/e/${seededEvent.id}`);
       const closing = when.endsWith("closing");
-      if (closing) await page.addStyleTag({ content: slowClose });
+      const held = closing ? await page.addStyleTag({ content: holdClose }) : undefined;
       await cell(page, "Tom", "Aller").click();
       await sheet(page, "Tom · Aller").getByRole("button", { name: "Ne fait pas l’aller" }).click();
       await page.keyboard.press("Escape");
@@ -360,13 +362,15 @@ test.describe("person changes", () => {
         await expect(lea).toBeVisible();
       }
       if (when !== "reopened while closing") await release();
+      // Answered, and reopened if it is: the first sheet may end its closing.
+      await held?.evaluate((style) => style.parentNode?.removeChild(style));
       if (when.startsWith("reopened")) {
         // Léa's change succeeds once Tom's has failed: it neither clears nor replaces that message.
-        await expect(async () => {
-          const sent = page.waitForRequest((request) => !!request.postData()?.includes(scene.persons.lea), { timeout: 1000 });
-          await lea.getByRole("button", { name: "Sortir de la voiture" }).click();
-          await sent;
-        }).toPass();
+        // One tap sends it (#392): awaited together, the request is waited for as long as the click takes.
+        await Promise.all([
+          page.waitForRequest((request) => !!request.postData()?.includes(scene.persons.lea)),
+          lea.getByRole("button", { name: "Sortir de la voiture" }).click(),
+        ]);
         await expect(lea).toHaveCount(0);
       }
       await expect(bar(page)).toHaveText(TOM_FAILED);
