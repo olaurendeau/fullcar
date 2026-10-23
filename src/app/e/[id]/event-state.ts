@@ -10,11 +10,12 @@ import { eventLegs } from "@/domain/leg";
 import { isPersonalToken } from "@/domain/personal-token";
 import { withVisiblePhones, type VisibleBoard } from "@/domain/phone-visibility";
 import { isPublicId } from "@/domain/public-id";
+import { headerFrom } from "./edit-event";
 import { findPublicEvent } from "./event";
 
 /**
  * The event as one device sees it, plain data ready for the browser: what the page shows at
- * its top (title, place, start and end), and each of its legs (epic #250).
+ * its top (title, place and its position, start and end), and each of its legs (epic #250).
  */
 export interface EventState {
   event: EventHeader;
@@ -45,9 +46,8 @@ export async function readEventState(
     const holders = isPersonalToken(token) ? await readTokenHolders(trx, eventId) : [];
     // One set for the board and the numbers: the device section and the cards follow one device.
     const deviceIds: ReadonlySet<string> = new Set(devicePersonIds(token, holders));
-    const header = { title: event.title, location: event.location, allerAt: event.aller_at, retourAt: event.retour_at };
     return {
-      event: header,
+      event: headerFrom(event),
       legs: withVisiblePhones(buildBoard(rows, eventLegs(event.retour_at), deviceIds), phonesById, deviceIds),
     };
   });

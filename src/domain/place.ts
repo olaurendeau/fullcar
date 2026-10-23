@@ -40,8 +40,10 @@ function within(value: unknown, bound: number): value is number {
 export function positionOf(value: unknown): { value: Position | null } | { error: "invalid" } {
   if (value === null) return { value: null };
   if (typeof value !== "object") return { error: "invalid" };
-  // Exactly two keys: once lat and lng are numbers below, they are the only ones.
-  if (Object.keys(value).length !== 2) return { error: "invalid" };
+  // Exactly two own keys, lat and lng: never one read from the prototype.
+  if (Object.keys(value).length !== 2 || !Object.hasOwn(value, "lat") || !Object.hasOwn(value, "lng")) {
+    return { error: "invalid" };
+  }
   const { lat, lng } = value as Record<string, unknown>;
   if (!within(lat, 90) || !within(lng, 180)) return { error: "invalid" };
   return { value: { lat: rounded(lat, DECIMALS), lng: rounded(lng, DECIMALS) } };
