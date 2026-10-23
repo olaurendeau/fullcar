@@ -28,6 +28,12 @@ const PHOTON_SEARCH = `https://photon.komoot.io/api/?${PHOTON_QUERY}`;
 const typed = (value: unknown) => /Lilas|q=/.test(JSON.stringify(value));
 
 describe("scrubUrl", () => {
+  it("keeps /api/lieux and Photon's path, and drops the text typed in their query or path (#449)", () => {
+    same(scrubUrl(PHOTON_SEARCH), "https://photon.komoot.io/api/");
+    same(scrubUrl("/api/lieux?q=12%20rue%20des%20Lilas#12%20rue%20des%20Lilas"), "/api/lieux");
+    same(scrubUrl("/api/lieux/12%20rue%20des%20Lilas"), "/api/lieux/[id]");
+  });
+
   it("keeps the scheme, the host and the application's segments, and drops the id and the fragment", () => {
     same(scrubUrl(secrets.adminUrl), `${ORIGIN}/e/[id]/admin`);
     same(scrubUrl(secrets.personalUrl), `${ORIGIN}/e/[id]/moi`);
@@ -119,8 +125,7 @@ describe("scrubBreadcrumb", () => {
     };
     const sent = [scrubBreadcrumb(fetch), scrubBreadcrumb(http)];
     expect(typed(sent)).toBe(false);
-    // `api` is not a segment `scrubUrl` keeps: it reads as data.
-    const url = "https://photon.komoot.io/[id]/";
+    const url = "https://photon.komoot.io/api/";
     same(sent, [
       { ...head, data: { method: "GET", url, status_code: 200 } },
       { type: "http", category: "http", data: { url, status_code: 429 } },
@@ -131,7 +136,7 @@ describe("scrubBreadcrumb", () => {
     const head = { type: "http", category: "fetch", level: "info", timestamp: 1792477108.148 } as const;
     const data = { method: "POST", url: "/api/lieux", status_code: 200, request_body_size: 52, response_body_size: 230 };
     const fetch: Breadcrumb = { ...head, message: "12 rue des Lilas", data };
-    same(scrubBreadcrumb(fetch), { ...head, data: { method: "POST", url: "/[id]/[id]", status_code: 200 } });
+    same(scrubBreadcrumb(fetch), { ...head, data: { method: "POST", url: "/api/lieux", status_code: 200 } });
   });
 
   it.each(["console", "ui.click", "ui.input", "sentry.event"])("drops a %s breadcrumb", (category) => {
@@ -310,7 +315,7 @@ describe("scrubEvent", () => {
     const event = { exception: { values: [{ type: "TypeError", value: `fetch failed: ${PHOTON_SEARCH}` }] } } as ErrorEvent;
     const sent = scrubEvent(event);
     expect(typed(sent)).toBe(false);
-    same(sent.exception?.values?.[0].value, "fetch failed: https://photon.komoot.io/[id]/");
+    same(sent.exception?.values?.[0].value, "fetch failed: https://photon.komoot.io/api/");
   });
 
   it("keeps only the navigations and requests among the breadcrumbs", () => {
@@ -396,7 +401,7 @@ describe("scrubSpan", () => {
       }),
     );
     expect(typed(sent)).toBe(false);
-    same(sent.name, "GET https://photon.komoot.io/[id]/");
+    same(sent.name, "GET https://photon.komoot.io/api/");
     same(sent.attributes, {
       "sentry.op": "http.client",
       "sentry.origin": "auto.http.otel.node_fetch",
