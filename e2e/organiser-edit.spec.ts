@@ -1,5 +1,5 @@
 import type { Locator, Page, Request, Route } from "@playwright/test";
-import { holdClose, messages } from "./device";
+import { animationsDone, holdClose, messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
 import { expect, holdActionsWith, isAction, oneCharOff, organiserPath, seedOrganiserScene, test } from "./organiser";
@@ -170,7 +170,7 @@ test("M1.5: the sheet opens with no request, on the saved values, no option, the
 test("#447: reopened while it closes, the sheet takes the focus on « Titre », its text selected", async ({ page, seededEvent }) => {
   await openSheet(page, organiserPath(seededEvent));
   await expect(field(page, "Titre")).toBeFocused();
-  const held = await page.addStyleTag({ content: holdClose });
+  await page.addStyleTag({ content: holdClose });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
   // Hidden from role queries while the sheet is mounted.
@@ -182,7 +182,8 @@ test("#447: reopened while it closes, the sheet takes the focus on « Titre », 
     0,
     "Tournoi de Rennes".length,
   ]);
-  await held.evaluate((style) => style.parentNode?.removeChild(style));
+  // Its opening over, the focus has stayed (#457).
+  await animationsDone(sheet(page));
   await expect(field(page, "Titre")).toBeFocused();
 });
 

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
 
 /*
@@ -122,6 +122,19 @@ export async function failHeld(page: Page, answer: () => void) {
 
 /** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
 export const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
+
+/**
+ * Waits for the end of the animations `sheet` runs now, its opening's (200 ms) after a reopening
+ * (#457): what happens at their end has happened. Fails if none runs, which waits for nothing.
+ */
+export async function animationsDone(sheet: Locator) {
+  const running = await sheet.evaluate(async (element) => {
+    const animations = element.getAnimations();
+    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
+    return animations.length;
+  });
+  if (running === 0) throw new Error("animationsDone: the sheet runs no animation to wait for");
+}
 
 /** Answers every server action with a 500 while `failing.on`; the page and its scripts load. */
 export async function failActions(page: Page) {
