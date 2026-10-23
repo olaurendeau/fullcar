@@ -116,7 +116,9 @@ const readAs = (read: StackFrame) => (frame: StackFrame) =>
  * frames' files are still those the parser read. A frame of the stack equal to one of those
  * lines, function, file, line and column, goes with them: a cost the project accepts. A line
  * without a file is compared without it (`readAs`): the parser gives its frame the file of
- * another line, which no comparison of files could tell.
+ * another line, which no comparison of files could tell. Such a line removes ANY frame of the
+ * stack with the same function, line and column, whatever its file, one of ours among them:
+ * the same cost, privacy over diagnostics.
  * Only as far as the stack's text holds this message: when it does not (a `message` changed
  * after `stack` was read, an empty `name`), a frame read from a line of the stack's own copy
  * may go out, and with a file of the build, its function's name.
