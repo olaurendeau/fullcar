@@ -34,7 +34,8 @@ export type PhotonFeature = {
 
 /**
  * What the fake answers to a text: its features (none by default), its status (200 by
- * default) and how long it waits before answering (none by default).
+ * default) and how long it waits before answering (none by default, 2³¹ − 1 ms at most:
+ * Node would cut a longer timer to 1 ms).
  */
 export type PhotonAnswer = { features?: PhotonFeature[]; status?: number; delayMs?: number };
 
