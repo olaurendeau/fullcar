@@ -124,16 +124,20 @@ export async function failHeld(page: Page, answer: () => void) {
 export const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /**
- * Waits for the end of the animations `sheet` runs now, its opening's (200 ms) after a reopening
- * (#457): what happens at their end has happened. Fails if none runs, which waits for nothing.
+ * Waits for the end of the animations `sheet` still runs, its opening's (200 ms) after a
+ * reopening (#457): what happens at their end has happened. An opening already over has left
+ * `getAnimations()` (no fill), so its style is what says it was there: fails if the sheet has no
+ * animation of any length, which would wait for nothing.
  */
 export async function animationsDone(sheet: Locator) {
-  const running = await sheet.evaluate(async (element) => {
-    const animations = element.getAnimations();
-    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
-    return animations.length;
+  const { name, duration } = await sheet.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
+    const style = getComputedStyle(element);
+    return { name: style.animationName, duration: style.animationDuration };
   });
-  if (running === 0) throw new Error("animationsDone: the sheet runs no animation to wait for");
+  if (name === "none" || !(parseFloat(duration) > 0)) {
+    throw new Error(`animationsDone: the sheet has no animation to wait for (${name}, ${duration})`);
+  }
 }
 
 /** Answers every server action with a 500 while `failing.on`; the page and its scripts load. */
