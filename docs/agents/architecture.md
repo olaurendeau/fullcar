@@ -395,10 +395,11 @@ ailleurs serait une nouvelle lecture.
 
 À partir de l'épic #237 (maquette `docs/design/place-autocomplete/`), le lieu de l'événement
 et celui d'une voiture peuvent recevoir une **position**, choisie parmi des propositions. Sur
-main : la position dans le domaine et en base, la route des propositions et son appel à
-Photon, l'état du champ dans le navigateur. **À venir** : l'écriture et la lecture des
-positions par l'événement et les voitures (#420, #421, #422), puis les formulaires qui
-montrent le champ (#428 et suivantes).
+main : la position dans le domaine et en base, les voitures qui l'enregistrent (#421), la
+route des propositions et son appel à Photon, l'état du champ dans le navigateur. **À
+venir** : l'écriture et la lecture de la position de l'événement (#420), la lecture des
+positions des voitures dans l'état de la page (#422), puis les formulaires qui montrent le
+champ (#428 et suivantes).
 
 ### Un lieu, une valeur
 
@@ -420,9 +421,31 @@ vérifie un lieu, c'est ce couple, jamais le texte seul.
 - **La position d'une voiture est toujours celle de son texte.** Dans le champ, `typed`
   (`src/components/event/place-field-state.ts`, #427) retire la position d'une voiture
   (règle `car`) à la première frappe qui change le texte ; celle de l'événement (règle
-  `event`) reste, jusqu'à « Retirer » (`removed`) ou jusqu'à ce que le champ soit vidé.
-  **À venir** (#421) : la même règle côté serveur, pour une modification de voiture qui
-  n'envoie que le texte.
+  `event`) reste, jusqu'à « Retirer » (`removed`) ou jusqu'à ce que le champ soit vidé. Le
+  serveur applique la même règle (voir « La position d'une voiture »).
+
+### La position d'une voiture (#421)
+
+Le lieu reste un seul champ de la voiture, `location` ; sa position voyage avec lui, sous la
+clé `position`, et une position envoyée est lue par `positionOf`, donc arrondie à 5 décimales.
+
+- **Proposer une voiture** (`offerRide`, `src/app/e/[id]/offer-ride.ts`) : `position` à côté
+  de `location`, et `otherLeg.position` pour la voiture de l'autre leg (`kind: "drive"`).
+  Absente, elle vaut `null`. Mal formée, hors bornes, ou envoyée sans `location` : l'offre
+  est `invalid`, et rien n'est écrit.
+- **Modifier la voiture** (`updateRide`, `src/app/e/[id]/change-ride.ts`) : `readChange` lit
+  `position` (absente, elle n'est pas envoyée ; mal formée, `invalid`). Sous le verrou du
+  Ride, `lockRide` (`src/db/rides.ts`) rend aussi le `location` enregistré, et
+  `ridePositionChange` (`src/domain/ride.ts`, fonction pure) décide :
+  - `location` et `position` envoyées : les deux sont écrites, `null` compris ;
+  - `location` seule (une page d'avant le déploiement) : sous le même texte que celui
+    enregistré, la position ne change pas ; sous un autre, elle devient `null`, puisque la
+    position d'une voiture est toujours celle de son texte ;
+  - `position` seule : `invalid`, qu'aucun formulaire n'envoie.
+- **Accès aux données** (`src/db/rides.ts`) : `insertRide` écrit la position et `StoredRide`
+  la rend ; `updateRide` n'écrit `location_lat` et `location_lng` que si `position` est
+  donnée. `seedRide` (`src/db/test-participants.ts`) crée une voiture sans position, sauf si
+  le test en donne une.
 
 ### Le chemin d'une proposition
 
