@@ -392,5 +392,20 @@
   },
   "NewEvent": {
     "title": "Créer un événement"
+  },
+  "PlaceField": {
+    "listLabel": "Propositions pour {field}",
+    "count": "{count, plural, one {# proposition} other {# propositions}}",
+    "keepText": "Ou gardez votre texte tel quel.",
+    "source": "Propositions : © les contributeurs d’OpenStreetMap",
+    "searching": "Recherche de propositions…",
+    "none": "Aucune proposition. Votre texte sera gardé tel quel.",
+    "unavailable": "Propositions indisponibles. Votre texte sera gardé tel quel.",
+    "position": "Position : {label}",
+    "saved": "Position enregistrée",
+    "remove": "Retirer",
+    "removeLabel": "Retirer la position ({field})",
+    "added": "Position ajoutée.",
+    "removed": "Position retirée."
   }
 }
