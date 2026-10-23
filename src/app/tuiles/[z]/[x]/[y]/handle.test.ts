@@ -91,7 +91,7 @@ describe("the route", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  it("exports GET only: Next answers 405 to any other method", async () => {
+  it("exports GET only: Next answers HEAD with it, OPTIONS with 204, any other method with 405", async () => {
     expect(Object.keys(await import("./route"))).toEqual(["GET"]);
   });
 
