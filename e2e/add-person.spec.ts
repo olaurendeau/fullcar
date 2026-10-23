@@ -442,6 +442,29 @@ test.describe("add a person", () => {
     });
   }
 
+  // #447: Radix focuses a sheet's first field when its content mounts. Reopened while it closes,
+  // the content is still mounted: the sheet takes the focus all the same, as at any opening.
+  test("#447: reopened while it closes, the sheet's first field takes the focus", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await openForm(page);
+    const firstName = form(page).getByLabel(FR.firstName);
+    await expect(firstName).toBeFocused();
+    await firstName.fill("Léa");
+    const held = await page.addStyleTag({ content: holdClose });
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+    // Hidden from role queries while the sheet is mounted.
+    await page.locator('[role="tabpanel"][data-state="active"] button', { hasText: FR.add }).focus();
+    await page.keyboard.press("Enter");
+    await expect(form(page)).toHaveAttribute("data-state", "open");
+    await expect(firstName).toBeFocused();
+    // As at an opening, what the field holds is selected: the next key replaces it.
+    expect(await firstName.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([0, 3]);
+    await held.evaluate((style) => style.parentNode?.removeChild(style));
+    await expect(firstName).toHaveValue("Léa");
+    await expect(firstName).toBeFocused();
+  });
+
   // #276: the sheet's veil closes in 100 ms, its content in 200 ms. Reopened in between, the
   // veil came back after the content in the page, above it, and caught every tap. Real durations.
   test("#276: reopened 150 ms after « Fermer », its veil gone but the sheet still closing, « Valider » takes the tap", async ({

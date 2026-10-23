@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import type { ComponentProps, ReactNode } from "react";
+import { useEffect, useRef, type ComponentProps, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -12,6 +12,31 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { HidesPage } from "./hidden-page";
+
+/**
+ * What Radix's FocusScope does when a sheet's content mounts: the first element the Tab key
+ * reaches, links left out, its text selected if it is a field; without one, the sheet itself.
+ * Copied from `@radix-ui/react-focus-scope` 1.3.0 (`focusFirst(removeLinks(getTabbableCandidates()),
+ * { select: true })`, which it does not export): an upgrade of it checks this again.
+ */
+function focusFirstIn(sheet: HTMLElement) {
+  const before = document.activeElement;
+  const candidates = Array.from(sheet.querySelectorAll<HTMLElement>("*")).filter(
+    (node) =>
+      node.tabIndex >= 0 &&
+      node.tagName !== "A" &&
+      !node.hidden &&
+      !(node as HTMLInputElement).disabled &&
+      !(node instanceof HTMLInputElement && node.type === "hidden"),
+  );
+  for (const candidate of candidates) {
+    candidate.focus({ preventScroll: true });
+    if (document.activeElement === before) continue;
+    if (candidate instanceof HTMLInputElement) candidate.select();
+    return;
+  }
+  sheet.focus({ preventScroll: true });
+}
 
 /**
  * The page's sheet, opened from the bottom of the screen: its title, its content, then
@@ -47,11 +72,21 @@ export function BottomSheet({
   children: ReactNode;
 }) {
   const t = useTranslations("Actions");
+  const content = useRef<HTMLDivElement>(null);
+
+  // Radix focuses the sheet when its content mounts. Reopened while it closes, its content is
+  // still mounted, and the focus would stay behind it, in the hidden page (#447): the same focus,
+  // then. At any other opening, Radix has focused it already, or will once its content mounts.
+  useEffect(() => {
+    const sheet = content.current;
+    if (open && sheet && !sheet.contains(document.activeElement)) focusFirstIn(sheet);
+  }, [open]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       {trigger && <SheetTrigger asChild>{trigger}</SheetTrigger>}
       <SheetContent
+        ref={content}
         side="bottom"
         showCloseButton={false}
         // Without a description, Radix would warn of a missing one; with it, Radix links it.
