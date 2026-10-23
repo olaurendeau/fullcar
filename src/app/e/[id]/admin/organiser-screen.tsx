@@ -114,11 +114,14 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const editButton = useRef<HTMLButtonElement>(null);
   const [editing, setEditingState] = useState(false);
   // Read when the answer comes: the sheet that sent, still open, says it; otherwise the bar.
-  // Each opening is a sheet of its own: one opened since did not send.
+  // Each opening is a form of its own (its `key`), even one reopened while the sheet closes:
+  // one opened since did not send.
   const openSheet = useRef<number | null>(null);
   const openings = useRef(0);
+  const [opening, setOpening] = useState(0);
   const setEditing = (open: boolean) => {
-    openSheet.current = open ? (openings.current += 1) : null;
+    if (open) setOpening((openings.current += 1));
+    openSheet.current = open ? openings.current : null;
     setEditingState(open);
   };
   // While a change is on its way, « Modifier l’événement » opens nothing, for 10 s at most (M2.11, decision 51).
@@ -261,6 +264,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           onEdit={edit}
           onClosed={focusEdit}
           lateSavedRef={lateSaved}
+          opening={opening}
         />
       )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">

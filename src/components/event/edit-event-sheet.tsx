@@ -37,7 +37,8 @@ type LateRemoval = { kind: "offline" | "failed" | "eventNotFound" } | { kind: "r
  * the creation and no option, loaded with `event`, the values the page shows as it opens. Neither
  * « Fermer »: « Annuler » and Escape close it. Closed, by them or once saved, the focus goes back
  * to `onClosed`'s place, « Modifier l’événement ». While open, `lateSavedRef` gives it the values a
- * change sent from an earlier sheet saved (decision 51).
+ * change sent from an earlier sheet saved (decision 51). Each `opening` mounts a form of its own,
+ * even while the sheet still closes from the one before.
  */
 export function EditEventSheet({
   open,
@@ -47,6 +48,7 @@ export function EditEventSheet({
   onEdit,
   onClosed,
   lateSavedRef,
+  opening,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,6 +58,7 @@ export function EditEventSheet({
   onEdit: EditEvent;
   onClosed: () => void;
   lateSavedRef: RefObject<((event: EventHeader) => void) | null>;
+  opening: number;
 }) {
   const t = useTranslations("EditEvent");
   return (
@@ -69,7 +72,14 @@ export function EditEventSheet({
         onClosed();
       }}
     >
-      <EditEventForm event={event} cars={cars} onEdit={onEdit} onDone={() => onOpenChange(false)} lateSavedRef={lateSavedRef} />
+      <EditEventForm
+        key={opening}
+        event={event}
+        cars={cars}
+        onEdit={onEdit}
+        onDone={() => onOpenChange(false)}
+        lateSavedRef={lateSavedRef}
+      />
     </BottomSheet>
   );
 }
@@ -209,16 +219,19 @@ function EditEventForm({
     submitted.preventDefault();
     if (inFlight.current) return;
     if (said === "eventNotFound") return;
-    // The numbers changed while the confirmation was closed: « Valider » opens it with them,
-    // unless « Retour » was checked again (decision 49).
+    // The numbers changed while the confirmation was closed: « Valider » opens it with them, the
+    // fields checked first, unless « Retour » was checked again (decision 49).
     const reopen = late?.kind === "retourChanged" && !fields.values.retour;
-    setLate(null);
-    if (reopen) return openConfirmation(true);
-    if (!eventFieldsChanged(fields.values, loaded.values)) return onDone();
+    if (!reopen) setLate(null);
+    if (!reopen && !eventFieldsChanged(fields.values, loaded.values)) return onDone();
     setSaid(null);
     const checked = validateEventChange(fields.values, deviceBounds(new Date()), before);
     if (!checked.ok) return showErrors(checked.errors);
     setErrors({});
+    if (reopen) {
+      setLate(null);
+      return openConfirmation(true);
+    }
     const answer = await send();
     if (answer) sheetAnswer(answer);
   }

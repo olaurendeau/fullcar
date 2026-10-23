@@ -358,15 +358,15 @@ describe("editFailure: the sheet closed before the answer, word for word", () =>
       .map((line) => line.split("|").map((cell) => cell.trim()))
       .map(([, , failure, fr, en]) => ({ failure, fr, en }));
 
-  for (const [action, removal] of [
-    ["« Modifier l’événement », feuille fermée pendant l’envoi", false],
-    ["« Supprimer le retour », confirmation fermée après 10 s, puis feuille fermée", true],
+  const FAILURES = ["hors ligne", "erreur serveur (500, réseau), `invalid`", "`eventNotFound`", "`errors`", "`changed`"];
+  for (const [action, removal, last] of [
+    ["« Modifier l’événement », feuille fermée pendant l’envoi", false, "`confirmRetour`"],
+    ["« Supprimer le retour », confirmation fermée après 10 s, puis feuille fermée", true, "`confirmRetour` (nombres changés : 3 voitures, 10 personnes)"],
   ] as const) {
     const table = rows(action);
 
-    it(`${action}: reads the six rows, and knows each failure`, () => {
-      expect(table.length).toBe(6);
-      for (const { failure } of table) expect(Object.keys(ANSWERS)).toContain(failure);
+    it(`${action}: reads its six rows, one per failure, in the table's order`, () => {
+      expect(table.map((row) => row.failure)).toEqual([...FAILURES, last]);
     });
 
     for (const { failure, fr: inFrench, en: inEnglish } of table) {

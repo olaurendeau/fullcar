@@ -2,7 +2,7 @@ import type { Kysely } from "kysely";
 import type { Page, Request, Route } from "@playwright/test";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { messages } from "./device";
+import { holdClose, messages } from "./device";
 import { leaveNoToken } from "./fixtures";
 import { expect, isAction, organiserPath, test } from "./organiser";
 
@@ -66,6 +66,7 @@ async function holdEdits(page: Page, text: string) {
     held: () => held.length,
     release: () => each((route) => route.fallback()),
     lose: () => each((route) => route.abort("internetdisconnected")),
+    fail: () => each((route) => route.fulfill({ status: 500, contentType: "text/plain", body: "" })),
   };
 }
 
@@ -189,7 +190,14 @@ test.describe("M3.7: the confirmation lets go after 10 s", () => {
     await expect(submit(page)).toBeFocused();
     await expect(submit(page)).not.toHaveAttribute("aria-disabled");
 
+    // The fields are free again: they are checked before the confirmation opens.
     const sent = sends(page, CHANGE);
+    await field(page, "Titre").fill("");
+    await submit(page).click();
+    await expect(field(page, "Titre")).toHaveAccessibleDescription("Champ requis.");
+    await expect(field(page, "Titre")).toBeFocused();
+    await expect(confirmation(page)).toHaveCount(0);
+    await field(page, "Titre").fill("Tournoi de Rennes");
     await submit(page).click();
     await expect(confirmation(page).getByText(FR.body3, { exact: true })).toBeVisible();
     expect(sent.length, "a request to open the confirmation again").toBe(0);
@@ -224,6 +232,56 @@ test.describe("M3.7: the confirmation lets go after 10 s", () => {
       await context.setOffline(false);
     }
   });
+
+  test("the event deleted meanwhile: the sheet says it once, « Valider » disabled, the focus on « Annuler », never lost", async ({
+    page,
+    db,
+    seededEvent,
+    organiserTraffic,
+  }) => {
+    await seedRetour(db, seededEvent.id);
+    const held = await confirmThenWait(page, organiserPath(seededEvent));
+    await organiserTraffic.keepNumbers();
+    await db.deleteFrom("event").where("id", "=", seededEvent.id).execute();
+    const body = await watchBody(page);
+    await held.release();
+
+    await expect(notice(page)).toHaveText([NOT_REMOVED, FR.gone]);
+    await expect(sheet(page).getByRole("alert")).toHaveCount(1);
+    await expect(submit(page)).toBeDisabled();
+    await expect(sheet(page).getByRole("button", { name: "Annuler", exact: true })).toBeFocused();
+    expect(await body.seen(), "the focus lost as « Valider » was disabled").toBe(false);
+  });
+});
+
+test("reopened while it closes, after 10 s: the late failure is the bar's alone, not the sheet opened since", async ({ page, seededEvent }) => {
+  await page.clock.install();
+  const held = await holdEdits(page, CHANGE);
+  await page.goto(organiserPath(seededEvent));
+  const closing = await page.addStyleTag({ content: holdClose });
+  await editButton(page).click();
+  await field(page, "Lieu").fill("Salle Carrel");
+  await submit(page).click();
+  await expect.poll(held.held).toBe(1);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { includeHidden: true })).toHaveAttribute("data-state", "closed");
+  await page.clock.fastForward(10_000);
+  // The page is aria-hidden while the sheet is mounted: the button found by its words.
+  const button = page.locator("button", { hasText: FR.edit });
+  await expect(button).not.toHaveAttribute("aria-disabled");
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(sheet(page)).toHaveAttribute("data-state", "open");
+  await closing.evaluate((style) => style.parentNode?.removeChild(style));
+
+  const responded = page.waitForResponse((response) => response.status() === 500);
+  await held.fail();
+  await responded;
+  await expect(field(page, "Lieu")).toHaveValue("Gymnase des Gayeulles");
+  await expect(sheet(page).getByRole("alert")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(messages(page)).toHaveText(["L’événement n’a pas été modifié. Une erreur est survenue : réessayez dans un instant."]);
 });
 
 test("M3.7, the event deleted in the confirmation: the focus goes to « Annuler », never by <body>", async ({ page, db, seededEvent, organiserTraffic }) => {
