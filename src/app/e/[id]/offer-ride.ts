@@ -9,6 +9,7 @@ import { devicePersonIds } from "@/domain/device";
 import { LEGS, otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import { validatePerson, type NewPerson, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
+import { positionOf, type Position } from "@/domain/place";
 import { isPublicId } from "@/domain/public-id";
 import {
   passengersFit,
@@ -34,7 +35,11 @@ import { lockLegs } from "./retour";
  *
  * `otherLeg` is what becomes of the driver on the other leg, `keep` when absent (C4.11):
  * `{ kind: "keep" }`, `{ kind: "withoutCar" }`, `{ kind: "notConcerned" }`, or
- * `{ kind: "drive", rideId, location, time }`, a second car with this one's seats and note.
+ * `{ kind: "drive", rideId, location, position, time }`, a second car with this one's seats
+ * and note.
+ *
+ * `position` is the point of the suggestion chosen for `location`, `null` when absent: sent
+ * without its place, or not a position, the offer is `invalid` (AL6.4).
  *
  * `passengerIds` are those ticked in « Qui monte avec vous ? » (C4.13), none when absent:
  * persons of the device, each once, not the driver, at most as many as the seats.
@@ -44,6 +49,7 @@ export interface RideOffer {
   leg?: unknown;
   driver?: unknown;
   location?: unknown;
+  position?: unknown;
   /** `HH:MM`, on the date of the leg. */
   time?: unknown;
   seats?: unknown;
@@ -104,20 +110,23 @@ type Driver =
   | { kind: "device"; personId: string }
   | { kind: "new"; personId: string; person: NewPerson; token: string };
 
-type OtherLeg = { kind: "keep" | "withoutCar" | "notConcerned" } | { kind: "drive"; rideId: string; ride: NewRide };
+/** A car's fields, and the position of its place (AL4.3). */
+type PlacedRide = NewRide & { position: Position | null };
+
+type OtherLeg = { kind: "keep" | "withoutCar" | "notConcerned" } | { kind: "drive"; rideId: string; ride: PlacedRide };
 
 type OtherLegErrors = Partial<Record<OtherLegField, RideError>>;
 
 /** The other leg as sent: its car, if the place and time are right, and their errors. */
 type OtherLegRead =
   | { kind: "keep" | "withoutCar" | "notConcerned"; errors: OtherLegErrors }
-  | { kind: "drive"; rideId: string; ride: NewRide | undefined; errors: OtherLegErrors };
+  | { kind: "drive"; rideId: string; ride: PlacedRide | undefined; errors: OtherLegErrors };
 
 interface Offer {
   rideId: string;
   leg: Leg;
   driver: Driver;
-  ride: NewRide;
+  ride: PlacedRide;
   otherLeg: OtherLeg;
   passengerIds: string[];
 }
@@ -152,6 +161,13 @@ function fieldsOf(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null ? { ...value } : undefined;
 }
 
+/** The position of a place, `null` when absent; nothing when sent without its place, or malformed. */
+function placePosition(location: unknown, position: unknown): Position | null | undefined {
+  if (position === undefined) return null;
+  const read = location === undefined ? undefined : positionOf(position);
+  return read && "value" in read ? read.value : undefined;
+}
+
 /**
  * The other leg as sent, `keep` when absent. A car there has its own id, and its place and
  * time checked by R4 with this car's seats and note, whose errors are this car's: `errors`
@@ -164,12 +180,13 @@ function readOtherLeg(offer: Record<string, unknown>): OtherLegRead | undefined 
   if (fields === undefined || kind === undefined) return undefined;
   if (kind !== "drive") return { kind, errors: {} };
   const { rideId } = fields;
-  if (!isCreationId(rideId) || rideId === offer.rideId) return undefined;
+  const position = placePosition(fields.location, fields.position);
+  if (!isCreationId(rideId) || rideId === offer.rideId || position === undefined) return undefined;
   const ride = validateRide({ location: fields.location, time: fields.time, seats: offer.seats, note: offer.note });
   const errors: OtherLegErrors = {};
   if (!ride.ok && ride.errors.location) errors.otherLocation = ride.errors.location;
   if (!ride.ok && ride.errors.time) errors.otherTime = ride.errors.time;
-  return { kind, rideId, ride: ride.ok ? ride.ride : undefined, errors };
+  return { kind, rideId, ride: ride.ok ? { ...ride.ride, position } : undefined, errors };
 }
 
 /** Those ticked, none when absent; nothing for a list no form sends. */
@@ -197,7 +214,8 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
   if (kind !== "device" && !newcomer) return undefined;
   const other = readOtherLeg(offer);
   const passengerIds = readPassengers(offer.passengerIds, personId);
-  if (other === undefined || passengerIds === undefined) return undefined;
+  const position = placePosition(offer.location, offer.position);
+  if (other === undefined || passengerIds === undefined || position === undefined) return undefined;
 
   const person = kind === "new" ? validatePerson({ firstName: driver.firstName, phone: driver.phone }) : undefined;
   const ride = validateRide({ location: offer.location, time: offer.time, seats: offer.seats, note: offer.note });
@@ -222,7 +240,7 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
     leg,
     driver:
       newcomer && person?.ok ? { kind: "new", personId, person: person.person, token } : { kind: "device", personId },
-    ride: ride.ride,
+    ride: { ...ride.ride, position },
     otherLeg,
     passengerIds,
   };
@@ -286,9 +304,10 @@ async function seatsOf(trx: Kysely<Database>, placements: readonly PlacementRef[
   return Promise.all(placements.map(async (placement) => (await findPlacement(trx, placement))?.rideId ?? null));
 }
 
-async function storeRide(trx: Kysely<Database>, ref: RideRef, driverId: string, ride: NewRide): Promise<void> {
-  const { location, seats, note } = ride;
-  const stored = await insertRide(trx, { ...ref, driverId, location, departureTime: `${ride.time}:00`, seats, note });
+async function storeRide(trx: Kysely<Database>, ref: RideRef, driverId: string, ride: PlacedRide): Promise<void> {
+  const { location, position, seats, note } = ride;
+  const departureTime = `${ride.time}:00`;
+  const stored = await insertRide(trx, { ...ref, driverId, location, position, departureTime, seats, note });
   if (stored === undefined || stored.driverId !== driverId) throw new Refused("idTaken");
 }
 

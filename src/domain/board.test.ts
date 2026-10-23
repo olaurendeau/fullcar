@@ -16,6 +16,7 @@ function ride(id: string, driverId: string, overrides: Partial<RideRow> = {}): R
     departureTime: "07:30:00",
     seats: 3,
     note: null,
+    position: null,
     ...overrides,
   };
 }
@@ -38,7 +39,14 @@ describe("legBoard: cars", () => {
       "aller",
       rows({
         persons: [person("marc", "Marc"), person("lea", "Léa"), person("tom", "Tom")],
-        rides: [ride("r1", "marc", { location: "Mairie", departureTime: "07:15:00", note: "Coffre plein" })],
+        rides: [
+          ride("r1", "marc", {
+            location: "Mairie",
+            departureTime: "07:15:00",
+            note: "Coffre plein",
+            position: { lat: 48.5612, lng: 2.6007 },
+          }),
+        ],
         // Read in any order: the board sorts by boarding time.
         placements: [later, earlier],
       }),
@@ -53,6 +61,7 @@ describe("legBoard: cars", () => {
         location: "Mairie",
         departureTime: "07:15:00",
         note: "Coffre plein",
+        position: { lat: 48.5612, lng: 2.6007 },
         seats: 3,
         passengers: [
           { id: "tom", firstName: "Tom" },
@@ -61,6 +70,24 @@ describe("legBoard: cars", () => {
         freeSeats: 1,
         full: false,
       },
+    ]);
+  });
+
+  it("a car carries its ride's position, or null when the ride has none", () => {
+    const board = legBoard(
+      "aller",
+      rows({
+        persons: [person("marc"), person("ana")],
+        rides: [
+          ride("placed", "marc", { departureTime: "07:00:00", position: { lat: -33.86882, lng: 151.20929 } }),
+          ride("unplaced", "ana", { departureTime: "08:00:00" }),
+        ],
+      }),
+      NONE,
+    );
+    expect(board.cars.map((car) => [car.id, car.position])).toStrictEqual([
+      ["placed", { lat: -33.86882, lng: 151.20929 }],
+      ["unplaced", null],
     ]);
   });
 

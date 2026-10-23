@@ -6,6 +6,7 @@
  * part of it: the visibility rule adds them afterwards, car by car (#77).
  */
 import type { Leg } from "./leg";
+import type { Position } from "./place";
 import type { WallTime } from "./wall-clock";
 
 /** The rows of one event, as read from the database. */
@@ -24,6 +25,8 @@ export interface RideRow {
   /** Passenger seats, driver excluded. */
   seats: number;
   note: string | null;
+  /** The position of `location`, or `null` when it has none. */
+  position: Position | null;
 }
 
 /** A person's Placement on a leg: in a car, or without a car when `rideId` is null. */
@@ -53,6 +56,8 @@ export interface BoardCar {
   location: string;
   departureTime: WallTime;
   note: string | null;
+  /** The position of `location`, or `null`. */
+  position: Position | null;
   seats: number;
   /** In boarding order. */
   passengers: BoardPerson[];
@@ -124,6 +129,7 @@ export function legBoard(leg: Leg, rows: BoardRows, deviceIds: ReadonlySet<strin
           location: ride.location,
           departureTime: ride.departureTime,
           note: ride.note,
+          position: ride.position,
           seats: ride.seats,
           passengers,
           freeSeats,
