@@ -466,8 +466,8 @@ Le navigateur ne joint jamais Photon : il appelle notre route, qui appelle Photo
 - **Une route, pas une server action** : Next exécute les server actions d'une page l'une
   après l'autre, et un appel lent à Photon bloquerait les autres. Le texte voyage dans le
   **corps** JSON, `{ text, locale, near? }`, jamais dans une URL, que Vercel journalise.
-- **La route** : `src/app/api/lieux/route.ts` n'exporte que `POST` (Next répond lui-même 405
-  aux autres méthodes), qui délègue à `handlePlaces` (`src/app/api/lieux/handle.ts`, #425) :
+- **La route** : `src/app/api/lieux/route.ts` n'exporte que `POST` (Next répond lui-même 204 à
+  `OPTIONS`, sans l'appeler, et 405 aux autres méthodes, `HEAD` compris), qui délègue à `handlePlaces` (`src/app/api/lieux/handle.ts`, #425) :
   - 403, sans appel, si `Origin` manque ou n'a pas l'hôte de la requête
     (`x-forwarded-host`, à défaut `Host`) : la règle que Next applique à ses server actions ;
   - 400 `{ state: "invalid" }` pour un corps de plus de 1 024 octets, qui n'est pas de

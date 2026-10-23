@@ -175,7 +175,7 @@ describe("what the route leaves", () => {
 });
 
 describe("the route", () => {
-  it("exports POST only: Next answers 405 to any other method", async () => {
+  it("exports POST only: Next answers OPTIONS with 204, any other method with 405", async () => {
     expect(Object.keys(await import("./route"))).toEqual(["POST"]);
   });
 });

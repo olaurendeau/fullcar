@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./fixtures";
 import { isPublicId, PUBLIC_ID_ALPHABET } from "@/domain/public-id-format";
-import { answerTiles, placeOf, requestsForTile, tileAt, type IgnAnswer } from "./ign";
+import { answerTiles, placeOf, PNG_SIGNATURE, requestsForTile, tileAt, tileOf, type IgnAnswer } from "./ign";
 
 // The fake IGN itself, as the app will reach it: `IGN_WMTS_URL` of `web` (compose.yaml).
 const IGN_WMTS_URL = "http://ign:2324/wmts";
@@ -9,15 +9,6 @@ const IGN_WMTS_URL = "http://ign:2324/wmts";
 /** The real service's 404 body, as captured from it (relevé de #473, #238). */
 const NOT_FOUND_BODY =
   '<ExceptionReport xmlns="http://www.opengis.net/ows/1.1"><Exception exceptionCode="Not Found" >No data found</Exception></ExceptionReport>';
-
-/**
- * This test's own tile: the fake keeps its answers and requests for its whole life. At z 18,
- * 256 times the tiles of z 14: the fake's tests need no map view, only tiles of their own.
- */
-function tileOf(eventId: string, dx = 0) {
-  const [z, x, y] = tileAt(placeOf(eventId), 18).split("/").map(Number);
-  return `${z}/${x + dx}/${y}`;
-}
 
 /** The KVP `GetTile` the app sends for `tile`, `z/x/y` (Conception, § 2). */
 function getTileUrl(tile: string) {
@@ -46,7 +37,7 @@ function getTile(tile: string, headers: Record<string, string> = {}) {
 
 /** A PNG of 256 × 256: its signature, then the width and height of its IHDR. */
 function expectTilePng(body: Buffer) {
-  expect(body.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  expect(body.subarray(0, 8)).toEqual(PNG_SIGNATURE);
   expect(body.subarray(12, 16).toString("latin1")).toBe("IHDR");
   expect([body.readUInt32BE(16), body.readUInt32BE(20)]).toEqual([256, 256]);
 }
@@ -191,14 +182,14 @@ test.describe("the fake IGN", () => {
 
   test("records each request for a tile: its path, its query and its headers", async ({ seededEvent }) => {
     const tile = tileOf(seededEvent.id);
-    expect(await requestsForTile(tile)).toEqual([]);
+    expect((await requestsForTile(tile)).length).toBe(0);
 
     await getTile(tile, { "User-Agent": "fullcar/0.0.0 (+https://github.com/olaurendeau/fullcar)", Accept: "image/png" });
     await getTile(tile, { "X-Second": "yes" });
     await getTile(tileOf(seededEvent.id, 1));
 
     const requests = await requestsForTile(tile);
-    expect(requests).toHaveLength(2);
+    expect(requests.length).toBe(2);
     const [first, second] = requests;
     expect(first.path).toBe("/wmts");
     // As sent, not decoded: the app's grid and style are what a test will check.

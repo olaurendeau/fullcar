@@ -2,8 +2,10 @@ import { handleTile } from "./handle";
 import { createIgn, ignSettings } from "./ign";
 
 /*
- * One IGN client per server instance. Only `GET` is exported, and Next answers 405 to any other
- * method. The visitor's request is not passed on: only the three segments are.
+ * One IGN client per server instance. Only `GET` is exported. Next answers `HEAD` by calling it,
+ * so a `HEAD` the CDN has not cached calls the IGN; `OPTIONS` with 204 and `Allow: GET, HEAD,
+ * OPTIONS`; any other method with 405. The visitor's request is not passed on: only the three
+ * segments are.
  */
 const ign = createIgn({
   // Looked up at each call: Next patches `fetch` on the server.
