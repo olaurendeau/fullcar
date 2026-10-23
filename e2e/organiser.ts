@@ -380,9 +380,10 @@ function findings(places: [string, string][], secrets: [string, string][]): stri
  * included once `leaveNoToken()` (#160) has left it. Cookies and `localStorage` are the
  * context's: any page of the origin reads its `localStorage`, and with no page left, one is
  * opened for it here. Not by `storageState()`, which opens a hidden tab of its own for an
- * origin no page shows, and fails or waits when it cannot (#436).
+ * origin no page shows, and fails or waits when it cannot (#436). Exported for the test of that
+ * page (`organiser-leaks.spec.ts`), the one case no other spec reaches.
  */
-async function storageOf(context: BrowserContext, origin: string): Promise<[string, string][]> {
+export async function storageOf(context: BrowserContext, origin: string): Promise<[string, string][]> {
   const places: [string, string][] = [];
   const pages = context.pages().length > 0 ? context.pages() : [await context.newPage()];
   for (const page of pages) {
