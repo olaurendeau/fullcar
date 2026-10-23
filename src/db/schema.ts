@@ -12,6 +12,7 @@ export interface Database {
  * `aller_at` and `retour_at` are wall-clock times at the event's place, without time
  * zone: written and read as `YYYY-MM-DD HH:MM:SS` strings, never as a Date.
  * `admin_token_hash` is the 32-byte SHA-256 of the admin token, never the token itself.
+ * `location_lat` and `location_lng` are the position of `location`: both or neither.
  */
 export interface EventTable {
   id: string;
@@ -24,6 +25,8 @@ export interface EventTable {
   stops_enabled: Generated<boolean>;
   admin_token_hash: Buffer;
   created_at: ColumnType<Date, never, never>;
+  location_lat: number | null;
+  location_lng: number | null;
 }
 
 /** The two legs of an Event, as stored: `retour` only when the event has one. */
@@ -44,7 +47,8 @@ export interface PersonTable {
 
 /**
  * `departure_time` is a wall-clock `HH:MM:SS` string on the date of its leg, which is not
- * stored. `id` is drawn by the browser, like a person's.
+ * stored. `id` is drawn by the browser, like a person's. `location_lat` and
+ * `location_lng` are the position of `location`, as on an event.
  */
 export interface RideTable {
   id: string;
@@ -56,6 +60,8 @@ export interface RideTable {
   seats: number;
   note: string | null;
   created_at: ColumnType<Date, never, never>;
+  location_lat: number | null;
+  location_lng: number | null;
 }
 
 /**

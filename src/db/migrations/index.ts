@@ -1,6 +1,7 @@
 import type { Migration } from "kysely/migration";
 import * as event from "./0001_event";
 import * as participants from "./0002_participants";
+import * as positions from "./0003_positions";
 
 /**
  * Every migration, in order. Listed statically rather than read from the folder,
@@ -10,4 +11,5 @@ import * as participants from "./0002_participants";
 export const migrations: Record<string, Migration> = {
   "0001_event": event,
   "0002_participants": participants,
+  "0003_positions": positions,
 };

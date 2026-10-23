@@ -1,6 +1,6 @@
-import { sql, type Transaction } from "kysely";
-import { describe, expect, it } from "vitest";
-import type { Database } from "./schema";
+import { sql, type Selectable, type Transaction } from "kysely";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { Database, EventTable } from "./schema";
 import { withRollback } from "./test-db";
 
 const HASH = Buffer.alloc(32, 7);
@@ -51,6 +51,8 @@ describe("event table", () => {
       { name: "stops_enabled", type: "boolean", nullable: "NO", default: "false" },
       { name: "admin_token_hash", type: "bytea", nullable: "NO", default: null },
       { name: "created_at", type: "timestamp with time zone", nullable: "NO", default: "now()" },
+      { name: "location_lat", type: "double precision", nullable: "YES", default: null },
+      { name: "location_lng", type: "double precision", nullable: "YES", default: null },
     ]);
   });
 
@@ -155,5 +157,48 @@ describe("event table", () => {
     expect(row[column as "title" | "location"]).toBe("🚗".repeat(max));
     await expectRefusedBy({ [column]: "🚗".repeat(max + 1) }, constraint);
     await expectRefusedBy({ [column]: "" }, constraint);
+  });
+
+  // D4: a position is both coordinates or neither, each within its bounds. The rounding
+  // to 5 decimals is the domain's, not checked here.
+  describe("position", () => {
+    it("is typed as a number or null", () => {
+      expectTypeOf<Selectable<EventTable>["location_lat"]>().toEqualTypeOf<number | null>();
+      expectTypeOf<Selectable<EventTable>["location_lng"]>().toEqualTypeOf<number | null>();
+    });
+
+    it.each([
+      ["a latitude without longitude", { location_lat: 48.1, location_lng: null }, "event_location_position_pair"],
+      ["a longitude without latitude", { location_lat: null, location_lng: -1.6 }, "event_location_position_pair"],
+      ["a latitude of -90.0001", { location_lat: -90.0001, location_lng: 0 }, "event_location_lat_range"],
+      ["a latitude of 90.0001", { location_lat: 90.0001, location_lng: 0 }, "event_location_lat_range"],
+      ["a longitude of -180.0001", { location_lat: 0, location_lng: -180.0001 }, "event_location_lng_range"],
+      ["a longitude of 180.0001", { location_lat: 0, location_lng: 180.0001 }, "event_location_lng_range"],
+      // Postgres orders NaN above every number: the ranges refuse it, as they do infinities.
+      ["a latitude of NaN", { location_lat: NaN, location_lng: 0 }, "event_location_lat_range"],
+      ["a latitude of Infinity", { location_lat: Infinity, location_lng: 0 }, "event_location_lat_range"],
+      ["a latitude of -Infinity", { location_lat: -Infinity, location_lng: 0 }, "event_location_lat_range"],
+      ["a longitude of NaN", { location_lat: 0, location_lng: NaN }, "event_location_lng_range"],
+      ["a longitude of Infinity", { location_lat: 0, location_lng: Infinity }, "event_location_lng_range"],
+      ["a longitude of -Infinity", { location_lat: 0, location_lng: -Infinity }, "event_location_lng_range"],
+    ])("refuses %s", async (_, position, constraint) => {
+      await expectRefusedBy(position, constraint);
+    });
+
+    it.each([
+      ["none", { location_lat: null, location_lng: null }],
+      ["the lowest bounds", { location_lat: -90, location_lng: -180 }],
+      ["the highest bounds", { location_lat: 90, location_lng: 180 }],
+    ])("accepts %s, and gives it back as written", async (_, position) => {
+      const row = await withRollback(async (trx) => {
+        await insert(trx, position);
+        return trx
+          .selectFrom("event")
+          .select(["location_lat", "location_lng"])
+          .where("id", "=", ID)
+          .executeTakeFirstOrThrow();
+      });
+      expect(row).toEqual(position);
+    });
   });
 });
