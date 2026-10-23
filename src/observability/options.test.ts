@@ -1,14 +1,15 @@
 import { isDeepStrictEqual } from "node:util";
 import {
   captureException, continueTrace, createTransport, defaultStackParser, getDefaultIntegrations, initWithoutDefaultIntegrations,
-  startSpan, type NodeClient,
+  linkedErrorsIntegration, startSpan, type NodeClient,
 } from "@sentry/nextjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, startBrowserSentry } from "./client";
 import {
-  codeFramesOnly, type Integration, registerHooks, scrubEnvelopeHeader, sentryOptions, type SentryEnv, tracesSampleRate,
+  codeFramesOnly, type Integration, messagesWithoutFrames, registerHooks, scrubEnvelopeHeader, sentryOptions, type SentryEnv,
+  tracesSampleRate,
 } from "./options";
-import { scrubBreadcrumb, scrubCreatedDsc, scrubEvent, scrubSpan } from "./scrub";
+import { scrubBreadcrumb, scrubCreatedDsc, scrubEvent, scrubSpan, scrubText } from "./scrub";
 import {
   databaseErrors, registerServerHooks, reportRequestError, SERVER_INTEGRATIONS, type ServerSdk, serverEnv,
   startServerSentry,
@@ -21,7 +22,7 @@ const NO_DSN: SentryEnv[] = [{}, { ...ENV, dsn: undefined }, { ...ENV, dsn: "" }
 
 /** A client that records what is registered on it, and the SDK that hands it out. */
 function fakeClient() {
-  return { on: vi.fn(), addEventProcessor: vi.fn() };
+  return { on: vi.fn(), addEventProcessor: vi.fn(), getOptions: vi.fn(() => ({ stackParser: defaultStackParser })) };
 }
 const named = (name: string, options?: object) => ({ name, options }) as Integration;
 
@@ -113,7 +114,11 @@ describe("on the server, with a DSN", () => {
     expect(options).toEqual(sentryOptions(ENV));
     expect(typeof integrations).toBe("function");
     expect(client.on.mock.calls).toEqual([["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader]]);
-    expect(client.addEventProcessor.mock.calls).toEqual([[codeFramesOnly], [databaseErrors]]);
+    const processors = client.addEventProcessor.mock.calls.map(([processor]) => processor as typeof codeFramesOnly);
+    expect(processors).toEqual([codeFramesOnly, expect.any(Function), databaseErrors]);
+    // The second reads each line with the client's own stack parser.
+    const event = { exception: { values: [{ type: "Error", value: "Le trajet a échoué\n    at Marc (depuis 10:30)" }] } };
+    expect(processors[1](event).exception.values).toEqual([{ type: "Error", value: "Le trajet a échoué" }]);
   });
 
   it("keeps the exact list of integrations, Http without sessions", async () => {
@@ -160,6 +165,31 @@ describe("on the server, with a DSN", () => {
     const functions = (each: typeof event) => each.exception.values.map(({ stacktrace }) => stacktrace.frames.map((frame) => frame.function));
     expect(functions(event).flat()).toContain("Marc");
     expect(functions(codeFramesOnly(event))).toEqual([["Parser.parse"], ["loadEvent"]]);
+  });
+
+  it("keeps of each message its first line and every line the stack parser makes no frame of (#393)", () => {
+    const message = (value: string) => ({ value, type: "Error" });
+    const frames = [
+      "    at Marc (depuis 10:30)",
+      // Node's parser reads `at ` anywhere in a line.
+      "Résultat pour Marc : aucune place",
+      // A frame the parser drops at either end of a stack, as one of the SDK's own.
+      "    at Marc.captureException (depuis 10:30)",
+    ];
+    const event = {
+      exception: {
+        values: [
+          message(["Échec du trajet", ...frames, "Réessayez plus tard"].join("\n")),
+          message("    at Marc (depuis 10:30)\nat Marc"),
+          { type: "Error" },
+        ],
+      },
+    };
+    expect(messagesWithoutFrames(defaultStackParser)(event).exception.values).toEqual([
+      message("Échec du trajet\nRéessayez plus tard"),
+      message("    at Marc (depuis 10:30)"),
+      { type: "Error" },
+    ]);
   });
 
   it("hands a request's error to captureRequestError", async () => {
@@ -210,6 +240,8 @@ describe("what the SDK sends with these options", () => {
     sent = [];
     client = initWithoutDefaultIntegrations({
       ...sentryOptions(ENV),
+      // One of SERVER_INTEGRATIONS: an error's causes are sent with it.
+      integrations: [linkedErrorsIntegration()],
       sendClientReports: false,
       transport: (options) =>
         createTransport(options, async ({ body }) => {
@@ -276,6 +308,58 @@ describe("what the SDK sends with these options", () => {
   it("sends it as a frame without codeFramesOnly, so that the test above means something", async () => {
     start();
     expect(await framesOfErrorWithFrameInMessage()).toContain("Marc");
+  });
+
+  const FRAME_LINE = "\n    at Marc (depuis 10:30)";
+  /** Whether the whole of what is sent for `error` holds the first name, and the messages of its error event. */
+  async function sendWithFrameInMessage(error: Error) {
+    sent = [];
+    captureException(error);
+    await client?.flush(2000);
+    const items = sent.flatMap((body) => body.split("\n").filter(Boolean).map((line) => JSON.parse(line) as { exception?: unknown }));
+    const { exception } = items.find((item) => item.exception) as { exception: { values: { value?: string }[] } };
+    return { leaks: sent.join("\n").includes("Marc"), values: exception.values.map(({ value }) => value) };
+  }
+  /** The error, its cause, and a line Node's parser reads as a frame though it does not start with `at`. */
+  const withFrameInMessage = () => [
+    new Error(`Le trajet a échoué${FRAME_LINE}`),
+    new Error("Impossible d'afficher le trajet", { cause: new Error(`Le trajet a échoué${FRAME_LINE}`) }),
+    new Error("Le trajet a échoué\nRésultat pour Marc : aucune place"),
+  ];
+  async function sendEach(errors: Error[]) {
+    const each = [];
+    for (const error of errors) each.push(await sendWithFrameInMessage(error));
+    return each;
+  }
+
+  it("sends no line of an error's message that reads as a frame from the server, of the error or of its cause (#393)", async () => {
+    start(registerServerHooks);
+    const each = await sendEach(withFrameInMessage());
+    // A boolean, first: a failing assertion prints no part of what was sent (#233).
+    expect(each.map(({ leaks }) => leaks)).toEqual([false, false, false]);
+    expect(each.map(({ values }) => values)).toEqual([
+      ["Le trajet a échoué"],
+      ["Le trajet a échoué", scrubText("Impossible d'afficher le trajet")],
+      ["Le trajet a échoué"],
+    ]);
+  });
+
+  it("sends the first name in the message without messagesWithoutFrames, so that the test above means something", async () => {
+    start((each) => {
+      registerHooks(each);
+      each.addEventProcessor(codeFramesOnly);
+    });
+    expect((await sendEach(withFrameInMessage())).map(({ leaks }) => leaks)).toEqual([true, true, true]);
+  });
+
+  it("sends, on purpose, a first name in a line of plain text that Node's parser reads as no frame (#393)", async () => {
+    start(registerServerHooks);
+    // Gecko's parser makes a frame of a line that ends in a path; Node's only of one with `at `.
+    // Such a line is plain text, and a first name in plain text is sent: the limit of plain
+    // text accepted by #231 and #239, and on #396. Only that « Marc » is there is checked.
+    expect(defaultStackParser("Marc revient le 12/03")).toEqual([]);
+    const [{ leaks }] = await sendEach([new Error("Le trajet a échoué\nMarc revient le 12/03")]);
+    expect(leaks).toBe(true);
   });
 
   it("leaks it without the envelope's hook, so that [] above means something", async () => {
