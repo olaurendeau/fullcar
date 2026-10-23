@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -32,46 +32,48 @@ export type RemovalSaid = "changed" | "offline" | "failed" | "eventNotFound";
  * `counts`, that the aller does not change, that nobody is notified, then the removal in red and
  * « Annuler ». The focus starts on « Annuler ».
  *
- * While the removal is sent, « Supprimer le retour » is `aria-disabled` and keeps the focus, a
- * second tap sends nothing, and neither « Annuler » nor Escape closes anything: the answer comes
- * here. Then the focus goes back to « Supprimer le retour », or to « Annuler » once the event is
- * gone, which leaves the removal `disabled`. Closed, `onClosed` says where the focus goes.
+ * While the removal is sent, « Supprimer le retour » is `aria-disabled` and keeps the focus, and
+ * a second tap sends nothing. For 10 s, neither « Annuler » nor Escape closes anything: the
+ * answer comes here (decision 39); then, once `waited`, they close it, the answer going to the
+ * sheet. After an answer, the focus goes back to « Supprimer le retour », or to « Annuler »
+ * (`cancelRef`, which the sheet focuses before the removal is `disabled`, never by `<body>`) once
+ * the event is gone. As it closes, the sheet gives the focus its place.
  */
 export function RemoveRetourDialog({
   open,
   counts,
   said,
   sending,
+  waited,
+  cancelRef,
   onConfirm,
   onCancel,
-  onClosed,
 }: {
   open: boolean;
   counts: RetourCounts;
   said: RemovalSaid | null;
   sending: boolean;
+  waited: boolean;
+  cancelRef: RefObject<HTMLButtonElement | null>;
   onConfirm: () => void;
   onCancel: () => void;
-  onClosed: () => void;
 }) {
   const t = useTranslations();
   const confirmButton = useRef<HTMLButtonElement>(null);
-  const cancelButton = useRef<HTMLButtonElement>(null);
   const gone = said === "eventNotFound";
+  const held = sending && !waited;
 
   useEffect(() => {
     if (!open || sending || said === null) return;
-    (gone ? cancelButton : confirmButton).current?.focus();
-  }, [open, sending, said, gone]);
+    (gone ? cancelRef : confirmButton).current?.focus();
+  }, [open, sending, said, gone, cancelRef]);
 
   return (
-    <AlertDialog open={open} onOpenChange={(next) => !next && !sending && onCancel()}>
+    <AlertDialog open={open} onOpenChange={(next) => !next && !held && onCancel()}>
       <AlertDialogContent
-        onEscapeKeyDown={(escape) => sending && escape.preventDefault()}
-        onCloseAutoFocus={(focus) => {
-          focus.preventDefault();
-          onClosed();
-        }}
+        onEscapeKeyDown={(escape) => held && escape.preventDefault()}
+        // The sheet has given the focus its place as this closed, before it was gone.
+        onCloseAutoFocus={(focus) => focus.preventDefault()}
       >
         <AlertDialogHeader>
           <AlertDialogTitle>{t("EditEvent.removeRetour.title")}</AlertDialogTitle>
@@ -107,10 +109,10 @@ export function RemoveRetourDialog({
             </Button>
           </AlertDialogPrimitive.Action>
           <AlertDialogCancel
-            ref={cancelButton}
+            ref={cancelRef}
             className="h-11 w-full"
-            aria-disabled={sending || undefined}
-            onClick={(press) => sending && press.preventDefault()}
+            aria-disabled={held || undefined}
+            onClick={(press) => held && press.preventDefault()}
           >
             {t("Actions.cancel")}
           </AlertDialogCancel>
