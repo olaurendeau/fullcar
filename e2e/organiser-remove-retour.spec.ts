@@ -391,6 +391,49 @@ test.describe("M3.7: the confirmation while it sends, and after a failure", () =
     await confirmButton(page).click();
     await expectRemoved(page, db, seededEvent.id);
   });
+
+  // #405: the answer `errors` closes the confirmation, and the sheet shows them. Only a forged
+  // request gets it: the start date put a week back on the way, which the server refuses.
+  test("`errors`: the confirmation closes, the error under its field, the focus on it; nothing changed", async ({ page, db, seededEvent }) => {
+    await seedRetour(db, seededEvent.id);
+    await askRemoval(page, organiserPath(seededEvent));
+    const past = await page.evaluate(() => {
+      const at = new Date();
+      at.setDate(at.getDate() - 7);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+    });
+    await page.route(
+      (url) => url.pathname.endsWith("/admin"),
+      (route) => {
+        const body = route.request().postData() ?? "";
+        if (!isAction(route.request()) || !body.includes('"persons"')) return route.fallback();
+        return route.fallback({ postData: body.replace(/"allerDate":\s*"[^"]*"/, `"allerDate":"${past}"`) });
+      },
+    );
+    await confirmButton(page).click();
+
+    await expect(confirmation(page)).toHaveCount(0);
+    await expect(field(page, "Date de début")).toHaveAccessibleDescription("Cette date est déjà passée.");
+    await expect(field(page, "Date de début")).toBeFocused();
+    await expect(retourBox(page)).not.toBeChecked();
+    await expectKept(page, db, seededEvent.id);
+  });
+
+  // #405: while it sends, the focus may leave « Supprimer le retour »: the answer brings it back.
+  test("the focus moved to « Annuler » while it sends: a failure gives it back to « Supprimer le retour »", async ({ page, db, seededEvent }) => {
+    await seedRetour(db, seededEvent.id);
+    await askRemoval(page, organiserPath(seededEvent));
+    const held = await holdActionsWith(page, '"persons"');
+    await confirmButton(page).click();
+    await expect.poll(held.held).toBe(1);
+    await page.keyboard.press("Tab");
+    await expect(cancelButton(page)).toBeFocused();
+    await held.fail();
+
+    await expect(confirmation(page).getByRole("alert")).toHaveText(SAID.failed);
+    await expect(confirmButton(page)).toBeFocused();
+  });
 });
 
 test.describe("M9: the confirmation, readable everywhere", () => {
