@@ -184,6 +184,29 @@ describe("createEvent", () => {
     });
   });
 
+  describe("AL1.7, AL2.1, AL6.4: the position of the location", () => {
+    it("stores the position sent, rounded to 5 decimals", async () => {
+      const { row } = await created({ ...valid, locationPosition: { lat: 45.758126, lng: 4.689444 } });
+      expect(row).toMatchObject({ location_lat: 45.75813, location_lng: 4.68944 });
+    });
+
+    it.each<[string, unknown]>([
+      ["without a position", valid],
+      ["with a null position", { ...valid, locationPosition: null }],
+    ])("stores no position %s", async (_, fields) => {
+      const { row } = await created(fields);
+      expect(row).toMatchObject({ location_lat: null, location_lng: null });
+    });
+
+    it.each<[string, unknown]>([
+      ["malformed", { ...valid, locationPosition: { lat: 45.7581, lng: "4.6894" } }],
+      ["out of bounds", { ...valid, locationPosition: { lat: 45.7581, lng: -180.00001 } }],
+      ["sent without a location", { ...valid, location: undefined, locationPosition: { lat: 45.7581, lng: 4.6894 } }],
+    ])("creates nothing from a position %s: invalid, on the location", async (_, fields) => {
+      expect(await refused(fields)).toEqual({ location: "invalid" });
+    });
+  });
+
   it("C2.3: without the retour box, stores no retour, even with retour values typed", async () => {
     const { row } = await created({ ...valid, retour: false, retourDate: "2026-12-13", retourTime: "18:00" });
     expect(row.retour_at).toBeNull();

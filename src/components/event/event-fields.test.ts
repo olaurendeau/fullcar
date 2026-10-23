@@ -74,7 +74,7 @@ describe("updates in one tick", () => {
 });
 
 describe("loadedEventFields", () => {
-  const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00" };
+  const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00" };
   const values = { title: "Tournoi de Rennes", location: "Gymnase", allerDate: "2026-12-12", allerTime: "07:30" };
 
   // M1.5: the fields show what is saved, the box checked with a retour; M1.7: on one day, the end date follows.
@@ -103,7 +103,7 @@ describe("loadedEventFields", () => {
 });
 
 describe("eventFieldsChanged", () => {
-  const loaded = loadedEventFields({ title: "T", location: "L", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
+  const loaded = loadedEventFields({ title: "T", location: "L", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
 
   // M2.5: a field changed, then put back as it was loaded, is not changed.
   it("is false for the loaded values", () => {
@@ -127,7 +127,7 @@ describe("eventFieldsChanged", () => {
 
 // M6.1, M6.2: the server answers `changed` with the saved values, and the form takes them in.
 describe("withSavedFields", () => {
-  const event = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" };
+  const event = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" };
   const loaded = loadedEventFields(event);
   const without = loadedEventFields({ ...event, retourAt: null });
   const typed = (values: Partial<EventFieldsState["values"]>, from = loaded): EventFieldsState => ({
@@ -203,7 +203,7 @@ describe("EventFormFields", () => {
     const element = node as Element;
     return [element, ...elements(element.props?.children)];
   };
-  const rendered = loadedEventFields({ title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" });
+  const rendered = loadedEventFields({ title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" });
   const meanwhile: EventFieldsState = { values: { ...rendered.values, location: "Salle Carrel", retourTime: "19:00" }, retourDateFollows: false };
 
   /** Renders the fields with `rendered`, changes the one named `name`, and applies its update to `meanwhile`. */
@@ -264,7 +264,7 @@ describe("EventFormFields", () => {
 
 // M5.1: the cars of a leg whose date or time changed keep their time; the sheet says so.
 describe("carTimesKept", () => {
-  const loaded = loadedEventFields({ title: "T", location: "L", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
+  const loaded = loadedEventFields({ title: "T", location: "L", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
   const cars = { aller: 3, retour: 2 };
 
   it.each([

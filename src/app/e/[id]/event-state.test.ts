@@ -8,8 +8,10 @@ import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import { buildBoard } from "@/domain/board";
+import type { NewEvent } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import { withVisiblePhones } from "@/domain/phone-visibility";
+import type { Position } from "@/domain/place";
 import { readEventState, type EventState } from "./event-state";
 
 // Passed through, and watched: the board and the numbers must follow the same device.
@@ -206,16 +208,18 @@ describe("readEventState", () => {
   });
 
   // Epic #250: an open page applies the header of the state its next action brings back (M7.2).
-  it.each<[string, { retourAt?: null }, string | null]>([
-    ["with a retour", {}, "2026-12-12 18:00:00"],
-    ["without a retour: no end", { retourAt: null }, null],
-  ])("carries the event's header, %s", async (_, fields, retourAt) => {
+  it.each<[string, Partial<NewEvent>, string | null, Position | null]>([
+    ["with a retour", {}, "2026-12-12 18:00:00", null],
+    ["without a retour: no end", { retourAt: null }, null, null],
+    ["with the position of its location", { locationPosition: { lat: 47.65762, lng: -2.74833 } }, "2026-12-12 18:00:00", { lat: 47.65762, lng: -2.74833 }],
+  ])("carries the event's header, %s", async (_, fields, retourAt, locationPosition) => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx, { title: "Match à Vannes", location: "Salle du Vincin", ...fields });
       const state = await readEventState(trx, eventId);
       expect(state?.event).toStrictEqual({
         title: "Match à Vannes",
         location: "Salle du Vincin",
+        locationPosition,
         allerAt: "2026-12-12 07:30:00",
         retourAt,
       });

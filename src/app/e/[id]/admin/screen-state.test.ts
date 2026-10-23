@@ -252,7 +252,7 @@ describe("panelRead", () => {
 });
 
 describe("screenRead", () => {
-  const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: null };
+  const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: null };
   const board: EventState = { event: header, legs: [] };
   const panel = { state: "panel", legs: after };
 
@@ -276,11 +276,21 @@ describe("screenRead", () => {
 });
 
 describe("editAnswer", () => {
-  const event = { title: "Tournoi de Rennes U13", location: "Gymnase", allerAt: "2026-12-12 14:00:00", retourAt: null };
+  const event = { title: "Tournoi de Rennes U13", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 14:00:00", retourAt: null };
 
   // M2.1: saved, with the values the server stored.
   it("is saved, with the stored values, on `ok`", () => {
     expect(editAnswer({ ok: true, value: { ok: true, event } })).toStrictEqual({ kind: "saved", event });
+  });
+
+  // AL5.6: the position kept is in the values stored.
+  it("is saved or changed, with the position stored", () => {
+    const placed = { ...event, locationPosition: { lat: 48.1173, lng: -1.67779 } };
+    expect(editAnswer({ ok: true, value: { ok: true, event: placed } })).toStrictEqual({ kind: "saved", event: placed });
+    expect(editAnswer({ ok: true, value: { ok: false, error: "changed", event: placed } })).toStrictEqual({
+      kind: "changed",
+      event: placed,
+    });
   });
 
   // M2.3: the server's errors show by their field.
@@ -324,6 +334,8 @@ describe("editAnswer", () => {
     ["another error", { ok: false, error: "rideGone" }],
     ["`ok` without a header", { ok: true }],
     ["`ok` with a header missing its title", { ok: true, event: { ...event, title: undefined } }],
+    ["`ok` with a header missing its position", { ok: true, event: { ...event, locationPosition: undefined } }],
+    ["`changed` with a position that is not one", { ok: false, error: "changed", event: { ...event, locationPosition: { lat: "48.1" } } }],
     ["no answer", undefined],
   ])("is the failure on %s", (_, value) => {
     expect(editAnswer({ ok: true, value })).toStrictEqual({ kind: "problem", problem: "failed" });
@@ -335,7 +347,7 @@ describe("editAnswer", () => {
 // M3.7 (#273): a removal confirmed, its confirmation closed after 10 s, then the sheet: the same,
 // with what the removal did not do, and the numbers of a retour changed meanwhile.
 describe("editFailure: the sheet closed before the answer, word for word", () => {
-  const event = { title: "Tournoi de Rennes U13", location: "Gymnase", allerAt: "2026-12-12 14:00:00", retourAt: null };
+  const event = { title: "Tournoi de Rennes U13", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 14:00:00", retourAt: null };
   const words = (locale: "fr" | "en") =>
     wordsOf(createTranslator<Messages>({ locale, messages: locale === "fr" ? fr : en }), createFormatter({ locale }));
   /** The answers of a row's failure column. */
