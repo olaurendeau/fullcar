@@ -1,18 +1,22 @@
 import type { Kysely } from "kysely";
-import { lockEvent, readAdminTokenHash, writeEventFields, type PublicEvent } from "@/db/events";
+import { lockEvent, readAdminTokenHash, writeEventFields } from "@/db/events";
 import type { LegCounts } from "@/db/legs";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { adminTokenMatches } from "@/domain/admin-token";
 import {
   eventFieldsOf,
+  locationPositionOf,
   serverBounds,
   validateEventChange,
+  type EventChange,
   type EventErrors,
   type EventHeader,
 } from "@/domain/event";
+import { positionOf, samePosition } from "@/domain/place";
 import { isPublicId } from "@/domain/public-id";
 import { isWallClock } from "@/domain/wall-clock";
+import { headerFrom } from "./event";
 import { removeRetour } from "./retour";
 
 /**
@@ -35,13 +39,19 @@ export type EditEventOutcome =
 const INVALID = { ok: false, error: "invalid" } as const;
 const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" } as const;
 
-/** `before` as a page sends it, the values it loaded, or nothing: `validateEventChange` throws on another shape. */
-function headerOf(input: unknown): EventHeader | undefined {
+/**
+ * `before` as a page sends it, the values it loaded, or nothing: `validateEventChange` throws on
+ * another shape. A page from before the positions sends no `locationPosition`: it is then
+ * compared without it.
+ */
+function headerOf(input: unknown): EventChange | undefined {
   if (typeof input !== "object" || input === null) return undefined;
-  const { title, location, allerAt, retourAt } = input as Record<string, unknown>;
+  const { title, location, allerAt, retourAt, locationPosition } = input as Record<string, unknown>;
   if (typeof title !== "string" || typeof location !== "string" || !isWallClock(allerAt)) return undefined;
   if (retourAt !== null && !isWallClock(retourAt)) return undefined;
-  return { title, location, allerAt, retourAt };
+  if (locationPosition === undefined) return { title, location, allerAt, retourAt };
+  const position = positionOf(locationPosition);
+  return "error" in position ? undefined : { title, location, allerAt, retourAt, locationPosition: position.value };
 }
 
 function isCount(value: unknown): value is number {
@@ -56,22 +66,27 @@ function countsOf(input: unknown): { ok: true; counts?: LegCounts } | { ok: fals
   return isCount(cars) && isCount(persons) ? { ok: true, counts: { cars, persons } } : { ok: false };
 }
 
-function headerFrom(row: PublicEvent): EventHeader {
-  return { title: row.title, location: row.location, allerAt: row.aller_at, retourAt: row.retour_at };
-}
-
-function sameHeader(a: EventHeader, b: EventHeader): boolean {
-  return a.title === b.title && a.location === b.location && a.allerAt === b.allerAt && a.retourAt === b.retourAt;
+/** `loaded` without a position, from a page before the positions, is compared without it. */
+function sameHeader(stored: EventHeader, loaded: EventChange): boolean {
+  return (
+    stored.title === loaded.title &&
+    stored.location === loaded.location &&
+    stored.allerAt === loaded.allerAt &&
+    stored.retourAt === loaded.retourAt &&
+    (loaded.locationPosition === undefined || samePosition(stored.locationPosition, loaded.locationPosition))
+  );
 }
 
 /**
- * The organiser changes the event (epic #250, §3): its title, its location, its start, and
- * its end or none. In this order: the id, the token (`adminTokenMatches`, constant time),
- * the shape of `before` and of `removal`, the fields (`validateEventChange`, against the
- * server's bounds), then one transaction: the Event under `lockEvent(…, "noKeyUpdate")`,
- * `before` compared with that row (`changed`), the retour removed when it is unchecked
- * (`removeRetour`, `confirmRetour`), then the fields written. A `before` forged with a past
- * date makes the bounds skip that date, then is refused as `changed` under the lock.
+ * The organiser changes the event (epic #250, §3): its title, its location and its position,
+ * its start, and its end or none. In this order: the id, the token (`adminTokenMatches`,
+ * constant time), the shape of `before`, of `removal` and of the position sent, the fields
+ * (`validateEventChange`, against the server's bounds), then one transaction: the Event
+ * under `lockEvent(…, "noKeyUpdate")`, `before` compared with that row (`changed`), the
+ * retour removed when it is unchecked (`removeRetour`, `confirmRetour`), then the fields
+ * written. A `before` forged with a past date makes the bounds skip that date, then is
+ * refused as `changed` under the lock. A position not sent, by a page from before the
+ * positions, keeps the one stored, even with another text (D6, AL5.6).
  *
  * The application passes the connection: the transaction is `atomically`'s, READ COMMITTED,
  * so that the retour, counted again after the lock, includes a write committed while the
@@ -95,8 +110,9 @@ export async function editEvent(
   if (!adminTokenMatches(token, storedHash)) return INVALID;
   const loaded = headerOf(before);
   const confirmed = countsOf(removal);
-  if (loaded === undefined || !confirmed.ok) return INVALID;
-  const validation = validateEventChange(eventFieldsOf(fields), serverBounds(new Date()), loaded);
+  const sent = eventFieldsOf(fields);
+  if (loaded === undefined || !confirmed.ok || "error" in locationPositionOf(sent)) return INVALID;
+  const validation = validateEventChange(sent, serverBounds(new Date()), loaded);
   if (!validation.ok) return validation;
   const { event } = validation;
 
@@ -109,6 +125,9 @@ export async function editEvent(
       const removed = await removeRetour(trx, eventId, confirmed.counts);
       if (!removed.ok) return removed;
     }
-    return (await writeEventFields(trx, eventId, event)) ? { ok: true, event } : EVENT_NOT_FOUND;
+    if (!(await writeEventFields(trx, eventId, event))) return EVENT_NOT_FOUND;
+    // Not sent, the position stored is kept (D6, AL5.6): the answer says it.
+    const { locationPosition = stored.locationPosition } = event;
+    return { ok: true, event: { ...event, locationPosition } };
   });
 }

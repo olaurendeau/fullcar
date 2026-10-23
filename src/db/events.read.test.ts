@@ -10,6 +10,8 @@ const PUBLIC_FIELDS = [
   "id",
   "title",
   "location",
+  "location_lat",
+  "location_lng",
   "aller_at",
   "retour_at",
   "boosters_enabled",
@@ -22,6 +24,7 @@ const EVENT: NewEvent = {
   location: "Gymnase des Gayeulles",
   allerAt: "2026-12-12 07:30:00",
   retourAt: null,
+  locationPosition: null,
   boostersEnabled: false,
   participationEnabled: false,
   stopsEnabled: false,
@@ -39,10 +42,21 @@ describe("findEventById", () => {
       location: "Gymnase des Gayeulles",
       aller_at: "2026-12-12 07:30:00",
       retour_at: "2026-12-12 18:00:00",
+      location_lat: null,
+      location_lng: null,
       boosters_enabled: true,
       participation_enabled: false,
       stops_enabled: true,
     });
+  });
+
+  // D5: the position is shown to anyone holding the link, as the location is.
+  it("gives back the position of the location", async () => {
+    const found = await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx, { locationPosition: { lat: 48.1173, lng: -1.67779 } });
+      return findEventById(trx, id);
+    });
+    expect(found).toMatchObject({ location_lat: 48.1173, location_lng: -1.67779 });
   });
 
   it("gives back exactly the public fields, never the token hash", async () => {

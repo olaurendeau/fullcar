@@ -8,9 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EVENT_FIELDS, type EventErrors, type EventField, type EventFields as SentFields, type EventHeader } from "@/domain/event";
 import { LEGS, type Leg } from "@/domain/leg";
+import type { Position } from "@/domain/place";
 import { wallClockParts } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { eventErrorMessage } from "./event-error";
+import { PlaceField } from "./place-field";
+import type { PlaceValue } from "./place-field-state";
 
 /** The values of the fields, as they show: the retour date is the one displayed. */
 export type EventFieldValues = Pick<Required<SentFields>, EventField | "retour">;
@@ -22,6 +25,15 @@ export type EventFieldValues = Pick<Required<SentFields>, EventField | "retour">
 export interface EventFieldsState {
   values: EventFieldValues;
   retourDateFollows: boolean;
+  /**
+   * Where the place proposes suggestions (`suggestions`): the position of `values.location`,
+   * absent or `null` without one, and the label of the suggestion it came from, which never
+   * leaves the browser.
+   * Decision: outside `values` until « Modifier l’événement » proposes places (#432). Reason:
+   * that form sends its `values` whole, and would send a position it cannot compare yet.
+   */
+  locationPosition?: Position | null;
+  locationLabel?: string | null;
 }
 
 /** The creation's start: every text empty, Retour checked (C1.1). */
@@ -86,10 +98,15 @@ export type EventFieldsUpdate = (state: EventFieldsState) => EventFieldsState;
 export function withEventField(name: EventField, value: string): EventFieldsUpdate {
   return (state) => {
     const values = { ...state.values, [name]: value };
-    if (name === "retourDate") return { values, retourDateFollows: false };
+    if (name === "retourDate") return { ...state, values, retourDateFollows: false };
     if (name === "allerDate" && state.retourDateFollows) values.retourDate = value;
-    return { values, retourDateFollows: state.retourDateFollows };
+    return { ...state, values };
   };
+}
+
+/** The place changes, with suggestions: its text, its position and its label together. */
+export function withLocation({ text, position, label }: PlaceValue): EventFieldsUpdate {
+  return (state) => ({ ...state, values: { ...state.values, location: text }, locationPosition: position, locationLabel: label });
 }
 
 /** The box Retour changes. */
@@ -136,6 +153,8 @@ export function EventFormFields({
   onChange,
   notes = {},
   locked = false,
+  suggestions = false,
+  sending = false,
 }: {
   idOf: (name: string) => string;
   state: EventFieldsState;
@@ -144,6 +163,10 @@ export function EventFormFields({
   notes?: Partial<Record<Leg, string>>;
   /** While a change is sent (M2.6, decision 52): each field read-only, the box `aria-disabled`, and no input taken. */
   locked?: boolean;
+  /** The place proposes suggestions (place-autocomplete); without, it is the text field it always was. */
+  suggestions?: boolean;
+  /** The form is sending: the place proposes nothing, and its « Retirer » does nothing (AL5.4). */
+  sending?: boolean;
 }) {
   const t = useTranslations("CreateEvent");
   const { values } = state;
@@ -156,11 +179,17 @@ export function EventFormFields({
       </p>
     );
 
-  const text = (name: EventField, type: "text" | "date" | "time" = "text") => {
+  /** A field's error: its message, and the id that describes the field. */
+  const errorOf = (name: EventField) => {
     const error = errors[name];
     const message = error && eventErrorMessage(name, error);
+    return message ? { id: idOf(`${name}-error`), message: t(`errors.${message.key}`, message.values) } : undefined;
+  };
+
+  const text = (name: EventField, type: "text" | "date" | "time" = "text") => {
+    const error = errorOf(name);
     const leg = name.startsWith("aller") ? "aller" : name.startsWith("retour") ? "retour" : undefined;
-    const describedBy = [message && idOf(`${name}-error`), leg && notes[leg] && idOf(`${leg}-note`)].filter(Boolean).join(" ");
+    const describedBy = [error && error.id, leg && notes[leg] && idOf(`${leg}-note`)].filter(Boolean).join(" ");
     return (
       <div className="flex min-w-0 flex-col gap-1.5">
         <Label htmlFor={idOf(name)} className={cn(error && "text-destructive")}>
@@ -178,9 +207,9 @@ export function EventFormFields({
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
         />
-        {message && (
-          <p id={idOf(`${name}-error`)} className="text-[13px] leading-[18px] text-destructive">
-            {t(`errors.${message.key}`, message.values)}
+        {error && (
+          <p id={error.id} className="text-[13px] leading-[18px] text-destructive">
+            {error.message}
           </p>
         )}
       </div>
@@ -190,7 +219,20 @@ export function EventFormFields({
   return (
     <>
       {text("title")}
-      {text("location")}
+      {suggestions ? (
+        <PlaceField
+          id={idOf("location")}
+          label={t("location")}
+          value={{ text: values.location, position: state.locationPosition ?? null, label: state.locationLabel ?? null }}
+          onChange={(value) => !locked && onChange(withLocation(value))}
+          rule="event"
+          locked={locked || sending}
+          readOnly={locked}
+          error={errorOf("location")}
+        />
+      ) : (
+        text("location")
+      )}
       <div className="grid grid-cols-2 gap-3">
         {text("allerDate", "date")}
         {text("allerTime", "time")}

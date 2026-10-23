@@ -26,7 +26,7 @@ describe("sendAction", () => {
   });
 });
 
-const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: null };
+const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: null };
 
 describe("stateOf", () => {
   const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };

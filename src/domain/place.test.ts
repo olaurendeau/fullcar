@@ -34,6 +34,13 @@ describe("positionOf", () => {
     ["an infinite lat", { lat: Number.POSITIVE_INFINITY, lng: 4.6894 }],
     ["an infinite lng", { lat: 45.7581, lng: Number.NEGATIVE_INFINITY }],
     ["a key besides lat and lng", { lat: 45.7581, lng: 4.6894, label: "Brindas" }],
+    ["two other keys, lat and lng inherited", Object.assign(Object.create({ lat: 45.7581, lng: 4.6894 }), { a: 1, b: 2 })],
+    ["an own lat beside another key, lng inherited", Object.assign(Object.create({ lng: 4.6894 }), { lat: 45.7581, label: "x" })],
+    ["an own lng beside another key, lat inherited", Object.assign(Object.create({ lat: 45.7581 }), { lng: 4.6894, label: "x" })],
+    [
+      "two other keys, lat and lng own but not enumerable",
+      Object.defineProperties({ a: 1, b: 2 }, { lat: { value: 45.7581 }, lng: { value: 4.6894 } }),
+    ],
   ])("refuses %s as invalid, without throwing", (_, value) => {
     expect(positionOf(value)).toEqual({ error: "invalid" });
   });
