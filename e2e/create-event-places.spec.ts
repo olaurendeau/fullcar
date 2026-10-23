@@ -194,7 +194,7 @@ test.describe("the place field of « Créer un événement »", () => {
     await expect.poll(async () => (await requestsFor(`Va${rest.join("")}`)).length).toBe(1);
   });
 
-  test("AL1.2, AL1.6: 5 options of 44 px at most, the combobox expanded, the list named; Arrow down makes the first active, by aria-selected, aria-activedescendant and a bar of 3:1", async ({
+  test("AL1.2, AL1.6: 5 options of at least 44 px, the combobox expanded, the list named; Arrow down makes the first active, by aria-selected, aria-activedescendant and a bar of 3:1", async ({
     page,
   }) => {
     const text = textOf("Vaugn");
@@ -229,6 +229,8 @@ test.describe("the place field of « Créer un événement »", () => {
     await answerFor(text, { features: [SALLE, ECOLE, MAIRIE].map(({ feature }) => feature) });
     const sent = creations(page);
     await openForm(page);
+    // The form complete: a creation sent on the tap would not stop at the browser's validation.
+    await fillTheRest(page);
     await typeAndList(page, text, 3);
     await expect(status(page)).toHaveText("3 propositions");
 
