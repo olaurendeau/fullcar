@@ -2,7 +2,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { failHeld, holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
+import { bar as barAlert, failHeld, holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
 import { removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -495,7 +495,7 @@ for (const language of ["fr", "en"] as const) {
       await undoes(page).click();
       await expect(messages(page)).toHaveText([words.failed, words.placed]);
       // Said in `alert` 100 ms after its line, before anything is recorded.
-      await expect(page.locator('[role="status"] + [role="alert"]')).toHaveText(words.failed);
+      await expect(barAlert(page)).toHaveText(words.failed);
       await context.setOffline(false);
       await car(page, "Marc").getByRole("button", { name: words.freeSeat }).first().click();
       await expect(messages(page)).toHaveText([words.failed, words.hugo]);
