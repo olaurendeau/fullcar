@@ -3,9 +3,10 @@ import { useTranslations } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { ContactFooter } from "@/components/contact/contact-footer";
 import { CreateEventForm } from "@/components/event/create-event-form";
+import { publicPageMetadata } from "../site";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return { title: (await getTranslations("NewEvent"))("title") };
+  return { title: (await getTranslations("NewEvent"))("title"), ...publicPageMetadata("/nouveau") };
 }
 
 /** `/nouveau`: the creation form, under its own title (#232, A2.1). */

@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { ContactFooter } from "@/components/contact/contact-footer";
 import { Button } from "@/components/ui/button";
+import { publicPageMetadata } from "./site";
+
+export const metadata: Metadata = publicPageMetadata("/");
 
 /** The three steps of « Comment ça marche », in their order. */
 const STEPS = ["create", "share", "follow"] as const;
