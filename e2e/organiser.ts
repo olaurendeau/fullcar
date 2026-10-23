@@ -249,9 +249,16 @@ function isRouterRead(request: Request): boolean {
   return new URL(request.url()).searchParams.has("_rsc");
 }
 
-/** The favicon (`<link rel="icon">`): the browser's own request, `other` for Playwright, after the page has loaded. */
+/** The app's icons, as a page links them (`<link rel="icon">`) or a browser asks for them. */
+const ICONS = new Set(["/icon.svg", "/favicon.ico"]);
+
+/**
+ * The favicon: the browser's own `GET` of one of the app's icons, `other` for Playwright, after
+ * the page has loaded. Any other `other` request (a prefetch, a preflight, …) is not a file of the
+ * app asked again: its body is the browser's (review of #450).
+ */
 function isFavicon(request: Request): boolean {
-  return request.resourceType() === "other";
+  return request.method() === "GET" && request.resourceType() === "other" && ICONS.has(new URL(request.url()).pathname);
 }
 
 /** A request as it left, answered or not. */

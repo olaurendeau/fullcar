@@ -151,3 +151,15 @@ test("O7.6, O2.8: /e/{id} sends no number of the scene, and shows nothing of the
   await expect(page.getByRole("region", { name: FR.panel })).toHaveCount(0);
   await expect(page.getByText("Lien d’organisateur")).toHaveCount(0);
 });
+
+// #436, review of #450: with no page left at its teardown, `organiserTraffic` opens one to read the
+// origin's `localStorage` (O2.10). A token left there, every page closed, fails the test. The token
+// goes to the page as an argument, never in a title or a message; the failure names the place only.
+test("O2.10: the admin token in `localStorage`, every page closed: the teardown still finds it", async ({ page, seededEvent }) => {
+  test.fail();
+  await page.goto("/icon.svg");
+  await page.evaluate((token) => localStorage.setItem("fullcar:probe", token), seededEvent.token);
+  const context = page.context();
+  for (const each of context.pages()) await each.close();
+  expect(context.pages().length).toBe(0);
+});
