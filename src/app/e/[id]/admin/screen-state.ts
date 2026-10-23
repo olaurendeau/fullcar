@@ -1,4 +1,4 @@
-import { whyOf, type Why } from "@/components/event/failure-words";
+import { whyOf, type NotDone, type Why } from "@/components/event/failure-words";
 import type { LegCounts } from "@/db/legs";
 import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
@@ -178,22 +178,24 @@ function isHeader(value: unknown): value is EventHeader {
 const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
 /**
- * Why the change was not done, once its sheet is closed (« Une réponse qui arrive feuille
- * fermée », M2.8, M2.9): after `Actions.notDone.editEvent`, in the bar. `invalid`, which only a
- * forged request gets, takes the generic reason (decision 46).
+ * What the change did not do, then why, once its sheet is closed (« Une réponse qui arrive
+ * feuille fermée », M2.8, M2.9), in the bar. A `removal` confirmed did not remove the retour
+ * either, and new numbers are said with what to use again (M3.7). `invalid`, which only a forged
+ * request gets, takes the generic reason (decision 46).
  */
-export function editWhy(answer: Exclude<EditAnswer, { kind: "saved" }>): Why {
+export function editFailure(answer: Exclude<EditAnswer, { kind: "saved" }>, removal: boolean): { notDone: NotDone; why: Why } {
+  const notDone: NotDone = { kind: removal ? "removeRetour" : "editEvent" };
   switch (answer.kind) {
     case "problem":
-      return whyOf(answer.problem);
+      return { notDone, why: whyOf(answer.problem) };
     case "refused":
-      return whyOf(answer.reason);
+      return { notDone, why: whyOf(answer.reason) };
     case "errors":
-      return whyOf("editErrors");
+      return { notDone, why: whyOf("editErrors") };
     case "changed":
-      return whyOf("eventChanged");
+      return { notDone, why: whyOf("eventChanged") };
     case "confirmRetour":
-      return whyOf("retourNotConfirmed");
+      return { notDone, why: removal ? { kind: "retourChanged", ...answer.counts, where: "bar" } : whyOf("retourNotConfirmed") };
   }
 }
 

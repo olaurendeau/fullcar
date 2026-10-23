@@ -11,7 +11,7 @@ import {
   alertShown,
   announcement,
   editAnswer,
-  editWhy,
+  editFailure,
   listKey,
   panelRead,
   screenRead,
@@ -332,7 +332,9 @@ describe("editAnswer", () => {
 
 // M2.8, M2.9, C11.11 amended: the sheet closed before the answer, the bar says what was not done,
 // then why, word for word as the table « Chaque échec de la v3.3, mot pour mot » has it.
-describe("editWhy: « Modifier l’événement », the sheet closed before the answer", () => {
+// M3.7 (#273): a removal confirmed, its confirmation closed after 10 s, then the sheet: the same,
+// with what the removal did not do, and the numbers of a retour changed meanwhile.
+describe("editFailure: the sheet closed before the answer, word for word", () => {
   const event = { title: "Tournoi de Rennes U13", location: "Gymnase", allerAt: "2026-12-12 14:00:00", retourAt: null };
   const words = (locale: "fr" | "en") =>
     wordsOf(createTranslator<Messages>({ locale, messages: locale === "fr" ? fr : en }), createFormatter({ locale }));
@@ -347,24 +349,34 @@ describe("editWhy: « Modifier l’événement », the sheet closed before the a
     "`errors`": [{ kind: "errors", errors: { allerDate: "tooEarly" } }],
     "`changed`": [{ kind: "changed", event }],
     "`confirmRetour`": [{ kind: "confirmRetour", counts: { cars: 2, persons: 9 } }],
+    "`confirmRetour` (nombres changés : 3 voitures, 10 personnes)": [{ kind: "confirmRetour", counts: { cars: 3, persons: 10 } }],
   };
   const readme = readFileSync(new URL("../../../../../docs/design/organizer-view/README.md", import.meta.url), "utf8").split("\n");
-  const table = readme
-    .filter((line) => /^\|\s+« Modifier l’événement », feuille fermée pendant l’envoi \|/.test(line))
-    .map((line) => line.split("|").map((cell) => cell.trim()))
-    .map(([, , failure, fr, en]) => ({ failure, fr, en }));
+  const rows = (action: string) =>
+    readme
+      .filter((line) => line.startsWith(`|  ${action} |`))
+      .map((line) => line.split("|").map((cell) => cell.trim()))
+      .map(([, , failure, fr, en]) => ({ failure, fr, en }));
 
-  it("reads the six rows, and knows each failure", () => {
-    expect(table.map((row) => row.failure)).toEqual(Object.keys(ANSWERS));
-  });
+  const FAILURES = ["hors ligne", "erreur serveur (500, réseau), `invalid`", "`eventNotFound`", "`errors`", "`changed`"];
+  for (const [action, removal, last] of [
+    ["« Modifier l’événement », feuille fermée pendant l’envoi", false, "`confirmRetour`"],
+    ["« Supprimer le retour », confirmation fermée après 10 s, puis feuille fermée", true, "`confirmRetour` (nombres changés : 3 voitures, 10 personnes)"],
+  ] as const) {
+    const table = rows(action);
 
-  for (const { failure, fr: inFrench, en: inEnglish } of table) {
-    for (const answer of ANSWERS[failure] ?? []) {
-      it(`${failure}: ${answer.kind}`, () => {
-        const why = editWhy(answer as Exclude<EditAnswer, { kind: "saved" }>);
-        expect(failureText(words("fr"), { kind: "editEvent" }, why)).toBe(inFrench);
-        expect(failureText(words("en"), { kind: "editEvent" }, why)).toBe(inEnglish);
-      });
+    it(`${action}: reads its six rows, one per failure, in the table's order`, () => {
+      expect(table.map((row) => row.failure)).toEqual([...FAILURES, last]);
+    });
+
+    for (const { failure, fr: inFrench, en: inEnglish } of table) {
+      for (const answer of ANSWERS[failure] ?? []) {
+        it(`${action}, ${failure}: ${answer.kind}`, () => {
+          const { notDone, why } = editFailure(answer as Exclude<EditAnswer, { kind: "saved" }>, removal);
+          expect(failureText(words("fr"), notDone, why)).toBe(inFrench);
+          expect(failureText(words("en"), notDone, why)).toBe(inEnglish);
+        });
+      }
     }
   }
 });

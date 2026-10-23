@@ -21,7 +21,8 @@ export type NotDone =
   | { kind: "removeRide"; driver: string; leg: Leg }
   | { kind: "editRide"; driver: string; leg: Leg }
   | { kind: "readDevice" }
-  | { kind: "editEvent" };
+  | { kind: "editEvent" }
+  | { kind: "removeRetour" };
 
 /** The reasons said by their key alone; the last three, of « Modifier l’événement » closed before its answer (v3.3.2). */
 type Plain =
@@ -46,7 +47,9 @@ export type Why =
   | { kind: "passengerInCar"; names: readonly string[] }
   | { kind: "drives"; firstName: string; leg: Leg }
   | { kind: "alreadyDriving"; driver: string }
-  | { kind: "noRetourAgain"; action: "offerRide" | "addPerson" };
+  | { kind: "noRetourAgain"; action: "offerRide" | "addPerson" }
+  /** The retour changed while its removal was confirmed (M3.7): what to use again, `where` the answer is said. */
+  | { kind: "retourChanged"; cars: number; persons: number; where: "sheet" | "bar" };
 
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
