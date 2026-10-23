@@ -7,7 +7,7 @@ import { expect, test as base } from "./fixtures";
 import { placeOf } from "./ign";
 
 /*
- * #479, event-map v11: the map without animation (CA1.10), and at touch (CA1.11). The project
+ * #479, event-map v13 (CA1.10 as amended after #479): the map without animation (CA1.10), and at touch (CA1.11). The project
  * `e2e` is a Pixel 7, touch-enabled (`hasTouch`, `isMobile`): each test checks it first, and the
  * mouse half runs in a context of its own, without touch. The fake IGN answers its default
  * tile: no test here sets one.
@@ -164,6 +164,7 @@ test.describe("the map, at touch", () => {
       return running;
     });
     await map.getByRole("button", { name: "Zoom avant", exact: true }).click();
+    expect(await still(map)).toBe(true);
     await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/15/"]').first()).toBeVisible();
     await twoFrames(page);
     await expect(animated).toHaveCount(0);
