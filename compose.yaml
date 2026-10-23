@@ -31,6 +31,8 @@ services:
       # 429 or 500 does not leave the others without suggestions.
       PHOTON_URL: http://photon:2322/api/
       PLACES_BREAKER_MS: "0"
+      # The slot's fake IGN, never the Géoplateforme.
+      IGN_WMTS_URL: http://ign:2324/wmts
     ports:
       # Loopback only: the slot's app and data are not offered to the local network.
       - "127.0.0.1:30${SLOT:-0}0:3000"
@@ -38,6 +40,8 @@ services:
       db:
         condition: service_healthy
       photon:
+        condition: service_healthy
+      ign:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
@@ -54,6 +58,19 @@ services:
     environment: {}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:2323/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  # A fake of the IGN's WMTS (e2e/fake-ign.mjs), a plain tile unless a test sets another
+  # answer for a tile on its control port. Reached only by name inside the slot: no port is
+  # published on the host.
+  ign:
+    <<: *node
+    command: node e2e/fake-ign.mjs
+    environment: {}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:2325/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 1s
       timeout: 3s
       retries: 30
@@ -87,11 +104,15 @@ services:
       DATABASE_URL: postgres://fullcar:fullcar@db:5432/fullcar
       # The fake Photon's control port (e2e/photon.ts).
       PHOTON_CONTROL_URL: http://photon:2323
+      # The fake IGN's control port (e2e/ign.ts).
+      IGN_CONTROL_URL: http://ign:2325
       HOME: /tmp
       CI: ${CI:-}
-    # `make e2e` serves `web` with --no-deps: running `e2e` is what starts the fake Photon.
+    # `make e2e` serves `web` with --no-deps: running `e2e` is what starts the fake Photon and the fake IGN.
     depends_on:
       photon:
+        condition: service_healthy
+      ign:
         condition: service_healthy
     ipc: host
     profiles: [tools]

@@ -19,9 +19,10 @@ const OPTIONS = ["boosters", "participation", "stops"] as const;
 const noSubscription = () => () => {};
 
 /**
- * The creation form of the home page (#3, R1 to R3). The browser checks the fields
- * against the device's date, the server checks them again, and either way the errors show
- * by their field. On success, the action's answer goes to `goToAdminLink`, and nowhere else.
+ * The creation form of the home page (#3, R1 to R3), its place with suggestions (#428). The
+ * browser checks the fields against the device's date, the server checks them again, and
+ * either way the errors show by their field. On success, the action's answer goes to
+ * `goToAdminLink`, and nowhere else.
  */
 export function CreateEventForm() {
   const t = useTranslations("CreateEvent");
@@ -43,7 +44,8 @@ export function CreateEventForm() {
   // Set at once, unlike `sending`: a second tap before the next render sends nothing (C1.11).
   const inFlight = useRef(false);
 
-  const fields: EventFields = { ...eventFields.values, ...options };
+  // The place and its position go together, `null` without one (« Un lieu, une valeur »).
+  const fields: EventFields = { ...eventFields.values, locationPosition: eventFields.locationPosition ?? null, ...options };
 
   function showErrors(found: EventErrors) {
     setErrors(found);
@@ -76,7 +78,7 @@ export function CreateEventForm() {
 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-4">
-      <EventFormFields idOf={idOf} state={eventFields} errors={errors} onChange={setEventFields} />
+      <EventFormFields idOf={idOf} state={eventFields} errors={errors} onChange={setEventFields} suggestions sending={sending} />
       <div role="group" aria-labelledby={idOf("options")} className="flex flex-col gap-1 rounded-xl border px-3.5 py-2">
         <span id={idOf("options")} className="pt-1.5 text-sm font-semibold">
           {t("options")}

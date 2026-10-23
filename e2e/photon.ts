@@ -4,12 +4,20 @@
  * as it runs: each test picks texts of its own (the app's cache keeps an answer an hour too).
  */
 
-/** The properties of a Photon feature, as its API documents them. */
+/** The properties of a Photon feature, as its API documents them and sends them. */
 export type PhotonProperties = {
+  osm_type?: string;
+  osm_id?: number;
+  osm_key?: string;
+  osm_value?: string;
+  /** The bounding box of a street or an area: `[minLon, maxLat, maxLon, minLat]`. */
+  extent?: [number, number, number, number];
   name?: string;
   housenumber?: string;
   street?: string;
   postcode?: string;
+  locality?: string;
+  district?: string;
   city?: string;
   county?: string;
   state?: string;
