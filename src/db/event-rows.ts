@@ -1,6 +1,7 @@
 import type { Kysely } from "kysely";
 import type { BoardRows } from "@/domain/board";
 import type { PhonesById } from "@/domain/phone-visibility";
+import type { Position } from "@/domain/place";
 import type { Database } from "./schema";
 
 /**
@@ -19,6 +20,11 @@ export interface EventRows extends BoardRows {
  */
 const PERSON_COLUMNS = ["id", "first_name", "phone"] as const;
 
+/** The position stored with a place: both columns or neither (`ride_location_position_pair`). */
+function storedPosition(lat: number | null, lng: number | null): Position | null {
+  return lat === null || lng === null ? null : { lat, lng };
+}
+
 /** Everything of one event's persons, Rides and Placements, both legs; nothing of another event. */
 export async function readEventRows(db: Kysely<Database>, eventId: string): Promise<EventRows> {
   const persons = await db
@@ -30,7 +36,7 @@ export async function readEventRows(db: Kysely<Database>, eventId: string): Prom
     .execute();
   const rides = await db
     .selectFrom("ride")
-    .select(["id", "leg", "driver_id", "location", "departure_time", "seats", "note"])
+    .select(["id", "leg", "driver_id", "location", "departure_time", "seats", "note", "location_lat", "location_lng"])
     .where("event_id", "=", eventId)
     .orderBy("created_at")
     .orderBy("id")
@@ -54,6 +60,7 @@ export async function readEventRows(db: Kysely<Database>, eventId: string): Prom
       departureTime: row.departure_time,
       seats: row.seats,
       note: row.note,
+      position: storedPosition(row.location_lat, row.location_lng),
     })),
     placements: placements.map((row) => ({
       personId: row.person_id,

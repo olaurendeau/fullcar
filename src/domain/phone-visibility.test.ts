@@ -53,7 +53,7 @@ function placed(personId: string, leg: Leg, rideId: string | null): PlacementRow
 }
 
 function ride(id: string, leg: Leg, driverId: string, departureTime: RideRow["departureTime"]): RideRow {
-  return { id, leg, driverId, location: "Gymnase", departureTime, seats: 3, note: null };
+  return { id, leg, driverId, location: "Gymnase", departureTime, seats: 3, note: null, position: null };
 }
 
 /**
@@ -78,6 +78,8 @@ const ROWS: BoardRows = {
     placed("zoe", "retour", null),
   ],
 };
+
+const GYMNASE = { lat: 48.85661, lng: 2.35222 };
 
 function visibleFor(device: string[]) {
   const deviceIds = new Set(device);
@@ -176,6 +178,18 @@ describe("withVisiblePhones", () => {
     const [allerBoard, retourBoard] = visibleFor(device);
     expect(sentNumbers(allerBoard).sort()).toEqual([...aller].sort());
     expect(sentNumbers(retourBoard).sort()).toEqual([...retour].sort());
+  });
+
+  it("a car's position, or null, arrives in the visible car", () => {
+    const rows: BoardRows = { ...ROWS, rides: ROWS.rides.map((row) => (row.id === "r1" ? { ...row, position: GYMNASE } : row)) };
+    const deviceIds = new Set(["lea"]);
+    const [aller] = withVisiblePhones(buildBoard(rows, ["aller"], deviceIds), PHONES, deviceIds);
+    expect(aller.cars.map((card) => [card.id, card.position])).toStrictEqual([
+      ["r1", GYMNASE],
+      ["r2", null],
+    ]);
+    // The key survives serialization: a car without a position says so.
+    expect(JSON.parse(JSON.stringify(aller.cars[1]))).toHaveProperty("position", null);
   });
 
   it("leaves the board it is given without any number", () => {
@@ -354,6 +368,7 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
       location: "Gymnase",
       departureTime: "07:00:00",
       note: null,
+      position: null,
       seats: 3,
       passengers: [
         { id: "lea", firstName: "lea" },
@@ -364,6 +379,18 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
       driverHasPhone: true,
     });
     expect(board[0].withoutCar).toStrictEqual([{ id: "tom", firstName: "tom", phone: "+33 6 33 33 33 33" }]);
+  });
+
+  it("a car's position, or null, arrives in the organiser's car", () => {
+    const rows = sceneWithEve("a driver");
+    const located: BoardRows = { ...rows, rides: rows.rides.map((row) => (row.id === "r2" ? { ...row, position: GYMNASE } : row)) };
+    const [aller, retour] = organiserBoard(located, RIGHT) ?? [];
+    expect(aller.cars.map((card) => [card.id, card.position])).toStrictEqual([
+      ["r1", null],
+      ["r2", GYMNASE],
+    ]);
+    expect(retour.cars.map((card) => [card.id, card.position])).toStrictEqual([["r3", null]]);
+    expect(JSON.parse(JSON.stringify(aller.cars[0]))).toHaveProperty("position", null);
   });
 
   it("does not take the device's section: only the leg, its cars and its list without a car", () => {

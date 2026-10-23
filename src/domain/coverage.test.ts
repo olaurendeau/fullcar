@@ -3,7 +3,7 @@ import { legBoard, type BoardRows, type PlacementRow, type RideRow } from "./boa
 import { coverage, coverageBanner, hasBanner } from "./coverage";
 
 function ride(id: string, driverId: string, seats: number): RideRow {
-  return { id, leg: "aller", driverId, location: "Gymnase", departureTime: "07:30:00", seats, note: null };
+  return { id, leg: "aller", driverId, location: "Gymnase", departureTime: "07:30:00", seats, note: null, position: null };
 }
 
 function placed(personId: string, rideId: string | null, leg: RideRow["leg"] = "aller"): PlacementRow {
