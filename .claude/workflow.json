@@ -35,16 +35,12 @@
     "sensitive_paths": [
       ".github/**",
       ".claude/**",
-      "docs/agents/**",
+      "docs/agents/review-checklist.md",
       "**/migrations/**",
       "src/domain/phone-visibility.ts",
       "src/db/event-rows.ts",
       "package.json",
       "package-lock.json",
-      "compose.yaml",
-      "compose.*.y*ml",
-      "compose.override.*",
-      "docker-compose*",
       ".env*",
       "**/.env*",
       "vercel.json",
@@ -58,9 +54,7 @@
       ".dockerignore",
       "docker/**",
       "tsconfig.json",
-      "eslint.config.*",
-      "vitest.config.*",
-      "playwright.config.*"
+      "eslint.config.*"
     ],
     "sensitive_patterns": [
       {
@@ -73,7 +67,7 @@
         ]
       },
       {
-        "regex": "(?i)token_?hash|newAdminToken|hashAdminToken|adminTokenMatches|hashToken|tokenMatches|personalTokenFromBytes|tokenInFragment|readDeviceToken|ensureDeviceToken|\\binsertEvent\\s*\\(|\\b(get|set|remove)Item\\s*\\(|[\"'`]token[\"'`]|[\"'`][^\"'`\\s/]*[-_]token[\"'`]|\\$\\{[^}]*token\\b[^}]*\\}|\\+=?\\s*[\\w.]*token\\b|\\b(console|logger|log)\\.\\w+\\s*\\(.*token\\b|\\b(console|logger)\\.\\w+\\s*\\(\\s*$|URLSearchParams|searchParams\\.(set|append)|localStorage|sessionStorage|location\\.hash|location\\.href|split\\(\\s*[\"'`]#|\\.hash\\b|\\breferrer|Referrer-Policy|cookies\\(\\)|\\.cookies\\.(set|delete)|cookieStore|document\\.cookie|Set-Cookie",
+        "regex": "(?i)token_?hash|newAdminToken|hashAdminToken|adminTokenMatches|hashToken|tokenMatches|personalTokenFromBytes|tokenInFragment|readDeviceToken|ensureDeviceToken|\\binsertEvent\\s*\\(|\\b(get|set|remove)Item\\s*\\(|[\"'`]token[\"'`]|[\"'`][^\"'`\\s/]*[-_]token[\"'`]|\\$\\{[^}]*token\\b[^}]*\\}|\\+=?\\s*[\\w.]*token\\b|\\b(console|logger|log)\\.\\w+\\s*\\(.*token\\b|\\b(console|logger)\\.\\w+\\s*\\(\\s*$|URLSearchParams|searchParams\\.(set|append)|localStorage|sessionStorage|location\\.hash|location\\.href|split\\(\\s*[\"'`]#|cookies\\(\\)|\\.cookies\\.(set|delete)|cookieStore|document\\.cookie|Set-Cookie",
         "exclude": [
           "docs/design/**",
           "e2e/**",

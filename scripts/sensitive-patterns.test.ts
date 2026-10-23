@@ -163,7 +163,6 @@ describe("sensitive patterns: tokens", () => {
     'headers.set("x.admin-token", token);',
     "const value = body['token'];",
     "const fragment = location.hash;",
-    "const fragment = url.hash;",
     "const link = `/e/${id}/admin#${token}`;",
     "const link = `/e/${id}/moi#${ token }`;",
     // A token named `token` outside a string, logged or in a URL.
@@ -203,7 +202,6 @@ describe("sensitive patterns: tokens", () => {
     "const qs = new URLSearchParams({ token }).toString();",
     'const [, token] = page.url().split("#");',
     "localStorage.setItem(key, value);",
-    'headers.set("Referrer-Policy", "no-referrer");',
     "const jar = await cookies();",
     // The fragment handled without being named: the whole URL, or the URL cut at `#`.
     'console.error("save failed", window.location.href);',
@@ -211,11 +209,6 @@ describe("sensitive patterns: tokens", () => {
     'const fragment = page.url().split("#")[1];',
     "const [, secret] = url.split( '#' );",
     "const [, secret] = url.split(`#`);",
-    // What decides whether the URL, fragment aside, leaves with the referrer.
-    'export const metadata = { referrer: "unsafe-url" };',
-    '<meta name="referrer" content="origin" />',
-    '<a href={url} referrerPolicy="unsafe-url">',
-    "const from = document.referrer;",
   ])("flags %s", (line) => {
     expect(isSensitive(line)).toBe(true);
   });
@@ -254,8 +247,48 @@ describe("sensitive patterns: tokens", () => {
     'import { useDevice } from "./device-token";',
     // Decision (#191): a new rights check on the personal token is the coordinator's to merge.
     "const ids = devicePersonIds(secret, holders);",
+    // Decision (23/10, the owner): `.hash`, `referrer` and `Referrer-Policy` caught more false
+    // positives than tokens. The pages' Referrer-Policy header is set in next.config.ts, a
+    // sensitive path, and the review checklist requires it.
+    'url.hash = "";',
+    "const fragment = url.hash;",
+    "// le referrer de la page n'emporte pas le fragment",
+    'headers.set("Referrer-Policy", "no-referrer");',
+    'export const metadata = { referrer: "unsafe-url" };',
+    '<meta name="referrer" content="origin" />',
+    '<a href={url} referrerPolicy="unsafe-url">',
+    "const from = document.referrer;",
   ])("ignores %s", (line) => {
     expect(isSensitive(line)).toBe(false);
+  });
+});
+
+// Decision (23/10, the owner): the test infrastructure and the agents' documents, the review
+// checklist aside, are the coordinator's to merge; the build and its images stay the human's.
+describe("sensitive paths: infrastructure and agent documents", () => {
+  it.each([
+    "Makefile",
+    "Dockerfile",
+    "Dockerfile.dev",
+    ".dockerignore",
+    "docker/postgres/init.sql",
+    "docs/agents/review-checklist.md",
+  ])("sends any change to %s to the human", (path) => {
+    expect(isSensitivePath(path)).toBe(true);
+  });
+
+  it.each([
+    "compose.yaml",
+    "compose.dev.yaml",
+    "compose.override.yml",
+    "docker-compose.yml",
+    "playwright.config.ts",
+    "vitest.config.ts",
+    "docs/agents/architecture.md",
+    "docs/agents/product.md",
+    "docs/agents/glossary.md",
+  ])("leaves %s to the gate's other rules", (path) => {
+    expect(isSensitivePath(path)).toBe(false);
   });
 });
 
