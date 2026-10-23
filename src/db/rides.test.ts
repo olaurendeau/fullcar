@@ -27,9 +27,17 @@ function aRide(eventId: string, driverId: string, fields: Partial<NewRide> = {})
     departureTime: "07:15:00",
     seats: 3,
     note: null,
+    position: null,
     ...fields,
   };
 }
+
+/** Where a Ride is, as the database holds it. */
+async function positionOf(trx: Kysely<Database>, id: string) {
+  return trx.selectFrom("ride").select(["location_lat", "location_lng"]).where("id", "=", id).executeTakeFirstOrThrow();
+}
+
+const VAUGNERAY = { lat: 45.73711, lng: 4.65622 };
 
 async function ridesOf(trx: Kysely<Database>, eventId: string) {
   return trx
@@ -50,6 +58,27 @@ describe("insertRide", () => {
       expect(await insertRide(trx, { ...ride, location: "Ailleurs", seats: 8 })).toEqual(ride);
       const { id, leg, location, departureTime: departure_time, seats, note } = ride;
       expect(await ridesOf(trx, eventId)).toEqual([{ id, leg, driver_id: driverId, location, departure_time, seats, note }]);
+    });
+  });
+
+  it("AL4.3: stores the position, and returns the one stored when the id is sent again", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      const ride = aRide(eventId, driverId, { position: VAUGNERAY });
+      expect(await insertRide(trx, ride)).toEqual(ride);
+      expect(await insertRide(trx, { ...ride, position: null })).toEqual(ride);
+      expect(await positionOf(trx, ride.id)).toEqual({ location_lat: 45.73711, location_lng: 4.65622 });
+    });
+  });
+
+  it("stores no position, and returns none, for a place typed by hand", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      const ride = aRide(eventId, driverId);
+      expect(await insertRide(trx, ride)).toEqual(ride);
+      expect(await positionOf(trx, ride.id)).toEqual({ location_lat: null, location_lng: null });
     });
   });
 
@@ -126,12 +155,12 @@ describe("a Ride named with another event", () => {
 });
 
 describe("lockRide", () => {
-  it("returns the ride's seats and driver, and nothing for an unknown ride or another leg", async () => {
+  it("returns the ride's seats, driver and place, and nothing for an unknown ride or another leg", async () => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       const { id: driverId } = await seedPerson(trx, eventId);
       const id = await seedRide(trx, eventId, driverId, { seats: 4 });
-      expect(await lockRide(trx, { id, eventId, leg: "aller" })).toEqual({ id, driverId, seats: 4 });
+      expect(await lockRide(trx, { id, eventId, leg: "aller" })).toEqual({ id, driverId, seats: 4, location: "Mairie de Cesson" });
       expect(await lockRide(trx, { id, eventId, leg: "retour" })).toBeUndefined();
       expect(await lockRide(trx, { id: randomUUID(), eventId, leg: "aller" })).toBeUndefined();
     });
@@ -166,6 +195,34 @@ describe("updateRide", () => {
       const [stored, untouched] = await ridesOf(trx, eventId);
       expect(stored).toMatchObject({ id: aller, location: "Gare", departure_time: "18:30:00", seats: 2, note: "Pas de bagages" });
       expect(untouched).toMatchObject({ id: retour, location: "Mairie de Cesson", departure_time: "07:15:00", seats: 3 });
+    });
+  });
+
+  it("AL3.6: writes the position given, null included, and leaves it as it is when none is given", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      const id = await seedRide(trx, eventId, driverId);
+      const ref = { id, eventId, leg: "aller" as const };
+      expect(await updateRide(trx, ref, { location: "Mairie", position: VAUGNERAY })).toBe(true);
+      expect(await positionOf(trx, id)).toEqual({ location_lat: 45.73711, location_lng: 4.65622 });
+      expect(await updateRide(trx, ref, { seats: 2 })).toBe(true);
+      expect(await positionOf(trx, id)).toEqual({ location_lat: 45.73711, location_lng: 4.65622 });
+      expect(await updateRide(trx, ref, { position: null })).toBe(true);
+      expect(await positionOf(trx, id)).toEqual({ location_lat: null, location_lng: null });
+    });
+  });
+});
+
+describe("seedRide", () => {
+  it("stores no position unless the test gives one", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      const plain = await seedRide(trx, eventId, driverId);
+      const placed = await seedRide(trx, eventId, driverId, { leg: "retour", position: VAUGNERAY });
+      expect(await positionOf(trx, plain)).toEqual({ location_lat: null, location_lng: null });
+      expect(await positionOf(trx, placed)).toEqual({ location_lat: 45.73711, location_lng: 4.65622 });
     });
   });
 });

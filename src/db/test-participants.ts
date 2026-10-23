@@ -37,7 +37,10 @@ export async function seedPerson(
   return { id: person.id, token };
 }
 
-/** Stores a Ride driven by `driverId`, on the aller with 3 seats unless `fields` says otherwise. */
+/**
+ * Stores a Ride driven by `driverId`, on the aller with 3 seats and no position unless
+ * `fields` says otherwise.
+ */
 export async function seedRide(
   db: Kysely<Database>,
   eventId: string,
@@ -51,6 +54,7 @@ export async function seedRide(
     departureTime: "07:15:00",
     seats: 3,
     note: null,
+    position: null,
     ...fields,
     eventId,
     driverId,

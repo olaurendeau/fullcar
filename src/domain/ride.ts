@@ -4,6 +4,7 @@
  * C6.5), and who boards a car as it is offered (C4.13). Pure functions: the caller reads
  * the Ride under its lock, then writes what they decide.
  */
+import type { Position } from "./place";
 import { optionalText, text, type TextError } from "./text";
 import { isWallTime, type WallTime } from "./wall-clock";
 
@@ -107,6 +108,25 @@ export function validateRideChange(fields: RideFields) {
   if (!checked.ok) return checked;
   const change: Partial<NewRide> = Object.fromEntries(given.map((name) => [name, checked.ride[name]]));
   return { ok: true as const, change };
+}
+
+/**
+ * What a change of a Ride does to its position (AL5.6), decided under the Ride's lock from
+ * the place sent, read by `validateRideChange`, and its position, read by `positionOf`
+ * (`undefined` when not sent), against the place stored:
+ * - the place and its position: both are written, `null` included;
+ * - the place alone (a page from before the deployment): under the same text, the position
+ *   stays as it is (`{}`); under another, it is `null`, since a car's position is always
+ *   that of its text (owner's rule, v3);
+ * - the position alone: `invalid`, as no form sends it (AL6.4).
+ */
+export function ridePositionChange(
+  sent: { location?: string; position?: Position | null },
+  storedLocation: string,
+): { position?: Position | null } | { error: "invalid" } {
+  if (sent.location === undefined) return sent.position === undefined ? {} : { error: "invalid" };
+  if (sent.position !== undefined) return { position: sent.position };
+  return sent.location === storedLocation ? {} : { position: null };
 }
 
 /**
