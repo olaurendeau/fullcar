@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import type { Page, Request } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, messages, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
@@ -11,7 +11,7 @@ leaveNoToken();
 
 // #426: `POST /api/lieux` (place-autocomplete, « La route et Photon ») against the slot's fake
 // Photon, from end to end: what Photon receives (AL6.1), what the route refuses (AL6.4), a slow
-// Photon that holds nothing else of the page (AL2.6), the text in no URL (AL6.3), and the
+// Photon that holds nothing else of the page (AL2.6), a text in the URL not read (AL6.3), and the
 // `Origin` a page of ours really sends.
 
 /** The version deployed, which fullcar's User-Agent names. */
@@ -52,8 +52,8 @@ const LILAS = photonFeature({
 const LILAS_SUGGESTION = { label: "Gymnase des Lilas, 75019 Paris", lat: 48.87654, lng: 2.39321 };
 
 type Answer = { status: number; body: unknown };
-/** The page's window, where AL2.6 notes that the search was answered. */
-type Searched = Window & { searched?: true };
+/** The page's window, where AL2.6 keeps the search's answer once it comes. */
+type Searched = Window & { searched?: unknown };
 
 /**
  * `POST /api/lieux` from the page, as the place field (#428) will send it: a `fetch` of the page's
@@ -129,14 +129,15 @@ test.describe("POST /api/lieux against the fake Photon", () => {
     expect(visitor["x-forwarded-for"]).toBe("203.0.113.7");
     expect(visitor["x-real-ip"]).toBe("203.0.113.7");
     expect(visitor.forwarded).toBe("for=203.0.113.7;proto=https");
-    expect(visitor.cookie).toContain(token);
+    // Booleans only, here and below: a failure must not print the token (#365).
+    expect(visitor.cookie?.includes(token), "the route was sent the cookie holding the token").toBe(true);
     expect(visitor.referer).toContain(seededEvent.id);
 
     const received = await requestsFor(text);
-    expect(received).toHaveLength(1);
+    expect(received.length).toBe(1);
     const [{ headers }] = received;
     for (const name of ["x-forwarded-for", "x-real-ip", "forwarded", "cookie", "referer", "origin"]) {
-      expect(headers[name], name).toBeUndefined();
+      expect(name in headers, `${name} reached Photon`).toBe(false);
     }
     const everything = JSON.stringify(received);
     for (const [what, value] of [
@@ -188,7 +189,7 @@ test.describe("POST /api/lieux against the fake Photon", () => {
     });
   });
 
-  test("AL2.6: a search Photon holds 3 s does not hold a seat taken meanwhile, whose answer comes first", async ({ db, page, seededEvent }) => {
+  test("AL2.6: a search Photon holds 2 s does not hold a seat taken meanwhile, whose answer comes first", async ({ db, page, seededEvent }) => {
     const token = newToken();
     const tom = await seedPerson(db, seededEvent.id, { firstName: "Tom" }, token);
     await seedPlacement(db, { personId: tom.id, eventId: seededEvent.id, leg: "aller", rideId: null });
@@ -196,7 +197,8 @@ test.describe("POST /api/lieux against the fake Photon", () => {
     await seedRide(db, seededEvent.id, sophie.id, { departureTime: "07:00:00" });
     await holdToken(page, seededEvent.id, token);
     const text = textOf("Lent");
-    await answerFor(text, { delayMs: 3000, features: [LILAS] });
+    // Under the route's own 3 s timeout: the late answer is Photon's, not `unavailable`.
+    await answerFor(text, { delayMs: 2000, features: [LILAS] });
 
     await page.goto(`/e/${seededEvent.id}`);
     const seat = page
@@ -204,13 +206,15 @@ test.describe("POST /api/lieux against the fake Photon", () => {
       .getByRole("button", { name: "Place libre : prendre une place dans la voiture de Sophie" })
       .first();
     await expect(seat).toBeEnabled();
-    // Sent and not awaited: `searched` is set when its answer comes.
+    // Sent and not awaited: `searched` is set to its answer when it comes.
     await page.evaluate((text) => {
       void fetch("/api/lieux", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, locale: "fr" }),
-      }).then(() => ((window as Searched).searched = true));
+      })
+        .then((response) => response.json())
+        .then((answer) => ((window as Searched).searched = answer));
     }, text);
     // Photon holds it now: the seat is taken while the search waits.
     await expect.poll(async () => (await requestsFor(text)).length).toBe(1);
@@ -218,28 +222,15 @@ test.describe("POST /api/lieux against the fake Photon", () => {
     await seat.click();
     await expect(messages(page)).toHaveText(["Tom est dans la voiture de Sophie"]);
     expect(await page.evaluate(() => (window as Searched).searched), "the search answered before the seat").toBeUndefined();
-    // The search was held, not lost: it is answered after all.
-    await expect.poll(() => page.evaluate(() => (window as Searched).searched), { timeout: 10_000 }).toBe(true);
+    // The search was held, not lost: Photon's answer comes after all.
+    await expect
+      .poll(() => page.evaluate(() => (window as Searched).searched), { timeout: 10_000 })
+      .toEqual({ state: "ok", suggestions: [LILAS_SUGGESTION] });
   });
 
-  test("AL6.3: the text is in no URL of our origin, and a text in the URL alone is not read", async ({ page, baseURL }) => {
-    const ours = new URL(baseURL!).origin;
-    const text = textOf("12, rue des Lilas, Créteil");
-    await answerFor(text, { features: [LILAS] });
+  // AL6.3, the route's part only: the place field (#428) sends the requests whose URLs AL6.3 is about.
+  test("AL6.3, the route: a text in the URL and not in the body is not read, 400, and Photon is not asked", async ({ page }) => {
     await page.goto("/nouveau");
-    const urls: string[] = [];
-    page.on("request", (request: Request) => void (new URL(request.url()).origin === ours && urls.push(request.url())));
-
-    const answer = await searchFromPage(page, { text, locale: "fr" });
-    expect(answer).toEqual({ status: 200, body: { state: "ok", suggestions: [LILAS_SUGGESTION] } });
-    expect(urls.length).toBeGreaterThan(0);
-    for (const url of urls) {
-      for (const form of [text, encodeURIComponent(text), new URLSearchParams({ q: text }).toString().slice(2), "Lilas"]) {
-        expect(url.includes(form), "the text in a URL of our origin").toBe(false);
-      }
-    }
-
-    // In the URL and not in the body, the text is not a search: 400, and Photon is not asked.
     const elsewhere = textOf("Dans l'URL");
     const query = new URLSearchParams({ text: elsewhere, q: elsewhere, locale: "fr" });
     const refused = await page.evaluate(async (path) => {
