@@ -124,8 +124,10 @@ celui qui écrit le code.
   - dans le navigateur, `startBrowserSentry` passe `stackParser: scriptFramesOnly(…)` à
     `init` (`src/observability/client.ts`). Quand la pile a une frame de script, dont le
     fichier est une URL sans espace, ce parseur ne garde que ces frames-là et celles dont le
-    fichier est `<anonymous>` ou `[native code]`. `allowUrls: [/\/_next\//]` regarde alors la
-    vraie frame du haut (#379) ;
+    fichier est `<anonymous>` ou `[native code]`. Pour une ligne du message sans URL,
+    `allowUrls: [/\/_next\//]` regarde alors la vraie frame du haut (#379). Une ligne avec
+    une URL, comme `    at Marc (https://…/_next/a.js:1:2)`, passe ce parseur : seul
+    `messagesWithoutFrames`, ci-dessous, en retire la frame ;
   - `codeFramesOnly` (`src/observability/options.ts`), posé par `registerServerHooks`
     (`src/observability/server.ts`) et par `startBrowserSentry`, ne garde de chaque erreur
     et de ses causes que deux sortes de frames (#361, #395). Les frames de code ont une
@@ -144,12 +146,16 @@ celui qui écrit le code.
     d'un côté ou de l'autre avec `addEventProcessor` est bloquant. Les deux côtés restent
     ainsi symétriques. Le serveur n'a pas d'`allowUrls`, et seul le test d'enregistrement de
     `src/observability/options.test.ts` y garde ce point.
-    Après la première ligne, il retire du message de chaque erreur et de ses causes toute
-    ligne que le parseur lit comme une frame (#393, #386). Il retire aussi de la pile toute
+    Après la première ligne, `messagesWithoutFrames` retire du message de chaque erreur et de
+    ses causes toute ligne que le parseur lit comme une frame (#393, #386). Le parseur de Node
+    lit `at ` n'importe où dans une ligne : des lignes comme « Le format attendu » ou « Un état
+    incohérent » quittent donc aussi le message. C'est un coût accepté, la vie privée avant le
+    diagnostic, et pas un défaut à relever. `messagesWithoutFrames` retire aussi de la pile toute
     frame que ces lignes se lisent comme, comparée sur sa fonction, son fichier, sa ligne et
     sa colonne (`readAs`, #395, #388). Une ligne sans fichier est comparée sans fichier : le
-    parseur lui donne celui d'une autre ligne. Une de nos vraies frames de même fonction, de
-    même ligne et de même colonne peut alors partir avec elle, un coût accepté. Ce retrait de
+    parseur lui donne celui d'une autre ligne. Une telle ligne retire donc toute frame de même
+    fonction, de même ligne et de même colonne, quel que soit son fichier, une des nôtres
+    comprise. C'est un coût accepté. Ce retrait de
     la pile ne tient que si le texte de la pile contient le message.
 
   Sur le serveur, `databaseErrors` ne garde du `DatabaseError` de pg que son code.
