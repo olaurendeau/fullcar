@@ -88,7 +88,7 @@ contrôle sur le port 2323. Aucun de ses ports n'est publié sur l'hôte : il n'
 par le nom `photon` dans le réseau du slot. `web` y est branché dans **tous** les slots
 (`PHOTON_URL=http://photon:2322/api/`, `PLACES_BREAKER_MS=0`), `make up` compris, dans le
 slot 0 de l'humain aussi : un slot n'appelle jamais l'instance publique. Le faux est vide par
-défaut, et la route répond alors `{ state: "ok", suggestions: [] }` à tout texte. Pour voir des
+défaut, et la route répond alors `{ state: "ok", suggestions: [] }` à tout texte valide. Pour voir des
 propositions en local, on le règle depuis son propre conteneur, avec `docker compose exec`,
 pour un texte que l'application n'a pas encore demandé (son cache garde aussi une réponse
 vide pendant une heure) :
@@ -403,16 +403,20 @@ l'événement (#420), puis les formulaires qui montrent le champ (#428 et suivan
 ### Un lieu, une valeur
 
 `src/domain/place.ts` (#418) : un lieu est **une seule valeur**, `{ text, position }`, où
-`position` vaut `{ lat, lng }` ou `null`. Partout où le code compare, envoie, recopie ou
-vérifie un lieu, c'est ce couple, jamais le texte seul.
+`position` vaut `{ lat, lng }` ou `null`. La position voyage avec son texte : le serveur
+reçoit et écrit le lieu d'une voiture en couple, `location` et `position` (voir « La position
+d'une voiture »).
 
 - `positionOf` lit une position reçue : `null` reste `null` ; un objet de deux nombres finis
   exactement, `lat` entre −90 et 90 et `lng` entre −180 et 180, devient la position arrondie à
   5 décimales (environ un mètre). Tout le reste est `invalid`, pas une exception. `undefined`
   n'est pas une valeur : chaque appelant le lit comme « pas envoyée ».
-- `samePlace` est la **seule comparaison** d'un lieu, côté serveur comme dans les
-  formulaires : même texte et même position (`samePosition`, à 5 décimales). Le même texte
-  avec une autre position est un changement.
+- `samePlace` compare deux lieux : même texte et même position (`samePosition`, à
+  5 décimales) ; le même texte avec une autre position est un changement. Hors de
+  `place.ts`, aucun code de main n'appelle encore `samePlace` ni `samePosition`. **À
+  venir** (#428) : les formulaires, qui compareront un lieu par ce couple. Sur main, la seule
+  décision prise à partir d'un lieu, `ridePositionChange`, compare **le texte seul**, et
+  c'est voulu (voir « La position d'une voiture »).
 - En base (migration `0003_positions`, #417) : `location_lat` et `location_lng`,
   `double precision` nullables, sur `event` et sur `ride`. La base vérifie la paire (les deux
   ou aucune) et les bornes, pas l'arrondi : c'est le domaine qui arrondit, parce que l'égalité
@@ -441,6 +445,10 @@ clé `position`, et une position envoyée est lue par `positionOf`, donc arrondi
     enregistré, la position ne change pas ; sous un autre, elle devient `null`, puisque la
     position d'une voiture est toujours celle de son texte ;
   - `position` seule : `invalid`, qu'aucun formulaire n'envoie.
+
+  La comparaison du texte seul (`sent.location === storedLocation`) est **voulue** : une page
+  d'avant le déploiement n'envoie pas de position, il n'y a donc que le texte à comparer. Ce
+  n'est pas un oubli de `samePlace`, et elle ne se « corrige » pas.
 - **Accès aux données** (`src/db/rides.ts`) : `insertRide` écrit la position et `StoredRide`
   la rend ; `updateRide` n'écrit `location_lat` et `location_lng` que si `position` est
   donnée. `seedRide` (`src/db/test-participants.ts`) crée une voiture sans position, sauf si
@@ -471,9 +479,11 @@ Le navigateur ne joint jamais Photon : il appelle notre route, qui appelle Photo
   personne a tapé.
 - **Ce que Photon reçoit** (`photonQuery`, #423) : `q`, `limit=5`, `lang`, et la zone de
   l'événement en `lat` et `lon` arrondis à **1 décimale** (environ 10 km, `nearOf`) : la
-  position exacte de l'événement ne part jamais. En en-têtes, seulement
-  `User-Agent: fullcar/{version} (+https://github.com/olaurendeau/fullcar)` et `Accept` :
-  rien de la requête du visiteur n'est recopié.
+  position exacte de l'événement ne part jamais. En en-têtes, le code ne pose que
+  `User-Agent: fullcar/{version} (+https://github.com/olaurendeau/fullcar)` et `Accept` ; les
+  autres sont les valeurs par défaut de `fetch` (`accept-language`, `sec-fetch-mode`,
+  `pragma`, `cache-control`, `accept-encoding`), et rien n'est recopié de la requête du
+  visiteur.
 - **Ce qui revient** : `suggestionsOf` fait de la réponse GeoJSON au plus 5 propositions
   `{ label, lat, lng }`, libellées comme la maquette les écrit, sans doublon ni libellé de
   plus de 120 caractères.
@@ -482,8 +492,9 @@ Le navigateur ne joint jamais Photon : il appelle notre route, qui appelle Photo
 
 `src/app/api/lieux/photon.ts` (#424). L'instance publique de komoot ne promet rien :
 `unavailable` est un **état normal**, jamais une exception levée. `createPhoton` crée une
-instance par module, donc par instance serveur : son cache, son plafond et son disjoncteur
-vivent autant qu'elle.
+instance à chaque appel ; `route.ts` l'appelle une seule fois, au chargement du module, d'où
+une instance par instance serveur : son cache, son plafond et son disjoncteur vivent autant
+qu'elle.
 
 - **Cache** : en mémoire, 500 entrées, 1 h, la moins récemment lue sortie la première. Clé
   (`cacheKey`) : le texte en minuscules et ses espaces réduits, la langue, la zone. Seules les
@@ -585,7 +596,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | cas d'usage de l'événement | `src/app/e/[id]/*.ts` (précédent : `src/app/e/[id]/event.ts`) | reçoivent `db` en paramètre, composent le domaine et l'accès aux données ; testés avec `withRollback`, comme une fonction d'accès aux données |
 | jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur |
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones |
-| lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position, `samePlace` est la seule comparaison d'un lieu |
+| lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position ; `samePlace` compare deux lieux (texte et position), mais aucun code de main ne l'appelle encore (à venir, #428) |
 | propositions de lieux | `src/domain/suggestion.ts` ; `src/app/api/lieux/` (`route.ts`, `handle.ts`, `photon.ts`), à partir de #425 | le domaine lit la requête, écrit l'URL de Photon et les libellés ; la route n'exporte que `POST` ; seul `photon.ts` appelle Photon, avec son cache, son plafond et son disjoncteur (voir « Auto-complétion des lieux ») |
 | champ de lieu | `src/components/event/place-field-state.ts` et `place-search.ts`, à partir de #427 | l'état du champ en fonctions pures, et la seule requête du navigateur vers `/api/lieux` |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
@@ -638,9 +649,10 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
 - **i18n** : aucune chaîne visible en dur dans une vue. FR et EN livrées ensemble, une clé
   manquante fait échouer la vérification.
 - **360 px** : la largeur de référence, pas un cas limite.
-- **Un lieu, une valeur** : un lieu est le couple `{ text, position }`, comparé par
-  `samePlace`, jamais le texte seul ; la position d'une voiture est toujours celle de son
-  texte (voir « Auto-complétion des lieux »).
+- **Un lieu, une valeur** : un lieu est le couple `{ text, position }`, et sa position voyage
+  avec son texte ; la position d'une voiture est toujours celle de son texte. Exception
+  voulue : `ridePositionChange` compare le texte seul quand une page d'avant le déploiement
+  n'envoie pas de position (voir « Auto-complétion des lieux »).
 - **Aucun tiers depuis le navigateur** : Photon n'est appelé que par notre serveur.
 - **Options** : désactivée, une option est **absente** de l'UI, pas grisée. Le code ne doit
   pas supposer qu'une option est active.
