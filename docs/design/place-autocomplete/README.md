@@ -3,7 +3,7 @@
 - Artifact : https://claude.ai/artifact/SNnDuNTwkRzc4fTMxarjnT
 - Issue : https://github.com/olaurendeau/fullcar/issues/237 (prérequis de #238, maquette `event-map`)
 - Page : `index.html` (autonome ; maquettes à 360 px de large, et un navigateur de 1280 px à taille réelle)
-- Version : v5 (v4 approuvée, cinq corrections ; v4 : re-revue de la v3 ; v3 : décision du propriétaire sur les lieux de voiture ; v2 : revue de design de la v1)
+- Version : v6 (v5 approuvée ; correction de texte #453, disjoncteur selon #448 ; v5 : cinq corrections ; v4 : re-revue de la v3 ; v3 : décision du propriétaire sur les lieux de voiture ; v2 : revue de design de la v1)
 
 ## Décisions du propriétaire (2026-10-23)
 
@@ -85,7 +85,7 @@ Les libellés des champs ne changent pas. « Envoi en cours… » / “Sending�
 
 - `POST /api/lieux`, corps `{ text, locale, near? }` de 1 Ko au plus. Refus sans appel : 405 (autre méthode), 403 (`Origin` qui n'est pas le nôtre), 400 `{ state: "invalid" }`. Réponse 200 `no-store` : `{ state: "ok", suggestions }` ou `{ state: "unavailable" }`.
 - Vers Photon (`PHOTON_URL`) : `q`, `limit=5`, `lang`, et pour une voiture `lat`/`lon` à 1 décimale. User-Agent `fullcar/{version} (+https://github.com/olaurendeau/fullcar)`. Ni IP du visiteur, ni cookie, ni `Referer`, ni identifiant, ni jeton.
-- Bon citoyen : 3 caractères, 300 ms, une requête à la fois (`AbortController`), 5 résultats ; cache en mémoire (500 entrées, 1 h) ; disjoncteur de 60 s (`PLACES_BREAKER_MS`, ou `Retry-After`) après un 429, un 5xx ou 3 s ; 5 appels par seconde au plus par instance.
+- Bon citoyen : 3 caractères, 300 ms, une requête à la fois (`AbortController`), 5 résultats ; cache en mémoire (500 entrées, 1 h) ; disjoncteur après un 429, un 5xx ou 3 s : si `breakerMs` (`PLACES_BREAKER_MS`, 60 000 par défaut) vaut 0, il ne s'ouvre jamais ; sinon il s'ouvre pour `Retry-After` borné entre `breakerMs` et 1 h, et tout `Retry-After` absent ou qui n'est ni un entier positif ou nul de secondes ni une date IMF-fixdate valide (formes obsolètes comprises) donne `breakerMs` (décision du coordinateur sur #448) ; 5 appels par seconde au plus par instance.
 - Rien n'est journalisé du texte ni de la réponse. Sentry : `scrub.ts` retire la query de toute URL sortante (fils d'Ariane, spans), et l'erreur levée sur un échec de Photon ne porte pas l'URL.
 - Tests : Vitest pour le disjoncteur, le plafond, le cache, le délai, le libellé, l'arrondi et le retrait de la query, avec une horloge et un `fetch` injectés ; de bout en bout, un faux Photon du slot (`compose.yaml`, PR mergée par l'humain), vide par défaut, réglé par texte sur son port de contrôle, et `PLACES_BREAKER_MS=0` dans ce slot.
 
@@ -127,3 +127,4 @@ Les Arrêts ; « Autour de moi » ; rattacher une position aux lieux saisis avan
 - v3 (2026-10-23) : décision du propriétaire : pour le lieu d'une voiture, toute modification du texte après un choix retire la position (état 4 bis, AL3.6, AL4.2) ; le lieu de l'événement garde D6 (état 4, AL3.1). État 6 redessiné, exemple anglais corrigé, région `status` du champ hors du panneau du leg.
 - v4 (2026-10-23) : re-revue de la v3, **changements demandés** (deux bloquants, dix suggestions), tous appliqués : une voiture modifiée depuis une page d'avant le déploiement perd sa position quand son texte change (AL5.6) ; AL1.9 en trois cas, état 6 complété ; « Modifier la voiture » ouvert avec une position et à la première frappe ; AL3.7 ; AL4.2 une seule annonce ; cycle de vie et `PlaceField.removed` ; plus d'option active sans flèche ; exemple anglais dans « On the return trip » ; `EditEvent.sending` absent de main ; AL2.4 étendu ; AL1.11 en 360 × 420 ; révisions dans l'ordre.
 - v5 (2026-10-23) : après l'approbation de la v4, cinq corrections : cycle de vie et vidage du lieu de l'événement (AL3.8) ; dessin à 360 × 420 conforme à sa légende ; paragraphe de `PlaceField.removed` sorti du tableau ; critères dans l'ordre ; état 6 en trois feuilles, les voitures dans « Modifier la voiture ».
+- v6 (2026-10-23) : v5 approuvée. Correction de texte (#453) : « 60 s, ou la durée de Retry-After » remplacé par la règle du coordinateur sur #448 (bornes `breakerMs`–1 h, `breakerMs` à 0 : jamais ouvert, formes invalides ou obsolètes : `breakerMs`) ; AL2.5 en donne les cas.
