@@ -4,6 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -60,6 +61,12 @@ function offers(page: Page, marker: string): Request[] {
  * keys: an assertion on the body would print the device's token when it fails.
  */
 const sentKeys = (request: Request): string[] => Object.keys(JSON.parse(request.postData() ?? "[]")[2] ?? {});
+
+/** Whether two offers sent the same `passengerIds`: a boolean, never the values, as `sentKeys`. */
+const samePassengers = (one: Request, other: Request) => {
+  const ids = (request: Request) => JSON.stringify(JSON.parse(request.postData() ?? "[]")[2]?.passengerIds ?? null);
+  return ids(one) === ids(other);
+};
 
 async function openForm(page: Page) {
   await panel(page).getByRole("button", { name: "Proposer une voiture", exact: true }).click();
@@ -219,6 +226,40 @@ test.describe("« Qui monte avec vous ? »", () => {
     await expect(lines(page)).toHaveText(["Tom est dans la voiture de Claire"]);
     await expect(undo(page)).toBeVisible();
     expect(await where(db, [lea, tom], "aller")).toEqual([null, (await driven(db, id, claire))[0]]);
+  });
+
+  test("M7.6: two ticked, refused by `noRetour` from the aller: the boxes stay ticked, and a second « Valider » boards the same", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    const { id } = seededEvent;
+    const { Claire: claire, Léa: lea, Tom: tom } = await device(db, page, id, ["Claire", "Léa", "Tom"]);
+    for (const person of [claire, lea, tom]) await place(db, id, person, "aller", null);
+    const sent = offers(page, "Parking du stade");
+    await page.goto(`/e/${id}`);
+    await openForm(page);
+    await driverRadio(page, "Claire").check();
+    await box(page, "Léa").check();
+    await box(page, "Tom").check();
+    await field(page, "Lieu de départ").fill("Parking du stade");
+    await form(page).getByRole("radiogroup", { name: "Au retour" }).getByRole("radio", { name: "Je ramène aussi", exact: true }).check();
+    await removeRetourInDb(db, id);
+    await submit(page).click();
+
+    await expect(form(page).getByRole("alert")).toHaveText("Il n’y a plus de retour pour cet événement : rien n’a changé.");
+    expect(await driven(db, id, claire)).toEqual([]);
+    for (const name of ["Léa", "Tom"]) await expect(box(page, name)).toBeChecked();
+
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    await expect(lines(page)).toHaveText(["Léa et Tom sont dans la voiture de Claire"]);
+    expect(sent.length).toBe(2);
+    expect(sentKeys(sent[1])).toContain("passengerIds");
+    expect(samePassengers(sent[0], sent[1])).toBe(true);
+    const cars = await driven(db, id, claire);
+    expect(cars.length).toBe(1);
+    expect(await where(db, [lea, tom], "aller")).toEqual([cars[0], cars[0]]);
   });
 
   test("C4.10: a response lost after the write, sent again: one car, each passenger placed once, and the bar says so", async ({ db, page, seededEvent }) => {

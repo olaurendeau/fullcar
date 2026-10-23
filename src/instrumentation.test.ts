@@ -4,7 +4,7 @@ import { onRequestError, register } from "./instrumentation";
 /** The SDK, replaced: its factory runs only if something imports it, once per file, so the tests without a DSN come first. */
 const sdk = vi.hoisted(() => ({
   loads: 0,
-  init: vi.fn(() => ({ on: vi.fn(), addEventProcessor: vi.fn() })),
+  init: vi.fn(() => ({ on: vi.fn(), addEventProcessor: vi.fn(), getOptions: () => ({ stackParser: () => [] }) })),
   captureRequestError: vi.fn(),
 }));
 vi.mock("@sentry/nextjs", () => {
