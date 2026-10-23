@@ -1,0 +1,662 @@
+<title>Fullcar, auto-complétion des lieux</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8; --card: #ffffff;
+    --accent: #2457c5; --accent-soft: #e6edfb; --note: #fff7e0; --note-line: #ecd48a;
+    /* The app's own look, light only, from src/app/globals.css (as in event-board): */
+    --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
+    --app-border: #e5e5e5; --app-primary: #171717; --app-primary-fg: #fafafa;
+    --app-destructive: #e7000b; --app-ring: #a1a1a1; --app-active: #f0f0f0;
+    --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  h2 { font-size: 1.3rem; margin: 48px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 78ch; }
+  a { color: var(--accent); }
+  code { font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 0; font-size: .92rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 32px 24px; margin-top: 20px; align-items: start; }
+  .state { min-width: 0; }
+  .state > p { color: var(--muted); font-size: 0.9rem; margin: 0 0 10px; }
+  .crit { font-size: 0.8rem; color: var(--accent); font-weight: 600; }
+
+  .phone { position: relative; box-sizing: content-box; width: 360px; max-width: calc(100% - 12px); border: 6px solid var(--frame); border-radius: 22px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); }
+  .urlbar { background: var(--urlbar); color: var(--urlbar-fg); font: 12px ui-monospace, Menlo, monospace; padding: 7px 10px; overflow-wrap: anywhere; }
+  .screen { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 16px; font-size: 14px; line-height: 1.43; }
+  .cut { color: var(--app-muted); font-size: 11px; text-align: center; letter-spacing: .04em; }
+  .ev-h1 { font-size: 24px; font-weight: 700; margin: 0; line-height: 1.25; overflow-wrap: anywhere; }
+  .small-muted { color: var(--app-muted); font-size: 13px; line-height: 18px; }
+  .ico { width: 16px; height: 16px; flex: none; }
+  .btn { min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid transparent; background: var(--app-primary); color: var(--app-primary-fg); display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 500; padding: 0 12px; white-space: nowrap; }
+  .btn.outline { background: var(--app-bg); color: var(--app-fg); border-color: var(--app-border); }
+  .btn.full { width: 100%; }
+
+  /* Forms (as event-board) */
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; position: relative; }
+  .field label, .field .lbl { font-weight: 500; font-size: 14px; }
+  .input { min-height: 40px; box-sizing: border-box; border: 1px solid var(--app-border); border-radius: 8px; padding: 0 10px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
+  .input.focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ring) 50%, transparent); border-color: var(--app-ring); }
+  .input.narrow { width: 88px; }
+  .input .ph { color: var(--app-muted); }
+  .caret { display: inline-block; width: 1px; height: 18px; background: var(--app-fg); margin-left: 1px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .box { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 4px 0; box-sizing: border-box; }
+  .cb { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid #cfcfcf; border-radius: 4px; display: grid; place-items: center; font-size: 11px; line-height: 1; box-sizing: border-box; }
+  .cb.on { background: var(--app-primary); border-color: var(--app-primary); color: var(--app-primary-fg); }
+  .rd { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid #cfcfcf; border-radius: 50%; box-sizing: border-box; display: grid; place-items: center; }
+  .rd.on { border-color: var(--app-primary); background: var(--app-primary); }
+  .rd.on::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--app-primary-fg); }
+  .box > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+  .box strong { font-weight: 500; }
+  .fieldset { border: 1px solid var(--app-border); border-radius: 12px; padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .fieldset > .lbl { font-weight: 600; padding-top: 6px; }
+
+  /* The list of suggestions: a popover under the field, the field's width */
+  .listbox { margin-top: -2px; border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-bg); box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 4px; display: flex; flex-direction: column; outline: 2px dashed var(--accent); outline-offset: 3px; }
+  .opt { min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; line-height: 18px; overflow-wrap: anywhere; }
+  .opt .ico { color: var(--app-muted); }
+  .opt span { min-width: 0; }
+  /* Active option: a 3 px bar in the text colour (about 20:1 on white), plus the tint, plus aria-selected */
+  .opt.active { background: var(--app-active); box-shadow: inset 3px 0 0 var(--app-fg); }
+  .opt.stale { opacity: .45; }
+  .searching { display: flex; gap: 6px; align-items: center; }
+  .errtext { color: var(--app-destructive); font-size: 13px; line-height: 18px; margin: 0; }
+  .input.err { border-color: var(--app-destructive); }
+  .lbl-err { color: var(--app-destructive); }
+  .input.ro { background: var(--app-muted-bg); }
+  .posline .rm.off { opacity: .5; text-decoration: none; }
+  .sending-line { color: var(--app-muted); font-size: 14px; margin: 0; }
+  .btn.aria-off { background: var(--app-muted-bg); color: var(--app-muted); }
+  /* The on-screen keyboard, drawn as a grey block at the bottom of the phone */
+  .kbd { height: 236px; background: #d1d3d9; color: #555; display: grid; place-items: center; font-size: 12px; border-top: 1px solid #b9bcc4; }
+  .viewport { position: relative; height: 420px; overflow: hidden; }
+  .scroller { position: absolute; inset: 0; overflow: hidden; }
+  .listbox.capped { max-height: 160px; overflow: hidden; }
+  .order { counter-reset: o; }
+  .tag { display: inline-block; font: 600 10px/16px ui-monospace, Menlo, monospace; color: #fff; background: var(--accent); border-radius: 4px; padding: 0 5px; margin-right: 6px; vertical-align: middle; }
+  .opt b { font-weight: 600; }
+  .lfoot { border-top: 1px solid var(--app-border); margin-top: 4px; padding: 6px 8px 2px; display: flex; flex-direction: column; gap: 2px; }
+  /* The position line: under the field, its own line, with « Retirer » */
+  .posline { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; border-radius: 8px; background: var(--app-muted-bg); padding: 0 0 0 10px; outline: 2px dashed var(--accent); outline-offset: 3px; }
+  .posline .ico { color: var(--app-muted); }
+  .posline .t { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 13px; line-height: 18px; padding: 6px 0; }
+  .posline .rm { flex: none; min-height: 44px; padding: 0 12px; display: inline-flex; align-items: center; font-weight: 500; border-radius: 8px; text-decoration: underline; text-underline-offset: 3px; }
+  .quiet { color: var(--app-muted); font-size: 13px; line-height: 18px; margin: 0; outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 4px; }
+  .hint { color: var(--app-muted); font-size: 13px; line-height: 18px; outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 4px; }
+  .focusring { outline: 2px solid var(--app-ring) !important; outline-offset: 3px; border-radius: 4px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-ring) 35%, transparent); }
+
+  .behind { height: 72px; padding: 16px; box-sizing: border-box; background: var(--app-bg); position: relative; overflow: hidden; }
+  .behind::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.28); }
+  .behind .ghosttext { color: var(--app-muted); font-size: 13px; }
+  .sheet { border-top: 1px solid var(--app-border); background: var(--app-bg); display: flex; flex-direction: column; box-shadow: 0 -8px 24px rgba(0,0,0,.12); }
+  .sheet .sh-h { padding: 16px 16px 0; }
+  .sheet .sh-h strong { font-size: 16px; font-weight: 500; }
+  .sheet .sh-b { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .sheet .sh-f { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+
+  /* Desktop frame, real size, scrolled inside its own box */
+  .desk-wrap { overflow-x: auto; margin-top: 16px; border-radius: 12px; }
+  .desk { width: 1280px; border: 6px solid var(--frame); border-radius: 14px; background: var(--app-bg); color: var(--app-fg); overflow: hidden; }
+  .desk .col { width: 448px; margin: 0 auto; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; font-size: 14px; line-height: 1.43; }
+
+  .anatomy { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; margin-top: 16px; }
+  .anatomy .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .anatomy ol, .anatomy ul { margin: 6px 0 0; padding-left: 20px; }
+  .anatomy li { margin-bottom: 4px; }
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 80ch; }
+  .table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  .table-wrap table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.9rem; }
+  .table-wrap th, .table-wrap td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .table-wrap th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  .table-wrap tr:last-child td { border-bottom: 0; }
+  ol.crits, ol.decisions { padding-left: 20px; max-width: 86ch; }
+  ol.crits li, ol.decisions li { margin-bottom: 8px; }
+  .legend { display: inline-block; width: 22px; height: 12px; border-radius: 3px; outline: 2px dashed var(--accent); outline-offset: 1px; vertical-align: middle; margin-right: 6px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="crosshair" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M22 12h-4"/><path d="M6 12H2"/><path d="M12 6V2"/><path d="M12 22v-4"/></symbol>
+  <symbol id="loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+</svg>
+
+<div class="wrap">
+  <h1>Auto-complétion des lieux</h1>
+  <p class="lead">Issue <a href="https://github.com/olaurendeau/fullcar/issues/237">#237</a>, <strong>version 5</strong>. Pendant la saisie d’un lieu (celui de l’événement, et celui d’une voiture), des propositions apparaissent sous le champ. En choisir une donne au lieu une <strong>position</strong>, que la carte de <a href="https://github.com/olaurendeau/fullcar/issues/238">#238</a> utilisera (maquette <code>event-map</code>). Le texte libre reste la règle : une proposition n’est jamais obligatoire.</p>
+  <p class="lead">Décisions du propriétaire (D2 à D6, D9) : Photon, instance publique de komoot (OpenStreetMap), toujours <strong>par notre serveur</strong> ; latitude et longitude stockées seulement quand une proposition est choisie ; le point <strong>exact</strong> de la proposition, aussi pour une voiture ; après une modification du texte, la position reste, sur sa propre ligne, avec « Retirer » (pour l’événement ; pour une voiture, voir la v3 ci-dessous). Décisions du coordinateur (revue de la v1) : une route <code>POST /api/lieux</code>, pas une server action ; la position de l’événement envoyée à Photon arrondie à 1 décimale.</p>
+  <p class="lead"><strong>La v5</strong> (après l’approbation de la v4) : le cycle de vie dit aussi que vider le lieu de l’événement retire sa position, et l’annonce (AL3.8) ; le dessin à 360 × 420 correspond à sa légende ; l’état 6 dessine les voitures dans « Modifier la voiture » ; critères remis dans l’ordre.</p>
+  <p class="lead"><strong>La v4</strong> (re-revue de la v3) : une voiture modifiée depuis un onglet d’avant le déploiement ne reste pas épinglée (le serveur retire sa position quand son texte change sans position, AL5.6) ; AL1.9 découpé en trois cas observables ; « Modifier la voiture » ouvert avec une position, dessiné ; aucune option active sans flèche dans les dessins ; l’exemple anglais remis en ordre.</p>
+  <p class="lead"><strong>La v3</strong> (décision du propriétaire) : pour le lieu d’une <strong>voiture</strong> (départ, dépose, et le lieu de l’autre leg), <strong>toute modification du texte après un choix retire la position</strong>. Pour le lieu de l’<strong>événement</strong>, D6 tient : la position reste, avec « Retirer ». Une personne qui réduit « 12 rue des Lilas, 69126 Brindas » à « Brindas » ne doit pas rester épinglée chez elle pour tout porteur du lien. Voir les états 4 et 4 bis, et AL3.1, AL3.6.</p>
+  <p class="lead"><strong>La v2</strong> (revue de design de la v1) : un lieu est <strong>une seule valeur</strong>, texte et position, pour tout ce qui compare, envoie ou vérifie (voir « <a href="#valeur">Un lieu, une valeur</a> ») ; le cycle de vie de la liste et des lignes ; Échap dans une feuille ; le champ pendant l’envoi ; l’option active marquée autrement que par la couleur ; l’ordre des descriptions ; le clavier virtuel à 360 px ; la route <code>/api/lieux</code> ; Sentry.</p>
+  <p class="lead"><span class="legend"></span>Ce qui est nouveau est entouré de pointillés bleus. Tout le reste est l’écran d’aujourd’hui.</p>
+  <nav class="toc" aria-label="Sections">
+    <a href="#champ">Le champ</a><a href="#cycle">Cycle de vie</a><a href="#voiture">Proposer une voiture</a><a href="#modifier">Modifier</a><a href="#valeur">Un lieu, une valeur</a><a href="#anglais">En anglais</a><a href="#bureau">À 1280 px</a><a href="#anatomie">Anatomie et clavier</a><a href="#serveur">La route et Photon</a><a href="#mots">Les mots</a><a href="#criteres">Critères</a><a href="#decisions">Décisions</a><a href="#hors">Hors périmètre</a><a href="#revisions">Révisions</a>
+  </nav>
+
+  <!-- ============================================================ -->
+  <h2 id="champ">Le champ « Lieu » de « Créer un événement »</h2>
+  <p class="lead">Le même champ qu’aujourd’hui : même libellé, même place, même limite de 120 caractères. La liste est rendue <strong>dans</strong> le formulaire (dans la feuille quand il y en a une, jamais dans un portail), sous le champ, de sa largeur ; elle passe par-dessus ce qui suit sans le déplacer.</p>
+  <div class="grid">
+    <div class="state"><h3>1. Moins de 3 caractères : rien</h3><p>« Va » : aucune requête, aucune liste, aucun message. Les espaces au début et à la fin ne comptent pas. <span class="crit">AL1.1</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <p class="ev-h1">Créer un événement</p>
+        <div class="field"><label>Titre</label><div class="input">Kermesse de l’école</div></div>
+        <div class="field"><label>Lieu</label><div class="input focus">Va<span class="caret"></span></div></div>
+        <div class="two"><div class="field"><label>Date de début</label><div class="input">13/06/2027</div></div><div class="field"><label>Heure de début</label><div class="input">10:00</div></div></div>
+        <div class="cut">… Retour, options, « Créer »</div>
+      </div></div></div>
+
+    <div class="state"><h3>2. La liste, la deuxième proposition active au clavier</h3><p>« Vaugn », 300 ms sans frappe : une requête, cinq propositions au plus. Le texte tapé est en gras. Flèche bas deux fois : la deuxième est active, marquée par une barre de 3 px de la couleur du texte (environ 20:1 sur le blanc) en plus du fond, et <code>aria-selected="true"</code> ; le champ la désigne par <code>aria-activedescendant</code> et garde le focus. <span class="crit">AL1.2, AL1.6, AL1.8</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <p class="ev-h1">Créer un événement</p>
+        <div class="field"><label>Titre</label><div class="input">Kermesse de l’école</div></div>
+        <div class="field"><label>Lieu</label><div class="input focus">Vaugn<span class="caret"></span></div>
+          <div class="listbox" role="listbox" aria-label="Propositions pour Lieu">
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Vaugn</b>eray (69670)</span></div>
+            <div class="opt active"><svg class="ico"><use href="#pin"/></svg><span>Salle des fêtes, 69670 <b>Vaugn</b>eray</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span>École primaire, 69670 <b>Vaugn</b>eray</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span>Chemin de <b>Vaugn</b>eray, 69290 Craponne</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Vaugn</b>ard, 38140 Rives</span></div>
+            <div class="lfoot"><span class="small-muted">Ou gardez votre texte tel quel.</span><span class="small-muted">Propositions : © les contributeurs d’OpenStreetMap</span></div>
+          </div>
+        </div>
+        <div class="cut">… sous la liste : dates, Retour, options, « Créer »</div>
+      </div></div></div>
+
+    <div class="state"><h3>3. Une proposition choisie</h3><p>Entrée (ou un tap) : le libellé remplace le texte, la liste se ferme, le focus reste dans le champ, le formulaire n’est pas envoyé. La ligne de position apparaît sous le champ et entre dans sa description ; la région <code>status</code> dit « Position ajoutée. ». Aucune requête pour ce texte. <span class="crit">AL1.3, AL1.7, AL3.4</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <p class="ev-h1">Créer un événement</p>
+        <div class="field"><label>Titre</label><div class="input">Kermesse de l’école</div></div>
+        <div class="field"><label>Lieu</label><div class="input focus">Salle des fêtes, 69670 Vaugneray<span class="caret"></span></div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position : Salle des fêtes, 69670 Vaugneray</span><span class="rm">Retirer</span></div>
+        </div>
+        <div class="two"><div class="field"><label>Date de début</label><div class="input">13/06/2027</div></div><div class="field"><label>Heure de début</label><div class="input">10:00</div></div></div>
+        <div class="cut">… Retour, options, « Créer »</div>
+      </div></div></div>
+
+    <div class="state"><h3>4. Événement : le texte modifié après le choix</h3><p>Lieu de l’<strong>événement</strong> seulement (D6). « Devant la salle des fêtes, Vaugneray » : la position reste, sa ligne aussi. Pendant la frappe, de nouvelles propositions peuvent arriver ; en choisir une remplace la position. « Retirer » (ici avec le focus) enlève la position, laisse le texte, remet le focus dans le champ, et la région <code>status</code> dit « Position retirée. ». Vider le champ enlève aussi la position. <span class="crit">AL3.1 à AL3.4</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <div class="cut">… titre</div>
+        <div class="field"><label>Lieu</label><div class="input">Devant la salle des fêtes, Vaugneray</div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position : Salle des fêtes, 69670 Vaugneray</span><span class="rm focusring">Retirer</span></div>
+        </div>
+        <div class="cut">… dates, Retour, options, « Créer »</div>
+      </div></div></div>
+
+    <div class="state"><h3>4 bis. Voiture : le texte modifié après le choix</h3><p>Lieu d’une <strong>voiture</strong> (décision du propriétaire, v3). Claire avait choisi « 12 rue des Lilas, 69126 Brindas », puis efface jusqu’à « Brindas » : dès la première frappe qui change le texte, la position est retirée, sa ligne disparaît, et la région <code>status</code> dit « Position retirée. ». La voiture sera enregistrée sans position, sauf si Claire choisit une proposition (ici « Brindas (69126) »). Même règle pour « Lieu de dépose » et pour le lieu de l’autre leg, et dans « Modifier la voiture » où la ligne « Position enregistrée » part à la première frappe. <span class="crit">AL3.6</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Kermesse de l’école</span></div><div class="sheet"><div class="sh-h"><strong>Proposer une voiture</strong></div><div class="sh-b">
+        <div class="cut">… qui conduit</div>
+        <div class="field"><label>Lieu de départ</label><div class="input focus">Brindas<span class="caret"></span></div>
+          <div class="listbox">
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Brindas</b> (69126)</span></div>
+            <div class="lfoot"><span class="small-muted">Ou gardez votre texte tel quel.</span><span class="small-muted">Propositions : © les contributeurs d’OpenStreetMap</span></div>
+          </div>
+          <span class="hint">Visible par toutes les personnes qui ont le lien.</span></div>
+        <div class="cut">… heure, places, note ; pas de ligne de position</div>
+      </div></div></div></div>
+
+    <div class="state"><h3>5. Texte libre, aucune proposition choisie</h3><p>« Chez Mamie, au bout du chemin » : la personne a continué à taper puis a quitté le champ (Tab). Pas de ligne de position. L’événement est créé avec ce texte, sans position. <span class="crit">AL2.1</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <div class="cut">… titre</div>
+        <div class="field"><label>Lieu</label><div class="input">Chez Mamie, au bout du chemin</div></div>
+        <div class="two"><div class="field"><label>Date de début</label><div class="input focus"><span class="ph">jj/mm/aaaa</span></div></div><div class="field"><label>Heure de début</label><div class="input"><span class="ph">--:--</span></div></div></div>
+        <div class="cut">… Retour, options, « Créer »</div>
+      </div></div></div>
+
+    <div class="state"><h3>6. Une erreur, une position, la phrase : l’ordre</h3><p>Sous le champ, toujours dans cet ordre : la liste (quand elle est ouverte, par-dessus la suite), <span class="tag">1</span>l’erreur du champ, <span class="tag">2</span>la ligne de position, <span class="tag">3</span>la phrase de visibilité (voitures seulement). <code>aria-describedby</code> cite celles qui existent, dans le même ordre. Trois cas : (a) le lieu de l’événement, erreur puis position (une voiture perd sa position à la frappe, donc n’a jamais les deux) ; (b) une voiture en erreur, erreur puis phrase ; (c) une voiture sans erreur, position puis phrase. <span class="crit">AL1.9 (a), (b), (c)</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Espace organisateur</span></div><div class="sheet"><div class="sh-h"><strong>Modifier l’événement</strong></div><div class="sh-b">
+        <div class="field"><label class="lbl-err">Lieu</label><div class="input err">Devant la salle des fêtes de Vaugneray, côté parking, après la barrière blanche…</div>
+          <p class="errtext"><span class="tag">1</span>120 caractères au maximum.</p>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t"><span class="tag">2</span>Position enregistrée</span><span class="rm">Retirer</span></div></div>
+        <div class="cut">(a) lieu de l’événement</div>
+      </div></div></div>
+      <div class="phone" style="margin-top:16px"><div class="behind"><span class="ghosttext">Kermesse de l’école</span></div><div class="sheet"><div class="sh-h"><strong>Modifier la voiture</strong></div><div class="sh-b">
+        <div class="field"><label class="lbl-err">Lieu de départ</label><div class="input err">Devant le portail vert de la résidence Les Tilleuls, au fond de l’impasse…</div>
+          <p class="errtext"><span class="tag">1</span>120 caractères au maximum.</p>
+          <span class="hint"><span class="tag">3</span>Visible par toutes les personnes qui ont le lien.</span></div>
+        <div class="cut">(b) voiture en erreur</div>
+      </div></div></div>
+      <div class="phone" style="margin-top:16px"><div class="behind"><span class="ghosttext">Kermesse de l’école</span></div><div class="sheet"><div class="sh-h"><strong>Modifier la voiture</strong></div><div class="sh-b">
+        <div class="field"><label>Lieu de départ</label><div class="input">12 rue des Lilas, 69126 Brindas</div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t"><span class="tag">2</span>Position enregistrée</span><span class="rm">Retirer</span></div>
+          <span class="hint"><span class="tag">3</span>Visible par toutes les personnes qui ont le lien.</span></div>
+        <div class="cut">(c) voiture sans erreur, avec une position</div>
+      </div></div></div></div>
+
+    <div class="state"><h3>7. Un libellé long, à 360 px</h3><p>Une proposition va à la ligne, sans déborder ; chaque ligne reste une cible d’au moins 44 px. Une proposition de plus de 120 caractères n’est pas montrée. Hors de France, le pays termine le libellé. <span class="crit">AL1.4</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <div class="cut">… titre</div>
+        <div class="field"><label>Lieu</label><div class="input focus">Salle polyvalente Mar<span class="caret"></span></div>
+          <div class="listbox">
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Salle polyvalente Mar</b>cel-Pagnol, 13090 Aix-en-Provence</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Salle polyvalente Mar</b>ie-Curie, 1950 Sion, Suisse</span></div>
+            <div class="lfoot"><span class="small-muted">Ou gardez votre texte tel quel.</span><span class="small-muted">Propositions : © les contributeurs d’OpenStreetMap</span></div>
+          </div></div>
+        <div class="cut">… dates, Retour, options, « Créer »</div>
+      </div></div></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="cycle">Cycle de vie : la frappe, l’attente, la réponse</h2>
+  <p class="lead">Une liste ne montre jamais que des propositions pour le texte <strong>actuel</strong> du champ. Les deux lignes discrètes (« Aucune proposition… », « Propositions indisponibles… ») non plus.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>moment</th><th>ce qui est affiché</th><th>région <code>status</code></th></tr></thead>
+    <tbody>
+      <tr><td>une frappe qui change le texte</td><td>la liste se ferme (plus d’option active), les lignes « Aucune proposition » et « indisponibles » disparaissent ; une réponse encore attendue pour un texte précédent sera ignorée. <strong>Lieu de voiture</strong> avec une position : la position est retirée et sa ligne disparaît (avec elle, celle du lieu de dépose qui suit encore le départ). Lieu de l’événement : la position reste, <strong>sauf</strong> si la frappe vide le champ (elle part alors, comme pour une voiture).</td><td>rien ; « Position retirée. » si une position vient de partir (voiture : toute frappe qui change le texte ; événement : le champ vidé), une seule fois, dans la région du champ où l’on tape</td></tr>
+      <tr><td>la pause de 300 ms</td><td>rien de nouveau</td><td>rien</td></tr>
+      <tr><td>la requête envoyée, de 0 à 1 s</td><td>rien de nouveau</td><td>rien</td></tr>
+      <tr><td>la requête envoyée, de 1 à 3 s</td><td>la ligne « Recherche de propositions… » sous le champ</td><td>rien</td></tr>
+      <tr><td>réponse avec des propositions, pour le texte actuel</td><td>la liste, sans option active</td><td>« 3 propositions »</td></tr>
+      <tr><td>réponse vide</td><td>« Aucune proposition. Votre texte sera gardé tel quel. »</td><td>la même phrase</td></tr>
+      <tr><td>réponse <code>unavailable</code>, erreur, 3 s sans réponse, ou hors ligne (aucune requête alors)</td><td>« Propositions indisponibles. Votre texte sera gardé tel quel. »</td><td>la même phrase, <strong>une seule fois</strong> tant que le focus reste dans le champ : les pauses suivantes, encore indisponibles (le disjoncteur de 60 s est ouvert), remettent la ligne sans la réannoncer ; une autre annonce entre-temps (« 2 propositions ») ou une sortie du champ rouvre le droit de l’annoncer</td></tr>
+      <tr><td>une réponse pour un texte qui a changé depuis</td><td>ignorée : rien ne s’affiche</td><td>rien</td></tr>
+      <tr><td>le formulaire en cours d’envoi</td><td>aucune requête ne part ; la liste ouverte se ferme ; une réponse qui arrive est ignorée ; « Retirer » ne fait rien (<code>aria-disabled</code>)</td><td>rien</td></tr>
+      <tr><td>la personne quitte le champ</td><td>la liste se ferme ; une ligne affichée reste jusqu’à la prochaine frappe dans ce champ</td><td>rien</td></tr>
+    </tbody></table></div>
+  <div class="grid">
+    <div class="state"><h3>8. L’attente au-delà d’une seconde</h3><p>« Gymnase Colette-Bes » : la liste s’est fermée à la frappe ; la requête part après 300 ms ; au bout d’1 s sans réponse, une ligne discrète (pas annoncée). Une réponse en moins d’1 s ne la montre jamais. <span class="crit">AL1.10</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <div class="cut">… titre</div>
+        <div class="field"><label>Lieu</label><div class="input focus">Gymnase Colette-Bes<span class="caret"></span></div>
+          <p class="quiet searching"><svg class="ico"><use href="#loader"/></svg>Recherche de propositions…</p></div>
+        <div class="cut">… dates, Retour, options, « Créer »</div>
+      </div></div></div>
+
+    <div class="state"><h3>9. Aucune proposition</h3><p>Photon répond, sans résultat. Pas de liste : une ligne discrète, annoncée une fois par la région <code>status</code>. Elle disparaît à la frappe suivante. <span class="crit">AL2.3</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <div class="cut">… titre</div>
+        <div class="field"><label>Lieu</label><div class="input focus">Devant le portail vert<span class="caret"></span></div>
+          <p class="quiet">Aucune proposition. Votre texte sera gardé tel quel.</p></div>
+        <div class="cut">… dates, Retour, options, « Créer »</div>
+      </div></div></div>
+
+    <div class="state"><h3>10. Propositions indisponibles</h3><p>Hors ligne, Photon en panne, plus de 3 s, Photon qui nous limite (429) ou notre disjoncteur ouvert : la même ligne. Rien de rouge. Les propositions passent par leur propre route (<code>/api/lieux</code>), à côté des actions de la page : une réponse lente de Photon ne retarde ni l’envoi du formulaire ni l’actualisation de la page. Hors ligne, c’est l’envoi du formulaire qui échoue, avec son message d’aujourd’hui ; le texte et la position restent dans le formulaire. <span class="crit">AL2.2, AL2.6</span></p>
+      <div class="phone"><div class="urlbar">{hôte}/nouveau</div><div class="screen">
+        <div class="cut">… titre</div>
+        <div class="field"><label>Lieu</label><div class="input focus">Gymnase Colette-Bes<span class="caret"></span></div>
+          <p class="quiet">Propositions indisponibles. Votre texte sera gardé tel quel.</p></div>
+        <div class="cut">… dates, Retour, options, « Créer »</div>
+      </div></div></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="voiture">« Proposer une voiture » : le lieu de départ</h2>
+  <p class="lead">Le même champ, sous « Lieu de départ » (onglet Aller) ou « Lieu de dépose » (onglet Retour), et sous le lieu de l’autre leg avec « Je ramène aussi » / « J’emmène aussi ». Une phrase, sous chacun de ces champs, dit que le lieu est vu par tout le monde : aucune phrase existante ne le dit.</p>
+  <div class="grid">
+    <div class="state"><h3>Le lieu de départ, et qui le voit</h3><p>« Visible par toutes les personnes qui ont le lien. », toujours sous le champ, comme la phrase du téléphone. Les propositions sont rapprochées de l’événement quand il a une position (envoyée à Photon arrondie à 1 décimale, environ 10 km) : pour « Mairie », celle de Vaugneray avant celle de Lyon. <span class="crit">AL4.1, AL4.4</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Kermesse de l’école</span></div><div class="sheet"><div class="sh-h"><strong>Proposer une voiture</strong></div><div class="sh-b">
+        <div class="fieldset"><span class="lbl">Qui conduit ?</span><div class="field"><label>Prénom</label><div class="input">Claire</div></div><div class="field" style="margin-top:8px"><label>Téléphone (facultatif)</label><div class="input"></div><span class="small-muted">Visible seulement par l’organisateur et par les personnes de la même voiture.</span></div></div>
+        <div class="field"><label>Lieu de départ</label><div class="input focus">Mairie<span class="caret"></span></div>
+          <div class="listbox">
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Mairie</b>, 69670 Vaugneray</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Mairie</b>, 69126 Brindas</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Mairie</b>, 69290 Grézieu-la-Varenne</span></div>
+            <div class="lfoot"><span class="small-muted">Ou gardez votre texte tel quel.</span><span class="small-muted">Propositions : © les contributeurs d’OpenStreetMap</span></div>
+          </div>
+          <span class="hint">Visible par toutes les personnes qui ont le lien.</span></div>
+        <div class="cut">… heure, places, note, au retour</div>
+      </div></div></div>
+      <p class="small-muted" style="margin-top:8px">Échap, la liste ouverte : la liste se ferme, la feuille reste, le texte aussi, le focus dans le champ. Un second Échap ferme la feuille, comme aujourd’hui. Même règle dans « Modifier la voiture » et « Modifier l’événement ». <span class="crit">AL1.5</span></p></div>
+
+    <div class="state"><h3>« Je ramène aussi » : le lieu de dépose suit, sa position aussi</h3><p>Tant que le lieu de dépose n’a pas été touché, il suit le lieu de départ, texte et position ensemble. Dès qu’on le touche, il devient indépendant : une frappe dans son texte retire sa position (règle des voitures, v3), « Retirer » aussi. Une frappe dans le lieu de départ retire la position du départ, et le lieu de dépose qui le suit encore la perd avec lui. Chaque « Retirer » a son nom : « Retirer la position (Lieu de départ) », « Retirer la position (Lieu de dépose) ». <span class="crit">AL4.2, AL3.5</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Kermesse de l’école</span></div><div class="sheet"><div class="sh-h"><strong>Proposer une voiture</strong></div><div class="sh-b">
+        <div class="cut">… qui conduit</div>
+        <div class="field"><label>Lieu de départ</label><div class="input">12 rue des Lilas, 69126 Brindas</div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position : 12 rue des Lilas, 69126 Brindas</span><span class="rm">Retirer</span></div>
+          <span class="hint">Visible par toutes les personnes qui ont le lien.</span></div>
+        <div class="cut">… heure, places, note</div>
+        <div class="fieldset"><span class="lbl">Au retour</span><div class="box"><span class="rd on"></span><span><strong>Je ramène aussi</strong></span></div>
+          <div style="margin-left:26px;display:flex;flex-direction:column;gap:8px">
+            <div class="field"><label>Lieu de dépose</label><div class="input">12 rue des Lilas, 69126 Brindas</div>
+              <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position : 12 rue des Lilas, 69126 Brindas</span><span class="rm">Retirer</span></div>
+              <span class="hint">Visible par toutes les personnes qui ont le lien.</span></div>
+            <div class="field"><label>Heure de départ du retour</label><div class="input narrow">17:00</div></div>
+          </div>
+          <div class="box"><span class="rd"></span><span><strong>Je cherche une place</strong></span></div><div class="box"><span class="rd"></span><span><strong>Je ne fais pas le retour</strong></span></div></div>
+      </div></div></div></div>
+
+    <div class="state"><h3>360 px, clavier ouvert : le lieu de dépose en bas de la feuille</h3><p>Aucune option active : la liste arrive sans, et seule une flèche en active une. À l’ouverture de la liste, le champ défile en haut de la zone visible de la feuille (au-dessus du clavier), et la liste prend la hauteur qui reste, 8 px de marge comprise ; au-delà, elle défile en elle-même. Ici, une fenêtre de 360 × 420 au-dessus d’un clavier de 236 px : le champ occupe les 86 premiers pixels, la liste a donc au plus 420 − 86 − 8 = 326 px. Les cinq propositions (l’une sur deux lignes) et le pied y tiennent, environ 300 px : rien ne défile ici. Avec des libellés plus longs, la liste garderait ses 326 px et défilerait en elle-même. La liste s’ouvre toujours sous le champ. <span class="crit">AL1.11</span></p>
+      <div class="phone"><div class="sheet" style="box-shadow:none;border:0"><div class="viewport"><div class="scroller"><div class="sh-b">
+        <div class="field"><label>Lieu de dépose</label><div class="input focus">Gare de Br<span class="caret"></span></div>
+          <div class="listbox capped" style="max-height:326px">
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Gare de Br</b>ignais, 69530 Brignais</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Gare de Br</b>otteaux, 69006 Lyon</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Gare de Br</b>essieux, 38870 Saint-Pierre-de-Bressieux</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Gare de Br</b>on, 69500 Bron</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Gare de Br</b>ives-Charensac, 43700 Brives-Charensac</span></div>
+            <div class="lfoot"><span class="small-muted">Ou gardez votre texte tel quel.</span><span class="small-muted">Propositions : © les contributeurs d’OpenStreetMap</span></div>
+          </div>
+        </div>
+        <div class="cut">… sous la liste : heure de départ du retour, « Valider »</div>
+      </div></div></div><div class="kbd">clavier du téléphone</div></div></div></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="modifier">« Modifier l’événement » et « Modifier la voiture »</h2>
+  <p class="lead">Le formulaire s’ouvre sur le lieu enregistré, avec sa ligne de position s’il en a une. L’ouvrir n’envoie aucune requête de propositions : seule une frappe en envoie.</p>
+  <div class="grid">
+    <div class="state"><h3>« Modifier l’événement », lieu avec position</h3><p>« Valider » puis « Annuler », sans « Fermer » (<code>closable={false}</code>), comme sur main. La ligne dit « Position enregistrée » : le libellé de la proposition n’est pas stocké. « Retirer » seul est un changement ; rien touché, « Valider » n’envoie rien (M2.5). <span class="crit">AL5.1, AL5.2</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Espace organisateur</span></div><div class="sheet"><div class="sh-h"><strong>Modifier l’événement</strong></div><div class="sh-b">
+        <div class="field"><label>Titre</label><div class="input">Kermesse de l’école</div></div>
+        <div class="field"><label>Lieu</label><div class="input">Devant la salle des fêtes, Vaugneray</div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position enregistrée</span><span class="rm">Retirer</span></div></div>
+        <div class="cut">… début, Retour, fin</div>
+      </div><div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Annuler</div></div></div></div></div>
+
+    <div class="state"><h3>… pendant l’envoi</h3><p>Les champs sont verrouillés (décision 52 d’organizer-view) : « Lieu » en <code>readonly</code>, aucune requête de propositions, pas de liste, « Retirer » <code>aria-disabled</code> et sans effet. « Envoi en cours… » au-dessus de « Valider ». À la réponse, tout se déverrouille ; un échec garde le texte et la position. <span class="crit">AL5.4, AL5.5</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Espace organisateur</span></div><div class="sheet"><div class="sh-h"><strong>Modifier l’événement</strong></div><div class="sh-b">
+        <div class="field"><label>Titre</label><div class="input ro">Kermesse de l’école — juin</div></div>
+        <div class="field"><label>Lieu</label><div class="input ro">Devant la salle des fêtes, Vaugneray</div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position enregistrée</span><span class="rm off">Retirer</span></div></div>
+        <div class="cut">… début, Retour, fin</div>
+      </div><div class="sh-f"><p class="sending-line">Envoi en cours…</p><div class="btn full aria-off focusring">Valider</div><div class="btn outline full">Annuler</div></div></div></div></div>
+
+    <div class="state"><h3>« Modifier la voiture », lieu avec position</h3><p>À l’ouverture : « Position enregistrée », puis la phrase de visibilité, dans cet ordre, et dans cet ordre dans <code>aria-describedby</code>. Aucune requête. <span class="crit">AL5.1, AL1.9 (c)</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Kermesse de l’école</span></div><div class="sheet"><div class="sh-h"><strong>Modifier la voiture</strong></div><div class="sh-b">
+        <div class="field"><label>Lieu de départ</label><div class="input">12 rue des Lilas, 69126 Brindas</div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position enregistrée</span><span class="rm">Retirer</span></div>
+          <span class="hint">Visible par toutes les personnes qui ont le lien.</span></div>
+        <div class="field"><label>Heure de départ</label><div class="input narrow">09:15</div><span class="small-muted">Le dimanche 13 juin 2027</span></div>
+        <div class="cut">… places, note</div>
+      </div><div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div></div></div></div>
+
+    <div class="state"><h3>… à la première frappe</h3><p>Claire efface « 12 rue des Lilas, 69126 » : dès la première frappe qui change le texte, « Position enregistrée » disparaît, la région <code>status</code> du champ dit « Position retirée. », et la phrase de visibilité reste. « Valider » enregistre « Brindas » sans position. <span class="crit">AL3.6</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Kermesse de l’école</span></div><div class="sheet"><div class="sh-h"><strong>Modifier la voiture</strong></div><div class="sh-b">
+        <div class="field"><label>Lieu de départ</label><div class="input focus">Brindas<span class="caret"></span></div>
+          <span class="hint">Visible par toutes les personnes qui ont le lien.</span></div>
+        <div class="field"><label>Heure de départ</label><div class="input narrow">09:15</div><span class="small-muted">Le dimanche 13 juin 2027</span></div>
+        <div class="cut">… places, note</div>
+      </div><div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div></div></div></div>
+
+    <div class="state"><h3>« Modifier la voiture », lieu sans position : la proposition au même texte</h3><p>Une voiture proposée avant #237 : pas de ligne de position. Choisir la proposition au texte identique (« Mairie, 69670 Vaugneray ») ne change que la position : c’est un changement du lieu, envoyé texte et position ensemble (voir « Un lieu, une valeur »). <span class="crit">AL5.3</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Kermesse de l’école</span></div><div class="sheet"><div class="sh-h"><strong>Modifier la voiture</strong></div><div class="sh-b">
+        <div class="field"><label>Lieu de départ</label><div class="input focus">Mairie, 69670 Vaugneray<span class="caret"></span></div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position : Mairie, 69670 Vaugneray</span><span class="rm">Retirer</span></div>
+          <span class="hint">Visible par toutes les personnes qui ont le lien.</span></div>
+        <div class="field"><label>Heure de départ</label><div class="input narrow">09:30</div><span class="small-muted">Le dimanche 13 juin 2027</span></div>
+        <div class="cut">… places, note</div>
+      </div><div class="sh-f"><div class="btn full">Valider</div><div class="btn outline full">Fermer</div></div></div></div></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="valeur">Un lieu, une valeur</h2>
+  <p class="lead">Un lieu est le couple <code>{ text, position }</code>, où <code>position</code> vaut <code>{ lat, lng }</code> ou <code>null</code>. Partout où le code compare, envoie, recopie ou vérifie un lieu, il traite ce couple comme une seule valeur, jamais le texte seul.</p>
+  <div class="anatomy">
+    <div class="card"><h3>Comparer</h3><ul>
+      <li>Deux lieux sont égaux si leurs textes sont égaux <strong>et</strong> leurs positions aussi : toutes deux <code>null</code>, ou mêmes <code>lat</code> et <code>lng</code> à 5 décimales.</li>
+      <li>« Valider » sans changement (M2.5, v4.4.5-6) : le lieu compte comme changé si le couple a changé. « Retirer » seul est un changement ; choisir la proposition au texte identique aussi.</li>
+      <li>Modification simultanée (M6.1) : un lieu non touché (couple égal à celui chargé) prend le couple enregistré ; un lieu touché garde le couple saisi, texte <strong>et</strong> position.</li>
+      <li>« Je ramène aussi » : le lieu de l’autre leg suit le couple entier tant qu’il n’est pas touché.</li>
+      <li>Voiture (v3) : une modification du texte remet la position à <code>null</code> dans le même changement d’état ; le couple change donc d’un coup, texte et position.</li></ul></div>
+    <div class="card"><h3>« Modifier l’événement » : <code>before</code> et l’envoi</h3><ul>
+      <li><code>EventHeader</code> (et donc <code>before</code>) gagne <code>locationPosition</code> : <code>{ title, location, locationPosition, allerAt, retourAt }</code>. <code>sameHeader</code> la compare, sous le verrou, comme le reste.</li>
+      <li>Le formulaire envoie toujours <code>location</code> et <code>locationPosition</code> ensemble.</li>
+      <li>Cas 1 de la revue : A retire la position ; B, ouvert avant, ne change que le titre. Le <code>before</code> de B porte l’ancienne position, la ligne n’en a plus : réponse <code>changed</code>, rien d’écrit ; le lieu de B, non touché, prend le couple enregistré (sans position), son titre reste.</li>
+      <li>Une page chargée avant le déploiement envoie un <code>before</code> sans <code>locationPosition</code> : il est comparé sans la position, et l’écriture garde la position enregistrée, même si le texte change : c’est la règle de l’événement (D6). Expansion, puis contraction dans un déploiement suivant.</li></ul></div>
+    <div class="card"><h3>« Modifier la voiture » : seulement ce qui change</h3><ul>
+      <li>Le lieu est <strong>un</strong> champ de <code>RIDE_FIELDS</code> : changé (le couple), il part <code>location</code> et <code>position</code> ensemble ; non changé, ni l’un ni l’autre.</li>
+      <li>Cas 2 de la revue : « Mairie, 69670 Vaugneray », sans position, reçoit la proposition au même texte : le lieu a changé, la requête porte <code>location</code> (même texte) et <code>position</code> ; elle est valide.</li>
+      <li>Une page d’avant le déploiement envoie <code>location</code> sans <code>position</code>. Si ce texte est celui enregistré, la position ne change pas. S’il est différent, <strong>le serveur met la position à <code>null</code></strong> : un lieu de voiture dont le texte change perd sa position (décision du propriétaire, v3), quelle que soit la page qui l’envoie. Ainsi la position d’une voiture est toujours celle de son texte (AL5.6).</li></ul></div>
+    <div class="card"><h3>Ce que le serveur refuse (<code>invalid</code>, rien d’écrit)</h3><ul>
+      <li><code>position</code> (ou <code>locationPosition</code>) sans <code>location</code> dans la même requête.</li>
+      <li>Une position qui n’est ni <code>null</code> ni un objet <code>{ lat, lng }</code> de deux nombres finis ; une latitude hors de [−90, 90], une longitude hors de [−180, 180].</li>
+      <li>À la création (événement, voiture, autre leg), <code>position</code> absente vaut <code>null</code>.</li>
+      <li>Le serveur arrondit à 5 décimales (environ 1 m) : c’est une mise en forme, pas un floutage (D5 : le point exact).</li></ul></div>
+    <div class="card"><h3>Ce que reçoit <code>/e/{id}</code></h3><ul>
+      <li>Avec #237 : la position de l’événement (<code>EventHeader.locationPosition</code>) et celle de chaque voiture, dans l’état de la page et dans son actualisation. Les formulaires de modification en ont besoin pour la ligne de position et pour <code>before</code>.</li>
+      <li>Rien d’autre de Photon : ni libellé de la proposition, ni identifiant.</li>
+      <li>Le libellé d’une proposition n’est pas stocké : à l’ouverture d’un formulaire de modification, la ligne dit « Position enregistrée ». Un choix fait dans ce formulaire la remplace par « Position : {libellé} ».</li></ul></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="anglais">En anglais</h2>
+  <p class="lead">Les propositions sont demandées dans la langue de la page (<code>lang=en</code>) : Photon donne les noms anglais quand OpenStreetMap en a, sinon le nom local.</p>
+  <div class="grid">
+    <div class="state"><h3>The list</h3><p><span class="crit">AL1.8</span></p>
+      <div class="phone"><div class="urlbar">{host}/nouveau</div><div class="screen">
+        <p class="ev-h1">Create an event</p>
+        <div class="field"><label>Title</label><div class="input">Ski weekend</div></div>
+        <div class="field"><label>Place</label><div class="input focus">Chamon<span class="caret"></span></div>
+          <div class="listbox" role="listbox" aria-label="Suggestions for Place">
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Chamon</b>ix-Mont-Blanc (74400)</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span>Gare de <b>Chamon</b>ix, 74400 Chamonix-Mont-Blanc</span></div>
+            <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Chamon</b>t, 74470 Bellevaux</span></div>
+            <div class="lfoot"><span class="small-muted">Or keep your text as it is.</span><span class="small-muted">Suggestions: © OpenStreetMap contributors</span></div>
+          </div></div>
+        <div class="cut">… dates, return, options, “Create”</div>
+      </div></div></div>
+    <div class="state"><h3>Departure place after a choice; drop-off waiting</h3><p>The drop-off place is inside “On the return trip”, after time, seats and note, as on main. <span class="crit">AL1.10, AL3, AL4.4</span></p>
+      <div class="phone"><div class="behind"><span class="ghosttext">Ski weekend</span></div><div class="sheet"><div class="sh-h"><strong>Offer a car</strong></div><div class="sh-b">
+        <div class="cut">… who drives</div>
+        <div class="field"><label>Departure place</label><div class="input">Gare de Chamonix, 74400 Chamonix-Mont-Blanc</div>
+          <div class="posline"><svg class="ico"><use href="#crosshair"/></svg><span class="t">Position: Gare de Chamonix, 74400 Chamonix-Mont-Blanc</span><span class="rm">Remove</span></div>
+          <span class="hint">Visible to everyone who has the link.</span></div>
+        <div class="cut">… departure time, seats, note</div>
+        <div class="fieldset"><span class="lbl">On the return trip</span><div class="box"><span class="rd on"></span><span><strong>I drive back too</strong></span></div>
+          <div style="margin-left:26px;display:flex;flex-direction:column;gap:8px">
+            <div class="field"><label>Drop-off place</label><div class="input focus">Les Hou<span class="caret"></span></div>
+              <p class="quiet searching"><svg class="ico"><use href="#loader"/></svg>Looking for suggestions…</p>
+              <span class="hint">Visible to everyone who has the link.</span></div>
+            <div class="field"><label>Return departure time</label><div class="input narrow">17:00</div></div>
+          </div>
+          <div class="box"><span class="rd"></span><span><strong>I need a seat</strong></span></div><div class="box"><span class="rd"></span><span><strong>I’m not doing the return trip</strong></span></div></div>
+      </div></div></div></div>
+
+    <div class="state"><h3>Event place: unavailable</h3><p><span class="crit">AL2.2</span></p>
+      <div class="phone"><div class="urlbar">{host}/nouveau</div><div class="screen">
+        <p class="ev-h1">Create an event</p>
+        <div class="field"><label>Title</label><div class="input">Ski weekend</div></div>
+        <div class="field"><label>Place</label><div class="input focus">Les Houches<span class="caret"></span></div>
+          <p class="quiet">Suggestions unavailable. Your text will be kept as it is.</p></div>
+        <div class="cut">… dates, return, options, “Create”</div>
+      </div></div></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="bureau">À 1280 px</h2>
+  <p class="lead">La page reste une colonne de 448 px au centre (<code>max-w-md</code>) : la liste a la largeur du champ, rien d’autre ne change. Le cadre est à taille réelle et défile horizontalement dans sa boîte.</p>
+  <div class="desk-wrap"><div class="desk"><div class="urlbar">{hôte}/nouveau</div><div class="col">
+    <p class="ev-h1">Créer un événement</p>
+    <div class="field"><label>Titre</label><div class="input">Kermesse de l’école</div></div>
+    <div class="field"><label>Lieu</label><div class="input focus">Salle des f<span class="caret"></span></div>
+      <div class="listbox">
+        <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Salle des f</b>êtes, 69670 Vaugneray</span></div>
+        <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Salle des f</b>êtes, 69126 Brindas</span></div>
+        <div class="opt"><svg class="ico"><use href="#pin"/></svg><span><b>Salle des f</b>êtes, 69290 Craponne</span></div>
+        <div class="lfoot"><span class="small-muted">Ou gardez votre texte tel quel.</span><span class="small-muted">Propositions : © les contributeurs d’OpenStreetMap</span></div>
+      </div></div>
+    <div class="cut">… dates, Retour, options, « Créer »</div>
+  </div></div></div>
+
+  <!-- ============================================================ -->
+  <h2 id="anatomie">Anatomie et clavier</h2>
+  <div class="anatomy">
+    <div class="card"><h3>Le motif : combobox à liste (ARIA 1.2)</h3><ul>
+      <li>Le champ garde son <code>&lt;input type="text"&gt;</code>, son <code>&lt;label&gt;</code> et sa validation. Il prend <code>role="combobox"</code>, <code>aria-autocomplete="list"</code>, <code>aria-expanded</code>, <code>aria-controls</code>, et <code>aria-activedescendant</code> quand une option est active.</li>
+      <li>La liste : <code>role="listbox"</code>, nommée « Propositions pour {libellé du champ} », rendue dans le formulaire (dans la feuille, pas dans un portail : Radix ne la prend pas pour un clic à l’extérieur). Chaque proposition : <code>role="option"</code> ; l’active a <code>aria-selected="true"</code> et la barre de 3 px. Le pied n’est pas une option.</li>
+      <li><code>aria-describedby</code> du champ, dans l’ordre : l’erreur, la ligne de position, la phrase de visibilité, celles qui existent.</li>
+      <li>Une région <code>status</code> polie par champ, dans le formulaire (donc dans la feuille, hors du panneau du leg, où <code>getByRole("status")</code> des tests existants n’en voit qu’une), montée vide avec lui : nombre de propositions, « Aucune proposition… », « Propositions indisponibles… » (une fois, voir « Cycle de vie »), « Position ajoutée. », « Position retirée. ». Jamais <code>alert</code>.</li>
+      <li>« Retirer » : un bouton de 44 px, nommé « Retirer la position ({libellé du champ}) ».</li>
+      <li>Aucune dépendance : construit à la main sur le champ shadcn existant.</li></ul></div>
+    <div class="card"><h3>Clavier et toucher</h3><ul>
+      <li>Flèche bas / haut : ouvre la liste si elle a des propositions pour le texte actuel, déplace l’option active ; le focus reste dans le champ.</li>
+      <li>Entrée, la liste ouverte : avec une option active, la choisit ; sans option active, ferme la liste et n’envoie pas le formulaire. La liste fermée, Entrée garde son effet d’aujourd’hui.</li>
+      <li>Échap, la liste ouverte : ferme la liste seule et garde le texte. Dans une feuille, l’<code>onEscapeKeyDown</code> de la feuille appelle <code>preventDefault()</code> tant qu’une liste est ouverte. La liste fermée, Échap ferme la feuille comme aujourd’hui.</li>
+      <li>Tab, ou un tap ailleurs : ferme la liste, garde le texte, ne choisit rien.</li>
+      <li>Un tap sur une option la choisit ; options de 44 px au moins.</li>
+      <li>Sans JavaScript : sans objet, les formulaires de création et de voiture le demandent déjà.</li></ul></div>
+    <div class="card"><h3>Quand une requête part</h3><ul>
+      <li>Au moins 3 caractères après <code>trim</code>, et au plus 120.</li>
+      <li>300 ms après la dernière frappe ; une seule requête en cours par champ (la précédente est abandonnée par <code>AbortController</code>), et une réponse pour un autre texte que le texte actuel est ignorée.</li>
+      <li>Jamais à l’ouverture d’un formulaire, ni au focus, ni pour un texte égal au libellé qui vient d’être choisi, ni pendant l’envoi du formulaire.</li>
+      <li>Navigateur hors ligne (<code>navigator.onLine</code> faux) : aucune requête, la ligne « indisponibles » après la pause.</li>
+      <li>3 s sans réponse : la requête est abandonnée, « indisponibles ».</li></ul></div>
+    <div class="card"><h3>Le libellé d’une proposition</h3><ul>
+      <li>Un lieu nommé : « {nom}, {code postal} {commune} ».</li>
+      <li>Une adresse : « {numéro} {rue}, {code postal} {commune} ».</li>
+      <li>Une rue : « {rue}, {code postal} {commune} ».</li>
+      <li>Une commune : « {commune} ({code postal}) », sans code postal « {commune}, {département ou région} ».</li>
+      <li>Hors de France : « , {pays} » à la fin, dans la langue de la page.</li>
+      <li>Deux libellés identiques : un seul. Plus de 120 caractères : pas montré.</li></ul></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="serveur">La route <code>/api/lieux</code> et Photon</h2>
+  <div class="anatomy">
+    <div class="card"><h3>La route (décision du coordinateur)</h3><ol>
+      <li><code>POST /api/lieux</code>, un route handler de notre origine (<code>src/app/api/lieux/route.ts</code>). Pas une server action : Next exécute celles d’une page une à une, et une réponse lente de Photon retarderait l’envoi d’un formulaire ou l’actualisation de 15 s (<code>loadEventState</code>), ou serait retardée par elles au point de dépasser 3 s.</li>
+      <li>Corps JSON : <code>{ "text": "…", "locale": "fr" | "en", "near"?: { "lat": n, "lng": n } }</code>, 1 Ko au plus. Le texte n’est jamais dans une URL de notre origine.</li>
+      <li>Refus sans appel à Photon : autre méthode (405) ; <code>Origin</code> absent ou autre que notre origine (403) ; corps illisible, trop gros, texte de moins de 3 ou de plus de 120 caractères après <code>trim</code>, <code>locale</code> inconnue, <code>near</code> hors bornes (400, <code>{ "state": "invalid" }</code>).</li>
+      <li>Réponse 200, <code>Cache-Control: no-store</code> : <code>{ "state": "ok", "suggestions": [{ "label", "lat", "lng" }] }</code> (0 à 5) ou <code>{ "state": "unavailable" }</code>. Jamais le détail d’une erreur.</li>
+      <li>Vers Photon : <code>GET https://photon.komoot.io/api/?q=…&amp;limit=5&amp;lang=…</code>, et pour un champ de voiture <code>&amp;lat=…&amp;lon=…</code> : la position de l’événement <strong>arrondie à 1 décimale</strong> (environ 10 km), jamais la position exacte. L’URL de Photon vient d’une variable d’environnement.</li></ol></div>
+    <div class="card"><h3>Ce que Photon voit, et ce qu’il ne voit pas</h3><ul>
+      <li><strong>Voit</strong> : le texte tapé, la langue, pour un champ de voiture la zone de l’événement à 10 km près, l’IP de Vercel, notre User-Agent.</li>
+      <li><strong>Ne voit pas</strong> : l’IP du visiteur (aucun <code>X-Forwarded-For</code>, <code>X-Real-IP</code>, <code>Forwarded</code>), son User-Agent, ses cookies, un <code>Referer</code>, la position exacte de l’événement, son identifiant, un jeton, un prénom.</li>
+      <li>Nous ne journalisons ni le texte ni la réponse. Un échec journalise un message fixe et le statut HTTP de Photon, rien d’autre.</li>
+      <li><strong>Sentry</strong> : l’URL sortante vers Photon porte <code>q=</code>. Ni un fil d’Ariane, ni un span, ni un rapport d’erreur ne la garde avec sa query : le hook de <code>scrub.ts</code> retire la query de toute URL sortante (<code>data.url</code>, <code>http.query</code>, <code>url.query</code>, <code>url.full</code>), et l’erreur levée sur un échec de Photon ne porte pas l’URL. Côté navigateur, le fil d’Ariane du <code>fetch</code> vers <code>/api/lieux</code> n’a que l’URL et le statut, jamais le corps.</li></ul></div>
+    <div class="card"><h3>Rester un bon citoyen de l’instance publique</h3><ul>
+      <li>Côté navigateur : 3 caractères, 300 ms, une requête à la fois, 5 résultats.</li>
+      <li>User-Agent descriptif : <code>fullcar/{version} (+https://github.com/olaurendeau/fullcar)</code>. Pas d’adresse e-mail : au propriétaire d’en ajouter une s’il le veut.</li>
+      <li>Cache en mémoire de l’instance : 500 entrées, 1 h, clé = texte normalisé (minuscules, espaces réduits) + langue + <code>near</code> arrondi (1 décimale). Jamais écrit en base ni sur disque.</li>
+      <li>Disjoncteur par instance : après un 429, un 5xx ou 3 s sans réponse, aucun appel pendant 60 s (ou la durée de <code>Retry-After</code>) ; la route répond aussitôt <code>unavailable</code>. Durée lue dans <code>PLACES_BREAKER_MS</code> (60 000 par défaut).</li>
+      <li>Plafond par instance : 5 appels par seconde ; au-delà, <code>unavailable</code> sans appel.</li></ul></div>
+    <div class="card"><h3>Ce qui est stocké</h3><ul>
+      <li><code>event.location_lat</code>, <code>event.location_lng</code>, <code>ride.location_lat</code>, <code>ride.location_lng</code> : <code>double precision</code>, nullables, les deux ou aucun (<code>check</code>), latitude dans [−90, 90], longitude dans [−180, 180], arrondies à 5 décimales.</li>
+      <li>Renseignées seulement quand une proposition a été choisie. Ni identifiant Photon, ni libellé, ni réponse.</li>
+      <li>Mêmes lignes que le lieu : la purge les emporte. Migration par expansion.</li>
+      <li>Le serveur ne vérifie pas que la position correspond au texte : il ne le peut pas, et ce n’est pas une règle.</li></ul></div>
+  </div>
+  <div class="note"><strong>Tests.</strong> Aucun test ne joint Photon.
+    <ul style="margin:6px 0 0;padding-left:20px">
+      <li><strong>Vitest</strong> : le disjoncteur (AL2.5), le plafond, le cache et le délai de 3 s sont testés sur le module de la route, avec une horloge et un <code>fetch</code> injectés ; le libellé et l’arrondi de <code>near</code> sont des fonctions pures du domaine ; le retrait de la query par <code>scrub.ts</code> (AL6.6) aussi.</li>
+      <li><strong>Bout en bout</strong> : <code>PHOTON_URL</code> pointe vers un faux Photon du slot, ajouté à <code>compose.yaml</code> (PR mergée par l’humain). Il répond <strong>vide par défaut</strong>, si bien que les tests existants (AL2.4) passent sans changement ; un test qui veut des propositions, un 500, un 429 ou de la lenteur le règle pour <strong>son</strong> texte, sur le port de contrôle du faux service (pas une route de notre application). Il enregistre chaque requête reçue, en-têtes compris. Dans le slot de bout en bout, <code>PLACES_BREAKER_MS=0</code> : un test qui provoque un 429 n’ouvre pas le disjoncteur pour les tests parallèles ; le disjoncteur lui-même est prouvé par Vitest.</li>
+    </ul></div>
+
+  <!-- ============================================================ -->
+  <h2 id="mots">Les mots</h2>
+  <p class="lead">Les libellés des champs ne changent pas : « Lieu » / “Place”, « Lieu de départ » / “Departure place”, « Lieu de dépose » / “Drop-off place”. « Envoi en cours… » / “Sending…” est <code>EditEvent.sending</code>, défini par la décision 52 d’organizer-view mais <strong>pas encore dans <code>messages/*.json</code></strong> sur main (82e8259) : s’il manque encore quand #237 est construit, la PR l’ajoute avec ces mots-là.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>clé (proposée)</th><th>FR</th><th>EN</th><th>où</th></tr></thead>
+    <tbody>
+      <tr><td><code>PlaceField.listLabel</code></td><td>Propositions pour {field}</td><td>Suggestions for {field}</td><td>nom de la liste</td></tr>
+      <tr><td><code>PlaceField.count</code></td><td>{count, plural, one {# proposition} other {# propositions}}</td><td>{count, plural, one {# suggestion} other {# suggestions}}</td><td>région <code>status</code></td></tr>
+      <tr><td><code>PlaceField.keepText</code></td><td>Ou gardez votre texte tel quel.</td><td>Or keep your text as it is.</td><td>pied de la liste</td></tr>
+      <tr><td><code>PlaceField.source</code></td><td>Propositions : © les contributeurs d’OpenStreetMap</td><td>Suggestions: © OpenStreetMap contributors</td><td>pied de la liste</td></tr>
+      <tr><td><code>PlaceField.searching</code></td><td>Recherche de propositions…</td><td>Looking for suggestions…</td><td>sous le champ, après 1 s d’attente, non annoncée</td></tr>
+      <tr><td><code>PlaceField.none</code></td><td>Aucune proposition. Votre texte sera gardé tel quel.</td><td>No suggestions. Your text will be kept as it is.</td><td>sous le champ, et <code>status</code></td></tr>
+      <tr><td><code>PlaceField.unavailable</code></td><td>Propositions indisponibles. Votre texte sera gardé tel quel.</td><td>Suggestions unavailable. Your text will be kept as it is.</td><td>sous le champ, et <code>status</code> une fois</td></tr>
+      <tr><td><code>PlaceField.position</code></td><td>Position : {label}</td><td>Position: {label}</td><td>ligne de position</td></tr>
+      <tr><td><code>PlaceField.saved</code></td><td>Position enregistrée</td><td>Saved position</td><td>ligne de position, à l’ouverture d’un formulaire de modification</td></tr>
+      <tr><td><code>PlaceField.remove</code></td><td>Retirer</td><td>Remove</td><td>bouton de la ligne</td></tr>
+      <tr><td><code>PlaceField.removeLabel</code></td><td>Retirer la position ({field})</td><td>Remove the position ({field})</td><td>nom accessible du bouton</td></tr>
+      <tr><td><code>PlaceField.added</code></td><td>Position ajoutée.</td><td>Position added.</td><td><code>status</code>, après un choix</td></tr>
+      <tr><td><code>PlaceField.removed</code></td><td>Position retirée.</td><td>Position removed.</td><td><code>status</code> du champ : après « Retirer » ; après la frappe qui retire la position d’une voiture ; quand un champ qui a une position est vidé (AL3.3, AL3.8)</td></tr>
+      <tr><td><code>RideForm.locationHint</code></td><td>Visible par toutes les personnes qui ont le lien.</td><td>Visible to everyone who has the link.</td><td>sous chaque lieu d’une voiture</td></tr>
+      <tr><td>(pays)</td><td>Suisse, Italie… (langue de la page)</td><td>Switzerland, Italy…</td><td>fin d’un libellé hors de France, tel que Photon le donne</td></tr>
+    </tbody></table></div>
+
+  <!-- ============================================================ -->
+  <h2 id="criteres">Critères d’acceptation</h2>
+  <p class="lead">Chacun se prouve par un test : de bout en bout contre le faux Photon, ou Vitest quand c’est dit.</p>
+  <ol class="crits">
+    <li><strong>AL1.1</strong> 1 ou 2 caractères (après <code>trim</code>) : aucune requête vers <code>/api/lieux</code>. Un 3<sup>e</sup>, puis 300 ms sans frappe : exactement une requête ; des frappes à moins de 300 ms d’intervalle n’en envoient pas d’autre.</li>
+    <li><strong>AL1.2</strong> Au plus 5 options, chacune haute d’au moins 44 px ; le champ a <code>role="combobox"</code> et <code>aria-expanded="true"</code> ; la liste s’appelle « Propositions pour Lieu ». Flèche bas : la première option a <code>aria-selected="true"</code>, le champ la désigne par <code>aria-activedescendant</code>, et sa barre gauche contraste à 3:1 au moins avec le fond de l’option (mesuré sur le style calculé).</li>
+    <li><strong>AL1.3</strong> Choisir une option (tap, ou Flèche bas puis Entrée) met son libellé dans le champ, ferme la liste, garde le focus dans le champ et n’envoie pas le formulaire.</li>
+    <li><strong>AL1.4</strong> Une proposition dont le libellé dépasse 120 caractères n’est pas montrée ; deux libellés identiques n’en font qu’une (Vitest, fonction du domaine).</li>
+    <li><strong>AL1.5</strong> Tab ou un tap hors de la liste la ferment, le texte reste. Dans « Proposer une voiture », « Modifier la voiture » et « Modifier l’événement », la liste ouverte, Échap ferme la liste, la feuille reste ouverte, le texte est inchangé et le focus est dans le champ ; un second Échap ferme la feuille.</li>
+    <li><strong>AL1.6</strong> La région <code>status</code> annonce « 3 propositions » quand trois arrivent.</li>
+    <li><strong>AL1.7</strong> L’événement créé après un choix affiche le libellé mot pour mot, et sa position est celle de l’option, à 5 décimales.</li>
+    <li><strong>AL1.8</strong> Le faux Photon reçoit <code>lang=fr</code> d’une page en français, <code>lang=en</code> en anglais.</li>
+    <li><strong>AL1.9</strong> L’ordre sous le champ, et le même dans <code>aria-describedby</code>, dans les trois cas de l’état 6 :<br>(a) lieu de l’événement, erreur et position (« Modifier l’événement », 121 caractères après « Position enregistrée ») : l’erreur, puis la ligne de position ;<br>(b) lieu de voiture en erreur : l’erreur, puis « Visible par toutes les personnes qui ont le lien. » ;<br>(c) lieu de voiture sans erreur, avec une position : la ligne de position, puis la phrase.</li>
+    <li><strong>AL1.10</strong> Une liste affichée se ferme à la frappe suivante, et Entrée ne choisit alors rien ; une réponse du faux Photon arrivée pour un texte qui a changé depuis n’ouvre aucune liste. Un faux Photon qui répond en 1,5 s fait voir « Recherche de propositions… » ; en 0,5 s, jamais.</li>
+    <li><strong>AL1.11</strong> Dans une fenêtre de 360 × 420 (la hauteur que laisse le clavier), la liste a au plus la hauteur qui reste sous le champ moins 8 px ; la liste du « Lieu de dépose » en bas de « Proposer une voiture » tient entièrement dans la zone visible, et défile en elle-même au-delà.</li>
+    <li><strong>AL2.1</strong> « devant la salle des fêtes », envoyé sans choix, crée l’événement avec ce texte exact, sans position.</li>
+    <li><strong>AL2.2</strong> Faux Photon en 500, en 429, ou au-delà de 3 s, ou navigateur hors ligne : « Propositions indisponibles. Votre texte sera gardé tel quel. » sous le champ, sans <code>role="alert"</code>, et le formulaire s’envoie ensuite avec le texte. Hors ligne, aucune requête vers <code>/api/lieux</code>. Deux pauses de suite, encore indisponibles, focus dans le champ : la région <code>status</code> ne l’a annoncé qu’une fois.</li>
+    <li><strong>AL2.3</strong> Faux Photon vide : « Aucune proposition. Votre texte sera gardé tel quel. », et pas de liste.</li>
+    <li><strong>AL2.4</strong> Les tests existants passent sans changement, le faux Photon vide par défaut : la création en moins de 30 s ; ceux qui appuient sur Entrée dans un champ de lieu (<code>e2e/aller-sheets.spec.ts</code>, M7.6 vers la ligne 168 ; W1.2) ; ceux qui lisent les régions <code>status</code> de la page ou d’un panneau.</li>
+    <li><strong>AL2.5</strong> (Vitest, horloge et <code>fetch</code> injectés) Après un 429, aucun appel à Photon pendant 60 s, ou pendant la durée de <code>Retry-After</code>, et la route répond <code>unavailable</code> ; le 6<sup>e</sup> appel d’une même seconde répond <code>unavailable</code> sans appel ; une même requête dans l’heure est servie par le cache sans appel.</li>
+    <li><strong>AL2.6</strong> Une requête à <code>/api/lieux</code> retenue 3 s par le faux Photon ne retarde pas une prise de place faite pendant ce temps : sa réponse arrive avant celle des propositions.</li>
+    <li><strong>AL3.1</strong> Lieu de l’<strong>événement</strong> : après un choix, modifier le texte garde la ligne de position ; l’événement est créé avec le texte modifié et la position du choix.</li>
+    <li><strong>AL3.2</strong> « Retirer » enlève la ligne et la position, laisse le texte, et met le focus dans le champ.</li>
+    <li><strong>AL3.3</strong> Vider le champ enlève la position, pour l’événement comme pour une voiture.</li>
+    <li><strong>AL3.4</strong> La ligne de position est dans l’<code>aria-describedby</code> du champ ; la région <code>status</code> dit « Position ajoutée. » après un choix et « Position retirée. » après « Retirer ».</li>
+    <li><strong>AL3.5</strong> Avec « Je ramène aussi », les deux boutons s’appellent « Retirer la position (Lieu de départ) » et « Retirer la position (Lieu de dépose) ».</li>
+    <li><strong>AL3.6</strong> Lieu d’une <strong>voiture</strong> (départ, dépose, autre leg), dans « Proposer une voiture » et « Modifier la voiture » : après un choix, ou à l’ouverture avec « Position enregistrée », la première frappe qui change le texte retire la position : la ligne disparaît, la région <code>status</code> dit « Position retirée. », et la voiture est enregistrée sans position. Choisir ensuite une proposition redonne une position. Coller un texte compte comme une frappe.</li>
+    <li><strong>AL3.7</strong> Lieu de l’<strong>événement</strong>, miroir d’AL3.6 : « Modifier l’événement » ouvert avec « Position enregistrée », modifier le texte garde la ligne et la position, et « Valider » enregistre le texte modifié avec la position.</li>
+    <li><strong>AL3.8</strong> Vider un champ de lieu qui a une position (événement ou voiture) : la région <code>status</code> de ce champ dit « Position retirée. », une fois ; vider un champ sans position n’annonce rien.</li>
+    <li><strong>AL4.1</strong> Pour un champ de voiture, quand l’événement est à 45.7581, 4.6894, le faux Photon reçoit <code>lat=45.8</code> et <code>lon=4.7</code> ; sans position d’événement, ni <code>lat</code> ni <code>lon</code>.</li>
+    <li><strong>AL4.2</strong> Avec « Je ramène aussi » (ou « J’emmène aussi »), le lieu de l’autre leg reprend texte et position tant qu’il n’a pas été touché (y compris la position retirée par une frappe dans le départ) ; touché, il ne suit plus. Quand il perd sa position avec le départ, seule la région du départ dit « Position retirée. », une fois ; celle du lieu de dépose ne dit rien.</li>
+    <li><strong>AL4.3</strong> Une voiture enregistrée après un choix porte la position exacte de l’option.</li>
+    <li><strong>AL4.4</strong> Sous chaque lieu d’une voiture, « Visible par toutes les personnes qui ont le lien. » est dans l’<code>aria-describedby</code> du champ.</li>
+    <li><strong>AL5.1</strong> « Modifier l’événement » et « Modifier la voiture » s’ouvrent avec la ligne « Position enregistrée » quand le lieu a une position, et sans requête vers <code>/api/lieux</code>.</li>
+    <li><strong>AL5.2</strong> « Retirer » seul puis « Valider » enregistre le lieu sans position ; rien changé, « Valider » n’envoie rien (M2.5, v4.4.5-6).</li>
+    <li><strong>AL5.3</strong> Cas 1 : sur deux pages, A retire la position et valide ; B ne change que le titre et valide : B reçoit <code>changed</code>, rien n’est écrit, et son « Lieu » montre le lieu enregistré sans ligne de position. Cas 2 : une voiture « Mairie, 69670 Vaugneray » sans position, la proposition au même texte choisie, « Valider » : la requête porte <code>location</code> et <code>position</code>, la voiture est enregistrée avec la position. Modifié sur un autre appareil, un lieu non touché prend le texte et la position enregistrés ensemble.</li>
+    <li><strong>AL5.4</strong> Pendant l’envoi de « Modifier l’événement » : « Lieu » a <code>readonly</code>, une frappe n’envoie rien à <code>/api/lieux</code>, une réponse attendue n’ouvre pas de liste, « Retirer » a <code>aria-disabled="true"</code> et un clic ne retire rien. Dans les trois autres formulaires, pendant l’envoi, aucune requête ne part, aucune liste ne s’ouvre et « Retirer » ne fait rien.</li>
+    <li><strong>AL5.5</strong> Un envoi qui échoue (hors ligne, ou erreur) laisse dans le formulaire le texte et la position envoyés.</li>
+    <li><strong>AL5.6</strong> Une requête de modification de voiture qui porte <code>location</code> sans <code>position</code> (forme d’une page d’avant le déploiement) : texte égal à celui enregistré, la position ne change pas ; texte différent, la voiture est enregistrée avec ce texte et une position <code>null</code>. Pour l’événement, un <code>before</code> sans <code>locationPosition</code> et un texte différent gardent la position (D6).</li>
+    <li><strong>AL6.1</strong> La requête que reçoit le faux Photon ne porte ni <code>X-Forwarded-For</code>, ni <code>X-Real-IP</code>, ni <code>Forwarded</code>, ni cookie, ni <code>Referer</code>, ni l’identifiant de l’événement, ni un jeton ; son User-Agent est celui de fullcar.</li>
+    <li><strong>AL6.2</strong> Pendant la frappe, toute requête du navigateur va à notre origine (Playwright).</li>
+    <li><strong>AL6.3</strong> Le texte tapé n’est dans aucune URL de notre origine (<code>POST /api/lieux</code>, texte dans le corps) et dans aucune ligne de journal du serveur.</li>
+    <li><strong>AL6.4</strong> Le serveur répond <code>invalid</code> et n’écrit rien pour : une position sans <code>location</code> dans la même requête ; une position qui n’est ni <code>null</code> ni <code>{ lat, lng }</code> de nombres finis ; une latitude hors de [−90, 90] ou une longitude hors de [−180, 180]. <code>/api/lieux</code> répond 400 sans appeler Photon à un texte de moins de 3 ou de plus de 120 caractères, 403 sans <code>Origin</code> de notre origine, 405 à un <code>GET</code>.</li>
+    <li><strong>AL6.5</strong> La purge emporte les positions avec leur événement (test de purge existant, étendu).</li>
+    <li><strong>AL6.6</strong> (Vitest) Un fil d’Ariane et un span d’une requête sortante vers <code>https://photon.komoot.io/api/?q=12%20rue%20des%20Lilas&amp;…</code> sortent de <code>scrub.ts</code> sans « Lilas » ni <code>q=</code> ; l’erreur levée sur un échec de Photon ne contient pas l’URL.</li>
+  </ol>
+
+  <!-- ============================================================ -->
+  <h2 id="decisions">Décisions</h2>
+  <ol class="decisions">
+    <li><strong>D2–D6 (propriétaire).</strong> Photon public, par notre serveur ; latitude et longitude stockées seulement après un choix ; point exact, voitures comprises ; position gardée après modification du texte, sur sa ligne, avec « Retirer » — <strong>pour le lieu de l’événement seulement</strong>.</li>
+    <li><strong>Propriétaire (v3).</strong> Pour le lieu d’une voiture, toute modification du texte après un choix retire la position. — Raison : une personne qui réduit son adresse à sa commune ne doit pas rester épinglée chez elle pour tout porteur du lien. Conséquence : la position d’une voiture est toujours celle de son texte, et la carte (#238) ne montre jamais un point que le texte ne dit pas.</li>
+    <li><strong>D9 (propriétaire).</strong> « position » entre au glossaire : les coordonnées d’un lieu, quand il a été choisi parmi les propositions. PR de documentation, mergée par l’humain.</li>
+    <li><strong>Coordinateur (revue v1).</strong> Une route <code>POST /api/lieux</code>, pas une server action ; la position de l’événement envoyée à Photon arrondie à 1 décimale.</li>
+    <li>Décision : un lieu est une seule valeur <code>{ text, position }</code> pour comparer, envoyer, recopier et vérifier ; <code>before</code> de « Modifier l’événement » porte la position. — Raison : revue de la v1, bloquant 1 ; sans cela, une modification du titre réécrit une position retirée ailleurs, et un choix au même texte part sans texte.</li>
+    <li>Décision : une frappe ferme la liste ; la nouvelle arrive avec la réponse. — Raison : une liste pour un texte qui a changé ne doit pas être choisie (revue, bloquant 6) ; une liste grisée mais visible serait une règle de plus pour le même résultat.</li>
+    <li>Décision : « Recherche de propositions… » après 1 s seulement, jamais annoncée. — Raison : une réponse rapide ne fait rien clignoter ; une attente longue est dite ; un lecteur d’écran n’a pas à entendre chaque attente.</li>
+    <li>Décision : « indisponibles » annoncé une fois tant que le focus reste dans le champ. — Raison : avec le disjoncteur ouvert, chaque pause donnerait la même annonce ; l’écran la montre toujours.</li>
+    <li>Décision : Échap ferme la liste avant la feuille. — Raison : revue, bloquant 3 ; dans « Modifier l’événement », Échap vaut « Annuler » et perdrait la saisie.</li>
+    <li>Décision : pendant l’envoi, le champ ne propose rien et « Retirer » ne fait rien, dans les quatre formulaires. — Raison : décision 52 d’organizer-view, étendue au lieu ; une seule règle pour les quatre.</li>
+    <li>Décision : la phrase de visibilité sous chaque lieu d’une voiture, toujours affichée. — Raison : demande du propriétaire avec D5 ; aucune phrase existante ne le dit.</li>
+    <li>Décision : pas de phrase sous le lieu de l’événement. — Raison : il est fait pour être vu par le groupe.</li>
+    <li>Décision : la ligne de position dit « Position : {libellé} » après un choix, et « Position enregistrée » à l’ouverture d’un formulaire de modification. — Raison : le libellé n’est pas stocké (D4 : rien d’autre de Photon) ; répéter le texte du lieu ne dirait rien.</li>
+    <li>Décision : un seul message pour hors ligne, panne, lenteur, limitation et disjoncteur. — Raison : la personne fait la même chose dans tous les cas.</li>
+    <li>Décision : pays en fin de libellé hors de France seulement. — Raison : le cas courant reste court à 360 px.</li>
+    <li>Décision : cache en mémoire seulement. — Raison : une table de cache stockerait des textes tapés, souvent des adresses.</li>
+    <li>Décision : <code>/api/lieux</code> refuse un <code>Origin</code> qui n’est pas le nôtre. — Raison : la route ne doit pas servir de proxy Photon gratuit à d’autres sites ; un client hors navigateur peut forger l’en-tête, le plafond de 5 appels par seconde protège Photon dans ce cas.</li>
+    <li>Décision : la durée du disjoncteur vient de <code>PLACES_BREAKER_MS</code>, 0 dans le slot de bout en bout. — Raison : tests parallèles indépendants sans route réservée aux tests ; le disjoncteur est prouvé par Vitest.</li>
+  </ol>
+
+  <!-- ============================================================ -->
+  <h2 id="hors">Hors périmètre</h2>
+  <ul>
+    <li>Les lieux des Arrêts (la table n’existe pas encore) : quand elle arrive, elle reprend ce champ.</li>
+    <li>« Autour de moi » et toute géolocalisation de l’appareil.</li>
+    <li>Rattacher une position aux lieux saisis avant #237.</li>
+    <li>Un lien « Ouvrir dans mon GPS » sur le lieu : une issue à part.</li>
+    <li>Choisir ou corriger la position en touchant une carte.</li>
+    <li>Une instance Photon à nous (environ 95 Go pour le monde) : une décision d’hébergement.</li>
+    <li>Sans JavaScript : sans objet, les formulaires concernés le demandent déjà.</li>
+  </ul>
+
+  <!-- ============================================================ -->
+  <h2 id="revisions">Révisions</h2>
+  <ul>
+    <li><strong>v1</strong> (2026-10-23) : première version, après les décisions D1 à D9 du propriétaire.</li>
+    <li><strong>v2</strong> (2026-10-23) : revue de design de la v1, changements demandés (six bloquants, treize suggestions, toutes appliquées). Un lieu, une valeur (<code>before</code> avec la position, envoi groupé, AL5.3) ; champ verrouillé pendant l’envoi (AL5.4) ; Échap dans une feuille (AL1.5) ; route <code>POST /api/lieux</code> (décision du coordinateur, AL2.6) ; option active à 3:1 et <code>aria-selected</code> (AL1.2) ; cycle de vie de la liste et des lignes (AL1.10, AL2.2) ; <code>near</code> à 1 décimale (AL4.1) ; testabilité (Vitest, faux Photon vide, <code>PLACES_BREAKER_MS</code>) ; Sentry (AL6.6) ; « Valider » puis « Annuler » ; annonces de position (AL3.4) ; noms des « Retirer » (AL3.5) ; ordre des descriptions (AL1.9) ; clavier à 360 px (AL1.11) ; liste hors portail ; sans JavaScript sans objet ; échec d’envoi (AL5.5) ; données de <code>/e/{id}</code> ; D5 sans floutage ; « Position enregistrée » à l’ouverture d’un formulaire de modification.</li>
+    <li><strong>v3</strong> (2026-10-23) : décision du propriétaire : pour le lieu d’une voiture, toute modification du texte après un choix retire la position (état 4 bis, AL3.6, AL4.2) ; le lieu de l’événement garde D6 (état 4, AL3.1). État 6 redessiné (une voiture ne peut plus avoir erreur et position ensemble) ; exemple anglais corrigé ; la région <code>status</code> du champ reste hors du panneau du leg.</li>
+    <li><strong>v4</strong> (2026-10-23) : re-revue de la v3, <strong>changements demandés</strong> (deux bloquants, dix suggestions), tous appliqués. Une voiture modifiée depuis une page d’avant le déploiement perd sa position quand son texte change (AL5.6) ; AL1.9 découpé en trois cas, état 6 complété ; « Modifier la voiture » ouvert avec une position et à la première frappe ; AL3.7 (miroir événement) ; AL4.2 : une seule annonce, dans le champ où l’on tape ; ligne du cycle de vie et mots de <code>PlaceField.removed</code> ; plus d’option active sans flèche dans les dessins ; exemple anglais dans « On the return trip » ; <code>EditEvent.sending</code> absent de main ; AL2.4 étendu ; AL1.11 en 360 × 420 ; révisions dans l’ordre.</li>
+    <li><strong>v5</strong> (2026-10-23) : après l’approbation de la v4, cinq corrections : le cycle de vie dit que vider le lieu de l’événement retire sa position et l’annonce (nouveau AL3.8) ; le dessin à 360 × 420 suit sa légende (326 px de liste, tout y tient) ; état 6 en trois feuilles, les voitures dans « Modifier la voiture » ; critères dans l’ordre (AL3.6 à AL3.8 après AL3.5, AL5.6 après AL5.5).</li>
+  </ul>
+</div>
