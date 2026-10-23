@@ -1,5 +1,5 @@
 import type { Kysely } from "kysely";
-import { lockEvent, readAdminTokenHash, writeEventFields, type PublicEvent } from "@/db/events";
+import { lockEvent, readAdminTokenHash, writeEventFields } from "@/db/events";
 import type { LegCounts } from "@/db/legs";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
@@ -16,6 +16,7 @@ import {
 import { positionOf, samePosition } from "@/domain/place";
 import { isPublicId } from "@/domain/public-id";
 import { isWallClock } from "@/domain/wall-clock";
+import { headerFrom } from "./event";
 import { removeRetour } from "./retour";
 
 /**
@@ -63,13 +64,6 @@ function countsOf(input: unknown): { ok: true; counts?: LegCounts } | { ok: fals
   if (typeof input !== "object" || input === null || Array.isArray(input)) return { ok: false };
   const { cars, persons } = input as Record<string, unknown>;
   return isCount(cars) && isCount(persons) ? { ok: true, counts: { cars, persons } } : { ok: false };
-}
-
-/** The header of the row read: the database keeps both coordinates or neither. */
-export function headerFrom(row: PublicEvent): EventHeader {
-  const { location_lat: lat, location_lng: lng } = row;
-  const locationPosition = lat === null || lng === null ? null : { lat, lng };
-  return { title: row.title, location: row.location, locationPosition, allerAt: row.aller_at, retourAt: row.retour_at };
 }
 
 /** `loaded` without a position, from a page before the positions, is compared without it. */

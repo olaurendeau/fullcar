@@ -10,8 +10,7 @@ import { eventLegs } from "@/domain/leg";
 import { isPersonalToken } from "@/domain/personal-token";
 import { withVisiblePhones, type VisibleBoard } from "@/domain/phone-visibility";
 import { isPublicId } from "@/domain/public-id";
-import { headerFrom } from "./edit-event";
-import { findPublicEvent } from "./event";
+import { findPublicEvent, headerFrom } from "./event";
 
 /**
  * The event as one device sees it, plain data ready for the browser: what the page shows at
