@@ -13,6 +13,7 @@ import { otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import { otherLegField, otherLegKind, type OtherLegChoice } from "@/domain/offer";
 import { validatePerson } from "@/domain/person";
 import type { VisibleCar } from "@/domain/phone-visibility";
+import type { Position } from "@/domain/place";
 import { passengersFit, RIDE_FIELDS, RIDE_SEATS_DEFAULT, validateRide, validSeats, type RideField } from "@/domain/ride";
 import { currentDriver, driverChoice, NEW_DRIVER, passengerCandidates } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
@@ -25,16 +26,20 @@ import { useSends, type FromSheet } from "./hidden-page";
 import { LeavingStep } from "./leaving-step";
 import { personErrorMessage } from "./person-error";
 import { StorageNotice, type Registering, type Registration } from "./person-form";
+import { PlaceField } from "./place-field";
+import type { PlaceValue } from "./place-field-state";
 import { rideErrorMessage } from "./ride-error";
 
 /**
  * What the form sends, before its creation ids: who drives, the car on the tab's leg (R4),
- * and what becomes of her on the other leg, unchanged when absent (C4.11).
+ * and what becomes of her on the other leg, unchanged when absent (C4.11). Each place goes
+ * with its position, `null` without one (« Un lieu, une valeur »).
  */
 export interface RideDraft extends Record<"location" | "time" | "seats" | "note", string> {
   leg: Leg;
+  position: Position | null;
   driver: { kind: "device"; personId: string } | { kind: "new"; firstName: string; phone: string };
-  otherLeg?: { kind: "keep" | "withoutCar" | "notConcerned" } | { kind: "drive"; location: string; time: string };
+  otherLeg?: { kind: "keep" | "withoutCar" | "notConcerned" } | { kind: "drive"; location: string; position: Position | null; time: string };
 }
 
 /** An offer as the form sends it; sending, and where a failure is said, as for a registration. */
@@ -88,15 +93,22 @@ interface FormProps {
   /** The other leg's date and time, and where the device's persons stand there; none without a retour. */
   other?: { at: WallClock; persons: readonly DevicePerson[] };
   offerRide: OfferRide;
+  /** The event's position, which brings the suggestions for a car's places closer (AL4.1). */
+  near?: Position | null;
 }
 
 /** What the form does: offer a car on a leg, or change one of the device's (C8.2). */
 type FormMode =
-  | ({ kind: "offer" } & Pick<FormProps, "persons" | "other" | "offerRide">)
+  | ({ kind: "offer" } & Pick<FormProps, "persons" | "other" | "offerRide" | "near">)
   | { kind: "edit"; car: VisibleCar; updateRide: UpdateRide };
 
 type FieldName = Exclude<OfferField, "passengers">;
 type Values = Record<FieldName, string>;
+
+/** The places of an offer, which propose suggestions; their texts are in `Values`, their positions beside. */
+type PlaceName = "location" | "otherLocation";
+type PlaceMark = Pick<PlaceValue, "position" | "label">;
+const UNMARKED: PlaceMark = { position: null, label: null };
 
 /** A field's control: an input of a type, or the note's text area. */
 type Control = { type: "text" | "tel" | "time"; autoComplete?: string; inputMode?: "numeric" } | "textarea";
@@ -228,8 +240,9 @@ export function EditRideButton({ car, at, updateRide }: { car: VisibleCar; at: W
  * the other leg (#169), then « Qui monte avec vous ? » (#171). None of an option (C4.9). Errors, failures and creation ids as in
  * « Ajouter une personne » (C4.7, C4.10).
  *
- * In `edit` mode (C8.2), the place, the time, the seats and the note alone, filled with the
- * car's, under the same rules; below the passengers, « Valider » opens the step (C8.4).
+ * In `offer` mode, each place proposes suggestions (#430). In `edit` mode (C8.2), the place,
+ * the time, the seats and the note alone, filled with the car's, under the same rules; below
+ * the passengers, « Valider » opens the step (C8.4).
  */
 function RideForm({
   leg,
@@ -274,9 +287,11 @@ function RideForm({
     const times = { time: wallClockParts(at).time, otherTime: other ? wallClockParts(other.at).time : "" };
     return { ...blank, ...times, seats: String(RIDE_SEATS_DEFAULT), ...shown };
   });
-  // The other car's place follows this one's until it is changed (v4-9).
+  // The other car's place follows this one's until it is changed (v4-9), its position with it (AL4.2).
   const [follows, setFollows] = useState(true);
   const values = { ...typed, otherLocation: follows ? typed.location : typed.otherLocation };
+  const [marks, setMarks] = useState<Record<PlaceName, PlaceMark>>({ location: UNMARKED, otherLocation: UNMARKED });
+  const placeOf = (name: PlaceName): PlaceValue => ({ text: values[name], ...marks[name === "otherLocation" && follows ? "location" : name] });
   // The other leg follows who drives, from her state there (v4-8).
   const there = driver === NEW_DRIVER ? undefined : other?.persons.find((person) => person.id === driver)?.state;
   const otherField = other && otherLegField(there ?? "new");
@@ -401,13 +416,19 @@ function RideForm({
     showErrors({}, false, undefined);
     const { firstName, phone, otherLocation, otherTime, ...car } = values;
     const kind = otherField && otherChoice && otherLegKind(otherField, otherChoice);
-    const otherLeg = kind === "drive" ? { kind, location: otherLocation, time: otherTime } : kind && { kind };
+    const otherLeg = kind === "drive" ? { kind, location: otherLocation, position: placeOf("otherLocation").position, time: otherTime } : kind && { kind };
     // As the form names her: the first name typed, its spaces trimmed, or the one chosen.
     const name = person?.ok ? person.person.firstName : (candidates.find((candidate) => candidate.id === driver)?.firstName ?? "");
     const legs = kind === "drive" ? [leg, otherLegOf(leg)] : [leg];
     const sheet = sends([], legs.map((offered) => `offer:${offered}:${isNew ? `new:${name}` : driver}`));
     const answer = await mode.offerRide({
-      offer: { leg, ...car, driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver }, otherLeg },
+      offer: {
+        leg,
+        ...car,
+        position: placeOf("location").position,
+        driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver },
+        otherLeg,
+      },
       passengers: boarding,
       notDone: { kind: "offerRide", driver: name, legs: kind === "drive" ? "both" : leg },
       landmark: () => focusOffer(leg),
@@ -467,6 +488,28 @@ function RideForm({
           </p>
         )}
       </div>
+    );
+  };
+  // A car's place, with suggestions: a change of its text takes its position (v3), and the
+  // sentence under it says who sees it (AL4.4). Sending, it asks nothing and « Retirer » does nothing (AL5.4).
+  const place = (name: PlaceName, label: string) => {
+    const message = messageOf(errors, name);
+    return (
+      <PlaceField
+        id={idOf(name)}
+        label={label}
+        value={placeOf(name)}
+        onChange={({ text, position, label: chosen }) => {
+          if (name === "otherLocation") setFollows(false);
+          setValues((current) => ({ ...current, [name]: text }));
+          setMarks((current) => ({ ...current, [name]: { position, label: chosen } }));
+        }}
+        rule="car"
+        near={mode.kind === "offer" ? mode.near : null}
+        locked={sending}
+        error={message && { id: idOf(`${name}-error`), message: tErrors(message.key, message.values) }}
+        hint={t("locationHint")}
+      />
     );
   };
   const choices = [...candidates, { id: NEW_DRIVER, firstName: t("newDriver") }];
@@ -544,7 +587,7 @@ function RideForm({
           )}
         </div>
       )}
-      {field("location", t(`location.${leg}`), { type: "text" })}
+      {editing ? field("location", t(`location.${leg}`), { type: "text" }) : place("location", t(`location.${leg}`))}
       {field("time", t("time"), { type: "time" }, t("timeHint", { date: format.dateTime(wallClockAsUtc(at), { dateStyle: "full" }) }))}
       {field("seats", t("seats"), { type: "text", inputMode: "numeric" }, t("seatsHint"))}
       {field("note", t("note"), "textarea", t("noteHint"))}
@@ -579,7 +622,7 @@ function RideForm({
                   </label>
                   {choice === "drive" && drivesThere && (
                     <div className="flex flex-col gap-3.5 pt-1 pb-2 pl-6.5">
-                      {field("otherLocation", t(`location.${otherLegName}`), { type: "text" })}
+                      {place("otherLocation", t(`location.${otherLegName}`))}
                       {field("otherTime", t(`otherLeg.time.${otherLegName}`), { type: "time" }, t("timeHint", { date: format.dateTime(wallClockAsUtc(other.at), { dateStyle: "full" }) }))}
                       <p className="text-[13px] leading-[18px] text-muted-foreground">{t("otherLeg.same")}</p>
                     </div>

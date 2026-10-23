@@ -3,6 +3,7 @@ import type { DevicePerson } from "@/domain/board";
 import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
+import type { Position } from "@/domain/place";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import type { Message } from "./bar-state";
@@ -74,6 +75,7 @@ export function LegPanel({
   device,
   hasRetour,
   other,
+  near,
   map,
 }: {
   at: WallClock;
@@ -82,6 +84,8 @@ export function LegPanel({
   hasRetour: boolean;
   /** The other leg's date and time, and the device's persons there, for « Proposer une voiture » (#169). */
   other?: { at: WallClock; persons: readonly DevicePerson[] };
+  /** The event's position, for the suggestions of a car's places (AL4.1). */
+  near: Position | null;
   /** The event's place and the page's open or folded map; none without a position (CA2.1). */
   map?: LegMap;
 }) {
@@ -108,6 +112,7 @@ export function LegPanel({
           at={at}
           persons={board.device}
           other={other}
+          near={near}
           main={coverageBanner(coverage(board)).kind === "missingSeats"}
           disabled={!deviceKnown(device.status)}
           offerRide={device.offerRide}
