@@ -4,7 +4,7 @@ import {
   linkedErrorsIntegration, startSpan, type NodeClient,
 } from "@sentry/nextjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, messagesWithoutFrames, startBrowserSentry } from "./client";
+import { BROWSER_INTEGRATIONS, beforeStartSpan, browserEnv, type BrowserSdk, startBrowserSentry } from "./client";
 import {
   codeFramesOnly, type Integration, messagesWithoutFrames, registerHooks, scrubEnvelopeHeader, sentryOptions, type SentryEnv,
   tracesSampleRate,
@@ -40,7 +40,7 @@ function fakeBrowserSdk(client = fakeClient()) {
     init: vi.fn(() => client),
     browserTracingIntegration: vi.fn((options?: object) => named("BrowserTracing", options)),
     captureRouterTransitionStart: vi.fn(),
-    defaultStackParser: vi.fn((): { filename?: string }[] => []),
+    defaultStackParser: vi.fn<(stack?: string) => { filename?: string }[]>(() => []),
   };
   return { sdk, client, load: vi.fn(async () => sdk as unknown as BrowserSdk) };
 }
@@ -220,7 +220,13 @@ describe("in the browser, with a DSN", () => {
     sdk.defaultStackParser.mockReturnValueOnce([{ filename: "depuis 10" }, { filename: "chrome-extension://abcdefgh/content.js" }]);
     expect(stackParser("the stack")).toEqual([{ filename: "chrome-extension://abcdefgh/content.js" }]);
     expect(client.on.mock.calls).toEqual([["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader]]);
-    expect(client.addEventProcessor.mock.calls).toEqual([[codeFramesOnly], [messagesWithoutFrames]]);
+    const processors = client.addEventProcessor.mock.calls.map(([processor]) => processor as typeof codeFramesOnly);
+    expect(processors).toEqual([codeFramesOnly, expect.any(Function)]);
+    // The second reads each line with the SDK's parser as it is, not with `scriptFramesOnly`'s.
+    const script = { filename: "https://fullcar.example/_next/a.js" };
+    sdk.defaultStackParser.mockImplementation((stack) => (stack?.includes("Marc") ? [script, { filename: "/03" }, script] : []));
+    const event = { exception: { values: [{ type: "Error", value: "Le trajet a échoué\nMarc revient le 12/03" }] } };
+    expect(processors[1](event).exception.values).toEqual([{ type: "Error", value: "Le trajet a échoué" }]);
   });
 
   it("keeps the exact list of integrations, page loads and navigations named without their URL", async () => {

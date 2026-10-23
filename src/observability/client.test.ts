@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import type * as Sentry from "@sentry/nextjs";
 import { afterEach, describe, expect, it } from "vitest";
-import { type BrowserSdk, messagesWithoutFrames, startBrowserSentry } from "./client";
+import { type BrowserSdk, startBrowserSentry } from "./client";
 import { type SentryEnv } from "./options";
 import { scrubText } from "./scrub";
 import { ORIGIN, RELEASE } from "./test-secrets";
@@ -136,6 +136,18 @@ describe("what the browser sends for an error", () => {
     expect([thrown, caused].map(({ payload }) => payload.includes("Marc"))).toEqual([false, false]);
   });
 
+  it("sends an error whose message holds a line read as a frame without « at », the first name nowhere (#379)", async () => {
+    const results = [];
+    for (const line of ["Marc revient le 12/03", "Marc: paquet bundle"]) {
+      const error = new Error(`Le trajet a échoué\n${line}`);
+      error.stack = `Error: ${error.message}\n    at onSubmit (${CHUNK}:1:4410)`;
+      const { event, payload } = await send(error);
+      // Booleans: a failing assertion prints no part of what was sent (#233).
+      results.push([event !== undefined, payload.includes("Marc")]);
+    }
+    expect(results).toEqual([[true, false], [true, false]]);
+  });
+
   it("sends no error thrown by another script, an extension's, though ours called it", async () => {
     expect(await framesSent(thrownByAnExtension())).toBeUndefined();
   });
@@ -147,25 +159,5 @@ describe("what the browser sends for an error", () => {
   it("sends that line as a frame with the SDK alone, so that the tests above mean something", async () => {
     const frames = await framesSent(errorWithFrameInMessage(), true);
     expect(frames?.map((frame) => frame.function)).toContain("Marc");
-  });
-});
-
-describe("messagesWithoutFrames", () => {
-  it("keeps of each message its first line and every line that reads as no frame, of V8 or of SpiderMonkey", () => {
-    const message = (value: string) => ({ value, type: "Error" });
-    const event = {
-      exception: {
-        values: [
-          message("Échec du trajet\n    at Marc (depuis 10:30)\nMarc@depuis 10:30\n@debugger eval code:1:5\nRéessayez plus tard"),
-          message("    at Marc (depuis 10:30)\nat Marc\nonSubmit@https://fullcar.example/_next/a.js:1:2"),
-          { type: "Error" },
-        ],
-      },
-    };
-    expect(messagesWithoutFrames(event).exception.values).toEqual([
-      message("Échec du trajet\nRéessayez plus tard"),
-      message("    at Marc (depuis 10:30)"),
-      { type: "Error" },
-    ]);
   });
 });

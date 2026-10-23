@@ -1,5 +1,5 @@
 import type * as Sentry from "@sentry/nextjs";
-import { codeFramesOnly, exactIntegrations, registerHooks, sentryOptions, type SentryEnv } from "./options";
+import { codeFramesOnly, exactIntegrations, messagesWithoutFrames, registerHooks, sentryOptions, type SentryEnv } from "./options";
 import { scrubText } from "./scrub";
 
 /*
@@ -54,22 +54,6 @@ export function scriptFramesOnly(parse: StackParser): StackParser {
   };
 }
 
-/** A line of a stack: V8's `    at …`, SpiderMonkey's and JavaScriptCore's `name@file:line:column`. */
-const FRAME_LINE = /^\s*at\s|^\s*[^\s@]*@.*:\d+(?::\d+)?\s*$/;
-
-/**
- * Of every error's message, and of its causes', the lines after the first that read as a
- * frame (#379): `scriptFramesOnly` leaves out the frame made of such a line, and this the
- * line itself, which `scrubText` would send with the first name in it.
- */
-export function messagesWithoutFrames<E extends Sentry.Event>(event: E): E {
-  for (const exception of event.exception?.values ?? []) {
-    if (typeof exception.value !== "string") continue;
-    exception.value = exception.value.split("\n").filter((line, index) => index === 0 || !FRAME_LINE.test(line)).join("\n");
-  }
-  return event;
-}
-
 /** The SDK, once started; `undefined` without a DSN, and `load` then never called. */
 export async function startBrowserSentry(env: SentryEnv, load: Load = () => import("@sentry/nextjs")): Promise<BrowserSdk | undefined> {
   const options = sentryOptions(env);
@@ -86,6 +70,7 @@ export async function startBrowserSentry(env: SentryEnv, load: Load = () => impo
   if (!client) return undefined;
   registerHooks(client);
   client.addEventProcessor(codeFramesOnly);
-  client.addEventProcessor(messagesWithoutFrames);
+  // The SDK's parser as it is: a line it makes a frame of leaves the message, URL or not.
+  client.addEventProcessor(messagesWithoutFrames(sentry.defaultStackParser));
   return sentry;
 }
