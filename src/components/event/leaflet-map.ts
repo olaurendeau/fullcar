@@ -18,6 +18,8 @@ export interface EventMapOptions {
   zoomOut: string;
   /** « Source : IGN – Plan IGN v2, {date} », after « Leaflet ». */
   attribution: string;
+  /** The media query of a touch screen, the one the two-finger sentence follows (CA1.11). */
+  touchQuery: string;
 }
 
 export interface EventMapHandle {
@@ -56,9 +58,27 @@ function flagIcon(label: string): L.DivIcon {
  * The map of a leg in `container`: our tiles, the flag, the zoom and the attribution. The flag
  * alone is framed at zoom 14 (`framing`). The container is a region, focusable (arrows, + and −);
  * the flag is not a button and stays out of the Tab order.
+ * Nothing moves by degrees (CA1.10, decision 24 of organizer-view): no zoom, fade or marker
+ * animation, no inertia, and every framing `{ animate: false }`. The wheel scrolls the page.
+ * At touch, one finger scrolls the page too, and two move and zoom the map (CA1.11): dragging
+ * follows `touchQuery`, also when it changes, the map staying as it is.
  */
 export function createEventMap(container: HTMLElement, options: EventMapOptions): EventMapHandle {
-  const map = L.map(container, { zoomControl: false, attributionControl: false, maxZoom: MAX_ZOOM });
+  const touch = window.matchMedia(options.touchQuery);
+  const map = L.map(container, {
+    zoomControl: false,
+    attributionControl: false,
+    maxZoom: MAX_ZOOM,
+    zoomAnimation: false,
+    fadeAnimation: false,
+    markerZoomAnimation: false,
+    inertia: false,
+    scrollWheelZoom: false,
+    dragging: !touch.matches,
+    touchZoom: true,
+  });
+  const pointerChanged = () => (touch.matches ? map.dragging.disable() : map.dragging.enable());
+  touch.addEventListener("change", pointerChanged);
 
   L.tileLayer("/tuiles/{z}/{x}/{y}", { noWrap: true, bounds: WORLD, maxZoom: MAX_ZOOM }).addTo(map);
   L.control.attribution({ prefix: "Leaflet" }).addAttribution(asText(options.attribution)).addTo(map);
@@ -71,10 +91,13 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   L.marker([options.flag.lat, options.flag.lng], { icon: flagIcon(options.flagLabel), keyboard: false, interactive: false }).addTo(map);
 
   const view = framing(options.flag, []);
-  if (view.kind === "flag") map.setView([view.center.lat, view.center.lng], view.zoom);
+  if (view.kind === "flag") map.setView([view.center.lat, view.center.lng], view.zoom, { animate: false });
 
   return {
     resize: () => map.invalidateSize(),
-    destroy: () => map.remove(),
+    destroy: () => {
+      touch.removeEventListener("change", pointerChanged);
+      map.remove();
+    },
   };
 }

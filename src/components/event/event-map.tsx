@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronUp, LoaderCircle, Map as MapIcon } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { PLAN_IGN_UPDATED } from "@/domain/tile";
@@ -19,6 +19,22 @@ export interface LegMap {
   onToggle: () => void;
 }
 
+/** A touch screen, where one finger scrolls the page and two move the map (CA1.11). */
+const TOUCH = "(pointer: coarse)";
+
+/** Whether the primary pointer is a finger, now: never on the server, nor before hydration. */
+function useTouch(): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      const touch = window.matchMedia(TOUCH);
+      touch.addEventListener("change", changed);
+      return () => touch.removeEventListener("change", changed);
+    },
+    () => window.matchMedia(TOUCH).matches,
+    () => false,
+  );
+}
+
 /** The first day of the month of `PLAN_IGN_UPDATED` (`YYYY-MM`), in UTC, as the formatter reads it. */
 function layerUpdated(): Date {
   const [year, month] = PLAN_IGN_UPDATED.split("-").map(Number);
@@ -32,6 +48,8 @@ function layerUpdated(): Date {
  * opening, and starts only once the map is open and its panel shown, a hidden tab having no
  * size (CA1.13). Until it has started, « Chargement de la carte… » in the box, `aria-busy`, and no
  * `status` region of its own: the leg's panel keeps its only one, the banner's.
+ * Under the map, in this order (CA1.17): the tiles' notice, `notOnMap`, then, at touch only, the
+ * two-finger sentence; for now, the sentence alone.
  * For now the map has the flag alone: its name says « … et aucune voiture » (the cars, #480).
  */
 export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
@@ -43,6 +61,7 @@ export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
   const [library, setLibrary] = useState<LeafletMap | null>(null);
   // Once started, a map stays: shown again, it only takes its new size.
   const [started, setStarted] = useState(false);
+  const touch = useTouch();
   const containerId = `event-map-${leg}`;
   const Chevron = map.open ? ChevronUp : ChevronDown;
 
@@ -73,7 +92,14 @@ export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
 
   useEffect(() => {
     if (library === null || !started || !leaflet.current) return;
-    const created = library.createEventMap(leaflet.current, { flag: { lat, lng }, flagLabel, zoomIn, zoomOut, attribution });
+    const created = library.createEventMap(leaflet.current, {
+      flag: { lat, lng },
+      flagLabel,
+      zoomIn,
+      zoomOut,
+      attribution,
+      touchQuery: TOUCH,
+    });
     handle.current = created;
     return () => {
       handle.current = null;
@@ -96,7 +122,8 @@ export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
         <span className="flex-1">{t("title")}</span>
         <Chevron aria-hidden className="size-4 shrink-0 text-muted-foreground" />
       </button>
-      <div id={containerId} hidden={!map.open}>
+      {/* Folded, `hidden` still wins over `flex`: Tailwind's preflight makes it `!important`. */}
+      <div id={containerId} hidden={!map.open} className="flex flex-col gap-2.5">
         <div
           ref={box}
           aria-busy={loading || undefined}
@@ -111,6 +138,7 @@ export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
             </p>
           )}
         </div>
+        {touch && <p className="text-[13px] leading-[18px] text-muted-foreground">{t("touchHint")}</p>}
       </div>
     </>
   );
