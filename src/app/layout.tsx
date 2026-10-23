@@ -4,9 +4,12 @@ import { getLocale } from "next-intl/server";
 import "./globals.css";
 import { WebAnalytics } from "@/components/analytics/web-analytics";
 import { cn } from "@/lib/utils";
+import { siteOrigin } from "./site";
 
 export const metadata: Metadata = {
   title: "Fullcar",
+  // What a canonical URL is resolved against (#412). No canonical here: a page names its own.
+  metadataBase: new URL(siteOrigin()),
 };
 
 export const viewport: Viewport = {
