@@ -148,6 +148,41 @@ describe("what the browser sends for an error", () => {
     expect(results).toEqual([[true, false], [true, false]]);
   });
 
+  it("keeps the frames of the runtime, Chrome's and Safari's, with ours (#395)", async () => {
+    const chrome = new SyntaxError("Unexpected token");
+    chrome.stack = [
+      `SyntaxError: ${chrome.message}`, "    at JSON.parse (<anonymous>)", "    at Array.map (<anonymous>)",
+      `    at onSubmit (${CHUNK}:1:4410)`, "    at new Promise (<anonymous>)",
+    ].join("\n");
+    const safari = new SyntaxError("JSON Parse error");
+    safari.stack = `parse@[native code]\nonSubmit@${CHUNK}:1:4410`;
+    const onSubmit = { filename: FILENAME, function: "onSubmit", lineno: 1, colno: 4410, in_app: true };
+    expect([await framesSent(chrome), await framesSent(safari)]).toEqual([
+      [
+        { filename: "<anonymous>", function: "new Promise", in_app: true },
+        onSubmit,
+        { filename: "<anonymous>", function: "Array.map", in_app: true },
+        { filename: "<anonymous>", function: "JSON.parse", in_app: true },
+      ],
+      [onSubmit, { filename: "[native code]", function: "parse", in_app: true }],
+    ]);
+  });
+
+  it("sends no frame of the runtime read from a line of its message, nor a first name as one (#395)", async () => {
+    const lines = [
+      "    at JSON.parse (<anonymous>)", "parse@[native code]", "    at Marc (<anonymous>)", "    at JSON.Marc (<anonymous>)",
+      "    at Marc.parse (<anonymous>)", "    at new Marc (<anonymous>)", "Marc@[native code]",
+    ];
+    const error = new Error(["Le trajet a échoué", ...lines].join("\n"));
+    error.stack = `Error: ${error.message}\n    at onSubmit (${CHUNK}:1:4410)`;
+    const { event, payload } = await send(error);
+    expect(event?.exception.values.map(({ value, stacktrace }) => [value, stacktrace.frames.map((frame) => frame.function)])).toEqual([
+      ["Le trajet a échoué", ["onSubmit"]],
+    ]);
+    // A boolean: a failing assertion prints no part of what was sent (#233).
+    expect(payload.includes("Marc")).toBe(false);
+  });
+
   it("sends no error thrown by another script, an extension's, though ours called it", async () => {
     expect(await framesSent(thrownByAnExtension())).toBeUndefined();
   });

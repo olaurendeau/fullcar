@@ -252,11 +252,59 @@ export function inCode(frame: StackFrame): boolean {
   return finite(frame.lineno) !== undefined && buildFile(frame.filename ?? frame.abs_path) !== undefined;
 }
 
+/** The files of the runtime's own frames, as the SDK's parsers write them, and as `allowUrls` skips them. */
+export const RUNTIME_FILES: ReadonlySet<unknown> = new Set(["<anonymous>", "[native code]"]);
+
+/** ECMAScript's own objects, a fixed list: `process`, `console`, a page's global or an element's id is none of them. */
+const BUILT_INS = `Array ArrayBuffer Atomics BigInt Boolean DataView Date Error EvalError FinalizationRegistry Float32Array
+  Float64Array Function Int8Array Int16Array Int32Array Intl Iterator JSON Map Math Number Object Promise Proxy RangeError
+  ReferenceError Reflect RegExp Set SharedArrayBuffer String Symbol SyntaxError TypeError URIError Uint8Array
+  Uint8ClampedArray Uint16Array Uint32Array WeakMap WeakRef WeakSet`.split(/\s+/);
+
+/**
+ * The names of each built-in's own members and of its prototype's, read once, when this
+ * module loads: a member added since (`Object.prototype.Marc = …`) is none of them. A
+ * built-in this runtime lacks is left out: in a page, an element's id could take its name.
+ */
+const MEMBERS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  BUILT_INS.flatMap((name) => {
+    const object = (globalThis as Record<string, unknown>)[name];
+    const tag = Object.prototype.toString.call(object);
+    if (typeof object !== "function" && tag !== `[object ${name}]`) return [];
+    const each = [object as object, (object as { prototype?: object }).prototype].filter((part) => part !== undefined);
+    return [[name, new Set(each.flatMap((part) => Object.getOwnPropertyNames(part)))] as const];
+  }),
+);
+const ANY_MEMBER: ReadonlySet<string> = new Set([...MEMBERS.values()].flatMap((members) => [...members]));
+
+/**
+ * A built-in's name, as V8 (`JSON.parse`, `Array.map`, `new Promise`) or Safari (`parse`)
+ * write it: each of its words one of the runtime's. A first name is none of them.
+ */
+function builtInName(name: string): boolean {
+  const constructed = /^new (\w+)$/.exec(name);
+  if (constructed) return MEMBERS.has(constructed[1]);
+  const [owner, member, ...rest] = name.split(".");
+  if (rest.length > 0) return false;
+  if (member !== undefined) return MEMBERS.get(owner)?.has(member) === true;
+  return MEMBERS.has(owner) || ANY_MEMBER.has(owner);
+}
+
+/**
+ * A frame of the runtime (#395): `JSON.parse (<anonymous>)`, `parse@[native code]`. No line,
+ * and a built-in's name: the SDK's parsers make `    at Marc (<anonymous>)` a frame too.
+ */
+export function inRuntime(frame: StackFrame): boolean {
+  return frame.lineno === undefined && RUNTIME_FILES.has(frame.filename) && builtInName(frame.function ?? "");
+}
+
 /**
  * Where the code ran, and nothing it held: no `vars`, no lines of source. Line and column
  * only in a frame of code: from a line of a message (`tel:0647812953:1`), they are its digits.
+ * A frame of the runtime as it is: its file is one of a fixed list, its name the runtime's.
  */
 function scrubFrame(frame: StackFrame): StackFrame {
+  if (inRuntime(frame)) return compact({ filename: frame.filename, function: frame.function, in_app: bool(frame.in_app) });
   const code = inCode(frame);
   return compact({
     filename: stringOr(frame.filename, scrubLocation),
