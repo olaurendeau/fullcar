@@ -134,13 +134,23 @@ celui qui écrit le code.
     noms d'objets intégrés à ECMAScript et de leurs membres. Ces objets viennent d'une liste
     fixe, et leurs membres sont lus une fois, au chargement (`inRuntime`,
     `src/observability/scrub.ts`) ;
-  - `messagesWithoutFrames(parse)` (`src/observability/options.ts`) est posé par
-    `registerServerHooks` et par `startBrowserSentry`, avec le parseur du SDK tel quel. Dans
-    le navigateur, ce parseur est `sentry.defaultStackParser`, jamais `scriptFramesOnly(…)`.
+  - `messagesWithoutFrames(parse)` (`src/observability/options.ts`) est posé avec
+    `client.on("preprocessEvent", …)` par `registerServerHooks` (`src/observability/server.ts`)
+    et par `startBrowserSentry` (`src/observability/client.ts`), avec le parseur du SDK tel
+    quel : `client.getOptions().stackParser` sur le serveur, `sentry.defaultStackParser` dans
+    le navigateur, jamais `scriptFramesOnly(…)`. `preprocessEvent` passe avant tout
+    processeur d'événement : dans le navigateur, `allowUrls` regarde donc la vraie frame du
+    haut, et les fichiers des frames sont encore ceux qu'a lus le parseur (#388). Le poser
+    d'un côté ou de l'autre avec `addEventProcessor` est bloquant. Les deux côtés restent
+    ainsi symétriques. Le serveur n'a pas d'`allowUrls`, et seul le test d'enregistrement de
+    `src/observability/options.test.ts` y garde ce point.
     Après la première ligne, il retire du message de chaque erreur et de ses causes toute
-    ligne que le parseur lit comme une frame (#393, #386). Il retire aussi de la pile les
-    frames du runtime que ces lignes se lisent comme (#395). Ce second retrait ne tient que
-    si le texte de la pile contient le message.
+    ligne que le parseur lit comme une frame (#393, #386). Il retire aussi de la pile toute
+    frame que ces lignes se lisent comme, comparée sur sa fonction, son fichier, sa ligne et
+    sa colonne (`readAs`, #395, #388). Une ligne sans fichier est comparée sans fichier : le
+    parseur lui donne celui d'une autre ligne. Une de nos vraies frames de même fonction, de
+    même ligne et de même colonne peut alors partir avec elle, un coût accepté. Ce retrait de
+    la pile ne tient que si le texte de la pile contient le message.
 
   Sur le serveur, `databaseErrors` ne garde du `DatabaseError` de pg que son code.
 - Le navigateur ne parle qu'à notre origine (`tunnelRoute: "/monitoring"`). Aucun DSN ni
