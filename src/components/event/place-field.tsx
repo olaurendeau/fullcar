@@ -28,6 +28,10 @@ import {
 } from "./place-field-state";
 import { createPlaceSearch } from "./place-search";
 
+/** What the list leaves under it in the window (AL1.11), and at least two options' height. */
+const LIST_MARGIN = 8;
+const LIST_MIN_HEIGHT = 88;
+
 /** The suggestion's label, the text typed in bold where it is found, as the page shows it (state 2). */
 function emphasised(label: string, text: string): ReactNode {
   const typedText = text.trim().toLocaleLowerCase();
@@ -62,6 +66,7 @@ export function PlaceField({
   locked = false,
   readOnly = false,
   error,
+  hint,
 }: {
   id: string;
   /** The field's label, which names its list and its « Retirer ». */
@@ -75,10 +80,14 @@ export function PlaceField({
   readOnly?: boolean;
   /** The field's error: its message, and the id that describes the field. */
   error?: { id: string; message: string };
+  /** A sentence under the field, after its position: who sees a car's place (AL4.4). */
+  hint?: string;
 }) {
   const t = useTranslations("PlaceField");
   const locale = useLocale() as Locale;
   const input = useRef<HTMLInputElement>(null);
+  const field = useRef<HTMLDivElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
   const [own, setOwn] = useState(() => placeFieldOf(value, rule));
   // The value is the form's: what the field keeps of it is only where it came from.
   const state: PlaceFieldState = { ...own, text: value.text, position: value.position, label: value.label };
@@ -133,6 +142,26 @@ export function PlaceField({
   const listId = `${id}-list`;
   const optionId = (n: number) => `${id}-option-${n}`;
   const positionId = `${id}-position`;
+  const hintId = `${id}-hint`;
+
+  // The list open: the height left under it in what the window shows (above a virtual keyboard),
+  // 8 px kept, after the field is scrolled to the top if it does not fit there (AL1.11).
+  const suggestions = open ? list.suggestions : null;
+  useLayoutEffect(() => {
+    const box = popup.current;
+    if (suggestions === null || !box) return;
+    const fit = (scroll: boolean) => {
+      const shown = window.visualViewport;
+      const bottom = () => (shown ? shown.offsetTop + shown.height : window.innerHeight) - LIST_MARGIN;
+      box.style.maxHeight = "";
+      if (scroll && box.getBoundingClientRect().bottom > bottom()) field.current?.scrollIntoView({ block: "start" });
+      box.style.maxHeight = `${Math.max(bottom() - box.getBoundingClientRect().top, LIST_MIN_HEIGHT)}px`;
+    };
+    fit(true);
+    const refit = () => fit(false);
+    window.visualViewport?.addEventListener("resize", refit);
+    return () => window.visualViewport?.removeEventListener("resize", refit);
+  }, [suggestions]);
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if ((event.key === "ArrowDown" || event.key === "ArrowUp") && list !== null && !state.locked) {
@@ -157,10 +186,10 @@ export function PlaceField({
 
   const words = (announcement: PlaceAnnouncement) =>
     announcement.kind === "count" ? t("count", { count: announcement.count }) : t(announcement.kind);
-  const describedBy = [error?.id, state.position && positionId].filter(Boolean).join(" ");
+  const describedBy = [error?.id, state.position && positionId, hint && hintId].filter(Boolean).join(" ");
 
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div ref={field} className="flex min-w-0 flex-col gap-1.5">
       <Label htmlFor={id} className={cn(error && "text-destructive")}>
         {label}
       </Label>
@@ -186,11 +215,13 @@ export function PlaceField({
         />
         {/* Pressed, an option keeps the focus in the field: Radix does not read it as outside. */}
         <div
+          ref={popup}
           hidden={!open}
           onMouseDown={(event) => event.preventDefault()}
-          className="absolute inset-x-0 top-full z-20 mt-1 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
+          className="absolute inset-x-0 top-full z-20 mt-1 overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
         >
-          <div id={listId} role="listbox" aria-label={t("listLabel", { field: label })}>
+          {/* Named only while open: hidden, a name holding the field's label would make two elements answer to it. */}
+          <div id={listId} role="listbox" aria-label={open ? t("listLabel", { field: label }) : undefined}>
             {open &&
               list.suggestions.map((suggestion, n) => (
                 <div
@@ -238,6 +269,11 @@ export function PlaceField({
         <p className="flex items-center gap-1.5 text-[13px] leading-[18px] text-muted-foreground">
           {state.line === "searching" && <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />}
           {t(state.line)}
+        </p>
+      )}
+      {hint && (
+        <p id={hintId} className="text-[13px] leading-[18px] text-muted-foreground">
+          {hint}
         </p>
       )}
       <div role="status" className="sr-only">

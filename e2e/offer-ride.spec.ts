@@ -30,6 +30,8 @@ const FR = {
   storageTitle: "Cet appareil ne pourra pas s’en souvenir",
   storageBody: "Votre navigateur bloque le stockage : après la fermeture de la page, cette voiture et la personne qui conduit ne pourront plus être modifiées depuis cet appareil.",
   required: "Champ requis.",
+  // Under each place of a car, after its error (place-autocomplete, AL1.9 (b), AL4.4).
+  placeHint: "Visible par toutes les personnes qui ont le lien.",
   seatsError: "De 1 à 8 places.",
   chooseDriver: "Choisissez qui conduit.",
   failed: "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
@@ -309,7 +311,7 @@ test.describe("offer a car", () => {
     await expect(choices).toHaveAccessibleDescription(FR.chooseDriver);
     await expect(choices).toHaveAttribute("aria-invalid", "true");
     await expect(choices.getByRole("radio", { name: "Claire" })).toBeFocused();
-    await expect(field(page, FR.location.aller)).toHaveAccessibleDescription(FR.required);
+    await expect(field(page, FR.location.aller)).toHaveAccessibleDescription(`${FR.required} ${FR.placeHint}`);
     await expect(field(page, FR.location.aller)).toHaveAttribute("aria-invalid", "true");
     await expect(field(page, FR.seats)).toHaveAccessibleDescription(`${FR.required} ${FR.seatsHint}`);
     await expect(field(page, FR.note)).toHaveValue("Laisser la place");

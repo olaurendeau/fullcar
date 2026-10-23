@@ -25,6 +25,8 @@ const FR = {
   otherTime: { aller: "Heure de départ de l’aller", retour: "Heure de départ du retour" },
   same: "Mêmes places et même note pour les deux voitures.",
   required: "Champ requis.",
+  // Under each place of a car, after its error (place-autocomplete, AL1.9 (b), AL4.4).
+  placeHint: "Visible par toutes les personnes qui ont le lien.",
   failed: "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
 };
 
@@ -295,7 +297,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     await submit(page).click();
     await expect(field(page, FR.location.retour)).toBeFocused();
     await expect(field(page, FR.location.retour)).toHaveAttribute("aria-invalid", "true");
-    await expect(field(page, FR.location.retour)).toHaveAccessibleDescription(FR.required);
+    await expect(field(page, FR.location.retour)).toHaveAccessibleDescription(`${FR.required} ${FR.placeHint}`);
     await expect(field(page, FR.otherTime.retour)).toHaveAccessibleDescription(`${FR.required} Le samedi 12 décembre 2026`);
     // This leg's place stays as it was, and holds no error.
     await expect(field(page, FR.location.aller)).not.toHaveAttribute("aria-invalid");
