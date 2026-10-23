@@ -17,9 +17,13 @@ import {
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { EventFormFields, eventFieldsChanged, loadedEventFields, withSavedFields } from "./event-fields";
+import { RemoveRetourDialog, type RemovalSaid, type RetourCounts } from "./remove-retour-dialog";
 
-/** Sends the organiser's change: `fields` as the form holds them, `before` the values it loaded. */
-export type EditEvent = (fields: EventFields, before: EventHeader) => Promise<EditAnswer>;
+/**
+ * Sends the organiser's change: `fields` as the form holds them, `before` the values it loaded,
+ * `removal` the numbers « Supprimer le retour ? » showed, once confirmed.
+ */
+export type EditEvent = (fields: EventFields, before: EventHeader, removal?: RetourCounts) => Promise<EditAnswer>;
 
 /**
  * « Modifier l’événement » (organizer-view v3.3.6, « Le formulaire »): a sheet with the fields of
@@ -69,7 +73,9 @@ type Said = ActionProblem | "changed" | "invalid" | "eventNotFound";
  * the sheet says why above « Valider », which gets the focus, and what was typed stays:
  * offline, a failure, or the link refused (M8.2). Changed on another device (M6.1, M6.2), the
  * fields not changed take the saved values, which become the ones loaded and `before`. The event
- * gone (M8.3), « Valider » is `disabled` for good, and the focus goes to « Annuler ».
+ * gone (M8.3), « Valider » is `disabled` for good, and the focus goes to « Annuler ». The retour
+ * unchecked still holding cars or persons, « Supprimer le retour ? » asks first (M3.2): its
+ * « Annuler » and Escape come back to the sheet, the box still unchecked, the focus on « Valider ».
  */
 function EditEventForm({ event, onEdit, onDone }: { event: EventHeader; onEdit: EditEvent; onDone: () => void }) {
   const tActions = useTranslations("Actions");
@@ -85,6 +91,11 @@ function EditEventForm({ event, onEdit, onDone }: { event: EventHeader; onEdit: 
   const inFlight = useRef(false);
   const submitButton = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
+  // « Supprimer le retour ? »: the numbers it shows and what it says, kept while it closes.
+  const [confirmation, setConfirmation] = useState<{ counts: RetourCounts; said: RemovalSaid | null } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  // What happens once the confirmation has closed: where the focus goes, what the sheet says.
+  const afterConfirmation = useRef(() => {});
   // An answer that comes once this form is gone closes no sheet opened since.
   const mounted = useRef(false);
   useEffect(() => {
@@ -100,24 +111,25 @@ function EditEventForm({ event, onEdit, onDone }: { event: EventHeader; onEdit: 
     if (first) document.getElementById(idOf(first))?.focus();
   }
 
-  async function submit(submitted: FormEvent<HTMLFormElement>) {
-    submitted.preventDefault();
-    if (inFlight.current) return;
-    if (said === "eventNotFound") return;
-    if (!eventFieldsChanged(fields.values, loaded.values)) return onDone();
-    setSaid(null);
-    const checked = validateEventChange(fields.values, deviceBounds(new Date()), before);
-    if (!checked.ok) return showErrors(checked.errors);
-    setErrors({});
-
+  /** Sends the fields, with the numbers confirmed if any: the answer, unless this form is gone. */
+  async function send(removal?: RetourCounts): Promise<EditAnswer | undefined> {
     inFlight.current = true;
     setSending(true);
-    const answer = await onEdit(fields.values, before);
+    const answer = await onEdit(fields.values, before, removal);
     inFlight.current = false;
-    if (!mounted.current) return;
+    if (!mounted.current) return undefined;
     setSending(false);
+    return answer;
+  }
+
+  /** An answer as the sheet says it; the retour still holding cars or persons, the confirmation opens. */
+  function sheetAnswer(answer: EditAnswer) {
     if (answer.kind === "saved") return onDone();
     if (answer.kind === "errors") return showErrors(answer.errors);
+    if (answer.kind === "confirmRetour") {
+      setConfirmation({ counts: answer.counts, said: null });
+      return setConfirming(true);
+    }
     if (answer.kind === "refused" && answer.reason === "eventNotFound") {
       setSaid("eventNotFound");
       return cancelButton.current?.focus();
@@ -132,6 +144,42 @@ function EditEventForm({ event, onEdit, onDone }: { event: EventHeader; onEdit: 
       setSaid(answer.kind === "problem" ? answer.problem : answer.reason);
     }
     submitButton.current?.focus();
+  }
+
+  async function submit(submitted: FormEvent<HTMLFormElement>) {
+    submitted.preventDefault();
+    if (inFlight.current) return;
+    if (said === "eventNotFound") return;
+    if (!eventFieldsChanged(fields.values, loaded.values)) return onDone();
+    setSaid(null);
+    const checked = validateEventChange(fields.values, deviceBounds(new Date()), before);
+    if (!checked.ok) return showErrors(checked.errors);
+    setErrors({});
+    const answer = await send();
+    if (answer) sheetAnswer(answer);
+  }
+
+  /**
+   * « Supprimer le retour »: the fields sent again with the numbers shown. Saved, the sheet closes
+   * with the confirmation. New numbers, a failure, the link refused or the event gone: the
+   * confirmation stays and says so. Changed on another device or a field refused: it closes, and
+   * the sheet says it.
+   */
+  async function confirm() {
+    if (inFlight.current || !confirmation) return;
+    const { counts } = confirmation;
+    setConfirmation({ counts, said: null });
+    const answer = await send(counts);
+    if (!answer) return;
+    if (answer.kind === "confirmRetour") return setConfirmation({ counts: answer.counts, said: "changed" });
+    if (answer.kind === "problem") return setConfirmation({ counts, said: answer.problem });
+    if (answer.kind === "refused") {
+      if (answer.reason === "eventNotFound") setSaid("eventNotFound");
+      return setConfirmation({ counts, said: answer.reason === "invalid" ? "failed" : "eventNotFound" });
+    }
+    afterConfirmation.current = answer.kind === "saved" ? () => {} : () => sheetAnswer(answer);
+    setConfirming(false);
+    if (answer.kind === "saved") onDone();
   }
 
   const gone = said === "eventNotFound";
@@ -157,6 +205,21 @@ function EditEventForm({ event, onEdit, onDone }: { event: EventHeader; onEdit: 
       <Button ref={cancelButton} type="button" variant="outline" className="h-11 w-full" onClick={onDone}>
         {tActions("cancel")}
       </Button>
+      {/* In a portal: out of the form in the document, its buttons submit nothing. */}
+      {confirmation && (
+        <RemoveRetourDialog
+          open={confirming}
+          counts={confirmation.counts}
+          said={confirmation.said}
+          sending={sending}
+          onConfirm={() => void confirm()}
+          onCancel={() => {
+            afterConfirmation.current = () => (gone ? cancelButton : submitButton).current?.focus();
+            setConfirming(false);
+          }}
+          onClosed={() => afterConfirmation.current()}
+        />
+      )}
     </form>
   );
 }

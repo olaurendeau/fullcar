@@ -367,14 +367,15 @@ test.describe("add a person", () => {
     await expect(bar(page)).toBeEmpty();
   });
 
-  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
-  // meanwhile. Reopened once closed, the sheet shows a new form: the one that sent is gone.
-  const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+  // Radix keeps a closing sheet mounted until its animation ends: held here until the answer has
+  // come, however long it takes (#398). Reopened once closed, the sheet shows a new form: the one that sent is gone.
+  /** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
+  const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
   for (const when of ["closed", "closing", "reopened"] as const) {
     test(`a refusal once the sheet is ${when}: said in the bar, once no sheet hides the page`, async ({ page, seededEvent }) => {
       const answer = await holdFirst(page, "Léa", true);
       await page.goto(`/e/${seededEvent.id}`);
-      if (when === "closing") await page.addStyleTag({ content: slowClose });
+      const held = when === "closing" ? await page.addStyleTag({ content: holdClose }) : undefined;
       await openForm(page);
       await form(page).getByLabel(FR.firstName).fill("Léa");
       await submit(page).click();
@@ -389,14 +390,13 @@ test.describe("add a person", () => {
       await responded;
       // Still closing at the answer: it came during the animation.
       if (when === "closing") expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
+      // Answered: the sheet may end its closing.
+      await held?.evaluate((style) => style.parentNode?.removeChild(style));
       if (when === "reopened") {
         // Marc registered once Léa's answer has come: his success neither clears nor replaces it.
         await form(page).getByLabel(FR.firstName).fill("Marc");
-        await expect(async () => {
-          const sent = page.waitForRequest((request) => !!request.postData()?.includes("Marc"), { timeout: 1000 });
-          await submit(page).click();
-          await sent;
-        }).toPass();
+        // One tap sends it (#398): awaited together, the request is waited for as long as the click takes.
+        await Promise.all([page.waitForRequest((request) => !!request.postData()?.includes("Marc")), submit(page).click()]);
         await expect(form(page)).toHaveCount(0);
       }
       await expect(bar(page)).toHaveText(FR.barFailed);
@@ -412,7 +412,7 @@ test.describe("add a person", () => {
     test(`a refusal while the sheet closes, reopened before it has: ${outcome}`, async ({ page, seededEvent }) => {
       const answer = await holdFirst(page, "Léa", true);
       await page.goto(`/e/${seededEvent.id}`);
-      await page.addStyleTag({ content: slowClose });
+      const held = await page.addStyleTag({ content: holdClose });
       await openForm(page);
       await form(page).getByLabel(FR.firstName).fill("Léa");
       await submit(page).click();
@@ -426,6 +426,8 @@ test.describe("add a person", () => {
       await page.locator('[role="tabpanel"][data-state="active"] button', { hasText: FR.add }).focus();
       await page.keyboard.press("Enter");
       await expect(form(page)).toHaveAttribute("data-state", "open");
+      // Reopened: its next closing may end.
+      await held.evaluate((style) => style.parentNode?.removeChild(style));
       await expect(form(page).getByLabel(FR.firstName)).toHaveValue("Léa");
       if (sentAgain) {
         await submit(page).click();

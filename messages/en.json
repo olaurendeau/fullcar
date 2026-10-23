@@ -227,7 +227,8 @@
       "removeRide": "{leg, select, aller {{driver}’s car for the outbound trip was not removed.} other {{driver}’s car for the return trip was not removed.}}",
       "editRide": "{leg, select, aller {The changes to {driver}’s car for the outbound trip were not saved.} other {The changes to {driver}’s car for the return trip were not saved.}}",
       "readDevice": "Your sign-ups could not be loaded.",
-      "editEvent": "The event was not changed."
+      "editEvent": "The event was not changed.",
+      "removeRetour": "The event was not changed and the return trip was not removed."
     },
     "why": {
       "offline": "Check your connection, then try again.",
@@ -354,6 +355,13 @@
     "changed": {
       "title": "The event has just been changed from another device.",
       "body": "Nothing was saved. The fields you had not changed now show the saved version: check them, then confirm again."
+    },
+    "removeRetour": {
+      "title": "Remove the return trip?",
+      "body": "{cars, plural, =0 {No car is offered for the return trip.} one {The car offered for the return trip will be removed.} other {The # cars offered for the return trip will be removed.}} {persons, plural, =0 {} one {# person will no longer be signed up for the return trip.} other {# people will no longer be signed up for the return trip.}}",
+      "aller": "The outbound trip does not change.",
+      "confirm": "Remove the return trip",
+      "changed": "The return trip changed in the meantime: check the numbers above, then confirm again."
     }
   },
   "EventNotFound": {
