@@ -209,6 +209,11 @@ describe("sensitive patterns: tokens", () => {
     'const fragment = page.url().split("#")[1];',
     "const [, secret] = url.split( '#' );",
     "const [, secret] = url.split(`#`);",
+    // A component that changes what the referrer carries: the attribute, case-sensitive, and
+    // the meta tag, but not the word in prose. Decision (23/10, the coordinator): this closes
+    // the gap the owner's relaxation below leaves in components.
+    '<a referrerPolicy="unsafe-url">',
+    '<meta name="referrer" content="origin">',
   ])("flags %s", (line) => {
     expect(isSensitive(line)).toBe(true);
   });
@@ -249,14 +254,14 @@ describe("sensitive patterns: tokens", () => {
     "const ids = devicePersonIds(secret, holders);",
     // Decision (23/10, the owner): `.hash`, `referrer` and `Referrer-Policy` caught more false
     // positives than tokens. The pages' Referrer-Policy header is set in next.config.ts, a
-    // sensitive path, and the review checklist requires it.
+    // sensitive path, and the review checklist requires it. Only `referrerPolicy` and the
+    // referrer meta tag stay flagged, above.
     'url.hash = "";',
     "const fragment = url.hash;",
+    "// le referrer de la page",
     "// le referrer de la page n'emporte pas le fragment",
     'headers.set("Referrer-Policy", "no-referrer");',
     'export const metadata = { referrer: "unsafe-url" };',
-    '<meta name="referrer" content="origin" />',
-    '<a href={url} referrerPolicy="unsafe-url">',
     "const from = document.referrer;",
   ])("ignores %s", (line) => {
     expect(isSensitive(line)).toBe(false);
