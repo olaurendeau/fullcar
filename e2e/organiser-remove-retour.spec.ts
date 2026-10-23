@@ -68,13 +68,22 @@ const header = (page: Page) => page.locator("main header").first();
 const tabs = (page: Page) => page.locator('main [role="tab"]');
 
 /**
- * The confirmation done appearing, as a person sees it open: its animation over. Radix gives it
- * Escape only once it is the highest layer, two renders and their effects after it has taken the
- * focus; until then Escape is the sheet's, which closes with the confirmation in it (#415). Its
- * animation outlasts those renders.
+ * The confirmation done appearing, as a person sees it open: its opening animation over. Radix
+ * gives it Escape only once it is the highest layer, two renders and their effects after it has
+ * taken the focus; until then Escape is the sheet's, which closes with the confirmation in it
+ * (#415). That its 100 ms animation outlasts those renders is measured, not guaranteed: 0 failure
+ * in 60 runs with the CPU 6 times slower, 0 in 40 at 12 times (#435). Without the animation, or
+ * shorter than that, the wait would cover nothing, or less than was measured: it fails (#439).
+ * Read from the style, not from `getAnimations()`, which is empty once the animation is over.
  */
 async function grownIn(dialog: Locator) {
-  await dialog.evaluate((element) => Promise.all(element.getAnimations().map((each) => each.finished)));
+  const opening = await dialog.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((each) => each.finished));
+    const style = getComputedStyle(element);
+    return { name: style.animationName, ms: parseFloat(style.animationDuration) * 1000 };
+  });
+  expect(opening.name, "grownIn: the confirmation has no opening animation to wait for").not.toBe("none");
+  expect(opening.ms, "grownIn: the opening animation is shorter than the measured margin, in ms").toBeGreaterThanOrEqual(100);
 }
 
 /** The removals sent from now on: the changes whose body carries confirmed numbers. Counted, never shown. */
