@@ -167,17 +167,13 @@ const CLOSED: Record<string, { text: string; answer: (held: Held, scene: { page:
       await held.release();
     },
   },
-  // Decision: a week ago, not yesterday. Reason: the server takes a day more than the device,
-  // for any time zone (`serverBounds`): yesterday is still accepted there.
-  "the start forged to a week ago (`errors`)": {
+  // Decision: a fixed date long past, not yesterday nor a week ago. Reason: the server takes a day
+  // more than the device, for any time zone (`serverBounds`): yesterday is still accepted there;
+  // and a date relative to today would be the seed's, 2026-12-12, some day, then kept (#462).
+  "the start forged to 2000-01-01 (`errors`)": {
     text: FR.errors,
-    answer: async (held, { page }) => {
-      const past = await page.evaluate(() => {
-        const at = new Date();
-        at.setDate(at.getDate() - 7);
-        const pad = (n: number) => String(n).padStart(2, "0");
-        return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
-      });
+    answer: async (held) => {
+      const past = "2000-01-01";
       const forged = (body: string) => body.replace(/"allerDate":\s*"[^"]*"/, `"allerDate":"${past}"`);
       await held.release((body) => {
         expect(forged(body) !== body, "the start date found in the body").toBe(true);

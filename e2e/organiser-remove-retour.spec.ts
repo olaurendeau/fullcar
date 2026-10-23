@@ -393,16 +393,12 @@ test.describe("M3.7: the confirmation while it sends, and after a failure", () =
   });
 
   // #405: the answer `errors` closes the confirmation, and the sheet shows them. Only a forged
-  // request gets it: the start date put a week back on the way, which the server refuses.
+  // request gets it: the start date put on 2000-01-01 on the way, which the server refuses. A fixed
+  // date, long past and never the seed's: one relative to today would be the seed's some day (#462).
   test("`errors`: the confirmation closes, the error under its field, the focus on it; nothing changed", async ({ page, db, seededEvent }) => {
     await seedRetour(db, seededEvent.id);
     await askRemoval(page, organiserPath(seededEvent));
-    const past = await page.evaluate(() => {
-      const at = new Date();
-      at.setDate(at.getDate() - 7);
-      const pad = (n: number) => String(n).padStart(2, "0");
-      return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
-    });
+    const past = "2000-01-01";
     await page.route(
       (url) => url.pathname.endsWith("/admin"),
       (route) => {
