@@ -4,7 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import { EventView } from "@/components/event/event-view";
-import { offerChanges, personLeg, type Message, type Undo } from "@/components/event/bar-state";
+import { offerChanges, personLeg, type Failure, type Message, type Undo } from "@/components/event/bar-state";
 import {
   cellWhy,
   failureText,
@@ -59,13 +59,15 @@ import { actionRunner, sendAction, stateOf, stateRead, stateShown, withTabsHeld,
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
  * sees and applies nothing, `apply(state)` shows it. The personal token stays in this file.
  * `applyEvent(event)` shows the header the organiser just saved, on the legs it keeps (epic
- * #250), and `succeed(message)` writes the success of the organiser's action in the bar.
+ * #250), and `succeed(message)` and `fail(failure)` write the success or the failure of the
+ * organiser's action in the bar.
  */
 export interface BoardHandle {
   read(): Promise<Sent<EventState | undefined>>;
   apply(state: EventState): void;
   applyEvent(event: EventHeader): void;
   succeed(message: Message): void;
+  fail(failure: Failure): void;
 }
 
 /**
@@ -141,7 +143,7 @@ export function ParticipantBoard({
       release();
     };
   });
-  const { succeed } = messages;
+  const { succeed, fail } = messages;
   useImperativeHandle(
     ref,
     () => ({
@@ -149,8 +151,9 @@ export function ParticipantBoard({
       apply: setBoard,
       applyEvent: (event) => setBoard({ event, legs: latest.current.legs.filter(({ leg }) => leg === "aller" || event.retourAt) }),
       succeed,
+      fail,
     }),
-    [id, setBoard, succeed],
+    [id, setBoard, succeed, fail],
   );
 
   useLayoutEffect(() => {

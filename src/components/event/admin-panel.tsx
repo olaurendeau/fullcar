@@ -46,6 +46,7 @@ export function AdminPanel({
   folded,
   onToggleFolded,
   editRef,
+  editSending = false,
   onEdit,
 }: {
   publicUrl: string;
@@ -64,6 +65,8 @@ export function AdminPanel({
   onToggleFolded: () => void;
   /** « Modifier l’événement », which opens the sheet (epic #250): the focus's place once it closes. */
   editRef: RefObject<HTMLButtonElement | null>;
+  /** A change is on its way: the button is `aria-disabled`, its words the same (M2.11). */
+  editSending?: boolean;
   onEdit: () => void;
 }) {
   const t = useTranslations("Admin");
@@ -154,7 +157,14 @@ export function AdminPanel({
           </div>
         </div>
         {/* After « Gardez ce lien », before the sections; from 1024 px, under both columns, at its width (v3.3). */}
-        <Button ref={editRef} type="button" variant="outline" className="h-11 w-full lg:w-fit lg:self-start" onClick={onEdit}>
+        <Button
+          ref={editRef}
+          type="button"
+          variant="outline"
+          className="h-11 w-full aria-disabled:text-muted-foreground lg:w-fit lg:self-start"
+          aria-disabled={editSending || undefined}
+          onClick={onEdit}
+        >
           <Pencil aria-hidden />
           {t("edit")}
         </Button>

@@ -1,15 +1,22 @@
+import { readFileSync } from "node:fs";
+import { createFormatter, createTranslator, type Messages } from "next-intl";
 import { describe, expect, it } from "vitest";
+import { failureText, wordsOf } from "@/components/event/failure-words";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
+import en from "../../../../../messages/en.json";
+import fr from "../../../../../messages/fr.json";
 import type { EventState } from "../event-state";
 import type { AdminLinkCheck } from "./admin-link";
 import {
   alertShown,
   announcement,
   editAnswer,
+  editWhy,
   listKey,
   panelRead,
   screenRead,
   screenReducer,
+  type EditAnswer,
   type ScreenEvent,
   type ScreenState,
 } from "./screen-state";
@@ -321,6 +328,45 @@ describe("editAnswer", () => {
   ])("is the failure on %s", (_, value) => {
     expect(editAnswer({ ok: true, value })).toStrictEqual({ kind: "problem", problem: "failed" });
   });
+});
+
+// M2.8, M2.9, C11.11 amended: the sheet closed before the answer, the bar says what was not done,
+// then why, word for word as the table « Chaque échec de la v3.3, mot pour mot » has it.
+describe("editWhy: « Modifier l’événement », the sheet closed before the answer", () => {
+  const event = { title: "Tournoi de Rennes U13", location: "Gymnase", allerAt: "2026-12-12 14:00:00", retourAt: null };
+  const words = (locale: "fr" | "en") =>
+    wordsOf(createTranslator<Messages>({ locale, messages: locale === "fr" ? fr : en }), createFormatter({ locale }));
+  /** The answers of a row's failure column. */
+  const ANSWERS: Record<string, EditAnswer[]> = {
+    "hors ligne": [{ kind: "problem", problem: "offline" }],
+    "erreur serveur (500, réseau), `invalid`": [
+      { kind: "problem", problem: "failed" },
+      { kind: "refused", reason: "invalid" },
+    ],
+    "`eventNotFound`": [{ kind: "refused", reason: "eventNotFound" }],
+    "`errors`": [{ kind: "errors", errors: { allerDate: "tooEarly" } }],
+    "`changed`": [{ kind: "changed", event }],
+    "`confirmRetour`": [{ kind: "confirmRetour", counts: { cars: 2, persons: 9 } }],
+  };
+  const readme = readFileSync(new URL("../../../../../docs/design/organizer-view/README.md", import.meta.url), "utf8").split("\n");
+  const table = readme
+    .filter((line) => /^\|\s+« Modifier l’événement », feuille fermée pendant l’envoi \|/.test(line))
+    .map((line) => line.split("|").map((cell) => cell.trim()))
+    .map(([, , failure, fr, en]) => ({ failure, fr, en }));
+
+  it("reads the six rows, and knows each failure", () => {
+    expect(table.map((row) => row.failure)).toEqual(Object.keys(ANSWERS));
+  });
+
+  for (const { failure, fr: inFrench, en: inEnglish } of table) {
+    for (const answer of ANSWERS[failure] ?? []) {
+      it(`${failure}: ${answer.kind}`, () => {
+        const why = editWhy(answer as Exclude<EditAnswer, { kind: "saved" }>);
+        expect(failureText(words("fr"), { kind: "editEvent" }, why)).toBe(inFrench);
+        expect(failureText(words("en"), { kind: "editEvent" }, why)).toBe(inEnglish);
+      });
+    }
+  }
 });
 
 describe("announcement", () => {

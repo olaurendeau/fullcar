@@ -20,10 +20,22 @@ export type NotDone =
   | { kind: "offerRide"; driver: string; legs: Leg | "both" }
   | { kind: "removeRide"; driver: string; leg: Leg }
   | { kind: "editRide"; driver: string; leg: Leg }
-  | { kind: "readDevice" };
+  | { kind: "readDevice" }
+  | { kind: "editEvent" };
 
-/** The reasons said by their key alone. */
-type Plain = "offline" | "failed" | "seatTaken" | "rideGone" | "passengersChanged" | "forbidden" | "eventNotFound" | "noRetour";
+/** The reasons said by their key alone; the last three, of « Modifier l’événement » closed before its answer (v3.3.2). */
+type Plain =
+  | "offline"
+  | "failed"
+  | "seatTaken"
+  | "rideGone"
+  | "passengersChanged"
+  | "forbidden"
+  | "eventNotFound"
+  | "noRetour"
+  | "editErrors"
+  | "eventChanged"
+  | "retourNotConfirmed";
 
 /** Why, and what to do: offline (nothing left), a server error, or the server's refusal. */
 export type Why =

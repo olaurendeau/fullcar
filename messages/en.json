@@ -245,6 +245,9 @@
       "forbidden": "This device cannot make this change: reload the page.",
       "eventNotFound": "This event can no longer be found: it may have been deleted.",
       "noRetour": "This event no longer has a return trip.",
+      "editErrors": "A field was not accepted: use “Edit the event” again.",
+      "eventChanged": "It had just been changed from another device: the page shows the saved version.",
+      "retourNotConfirmed": "Removing the return trip was not confirmed: use “Edit the event” again.",
       "noRetourAgain": "This event no longer has a return trip: {action, select, offerRide {offer the car again, for the outbound trip only.} other {add this person again, for the outbound trip only.}}"
     },
     "info": {
@@ -352,6 +355,7 @@
   "EditEvent": {
     "title": "Edit the event",
     "saved": "Event updated. Nobody is notified: remember to tell the group.",
+    "sending": "Sending…",
     "carTimes": {
       "aller": "{count, plural, one {The car already offered for the outbound trip keeps its departure time.} other {The # cars already offered for the outbound trip keep their departure time.}} Let the drivers know.",
       "retour": "{count, plural, one {The car already offered for the return trip keeps its departure time.} other {The # cars already offered for the return trip keep their departure time.}} Let the drivers know."
