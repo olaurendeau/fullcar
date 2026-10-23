@@ -59,7 +59,8 @@ function flagIcon(label: string): L.DivIcon {
  * alone is framed at zoom 14 (`framing`). The container is a region, focusable (arrows, + and −);
  * the flag is not a button and stays out of the Tab order.
  * Nothing moves by degrees (CA1.10, decision 24 of organizer-view): no zoom, fade or marker
- * animation, no inertia, and every framing `{ animate: false }`. The wheel scrolls the page.
+ * animation, no inertia, every framing `{ animate: false }`, and every pan too (`panBy`, below).
+ * The wheel scrolls the page.
  * At touch, one finger scrolls the page too, and two move and zoom the map (CA1.11): dragging
  * follows `touchQuery`, also when it changes, the map staying as it is.
  */
@@ -77,6 +78,11 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     dragging: !touch.matches,
     touchZoom: true,
   });
+  // Leaflet's arrow keys call `map.panBy(offset)`, animated for 250 ms, and no option says
+  // otherwise. Relies on that internal of Leaflet 1.9.4 (Map.Keyboard `_onKeyDown`): every pan
+  // of this map, the keyboard's included, happens at once.
+  const panBy = map.panBy.bind(map);
+  map.panBy = (offset, panOptions) => panBy(offset, { ...panOptions, animate: false });
   const pointerChanged = () => (touch.matches ? map.dragging.disable() : map.dragging.enable());
   touch.addEventListener("change", pointerChanged);
 

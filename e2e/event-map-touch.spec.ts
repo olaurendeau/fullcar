@@ -33,7 +33,9 @@ const ANIMATED = ["leaflet-zoom-anim", "leaflet-zoom-animated", "leaflet-proxy",
 /**
  * Except on a tile container: Leaflet 1.9.4 creates each one with `leaflet-zoom-animated`,
  * whatever `zoomAnimation` says (GridLayer `_updateLevels`). There it only sets a
- * `transform-origin`: its transition applies under `leaflet-zoom-anim` alone. See #479.
+ * `transform-origin`: its transition applies under `leaflet-zoom-anim` alone. Pending the
+ * amendment of CA1.10 in event-map v12, which excludes the tile containers (coordinator's
+ * decision on #479).
  */
 const TILE_LEVEL = "leaflet-tile-container";
 
@@ -176,6 +178,32 @@ test.describe("the map, at touch", () => {
     // Four times apart: from zoom 14 to 16.
     await swipe(page, [{ x: x - 20, y }, { x: x + 20, y }], { x: 60, y: 0 });
     await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/16/"]').first()).toBeVisible();
+  });
+
+  test("CA1.10: an arrow key pans the map at once, with nothing running", async ({ page, placed }) => {
+    await page.goto(`/e/${placed.id}`);
+    await expect(page.getByRole("tabpanel")).toBeVisible();
+    const seen = await watchAnimations(page);
+    const map = await openMap(page);
+    await map.focus();
+    const flag = await flagInMap(map);
+
+    await page.keyboard.press("ArrowRight");
+    // Leaflet animates a pan in JavaScript, frame by frame (PosAnimation), where `getAnimations()`
+    // sees nothing: the map pane's transform, read at once and then at each of five frames, is
+    // the same every time, the pan having ended within the key press.
+    const panes = await map.evaluate(async (box) => {
+      const pane = box.querySelector<HTMLElement>(".leaflet-map-pane")!;
+      const read = () => ({ transform: pane.style.transform, running: box.getAnimations({ subtree: true }).length });
+      const frames = [read()];
+      while (frames.length < 6) frames.push(await new Promise<ReturnType<typeof read>>((done) => requestAnimationFrame(() => done(read()))));
+      return frames;
+    });
+    expect(new Set(panes.map((frame) => frame.transform)).size).toBe(1);
+    expect(panes.filter((frame) => frame.running > 0).length).toBe(0);
+    // Leaflet's step: `keyboardPanDelta`, 80 px.
+    expect(await flagInMap(map)).toEqual({ x: flag.x - 80, y: flag.y });
+    expect(await seen.evaluate((names) => [...new Set(names)])).toEqual([]);
   });
 
   test("CA1.11: the pointer becomes a mouse, the map open: the sentence goes, and a drag moves the map", async ({ page, placed }) => {
