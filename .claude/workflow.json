@@ -67,12 +67,19 @@
         ]
       },
       {
-        "regex": "(?i)token_?hash|newAdminToken|hashAdminToken|adminTokenMatches|hashToken|tokenMatches|personalTokenFromBytes|tokenInFragment|readDeviceToken|ensureDeviceToken|\\binsertEvent\\s*\\(|\\b(get|set|remove)Item\\s*\\(|[\"'`]token[\"'`]|[\"'`][^\"'`\\s/]*[-_]token[\"'`]|\\$\\{[^}]*token\\b[^}]*\\}|\\+=?\\s*[\\w.]*token\\b|\\b(console|logger|log)\\.\\w+\\s*\\(.*token\\b|\\b(console|logger)\\.\\w+\\s*\\(\\s*$|URLSearchParams|searchParams\\.(set|append)|localStorage|sessionStorage|location\\.hash|location\\.href|split\\(\\s*[\"'`]#|(?-i:referrerPolicy)|name=[\"'`]referrer|cookies\\(\\)|\\.cookies\\.(set|delete)|cookieStore|document\\.cookie|Set-Cookie",
+        "regex": "(?i)token_?hash|newAdminToken|hashAdminToken|adminTokenMatches|hashToken|tokenMatches|personalTokenFromBytes|tokenInFragment|readDeviceToken|ensureDeviceToken|\\binsertEvent\\s*\\(|\\b(get|set|remove)Item\\s*\\(|[\"'`]token[\"'`]|[\"'`][^\"'`\\s/]*[-_]token[\"'`]|\\$\\{[^}]*token\\b[^}]*\\}|\\+=?\\s*[\\w.]*token\\b|\\b(console|logger|log)\\.\\w+\\s*\\(.*token\\b|\\b(console|logger)\\.\\w+\\s*\\(\\s*$|URLSearchParams|searchParams\\.(set|append)|localStorage|sessionStorage|location\\.hash|location\\.href|split\\(\\s*[\"'`]#|referrerpolicy\\s*[=:]|name=[\"'`]referrer|http-?equiv=[\"'`]referrer-policy|cookies\\(\\)|\\.cookies\\.(set|delete)|cookieStore|document\\.cookie|Set-Cookie",
         "exclude": [
           "docs/design/**",
           "e2e/**",
           "**/*.test.ts",
           "**/*.test.tsx"
+        ]
+      },
+      {
+        "file": "src/observability/**",
+        "regex": "\\.hash\\b",
+        "exclude": [
+          "**/*.test.ts"
         ]
       },
       {

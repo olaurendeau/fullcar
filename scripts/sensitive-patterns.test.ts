@@ -209,13 +209,28 @@ describe("sensitive patterns: tokens", () => {
     'const fragment = page.url().split("#")[1];',
     "const [, secret] = url.split( '#' );",
     "const [, secret] = url.split(`#`);",
-    // A component that changes what the referrer carries: the attribute, case-sensitive, and
-    // the meta tag, but not the word in prose. Decision (23/10, the coordinator): this closes
-    // the gap the owner's relaxation below leaves in components.
+    // A component that changes what the referrer carries: the attribute or option in any case,
+    // and the meta tags, but not the word in prose. Decision (23/10, the coordinator, after
+    // review): this closes the gap the owner's relaxation below leaves in components.
     '<a referrerPolicy="unsafe-url">',
+    '<a referrerpolicy="origin">',
     '<meta name="referrer" content="origin">',
+    '<meta httpEquiv="Referrer-Policy" content="unsafe-url" />',
   ])("flags %s", (line) => {
     expect(isSensitive(line)).toBe(true);
+  });
+
+  // The fragment, so the organiser's token, sent with the analytics: `.hash` stays sensitive
+  // where the page's URL is reported, and nowhere else (decision of 23/10, after review).
+  it("flags the fragment in what the observability code sends", () => {
+    const line = '  return route === undefined ? null : { type: "pageview", url: `${url.origin}${route}${url.hash}` };';
+    expect(isSensitive(line, "src/observability/analytics.ts")).toBe(true);
+    expect(isSensitive("const fragment = url.hash;", "src/observability/client.ts")).toBe(true);
+  });
+
+  it("leaves `.hash` alone outside the observability code and in its tests", () => {
+    expect(isSensitive('  url.hash = "";', "src/domain/tile.ts")).toBe(false);
+    expect(isSensitive('expect(url.hash).toBe("");', "src/observability/analytics.test.ts")).toBe(false);
   });
 
   it.each([
@@ -254,12 +269,13 @@ describe("sensitive patterns: tokens", () => {
     "const ids = devicePersonIds(secret, holders);",
     // Decision (23/10, the owner): `.hash`, `referrer` and `Referrer-Policy` caught more false
     // positives than tokens. The pages' Referrer-Policy header is set in next.config.ts, a
-    // sensitive path, and the review checklist requires it. Only `referrerPolicy` and the
-    // referrer meta tag stay flagged, above.
+    // sensitive path, and the review checklist requires it. Only an assigned referrer policy
+    // and the referrer meta tags stay flagged, above.
     'url.hash = "";',
     "const fragment = url.hash;",
     "// le referrer de la page",
     "// le referrer de la page n'emporte pas le fragment",
+    "// la referrerpolicy du lien",
     'headers.set("Referrer-Policy", "no-referrer");',
     'export const metadata = { referrer: "unsafe-url" };',
     "const from = document.referrer;",
