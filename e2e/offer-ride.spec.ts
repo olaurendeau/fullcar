@@ -410,17 +410,18 @@ test.describe("offer a car", () => {
     await expect(bar(page)).toBeEmpty();
   });
 
-  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
-  // meanwhile. Reopened once closed, the sheet shows a new form, and the one that sent is gone;
-  // reopened while it closes, the same form, which keeps what was typed.
-  const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+  // Radix keeps a closing sheet mounted until its animation ends: held here until the answer has
+  // come, however long it takes (#398). Reopened once closed, the sheet shows a new form, and the
+  // one that sent is gone; reopened while it closes, the same form, which keeps what was typed.
+  /** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
+  const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
   for (const when of ["closed", "closing", "reopened", "reopened while closing", "reopened while closing, then sent again"]) {
     const outcome = when.endsWith("again") ? "nothing left to say" : "said in the bar, once no sheet hides the page";
     test(`a refusal once the sheet is ${when}: ${outcome}`, async ({ page, seededEvent }) => {
       const closing = when.includes("closing");
       const answer = await holdFirst(page, "Mairie de Vitré", true);
       await page.goto(`/e/${seededEvent.id}`);
-      if (closing) await page.addStyleTag({ content: slowClose });
+      const held = closing ? await page.addStyleTag({ content: holdClose }) : undefined;
       await fillOffer(page);
       await submit(page).click();
       await expect(submit(page)).toBeDisabled();
@@ -449,6 +450,8 @@ test.describe("offer a car", () => {
         // From the keyboard: a click on « Valider » here was flaky in CI.
         await (when.endsWith("again") ? field(page, FR.location.aller).press("Enter") : page.keyboard.press("Escape"));
       }
+      // Answered, and reopened if it is: the sheet may end its closing.
+      await held?.evaluate((style) => style.parentNode?.removeChild(style));
       await expect(form(page)).toHaveCount(0);
       if (when.endsWith("again")) {
         await expect(car(panel(page), "Marc")).toBeVisible();
