@@ -77,7 +77,16 @@ Ils sont la moitié du produit, et chacun doit avoir une UI pensée :
 - jeton perdu (appareil changé) — le « lien perso » et son QR code sont la réponse ;
 - lien d'admin perdu : rien à faire, et il faut le dire honnêtement avant.
 
+## La carte
+
+Dans chaque leg, une **Carte** montre le lieu de l'événement et le lieu de chaque voiture de
+ce leg qui a une position (départ à l'aller, dépose au retour), relié à l'événement par une
+ligne droite, au point exact, voitures comprises. Elle est en lecture seule : elle ne dit rien
+que la liste ne dise déjà, et on n'y choisit ni n'y déplace aucune position. Ses tuiles sont
+servies par notre origine : le navigateur ne parle qu'à elle. Restent hors périmètre :
+l'itinéraire, la distance, la durée, et les Arrêts sur la carte (#68).
+
 ## Hors périmètre V1
 
-Carte, notifications, appariement automatique, paiement, messagerie, comptes. Proposer l'un
+Notifications, appariement automatique, paiement, messagerie, comptes. Proposer l'un
 de ces sujets est une décision produit : remonter à l'humain, ne pas le glisser dans une PR.
