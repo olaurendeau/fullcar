@@ -207,16 +207,17 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
 
   // A new line in a region: emptied, then its text 100 ms later; its line gone: emptied. The
   // failure first, when both come in the same render (« Lecteurs d’écran », points 3 and 7).
-  // The same failure with other words is its line cut to its aller part, which is not writing
-  // it (`retourGone`, event-board v4.4.6): what was said is emptied, what waits takes the words.
-  const alerted = useRef<{ line?: number; text: string }>({ text: "" });
-  useEffect(() => {
+  // Its line cut to its aller part is not writing it (`cutSince`, event-board v4.4.6): what was
+  // said is emptied, what waits takes the words.
+  const alerted = useRef(messages.state);
+  const alerting = useEffectEvent(() => {
     const before = alerted.current;
-    alerted.current = { line: messages.state.alert, text: alert };
+    alerted.current = messages.state;
     const announcer = announcers.current?.alert;
-    if (before.line === messages.state.alert && before.text && alert && before.text !== alert) announcer?.amend(alert);
+    if (bar.cutSince(before, messages.state)) announcer?.amend(alert);
     else announce(announcer, alert);
-  }, [messages.state.alert, alert]);
+  });
+  useEffect(() => alerting(), [messages.state.alert, alert]);
   useEffect(() => announce(announcers.current?.status, status), [messages.state.status, status]);
 
   // A seat taken, or a car removed, by a send from a sheet closed meanwhile can remove the
