@@ -352,6 +352,10 @@
   "EditEvent": {
     "title": "Modifier l’événement",
     "saved": "Événement modifié. Personne n’est prévenu : pensez à le dire au groupe.",
+    "carTimes": {
+      "aller": "{count, plural, one {La voiture déjà proposée pour l’aller garde son heure de départ.} other {Les # voitures déjà proposées pour l’aller gardent leur heure de départ.}} Prévenez les personnes qui conduisent.",
+      "retour": "{count, plural, one {La voiture déjà proposée pour le retour garde son heure de départ.} other {Les # voitures déjà proposées pour le retour gardent leur heure de départ.}} Prévenez les personnes qui conduisent."
+    },
     "changed": {
       "title": "L’événement vient d’être modifié depuis un autre appareil.",
       "body": "Rien n’a été enregistré. Les champs que vous n’aviez pas changés montrent maintenant la version enregistrée : vérifiez, puis validez de nouveau."

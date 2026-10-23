@@ -12,6 +12,7 @@ import {
   offerChanges,
   personLeg,
   regions,
+  retourBack,
   retourGone,
   succeed,
   undoing,
@@ -234,6 +235,36 @@ describe("decision 44: the retour gone, the bar's lines about it go", () => {
     state = inform(state, { ...info("Aucune place libre au retour"), ...retour });
     state = fail(state, { ...failure("Hugo · Retour", ["cell:hugo:retour"]), ...retour });
     expect(regions(retourGone(state))).toEqual({ alert: "", status: "" });
+  });
+});
+
+// #271 (review of #371): a retour added back makes untrue every line that said it was gone. They
+// are about no leg, so that the transition that wrote them leaves them: the return takes them.
+describe("the retour back, what said it was gone goes", () => {
+  const gone = { saysRetourGone: true as const };
+
+  it("its failures and its information go; every other line stays", () => {
+    let state = fail(emptyBar, { ...failure("Tom · Retour : « Je cherche une place »… Il n’y a plus de retour", ["cell:tom:retour"]), ...gone });
+    state = fail(state, { ...failure("Léa · Aller", ["cell:lea:aller"], 2), leg: "aller" });
+    state = succeed(state, success("Hugo est dans la voiture de Marc"));
+    state = inform(state, { ...info("Il n’y a plus de retour pour cet événement."), ...gone });
+    expect(texts(retourBack(state))).toEqual(["Léa · Aller", "Hugo est dans la voiture de Marc"]);
+  });
+
+  it("an information about another thing stays", () => {
+    const state = inform(emptyBar, info("Aucune place libre à l’aller"));
+    expect(texts(retourBack(state))).toEqual(["Aucune place libre à l’aller"]);
+  });
+
+  it("the retour gone again leaves none of them, as none is there any more", () => {
+    let state = fail(emptyBar, { ...failure("Tom · Retour… Il n’y a plus de retour", ["cell:tom:retour"]), ...gone });
+    state = retourGone(retourBack(state));
+    expect(texts(state)).toEqual([]);
+  });
+
+  it("a region that said a line gone empties", () => {
+    const state = fail(emptyBar, { ...failure("Tom · Retour… Il n’y a plus de retour", ["cell:tom:retour"]), ...gone });
+    expect(regions(retourBack(state))).toEqual({ alert: "", status: "" });
   });
 });
 

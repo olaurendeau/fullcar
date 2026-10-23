@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
-import { removeRetourInDb } from "./event-db";
+import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { organiserPath, test as organiserTest } from "./organiser";
 
@@ -241,6 +241,25 @@ test.describe("the bar, the retour removed meanwhile", () => {
     await send(page, "Tom", "Aller", "Ne fait pas l’aller");
     await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Ne fait pas l’aller");
     await expect(messages(page)).toHaveText([TEXT.lookingRefused]);
+  });
+
+  // #271 (review of #371): the failure is about no leg, so that its transition leaves it; the
+  // retour added back makes it untrue, and the state that brings the retour takes it away.
+  test("the retour added back: the next state with it takes away the failure `noRetour`, and the information", async ({ page, db, seededEvent }) => {
+    await seedScene(db, seededEvent.id, token, "notConcerned");
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(cell(page, "Tom", "Retour")).toBeVisible();
+    await removeRetourInDb(db, seededEvent.id);
+    await send(page, "Tom", "Retour", "Je cherche une place");
+    await expectWithoutRetour(page);
+    await expect(messages(page)).toHaveText([TEXT.lookingRefused]);
+
+    await editEventInDb(db, seededEvent.id, { retourAt: "2026-12-12 18:00:00" });
+    await send(page, "Tom", "Aller", "Ne fait pas l’aller");
+    await expect(tabs(page)).toHaveCount(2);
+    await expect(messages(page)).toHaveCount(0);
+    await expect(cell(page, "Tom", "Retour")).toBeVisible();
   });
 
   test("M7.9, page C, M7.3: « Sortir de la voiture » of Léa · Retour: the aller's success stays with its « Annuler », and the information", async ({

@@ -18,13 +18,15 @@ export interface Undo {
 /**
  * A message: its words, its landmark, which takes the focus and says whether it is shown (rule
  * 8), its « Annuler », and the leg it is about, if one: those about the retour go with it
- * (`retourGone`). What says that the retour is gone is about no leg.
+ * (`retourGone`). What says that the retour is gone is about no leg, and goes once it is back
+ * (`retourBack`).
  */
 export interface Message {
   text: string;
   landmark: () => boolean;
   undo?: Undo;
   leg?: Leg;
+  saysRetourGone?: true;
 }
 
 /** What a send was about: its subjects, each subject's fields after it (#208), and its number. */
@@ -179,6 +181,13 @@ export const retourGone = (state: BarState): BarState => ({
     return line.kind === "failure" && line.aller ? [{ ...line, ...line.aller, leg: undefined, aller: undefined, cut: true }] : [];
   }),
 });
+
+/**
+ * The page applies a state that has the retour the one before had not (#271, M4): every line that
+ * said the retour was gone, failure or information, is no longer true, and goes. They are about
+ * no leg, so that the transition that wrote them leaves them (decision 44); this return takes them.
+ */
+export const retourBack = (state: BarState): BarState => keep(state, (line) => !line.saysRetourGone);
 
 /** Rule 7: « Fermer », or Escape, removes every line. */
 export const close = (state: BarState): BarState => keep(state, () => false);

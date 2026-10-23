@@ -76,7 +76,7 @@ export interface BoardHandle {
  * told each time the state an action answered is shown: never for the first read, nor `apply`.
  *
  * Each state shown brings the event's header too (epic #250): its title, place, start and end,
- * the tabs, the legs' dates and `document.title` follow it, and `onState` is told it. Should
+ * the tabs, the legs' dates and `document.title` follow it, and `onState` is told the state. Should
  * the retour go while its tab is active, the aller shows; should what had the focus go with
  * the tabs, the event's title takes it, never `<body>`. While a sheet hides the page, the tabs
  * stay as they are until it is closed: the retour it may be on (rule 9), and none coming that
@@ -93,7 +93,7 @@ export function ParticipantBoard({
   state: EventState;
   ref?: Ref<BoardHandle>;
   onAction?: () => void;
-  onState?: (event: EventHeader) => void;
+  onState?: (state: EventState) => void;
 }) {
   const words = wordsOf(useTranslations(), useFormatter());
   const [state, setState] = useState(rendered);
@@ -113,6 +113,8 @@ export function ParticipantBoard({
         setTab("aller");
         // The retour gone, the bar's lines about it go, once, before what this state's answer says (decision 44).
         if (!next.event.retourAt) messages.retourGone();
+        // The retour back, what said it was gone goes (#271).
+        else messages.retourBack();
       }
       displayed.current = next;
       setState(next);
@@ -160,8 +162,8 @@ export function ParticipantBoard({
   const { event } = state;
   useEffect(() => {
     document.title = event.title;
-    onState?.(event);
-  }, [event, onState]);
+  }, [event]);
+  useEffect(() => onState?.(state), [state, onState]);
 
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
@@ -180,7 +182,7 @@ export function ParticipantBoard({
   // is gone `closes`, and its failure goes to the bar all the same (rule 9). A failure of
   // « Annuler » carries it again (rule 6). A failure is about the `leg` it was sent on, an offer's
   // named by its subjects, and goes with the retour (decision 44); one that says the retour is
-  // gone comes with the state without it, and stays. One `noRetourAgain` is about the aller's
+  // gone comes with the state without it, and stays until the retour is back (#271). One `noRetourAgain` is about the aller's
   // part of its send alone, which the aller sent again withdraws (B1.7).
   function failedIn(sheet: FromSheet, failure: { notDone: NotDone; why: Why; landmark: () => boolean; closes?: boolean; undo?: Undo; leg?: Leg }) {
     const { notDone, why, landmark, closes, undo } = failure;
@@ -197,14 +199,15 @@ export function ParticipantBoard({
     const aller = both
       ? { text: failureText(words, { ...notDone, legs: "aller" }, why), about: allerPart(sheet.about), landmark: () => focusOffer("aller") }
       : undefined;
-    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about, sent: sheet.seq, undo, leg, aller }), true);
+    const says = saysRetourGone ? ({ saysRetourGone } as const) : {};
+    sheet.whenClosed(() => messages.fail({ text, landmark, offline, about, sent: sheet.seq, undo, leg, aller, ...says }), true);
   }
 
   // What a send refused by `noRetour` asked holds without the retour: no failure, an information,
   // whose landmark is the event's title (decision 45). It removes no other line (rule 4).
   function informed(send: Send, notDone: NotDone, why: Why): boolean {
     const text = why.kind === "noRetour" ? noRetourInfo(words, notDone) : undefined;
-    if (text) send.whenClosed(() => messages.inform({ text, landmark: focusTitle }));
+    if (text) send.whenClosed(() => messages.inform({ text, landmark: focusTitle, saysRetourGone: true }));
     return text !== undefined;
   }
 
