@@ -270,6 +270,8 @@ test("the sheet open, its answer stays in it: nothing in the bar", async ({ page
   await expect(sheet(page).getByRole("alert")).toHaveText("Une erreur est survenue et rien n’a changé. Réessayez dans un instant.");
   await page.keyboard.press("Escape");
   await expect(sheet(page)).toHaveCount(0);
+  // Once the sheet has given the focus back: a failure for the bar would be written by then.
+  await expect(editButton(page)).toBeFocused();
   await expect(messages(page)).toHaveCount(0);
 });
 
