@@ -220,7 +220,8 @@ export function PlaceField({
           onMouseDown={(event) => event.preventDefault()}
           className="absolute inset-x-0 top-full z-20 mt-1 overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
         >
-          <div id={listId} role="listbox" aria-label={t("listLabel", { field: label })}>
+          {/* Named only while open: hidden, a name holding the field's label would make two elements answer to it. */}
+          <div id={listId} role="listbox" aria-label={open ? t("listLabel", { field: label }) : undefined}>
             {open &&
               list.suggestions.map((suggestion, n) => (
                 <div
