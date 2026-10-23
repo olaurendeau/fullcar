@@ -33,8 +33,9 @@ async function shoot(page: Page, testInfo: TestInfo, name: string) {
 /**
  * A sheet or a confirmation shown. Its `toBeVisible` is the condition; the wait for its opening
  * to end only keeps what follows from acting on it mid-animation. The screenshot finishes that
- * animation anyway (`animations: "disabled"`), and Escape is never pressed here: the guard of #444
- * on that wait is not needed.
+ * animation anyway (`animations: "disabled"`), and no Escape is pressed while a sheet or a
+ * confirmation is opening (#415): the one in « a failure in the bar » closes a sheet open since
+ * before its send. The guard of #444 on that wait is not needed.
  */
 async function grownIn(dialog: Locator) {
   await expect(dialog).toBeVisible();
