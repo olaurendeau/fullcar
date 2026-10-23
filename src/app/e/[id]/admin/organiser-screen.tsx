@@ -4,7 +4,7 @@ import { LoaderCircle } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
-import { EditEventSheet } from "@/components/event/edit-event-sheet";
+import { EditEventSheet, LONG_WAIT } from "@/components/event/edit-event-sheet";
 import { failureText, wordsOf } from "@/components/event/failure-words";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import type { LegCounts } from "@/db/legs";
@@ -15,7 +15,7 @@ import { ParticipantBoard, type BoardHandle } from "../participant-board";
 import { useAdminLinkCheck } from "./admin-link";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
 import { keepFolded, readFolded } from "./organiser-fold";
-import { alertShown, announcement, editAnswer, editWhy, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
+import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
 
 /**
  * The organiser's screen (epic #154): the organiser area, then the event's board, with
@@ -113,14 +113,19 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const words = wordsOf(useTranslations(), useFormatter());
   const editButton = useRef<HTMLButtonElement>(null);
   const [editing, setEditingState] = useState(false);
-  // Read when the answer comes: the sheet open then says it, or the bar does.
-  const editingNow = useRef(false);
+  // Read when the answer comes: the sheet that sent, still open, says it; otherwise the bar.
+  // Each opening is a sheet of its own: one opened since did not send.
+  const openSheet = useRef<number | null>(null);
+  const openings = useRef(0);
   const setEditing = (open: boolean) => {
-    editingNow.current = open;
+    openSheet.current = open ? (openings.current += 1) : null;
     setEditingState(open);
   };
-  // While a change is on its way, « Modifier l’événement » opens nothing (M2.11).
+  // While a change is on its way, « Modifier l’événement » opens nothing, for 10 s at most (M2.11, decision 51).
   const [editSending, setEditSending] = useState(false);
+  const editWaits = useRef(0);
+  // The sheet opened since a change left, to which its late `ok` gives the values saved (decision 51).
+  const lateSaved = useRef<((event: EventHeader) => void) | null>(null);
   const focusEdit = () => {
     editButton.current?.focus();
     return !!editButton.current && document.activeElement === editButton.current;
@@ -133,26 +138,34 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
    * Changed on another device, the whole page takes the header stored, then the same read
    * (M6.1, M6.2). Anything but saved, once the sheet is closed, is a failure in the bar: what
    * was not done, then why, its landmark « Modifier l’événement », its subject `event:edit`,
-   * which the next change takes away as it leaves (M2.8 to M2.10).
+   * which the next change takes away as it leaves (M2.8 to M2.10); a removal's, its own words
+   * (M3.7). After 10 s with no answer, the button opens a sheet again; a late `ok` gives that
+   * sheet the values saved (decision 51).
    */
   async function edit(fields: EventFields, before: EventHeader, removal?: LegCounts): Promise<EditAnswer> {
     const send = sendAbout(["event:edit"]);
+    const from = openSheet.current;
     send.leaves();
+    const wait = (editWaits.current += 1);
     setEditSending(true);
+    const letGo = setTimeout(() => wait === editWaits.current && setEditSending(false), LONG_WAIT);
     const answer = editAnswer(await link.edit(fields, before, removal));
     send.answered();
-    setEditSending(false);
+    clearTimeout(letGo);
+    if (wait === editWaits.current) setEditSending(false);
     const handle = boardRef.current;
     if (!handle) return answer;
+    const sheetSays = from !== null && openSheet.current === from;
     if (answer.kind === "saved" || answer.kind === "changed") {
       handle.applyEvent(answer.event);
       void readScreen(handle);
     }
     if (answer.kind === "saved") {
+      if (!sheetSays) lateSaved.current?.(answer.event);
       send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: focusEdit }));
-    } else if (!editingNow.current) {
-      const why = editWhy(answer);
-      const text = failureText(words, { kind: "editEvent" }, why);
+    } else if (!sheetSays) {
+      const { notDone, why } = editFailure(answer, removal !== undefined);
+      const text = failureText(words, notDone, why);
       const failure = { text, landmark: focusEdit, offline: why.kind === "offline", about: send.about, sent: send.seq };
       send.whenClosed(() => handle.fail(failure), true);
     }
@@ -247,6 +260,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           cars={{ aller: carsOn("aller"), retour: carsOn("retour") }}
           onEdit={edit}
           onClosed={focusEdit}
+          lateSavedRef={lateSaved}
         />
       )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">

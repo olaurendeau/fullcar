@@ -2,7 +2,7 @@
 
 import { TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import type { EditAnswer } from "@/app/e/[id]/admin/screen-state";
 import type { ActionProblem } from "@/app/e/[id]/run-action";
 import { Button } from "@/components/ui/button";
@@ -26,11 +26,18 @@ import { RemoveRetourDialog, type RemovalSaid, type RetourCounts } from "./remov
  */
 export type EditEvent = (fields: EventFields, before: EventHeader, removal?: RetourCounts) => Promise<EditAnswer>;
 
+/** How long a change waits for its answer before it lets the organiser go on (decisions 39 and 51). */
+export const LONG_WAIT = 10_000;
+
+/** A removal answered once its confirmation was closed: why it was not done (M3.7, decision 49). */
+type LateRemoval = { kind: "offline" | "failed" | "eventNotFound" } | { kind: "retourChanged"; counts: RetourCounts };
+
 /**
  * « Modifier l’événement » (organizer-view v3.3.6, « Le formulaire »): a sheet with the fields of
  * the creation and no option, loaded with `event`, the values the page shows as it opens. Neither
  * « Fermer »: « Annuler » and Escape close it. Closed, by them or once saved, the focus goes back
- * to `onClosed`'s place, « Modifier l’événement ».
+ * to `onClosed`'s place, « Modifier l’événement ». While open, `lateSavedRef` gives it the values a
+ * change sent from an earlier sheet saved (decision 51).
  */
 export function EditEventSheet({
   open,
@@ -39,6 +46,7 @@ export function EditEventSheet({
   cars,
   onEdit,
   onClosed,
+  lateSavedRef,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +55,7 @@ export function EditEventSheet({
   cars: Record<Leg, number>;
   onEdit: EditEvent;
   onClosed: () => void;
+  lateSavedRef: RefObject<((event: EventHeader) => void) | null>;
 }) {
   const t = useTranslations("EditEvent");
   return (
@@ -60,7 +69,7 @@ export function EditEventSheet({
         onClosed();
       }}
     >
-      <EditEventForm event={event} cars={cars} onEdit={onEdit} onDone={() => onOpenChange(false)} />
+      <EditEventForm event={event} cars={cars} onEdit={onEdit} onDone={() => onOpenChange(false)} lateSavedRef={lateSavedRef} />
     </BottomSheet>
   );
 }
@@ -87,11 +96,13 @@ function EditEventForm({
   cars,
   onEdit,
   onDone,
+  lateSavedRef,
 }: {
   event: EventHeader;
   cars: Record<Leg, number>;
   onEdit: EditEvent;
   onDone: () => void;
+  lateSavedRef: RefObject<((event: EventHeader) => void) | null>;
 }) {
   const tEdit = useTranslations("EditEvent");
   const tActions = useTranslations("Actions");
@@ -110,8 +121,27 @@ function EditEventForm({
   // « Supprimer le retour ? »: the numbers it shows and what it says, kept while it closes.
   const [confirmation, setConfirmation] = useState<{ counts: RetourCounts; said: RemovalSaid | null } | null>(null);
   const [confirming, setConfirming] = useState(false);
-  // What happens once the confirmation has closed: where the focus goes, what the sheet says.
+  // Read when its answer comes: closed after 10 s, the sheet says it (decision 49).
+  const confirmingNow = useRef(false);
+  const openConfirmation = (open: boolean) => {
+    confirmingNow.current = open;
+    setConfirming(open);
+  };
+  // Its removal sent 10 s ago with no answer: « Annuler » and Escape close it (decision 39).
+  const [waited, setWaited] = useState(false);
+  const dialogCancel = useRef<HTMLButtonElement>(null);
+  // What the sheet says of a removal answered once its confirmation was closed (M3.7).
+  const [late, setLate] = useState<LateRemoval | null>(null);
+  // What happens as the confirmation closes, while its buttons are still there: where the focus
+  // goes, straight to « Valider », never by `<body>`; what the sheet says. After the commit's
+  // effects, its focus trap among them, has let go: it would take the focus back otherwise.
   const afterConfirmation = useRef(() => {});
+  useEffect(() => {
+    if (confirming) return;
+    const after = afterConfirmation.current;
+    afterConfirmation.current = () => {};
+    after();
+  }, [confirming]);
   // An answer that comes once this form is gone closes no sheet opened since.
   const mounted = useRef(false);
   useEffect(() => {
@@ -120,6 +150,19 @@ function EditEventForm({
       mounted.current = false;
     };
   }, []);
+  // A change sent from an earlier sheet, saved late (decision 51): its values become the ones
+  // loaded, and each field not changed shows them, with no alert. This sheet has not sent.
+  useEffect(() => {
+    lateSavedRef.current = (saved) => {
+      const values = loadedEventFields(saved);
+      setFields(withSavedFields(loaded.values, values));
+      setLoaded(values);
+      setBefore(saved);
+    };
+    return () => {
+      lateSavedRef.current = null;
+    };
+  });
 
   function showErrors(found: EventErrors) {
     setErrors(found);
@@ -144,7 +187,7 @@ function EditEventForm({
     if (answer.kind === "errors") return showErrors(answer.errors);
     if (answer.kind === "confirmRetour") {
       setConfirmation({ counts: answer.counts, said: null });
-      return setConfirming(true);
+      return openConfirmation(true);
     }
     if (answer.kind === "refused" && answer.reason === "eventNotFound") {
       setSaid("eventNotFound");
@@ -166,6 +209,11 @@ function EditEventForm({
     submitted.preventDefault();
     if (inFlight.current) return;
     if (said === "eventNotFound") return;
+    // The numbers changed while the confirmation was closed: « Valider » opens it with them,
+    // unless « Retour » was checked again (decision 49).
+    const reopen = late?.kind === "retourChanged" && !fields.values.retour;
+    setLate(null);
+    if (reopen) return openConfirmation(true);
     if (!eventFieldsChanged(fields.values, loaded.values)) return onDone();
     setSaid(null);
     const checked = validateEventChange(fields.values, deviceBounds(new Date()), before);
@@ -179,23 +227,53 @@ function EditEventForm({
    * « Supprimer le retour »: the fields sent again with the numbers shown. Saved, the sheet closes
    * with the confirmation. New numbers, a failure, the link refused or the event gone: the
    * confirmation stays and says so. Changed on another device or a field refused: it closes, and
-   * the sheet says it.
+   * the sheet says it. After 10 s, it may be closed: the sheet says the answer (`lateRemoval`).
    */
   async function confirm() {
     if (inFlight.current || !confirmation) return;
     const { counts } = confirmation;
     setConfirmation({ counts, said: null });
+    const longWait = setTimeout(() => setWaited(true), LONG_WAIT);
     const answer = await send(counts);
+    clearTimeout(longWait);
     if (!answer) return;
+    setWaited(false);
+    if (!confirmingNow.current) return lateRemoval(answer);
     if (answer.kind === "confirmRetour") return setConfirmation({ counts: answer.counts, said: "changed" });
     if (answer.kind === "problem") return setConfirmation({ counts, said: answer.problem });
     if (answer.kind === "refused") {
-      if (answer.reason === "eventNotFound") setSaid("eventNotFound");
+      if (answer.reason === "eventNotFound") {
+        // Before « Supprimer le retour », which has it, is disabled: never by `<body>`.
+        dialogCancel.current?.focus();
+        setSaid("eventNotFound");
+      }
       return setConfirmation({ counts, said: answer.reason === "invalid" ? "failed" : "eventNotFound" });
     }
     afterConfirmation.current = answer.kind === "saved" ? () => {} : () => sheetAnswer(answer);
-    setConfirming(false);
+    openConfirmation(false);
     if (answer.kind === "saved") onDone();
+  }
+
+  /**
+   * The answer of a removal whose confirmation was closed after 10 s (decision 49), said in the
+   * sheet with the confirmation's words: new numbers open no confirmation, « Valider » does.
+   * Saved, changed elsewhere or a field refused: as the sheet says them.
+   */
+  function lateRemoval(answer: EditAnswer) {
+    if (answer.kind === "confirmRetour") {
+      setConfirmation({ counts: answer.counts, said: null });
+      setLate({ kind: "retourChanged", counts: answer.counts });
+    } else if (answer.kind === "problem" || answer.kind === "refused") {
+      const kind = answer.kind === "problem" ? answer.problem : answer.reason === "invalid" ? "failed" : "eventNotFound";
+      setLate({ kind });
+      if (kind === "eventNotFound") {
+        cancelButton.current?.focus();
+        return setSaid("eventNotFound");
+      }
+    } else {
+      return sheetAnswer(answer);
+    }
+    submitButton.current?.focus();
   }
 
   const gone = said === "eventNotFound";
@@ -212,8 +290,9 @@ function EditEventForm({
           {tActions(said)}
         </p>
       )}
+      {late && <SheetNotice said={late} destructive />}
       {said === "changed" && <SheetNotice said={said} />}
-      {(said === "invalid" || gone) && <SheetNotice said={said} destructive />}
+      {(said === "invalid" || (gone && !late)) && <SheetNotice said={said} destructive />}
       {/* No live region: the focus stays on « Valider », which it describes (M2.6). */}
       {sending && (
         <p id={idOf("sending")} className="text-sm text-muted-foreground">
@@ -240,12 +319,13 @@ function EditEventForm({
           counts={confirmation.counts}
           said={confirmation.said}
           sending={sending}
+          waited={waited}
+          cancelRef={dialogCancel}
           onConfirm={() => void confirm()}
           onCancel={() => {
             afterConfirmation.current = () => (gone ? cancelButton : submitButton).current?.focus();
-            setConfirming(false);
+            openConfirmation(false);
           }}
-          onClosed={() => afterConfirmation.current()}
         />
       )}
     </form>
@@ -254,15 +334,22 @@ function EditEventForm({
 
 /**
  * An answer said with a title and a body, above « Valider »: changed on another device (M6.1),
- * or, in the destructive colour, the link refused (M8.2) and the event gone (M8.3).
+ * or, in the destructive colour, the link refused (M8.2), the event gone (M8.3), and a removal
+ * answered once its confirmation was closed (M3.7).
  */
-function SheetNotice({ said, destructive = false }: { said: "changed" | "invalid" | "eventNotFound"; destructive?: boolean }) {
+function SheetNotice({ said, destructive = false }: { said: "changed" | "invalid" | "eventNotFound" | LateRemoval; destructive?: boolean }) {
   const t = useTranslations();
-  const [title, body] = {
-    changed: [t("EditEvent.changed.title"), t("EditEvent.changed.body")],
-    invalid: [t("Admin.invalid.title"), t("Admin.invalid.body")],
-    eventNotFound: [t("Actions.notDone.editEvent"), t("Actions.why.eventNotFound")],
-  }[said];
+  const [title, body] =
+    typeof said === "object"
+      ? [
+          t("Actions.notDone.removeRetour"),
+          said.kind === "retourChanged" ? t("Actions.why.retourChanged", { ...said.counts, where: "sheet" }) : t(`Actions.why.${said.kind}`),
+        ]
+      : {
+          changed: [t("EditEvent.changed.title"), t("EditEvent.changed.body")],
+          invalid: [t("Admin.invalid.title"), t("Admin.invalid.body")],
+          eventNotFound: [t("Actions.notDone.editEvent"), t("Actions.why.eventNotFound")],
+        }[said];
   return (
     <div
       role="alert"
