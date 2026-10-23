@@ -12,8 +12,11 @@ leaveNoToken();
  * #274, M9.4 (organizer-view v3.3.8): « Modifier l’événement » at WIDTH px (`make shot`, 360 by
  * default, then 1280), without scrolling sideways: the form, the sentence on the cars' times,
  * the errors, the confirmation with its send and its failure offline, saved, and a failure in
- * the bar. Each capture waits for what it shows; a sheet or a confirmation, for its opening to
- * end. Under `organiserTraffic` (O6.1, O2.10): no file name, title or message holds the token.
+ * the bar. Each capture waits for what it shows. `animations: "disabled"` runs a finite animation,
+ * a sheet's or a confirmation's opening, to its end before the capture: what makes a capture right
+ * is that its sheet is visible, not the wait for that opening. Under `organiserTraffic` (O6.1,
+ * O2.10): no file name, title or message holds the token, and the links, the organiser's with the
+ * token in it, are masked in every capture, which may be shared in a PR or an issue.
  */
 
 async function shoot(page: Page, testInfo: TestInfo, name: string) {
@@ -23,10 +26,16 @@ async function shoot(page: Page, testInfo: TestInfo, name: string) {
     path: `var/shots/${name}-${testInfo.project.use.viewport?.width}.png`,
     fullPage: true,
     animations: "disabled",
+    mask: [page.getByTestId("link")],
   });
 }
 
-/** A sheet or a confirmation done opening: what is shot is what a person sees once it is still. */
+/**
+ * A sheet or a confirmation shown. Its `toBeVisible` is the condition; the wait for its opening
+ * to end only keeps what follows from acting on it mid-animation. The screenshot finishes that
+ * animation anyway (`animations: "disabled"`), and Escape is never pressed here: the guard of #444
+ * on that wait is not needed.
+ */
 async function grownIn(dialog: Locator) {
   await expect(dialog).toBeVisible();
   await dialog.evaluate((element) => Promise.all(element.getAnimations().map((each) => each.finished)));
