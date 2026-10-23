@@ -34,7 +34,7 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
  * and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
  */
-export function EventView({ title, location, allerAt, retourAt, board, device, messageBar, tab, onTab }: EventViewProps) {
+export function EventView({ title, location, locationPosition, allerAt, retourAt, board, device, messageBar, tab, onTab }: EventViewProps) {
   const t = useTranslations("Event.legs");
   const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
 
@@ -59,6 +59,7 @@ export function EventView({ title, location, allerAt, retourAt, board, device, m
           aller={legOf(board, "aller")}
           retour={legOf(board, "retour")}
           device={device}
+          near={locationPosition}
           tab={tab}
           onTab={onTab}
         />
@@ -68,7 +69,7 @@ export function EventView({ title, location, allerAt, retourAt, board, device, m
           <h2 id="leg-aller" className="sr-only">
             {t("aller")}
           </h2>
-          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} />
+          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} near={locationPosition} />
         </section>
       )}
     </div>

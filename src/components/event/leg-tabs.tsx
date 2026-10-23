@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { coverage } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
+import type { Position } from "@/domain/place";
 import type { WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { LegPanel, type BoardDevice } from "./leg-panel";
@@ -46,6 +47,8 @@ export function LegTabs(props: {
   aller: VisibleLegBoard;
   retour: VisibleLegBoard;
   device: BoardDevice;
+  /** The event's position, for the suggestions of a car's places. */
+  near: Position | null;
   tab: Leg;
   onTab: (leg: Leg) => void;
 }) {
@@ -83,6 +86,7 @@ export function LegTabs(props: {
             board={board}
             device={props.device}
             hasRetour
+            near={props.near}
             other={{ at: legs[1 - index].at, persons: legs[1 - index].board.device }}
           />
         </LegTabPanel>

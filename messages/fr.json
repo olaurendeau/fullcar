@@ -188,6 +188,7 @@
       "aller": "Lieu de départ",
       "retour": "Lieu de dépose"
     },
+    "locationHint": "Visible par toutes les personnes qui ont le lien.",
     "time": "Heure de départ",
     "timeHint": "Le {date}",
     "seats": "Places, sans compter qui conduit",
