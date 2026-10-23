@@ -11,6 +11,7 @@ import {
   organiserPath,
   type ScenePhones,
   seedOrganiserScene,
+  storageOf,
   test,
   watchHash,
 } from "./organiser";
@@ -150,4 +151,22 @@ test("O7.6, O2.8: /e/{id} sends no number of the scene, and shows nothing of the
   expect(numbersIn([...answers(exchanges, seededEvent), await dom(page)], phones, WITH_A_NUMBER)).toEqual([]);
   await expect(page.getByRole("region", { name: FR.panel })).toHaveCount(0);
   await expect(page.getByText("Lien d’organisateur")).toHaveCount(0);
+});
+
+// #436, review of #450: with no page left at its teardown, `organiserTraffic` opens one to read the
+// origin's `localStorage` (O2.10). Its reader, called with every page closed, finds a token left
+// there. The token goes to the page as an argument and is checked as a boolean, never shown.
+test("O2.10: the admin token in `localStorage`, every page closed: the storage read opens a page and finds it", async ({ page, seededEvent }) => {
+  await page.goto("/icon.svg");
+  const origin = new URL(page.url()).origin;
+  await page.evaluate((token) => localStorage.setItem("fullcar:probe", token), seededEvent.token);
+  const context = page.context();
+  for (const each of context.pages()) await each.close();
+  expect(context.pages().length).toBe(0);
+
+  const places = await storageOf(context, origin);
+  const found = places.some(([where, text]) => where === "localStorage" && text.includes(seededEvent.token));
+  expect(found, "the token found in localStorage, with no page left").toBe(true);
+  // Taken away again, so that the fixture's own check, once the test is over, passes.
+  for (const each of context.pages()) await each.evaluate(() => localStorage.removeItem("fullcar:probe"));
 });
