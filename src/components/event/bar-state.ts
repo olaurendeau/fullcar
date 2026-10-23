@@ -186,6 +186,18 @@ const rank = { failure: 0, info: 1, success: 2 };
 /** Rule 1: the failures, most recent first, then the information, then the success. */
 export const lines = (state: BarState): Line[] => [...state.lines].sort((a, b) => rank[a.kind] - rank[b.kind] || b.id - a.id);
 
+const alertLine = (state: BarState) => state.lines.find((line) => line.id === state.alert);
+
+/**
+ * The line the region `alert` says, or waits to say, is the same in `after` as in `before`, cut
+ * since to its aller part (`retourGone`): which is not writing it (event-board v4.4.6).
+ */
+export function cutSince(before: BarState, after: BarState): boolean {
+  const was = alertLine(before);
+  const is = alertLine(after);
+  return !!was && !!is && was.id === is.id && was.text !== is.text;
+}
+
 /** What each live region says: the last line written there, while it is in the bar. */
 export function regions(state: BarState): { alert: string; status: string } {
   const text = (id: number | undefined) => state.lines.find((line) => line.id === id)?.text ?? "";
