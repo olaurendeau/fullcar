@@ -176,7 +176,7 @@ describe("what the browser sends for an error", () => {
     expect(payload.includes("Marc")).toBe(false);
   });
 
-  it("keeps a frame of ours that a line of its message names at another place (#388)", async () => {
+  it("keeps a frame of ours that no line of its message matches, each differing by function, line, column or file (#388, #407)", async () => {
     const other = `${ORIGIN}/_next/static/chunks/other-1.js`;
     // Each differs from the frame by one of its function, line, column or file.
     const lines = [`    at onLoad (${CHUNK}:1:4410)`, `    at onSubmit (${CHUNK}:2:4410)`, `    at onSubmit (${CHUNK}:1:2)`];
