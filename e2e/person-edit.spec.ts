@@ -19,7 +19,8 @@ const INVALID_PHONE = "Numéro non valide : de 6 à 15 chiffres, avec seulement 
 const PHONE_HINT = "Visible seulement par l’organisateur et par les personnes de la même voiture.";
 /** In the bar, the failure of « Clara » names the field sent and the first name before it (C11.11, #225). */
 const FAILED = "Le prénom de Claire n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
-const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
+const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /**
  * The device holds Claire, with a number, and Léa, without one. Aller: Claire drives; Marc,
@@ -264,13 +265,13 @@ test.describe("edit a person", () => {
     else await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
-  // meanwhile. Reopened, even while the first one closes, the sheet is a new one.
+  // Radix keeps a closing sheet mounted until its animation ends: held here until the answer has
+  // come, however long it takes (#398). Reopened, even while the first one closes, the sheet is a new one.
   for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
     test(`a failure once the sheet is ${when}: in the bar, once no sheet hides the page`, async ({ db, page, seededEvent }) => {
       const answer = await holdFirst(page, "Clara", true);
       await page.goto(`/e/${seededEvent.id}`);
-      if (when.endsWith("closing")) await page.addStyleTag({ content: slowClose });
+      const held = when.endsWith("closing") ? await page.addStyleTag({ content: holdClose }) : undefined;
       await sendThenClose(page, when.endsWith("closing"));
       const seen = await watchAlerts(page);
       if (when !== "reopened") await failHeld(page, answer);
@@ -283,6 +284,8 @@ test.describe("edit a person", () => {
         if (when === "reopened") await failHeld(page, answer);
         await page.keyboard.press("Escape");
       }
+      // Answered, and reopened if it is: the first sheet may end its closing.
+      await held?.evaluate((style) => style.parentNode?.removeChild(style));
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(bar(page)).toHaveText(FAILED);
       expect(await seen()).toEqual({ inSheet: false, barHidden: false });

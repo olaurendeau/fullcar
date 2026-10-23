@@ -87,7 +87,6 @@ async function selectTab(page: Page, leg: "Aller" | "Retour") {
 
 /** A cell, found while a sheet hides the page from role queries. */
 const hiddenCell = (page: Page, name: string) => page.locator(`button[aria-label="${name}"]`);
-const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
 /** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
 const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
@@ -409,8 +408,8 @@ test.describe("person changes", () => {
     const zed = await holdFirst(page, "Zed", true);
     const tom = await holdFirst(page, scene.persons.tom, true);
     await page.goto(`/e/${seededEvent.id}`);
-    // Slow enough for all that follows; removed once the form is open again.
-    const slow = await page.addStyleTag({ content: slowClose.replace("2s", "30s") });
+    // Held for all that follows, however long it takes (#398); removed once the form is open again.
+    const held = await page.addStyleTag({ content: holdClose });
     await page.getByRole("tabpanel").getByRole("button", { name: "Ajouter une personne", exact: true }).click();
     const form = sheet(page, "Ajouter une personne");
     await form.getByLabel("Prénom").fill("Zed");
@@ -434,7 +433,7 @@ test.describe("person changes", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator('[role="dialog"][data-state="open"]')).toHaveCount(1);
     // Tom's sheet, opened after the form, hides it from role queries until it has closed.
-    await slow.evaluate((style) => style.parentNode?.removeChild(style));
+    await held.evaluate((style) => style.parentNode?.removeChild(style));
     await expect(form).toHaveAttribute("data-state", "open");
     await expect(form.getByLabel("Prénom")).toHaveValue("Zed");
     // From the keyboard: an overlay of the two sheets may lie over the form for a moment.
