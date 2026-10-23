@@ -1,11 +1,13 @@
 "use client";
 
+import { Info } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EVENT_FIELDS, type EventErrors, type EventField, type EventFields as SentFields, type EventHeader } from "@/domain/event";
+import { LEGS, type Leg } from "@/domain/leg";
 import { wallClockParts } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { eventErrorMessage } from "./event-error";
@@ -62,6 +64,19 @@ export function eventFieldsChanged(values: EventFieldValues, loaded: EventFieldV
 }
 
 /**
+ * The cars that keep their time while their leg moves (organizer-view v3.3.8, « Les voitures
+ * gardent leur heure », M5.1): for each leg whose date or time differs from its loaded value,
+ * the retour while its box is checked, its number of cars in `cars`, if it has one.
+ */
+export function carTimesKept(values: EventFieldValues, loaded: EventFieldValues, cars: Record<Leg, number>): Partial<Record<Leg, number>> {
+  const moved = {
+    aller: values.allerDate !== loaded.allerDate || values.allerTime !== loaded.allerTime,
+    retour: values.retour && (values.retourDate !== loaded.retourDate || values.retourTime !== loaded.retourTime),
+  };
+  return Object.fromEntries(LEGS.filter((leg) => moved[leg] && cars[leg] > 0).map((leg) => [leg, cars[leg]]));
+}
+
+/**
  * A change of the fields, applied to the state current when it runs, not to the one of the
  * render it came from: a state set meanwhile (the saved values, `withSavedFields`) is kept.
  */
@@ -111,25 +126,38 @@ export function withSavedFields(loaded: EventFieldValues, saved: EventFieldsStat
  * while it is checked, the end's date and time. Shared by the creation and, with epic #250,
  * the organiser's change of the Event. Each error shows under its field; `idOf` names the
  * fields, so that the form around them can focus the first error. `onChange` receives an
- * update, as a state setter takes it.
+ * update, as a state setter takes it. A leg's `notes` show under its date and time, which they
+ * describe after their error (M5.1, review of #293).
  */
 export function EventFormFields({
   idOf,
   state,
   errors,
   onChange,
+  notes = {},
 }: {
   idOf: (name: string) => string;
   state: EventFieldsState;
   errors: EventErrors;
   onChange: (update: EventFieldsUpdate) => void;
+  notes?: Partial<Record<Leg, string>>;
 }) {
   const t = useTranslations("CreateEvent");
   const { values } = state;
 
+  const note = (leg: Leg) =>
+    notes[leg] && (
+      <p id={idOf(`${leg}-note`)} className="-mt-1 grid grid-cols-[14px_1fr] gap-2 text-[13px] leading-[18px] text-muted-foreground">
+        <Info aria-hidden className="mt-0.5 size-3.5" />
+        <span>{notes[leg]}</span>
+      </p>
+    );
+
   const text = (name: EventField, type: "text" | "date" | "time" = "text") => {
     const error = errors[name];
     const message = error && eventErrorMessage(name, error);
+    const leg = name.startsWith("aller") ? "aller" : name.startsWith("retour") ? "retour" : undefined;
+    const describedBy = [message && idOf(`${name}-error`), leg && notes[leg] && idOf(`${leg}-note`)].filter(Boolean).join(" ");
     return (
       <div className="flex min-w-0 flex-col gap-1.5">
         <Label htmlFor={idOf(name)} className={cn(error && "text-destructive")}>
@@ -144,7 +172,7 @@ export function EventFormFields({
           value={values[name]}
           onChange={(e) => onChange(withEventField(name, e.target.value))}
           aria-invalid={error ? true : undefined}
-          aria-describedby={message && idOf(`${name}-error`)}
+          aria-describedby={describedBy || undefined}
         />
         {message && (
           <p id={idOf(`${name}-error`)} className="text-[13px] leading-[18px] text-destructive">
@@ -163,6 +191,7 @@ export function EventFormFields({
         {text("allerDate", "date")}
         {text("allerTime", "time")}
       </div>
+      {note("aller")}
       <Box
         id={idOf("retour")}
         label={t("retour")}
@@ -176,6 +205,7 @@ export function EventFormFields({
           {text("retourTime", "time")}
         </div>
       )}
+      {values.retour && note("retour")}
     </>
   );
 }

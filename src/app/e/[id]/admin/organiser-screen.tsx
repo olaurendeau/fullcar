@@ -8,6 +8,7 @@ import { EditEventSheet } from "@/components/event/edit-event-sheet";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
+import type { Leg } from "@/domain/leg";
 import type { EventState } from "../event-state";
 import { ParticipantBoard, type BoardHandle } from "../participant-board";
 import { useAdminLinkCheck } from "./admin-link";
@@ -48,7 +49,10 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const title = useRef<HTMLButtonElement>(null);
   const invalid = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
-  const [event, setEvent] = useState(state.event);
+  // The state the board shows last: its header, and its cars on each leg for the sheet (M5.1).
+  const [shown, setShown] = useState(state);
+  const { event } = shown;
+  const carsOn = (leg: Leg) => shown.legs.find((each) => each.leg === leg)?.cars.length ?? 0;
   const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null)[] } | null>(null);
   useKeepBoardInPlace(frame);
 
@@ -212,10 +216,17 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         {area}
       </div>
       {screen.state === "ready" && (
-        <EditEventSheet open={editing} onOpenChange={setEditing} event={event} onEdit={edit} onClosed={focusEdit} />
+        <EditEventSheet
+          open={editing}
+          onOpenChange={setEditing}
+          event={event}
+          cars={{ aller: carsOn("aller"), retour: carsOn("retour") }}
+          onEdit={edit}
+          onClosed={focusEdit}
+        />
       )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">
-        <ParticipantBoard ref={boardRef} id={id} state={state} onAction={reread} onState={setEvent} />
+        <ParticipantBoard ref={boardRef} id={id} state={state} onAction={reread} onState={setShown} />
         {children}
       </div>
     </>

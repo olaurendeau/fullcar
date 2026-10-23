@@ -76,7 +76,7 @@ export interface BoardHandle {
  * told each time the state an action answered is shown: never for the first read, nor `apply`.
  *
  * Each state shown brings the event's header too (epic #250): its title, place, start and end,
- * the tabs, the legs' dates and `document.title` follow it, and `onState` is told it. Should
+ * the tabs, the legs' dates and `document.title` follow it, and `onState` is told the state. Should
  * the retour go while its tab is active, the aller shows; should what had the focus go with
  * the tabs, the event's title takes it, never `<body>`. While a sheet hides the page, the tabs
  * stay as they are until it is closed: the retour it may be on (rule 9), and none coming that
@@ -93,7 +93,7 @@ export function ParticipantBoard({
   state: EventState;
   ref?: Ref<BoardHandle>;
   onAction?: () => void;
-  onState?: (event: EventHeader) => void;
+  onState?: (state: EventState) => void;
 }) {
   const words = wordsOf(useTranslations(), useFormatter());
   const [state, setState] = useState(rendered);
@@ -113,6 +113,8 @@ export function ParticipantBoard({
         setTab("aller");
         // The retour gone, the bar's lines about it go, once, before what this state's answer says (decision 44).
         if (!next.event.retourAt) messages.retourGone();
+        // The retour back, the information that said it was gone goes; its failures stay (#271).
+        else messages.retourBack();
       }
       displayed.current = next;
       setState(next);
@@ -160,8 +162,8 @@ export function ParticipantBoard({
   const { event } = state;
   useEffect(() => {
     document.title = event.title;
-    onState?.(event);
-  }, [event, onState]);
+  }, [event]);
+  useEffect(() => onState?.(state), [state, onState]);
 
   const retrying = useRef(false);
   // Every action of the page goes through it; nothing else changes on a failure: what was typed stays.
@@ -204,7 +206,7 @@ export function ParticipantBoard({
   // whose landmark is the event's title (decision 45). It removes no other line (rule 4).
   function informed(send: Send, notDone: NotDone, why: Why): boolean {
     const text = why.kind === "noRetour" ? noRetourInfo(words, notDone) : undefined;
-    if (text) send.whenClosed(() => messages.inform({ text, landmark: focusTitle }));
+    if (text) send.whenClosed(() => messages.inform({ text, landmark: focusTitle, saysRetourGone: true }));
     return text !== undefined;
   }
 

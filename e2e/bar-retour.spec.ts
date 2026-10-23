@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
-import { removeRetourInDb } from "./event-db";
+import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { organiserPath, test as organiserTest } from "./organiser";
 
@@ -241,6 +241,30 @@ test.describe("the bar, the retour removed meanwhile", () => {
     await send(page, "Tom", "Aller", "Ne fait pas l’aller");
     await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Ne fait pas l’aller");
     await expect(messages(page)).toHaveText([TEXT.lookingRefused]);
+  });
+
+  // #271, the owner's decision (review of #409): the failure is about no leg, so that its
+  // transition leaves it. The retour added back leaves it too (Vitest: the information goes);
+  // a send about its subject takes it away, as for any failure (rule 5).
+  test("the retour added back: the failure `noRetour` stays, then goes with a send about its subject", async ({ page, db, seededEvent }) => {
+    await seedScene(db, seededEvent.id, token, "notConcerned");
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(cell(page, "Tom", "Retour")).toBeVisible();
+    await removeRetourInDb(db, seededEvent.id);
+    await send(page, "Tom", "Retour", "Je cherche une place");
+    await expectWithoutRetour(page);
+    await expect(messages(page)).toHaveText([TEXT.lookingRefused]);
+
+    await editEventInDb(db, seededEvent.id, { retourAt: "2026-12-12 18:00:00" });
+    await send(page, "Tom", "Aller", "Ne fait pas l’aller");
+    await expect(tabs(page)).toHaveCount(2);
+    await expect(cell(page, "Tom", "Aller")).toHaveAccessibleName("Tom, Aller : Ne fait pas l’aller");
+    await expect(messages(page)).toHaveText([TEXT.lookingRefused]);
+
+    await send(page, "Tom", "Retour", "Je cherche une place");
+    await expect(cell(page, "Tom", "Retour")).toHaveAccessibleName(/^Tom, Retour : (?!Ne fait pas le retour)/);
+    await expect(messages(page).filter({ hasText: TEXT.lookingRefused })).toHaveCount(0);
   });
 
   test("M7.9, page C, M7.3: « Sortir de la voiture » of Léa · Retour: the aller's success stays with its « Annuler », and the information", async ({

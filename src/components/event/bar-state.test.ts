@@ -12,6 +12,7 @@ import {
   offerChanges,
   personLeg,
   regions,
+  retourBack,
   retourGone,
   succeed,
   undoing,
@@ -234,6 +235,39 @@ describe("decision 44: the retour gone, the bar's lines about it go", () => {
     state = inform(state, { ...info("Aucune place libre au retour"), ...retour });
     state = fail(state, { ...failure("Hugo · Retour", ["cell:hugo:retour"]), ...retour });
     expect(regions(retourGone(state))).toEqual({ alert: "", status: "" });
+  });
+});
+
+// #271, the owner's decision (review of #409): a retour added back takes away the information that
+// said it was gone, whose aim is reached (decision 45). A failure `noRetour` or `noRetourAgain`
+// stays: only a send about its subject, or « Fermer », takes it away (rule 5).
+describe("the retour back: the information that said it was gone goes, the failures stay", () => {
+  const noRetour = "Tom · Retour : « Je cherche une place »… Il n’y a plus de retour";
+
+  it("the information goes; the failures, about no leg, and every other line stay", () => {
+    let state = fail(emptyBar, failure(noRetour, ["cell:tom:retour"]));
+    state = fail(state, { ...failure("Léa · Aller", ["cell:lea:aller"], 2), leg: "aller" });
+    state = succeed(state, success("Hugo est dans la voiture de Marc"));
+    state = inform(state, { ...info("Il n’y a plus de retour pour cet événement."), saysRetourGone: true });
+    expect(texts(retourBack(state))).toEqual(["Léa · Aller", noRetour, "Hugo est dans la voiture de Marc"]);
+  });
+
+  it("an information about another thing stays", () => {
+    const state = inform(emptyBar, info("Aucune place libre à l’aller"));
+    expect(texts(retourBack(state))).toEqual(["Aucune place libre à l’aller"]);
+  });
+
+  it("the region that said the information empties", () => {
+    const state = inform(emptyBar, { ...info("Il n’y a plus de retour pour cet événement."), saysRetourGone: true });
+    expect(regions(retourBack(state))).toEqual({ alert: "", status: "" });
+  });
+
+  // The note of #371's review: about no leg, the failure is not kept for ever.
+  it("a failure `noRetour` that outlived the retour back and gone again goes with a send about its subject, or « Fermer »", () => {
+    const state = retourGone(retourBack(fail(emptyBar, failure(noRetour, ["cell:tom:retour"]))));
+    expect(texts(state)).toEqual([noRetour]);
+    expect(texts(withdraw(state, { about: ["cell:tom:retour"] }))).toEqual([]);
+    expect(texts(close(state))).toEqual([]);
   });
 });
 

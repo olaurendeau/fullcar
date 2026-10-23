@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   BLANK_EVENT_FIELDS,
   EventFormFields,
+  carTimesKept,
   eventFieldsChanged,
   loadedEventFields,
   withEventField,
@@ -221,5 +222,58 @@ describe("EventFormFields", () => {
 
   it("Retour: the tick applies to the state given", () => {
     expect(change("retour", false)).toEqual({ ...meanwhile, values: { ...meanwhile.values, retour: false } });
+  });
+
+  // M5.1, review of #293: a leg's sentence describes the two fields of that leg, after their error.
+  it("a leg's sentence describes its date and its time, after their error; the other leg's fields keep theirs alone", () => {
+    const tree = EventFormFields({
+      idOf: (id) => `f-${id}`,
+      state: rendered,
+      errors: { allerTime: "required" },
+      onChange: () => {},
+      notes: { aller: "Les 3 voitures…" },
+    });
+    const describedBy = (name: string) => elements(tree).find((each) => each.props?.id === `f-${name}`)?.props as { "aria-describedby"?: string };
+    expect(describedBy("allerDate")["aria-describedby"]).toBe("f-aller-note");
+    expect(describedBy("allerTime")["aria-describedby"]).toBe("f-allerTime-error f-aller-note");
+    expect(describedBy("retourDate")["aria-describedby"]).toBeUndefined();
+    const note = elements(tree).find((each) => each.props?.id === "f-aller-note");
+    expect(JSON.stringify(note?.props?.children)).toContain("Les 3 voitures…");
+  });
+});
+
+// M5.1: the cars of a leg whose date or time changed keep their time; the sheet says so.
+describe("carTimesKept", () => {
+  const loaded = loadedEventFields({ title: "T", location: "L", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
+  const cars = { aller: 3, retour: 2 };
+
+  it.each([
+    ["the start's time", { allerTime: "14:00" }],
+    ["the start's date", { allerDate: "2026-12-13" }],
+  ])("%s changed: the aller's cars", (_, change) => {
+    expect(carTimesKept({ ...loaded, ...change }, loaded, cars)).toEqual({ aller: 3 });
+  });
+
+  it.each([
+    ["the end's time", { retourTime: "21:00" }],
+    ["the end's date", { retourDate: "2026-12-13" }],
+  ])("%s changed: the retour's cars", (_, change) => {
+    expect(carTimesKept({ ...loaded, ...change }, loaded, cars)).toEqual({ retour: 2 });
+  });
+
+  it("nothing changed, or put back as it was loaded: none", () => {
+    expect(carTimesKept({ ...loaded }, loaded, cars)).toEqual({});
+  });
+
+  it("a leg without a car: none for it", () => {
+    expect(carTimesKept({ ...loaded, allerTime: "14:00", retourTime: "21:00" }, loaded, { aller: 0, retour: 1 })).toEqual({ retour: 1 });
+  });
+
+  it("the box unchecked: none for the retour", () => {
+    expect(carTimesKept({ ...loaded, retour: false, retourTime: "21:00" }, loaded, cars)).toEqual({});
+  });
+
+  it("the end's date following the start's: both legs", () => {
+    expect(carTimesKept({ ...loaded, allerDate: "2026-12-13", retourDate: "2026-12-13" }, loaded, cars)).toEqual({ aller: 3, retour: 2 });
   });
 });
