@@ -255,15 +255,27 @@ export function inCode(frame: StackFrame): boolean {
 /** The files of the runtime's own frames, as the SDK's parsers write them, and as `allowUrls` skips them. */
 export const RUNTIME_FILES: ReadonlySet<unknown> = new Set(["<anonymous>", "[native code]"]);
 
-/** ECMAScript's own objects, a fixed list: a page's global, or an element's id, is none of them. */
+/** ECMAScript's own objects, a fixed list: `process`, `console`, a page's global or an element's id is none of them. */
 const BUILT_INS = `Array ArrayBuffer Atomics BigInt Boolean DataView Date Error EvalError FinalizationRegistry Float32Array
   Float64Array Function Int8Array Int16Array Int32Array Intl Iterator JSON Map Math Number Object Promise Proxy RangeError
   ReferenceError Reflect RegExp Set SharedArrayBuffer String Symbol SyntaxError TypeError URIError Uint8Array
   Uint8ClampedArray Uint16Array Uint32Array WeakMap WeakRef WeakSet`.split(/\s+/);
-const builtIn = (name: string): object | undefined =>
-  BUILT_INS.includes(name) ? ((globalThis as Record<string, unknown>)[name] as object | undefined) : undefined;
-const memberOf = (object: object | undefined, name: string) =>
-  object !== undefined && [object, (object as { prototype?: object }).prototype].some((each) => each !== undefined && Object.hasOwn(each, name));
+
+/**
+ * The names of each built-in's own members and of its prototype's, read once, when this
+ * module loads: a member added since (`Object.prototype.Marc = …`) is none of them. A
+ * built-in this runtime lacks is left out: in a page, an element's id could take its name.
+ */
+const MEMBERS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  BUILT_INS.flatMap((name) => {
+    const object = (globalThis as Record<string, unknown>)[name];
+    const tag = Object.prototype.toString.call(object);
+    if (typeof object !== "function" && tag !== `[object ${name}]`) return [];
+    const each = [object as object, (object as { prototype?: object }).prototype].filter((part) => part !== undefined);
+    return [[name, new Set(each.flatMap((part) => Object.getOwnPropertyNames(part)))] as const];
+  }),
+);
+const ANY_MEMBER: ReadonlySet<string> = new Set([...MEMBERS.values()].flatMap((members) => [...members]));
 
 /**
  * A built-in's name, as V8 (`JSON.parse`, `Array.map`, `new Promise`) or Safari (`parse`)
@@ -271,11 +283,11 @@ const memberOf = (object: object | undefined, name: string) =>
  */
 function builtInName(name: string): boolean {
   const constructed = /^new (\w+)$/.exec(name);
-  if (constructed) return builtIn(constructed[1]) !== undefined;
+  if (constructed) return MEMBERS.has(constructed[1]);
   const [owner, member, ...rest] = name.split(".");
   if (rest.length > 0) return false;
-  if (member !== undefined) return memberOf(builtIn(owner), member);
-  return builtIn(owner) !== undefined || BUILT_INS.some((each) => memberOf(builtIn(each), owner));
+  if (member !== undefined) return MEMBERS.get(owner)?.has(member) === true;
+  return MEMBERS.has(owner) || ANY_MEMBER.has(owner);
 }
 
 /**

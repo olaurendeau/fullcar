@@ -101,6 +101,10 @@ const sameFrame = (a: StackFrame) => (b: StackFrame) => a.function === b.functio
  * skip: on the server always, in the browser after the `…Error: ` of the error's name (#239).
  * A frame of the runtime that such a line reads as leaves the stack too (#395): V8 writes
  * the message at the top of it, and `    at JSON.parse (<anonymous>)` there is no frame.
+ * Only as far as the stack's text holds this message: when it does not (a `message` changed
+ * after `stack` was read, an empty `name`), a frame of the runtime read from a line of the
+ * stack's own copy may go out. Its words are then ECMAScript's alone (`inRuntime`), never a
+ * person's.
  */
 export function messagesWithoutFrames(parse: ParseStack) {
   return <E extends Event>(event: E): E => {
