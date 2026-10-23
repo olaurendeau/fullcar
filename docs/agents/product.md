@@ -81,9 +81,10 @@ Ils sont la moitié du produit, et chacun doit avoir une UI pensée :
 
 Dans chaque leg, une **Carte** montre le lieu de l'événement et le lieu de chaque voiture de
 ce leg qui a une position (départ à l'aller, dépose au retour), relié à l'événement par une
-ligne droite, au point exact, voitures comprises. Elle est en lecture seule : elle ne dit rien
-que la liste ne dise déjà, et on n'y choisit ni n'y déplace aucune position. Ses tuiles sont
-servies par notre origine : le navigateur ne parle qu'à elle. Restent hors périmètre :
+ligne droite, au point exact, voitures comprises ; une voiture à moins de 25 m du lieu de
+l'événement n'a pas de ligne. Elle est en lecture seule : elle ne dit rien que la liste ne
+dise déjà, et on n'y choisit ni n'y déplace aucune position. Ses tuiles sont servies par
+notre origine : le navigateur ne parle qu'à elle. Restent hors périmètre :
 l'itinéraire, la distance, la durée, et les Arrêts sur la carte (#68).
 
 ## Hors périmètre V1
