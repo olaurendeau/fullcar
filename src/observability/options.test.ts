@@ -114,12 +114,15 @@ describe("on the server, with a DSN", () => {
     const { integrations, ...options } = initOptions(sdk.init);
     expect(options).toEqual(sentryOptions(ENV));
     expect(typeof integrations).toBe("function");
-    expect(client.on.mock.calls).toEqual([["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader]]);
+    expect(client.on.mock.calls).toEqual([
+      ["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader], ["preprocessEvent", expect.any(Function)],
+    ]);
     const processors = client.addEventProcessor.mock.calls.map(([processor]) => processor as typeof codeFramesOnly);
-    expect(processors).toEqual([codeFramesOnly, expect.any(Function), databaseErrors]);
-    // The second reads each line with the client's own stack parser.
+    expect(processors).toEqual([codeFramesOnly, databaseErrors]);
+    // `preprocessEvent`, before every processor, reads each line with the client's own stack parser.
+    const preprocess = client.on.mock.calls[2][1] as typeof codeFramesOnly;
     const event = { exception: { values: [{ type: "Error", value: "Le trajet a échoué\n    at Marc (depuis 10:30)" }] } };
-    expect(processors[1](event).exception.values).toEqual([{ type: "Error", value: "Le trajet a échoué" }]);
+    expect(preprocess(event).exception.values).toEqual([{ type: "Error", value: "Le trajet a échoué" }]);
   });
 
   it("keeps the exact list of integrations, Http without sessions", async () => {
@@ -261,14 +264,17 @@ describe("in the browser, with a DSN", () => {
     expect([typeof integrations, allowUrls]).toEqual(["function", [/\/_next\//]]);
     sdk.defaultStackParser.mockReturnValueOnce([{ filename: "depuis 10" }, { filename: "chrome-extension://abcdefgh/content.js" }]);
     expect(stackParser("the stack")).toEqual([{ filename: "chrome-extension://abcdefgh/content.js" }]);
-    expect(client.on.mock.calls).toEqual([["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader]]);
+    expect(client.on.mock.calls).toEqual([
+      ["createDsc", scrubCreatedDsc], ["beforeEnvelope", scrubEnvelopeHeader], ["preprocessEvent", expect.any(Function)],
+    ]);
     const processors = client.addEventProcessor.mock.calls.map(([processor]) => processor as typeof codeFramesOnly);
-    expect(processors).toEqual([codeFramesOnly, expect.any(Function)]);
-    // The second reads each line with the SDK's parser as it is, not with `scriptFramesOnly`'s.
+    expect(processors).toEqual([codeFramesOnly]);
+    // `preprocessEvent` reads each line with the SDK's parser as it is, not with `scriptFramesOnly`'s.
+    const preprocess = client.on.mock.calls[2][1] as typeof codeFramesOnly;
     const script = { filename: "https://fullcar.example/_next/a.js" };
     sdk.defaultStackParser.mockImplementation((stack) => (stack?.includes("Marc") ? [script, { filename: "/03" }, script] : []));
     const event = { exception: { values: [{ type: "Error", value: "Le trajet a échoué\nMarc revient le 12/03" }] } };
-    expect(processors[1](event).exception.values).toEqual([{ type: "Error", value: "Le trajet a échoué" }]);
+    expect(preprocess(event).exception.values).toEqual([{ type: "Error", value: "Le trajet a échoué" }]);
   });
 
   it("keeps the exact list of integrations, page loads and navigations named without their URL", async () => {
@@ -390,11 +396,17 @@ describe("what the SDK sends with these options", () => {
     const { exception } = items.find((item) => item.exception) as { exception: { values: { value?: string }[] } };
     return { leaks: sent.join("\n").includes("Marc"), values: exception.values.map(({ value }) => value) };
   }
-  /** The error, its cause, and a line Node's parser reads as a frame though it does not start with `at`. */
+  /**
+   * The error, its cause, a line Node's parser reads as a frame though it does not start with
+   * `at`, and one whose file is of the build, which `codeFramesOnly` keeps (#388).
+   */
   const withFrameInMessage = () => [
     new Error(`Le trajet a échoué${FRAME_LINE}`),
     new Error("Impossible d'afficher le trajet", { cause: new Error(`Le trajet a échoué${FRAME_LINE}`) }),
     new Error("Le trajet a échoué\nRésultat pour Marc : aucune place"),
+    new Error("Le trajet a échoué\n    at Marc (/var/task/.next/server/chunks/ssr/4821.js:1:2)"),
+    // A frame without a file, which the parser gives the file of the line above it.
+    new Error("Le trajet a échoué\n    at a (/var/task/.next/server/chunks/ssr/1.js:1:2)\n    at Marc (file://:1:2)"),
   ];
   async function sendEach(errors: Error[]) {
     const each = [];
@@ -406,10 +418,12 @@ describe("what the SDK sends with these options", () => {
     start(registerServerHooks);
     const each = await sendEach(withFrameInMessage());
     // A boolean, first: a failing assertion prints no part of what was sent (#233).
-    expect(each.map(({ leaks }) => leaks)).toEqual([false, false, false]);
+    expect(each.map(({ leaks }) => leaks)).toEqual([false, false, false, false, false]);
     expect(each.map(({ values }) => values)).toEqual([
       ["Le trajet a échoué"],
       ["Le trajet a échoué", scrubText("Impossible d'afficher le trajet")],
+      ["Le trajet a échoué"],
+      ["Le trajet a échoué"],
       ["Le trajet a échoué"],
     ]);
   });
@@ -419,7 +433,7 @@ describe("what the SDK sends with these options", () => {
       registerHooks(each);
       each.addEventProcessor(codeFramesOnly);
     });
-    expect((await sendEach(withFrameInMessage())).map(({ leaks }) => leaks)).toEqual([true, true, true]);
+    expect((await sendEach(withFrameInMessage())).map(({ leaks }) => leaks)).toEqual([true, true, true, true, true]);
   });
 
   it("sends, on purpose, a first name in a line of plain text that Node's parser reads as no frame (#393)", async () => {

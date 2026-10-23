@@ -47,13 +47,14 @@ export function databaseErrors<E extends Sentry.Event>(event: E, hint: Sentry.Ev
 }
 
 /**
- * The hooks of `registerHooks`, and the server's event processors. The client's stack parser
+ * The hooks of `registerHooks`, the server's event processors, and `messagesWithoutFrames` on
+ * `preprocessEvent`, before every processor. The client's stack parser
  * is the SDK's own, `defaultStackParser`: the one that made the frames of every error.
  */
 export function registerServerHooks(client: Pick<Sentry.NodeClient, "on" | "addEventProcessor" | "getOptions">): void {
   registerHooks(client);
   client.addEventProcessor(codeFramesOnly);
-  client.addEventProcessor(messagesWithoutFrames(client.getOptions().stackParser));
+  client.on("preprocessEvent", messagesWithoutFrames(client.getOptions().stackParser));
   client.addEventProcessor(databaseErrors);
 }
 

@@ -43,7 +43,10 @@ function load(bare = false) {
               return { statusCode: 200 };
             }),
         });
-        return bare && client ? { on: client.on.bind(client), addEventProcessor: () => {} } : client;
+        if (!bare || !client) return client;
+        // The hooks of `registerHooks` alone: none on the event itself.
+        const on = (hook: string, callback: never) => (hook === "preprocessEvent" ? () => {} : client.on(hook as "createDsc", callback));
+        return { on, addEventProcessor: () => {} };
       },
     }) as unknown as BrowserSdk;
 }
@@ -146,6 +149,38 @@ describe("what the browser sends for an error", () => {
       results.push([event !== undefined, payload.includes("Marc")]);
     }
     expect(results).toEqual([[true, false], [true, false]]);
+  });
+
+  it("sends an error whose message holds a line read as a frame with a URL, ours or another's, without it (#388)", async () => {
+    const results = [];
+    for (const line of [
+      "Marc https://fullcar.example/_next/x.js:1:2", `    at Marc (${CHUNK}:1:2)`, `Marc@${CHUNK}:1:2`, "    at Marc (https://x.example/a.js:1:2)",
+    ]) {
+      const error = new Error(`Le trajet a échoué\n${line}`);
+      error.stack = `Error: ${error.message}\n    at onSubmit (${CHUNK}:1:4410)`;
+      const { event, payload } = await send(error);
+      const frames = event?.exception.values.flatMap(({ stacktrace }) => stacktrace.frames.map((frame) => frame.function));
+      // Booleans and our own names: a failing assertion prints no part of the message (#233).
+      results.push([event !== undefined, payload.includes("Marc"), frames]);
+    }
+    expect(results).toEqual(Array.from({ length: 4 }, () => [true, false, ["onSubmit"]]));
+  });
+
+  it("sends no frame of a line of its message without a file, which the parser gives the file of the line above (#388)", async () => {
+    const other = `${ORIGIN}/_next/static/chunks/other-1.js`;
+    const error = new Error(`Le trajet a échoué\n    at a (${other}:1:2)\n    at Marc (:1:2)`);
+    error.stack = `Error: ${error.message}\n    at onSubmit (${CHUNK}:1:4410)`;
+    const { event, payload } = await send(error);
+    expect(event?.exception.values.map(({ stacktrace }) => stacktrace.frames.map((frame) => frame.function))).toEqual([["onSubmit"]]);
+    // A boolean: a failing assertion prints no part of what was sent (#233).
+    expect(payload.includes("Marc")).toBe(false);
+  });
+
+  it("keeps a frame of ours that a line of its message names at another place (#388)", async () => {
+    const other = `${ORIGIN}/_next/static/chunks/other-1.js`;
+    const error = new Error(`Le trajet a échoué\n    at onSubmit (${CHUNK}:1:2)\n    at onSubmit (${other}:1:4410)`);
+    error.stack = `Error: ${error.message}\n    at onSubmit (${CHUNK}:1:4410)`;
+    expect(await framesSent(error)).toEqual([{ filename: FILENAME, function: "onSubmit", lineno: 1, colno: 4410, in_app: true }]);
   });
 
   it("keeps the frames of the runtime, Chrome's and Safari's, with ours (#395)", async () => {

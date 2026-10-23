@@ -1,5 +1,5 @@
 import type { addIntegration, Event, getClient, NodeOptions, StackFrame } from "@sentry/nextjs";
-import { inCode, inRuntime, RUNTIME_FILES, scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan } from "./scrub";
+import { inCode, inRuntime, scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan } from "./scrub";
 
 /*
  * Sentry's options, the same on the server and in the browser (#231, #234). The SDK collects
@@ -86,9 +86,19 @@ export type ParseStack = (stack: string) => readonly StackFrame[];
  * A frame of our own around the line: the parser drops a frame of `captureException` or of
  * `sentryWrapped` at either end of a stack, and would make none of `    at Marc.captureException (…)`.
  */
-const AROUND = "    at around (/around.js:1:1)";
+const AROUND_FILE = "/around.js";
+const AROUND = `    at around (${AROUND_FILE}:1:1)`;
 const framesOf = (parse: ParseStack, line: string) => parse(`${AROUND}\n${line}\n${AROUND}`).slice(1, -1);
-const sameFrame = (a: StackFrame) => (b: StackFrame) => a.function === b.function && a.filename === b.filename;
+/*
+ * Whether `frame` of the stack is the one `read` from a line of the message. A frame read
+ * without a file (`    at Marc (:1:2)`) is given the file of the top line of the stack it
+ * was read in (`stripSentryFramesAndReverse`, `@sentry/core`): here `AROUND_FILE`, in the
+ * error's own stack the file of whichever line comes first. Such a frame is compared without
+ * its file, by its function, line and column alone.
+ */
+const readAs = (read: StackFrame) => (frame: StackFrame) =>
+  read.function === frame.function && read.lineno === frame.lineno && read.colno === frame.colno &&
+  (read.filename === AROUND_FILE || read.filename === frame.filename);
 
 /**
  * Of every error's message, and of its causes', the lines after the first that `parse`, the
@@ -99,12 +109,17 @@ const sameFrame = (a: StackFrame) => (b: StackFrame) => a.function === b.functio
  * « Le format attendu » or « Un état incohérent » go too, which the project accepts (privacy
  * over diagnostics). The first line is the message's own, which the parsers
  * skip: on the server always, in the browser after the `…Error: ` of the error's name (#239).
- * A frame of the runtime that such a line reads as leaves the stack too (#395): V8 writes
- * the message at the top of it, and `    at JSON.parse (<anonymous>)` there is no frame.
+ * The frame that such a line reads as leaves the stack too, whatever its file (#395, #388):
+ * V8 writes the message at the top of the stack, and `    at Marc (https://…/_next/a.js:1:2)`
+ * there is no frame. Registered on `preprocessEvent`, this runs before every event processor:
+ * `allowUrls` then looks at the error's real top frame, not at a URL of the message, and the
+ * frames' files are still those the parser read. A frame of the stack equal to one of those
+ * lines, function, file, line and column, goes with them: a cost the project accepts. A line
+ * without a file is compared without it (`readAs`): the parser gives its frame the file of
+ * another line, which no comparison of files could tell.
  * Only as far as the stack's text holds this message: when it does not (a `message` changed
- * after `stack` was read, an empty `name`), a frame of the runtime read from a line of the
- * stack's own copy may go out. Its words are then ECMAScript's alone (`inRuntime`), never a
- * person's.
+ * after `stack` was read, an empty `name`), a frame read from a line of the stack's own copy
+ * may go out, and with a file of the build, its function's name.
  */
 export function messagesWithoutFrames(parse: ParseStack) {
   return <E extends Event>(event: E): E => {
@@ -113,9 +128,9 @@ export function messagesWithoutFrames(parse: ParseStack) {
       const [first = "", ...rest] = exception.value.split("\n");
       const read = rest.map((line) => framesOf(parse, line));
       exception.value = [first, ...rest.filter((_, index) => read[index].length === 0)].join("\n");
-      const fromMessage = read.flat().filter(({ filename }) => RUNTIME_FILES.has(filename));
+      const fromMessage = read.flat();
       const { stacktrace } = exception;
-      if (stacktrace?.frames) stacktrace.frames = stacktrace.frames.filter((frame) => !fromMessage.some(sameFrame(frame)));
+      if (stacktrace?.frames) stacktrace.frames = stacktrace.frames.filter((frame) => !fromMessage.some((read) => readAs(read)(frame)));
     }
     return event;
   };
