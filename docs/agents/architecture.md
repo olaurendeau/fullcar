@@ -395,11 +395,10 @@ ailleurs serait une nouvelle lecture.
 
 À partir de l'épic #237 (maquette `docs/design/place-autocomplete/`), le lieu de l'événement
 et celui d'une voiture peuvent recevoir une **position**, choisie parmi des propositions. Sur
-main : la position dans le domaine et en base, les voitures qui l'enregistrent (#421), la
-route des propositions et son appel à Photon, l'état du champ dans le navigateur. **À
-venir** : l'écriture et la lecture de la position de l'événement (#420), la lecture des
-positions des voitures dans l'état de la page (#422), puis les formulaires qui montrent le
-champ (#428 et suivantes).
+main : la position dans le domaine et en base, les voitures qui l'enregistrent (#421) et
+l'état de la page qui la porte (#422), la route des propositions et son appel à Photon,
+l'état du champ dans le navigateur. **À venir** : l'écriture et la lecture de la position de
+l'événement (#420), puis les formulaires qui montrent le champ (#428 et suivantes).
 
 ### Un lieu, une valeur
 
@@ -446,6 +445,11 @@ clé `position`, et une position envoyée est lue par `positionOf`, donc arrondi
   la rend ; `updateRide` n'écrit `location_lat` et `location_lng` que si `position` est
   donnée. `seedRide` (`src/db/test-participants.ts`) crée une voiture sans position, sauf si
   le test en donne une.
+- **Lecture** (#422) : `readEventRows` (`src/db/event-rows.ts`) lit `location_lat` et
+  `location_lng` de chaque voiture, et `RideRow` et `BoardCar` (`src/domain/board.ts`)
+  portent `position`, `null` quand il n'y en a pas. L'état de la page porte ainsi la position
+  de chaque voiture, pour les appareils (`withVisiblePhones` recopie la voiture entière) comme
+  pour l'organisateur (`withOrganiserPhones` la recopie champ par champ, `position` comprise).
 
 ### Le chemin d'une proposition
 
