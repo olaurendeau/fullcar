@@ -308,7 +308,8 @@ test.describe("the places of « Proposer une voiture », the event with a positi
     await expect(departure).toHaveAttribute("aria-expanded", "true");
     await departure.press("Escape");
     await expect(list(page, FR.departure)).toBeHidden();
-    await expect(form(page)).toBeVisible();
+    // Still visible while it slides out: Radix says at once whether it is closing.
+    await expect(form(page)).toHaveAttribute("data-state", "open");
     await expect(departure).toHaveValue(text);
     await expect(departure).toBeFocused();
 
