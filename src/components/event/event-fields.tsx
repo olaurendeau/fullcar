@@ -63,7 +63,7 @@ export function eventFieldsChanged(values: EventFieldValues, loaded: EventFieldV
 
 /**
  * A change of the fields, applied to the state current when it runs, not to the one of the
- * render it came from: a state set meanwhile (a merge with the saved values, #269) is kept.
+ * render it came from: a state set meanwhile (the saved values, `withSavedFields`) is kept.
  */
 export type EventFieldsUpdate = (state: EventFieldsState) => EventFieldsState;
 
@@ -80,6 +80,30 @@ export function withEventField(name: EventField, value: string): EventFieldsUpda
 /** The box Retour changes. */
 export function withRetour(retour: boolean): EventFieldsUpdate {
   return (state) => ({ ...state, values: { ...state.values, retour } });
+}
+
+/**
+ * The saved values arrive, the event changed on another device (organizer-view v3.3.6,
+ * « Modifications simultanées »): each field not changed, its value still `loaded`'s, takes the
+ * saved value, and each field changed keeps what was typed; the box Retour too (M6.1, M6.2).
+ * The end date then follows as the saved values have it, unless it was typed.
+ */
+export function withSavedFields(loaded: EventFieldValues, saved: EventFieldsState): EventFieldsUpdate {
+  return (state) => {
+    const kept = <K extends keyof EventFieldValues>(name: K) =>
+      state.values[name] === loaded[name] ? saved.values[name] : state.values[name];
+    const values: EventFieldValues = {
+      title: kept("title"),
+      location: kept("location"),
+      allerDate: kept("allerDate"),
+      allerTime: kept("allerTime"),
+      retour: kept("retour"),
+      retourDate: kept("retourDate"),
+      retourTime: kept("retourTime"),
+    };
+    const typed = state.values.retourDate !== loaded.retourDate;
+    return { values, retourDateFollows: typed ? state.retourDateFollows : saved.retourDateFollows };
+  };
 }
 
 /**

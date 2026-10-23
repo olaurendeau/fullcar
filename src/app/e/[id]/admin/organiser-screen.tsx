@@ -115,6 +115,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
    * Sends the change. Saved, the board shows the header saved at once, the bar says so once no
    * sheet hides the page, and a read of the screen follows, as one block (O1.9): should it fail,
    * the header stays the answer's, and the panel is withdrawn as after an action (O1.10).
+   * Changed on another device, the whole page takes the header stored, then the same read
+   * (M6.1, M6.2).
    */
   async function edit(fields: EventFields, before: EventHeader): Promise<EditAnswer> {
     const send = sendAbout(["event:edit"]);
@@ -122,9 +124,9 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     const answer = editAnswer(await link.edit(fields, before));
     send.answered();
     const handle = boardRef.current;
-    if (answer.kind !== "saved" || !handle) return answer;
+    if ((answer.kind !== "saved" && answer.kind !== "changed") || !handle) return answer;
     handle.applyEvent(answer.event);
-    send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: focusEdit }));
+    if (answer.kind === "saved") send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: focusEdit }));
     void readScreen(handle);
     return answer;
   }
