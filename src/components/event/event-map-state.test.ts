@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapOf, type EventMapPoints } from "@/domain/event-map";
+import { distanceMetres, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
 import { mapUpdate, pointKey, type MapFocus, type MapView } from "./event-map-state";
 
@@ -296,6 +296,15 @@ describe("an open bubble whose list changes", () => {
     expect(mapUpdate(pair, near, focused({ kind: "close" }, { bubble })).focus).toEqual({ kind: "point", key: "paul" });
     const far = map([car("paul", north(BRINDAS, 30)), car("lea", ECULLY)]);
     expect(mapUpdate(pair, far, focused({ kind: "close" }, { bubble })).focus).toEqual({ kind: "container" });
+  });
+
+  it("does not find a point exactly 25 m away", () => {
+    const origin: Position = { lat: 0, lng: 0 };
+    const at25: Position = { lat: 0.0002248300909311345, lng: 0 };
+    expect(distanceMetres(origin, at25)).toBe(SAME_POSITION_METRES);
+    const together = map([car("nina", origin), car("paul", origin)]);
+    const ninaGone = map([car("paul", at25)]);
+    expect(mapUpdate(together, ninaGone, focused({ kind: "close" }, { bubble })).focus).toEqual({ kind: "container" });
   });
 
   it("sends it to the map's container when no point is left there", () => {
