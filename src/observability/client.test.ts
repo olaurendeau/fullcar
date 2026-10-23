@@ -176,9 +176,12 @@ describe("what the browser sends for an error", () => {
     expect(payload.includes("Marc")).toBe(false);
   });
 
-  it("keeps a frame of ours that a line of its message names at another place (#388)", async () => {
+  it("keeps a frame of ours that no line of its message matches, each differing by function, line, column or file (#388, #407)", async () => {
     const other = `${ORIGIN}/_next/static/chunks/other-1.js`;
-    const error = new Error(`Le trajet a échoué\n    at onSubmit (${CHUNK}:1:2)\n    at onSubmit (${other}:1:4410)`);
+    // Each differs from the frame by one of its function, line, column or file.
+    const lines = [`    at onLoad (${CHUNK}:1:4410)`, `    at onSubmit (${CHUNK}:2:4410)`, `    at onSubmit (${CHUNK}:1:2)`];
+    lines.push(`    at onSubmit (${other}:1:4410)`);
+    const error = new Error(["Le trajet a échoué", ...lines].join("\n"));
     error.stack = `Error: ${error.message}\n    at onSubmit (${CHUNK}:1:4410)`;
     expect(await framesSent(error)).toEqual([{ filename: FILENAME, function: "onSubmit", lineno: 1, colno: 4410, in_app: true }]);
   });
