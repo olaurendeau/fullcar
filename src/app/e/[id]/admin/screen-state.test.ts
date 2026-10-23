@@ -299,12 +299,21 @@ describe("editAnswer", () => {
     expect(editAnswer({ ok: true, value: { ok: false, error: reason } })).toStrictEqual({ kind: "refused", reason });
   });
 
-  // Until #270 gives it its words (epic #250, « Comportement transitoire »): nothing was written,
-  // and the sheet says the generic failure.
+  // M3.2, M3.5: the retour unchecked still holds these, to confirm.
+  it("is the numbers to confirm on `confirmRetour`", () => {
+    expect(editAnswer({ ok: true, value: { ok: false, error: "confirmRetour", cars: 2, persons: 9 } })).toStrictEqual({
+      kind: "confirmRetour",
+      counts: { cars: 2, persons: 9 },
+    });
+  });
+
+  // Nothing was written, and the sheet says the generic failure.
   it.each<[string, unknown]>([
     ["`changed` without a header", { ok: false, error: "changed" }],
     ["`changed` with a header missing its place", { ok: false, error: "changed", event: { ...event, location: 1 } }],
-    ["confirmRetour", { ok: false, error: "confirmRetour", cars: 1, persons: 2 }],
+    ["`confirmRetour` without its numbers", { ok: false, error: "confirmRetour" }],
+    ["`confirmRetour` with a number that is not a count", { ok: false, error: "confirmRetour", cars: 1.5, persons: 2 }],
+    ["`confirmRetour` with a negative number", { ok: false, error: "confirmRetour", cars: 1, persons: -1 }],
     ["another error", { ok: false, error: "rideGone" }],
     ["`ok` without a header", { ok: true }],
     ["`ok` with a header missing its title", { ok: true, event: { ...event, title: undefined } }],

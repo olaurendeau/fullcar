@@ -227,7 +227,8 @@
       "removeRide": "{leg, select, aller {La voiture de {driver} pour l’aller n’a pas été retirée.} other {La voiture de {driver} pour le retour n’a pas été retirée.}}",
       "editRide": "{leg, select, aller {Les changements de la voiture de {driver} pour l’aller n’ont pas été enregistrés.} other {Les changements de la voiture de {driver} pour le retour n’ont pas été enregistrés.}}",
       "readDevice": "Vos inscriptions n’ont pas pu être chargées.",
-      "editEvent": "L’événement n’a pas été modifié."
+      "editEvent": "L’événement n’a pas été modifié.",
+      "removeRetour": "L’événement n’a pas été modifié et le retour n’a pas été supprimé."
     },
     "why": {
       "offline": "Vérifiez la connexion, puis réessayez.",
@@ -354,6 +355,13 @@
     "changed": {
       "title": "L’événement vient d’être modifié depuis un autre appareil.",
       "body": "Rien n’a été enregistré. Les champs que vous n’aviez pas changés montrent maintenant la version enregistrée : vérifiez, puis validez de nouveau."
+    },
+    "removeRetour": {
+      "title": "Supprimer le retour ?",
+      "body": "{cars, plural, =0 {Aucune voiture n’est proposée pour le retour.} one {La voiture proposée pour le retour sera retirée.} other {Les # voitures proposées pour le retour seront retirées.}} {persons, plural, =0 {} one {# personne ne sera plus inscrite au retour.} other {# personnes ne seront plus inscrites au retour.}}",
+      "aller": "L’aller ne change pas.",
+      "confirm": "Supprimer le retour",
+      "changed": "Le retour a changé entre-temps : vérifiez les nombres ci-dessus, puis confirmez de nouveau."
     }
   },
   "EventNotFound": {

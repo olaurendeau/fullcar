@@ -1,3 +1,4 @@
+import type { LegCounts } from "@/db/legs";
 import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
@@ -156,13 +157,14 @@ export function screenRead(
 /**
  * What came of « Valider » in « Modifier l’événement » (organizer-view v3.3.6, « Enregistrer »):
  * saved, with the values the server stored; a field refused; changed on another device, with
- * the values stored (M6.1); the link refused (M8.2) or the event gone (M8.3); or a problem, said
- * in the sheet.
+ * the values stored (M6.1); the retour unchecked still holding these, to confirm (M3.2); the
+ * link refused (M8.2) or the event gone (M8.3); or a problem, said in the sheet.
  */
 export type EditAnswer =
   | { kind: "saved"; event: EventHeader }
   | { kind: "errors"; errors: EventErrors }
   | { kind: "changed"; event: EventHeader }
+  | { kind: "confirmRetour"; counts: LegCounts }
   | { kind: "refused"; reason: "invalid" | "eventNotFound" }
   | { kind: "problem"; problem: ActionProblem };
 
@@ -172,14 +174,18 @@ function isHeader(value: unknown): value is EventHeader {
   return typeof title === "string" && typeof location === "string" && isWallClock(allerAt) && (retourAt === null || isWallClock(retourAt));
 }
 
-/**
- * The answer of `updateEvent`, as the sheet takes it. Decision: `confirmRetour` is the generic
- * failure until #270 gives it its words. Reason: the epic's « Comportement transitoire »;
- * nothing was written, the typing stays.
- */
+const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+
+/** The answer of `updateEvent`, as the sheet takes it: anything else is the generic failure. */
 export function editAnswer(sent: Sent<unknown>): EditAnswer {
   if (!sent.ok) return { kind: "problem", problem: sent.problem };
-  const answer = sent.value as { ok?: unknown; event?: unknown; errors?: unknown; error?: unknown } | null | undefined;
+  const answer = sent.value as
+    | { ok?: unknown; event?: unknown; errors?: unknown; error?: unknown; cars?: unknown; persons?: unknown }
+    | null
+    | undefined;
+  if (answer?.ok === false && answer.error === "confirmRetour" && isCount(answer.cars) && isCount(answer.persons)) {
+    return { kind: "confirmRetour", counts: { cars: answer.cars, persons: answer.persons } };
+  }
   if (answer?.ok === true && isHeader(answer.event)) return { kind: "saved", event: answer.event };
   if (answer?.ok === false && typeof answer.errors === "object" && answer.errors !== null) {
     return { kind: "errors", errors: answer.errors as EventErrors };
