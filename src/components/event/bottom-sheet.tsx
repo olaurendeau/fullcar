@@ -16,6 +16,8 @@ import { HidesPage } from "./hidden-page";
 /**
  * What Radix's FocusScope does when a sheet's content mounts: the first element the Tab key
  * reaches, links left out, its text selected if it is a field; without one, the sheet itself.
+ * Copied from `@radix-ui/react-focus-scope` 1.3.0 (`focusFirst(removeLinks(getTabbableCandidates()),
+ * { select: true })`, which it does not export): an upgrade of it checks this again.
  */
 function focusFirstIn(sheet: HTMLElement) {
   const before = document.activeElement;

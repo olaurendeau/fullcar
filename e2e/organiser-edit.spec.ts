@@ -1,5 +1,5 @@
 import type { Locator, Page, Request, Route } from "@playwright/test";
-import { messages } from "./device";
+import { holdClose, messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
 import { expect, holdActionsWith, isAction, oneCharOff, organiserPath, seedOrganiserScene, test } from "./organiser";
@@ -163,6 +163,27 @@ test("M1.5: the sheet opens with no request, on the saved values, no option, the
   await expect(sheet(page).getByRole("checkbox")).toHaveCount(1);
   await page.waitForLoadState("networkidle");
   expect(sent, "requests sent by opening the sheet").toBe(0);
+});
+
+// #447: reopened while it closes, the sheet's content is still mounted, its form a new one (its
+// `key`): the focus goes to « Titre » all the same, as at any opening, never behind the sheet.
+test("#447: reopened while it closes, the sheet takes the focus on « Titre », its text selected", async ({ page, seededEvent }) => {
+  await openSheet(page, organiserPath(seededEvent));
+  await expect(field(page, "Titre")).toBeFocused();
+  const held = await page.addStyleTag({ content: holdClose });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+  // Hidden from role queries while the sheet is mounted.
+  await page.locator("button", { hasText: FR.edit }).focus();
+  await page.keyboard.press("Enter");
+  await expect(sheet(page)).toHaveAttribute("data-state", "open");
+  await expect(field(page, "Titre")).toBeFocused();
+  expect(await field(page, "Titre").evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([
+    0,
+    "Tournoi de Rennes".length,
+  ]);
+  await held.evaluate((style) => style.parentNode?.removeChild(style));
+  await expect(field(page, "Titre")).toBeFocused();
 });
 
 test.describe("without a retour", () => {
