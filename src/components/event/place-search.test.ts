@@ -210,21 +210,36 @@ describe("createPlaceSearch", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("stop: gives nothing and leaves no timer, even with a fetch that does not heed its signal", async () => {
+  /** A search whose `fetch` does not heed its signal: it answers `body` after `ms`, whatever happens. */
+  function deafSetUp(ms: number, body: unknown) {
     const answers: unknown[] = [];
     const searching: string[] = [];
-    const deaf = vi.fn(() => new Promise<Response>(() => {}));
+    const deaf = vi.fn(() => new Promise<Response>((resolve) => setTimeout(() => resolve(json(body)), ms)));
     const search = createPlaceSearch(
       { fetch: deaf, onLine: () => true },
       { answered: (...answer) => void answers.push(answer), searching: (text) => void searching.push(text) },
     );
+    return { search, answers, searching };
+  }
+
+  it("stop: gives nothing, even from a fetch that does not heed its signal and answers later", async () => {
+    const { search, answers, searching } = deafSetUp(500, { state: "ok", suggestions: [SALLE] });
     search.typed("Brindas", query("Brindas"));
     await vi.advanceTimersByTimeAsync(300);
     search.stop();
-    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(5000);
     expect(answers).toEqual([]);
     expect(searching).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("3 s: unavailable, even from a fetch that does not heed its signal, and its later answer is dropped", async () => {
+    const { search, answers } = deafSetUp(5000, { state: "ok", suggestions: [SALLE] });
+    search.typed("Brindas", query("Brindas"));
+    await vi.advanceTimersByTimeAsync(300 + 3000);
+    expect(answers).toEqual([["Brindas", { state: "unavailable" }]]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(answers).toEqual([["Brindas", { state: "unavailable" }]]);
   });
 
   it("stop: abandons the pause and the request out, and gives nothing", async () => {

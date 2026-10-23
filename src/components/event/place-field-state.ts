@@ -6,6 +6,7 @@
  */
 import type { Position } from "@/domain/place";
 import { placeQueryOf, type PlaceQuery, type Suggestion } from "@/domain/suggestion";
+import { text as readText } from "@/domain/text";
 import type { Locale } from "@/i18n/locales";
 import type { PlaceSearchResult } from "./place-search";
 
@@ -84,6 +85,12 @@ export function queryOf(state: PlaceFieldState, locale: Locale, near: Position |
   return "value" in query ? query.value : null;
 }
 
+/** Empty as the domain reads a text (`text()`): nothing but blanks or invisible characters. */
+function isEmpty(value: string): boolean {
+  const read = readText(value, Number.POSITIVE_INFINITY);
+  return "error" in read && read.error === "required";
+}
+
 /**
  * A keystroke, or a paste: the list closes, the lines go, an answer awaited is ignored. A car's
  * position goes with any change of the text, the event's when the field is emptied: then
@@ -92,7 +99,7 @@ export function queryOf(state: PlaceFieldState, locale: Locale, near: Position |
 export function typed(state: PlaceFieldState, text: string): PlaceFieldState {
   if (text === state.text) return state;
   const changed: PlaceFieldState = { ...state, text, list: null, line: null, awaiting: null, chosen: null };
-  const loses = state.rule === "car" || text.trim() === "";
+  const loses = state.rule === "car" || isEmpty(text);
   if (state.position === null || !loses) return changed;
   return say({ ...changed, position: null, label: null }, { kind: "removed" });
 }
@@ -138,9 +145,17 @@ export function closed(state: PlaceFieldState): PlaceFieldState {
   return state.list === null ? state : { ...state, list: { ...state.list, open: false, active: null } };
 }
 
-/** The focus leaves: the list closes, a line stays, the answer awaited no longer opens one; « indisponibles » may be said again. */
+/** The answer awaited no longer is: « Recherche de propositions… », which it would have taken away, goes with it. */
+function unawaited(state: PlaceFieldState): PlaceFieldState {
+  return { ...state, awaiting: null, line: state.line === "searching" ? null : state.line };
+}
+
+/**
+ * The focus leaves: the list closes, « Aucune… » or « indisponibles » stays, the answer awaited
+ * no longer opens one; « indisponibles » may be said again.
+ */
 export function left(state: PlaceFieldState): PlaceFieldState {
-  return { ...closed(state), awaiting: null, unavailableSaid: false };
+  return { ...unawaited(closed(state)), unavailableSaid: false };
 }
 
 /** An option of the open list chosen: its label in the field, its position, « Position ajoutée. ». The form sending, the list is closed. */
@@ -160,5 +175,5 @@ export function removed(state: PlaceFieldState): PlaceFieldState {
 
 /** The form starts or stops sending: while it does, the list closes and an answer awaited is ignored. */
 export function locked(state: PlaceFieldState, sending: boolean): PlaceFieldState {
-  return sending ? { ...closed(state), locked: true, awaiting: null } : { ...state, locked: false };
+  return sending ? { ...unawaited(closed(state)), locked: true } : { ...state, locked: false };
 }

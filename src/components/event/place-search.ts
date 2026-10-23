@@ -71,16 +71,20 @@ export function createPlaceSearch({ fetch, onLine }: PlaceSearchDeps, { answered
       return;
     }
     const controller = new AbortController();
-    let abandoned = false;
-    const slow = setTimeout(() => searching(text), SEARCHING_MS);
-    // 3 s without an answer: the request is abandoned, which makes it unavailable below.
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    cancel = () => {
-      abandoned = true;
+    /** Once answered, abandoned or past 3 s, the request gives nothing more, whether its `fetch` heeds its signal or not. */
+    let over = false;
+    const end = () => {
+      over = true;
       clearTimeout(slow);
       clearTimeout(timeout);
       controller.abort();
     };
+    const slow = setTimeout(() => searching(text), SEARCHING_MS);
+    const timeout = setTimeout(() => {
+      end();
+      answered(text, UNAVAILABLE);
+    }, TIMEOUT_MS);
+    cancel = end;
     fetch("/api/lieux", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -90,9 +94,9 @@ export function createPlaceSearch({ fetch, onLine }: PlaceSearchDeps, { answered
       .then((response) => (response.ok ? response.json() : null))
       .catch(() => null)
       .then((body: unknown) => {
-        clearTimeout(slow);
-        clearTimeout(timeout);
-        if (!abandoned) answered(text, resultOf(body));
+        if (over) return;
+        end();
+        answered(text, resultOf(body));
       });
   }
 

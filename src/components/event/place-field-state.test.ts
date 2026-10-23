@@ -130,6 +130,13 @@ describe("the position, rule event", () => {
   it("leaves when only blanks are left", () => {
     expect(typed(withChoice("event"), "   ").position).toBeNull();
   });
+
+  it("leaves when only invisible characters are left, as the domain reads an empty text", () => {
+    expect(typed(withChoice("event"), "​⁠").position).toBeNull();
+    expect(typed(withChoice("event"), "​Brindas").position).toEqual({ lat: 45.71989, lng: 4.69613 });
+    // The domain refuses a NUL character as invalid, not as empty: the form will say so, the position stays.
+    expect(typed(withChoice("event"), "\u0000").position).toEqual({ lat: 45.71989, lng: 4.69613 });
+  });
 });
 
 describe("the position, rule car", () => {
@@ -263,6 +270,27 @@ describe("« Recherche de propositions… »", () => {
     const asked = requested(typed(placeFieldOf({ text: "", position: null }, "event"), "Brindas"), "Brindas");
     expect(waited(typed(asked, "Brindas "), "Brindas").line).toBeNull();
     expect(waited(withList(), "Salle des f").line).toBeNull();
+  });
+
+  it("leaves with the focus, whose answer is no longer awaited, and the other lines stay", () => {
+    const waiting = waited(requested(typed(placeFieldOf({ text: "", position: null }, "event"), "Brindas"), "Brindas"), "Brindas");
+    expect(left(waiting).line).toBeNull();
+    const none = answered(requested(typed(placeFieldOf({ text: "", position: null }, "event"), "Nulle part"), "Nulle part"), "Nulle part", {
+      state: "ok",
+      suggestions: [],
+    });
+    expect(left(none).line).toBe("none");
+  });
+
+  it("leaves when the form starts sending, and does not come back once it has sent", () => {
+    const waiting = waited(requested(typed(placeFieldOf({ text: "", position: null }, "event"), "Brindas"), "Brindas"), "Brindas");
+    const sending = locked(waiting, true);
+    expect(sending.line).toBeNull();
+    expect(locked(sending, false).line).toBeNull();
+    const off = answered(requested(typed(placeFieldOf({ text: "", position: null }, "event"), "Brindas"), "Brindas"), "Brindas", {
+      state: "unavailable",
+    });
+    expect(locked(off, true).line).toBe("unavailable");
   });
 
   it("leaves at the next keystroke", () => {
