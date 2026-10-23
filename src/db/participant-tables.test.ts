@@ -330,6 +330,13 @@ describe("participant tables", () => {
       ["a latitude of 90.0001", { location_lat: 90.0001, location_lng: 0 }, "ride_location_lat_range"],
       ["a longitude of -180.0001", { location_lat: 0, location_lng: -180.0001 }, "ride_location_lng_range"],
       ["a longitude of 180.0001", { location_lat: 0, location_lng: 180.0001 }, "ride_location_lng_range"],
+      // Postgres orders NaN above every number: the ranges refuse it, as they do infinities.
+      ["a latitude of NaN", { location_lat: NaN, location_lng: 0 }, "ride_location_lat_range"],
+      ["a latitude of Infinity", { location_lat: Infinity, location_lng: 0 }, "ride_location_lat_range"],
+      ["a latitude of -Infinity", { location_lat: -Infinity, location_lng: 0 }, "ride_location_lat_range"],
+      ["a longitude of NaN", { location_lat: 0, location_lng: NaN }, "ride_location_lng_range"],
+      ["a longitude of Infinity", { location_lat: 0, location_lng: Infinity }, "ride_location_lng_range"],
+      ["a longitude of -Infinity", { location_lat: 0, location_lng: -Infinity }, "ride_location_lng_range"],
     ])("refuses %s", async (_, position, constraint) => {
       await expectRefusedBy(async (trx) => {
         const { eventId, personId } = await anEvent(trx);
