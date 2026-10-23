@@ -69,10 +69,19 @@ describe("a query from our own page", () => {
     expect(search).toHaveBeenCalledTimes(1);
   });
 
-  it("reads a body of 1 024 bytes", async () => {
+  it("compares the Origin with the first host the proxies forward, in any case", async () => {
+    const { photon, search } = photonAnswering();
+    for (const forwarded of ["FULLCAR.example, interne.proxy", "FULLCAR.example , interne.proxy"]) {
+      expect((await handlePlaces(post(json(LILAS), { "x-forwarded-host": forwarded }), photon)).status).toBe(200);
+    }
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads a body of 1 024 bytes, said by Content-Length or not", async () => {
     const body = json(LILAS);
-    const response = await handlePlaces(post(body + " ".repeat(1024 - body.length)), photonAnswering().photon);
-    expect(response.status).toBe(200);
+    const padded = body + " ".repeat(1024 - body.length);
+    expect((await handlePlaces(post(padded), photonAnswering().photon)).status).toBe(200);
+    expect((await handlePlaces(post(padded, { "content-length": "1024" }), photonAnswering().photon)).status).toBe(200);
   });
 });
 
@@ -83,6 +92,7 @@ describe("a query from elsewhere (AL6.4)", () => {
     ["from our host on another port", { origin: `https://${HOST}:8443` }],
     ["from an opaque origin", { origin: "null" }],
     ["from Host when the proxy names another", { origin: "http://localhost:3000" }],
+    ["from a host a proxy forwards after the first", { origin: "https://interne.proxy", "x-forwarded-host": `${HOST}, interne.proxy` }],
     ["without a host to compare with", { "x-forwarded-host": undefined, host: undefined }],
   ])("answers 403 %s, without asking Photon", async (_, headers) => {
     const { photon, search } = photonAnswering();
