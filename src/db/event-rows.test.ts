@@ -17,11 +17,29 @@ async function addPerson(db: Db, eventId: string, firstName: string, phone: stri
   return id;
 }
 
-async function addRide(db: Db, eventId: string, driverId: string, leg: "aller" | "retour", note: string | null = null) {
+async function addRide(
+  db: Db,
+  eventId: string,
+  driverId: string,
+  leg: "aller" | "retour",
+  note: string | null = null,
+  position: { lat: number; lng: number } | null = null,
+) {
   const id = randomUUID();
   await db
     .insertInto("ride")
-    .values({ id, event_id: eventId, leg, driver_id: driverId, location: "Mairie de Cesson", departure_time: "07:15:00", seats: 3, note })
+    .values({
+      id,
+      event_id: eventId,
+      leg,
+      driver_id: driverId,
+      location: "Mairie de Cesson",
+      departure_time: "07:15:00",
+      seats: 3,
+      note,
+      location_lat: position?.lat ?? null,
+      location_lng: position?.lng ?? null,
+    })
     .execute();
   return id;
 }
@@ -50,7 +68,16 @@ describe("readEventRows", () => {
         ]),
       );
       expect(read.rides).toEqual([
-        { id: rideId, leg: "retour", driverId, location: "Mairie de Cesson", departureTime: "07:15:00", seats: 3, note: "Coffre plein" },
+        {
+          id: rideId,
+          leg: "retour",
+          driverId,
+          location: "Mairie de Cesson",
+          departureTime: "07:15:00",
+          seats: 3,
+          note: "Coffre plein",
+          position: null,
+        },
       ]);
       expect(read.placements).toHaveLength(2);
       expect(read.placements).toEqual(
@@ -65,6 +92,25 @@ describe("readEventRows", () => {
           [passengerId, null],
         ]),
       );
+    });
+  });
+
+  it("reads a ride's position, or null when it has none", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const leaId = await addPerson(trx, eventId, "Léa");
+      const paulId = await addPerson(trx, eventId, "Paul");
+      const placedId = await addRide(trx, eventId, leaId, "aller", null, { lat: 48.56123, lng: -2.60071 });
+      const unplacedId = await addRide(trx, eventId, paulId, "aller");
+
+      const { rides } = await readEventRows(trx, eventId);
+      expect(rides.map((ride) => [ride.id, ride.position])).toStrictEqual(
+        expect.arrayContaining([
+          [placedId, { lat: 48.56123, lng: -2.60071 }],
+          [unplacedId, null],
+        ]),
+      );
+      expect(rides).toHaveLength(2);
     });
   });
 

@@ -27,8 +27,12 @@ const NOBODYS_TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
 /** What every write action gives for an unknown event (decision on #135 and #138). */
 const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" };
 
+/** A point chosen among the suggestions, as the database keeps it. */
+const VAUGNERAY = { lat: 45.73711, lng: 4.65622 };
+const GARE = { lat: 45.73498, lng: 4.66012 };
+
 /**
- * Aller: Marc drives r1 (3 seats) with Léa then Hugo, Tom is without a car. Retour: Marc
+ * Aller: Marc drives r1 (3 seats, at the position of Vaugneray) with Léa then Hugo, Tom is without a car. Retour: Marc
  * drives r2 with Léa. Léa and Hugo are the persons of one device; Marc and Tom each have
  * their own.
  */
@@ -38,7 +42,7 @@ async function seedScene(db: Db) {
   const lea = await seedPerson(db, eventId, { firstName: "Léa" });
   const hugo = await seedPerson(db, eventId, { firstName: "Hugo" }, lea.token);
   const tom = await seedPerson(db, eventId, { firstName: "Tom" });
-  const r1 = await seedRide(db, eventId, marc.id, { leg: "aller", seats: 3 });
+  const r1 = await seedRide(db, eventId, marc.id, { leg: "aller", seats: 3, position: VAUGNERAY });
   const r2 = await seedRide(db, eventId, marc.id, { leg: "retour", departureTime: "18:30:00" });
   await seedPlacement(db, { personId: lea.id, eventId, leg: "aller", rideId: r1 });
   await seedPlacement(db, { personId: hugo.id, eventId, leg: "aller", rideId: r1 });
@@ -57,7 +61,7 @@ function form(fields: Record<string, unknown> = {}) {
 async function rowsOf(db: Db, eventId: string) {
   const rides = await db
     .selectFrom("ride")
-    .select(["id", "leg", "driver_id", "location", "departure_time", "seats", "note"])
+    .select(["id", "leg", "driver_id", "location", "departure_time", "seats", "note", "location_lat", "location_lng"])
     .where("event_id", "=", eventId)
     .orderBy("id")
     .execute();
@@ -69,6 +73,16 @@ async function rowsOf(db: Db, eventId: string) {
     .orderBy("leg")
     .execute();
   return { rides, placements };
+}
+
+/** Where a Ride is, as the database holds it. */
+async function positionOf(db: Db, rideId: string) {
+  return db.selectFrom("ride").select(["location_lat", "location_lng"]).where("id", "=", rideId).executeTakeFirstOrThrow();
+}
+
+/** The columns of a position. */
+function columns(position: { lat: number; lng: number } | null) {
+  return { location_lat: position?.lat ?? null, location_lng: position?.lng ?? null };
 }
 
 /** The state a result gives, if it gives one. */
@@ -223,6 +237,16 @@ describe("updateRide", () => {
     ["passengers seen that are not a list", ({ r1, lea }) => [r1, "aller", form({ seenPassengerIds: lea.id })]],
     ["no one leaving", ({ r1 }) => [r1, "aller", form({ leaving: undefined })]],
     ["someone leaving who is not a creation id", ({ r1 }) => [r1, "aller", form({ seats: "1", leaving: ["Hugo"] })]],
+    // AL6.4: a position that is not one, or without its place.
+    ["a position without its place", ({ r1 }) => [r1, "aller", form({ location: undefined, position: GARE })]],
+    ["a null position without its place", ({ r1 }) => [r1, "aller", form({ location: undefined, position: null })]],
+    ["a position that is not an object", ({ r1 }) => [r1, "aller", form({ position: "45.7,4.6" })]],
+    ["a position without a longitude", ({ r1 }) => [r1, "aller", form({ position: { lat: 45.7 } })]],
+    ["a position with a latitude as text", ({ r1 }) => [r1, "aller", form({ position: { lat: "45.7", lng: 4.6 } })]],
+    ["a latitude above 90", ({ r1 }) => [r1, "aller", form({ position: { lat: 90.1, lng: 4.6 } })]],
+    ["a latitude below -90", ({ r1 }) => [r1, "aller", form({ position: { lat: -90.1, lng: 4.6 } })]],
+    ["a longitude above 180", ({ r1 }) => [r1, "aller", form({ position: { lat: 45.7, lng: 180.1 } })]],
+    ["a longitude below -180", ({ r1 }) => [r1, "aller", form({ position: { lat: 45.7, lng: -180.1 } })]],
   ])("refuses %s as invalid, and nothing changes", async (_, request) => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
@@ -271,6 +295,64 @@ describe("updateRide", () => {
       const result = await updateRide(db, eventId, marc.token, rideId, "aller", form({ seats: "6" }));
       expect(carOf(stateOf(result), "aller", rideId)?.seats).toBe(6);
       expect((await rowsOf(db, eventId)).rides).toEqual([expect.objectContaining({ id: rideId, seats: 6 })]);
+    });
+  });
+});
+
+describe("updateRide, the position of the place", () => {
+  const lists = { seenPassengerIds: [], leaving: [] };
+
+  it("AL4.3: a place chosen among the suggestions is written with its position, rounded", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r1 } = await seedScene(trx);
+      const fields = { location: "Gare de Vaugneray", position: { lat: 45.7349812, lng: 4.6601249 }, ...lists };
+      expect(await updateRide(trx, eventId, marc.token, r1, "aller", fields)).toMatchObject({ ok: true });
+      expect(await positionOf(trx, r1)).toEqual(columns(GARE));
+    });
+  });
+
+  it("AL3.6: a place changed with a null position has none", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r1 } = await seedScene(trx);
+      const fields = { location: "Mairie de Vaugneray", position: null, ...lists };
+      expect(await updateRide(trx, eventId, marc.token, r1, "aller", fields)).toMatchObject({ ok: true });
+      expect(await positionOf(trx, r1)).toEqual(columns(null));
+    });
+  });
+
+  it("AL5.3 case 2: the same text with a position is a change, and the position is written", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r2 } = await seedScene(trx);
+      const fields = { location: "Mairie de Cesson", position: VAUGNERAY, ...lists };
+      expect(await updateRide(trx, eventId, marc.token, r2, "retour", fields)).toMatchObject({ ok: true });
+      expect(await positionOf(trx, r2)).toEqual(columns(VAUGNERAY));
+    });
+  });
+
+  it("AL5.6: the place sent without a position keeps it under the same text", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r1 } = await seedScene(trx);
+      const fields = { location: " Mairie de Cesson ", note: "Coffre plein", ...lists };
+      expect(await updateRide(trx, eventId, marc.token, r1, "aller", fields)).toMatchObject({ ok: true });
+      expect(await positionOf(trx, r1)).toEqual(columns(VAUGNERAY));
+    });
+  });
+
+  it("AL5.6: the place sent without a position, under another text, has none", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r1 } = await seedScene(trx);
+      const fields = { location: "Gare de Cesson", ...lists };
+      expect(await updateRide(trx, eventId, marc.token, r1, "aller", fields)).toMatchObject({ ok: true });
+      expect(await positionOf(trx, r1)).toEqual(columns(null));
+      expect((await rowsOf(trx, eventId)).rides).toContainEqual(expect.objectContaining({ id: r1, location: "Gare de Cesson" }));
+    });
+  });
+
+  it("C8.2: a change that leaves the place out leaves its position as it is", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r1 } = await seedScene(trx);
+      expect(await updateRide(trx, eventId, marc.token, r1, "aller", { seats: "4", ...lists })).toMatchObject({ ok: true });
+      expect(await positionOf(trx, r1)).toEqual(columns(VAUGNERAY));
     });
   });
 });

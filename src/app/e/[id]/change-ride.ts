@@ -7,14 +7,23 @@ import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
 import { devicePersonIds } from "@/domain/device";
 import { LEGS, type Leg } from "@/domain/leg";
+import { positionOf, type Position } from "@/domain/place";
 import { isPublicId } from "@/domain/public-id";
-import { seatReduction, validateRideChange, type NewRide, type RideErrors, type RideField } from "@/domain/ride";
+import {
+  ridePositionChange,
+  seatReduction,
+  validateRideChange,
+  type NewRide,
+  type RideErrors,
+  type RideField,
+} from "@/domain/ride";
 import { readEventState, type EventState } from "./event-state";
 import { lockLegs } from "./retour";
 
 /**
  * - `noRetour`: the car is on the retour, and the event no longer has one (decision 40).
- * - `invalid`: a request no page sends (an id, a leg or a list malformed).
+ * - `invalid`: a request no page sends (an id, a leg, a list or a position malformed, a
+ *   position without its place).
  * - `forbidden`: the car is not driven by a person of the device (C8.1).
  * - `rideGone`: the car is no longer offered on that leg.
  * - `passengersChanged`: the passengers are not those the driver chose among, or the
@@ -57,21 +66,24 @@ function ids(value: unknown): string[] | undefined {
 interface Change {
   /** Only what the driver changed: a field left out stays as it is. */
   ride: Partial<NewRide>;
+  /** The position of the place sent, `undefined` when not sent (a page from before the deployment). */
+  position?: Position | null;
   /** The passengers the form showed while the driver chose who leaves, never read again. */
   seenPassengerIds: string[];
   leaving: string[];
 }
 
-/** The fields, checked against R4, and the step's lists, which the form always sends. */
+/** The fields, checked against R4, the place's position, and the step's lists, which the form always sends. */
 function readChange(fields: unknown): Change | { errors: RideErrors; first: RideField } | undefined {
   if (typeof fields !== "object" || fields === null) return undefined;
   const sent: Record<string, unknown> = { ...fields };
   const seenPassengerIds = ids(sent.seenPassengerIds);
   const leaving = ids(sent.leaving);
-  if (seenPassengerIds === undefined || leaving === undefined) return undefined;
+  const position = sent.position === undefined ? { value: undefined } : positionOf(sent.position);
+  if (seenPassengerIds === undefined || leaving === undefined || "error" in position) return undefined;
   const validation = validateRideChange({ location: sent.location, time: sent.time, seats: sent.seats, note: sent.note });
   if (!validation.ok) return { errors: validation.errors, first: validation.first };
-  return { ride: validation.change, seenPassengerIds, leaving };
+  return { ride: validation.change, position: position.value, seenPassengerIds, leaving };
 }
 
 /**
@@ -100,6 +112,9 @@ async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, 
   if (locked === "noRetour") return NO_RETOUR;
   if (locked === "forbidden") return FORBIDDEN;
   if (locked === "gone") return { ok: false, error: "rideGone" };
+  // Against the place read under the lock (AL5.6): a car's position is always its text's.
+  const placed = ridePositionChange({ location: change.ride.location, position: change.position }, locked.location);
+  if ("error" in placed) return INVALID;
   // Counted under the lock (C12.11): a seat taken meanwhile has committed, or waits.
   const passengerIds = (await ridePassengers(trx, ride)).map((passenger) => passenger.personId);
   const decision = seatReduction({
@@ -112,7 +127,7 @@ async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, 
   if (!decision.ok) return { ok: false, error: "passengersChanged", passengerIds };
   await removePassengers(trx, ride, decision.leaving);
   const { time, ...fields } = change.ride;
-  const write = { ...fields, ...(time !== undefined && { departureTime: `${time}:00` }) };
+  const write = { ...fields, ...(time !== undefined && { departureTime: `${time}:00` }), ...placed };
   if (Object.keys(write).length > 0) await writeRide(trx, ride, write);
   return { ok: true };
 }
@@ -121,6 +136,7 @@ async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, 
  * The driver changes their car (epic #66, R8, C8.2 to C8.5): place, time, note and seats,
  * by the rules of R4, and who leaves when the seats go below the passengers. A field left out
  * stays as it is (`validateRideChange`): a change does not undo another made since the form showed.
+ * The place's position goes with it, as `ridePositionChange` decides under the Ride's lock (AL5.6).
  * `eventNotFound` for an unknown event; a malformed id is never looked up.
  *
  * The application passes the connection: the write commits in its own transaction (READ

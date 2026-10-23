@@ -7,6 +7,7 @@ import {
   RIDE_SEATS_MAX,
   RIDE_SEATS_MIN,
   passengersFit,
+  ridePositionChange,
   seatReduction,
   seatsDecision,
   validateRide,
@@ -170,6 +171,34 @@ describe("validateRideChange (C8.2)", () => {
       errors: { location: "required", time: "invalid" },
       first: "location",
     });
+  });
+});
+
+describe("ridePositionChange (AL5.6)", () => {
+  const stored = "Mairie, 69670 Vaugneray";
+  const point = { lat: 45.73711, lng: 4.65622 };
+
+  it("AL3.6, AL5.3: a place sent with its position writes that position, null included", () => {
+    expect(ridePositionChange({ location: stored, position: point }, stored)).toEqual({ position: point });
+    expect(ridePositionChange({ location: "Gare de Vaugneray", position: point }, stored)).toEqual({ position: point });
+    expect(ridePositionChange({ location: "Gare de Vaugneray", position: null }, stored)).toEqual({ position: null });
+  });
+
+  it("AL5.6: a place sent without a position keeps it under the same text", () => {
+    expect(ridePositionChange({ location: stored }, stored)).toEqual({});
+  });
+
+  it("AL5.6: a place sent without a position, under another text, has none", () => {
+    expect(ridePositionChange({ location: "Gare de Vaugneray" }, stored)).toEqual({ position: null });
+  });
+
+  it("leaves the position as it is when the place is not sent", () => {
+    expect(ridePositionChange({}, stored)).toEqual({});
+  });
+
+  it("AL6.4: refuses a position sent without its place", () => {
+    expect(ridePositionChange({ position: point }, stored)).toEqual({ error: "invalid" });
+    expect(ridePositionChange({ position: null }, stored)).toEqual({ error: "invalid" });
   });
 });
 

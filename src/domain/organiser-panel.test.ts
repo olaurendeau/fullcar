@@ -23,6 +23,7 @@ function car(
     location: `Parking ${id}`,
     departureTime,
     note: "Siège enfant",
+    position: null,
     seats,
     passengers: passengers.map(person),
     freeSeats,

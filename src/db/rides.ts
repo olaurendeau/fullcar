@@ -1,5 +1,6 @@
 import type { Kysely } from "kysely";
 import type { Leg } from "@/domain/leg";
+import type { Position } from "@/domain/place";
 import type { WallTime } from "@/domain/wall-clock";
 import type { Database } from "./schema";
 
@@ -17,6 +18,8 @@ export interface RideFields {
   /** Passenger seats, driver excluded. */
   seats: number;
   note: string | null;
+  /** The point of the suggestion chosen for `location`; `null` for a place typed by hand. */
+  position: Position | null;
 }
 
 /** `id` is the creation id drawn by the browser. */
@@ -30,6 +33,8 @@ export interface LockedRide {
   id: string;
   driverId: string;
   seats: number;
+  /** The place stored, for a change to compare the place it sends (AL5.6). */
+  location: string;
 }
 
 export interface Passenger {
@@ -37,7 +42,23 @@ export interface Passenger {
   placedAt: Date;
 }
 
-const STORED_RIDE_COLUMNS = ["id", "event_id", "leg", "driver_id", "location", "departure_time", "seats", "note"] as const;
+const STORED_RIDE_COLUMNS = [
+  "id",
+  "event_id",
+  "leg",
+  "driver_id",
+  "location",
+  "departure_time",
+  "seats",
+  "note",
+  "location_lat",
+  "location_lng",
+] as const;
+
+/** The two columns of a position: both `null`, or both set (`ride_location_position_pair`). */
+function positionColumns(position: Position | null) {
+  return { location_lat: position?.lat ?? null, location_lng: position?.lng ?? null };
+}
 
 /**
  * Stores the Ride, unless its id is taken: then nothing is written, and the Ride already
@@ -58,6 +79,7 @@ export async function insertRide(db: Kysely<Database>, ride: NewRide): Promise<S
       departure_time: ride.departureTime,
       seats: ride.seats,
       note: ride.note,
+      ...positionColumns(ride.position),
     })
     .onConflict((conflict) => conflict.column("id").doNothing())
     .execute();
@@ -78,6 +100,8 @@ export async function insertRide(db: Kysely<Database>, ride: NewRide): Promise<S
     departureTime: row.departure_time,
     seats: row.seats,
     note: row.note,
+    // The database keeps both or neither.
+    position: row.location_lat === null || row.location_lng === null ? null : { lat: row.location_lat, lng: row.location_lng },
   };
 }
 
@@ -90,13 +114,13 @@ export async function insertRide(db: Kysely<Database>, ride: NewRide): Promise<S
 export async function lockRide(db: Kysely<Database>, ride: RideRef): Promise<LockedRide | undefined> {
   const row = await db
     .selectFrom("ride")
-    .select(["id", "driver_id", "seats"])
+    .select(["id", "driver_id", "seats", "location"])
     .where("id", "=", ride.id)
     .where("event_id", "=", ride.eventId)
     .where("leg", "=", ride.leg)
     .forUpdate()
     .executeTakeFirst();
-  return row && { id: row.id, driverId: row.driver_id, seats: row.seats };
+  return row && { id: row.id, driverId: row.driver_id, seats: row.seats, location: row.location };
 }
 
 /**
@@ -110,11 +134,21 @@ export async function lockRides(db: Kysely<Database>, rides: readonly RideRef[])
   for (const ride of byId) await lockRide(db, ride);
 }
 
-/** Whether that Ride existed on that leg, and now has these fields; one left out stays as it is. At least one is given. */
+/**
+ * Whether that Ride existed on that leg, and now has these fields; one left out stays as it
+ * is, the position too. At least one is given.
+ */
 export async function updateRide(db: Kysely<Database>, ride: RideRef, fields: Partial<RideFields>): Promise<boolean> {
+  const { position } = fields;
   const result = await db
     .updateTable("ride")
-    .set({ location: fields.location, departure_time: fields.departureTime, seats: fields.seats, note: fields.note })
+    .set({
+      location: fields.location,
+      departure_time: fields.departureTime,
+      seats: fields.seats,
+      note: fields.note,
+      ...(position !== undefined && positionColumns(position)),
+    })
     .where("id", "=", ride.id)
     .where("event_id", "=", ride.eventId)
     .where("leg", "=", ride.leg)

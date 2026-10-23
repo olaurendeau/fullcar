@@ -132,6 +132,7 @@ export function withOrganiserPhones(
       location: car.location,
       departureTime: car.departureTime,
       note: car.note,
+      position: car.position,
       seats: car.seats,
       passengers: car.passengers.map(personOnly),
       freeSeats: car.freeSeats,
