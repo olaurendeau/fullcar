@@ -249,6 +249,18 @@ function isRouterRead(request: Request): boolean {
   return new URL(request.url()).searchParams.has("_rsc");
 }
 
+/** The app's icons, as a page links them (`<link rel="icon">`) or a browser asks for them. */
+const ICONS = new Set(["/icon.svg", "/favicon.ico"]);
+
+/**
+ * The favicon: the browser's own `GET` of one of the app's icons, `other` for Playwright, after
+ * the page has loaded. Any other `other` request (a prefetch, a preflight, …) is not a file of the
+ * app asked again: its body is the browser's (review of #450).
+ */
+function isFavicon(request: Request): boolean {
+  return request.method() === "GET" && request.resourceType() === "other" && ICONS.has(new URL(request.url()).pathname);
+}
+
 /** A request as it left, answered or not. */
 interface Sent {
   method: string;
@@ -269,6 +281,12 @@ interface Sent {
  * fails if it cannot be: a test that only lets it through uses `route.fallback()`. A redirect
  * is not followed here but given to the browser, which follows it through this route again: its
  * `Location` and the next request stay searched.
+ *
+ * The favicon, which Chromium fetches once the page has loaded, is often still loading when the
+ * test leaves the page (`leaveNoToken()`): its body, asked of the browser, was then refused, or
+ * never came and held the teardown until the test's timeout (#436). It is a file of the app,
+ * the same at every request: its body is read by asking the app for it again
+ * (`context.request`), and the browser's own request is left as it is.
  */
 async function record(context: BrowserContext, hide: (text: string) => string) {
   const state = { on: true };
@@ -276,6 +294,7 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
   const sent: Sent[] = [];
   const exchanges: Promise<Exchange>[] = [];
   const consoleLines: string[] = [];
+  const askedAgain = (request: Request) => context.request.get(request.url()).then((again) => again.text());
 
   await context.route(
     () => state.on,
@@ -295,7 +314,9 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     const request = response.request();
     const path = pathOf(request.url());
     const redirect = response.status() >= 300 && response.status() < 400;
-    const answer = redirect ? "" : await bodyOf(fetched.get(request) ?? response.text(), hide(path));
+    const answer = redirect
+      ? ""
+      : await bodyOf(fetched.get(request) ?? (isFavicon(request) ? askedAgain(request) : response.text()), hide(path));
     const responseHeaders = await response.allHeaders();
     return {
       method: request.method(),
@@ -357,11 +378,15 @@ function findings(places: [string, string][], secrets: [string, string][]): stri
  * is first taken to a document of the origin that holds no token, `/icon.svg`: its
  * `sessionStorage` is the tab's for the origin, whatever the page showed last, about:blank
  * included once `leaveNoToken()` (#160) has left it. Cookies and `localStorage` are the
- * context's.
+ * context's: any page of the origin reads its `localStorage`, and with no page left, one is
+ * opened for it here. Not by `storageState()`, which opens a hidden tab of its own for an
+ * origin no page shows, and fails or waits when it cannot (#436). Exported for the test of that
+ * page (`organiser-leaks.spec.ts`), the one case no other spec reaches.
  */
-async function storageOf(context: BrowserContext, origin: string): Promise<[string, string][]> {
+export async function storageOf(context: BrowserContext, origin: string): Promise<[string, string][]> {
   const places: [string, string][] = [];
-  for (const page of context.pages()) {
+  const pages = context.pages().length > 0 ? context.pages() : [await context.newPage()];
+  for (const page of pages) {
     await page.goto(`${origin}/icon.svg`);
     const stored = await page.evaluate(() => ({
       local: JSON.stringify(Object.entries(localStorage)),
@@ -369,9 +394,7 @@ async function storageOf(context: BrowserContext, origin: string): Promise<[stri
     }));
     places.push(["localStorage", stored.local], ["sessionStorage", stored.session]);
   }
-  const { cookies, origins } = await context.storageState();
-  places.push(["the cookies", JSON.stringify(cookies)]);
-  for (const each of origins) places.push(["localStorage", JSON.stringify(each.localStorage)]);
+  places.push(["the cookies", JSON.stringify(await context.cookies())]);
   return places;
 }
 
