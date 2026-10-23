@@ -72,7 +72,8 @@ export async function startBrowserSentry(env: SentryEnv, load: Load = () => impo
   if (!client) return undefined;
   registerHooks(client);
   client.addEventProcessor(codeFramesOnly);
-  // The SDK's parser as it is: a line it makes a frame of leaves the message, URL or not.
-  client.addEventProcessor(messagesWithoutFrames(sentry.defaultStackParser));
+  // The SDK's parser as it is: a line it makes a frame of leaves the message, URL or not, and
+  // its frame the stack, before `allowUrls` looks at it (#388).
+  client.on("preprocessEvent", messagesWithoutFrames(sentry.defaultStackParser));
   return sentry;
 }
