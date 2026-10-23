@@ -34,6 +34,11 @@ describe("scrubUrl", () => {
     same(scrubUrl("/api/lieux/12%20rue%20des%20Lilas"), "/api/lieux/[id]");
   });
 
+  it("keeps /tuiles and drops the tile's three numbers, which say the area looked at (#474)", () => {
+    same(scrubUrl("/tuiles/14/8299/5636"), "/tuiles/[id]/[id]/[id]");
+    same(scrubUrl(`${ORIGIN}/tuiles/14/8299/5636?x=1`), `${ORIGIN}/tuiles/[id]/[id]/[id]`);
+  });
+
   it("keeps the scheme, the host and the application's segments, and drops the id and the fragment", () => {
     same(scrubUrl(secrets.adminUrl), `${ORIGIN}/e/[id]/admin`);
     same(scrubUrl(secrets.personalUrl), `${ORIGIN}/e/[id]/moi`);

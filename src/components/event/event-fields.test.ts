@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PlaceField } from "./place-field";
 import {
   BLANK_EVENT_FIELDS,
   EventFormFields,
@@ -7,6 +8,7 @@ import {
   loadedEventFields,
   withEventField,
   withRetour,
+  withLocation,
   withSavedFields,
   type EventFieldsState,
   type EventFieldsUpdate,
@@ -74,7 +76,7 @@ describe("updates in one tick", () => {
 });
 
 describe("loadedEventFields", () => {
-  const header = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00" };
+  const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00" };
   const values = { title: "Tournoi de Rennes", location: "Gymnase", allerDate: "2026-12-12", allerTime: "07:30" };
 
   // M1.5: the fields show what is saved, the box checked with a retour; M1.7: on one day, the end date follows.
@@ -103,7 +105,7 @@ describe("loadedEventFields", () => {
 });
 
 describe("eventFieldsChanged", () => {
-  const loaded = loadedEventFields({ title: "T", location: "L", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
+  const loaded = loadedEventFields({ title: "T", location: "L", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
 
   // M2.5: a field changed, then put back as it was loaded, is not changed.
   it("is false for the loaded values", () => {
@@ -127,7 +129,7 @@ describe("eventFieldsChanged", () => {
 
 // M6.1, M6.2: the server answers `changed` with the saved values, and the form takes them in.
 describe("withSavedFields", () => {
-  const event = { title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" };
+  const event = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" };
   const loaded = loadedEventFields(event);
   const without = loadedEventFields({ ...event, retourAt: null });
   const typed = (values: Partial<EventFieldsState["values"]>, from = loaded): EventFieldsState => ({
@@ -203,7 +205,7 @@ describe("EventFormFields", () => {
     const element = node as Element;
     return [element, ...elements(element.props?.children)];
   };
-  const rendered = loadedEventFields({ title: "Tournoi de Rennes", location: "Gymnase", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" });
+  const rendered = loadedEventFields({ title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" });
   const meanwhile: EventFieldsState = { values: { ...rendered.values, location: "Salle Carrel", retourTime: "19:00" }, retourDateFollows: false };
 
   /** Renders the fields with `rendered`, changes the one named `name`, and applies its update to `meanwhile`. */
@@ -264,7 +266,7 @@ describe("EventFormFields", () => {
 
 // M5.1: the cars of a leg whose date or time changed keep their time; the sheet says so.
 describe("carTimesKept", () => {
-  const loaded = loadedEventFields({ title: "T", location: "L", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
+  const loaded = loadedEventFields({ title: "T", location: "L", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
   const cars = { aller: 3, retour: 2 };
 
   it.each([
@@ -295,5 +297,84 @@ describe("carTimesKept", () => {
 
   it("the end's date following the start's: both legs", () => {
     expect(carTimesKept({ ...loaded, allerDate: "2026-12-13", retourDate: "2026-12-13" }, loaded, cars)).toEqual({ aller: 3, retour: 2 });
+  });
+});
+
+// #428: the place with suggestions, its position and its label with its text, one value.
+describe("withLocation", () => {
+  const position = { lat: 45.73791, lng: 4.65616 };
+
+  it("sets the text, the position and the label together, and nothing else", () => {
+    const next = withLocation({ text: "Salle des fêtes, 69670 Vaugneray", position, label: "Salle des fêtes, 69670 Vaugneray" })(saved(true));
+    expect(next).toEqual({
+      ...saved(true),
+      values: { ...saved(true).values, location: "Salle des fêtes, 69670 Vaugneray" },
+      locationPosition: position,
+      locationLabel: "Salle des fêtes, 69670 Vaugneray",
+    });
+  });
+
+  it("is kept by a change of another field, and by the box", () => {
+    const placed = withLocation({ text: "Devant la salle", position, label: "Salle des fêtes" })(saved(true));
+    const next = queued(placed, withEventField("title", "Kermesse"), withEventField("allerDate", "2026-11-14"), withEventField("retourDate", "2026-11-15"), withRetour(false));
+    expect(next).toMatchObject({ locationPosition: position, locationLabel: "Salle des fêtes", values: { location: "Devant la salle" } });
+  });
+});
+
+describe("EventFormFields with suggestions", () => {
+  type Element = { type?: unknown; props?: Record<string, unknown> & { children?: unknown } };
+  const elements = (node: unknown): Element[] => {
+    if (Array.isArray(node)) return node.flatMap(elements);
+    if (typeof node !== "object" || node === null) return [];
+    const element = node as Element;
+    return [element, ...elements(element.props?.children)];
+  };
+  const position = { lat: 45.73791, lng: 4.65616 };
+  const state: EventFieldsState = { ...BLANK_EVENT_FIELDS, values: { ...BLANK_EVENT_FIELDS.values, location: "Salle" }, locationPosition: position, locationLabel: "Salle des fêtes" };
+  const placeOf = (props: Partial<Parameters<typeof EventFormFields>[0]>) => {
+    const updates: EventFieldsUpdate[] = [];
+    const tree = EventFormFields({ idOf: (id) => `f-${id}`, state, errors: {}, onChange: (update) => updates.push(update), ...props });
+    return { props: elements(tree).find((each) => each.type === PlaceField)?.props, updates };
+  };
+
+  it("without, the place is the text field it was", () => {
+    expect(placeOf({}).props).toBeUndefined();
+  });
+
+  it("gives the place field its value, its rule, its label and its error", () => {
+    const { props } = placeOf({ suggestions: true, errors: { location: "tooLong" } });
+    expect(props).toMatchObject({
+      id: "f-location",
+      label: "location",
+      value: { text: "Salle", position, label: "Salle des fêtes" },
+      rule: "event",
+      locked: false,
+      readOnly: false,
+      error: { id: "f-location-error", message: "errors.tooLong" },
+    });
+  });
+
+  it("a new event: no position, no label", () => {
+    const { props } = placeOf({ suggestions: true, state: BLANK_EVENT_FIELDS });
+    expect(props?.value).toEqual({ text: "", position: null, label: null });
+  });
+
+  it("hands the field's value to `onChange` as one update", () => {
+    const { props, updates } = placeOf({ suggestions: true });
+    (props?.onChange as (value: unknown) => void)({ text: "Salle des f", position: null, label: null });
+    expect(updates.length).toBe(1);
+    expect(updates[0](state)).toMatchObject({ values: { location: "Salle des f" }, locationPosition: null, locationLabel: null });
+  });
+
+  // AL5.4: while the creation is sent, the place proposes nothing and « Retirer » does nothing.
+  it("sending: the place field is locked, and still takes its text", () => {
+    expect(placeOf({ suggestions: true, sending: true }).props).toMatchObject({ locked: true, readOnly: false });
+  });
+
+  it("locked: the place field is locked and read-only, and its changes are ignored", () => {
+    const { props, updates } = placeOf({ suggestions: true, locked: true });
+    expect(props).toMatchObject({ locked: true, readOnly: true });
+    (props?.onChange as (value: unknown) => void)({ text: "x", position: null, label: null });
+    expect(updates.length).toBe(0);
   });
 });

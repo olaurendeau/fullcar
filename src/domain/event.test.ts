@@ -16,6 +16,8 @@ import {
 
 const bounds: DateBounds = { min: "2026-10-13", max: "2027-10-13" };
 
+const LYON = { lat: 45.7581, lng: 4.6894 };
+
 const valid: EventFields = {
   title: "Match à Lyon",
   location: "Gymnase Jean Macé",
@@ -45,9 +47,37 @@ describe("validateEvent", () => {
       location: "Gymnase Jean Macé",
       allerAt: "2026-12-12 07:30:00",
       retourAt: "2026-12-12 18:00:00",
+      locationPosition: null,
       boostersEnabled: false,
       participationEnabled: false,
       stopsEnabled: false,
+    });
+  });
+
+  describe("AL1.7, AL2.1, AL6.4: the position of the location", () => {
+    it("keeps the position sent, rounded to 5 decimals", () => {
+      expect(eventOf({ ...valid, locationPosition: { lat: 45.758126, lng: 4.689444 } }).locationPosition).toEqual({
+        lat: 45.75813,
+        lng: 4.68944,
+      });
+    });
+
+    it.each<[string, EventFields]>([
+      ["not sent", valid],
+      ["sent as null", { ...valid, locationPosition: null }],
+    ])("has no position when it is %s", (_, fields) => {
+      expect(eventOf(fields).locationPosition).toBeNull();
+    });
+
+    it.each<[string, EventFields, Record<string, string>]>([
+      ["malformed", { ...valid, locationPosition: "45.7581,4.6894" }, { location: "invalid" }],
+      ["with a key besides lat and lng", { ...valid, locationPosition: { ...LYON, label: "Lyon" } }, { location: "invalid" }],
+      ["out of bounds", { ...valid, locationPosition: { lat: 90.00001, lng: 4.6894 } }, { location: "invalid" }],
+      ["sent without a location", { ...valid, location: undefined, locationPosition: LYON }, { location: "invalid" }],
+      ["sent as null without a location", { ...valid, location: undefined, locationPosition: null }, { location: "invalid" }],
+      ["malformed, with another field refused", { ...valid, title: "", locationPosition: [45.7, 4.6] }, { title: "required", location: "invalid" }],
+    ])("refuses a position %s on the location, as invalid", (_, fields, expected) => {
+      expect(errorsOf(fields)).toEqual(expected);
     });
   });
 
@@ -218,6 +248,7 @@ describe("validateEventChange", () => {
     location: "Gymnase Jean Macé",
     allerAt: "2026-10-12 07:30:00",
     retourAt: "2026-10-12 18:00:00",
+    locationPosition: null,
   };
   const kept: EventFields = {
     title: before.title,
@@ -274,9 +305,11 @@ describe("validateEventChange", () => {
 
   describe("M2.4: a date kept as it was may be past, a changed date is bounded", () => {
     it("accepts both past dates kept, with another location", () => {
-      expect(changed({ ...kept, location: "Salle B" })).toEqual({
-        ...before,
+      expect(changed({ ...kept, location: "Salle B" })).toStrictEqual({
+        title: before.title,
         location: "Salle B",
+        allerAt: before.allerAt,
+        retourAt: before.retourAt,
       });
     });
 
@@ -319,11 +352,11 @@ describe("validateEventChange", () => {
       const saved = process.env.TZ;
       try {
         process.env.TZ = "Asia/Tokyo";
-        const { title, location, allerAt, retourAt } = eventOf(
+        const { title, location, allerAt, retourAt, locationPosition } = eventOf(
           { ...valid, allerDate: "2027-10-21", retourDate: "2027-10-21" },
           deviceBounds(at),
         );
-        const created: EventHeader = { title, location, allerAt, retourAt };
+        const created: EventHeader = { title, location, allerAt, retourAt, locationPosition };
         process.env.TZ = "America/Toronto";
         const montreal = deviceBounds(at);
         expect(montreal.max).toBe("2027-10-20");
@@ -332,7 +365,7 @@ describe("validateEventChange", () => {
           montreal,
           created,
         );
-        expect(result).toEqual({ ok: true, event: { ...created, title: "Tournoi de Rennes U13" } });
+        expect(result).toEqual({ ok: true, event: { title: "Tournoi de Rennes U13", location, allerAt, retourAt } });
       } finally {
         if (saved === undefined) delete process.env.TZ;
         else process.env.TZ = saved;
@@ -345,6 +378,25 @@ describe("validateEventChange", () => {
       });
     });
   });
+
+  describe("the position of the location", () => {
+    it("AL5.2: carries the position sent, rounded, or null to remove it", () => {
+      expect(changed({ ...kept, locationPosition: { lat: 45.758126, lng: 4.689444 } }).locationPosition).toEqual({
+        lat: 45.75813,
+        lng: 4.68944,
+      });
+      expect(changed({ ...kept, locationPosition: null }).locationPosition).toBeNull();
+    });
+
+    it("AL5.6: without a position sent, carries none, so that the saved one is kept", () => {
+      expect(changed({ ...kept, location: "Salle Carrel" })).not.toHaveProperty("locationPosition");
+    });
+
+    it("AL6.4: refuses a position malformed or sent without a location, as invalid", () => {
+      expect(changeErrors({ ...kept, locationPosition: { lat: 45.7581 } })).toEqual({ location: "invalid" });
+      expect(changeErrors({ ...kept, location: undefined, locationPosition: LYON })).toEqual({ location: "invalid" });
+    });
+  });
 });
 
 describe("eventFieldsOf: a forged request", () => {
@@ -355,6 +407,13 @@ describe("eventFieldsOf: a forged request", () => {
       participation: true,
       stops: true,
     });
+  });
+
+  it("passes the position on as sent, for the rules to check; not sent, it is undefined", () => {
+    expect(eventFieldsOf({ ...valid, locationPosition: LYON }).locationPosition).toEqual(LYON);
+    expect(eventFieldsOf({ ...valid, locationPosition: null }).locationPosition).toBeNull();
+    expect(eventFieldsOf({ ...valid, locationPosition: "x" }).locationPosition).toBe("x");
+    expect(eventFieldsOf(valid).locationPosition).toBeUndefined();
   });
 
   it.each([null, undefined, "title", 42, true])("reads %s as an empty form", (input) => {

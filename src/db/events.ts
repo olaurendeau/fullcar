@@ -28,6 +28,8 @@ export async function insertEvent(
         id: newId(),
         title: event.title,
         location: event.location,
+        location_lat: event.locationPosition?.lat ?? null,
+        location_lng: event.locationPosition?.lng ?? null,
         aller_at: event.allerAt,
         retour_at: event.retourAt,
         boosters_enabled: event.boostersEnabled,
@@ -57,6 +59,8 @@ const PUBLIC_EVENT_COLUMNS = [
   "id",
   "title",
   "location",
+  "location_lat",
+  "location_lng",
   "aller_at",
   "retour_at",
   "boosters_enabled",
@@ -91,8 +95,12 @@ export async function lockEvent(db: Kysely<Database>, id: string, lock: EventLoc
   return (lock === "share" ? query.forShare() : query.forNoKeyUpdate()).executeTakeFirst();
 }
 
-/** What the organiser changes: the options and the token are not among them. */
-export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" | "retourAt">;
+/**
+ * What the organiser changes: the options and the token are not among them. Without
+ * `locationPosition`, the position stored stays as it is.
+ */
+export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" | "retourAt"> &
+  Partial<Pick<NewEvent, "locationPosition">>;
 
 /**
  * Whether the event existed, and now has these fields. A retour removed has its Rides and
@@ -100,9 +108,13 @@ export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" 
  * (`removeRetour`): no row of the retour stays under a `retour_at` null.
  */
 export async function writeEventFields(db: Kysely<Database>, id: string, fields: EventFieldsChange): Promise<boolean> {
+  const { locationPosition: position } = fields;
   const result = await db
     .updateTable("event")
     .set({ title: fields.title, location: fields.location, aller_at: fields.allerAt, retour_at: fields.retourAt })
+    .$if(position !== undefined, (update) =>
+      update.set({ location_lat: position?.lat ?? null, location_lng: position?.lng ?? null }),
+    )
     .where("id", "=", id)
     .executeTakeFirst();
   return Number(result.numUpdatedRows) > 0;

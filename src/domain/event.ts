@@ -14,6 +14,7 @@ import {
   type WallClock,
   type WallDate,
 } from "./wall-clock";
+import { positionOf, type Position } from "./place";
 import { text, type TextError } from "./text";
 
 export const TITLE_MAX = 80;
@@ -33,6 +34,11 @@ export type EventErrors = Partial<Record<EventField, EventError>>;
 export interface EventFields {
   title?: string;
   location?: string;
+  /**
+   * The position of the location, as sent: `undefined` is not sent, anything else is checked
+   * by `positionOf`. Only sent with `location`.
+   */
+  locationPosition?: unknown;
   allerDate?: string;
   allerTime?: string;
   /** The "Retour" box: unchecked, the retour fields are ignored. */
@@ -48,9 +54,14 @@ export interface EventFields {
 export interface EventHeader {
   title: string;
   location: string;
+  /** The point of the suggestion chosen for the location, or `null` (D5: anyone with the link sees it). */
+  locationPosition: Position | null;
   allerAt: WallClock;
   retourAt: WallClock | null;
 }
+
+/** A change of the header: without `locationPosition`, the saved position is kept (D6, AL5.6). */
+export type EventChange = Omit<EventHeader, "locationPosition"> & { locationPosition?: Position | null };
 
 export interface NewEvent extends EventHeader {
   boostersEnabled: boolean;
@@ -65,7 +76,7 @@ export interface DateBounds {
 }
 
 export type EventValidation = { ok: true; event: NewEvent } | { ok: false; errors: EventErrors };
-export type EventChangeValidation = { ok: true; event: EventHeader } | { ok: false; errors: EventErrors };
+export type EventChangeValidation = { ok: true; event: EventChange } | { ok: false; errors: EventErrors };
 
 /**
  * What a request may send is anything: only strings are read as text and only `true`
@@ -78,6 +89,7 @@ export function eventFieldsOf(input: unknown): EventFields {
   return {
     title: text("title"),
     location: text("location"),
+    locationPosition: fields.locationPosition,
     allerDate: text("allerDate"),
     allerTime: text("allerTime"),
     retour: box("retour"),
@@ -102,6 +114,16 @@ export function deviceBounds(now: Date): DateBounds {
 export function serverBounds(now: Date): DateBounds {
   const today = utcDate(now);
   return { min: addDays(today, -1), max: addDays(today, HORIZON_DAYS + 1) };
+}
+
+/**
+ * The position sent with the location: `undefined` when none is sent. Malformed, out of
+ * bounds, or sent without a location, it comes from a request no page sends: invalid.
+ */
+export function locationPositionOf(fields: EventFields): { value: Position | null | undefined } | { error: "invalid" } {
+  if (fields.locationPosition === undefined) return { value: undefined };
+  if (fields.location === undefined) return { error: "invalid" };
+  return positionOf(fields.locationPosition);
 }
 
 export function firstInvalidField(errors: EventErrors): EventField | undefined {
@@ -140,6 +162,7 @@ export function validateEvent(fields: EventFields, bounds: DateBounds): EventVal
     ok: true,
     event: {
       ...result.event,
+      locationPosition: result.event.locationPosition ?? null,
       boostersEnabled: fields.boosters === true,
       participationEnabled: fields.participation === true,
       stopsEnabled: fields.stops === true,
@@ -156,7 +179,7 @@ export function validateEvent(fields: EventFields, bounds: DateBounds): EventVal
 export function validateEventChange(
   fields: EventFields,
   bounds: DateBounds,
-  before: EventHeader,
+  before: EventChange,
 ): EventChangeValidation {
   return validate(fields, bounds, {
     allerDate: wallClockParts(before.allerAt).date,
@@ -183,6 +206,9 @@ function validate(fields: EventFields, bounds: DateBounds, kept: KeptDates): Eve
     if ("error" in result) errors[field] = result.error;
     else values[field] = result.value;
   }
+  // A position the form never sends says more than the text's own error.
+  const position = locationPositionOf(fields);
+  if ("error" in position) errors.location = position.error;
 
   const { title, location, allerDate, allerTime, retourDate, retourTime } = values;
   const allerAt = allerDate && allerTime ? toWallClock(allerDate, allerTime) : undefined;
@@ -197,5 +223,7 @@ function validate(fields: EventFields, bounds: DateBounds, kept: KeptDates): Eve
   if (firstInvalidField(errors) !== undefined || !title || !location || !allerAt) {
     return { ok: false, errors };
   }
-  return { ok: true, event: { title, location, allerAt, retourAt: retourAt ?? null } };
+  const event: EventChange = { title, location, allerAt, retourAt: retourAt ?? null };
+  if ("value" in position && position.value !== undefined) event.locationPosition = position.value;
+  return { ok: true, event };
 }

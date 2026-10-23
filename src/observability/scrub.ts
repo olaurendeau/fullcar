@@ -40,7 +40,7 @@ const REDACTED = "[redacted]";
 const ID = "[id]";
 
 /** The path segments the application writes itself; any other segment is data. */
-const LITERAL_SEGMENTS = new Set(["e", "admin", "moi", "monitoring", "api", "lieux"]);
+const LITERAL_SEGMENTS = new Set(["e", "admin", "moi", "monitoring", "api", "lieux", "tuiles"]);
 /** Build assets: their path names a chunk, never a person. */
 const STATIC_PATH = "/_next/static/";
 

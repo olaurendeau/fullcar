@@ -39,6 +39,8 @@ describe("findPublicEvent", () => {
         location: "Gymnase des Gayeulles",
         aller_at: "2026-12-12 07:30:00",
         retour_at: null,
+        location_lat: null,
+        location_lng: null,
         boosters_enabled: false,
         participation_enabled: false,
         stops_enabled: false,

@@ -387,9 +387,25 @@
   "Contact": {
     "home": "Home",
     "link": "Contact us",
-    "newTab": "(opens in a new tab)"
+    "newTab": "(opens in a new tab)",
+    "sourceCode": "Source code on GitHub"
   },
   "NewEvent": {
     "title": "Create an event"
+  },
+  "PlaceField": {
+    "listLabel": "Suggestions for {field}",
+    "count": "{count, plural, one {# suggestion} other {# suggestions}}",
+    "keepText": "Or keep your text as it is.",
+    "source": "Suggestions: © OpenStreetMap contributors",
+    "searching": "Looking for suggestions…",
+    "none": "No suggestions. Your text will be kept as it is.",
+    "unavailable": "Suggestions unavailable. Your text will be kept as it is.",
+    "position": "Position: {label}",
+    "saved": "Saved position",
+    "remove": "Remove",
+    "removeLabel": "Remove the position ({field})",
+    "added": "Position added.",
+    "removed": "Position removed."
   }
 }

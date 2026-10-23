@@ -1,0 +1,346 @@
+<title>Fullcar, lien « Code source »</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8; --card: #ffffff;
+    --accent: #2457c5; --accent-soft: #e6edfb; --note: #fff7e0; --note-line: #ecd48a;
+    --reject: #b42318; --reject-soft: #fdecea;
+    /* The app's own look, light only, from src/app/globals.css (oklch converted): */
+    --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
+    --app-border: #e5e5e5; --app-destructive: #e7000b; --app-ring: #737373;
+    --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444; --fold: #2457c5; --secret: #e7000b;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --reject: #ff8a80; --reject-soft: #3a1d1b;
+    --frame: #4a4a50; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --reject: #ff8a80; --reject-soft: #3a1d1b;
+    --frame: #4a4a50; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  h2 { font-size: 1.3rem; margin: 48px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 0 0 6px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 75ch; }
+  a { color: var(--accent); }
+  code { font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .crit { font-size: 0.8rem; color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+  .anatomy { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; margin-top: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .card.rejected { border-color: var(--reject); background: var(--reject-soft); }
+  .card.rejected h3 { color: var(--reject); }
+  .card ul { margin: 8px 0 0; padding-left: 18px; }
+
+  /* Phone: exactly the app's 360 px viewport, the column's 16 px padding inside it */
+  .phone { box-sizing: content-box; width: 360px; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); }
+  .phone-scroll { overflow-x: auto; }
+  .urlbar { background: var(--urlbar); color: var(--urlbar-fg); font: 12px ui-monospace, Menlo, monospace; padding: 7px 10px; overflow-wrap: anywhere; }
+  .urlbar b { color: var(--secret); font-weight: 600; }
+  .screen { padding: 16px; font: 14px/1.43 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .cut { color: var(--app-muted); font-size: 11px; text-align: center; letter-spacing: .04em; margin-bottom: 8px; }
+  .app-p { margin: 0 0 4px; color: var(--app-muted); font-size: 14px; }
+
+  /* The footer, as ContactFooter renders it: column, 4 px apart, 24 px above */
+  .foot { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 24px; }
+  .foot.changed { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 4px; }
+  .foot-row { display: flex; justify-content: center; flex-wrap: wrap; }
+  .sw, .lnk { box-sizing: border-box; min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; font-size: 14px; color: var(--app-muted); white-space: nowrap; }
+  .sw { gap: 6px; border-radius: 8px; }
+  .sw svg { width: 15px; height: 15px; flex: none; }
+  .sw.disabled { opacity: .5; }
+  .lnk { text-decoration: underline; text-underline-offset: 4px; }
+  .lnk.new { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .lnk.focus { outline: 2px solid var(--app-ring); outline-offset: 2px; }
+  .alert { margin: 0; color: var(--app-destructive); font-size: 14px; line-height: 20px; text-align: center; }
+  .over { outline: 2px solid var(--reject); outline-offset: -2px; }
+
+  /* Desktop: a 1280 px browser at 50 % */
+  .desk-scroll { overflow-x: auto; margin-top: 16px; }
+  .desk { width: 1280px; zoom: .5; border: 8px solid var(--frame); border-radius: 16px; background: var(--app-bg); color: var(--app-fg); overflow: hidden; }
+  .desk .urlbar { font-size: 20px; padding: 10px 16px; }
+  .desk-col { box-sizing: border-box; width: 448px; margin: 0 auto; padding: 16px 16px 32px; outline: 2px dashed var(--fold); outline-offset: -1px; }
+
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 80ch; }
+  .table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 0.92rem; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  ol.decisions, ul.list { padding-left: 20px; max-width: 80ch; }
+  ol.decisions li, ul.list li { margin-bottom: 8px; }
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 16px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+</svg>
+
+<div class="wrap">
+  <h1>Lien « Code source sur GitHub »</h1>
+  <p class="lead">Version 1.2 (v1.1 approuvée, retouches de mots ; epic <a href="https://github.com/olaurendeau/fullcar/issues/489">#489</a>). Le bas de page partagé (<code>src/components/contact/contact-footer.tsx</code>) gagne un lien vers le dépôt public <code>https://github.com/olaurendeau/fullcar</code>, sur toutes les pages qui ont ce bas de page. Pour qu’il tienne à 360 px, le bas de page passe d’une ligne à deux, toujours les mêmes : ce qui reste dans l’application en haut, ce qui en sort en bas. « Nous contacter » reste le dernier lien de la page. Maquettes à la taille réelle, 360 px de large ; le cadre pointillé bleu marque le bas de page qui change, le fond bleu pâle le lien nouveau (repère de maquette seulement).</p>
+
+  <h2>Le bas de page à 360 px</h2>
+  <p class="lead">Deux lignes centrées, dans cet ordre de lecture, de tabulation et d’affichage. Ligne 1 : « Accueil » (absent de <code>/</code>), puis le bouton de langue. Ligne 2 : « Code source sur GitHub », puis « Nous contacter ». Le lien nouveau a exactement l’allure de « Nous contacter » : 14 px, gris <code>muted-foreground</code>, souligné, 44 px de haut, l’anneau de base au clavier. Pas d’icône.</p>
+  <div class="anatomy">
+    <div class="card">
+      <h3>Toutes les pages sauf <code>/</code>, en français</h3>
+      <div class="phone-scroll"><div class="phone"><div class="screen">
+        <div class="cut">… fin de la page …</div>
+        <footer class="foot changed">
+          <div class="foot-row">
+            <span class="lnk">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          </div>
+          <div class="foot-row">
+            <span class="lnk new">Code source sur GitHub</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+        </footer>
+      </div></div></div>
+      <ul>
+        <li><code>/nouveau</code>, <code>/e/{id}</code>, <code>/e/{id}/admin</code> (jeton valide, faux ou absent), « Événement introuvable » <span class="crit">G1</span></li>
+        <li>chacun des quatre libellés tient sur une seule ligne de texte (mesurée, pas déduite des 44 px) ; rien ne défile de côté <span class="crit">G5</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Sur <code>/</code>, en français</h3>
+      <div class="phone-scroll"><div class="phone"><div class="screen">
+        <div class="cut">… fin de la page …</div>
+        <footer class="foot changed">
+          <div class="foot-row">
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          </div>
+          <div class="foot-row">
+            <span class="lnk new">Code source sur GitHub</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+        </footer>
+      </div></div></div>
+      <ul><li>pas de lien « Accueil » (cette partie d’A3.2 est inchangée ; la suite d’A3.2 est réécrite, voir « Critères qui changent ailleurs ») : la ligne 1 n’a que le bouton de langue <span class="crit">G3</span></li></ul>
+    </div>
+    <div class="card">
+      <h3>En anglais, toutes les pages sauf <code>/</code></h3>
+      <div class="phone-scroll"><div class="phone"><div class="screen">
+        <div class="cut">… end of the page …</div>
+        <footer class="foot changed">
+          <div class="foot-row">
+            <span class="lnk">Home</span>
+            <span class="sw" lang="fr"><svg aria-hidden="true"><use href="#globe"/></svg>Français</span>
+          </div>
+          <div class="foot-row">
+            <span class="lnk new">Source code on GitHub</span>
+            <span class="lnk">Contact us</span>
+          </div>
+        </footer>
+      </div></div></div>
+      <ul><li>même adresse qu’en français, sans langue dedans <span class="crit">G9</span></li></ul>
+    </div>
+    <div class="card">
+      <h3>Focus au clavier</h3>
+      <div class="phone-scroll"><div class="phone"><div class="screen">
+        <footer class="foot">
+          <div class="foot-row">
+            <span class="lnk">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          </div>
+          <div class="foot-row">
+            <span class="lnk focus">Code source sur GitHub</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+        </footer>
+      </div></div></div>
+      <ul>
+        <li>Tab : « Accueil », « English », « Code source sur GitHub », « Nous contacter » <span class="crit">G3</span></li>
+        <li>l’anneau de base, comme « Nous contacter » : 2 px <code>#737373</code>, 2 px à l’extérieur ; le lecteur d’écran lit « Code source sur GitHub (s’ouvre dans un nouvel onglet) » <span class="crit">G2, G10</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Pourquoi deux lignes fixes</h2>
+  <p class="lead">À 360 px, la colonne laisse 328 px. « Accueil », « English », un lien GitHub et « Nous contacter » n’y tiennent pas sur une ligne en français, quel que soit le libellé, même « GitHub » seul. Laisser la ligne se replier d’elle-même donne un résultat qui dépend de la police du téléphone (Roboto, San Francisco, Segoe) et de la langue : la capture du test ne montrerait pas ce que voit le téléphone. Deux lignes fixes donnent le même bas de page partout.</p>
+  <div class="anatomy">
+    <div class="card rejected">
+      <h3>Écarté : une seule ligne qui se replie</h3>
+      <div class="phone-scroll"><div class="phone"><div class="screen">
+        <footer class="foot">
+          <div class="foot-row">
+            <span class="lnk">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="lnk">Code source sur GitHub</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+        </footer>
+      </div></div></div>
+      <ul><li>le repli tombe où la police le décide : ici, « Nous contacter » ou le lien GitHub se retrouve seul, et l’anglais, à quelques pixels près, tient parfois sur une ligne et parfois non</li></ul>
+    </div>
+    <div class="card rejected">
+      <h3>Écarté : GitHub après « Nous contacter »</h3>
+      <div class="phone-scroll"><div class="phone"><div class="screen">
+        <footer class="foot">
+          <div class="foot-row">
+            <span class="lnk">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+          <div class="foot-row"><span class="lnk over">Code source sur GitHub</span></div>
+        </footer>
+      </div></div></div>
+      <ul><li>la ligne d’aujourd’hui ne bouge pas, mais « Nous contacter » cesse d’être le dernier lien : K1 de #69 et A3.3 de #232 seraient à réécrire, et les tests qui lisent « le dernier lien » avec eux</li></ul>
+    </div>
+  </div>
+
+  <h2>Sur un ordinateur</h2>
+  <p class="lead">Les mêmes deux lignes, dans la colonne de 448 px centrée en haut. Il y aurait la place pour une seule ligne, mais un bas de page qui change de forme selon la largeur, c’est deux maquettes et deux jeux de tests pour quatre liens. <span class="crit">G6</span></p>
+  <div class="desk-scroll"><div class="desk">
+    <div class="urlbar">{hôte}/e/Xk3pQ9mT</div>
+    <div class="desk-col">
+      <div class="screen" style="padding:0">
+        <div class="cut">… fin de la page …</div>
+        <footer class="foot changed">
+          <div class="foot-row">
+            <span class="lnk">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          </div>
+          <div class="foot-row">
+            <span class="lnk new">Code source sur GitHub</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+        </footer>
+      </div>
+    </div>
+  </div></div>
+
+  <h2>Depuis l’espace organisateur</h2>
+  <p class="lead">Le seul endroit où l’URL porte un secret, le jeton d’admin, dans le fragment. Le lien a une adresse fixe, ne reprend rien de l’URL courante, s’ouvre dans un nouvel onglet sans <code>opener</code> ni <code>Referer</code> (<code>rel="noopener noreferrer"</code>, en plus de <code>Referrer-Policy: no-referrer</code> déjà sur toutes les pages). GitHub ne reçoit ni le jeton, ni l’identifiant de l’événement, et ne peut pas atteindre l’onglet d’origine. <span class="crit">G7</span></p>
+  <div class="flow">
+    <div class="card">
+      <h3>Avant le tap (au doigt : pas d’anneau)</h3>
+      <div class="phone-scroll"><div class="phone">
+        <div class="urlbar">{hôte}/e/Xk3pQ9mT/admin#<b>q3Vx9kLmN2pR7sT1uW4yZa</b></div>
+        <div class="screen">
+          <div class="cut">… l’événement, puis la fin de la page …</div>
+          <footer class="foot">
+            <div class="foot-row">
+              <span class="lnk">Accueil</span>
+              <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+            </div>
+            <div class="foot-row">
+              <span class="lnk new">Code source sur GitHub</span>
+              <span class="lnk">Nous contacter</span>
+            </div>
+          </footer>
+        </div>
+      </div></div>
+    </div>
+    <div class="card">
+      <h3>Après : un nouvel onglet</h3>
+      <div class="phone-scroll"><div class="phone">
+        <div class="urlbar">github.com/olaurendeau/fullcar</div>
+        <div class="screen"><p class="app-p">La page du dépôt, servie par GitHub.</p><p class="app-p"><code>window.opener</code> : <code>null</code>. Requête sans <code>Referer</code>, sans jeton, sans identifiant d’événement.</p></div>
+      </div></div>
+    </div>
+    <div class="card">
+      <h3>L’onglet d’origine</h3>
+      <div class="phone-scroll"><div class="phone">
+        <div class="urlbar">{hôte}/e/Xk3pQ9mT/admin#<b>q3Vx9kLmN2pR7sT1uW4yZa</b></div>
+        <div class="screen"><p class="app-p">Inchangé : même URL, même fragment, « Espace organisateur » toujours affiché.</p></div>
+      </div></div>
+    </div>
+  </div>
+
+  <h2>Quand ça ne se passe pas comme prévu</h2>
+  <div class="anatomy">
+    <div class="card">
+      <h3>Le changement de langue a échoué (#129, inchangé)</h3>
+      <div class="phone-scroll"><div class="phone"><div class="screen">
+        <footer class="foot">
+          <p class="alert" lang="en">The language could not be changed. Check your connection, then try again.</p>
+          <div class="foot-row">
+            <span class="lnk">Accueil</span>
+            <span class="sw" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          </div>
+          <div class="foot-row">
+            <span class="lnk">Code source sur GitHub</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+        </footer>
+      </div></div></div>
+      <ul><li>le message reste au-dessus de la ligne 1, jamais après « Nous contacter » <span class="crit">G3</span></li></ul>
+    </div>
+    <div class="card">
+      <h3>Sans JavaScript, ou avant l’hydratation</h3>
+      <div class="phone-scroll"><div class="phone"><div class="screen">
+        <footer class="foot">
+          <div class="foot-row">
+            <span class="lnk">Accueil</span>
+            <span class="sw disabled" lang="en"><svg aria-hidden="true"><use href="#globe"/></svg>English</span>
+          </div>
+          <div class="foot-row">
+            <span class="lnk">Code source sur GitHub</span>
+            <span class="lnk">Nous contacter</span>
+          </div>
+        </footer>
+      </div></div></div>
+      <ul><li>un lien ordinaire : il est là et fonctionne, rendu par le serveur ; seul le bouton de langue est grisé, comme aujourd’hui (L4.3, dont la ligne qui ne bouge pas devient la ligne 1) <span class="crit">G11</span></li></ul>
+    </div>
+  </div>
+  <div class="note">
+    <strong>Rien à afficher dans l’application pour :</strong> hors ligne (le nouvel onglet montre la page d’erreur du navigateur, l’onglet de Fullcar ne bouge pas) ; GitHub indisponible (sa propre page d’erreur) ; navigateur intégré d’une messagerie, qui peut ouvrir le lien par-dessus au lieu d’un onglet (le retour ramène à Fullcar). Si le dépôt devenait privé, le lien mènerait à une page 404 de GitHub : c’est au propriétaire de retirer le lien ce jour-là.
+  </div>
+
+  <h2>Les mots</h2>
+  <p class="lead">Dans l’espace de clés <code>Contact</code>, qui porte déjà les mots du bas de page (« Accueil », « Nous contacter », la mention de nouvel onglet). Les textes existants ne changent pas.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>clé</th><th><code>messages/fr.json</code></th><th><code>messages/en.json</code></th><th>usage</th></tr></thead>
+    <tbody>
+      <tr><td><code>Contact.sourceCode</code> (nouvelle)</td><td>Code source sur GitHub</td><td>Source code on GitHub</td><td>texte visible du lien</td></tr>
+      <tr><td><code>Contact.newTab</code> (existante, réutilisée)</td><td>(s’ouvre dans un nouvel onglet)</td><td>(opens in a new tab)</td><td>en <code>sr-only</code>, après un espace, comme pour « Nous contacter »</td></tr>
+    </tbody>
+  </table></div>
+  <p class="lead" style="margin-top:10px">Nom accessible : « Code source sur GitHub (s’ouvre dans un nouvel onglet) » / « Source code on GitHub (opens in a new tab) ».</p>
+
+  <h2>Décisions</h2>
+  <ol class="decisions">
+    <li>Décision : le lien est dans <code>ContactFooter</code>, donc sur toutes les pages qui ont le bas de page, <code>/</code> comprise ; pas dans le panneau organisateur. — Raison : un bas de page identique partout (décision 7 de #232) ; une page future qui prend le bas de page prend le lien.</li>
+    <li>Décision : « Code source sur GitHub », pas « GitHub » seul. — Raison : un parent qui organise un covoiturage ne sait pas ce qu’est GitHub ; le libellé dit ce qu’il trouvera derrière.</li>
+    <li>Décision : du texte, sans logo. — Raison : comme « Accueil » et « Nous contacter » ; <code>lucide-react</code> 1.55 n’a plus d’icône de marque, et un logo dessiné à la main est du code à tenir pour un lien discret.</li>
+    <li>Décision : deux lignes fixes, à toutes les largeurs : « Accueil », langue ; puis « Code source sur GitHub », « Nous contacter ». — Raison : quatre éléments ne tiennent pas sur 328 px en français ; un repli laissé au navigateur dépend de la police et de la langue. La ligne 1 reste dans l’application, la ligne 2 en sort, en nouvel onglet toutes les deux.</li>
+    <li>Décision : « Nous contacter » reste le dernier lien de la page. — Raison : K1 à K7 de #69 tiennent sans retouche, ainsi que C11.4 (« Nous contacter » défile au-dessus de la barre de messages).</li>
+    <li>Décision : <code>target="_blank"</code>, <code>rel="noopener noreferrer"</code>, adresse fixe. — Raison : comme « Nous contacter » (K2, K4) ; l’espace organisateur porte le jeton dans le fragment, et l’identifiant de l’événement dans le chemin.</li>
+    <li>Décision : aucune requête vers GitHub avant le tap (ni badge, ni nombre d’étoiles, ni préchargement). — Raison : aucun tiers sur les pages (K5 de #69).</li>
+    <li>Décision : clé <code>Contact.sourceCode</code>, pas de nouvel espace. — Raison : <code>Contact</code> porte déjà tous les mots du bas de page ; la mention de nouvel onglet est réutilisée telle quelle.</li>
+  </ol>
+
+  <h2>Critères qui changent ailleurs</h2>
+  <ul class="list">
+    <li><strong>A3.2 de #232</strong>, réécrit : « Sur <code>/</code>, il n’y a aucun lien « Accueil ». La ligne 1 du bas de page n’a que « English » ; la ligne 2 est « Code source sur GitHub », puis « Nous contacter ». » Le test « A3.2, A3.6 » de <code>e2e/home-link.spec.ts</code> attend <code>footerRow</code> = <code>[switch, sourceCode, contact]</code>.</li>
+    <li><strong>A3.3 de #232</strong> : l’ordre du bas de page devient « Accueil », langue, « Code source sur GitHub », « Nous contacter » (sur <code>/</code> : langue, GitHub, contact). « Nous contacter » reste le dernier lien.</li>
+    <li><strong>A3.4 de #232</strong> : « les trois sur une ligne » devient G5 : « Accueil » et la langue sur une ligne, GitHub et « Nous contacter » sur la suivante.</li>
+    <li><strong>F1.1, F1.2, F1.3 de #236</strong> : la liste des éléments atteints par Tab gagne « Code source sur GitHub » juste avant « Nous contacter », et l’anneau y est mesuré comme sur les autres (F1.1 : les cinq derniers sont « Créer », « Accueil », « English », « Code source sur GitHub », « Nous contacter » ; F1.2 : « Créer un événement », « English », « Code source sur GitHub », « Nous contacter »).</li>
+    <li><strong>F1.18 de #236</strong>, réécrit : « Sans JavaScript (<code>javaScriptEnabled: false</code>), <code>/e/{id}</code> : Tab jusqu’à « Accueil », puis Tab sur « Code source sur GitHub », puis Tab sur « Nous contacter » ; les trois passent la mesure, sur fond blanc. Le bouton de langue, inactif sans JavaScript (L4.3), n’est pas atteint. » Le test de <code>e2e/focus-ring-board.spec.ts</code> appuie une fois sur Tab après « Accueil » : il en faut deux.</li>
+    <li><strong>L4.1 de #113</strong> : le message d’échec s’affiche « au-dessus de la ligne 1 du bas de page » (au lieu de « la ligne »). <strong>L4.3</strong> : c’est la ligne 1 qui ne bouge pas à l’hydratation.</li>
+    <li><strong>Décision 8 de <code>docs/design/home</code></strong> : l’ordre « Accueil », langue, « Nous contacter » est prolongé en « Accueil », langue, « Code source sur GitHub », « Nous contacter ».</li>
+    <li><strong>K1 à K7 de #69, C11.4</strong> : inchangés.</li>
+  </ul>
+
+  <h2>Pour le développement</h2>
+  <ul class="list">
+    <li><code>src/components/i18n/language-switch.tsx</code> change aussi : il met aujourd’hui <code>before</code> (« Accueil »), le bouton et <code>children</code> (« Nous contacter ») dans une seule rangée flex, le message d’échec au-dessus. Les deux lignes demandent que sa rangée ne porte plus que « Accueil » et le bouton, le message restant au-dessus d’elle, et que la ligne 2 vienne après. La forme du code (prop, composant) est au choix du développeur.</li>
+    <li>Marge à 360 px : la ligne 2 en français mesure environ 321 px sur 328 si l’image Playwright rend <code>system-ui</code> en DejaVu Sans (estimation d’après les métriques de la police, pas une mesure), soit environ 7 px de reste. Un libellé plus long sur cette ligne, dans l’une ou l’autre langue, se revérifie avec G5.</li>
+  </ul>
+
+  <h2>Hors périmètre</h2>
+  <ul class="list">
+    <li>Un logo GitHub, un badge, le nombre d’étoiles, ou tout appel à GitHub depuis l’application.</li>
+    <li>Un lien « Signaler un problème » vers les issues : le contact reste Crisp.</li>
+    <li>Une licence pour le dépôt, un numéro de version ou de commit dans le bas de page, une page « À propos ».</li>
+    <li>Un en-tête, un lien dans le panneau organisateur, un changement de « Nous contacter ».</li>
+    <li>Un bas de page sur une seule ligne aux grandes largeurs.</li>
+  </ul>
+</div>
