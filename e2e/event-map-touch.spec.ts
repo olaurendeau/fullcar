@@ -52,10 +52,16 @@ async function openMap(page: Page): Promise<Locator> {
 /** Whether the page's primary pointer is a finger, as the map reads it. */
 const coarse = (page: Page) => page.evaluate(() => matchMedia("(pointer: coarse)").matches);
 
-/** Where the flag is in the map's box: a pan of the page leaves it, a pan of the map moves it. */
-async function flagInMap(map: Locator): Promise<{ x: number; y: number }> {
-  const [box, flag] = await Promise.all([map.boundingBox(), map.getByRole("img", { name: FLAG, exact: true }).boundingBox()]);
-  return { x: Math.round(flag!.x - box!.x), y: Math.round(flag!.y - box!.y) };
+/**
+ * Where the flag is in the map's box: a pan of the page leaves it, a pan of the map moves it.
+ * Both read at once, in the page: the page may still be scrolling.
+ */
+function flagInMap(map: Locator): Promise<{ x: number; y: number }> {
+  return map.evaluate((box, name) => {
+    const flag = box.querySelector(`[role="img"][aria-label="${name}"]`)!.getBoundingClientRect();
+    const { x, y } = box.getBoundingClientRect();
+    return { x: Math.round(flag.x - x), y: Math.round(flag.y - y) };
+  }, FLAG);
 }
 
 /** The middle of `locator`, in the viewport's CSS pixels. */
