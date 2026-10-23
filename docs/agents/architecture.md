@@ -21,6 +21,7 @@ est lu par trente personnes pendant trois jours, puis purgé.
 | tests | Vitest (domaine, données), Playwright (bout en bout, capture à 360 px) |
 | PWA | manifeste et service worker minimal, pas de mode hors ligne en V1 |
 | purge | Vercel Cron quotidienne vers une route protégée par `CRON_SECRET` |
+| lieux | Photon (instance publique de komoot, OpenStreetMap), appelé par notre serveur seulement, derrière `POST /api/lieux` (voir « Auto-complétion des lieux ») |
 
 Polices : la pile de polices système, **aucune police web**, ni distante ni servie par
 l'application. Aucune requête du navigateur vers un tiers, et rien à télécharger avant le
@@ -30,7 +31,9 @@ l'IP du visiteur (`X-Forwarded-For`) : ce qui la tient hors de Sentry, c'est
 `infer_ip: "never"`, que le SDK du navigateur pose avec `userInfo` coupé, et le réglage
 « Prevent Storing of IP Addresses » du projet Sentry. Vercel Web Analytics (#346) charge son
 script et envoie ses pages vues à notre origine aussi (`/_vercel/insights/…`, ou un chemin
-propre au projet).
+propre au projet). Les propositions de lieux (#425) passent par notre origine elles aussi,
+`POST /api/lieux` : c'est notre serveur qui appelle Photon, qui ne voit ni l'IP ni le
+navigateur du visiteur.
 
 ## Environnements et base de données
 
@@ -63,7 +66,7 @@ et force alors HTTPS sur `http://app:3000`, ce qui casse les tests de bout en bo
 ### Slots
 
 Chaque slot est un **projet Compose distinct** (`fullcar-slot{slot}`) : son conteneur Node (`web`),
-son conteneur Postgres, ses volumes. Rien n'est partagé, donc deux développeurs en parallèle
+son conteneur Postgres, son faux Photon (`photon`, voir plus bas), ses volumes. Rien n'est partagé, donc deux développeurs en parallèle
 ne se marchent pas dessus, et `make down SLOT={slot}` efface tout ce que le slot a créé.
 L'application du slot écoute sur le port `30{slot}0` de l'hôte, en `127.0.0.1` seulement ;
 Postgres n'est pas exposé, il n'est joignable que par le nom `db` dans le réseau du slot. Dans
@@ -78,6 +81,24 @@ slot par `next start` ; `make up` le remet. Les captures en ont besoin aussi : d
 conteneur Playwright, `next dev` bloque ses propres scripts (origine croisée) et la page
 n'hydrate jamais. Ce `next start` tourne dans le fuseau `Pacific/Kiritimati` (UTC+14), pas
 en UTC comme Vercel : une heure mise en forme dans le fuseau du serveur s'y voit (C1.12).
+
+**Le faux Photon du slot (#419).** Le service `photon` lance `e2e/fake-photon.mjs` (Node
+seul, sans dépendance) : l'API de recherche de Photon, en GeoJSON, sur le port 2322, et son
+contrôle sur le port 2323. Aucun de ses ports n'est publié sur l'hôte : il n'est joignable que
+par le nom `photon` dans le réseau du slot. `web` y est branché dans **tous** les slots
+(`PHOTON_URL=http://photon:2322/api/`, `PLACES_BREAKER_MS=0`), `make up` compris, dans le
+slot 0 de l'humain aussi : un slot n'appelle jamais l'instance publique. Le faux est vide par
+défaut, et la route répond alors `{ state: "ok", suggestions: [] }` à tout texte. Pour voir des
+propositions en local, on le règle depuis son propre conteneur, avec `docker compose exec`,
+pour un texte que l'application n'a pas encore demandé (son cache garde aussi une réponse
+vide pendant une heure) :
+
+```sh
+SLOT=0 docker compose exec photon node -e 'fetch("http://localhost:2323/answers", { method: "POST", body: JSON.stringify({ text: "Annecy", answer: { features: [{ type: "Feature", geometry: { type: "Point", coordinates: [6.1294, 45.8992] }, properties: { name: "Annecy", postcode: "74000", type: "city", countrycode: "FR" } }] } }) }).then((r) => console.log(r.status))'
+```
+
+Le faux répond `204`, puis propose « Annecy (74000) » au texte `Annecy`, exactement, tant
+qu'il tourne.
 
 **Un worktree git par slot** : chaque développeur travaille dans son propre worktree, avec
 son slot. Deux slots dans le même répertoire partageraient `node_modules`, `.next` et les
@@ -142,6 +163,17 @@ configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
   `postgres[ql]://[identifiants@]db[:port]/fullcar` : schéma `postgres` ou `postgresql`,
   identifiants facultatifs, hôte `db`, port facultatif, base `fullcar`, et rien après. Ni
   query string ni fragment, donc, puisque `pg` y lit aussi un hôte, un port ou un socket.
+- Les propositions de lieux viennent du **faux Photon du slot** (voir « Slots »), jamais de
+  l'instance publique. Un test le règle **par texte** (`q` exact) au travers de son port de
+  contrôle, que le conteneur Playwright reçoit en `PHOTON_CONTROL_URL` : `answerFor` fixe
+  les propositions, le statut ou le délai de la réponse à un texte, `requestsFor` rend les
+  requêtes reçues pour ce texte (chemin, query telle qu'envoyée, en-têtes), et
+  `photonFeature` écrit un élément GeoJSON (`e2e/photon.ts`). Là non plus, aucune route
+  réservée aux tests. Le faux garde ce qu'on lui dit tant qu'il tourne, et l'application
+  garde une réponse une heure : **chaque test choisit ses propres textes**.
+  `PLACES_BREAKER_MS=0` empêche le 429 ou le 500 d'un test d'ouvrir le disjoncteur pour les
+  autres. `make e2e` sert `web` sans ses dépendances : c'est le conteneur Playwright, qui
+  dépend de `photon`, qui démarre le faux.
 
 ### Production
 
@@ -359,6 +391,102 @@ re-dériverait la règle. `withOrganiserPhones` vérifie lui-même le jeton d'ad
 contient `phone` reste privée à `event-rows.ts` (non exportée) : un `.select(cette liste)`
 ailleurs serait une nouvelle lecture.
 
+## Auto-complétion des lieux (#237)
+
+À partir de l'épic #237 (maquette `docs/design/place-autocomplete/`), le lieu de l'événement
+et celui d'une voiture peuvent recevoir une **position**, choisie parmi des propositions. Sur
+main : la position dans le domaine et en base, la route des propositions et son appel à
+Photon, l'état du champ dans le navigateur. **À venir** : l'écriture et la lecture des
+positions par l'événement et les voitures (#420, #421, #422), puis les formulaires qui
+montrent le champ (#428 et suivantes).
+
+### Un lieu, une valeur
+
+`src/domain/place.ts` (#418) : un lieu est **une seule valeur**, `{ text, position }`, où
+`position` vaut `{ lat, lng }` ou `null`. Partout où le code compare, envoie, recopie ou
+vérifie un lieu, c'est ce couple, jamais le texte seul.
+
+- `positionOf` lit une position reçue : `null` reste `null` ; un objet de deux nombres finis
+  exactement, `lat` entre −90 et 90 et `lng` entre −180 et 180, devient la position arrondie à
+  5 décimales (environ un mètre). Tout le reste est `invalid`, pas une exception. `undefined`
+  n'est pas une valeur : chaque appelant le lit comme « pas envoyée ».
+- `samePlace` est la **seule comparaison** d'un lieu, côté serveur comme dans les
+  formulaires : même texte et même position (`samePosition`, à 5 décimales). Le même texte
+  avec une autre position est un changement.
+- En base (migration `0003_positions`, #417) : `location_lat` et `location_lng`,
+  `double precision` nullables, sur `event` et sur `ride`. La base vérifie la paire (les deux
+  ou aucune) et les bornes, pas l'arrondi : c'est le domaine qui arrondit, parce que l'égalité
+  d'un flottant arrondi n'est pas fiable en SQL.
+- **La position d'une voiture est toujours celle de son texte.** Dans le champ, `typed`
+  (`src/components/event/place-field-state.ts`, #427) retire la position d'une voiture
+  (règle `car`) à la première frappe qui change le texte ; celle de l'événement (règle
+  `event`) reste, jusqu'à « Retirer » (`removed`) ou jusqu'à ce que le champ soit vidé.
+  **À venir** (#421) : la même règle côté serveur, pour une modification de voiture qui
+  n'envoie que le texte.
+
+### Le chemin d'une proposition
+
+Le navigateur ne joint jamais Photon : il appelle notre route, qui appelle Photon.
+
+- **Une route, pas une server action** : Next exécute les server actions d'une page l'une
+  après l'autre, et un appel lent à Photon bloquerait les autres. Le texte voyage dans le
+  **corps** JSON, `{ text, locale, near? }`, jamais dans une URL, que Vercel journalise.
+- **La route** : `src/app/api/lieux/route.ts` n'exporte que `POST` (Next répond lui-même 405
+  aux autres méthodes), qui délègue à `handlePlaces` (`src/app/api/lieux/handle.ts`, #425) :
+  - 403, sans appel, si `Origin` manque ou n'a pas l'hôte de la requête
+    (`x-forwarded-host`, à défaut `Host`) : la règle que Next applique à ses server actions ;
+  - 400 `{ state: "invalid" }` pour un corps de plus de 1 024 octets, qui n'est pas de
+    l'UTF-8 ou du JSON, ou que `placeQueryOf` refuse (`src/domain/suggestion.ts` : texte de
+    3 à 120 caractères après `trim`, `locale` `fr` ou `en`, `near` facultatif) ;
+  - sinon 200, `{ state: "ok", suggestions }` ou `{ state: "unavailable" }`.
+
+  Toujours `Cache-Control: no-store`. La route ne journalise rien : le corps porte ce que la
+  personne a tapé.
+- **Ce que Photon reçoit** (`photonQuery`, #423) : `q`, `limit=5`, `lang`, et la zone de
+  l'événement en `lat` et `lon` arrondis à **1 décimale** (environ 10 km, `nearOf`) : la
+  position exacte de l'événement ne part jamais. En en-têtes, seulement
+  `User-Agent: fullcar/{version} (+https://github.com/olaurendeau/fullcar)` et `Accept` :
+  rien de la requête du visiteur n'est recopié.
+- **Ce qui revient** : `suggestionsOf` fait de la réponse GeoJSON au plus 5 propositions
+  `{ label, lat, lng }`, libellées comme la maquette les écrit, sans doublon ni libellé de
+  plus de 120 caractères.
+
+### L'appel à Photon
+
+`src/app/api/lieux/photon.ts` (#424). L'instance publique de komoot ne promet rien :
+`unavailable` est un **état normal**, jamais une exception levée. `createPhoton` crée une
+instance par module, donc par instance serveur : son cache, son plafond et son disjoncteur
+vivent autant qu'elle.
+
+- **Cache** : en mémoire, 500 entrées, 1 h, la moins récemment lue sortie la première. Clé
+  (`cacheKey`) : le texte en minuscules et ses espaces réduits, la langue, la zone. Seules les
+  réponses `ok` y entrent, vides comprises.
+- **Plafond** : 5 appels par seconde ; au-delà, `unavailable` sans appel.
+- **Délai** : 3 s.
+- **Disjoncteur** : un 429, un 5xx ou 3 s sans réponse l'ouvrent, pour la durée de
+  `Retry-After` bornée entre `PLACES_BREAKER_MS` et 1 h ; un `Retry-After` absent ou illisible
+  donne `PLACES_BREAKER_MS`. Ouvert, il répond `unavailable` sans appel. À `0`, il ne s'ouvre
+  jamais, `Retry-After` compris.
+- **Défenses** : `cache: "no-store"` (le cache de données de Next garderait la réponse sous
+  l'URL qui porte le texte), `redirect: "error"` (une redirection porterait le texte à un
+  autre hôte), réponse lue jusqu'à 64 Kio, 20 éléments au plus.
+- **Journal** : un échec écrit `photon: unavailable (…)`, avec un mot fixe (`timeout`,
+  `no answer`, `unreadable answer`, `answer too large`) ou le statut HTTP, jamais le texte,
+  l'URL ni la réponse. Pour Sentry, `scrubUrl` garde `/api/lieux` et le chemin de Photon, et
+  retire la query et le fragment (#449).
+
+| variable | sans elle | effet |
+|---|---|---|
+| `PHOTON_URL` | `https://photon.komoot.io/api/` | l'adresse de recherche de Photon ; chaque slot pointe vers son faux Photon |
+| `PLACES_BREAKER_MS` | `60000` (aussi pour une valeur qui n'est pas un entier) | la durée minimale du disjoncteur, en millisecondes ; `0` le coupe (les slots) |
+
+### Dans le navigateur
+
+`src/components/event/place-search.ts` (#427) envoie `POST /api/lieux` 300 ms après la
+dernière frappe, une requête à la fois par champ, 3 s au plus, et aucune hors ligne ; tout ce
+qui n'est pas un `ok` lisible est `unavailable`. `place-field-state.ts` tient l'état du champ
+en fonctions pures. **À venir** (#428) : aucun formulaire ne s'en sert encore.
+
 ## i18n
 
 next-intl, sans préfixe de langue : `/e/{id}` est le même lien pour tout le monde. La langue
@@ -430,6 +558,9 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | cas d'usage de l'événement | `src/app/e/[id]/*.ts` (précédent : `src/app/e/[id]/event.ts`) | reçoivent `db` en paramètre, composent le domaine et l'accès aux données ; testés avec `withRollback`, comme une fonction d'accès aux données |
 | jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur |
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones |
+| lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position, `samePlace` est la seule comparaison d'un lieu |
+| propositions de lieux | `src/domain/suggestion.ts` ; `src/app/api/lieux/` (`route.ts`, `handle.ts`, `photon.ts`), à partir de #425 | le domaine lit la requête, écrit l'URL de Photon et les libellés ; la route n'exporte que `POST` ; seul `photon.ts` appelle Photon, avec son cache, son plafond et son disjoncteur (voir « Auto-complétion des lieux ») |
+| champ de lieu | `src/components/event/place-field-state.ts` et `place-search.ts`, à partir de #427 | l'état du champ en fonctions pures, et la seule requête du navigateur vers `/api/lieux` |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 | rapports d'erreur | `src/observability/`, à partir de #234 | Sentry, seulement avec `NEXT_PUBLIC_SENTRY_DSN` : `register()` (`src/instrumentation.ts`) et `src/instrumentation-client.ts` importent le SDK dynamiquement, et sans DSN ne le chargent pas ; `options.ts` coupe `dataCollection`, la propagation de trace et toute intégration hors d'une liste exacte (`server.ts`, `client.ts`) ; les hooks de `scrub.ts` reconstruisent chaque envoi, et `registerHooks` y ajoute `createDsc` et `beforeEnvelope` ; une erreur de base part en `database error (SQLSTATE x)` |
@@ -480,6 +611,10 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
 - **i18n** : aucune chaîne visible en dur dans une vue. FR et EN livrées ensemble, une clé
   manquante fait échouer la vérification.
 - **360 px** : la largeur de référence, pas un cas limite.
+- **Un lieu, une valeur** : un lieu est le couple `{ text, position }`, comparé par
+  `samePlace`, jamais le texte seul ; la position d'une voiture est toujours celle de son
+  texte (voir « Auto-complétion des lieux »).
+- **Aucun tiers depuis le navigateur** : Photon n'est appelé que par notre serveur.
 - **Options** : désactivée, une option est **absente** de l'UI, pas grisée. Le code ne doit
   pas supposer qu'une option est active.
 - **Purge** : chaque table a une clé étrangère vers l'Event en `ON DELETE CASCADE`. C'est
