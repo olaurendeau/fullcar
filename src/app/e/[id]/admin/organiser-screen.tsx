@@ -1,10 +1,11 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
 import { EditEventSheet } from "@/components/event/edit-event-sheet";
+import { failureText, wordsOf } from "@/components/event/failure-words";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
@@ -14,7 +15,7 @@ import { ParticipantBoard, type BoardHandle } from "../participant-board";
 import { useAdminLinkCheck } from "./admin-link";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
 import { keepFolded, readFolded } from "./organiser-fold";
-import { alertShown, announcement, editAnswer, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
+import { alertShown, announcement, editAnswer, editWhy, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
 
 /**
  * The organiser's screen (epic #154): the organiser area, then the event's board, with
@@ -109,8 +110,17 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
 
   // « Modifier l’événement » (epic #250): the sheet, and what a change saved does to the screen.
   const tEdit = useTranslations("EditEvent");
+  const words = wordsOf(useTranslations(), useFormatter());
   const editButton = useRef<HTMLButtonElement>(null);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditingState] = useState(false);
+  // Read when the answer comes: the sheet open then says it, or the bar does.
+  const editingNow = useRef(false);
+  const setEditing = (open: boolean) => {
+    editingNow.current = open;
+    setEditingState(open);
+  };
+  // While a change is on its way, « Modifier l’événement » opens nothing (M2.11).
+  const [editSending, setEditSending] = useState(false);
   const focusEdit = () => {
     editButton.current?.focus();
     return !!editButton.current && document.activeElement === editButton.current;
@@ -121,18 +131,31 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
    * sheet hides the page, and a read of the screen follows, as one block (O1.9): should it fail,
    * the header stays the answer's, and the panel is withdrawn as after an action (O1.10).
    * Changed on another device, the whole page takes the header stored, then the same read
-   * (M6.1, M6.2).
+   * (M6.1, M6.2). Anything but saved, once the sheet is closed, is a failure in the bar: what
+   * was not done, then why, its landmark « Modifier l’événement », its subject `event:edit`,
+   * which the next change takes away as it leaves (M2.8 to M2.10).
    */
   async function edit(fields: EventFields, before: EventHeader, removal?: LegCounts): Promise<EditAnswer> {
     const send = sendAbout(["event:edit"]);
     send.leaves();
+    setEditSending(true);
     const answer = editAnswer(await link.edit(fields, before, removal));
     send.answered();
+    setEditSending(false);
     const handle = boardRef.current;
-    if ((answer.kind !== "saved" && answer.kind !== "changed") || !handle) return answer;
-    handle.applyEvent(answer.event);
-    if (answer.kind === "saved") send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: focusEdit }));
-    void readScreen(handle);
+    if (!handle) return answer;
+    if (answer.kind === "saved" || answer.kind === "changed") {
+      handle.applyEvent(answer.event);
+      void readScreen(handle);
+    }
+    if (answer.kind === "saved") {
+      send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: focusEdit }));
+    } else if (!editingNow.current) {
+      const why = editWhy(answer);
+      const text = failureText(words, { kind: "editEvent" }, why);
+      const failure = { text, landmark: focusEdit, offline: why.kind === "offline", about: send.about, sent: send.seq };
+      send.whenClosed(() => handle.fail(failure), true);
+    }
     return answer;
   }
 
@@ -183,7 +206,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           keepFolded(id, !screen.folded);
         }}
         editRef={editButton}
-        onEdit={() => setEditing(true)}
+        editSending={editSending}
+        onEdit={() => !editSending && setEditing(true)}
       />
     );
   } else if (screen.state === "loading") {
