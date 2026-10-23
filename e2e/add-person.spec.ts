@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import { isPersonalToken } from "@/domain/personal-token";
-import { bar, failActions, holdActions, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { animationsDone, bar, failActions, holdActions, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -450,7 +450,7 @@ test.describe("add a person", () => {
     const firstName = form(page).getByLabel(FR.firstName);
     await expect(firstName).toBeFocused();
     await firstName.fill("Léa");
-    const held = await page.addStyleTag({ content: holdClose });
+    await page.addStyleTag({ content: holdClose });
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
     // Hidden from role queries while the sheet is mounted.
@@ -460,7 +460,8 @@ test.describe("add a person", () => {
     await expect(firstName).toBeFocused();
     // As at an opening, what the field holds is selected: the next key replaces it.
     expect(await firstName.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([0, 3]);
-    await held.evaluate((style) => style.parentNode?.removeChild(style));
+    // Its opening over, the form and the focus have stayed (#457).
+    await animationsDone(form(page));
     await expect(firstName).toHaveValue("Léa");
     await expect(firstName).toBeFocused();
   });
