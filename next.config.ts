@@ -25,6 +25,11 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
+      {
+        // An event's link gives access: never indexed, even were the page's robots meta lost (#412).
+        source: "/e/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
     ];
   },
 };
