@@ -2,7 +2,7 @@ import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import { bar, failHeld, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
+import { bar, failHeld, holdClose, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -17,8 +17,6 @@ const BAR_FAILED =
   "Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Une erreur est survenue : réessayez dans un instant.";
 const CHANGED = "Quelqu’un a pris ou libéré une place entre-temps : rien n’a changé. Choisissez à nouveau parmi les personnes à bord.";
 const SEATS = "Places, sans compter qui conduit";
-/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
-const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /**
  * The device holds Claire. Aller: she drives Nina then Paul (3 seats), Marc drives nobody, Tom
@@ -279,6 +277,7 @@ test.describe("edit a car", () => {
       await sendThenClose(page, when.endsWith("closing"));
       const seen = await watchAlerts(page);
       if (when !== "reopened") await failHeld(page, answer);
+      if (when.endsWith("closing")) expect(await page.locator('[role="dialog"][data-state="closed"]').count()).toBe(1);
       if (when.startsWith("reopened")) {
         await hiddenEdit(page).focus();
         await page.keyboard.press("Enter");

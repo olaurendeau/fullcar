@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import { isPersonalToken } from "@/domain/personal-token";
-import { bar, failActions, holdActions, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failActions, holdActions, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -369,8 +369,6 @@ test.describe("add a person", () => {
 
   // Radix keeps a closing sheet mounted until its animation ends: held here until the answer has
   // come, however long it takes (#398). Reopened once closed, the sheet shows a new form: the one that sent is gone.
-  /** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
-  const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
   for (const when of ["closed", "closing", "reopened"] as const) {
     test(`a refusal once the sheet is ${when}: said in the bar, once no sheet hides the page`, async ({ page, seededEvent }) => {
       const answer = await holdFirst(page, "Léa", true);

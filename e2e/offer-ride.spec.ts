@@ -5,7 +5,7 @@ import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { isPersonalToken } from "@/domain/personal-token";
-import { bar, failActions, holdActions, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { bar, failActions, holdActions, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -413,8 +413,6 @@ test.describe("offer a car", () => {
   // Radix keeps a closing sheet mounted until its animation ends: held here until the answer has
   // come, however long it takes (#398). Reopened once closed, the sheet shows a new form, and the
   // one that sent is gone; reopened while it closes, the same form, which keeps what was typed.
-  /** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
-  const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
   for (const when of ["closed", "closing", "reopened", "reopened while closing", "reopened while closing, then sent again"]) {
     const outcome = when.endsWith("again") ? "nothing left to say" : "said in the bar, once no sheet hides the page";
     test(`a refusal once the sheet is ${when}: ${outcome}`, async ({ page, seededEvent }) => {
