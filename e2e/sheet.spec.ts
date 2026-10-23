@@ -66,7 +66,8 @@ const barClose = (page: Page) => page.locator("[data-message-bar]").getByRole("b
 const title = (page: Page, driver: string) => page.getByRole("heading", { name: `Voiture de ${driver}` });
 /** A free seat, found while a sheet hides the page from role queries. */
 const hiddenSeat = (page: Page, driver: string) => page.locator(`button[aria-label="${seatName(driver)}"]`).first();
-const slowClose = '[role="dialog"][data-state="closed"] { animation-duration: 2s !important; }';
+/** A closing sheet's animation, paused: Radix keeps the sheet mounted until the style is removed. */
+const holdClose = '[role="dialog"][data-state="closed"] { animation-play-state: paused !important; }';
 
 /** The checkboxes of a sheet, each with its first name, the state under it (its description), and whether it is ticked. */
 async function candidates(dialog: Locator) {
@@ -90,17 +91,17 @@ async function openSheet(page: Page, driver: string) {
 
 /**
  * Sends Tom and Léa to Sophie's car (`rideId`), held until `answer` fails it or lets it through,
- * and closes the sheet meanwhile: closed, or still `closing`, its animation slowed.
+ * and closes the sheet meanwhile: closed, or still `closing`, its animation `held` until that style is removed.
  */
 async function sendThenClose(page: Page, eventId: string, rideId: string, fails: boolean, closing = false) {
   const answer = await holdFirst(page, rideId, fails);
   await page.goto(`/e/${eventId}`);
-  if (closing) await page.addStyleTag({ content: slowClose });
+  const held = closing ? await page.addStyleTag({ content: holdClose }) : undefined;
   await placeButton(await openSheet(page, "Sophie")).click();
   await page.keyboard.press("Escape");
   if (closing) await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
   else await expect(page.getByRole("dialog")).toHaveCount(0);
-  return answer;
+  return { answer, held };
 }
 
 test.describe("the sheet", () => {
@@ -356,12 +357,12 @@ test.describe("the sheet", () => {
     expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: null });
   });
 
-  // Radix keeps a closing sheet mounted until its animation ends: slowed here, the answer comes
-  // meanwhile. Reopened, even while the first one closes, the sheet is a new one.
+  // Radix keeps a closing sheet mounted until its animation ends: held here until the answer has
+  // come, however long it takes (#398). Reopened, even while the first one closes, the sheet is a new one.
   for (const when of ["closed", "closing", "reopened", "reopened while closing"] as const) {
     test(`a failure once the sheet is ${when}: in the bar, once no sheet hides the page`, async ({ page, seededEvent }) => {
       const closing = when.endsWith("closing");
-      const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true, closing);
+      const { answer, held } = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true, closing);
       const seen = await watchAlerts(page);
       const release = async () => {
         await failHeld(page, answer);
@@ -375,6 +376,8 @@ test.describe("the sheet", () => {
         await expect(marc).toBeVisible();
       }
       if (when !== "reopened while closing") await release();
+      // Answered, and reopened if it is: the first sheet may end its closing.
+      await held?.evaluate((style) => style.parentNode?.removeChild(style));
       if (when.startsWith("reopened")) {
         // The new sheet neither shows the first one's failure nor closes.
         await expect(alerts(marc)).toHaveCount(0);
@@ -393,7 +396,7 @@ test.describe("the sheet", () => {
   // answer does, here a refusal said in that sheet), only the new outcome is said.
   for (const when of ["after", "before"] as const) {
     test(`seats sent again from a reopened sheet ${when} the first send fails: no false failure`, async ({ db, page, seededEvent }) => {
-      const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
+      const { answer } = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
       const sophie = await openSheet(page, "Sophie");
       if (when === "after") await failHeld(page, answer);
       else await db.deleteFrom("ride").where("id", "=", scene.cars.sophie).execute();
@@ -413,7 +416,7 @@ test.describe("the sheet", () => {
   // before its own answer, which alone says what came of it.
   test("seats sent again from a reopened sheet, closed too, before the first send fails: no false failure meanwhile", async ({ page, seededEvent }) => {
     const resend = await holdFirst(page, scene.cars.sophie, false);
-    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
+    const { answer } = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
     await placeButton(await openSheet(page, "Sophie")).click();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -432,7 +435,7 @@ test.describe("the sheet", () => {
 
   // A success never takes a failure away (#216): both are shown, the failure first.
   test("a failure waiting under another sheet stays, whatever success comes from that sheet", async ({ db, page, seededEvent }) => {
-    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
+    const { answer } = await sendThenClose(page, seededEvent.id, scene.cars.sophie, true);
     const marc = await openSheet(page, "Marc");
     await failHeld(page, answer);
     for (const name of ["Tom", "Léa", "Hugo"]) await marc.getByRole("checkbox", { name }).click();
@@ -444,7 +447,7 @@ test.describe("the sheet", () => {
   });
 
   test("the car removed while the sheet closes: the bar says so, and the focus goes to the leg's banner", async ({ db, page, seededEvent }) => {
-    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, false);
+    const { answer } = await sendThenClose(page, seededEvent.id, scene.cars.sophie, false);
     await expect(freeSeats(page, "Sophie").first()).toBeFocused();
     await db.deleteFrom("ride").where("id", "=", scene.cars.sophie).execute();
     answer();
@@ -455,7 +458,7 @@ test.describe("the sheet", () => {
   });
 
   test("a success from a sheet closed since: the sheet opened meanwhile stays open, and the bar waits for it", async ({ page, seededEvent }) => {
-    const answer = await sendThenClose(page, seededEvent.id, scene.cars.sophie, false);
+    const { answer } = await sendThenClose(page, seededEvent.id, scene.cars.sophie, false);
     const marc = await openSheet(page, "Marc");
     answer();
     // Behind the sheet, the board has the new state; the sheet has its own, and the bar nothing yet.
