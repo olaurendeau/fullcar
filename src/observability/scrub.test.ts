@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 // The parser @sentry/nextjs runs in the browser, and the one it runs on the server.
 // @sentry/browser is not in package.json: it comes with @sentry/react, which @sentry/nextjs pins at 11.8.0.
 import { defaultStackParser as browserStackParser } from "@sentry/browser";
-import { type Breadcrumb, defaultStackParser as nodeStackParser, type StackFrame } from "@sentry/nextjs";
+import { type Breadcrumb, defaultStackParser as nodeStackParser, type ErrorEvent, type StackFrame } from "@sentry/nextjs";
 import { beforeEach, describe, expect, it } from "vitest";
 import { scrubBreadcrumb, scrubCreatedDsc, scrubDsc, scrubEvent, scrubSpan, scrubText, scrubUrl, type StreamedSpan } from "./scrub";
 import { actionBody, drawSecrets, leakedKinds, leakyEvent, NAMES, ORIGIN, PHONES, RELEASE, type Secrets } from "./test-secrets";
@@ -21,6 +21,11 @@ beforeEach(() => {
 
 const leaks = (value: unknown) => leakedKinds(JSON.stringify(value) ?? "", secrets);
 const same = (actual: unknown, expected: unknown) => expect(isDeepStrictEqual(actual, expected)).toBe(true);
+
+/** A search the server sends Photon (place-autocomplete, AL6.6): the text is in its query. */
+const PHOTON_QUERY = "q=12%20rue%20des%20Lilas&limit=5&lang=fr";
+const PHOTON_SEARCH = `https://photon.komoot.io/api/?${PHOTON_QUERY}`;
+const typed = (value: unknown) => /Lilas|q=/.test(JSON.stringify(value));
 
 describe("scrubUrl", () => {
   it("keeps the scheme, the host and the application's segments, and drops the id and the fragment", () => {
@@ -101,6 +106,32 @@ describe("scrubBreadcrumb", () => {
   it("keeps a navigation to the admin link, both ends scrubbed", () => {
     const navigation: Breadcrumb = { category: "navigation", data: { from: `/e/${secrets.id}`, to: secrets.adminUrl } };
     same(scrubBreadcrumb(navigation), { category: "navigation", data: { from: "/e/[id]", to: `${ORIGIN}/e/[id]/admin` } });
+  });
+
+  it("keeps of a request to Photon its method, its URL without the query and its status (AL6.6)", () => {
+    const head = { type: "http", category: "fetch", level: "info", timestamp: 1792477108.148 } as const;
+    const fetch: Breadcrumb = { ...head, data: { method: "GET", url: PHOTON_SEARCH, status_code: 200, response_body_size: 812 } };
+    // The server's http integration writes the query apart.
+    const http: Breadcrumb = {
+      type: "http",
+      category: "http",
+      data: { "http.method": "GET", url: "https://photon.komoot.io/api/", "http.query": PHOTON_QUERY, status_code: 429 },
+    };
+    const sent = [scrubBreadcrumb(fetch), scrubBreadcrumb(http)];
+    expect(typed(sent)).toBe(false);
+    // `api` is not a segment `scrubUrl` keeps: it reads as data.
+    const url = "https://photon.komoot.io/[id]/";
+    same(sent, [
+      { ...head, data: { method: "GET", url, status_code: 200 } },
+      { type: "http", category: "http", data: { url, status_code: 429 } },
+    ]);
+  });
+
+  it("keeps of the browser's request to /api/lieux its method, its URL and its status only", () => {
+    const head = { type: "http", category: "fetch", level: "info", timestamp: 1792477108.148 } as const;
+    const data = { method: "POST", url: "/api/lieux", status_code: 200, request_body_size: 52, response_body_size: 230 };
+    const fetch: Breadcrumb = { ...head, message: "12 rue des Lilas", data };
+    same(scrubBreadcrumb(fetch), { ...head, data: { method: "POST", url: "/[id]/[id]", status_code: 200 } });
   });
 
   it.each(["console", "ui.click", "ui.input", "sentry.event"])("drops a %s breadcrumb", (category) => {
@@ -275,6 +306,13 @@ describe("scrubEvent", () => {
     same(frames.map((frame) => frame.function), ["new Promise", "useState", "Array.map", "Object.?", "new SeatPicker", "onSubmit"]);
   });
 
+  it("scrubs the query of Photon's URL out of an error's message (AL6.6)", () => {
+    const event = { exception: { values: [{ type: "TypeError", value: `fetch failed: ${PHOTON_SEARCH}` }] } } as ErrorEvent;
+    const sent = scrubEvent(event);
+    expect(typed(sent)).toBe(false);
+    same(sent.exception?.values?.[0].value, "fetch failed: https://photon.komoot.io/[id]/");
+  });
+
   it("keeps only the navigations and requests among the breadcrumbs", () => {
     same(scrubEvent(leakyEvent(secrets)).breadcrumbs, [
       { type: "http", category: "fetch", data: { method: "POST", url: "/e/[id]/admin", status_code: 200 } },
@@ -341,6 +379,30 @@ describe("scrubSpan", () => {
       "http.route": "/e/[id]/admin",
     });
     expect(sent.links === undefined).toBe(true);
+  });
+
+  it("keeps of an http.client span to Photon neither the text nor the query (AL6.6)", () => {
+    const sent = scrubSpan(
+      span(`GET ${PHOTON_SEARCH}`, {
+        "sentry.op": "http.client",
+        "sentry.origin": "auto.http.otel.node_fetch",
+        "http.request.method": "GET",
+        "http.response.status_code": 200,
+        "url.full": PHOTON_SEARCH,
+        "url.query": `?${PHOTON_QUERY}`,
+        "http.query": PHOTON_QUERY,
+        "url.path": "/api/",
+        "server.address": "photon.komoot.io",
+      }),
+    );
+    expect(typed(sent)).toBe(false);
+    same(sent.name, "GET https://photon.komoot.io/[id]/");
+    same(sent.attributes, {
+      "sentry.op": "http.client",
+      "sentry.origin": "auto.http.otel.node_fetch",
+      "http.request.method": "GET",
+      "http.response.status_code": 200,
+    });
   });
 
   it("keeps of a db span its system and operation, and drops its query and parameters", () => {
