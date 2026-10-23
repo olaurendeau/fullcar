@@ -110,9 +110,6 @@ interface Open {
 
 const NAME = /[A-Za-z_][\w.-]*(?::[A-Za-z_][\w.-]*)?/y;
 const SPACE = /[ \t\r\n]*/y;
-/** A reference, or a lone `&` that is not one. */
-const REFERENCE = /&(?:#x([0-9A-Fa-f]+)|#(\d+)|(lt|gt|amp|quot|apos))?;?/g;
-const ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
 
 function nameAt(text: string, at: number): string | null {
   NAME.lastIndex = at;
@@ -123,26 +120,6 @@ function skipSpace(text: string, at: number): number {
   SPACE.lastIndex = at;
   SPACE.exec(text);
   return SPACE.lastIndex;
-}
-
-/** The value of an attribute as XML reads it: whitespace as spaces, then the references. */
-function attributeValue(raw: string): string | null {
-  if (raw.includes("<")) return null;
-  let valid = true;
-  const value = raw.replace(/[\t\n\r]/g, " ").replace(REFERENCE, (whole, hex, dec, named) => {
-    if (!whole.endsWith(";") || whole === "&;") {
-      valid = false;
-      return "";
-    }
-    if (named) return ENTITIES[named];
-    const code = hex ? parseInt(hex, 16) : Number(dec);
-    if (!(code > 0 && code <= 0x10ffff)) {
-      valid = false;
-      return "";
-    }
-    return String.fromCodePoint(code);
-  });
-  return valid ? value : null;
 }
 
 function splitName(name: string): [prefix: string | null, local: string] {
@@ -179,8 +156,10 @@ function startTag(
     if (quote !== '"' && quote !== "'") return null;
     const close = text.indexOf(quote, next + 1);
     if (close < 0) return null;
-    const value = attributeValue(text.slice(next + 1, close));
-    if (value === null) return null;
+    // No reference is decoded: an `&` is a doubt, and the real report has none. Nor is
+    // whitespace normalised: a tab or a line break in the value is not a space here.
+    const value = text.slice(next + 1, close);
+    if (/[<&]/.test(value)) return null;
     raw.set(attribute, value);
     cursor = close + 1;
   }
@@ -206,9 +185,10 @@ function startTag(
 }
 
 /**
- * The root element of a small XML document, with its namespaces resolved; `null` for anything
- * that is not one well-formed element, possibly after a prologue and comments. Enough for an
- * exception report: no DTD, no entity beyond the five predefined ones.
+ * The root element of a small XML document, with its namespaces resolved, possibly after a
+ * prologue and comments; `null` when its tags and attributes do not make one well-formed
+ * element (cut, unclosed, mismatched, two roots, a DTD, an undeclared prefix). Text content is
+ * not checked: a stray `&`, a `]]>` or a NUL in it pass, as does a `--` inside a comment.
  */
 function readXml(text: string): XmlElement | null {
   const stack: Open[] = [];

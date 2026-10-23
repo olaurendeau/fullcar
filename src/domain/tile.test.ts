@@ -119,9 +119,11 @@ describe("isNotFoundReport", () => {
       `<ExceptionReport xmlns="${OWS}"><Exception exceptionCode="Not Found"><![CDATA[No <data> found]]></Exception></ExceptionReport>`,
     ],
     [
-      "a character reference in the attribute",
-      `<ExceptionReport xmlns="${OWS}"><Exception exceptionCode="Not&#32;Found"/></ExceptionReport>`,
+      "the attributes and the text a full OWS 1.1 report has, xml:lang among them",
+      `<?xml version="1.0" encoding="UTF-8"?>\n<ows:ExceptionReport xmlns:ows="${OWS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="${OWS} http://schemas.opengis.net/ows/1.1.0/owsExceptionReport.xsd" version="1.0.0" xml:lang="fr"><ows:Exception exceptionCode="Not Found" locator="TILEROW"><ows:ExceptionText>No data found</ows:ExceptionText></ows:Exception></ows:ExceptionReport>`,
     ],
+    ["xml:lang on the Exception", RELEVE.replace("<Exception ", '<Exception xml:lang="fr" ')],
+    ["spaces before the end of the closing tags", RELEVE.replace("</Exception>", "</Exception >").replace("</ExceptionReport>", "</ExceptionReport\n>")],
   ])("is true with %s", (_, text) => {
     expect(isNotFoundReport(text)).toBe(true);
   });
@@ -132,6 +134,8 @@ describe("isNotFoundReport", () => {
     ["not found", RELEVE.replace('"Not Found"', '"not found"')],
     ["Not Found with a space after it", RELEVE.replace('"Not Found"', '"Not Found "')],
     ["empty", RELEVE.replace('"Not Found"', '""')],
+    ["with a line break for its space: whitespace is not normalised", RELEVE.replace('"Not Found"', '"Not\nFound"')],
+    ["with a tab for its space", RELEVE.replace('"Not Found"', '"Not\tFound"')],
   ])("is false for exceptionCode %s", (_, text) => {
     expect(isNotFoundReport(text)).toBe(false);
   });
@@ -185,6 +189,7 @@ describe("isNotFoundReport", () => {
     ],
     ["an undeclared prefix", `<ows:ExceptionReport><ows:Exception exceptionCode="Not Found"/></ows:ExceptionReport>`],
     ["an undeclared prefix on another element", `<ExceptionReport xmlns="${OWS}"><foo:Other/><Exception exceptionCode="Not Found"/></ExceptionReport>`],
+    ["an undeclared prefix on another attribute", RELEVE.replace("<Exception ", '<Exception foo:bar="1" ')],
   ])("is false in %s", (_, text) => {
     expect(isNotFoundReport(text)).toBe(false);
   });
@@ -210,11 +215,10 @@ describe("isNotFoundReport", () => {
       "the attribute given twice",
       `<ExceptionReport xmlns="${OWS}"><Exception exceptionCode="NoApplicableCode" exceptionCode="Not Found"/></ExceptionReport>`,
     ],
-    ["a stray ampersand in the attribute", RELEVE.replace('"Not Found"', '"Not Found&"')],
-    ["an empty reference in the attribute", RELEVE.replace('"Not Found"', '"Not Found&;"')],
-    ["an unknown entity in the attribute", RELEVE.replace('"Not Found"', '"Not&nbsp;Found"')],
-    ["a reference to the character 0", RELEVE.replace('"Not Found"', '"Not Found&#0;"')],
-    ["a reference past the last character", RELEVE.replace('"Not Found"', '"Not&#x110000;Found"')],
+    ["a character reference for the space of exceptionCode", RELEVE.replace('"Not Found"', '"Not&#32;Found"')],
+    ["the same reference without its semicolon", RELEVE.replace('"Not Found"', '"Not&#32Found"')],
+    ["a reference in another attribute: none is decoded", RELEVE.replace("<Exception ", '<Exception locator="a &amp; b" ')],
+    ["a stray ampersand in another attribute", RELEVE.replace("<Exception ", '<Exception locator="a & b" ')],
     ["a < in an attribute", RELEVE.replace("<Exception ", '<Exception locator="<" ')],
     ["a CDATA section outside the report", `<![CDATA[x]]>${RELEVE}`],
     ["a document type", `<!DOCTYPE ExceptionReport>${RELEVE}`],
