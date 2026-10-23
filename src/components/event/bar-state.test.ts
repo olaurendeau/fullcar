@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   close,
   covers,
+  cutSince,
   emptyBar,
   ended,
   fail,
@@ -233,6 +234,53 @@ describe("decision 44: the retour gone, the bar's lines about it go", () => {
     state = inform(state, { ...info("Aucune place libre au retour"), ...retour });
     state = fail(state, { ...failure("Hugo · Retour", ["cell:hugo:retour"]), ...retour });
     expect(regions(retourGone(state))).toEqual({ alert: "", status: "" });
+  });
+});
+
+// Event-board v4.4.6 (#385): cutting a line to its aller part is not writing it, and `retourGone`
+// says so on the line it cuts. Words changed in place any other way are written as any new words.
+describe("cutSince: the line of `alert` cut to its aller part", () => {
+  const retour = { leg: "retour" as const };
+  const aller = { text: "La voiture de Claire pour l’aller…", about: ["offer:aller:claire"], landmark };
+  const offer = (state: BarState) =>
+    fail(state, { ...failure("Les voitures de Claire pour l’aller et le retour…", ["offer:aller:claire", "offer:retour:claire"]), ...retour, aller });
+
+  it("by `retourGone`, it is; once cut, the line is cut no further", () => {
+    const state = offer(emptyBar);
+    const cut = retourGone(state);
+    expect(cutSince(state, cut)).toBe(true);
+    expect(cutSince(cut, cut)).toBe(false);
+    expect(cutSince(cut, retourGone(cut))).toBe(false);
+  });
+
+  it("its words rewritten in place without `retourGone`: it is not, and the region says them", () => {
+    const state = offer(emptyBar);
+    const rewritten = { ...state, lines: state.lines.map((line) => ({ ...line, text: "Claire n’a pas pu proposer sa voiture." })) };
+    expect(regions(rewritten).alert).toBe("Claire n’a pas pu proposer sa voiture.");
+    expect(cutSince(state, rewritten)).toBe(false);
+  });
+
+  it("another failure written, or the line gone, or a line of the retour with no aller part: it is not", () => {
+    const state = offer(emptyBar);
+    expect(cutSince(state, fail(state, failure("Hugo n’a pas pu rejoindre vos inscriptions.")))).toBe(false);
+    expect(cutSince(state, withdraw(state, { about: ["offer:aller:claire", "offer:retour:claire"] }))).toBe(false);
+    expect(cutSince(emptyBar, state)).toBe(false);
+    const hugo = fail(emptyBar, { ...failure("Hugo · Retour", ["cell:hugo:retour"]), ...retour });
+    expect(cutSince(hugo, retourGone(hugo))).toBe(false);
+  });
+
+  it("written and cut since the region last changed: a new line, which the region says in its cut words", () => {
+    const hugo = fail(emptyBar, failure("Hugo n’a pas pu rejoindre vos inscriptions."));
+    const cut = retourGone(offer(hugo));
+    expect(regions(cut).alert).toBe("La voiture de Claire pour l’aller…");
+    expect(cutSince(hugo, cut)).toBe(false);
+  });
+
+  it("the line cut while another failure is said: `alert` still says the other, and is not cut", () => {
+    const state = fail(offer(emptyBar), failure("Hugo n’a pas pu rejoindre vos inscriptions.", ["hugo"], 2));
+    const cut = retourGone(state);
+    expect(regions(cut).alert).toBe("Hugo n’a pas pu rejoindre vos inscriptions.");
+    expect(cutSince(state, cut)).toBe(false);
   });
 });
 

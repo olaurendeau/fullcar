@@ -41,6 +41,8 @@ export interface Sent {
 export interface Failure extends Message, Sent {
   offline?: boolean;
   aller?: { text: string; about: readonly string[]; landmark: () => boolean };
+  /** Cut to its `aller` part by `retourGone`, the one place that changes a line's words in place (`cutSince`). */
+  cut?: true;
 }
 
 /** An information, and when it was written, on the clock that also stamps when each action begins (`ended`). */
@@ -168,13 +170,13 @@ export const undoing = (state: BarState, undo: Undo): BarState => ({
  * that no longer has the retour the one before had. Every line about the retour goes, success,
  * « Annuler », information and failures, before the answer that brings it writes its own; once,
  * as the page calls it on that change alone. A failure with an `aller` part stays, cut to it,
- * about no leg any more: an offer on both legs (the owner's decision on #267).
+ * about no leg any more, and marked `cut`: an offer on both legs (the owner's decision on #267).
  */
 export const retourGone = (state: BarState): BarState => ({
   ...state,
   lines: state.lines.flatMap((line): Line[] => {
     if ((line.leg ?? line.undo?.leg) !== "retour") return [line];
-    return line.kind === "failure" && line.aller ? [{ ...line, ...line.aller, leg: undefined, aller: undefined }] : [];
+    return line.kind === "failure" && line.aller ? [{ ...line, ...line.aller, leg: undefined, aller: undefined, cut: true }] : [];
   }),
 });
 
@@ -190,12 +192,13 @@ const alertLine = (state: BarState) => state.lines.find((line) => line.id === st
 
 /**
  * The line the region `alert` says, or waits to say, is the same in `after` as in `before`, cut
- * since to its aller part (`retourGone`): which is not writing it (event-board v4.4.6).
+ * since to its aller part (`retourGone`): which is not writing it (event-board v4.4.6). Its marker
+ * says so, not its words: words changed in place any other way are new words to say (#385).
  */
 export function cutSince(before: BarState, after: BarState): boolean {
   const was = alertLine(before);
   const is = alertLine(after);
-  return !!was && !!is && was.id === is.id && was.text !== is.text;
+  return was?.kind === "failure" && !was.cut && is?.kind === "failure" && is.id === was.id && !!is.cut;
 }
 
 /** What each live region says: the last line written there, while it is in the bar. */
