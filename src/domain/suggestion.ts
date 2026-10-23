@@ -37,7 +37,8 @@ export function placeQueryOf(body: unknown): { value: PlaceQuery } | { error: "i
   // Not an object, a body has no fields: invalid below.
   const fields = (body ?? {}) as Record<string, unknown>;
   const read = text(fields.text, MAX_TEXT);
-  if ("error" in read || [...read.value].length < MIN_TEXT) return { error: "invalid" };
+  // A lone surrogate: `encodeURIComponent` would throw on it in `photonQuery`.
+  if ("error" in read || [...read.value].length < MIN_TEXT || !read.value.isWellFormed()) return { error: "invalid" };
   if (!isLocale(fields.locale)) return { error: "invalid" };
   const near = positionOf(fields.near ?? null);
   if ("error" in near) return { error: "invalid" };
@@ -75,22 +76,20 @@ function joined(parts: (string | undefined)[], separator: string): string | unde
   return present.length > 0 ? present.join(separator) : undefined;
 }
 
-/** The country, in the page's language from its code, else as Photon names it. */
-function countryName(code: string, properties: Record<string, unknown>, locale: Locale): string | undefined {
-  try {
-    return new Intl.DisplayNames([locale], { type: "region", fallback: "none" }).of(code) ?? property(properties, "country");
-  } catch {
-    return property(properties, "country");
-  }
+/** France by its code, or by its name when Photon gives no code (« France » in French and in English). */
+function inFrance(properties: Record<string, unknown>): boolean {
+  const code = property(properties, "countrycode");
+  return code === undefined ? property(properties, "country") === "France" : code.toUpperCase() === "FR";
 }
 
 /**
  * The label of a feature, as the page writes it: a city « {city} ({postcode}) », or without a
  * postcode « {city}, {county or state} »; a street « {street}, {postcode} {city} »; a named
  * place « {name}, {postcode} {city} »; an address « {housenumber} {street}, {postcode} {city} ».
- * Outside France, « , {country} » at the end. Nothing to name it by: no label.
+ * Outside France, « , {country} » at the end, as Photon gives it: asked with `lang`, Photon
+ * names it in the page's language. Nothing to name it by: no label.
  */
-function labelOf(properties: Record<string, unknown>, locale: Locale): string | undefined {
+function labelOf(properties: Record<string, unknown>): string | undefined {
   const name = property(properties, "name");
   const street = property(properties, "street");
   const housenumber = property(properties, "housenumber");
@@ -110,13 +109,11 @@ function labelOf(properties: Record<string, unknown>, locale: Locale): string | 
   }
   if (label === undefined) return undefined;
 
-  const code = (property(properties, "countrycode") ?? "").toUpperCase();
-  if (code === "FR") return label;
-  const country = countryName(code, properties, locale);
-  return country === undefined || country === label ? label : `${label}, ${country}`;
+  const country = property(properties, "country");
+  return inFrance(properties) || country === undefined || country === label ? label : `${label}, ${country}`;
 }
 
-function suggestionOf(feature: unknown, locale: Locale): Suggestion | undefined {
+function suggestionOf(feature: unknown): Suggestion | undefined {
   if (typeof feature !== "object" || feature === null) return undefined;
   const { geometry, properties } = feature as Record<string, unknown>;
   if (typeof properties !== "object" || properties === null) return undefined;
@@ -125,7 +122,7 @@ function suggestionOf(feature: unknown, locale: Locale): Suggestion | undefined 
   // GeoJSON: [lon, lat]. A missing one is not a number: invalid.
   const position = positionOf({ lat: coordinates[1], lng: coordinates[0] });
   if ("error" in position || position.value === null) return undefined;
-  const label = labelOf(properties as Record<string, unknown>, locale);
+  const label = labelOf(properties as Record<string, unknown>);
   if (label === undefined || [...label].length > MAX_LABEL) return undefined;
   return { label, ...position.value };
 }
@@ -135,12 +132,12 @@ function suggestionOf(feature: unknown, locale: Locale): Suggestion | undefined 
  * and labels longer than 120 characters, left out; two identical labels, the first; 5 at most.
  * An answer without a list of features is unreadable: `null`, not « no suggestion ».
  */
-export function suggestionsOf(json: unknown, locale: Locale): Suggestion[] | null {
+export function suggestionsOf(json: unknown): Suggestion[] | null {
   const features = typeof json === "object" && json !== null ? (json as Record<string, unknown>).features : undefined;
   if (!Array.isArray(features)) return null;
   const suggestions: Suggestion[] = [];
   for (const feature of features) {
-    const suggestion = suggestionOf(feature, locale);
+    const suggestion = suggestionOf(feature);
     if (suggestion && !suggestions.some((kept) => kept.label === suggestion.label)) suggestions.push(suggestion);
     if (suggestions.length === LIMIT) break;
   }

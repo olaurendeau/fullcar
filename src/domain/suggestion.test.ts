@@ -14,9 +14,9 @@ function collection(...features: unknown[]) {
   return { type: "FeatureCollection", features };
 }
 
-/** The labels Photon's answer gives, in French unless said otherwise. */
-function labelsOf(json: unknown, locale: "fr" | "en" = "fr") {
-  return suggestionsOf(json, locale)?.map((suggestion) => suggestion.label);
+/** The labels Photon's answer gives. */
+function labelsOf(json: unknown) {
+  return suggestionsOf(json)?.map((suggestion) => suggestion.label);
 }
 
 const FR = { country: "France", countrycode: "FR" };
@@ -58,6 +58,8 @@ describe("placeQueryOf", () => {
     ["no text", { locale: "fr" }],
     ["a text that is not a string", { text: 12345, locale: "fr" }],
     ["a text with a NUL character", { text: "Bri\u0000ndas", locale: "fr" }],
+    ["a text with a lone surrogate, which encodeURIComponent cannot encode", { text: "Lyo\ud800n", locale: "fr" }],
+    ["a text with a lone low surrogate", { text: "Lyon\udc00", locale: "fr" }],
     ["an unknown locale", { text: "Brindas", locale: "de" }],
     ["no locale", { text: "Brindas" }],
     ["a latitude out of bounds", { text: "Brindas", locale: "fr", near: { lat: 90.1, lng: 4.6894 } }],
@@ -161,18 +163,16 @@ describe("suggestionsOf: the label", () => {
     expect(labelsOf(collection(noPostcode, noCity, neither))).toEqual(["Mairie, Brindas", "Mairie, 69126", "Mairie"]);
   });
 
-  it("ends the label with the country outside France only, in the page's language", () => {
-    const sion = feature({
-      name: "Salle polyvalente Marie-Curie",
-      postcode: "1950",
-      city: "Sion",
-      type: "house",
-      country: "Schweiz/Suisse/Svizzera/Svizra",
-      countrycode: "CH",
-    });
+  it("ends the label with the country outside France only, as Photon gives it in the page's language", () => {
+    const sion = (country: string) =>
+      feature({ name: "Salle polyvalente Marie-Curie", postcode: "1950", city: "Sion", type: "house", country, countrycode: "CH" });
     const brindas = feature({ name: "Mairie", postcode: "69126", city: "Brindas", type: "house", ...FR });
-    expect(labelsOf(collection(sion, brindas), "fr")).toEqual(["Salle polyvalente Marie-Curie, 1950 Sion, Suisse", "Mairie, 69126 Brindas"]);
-    expect(labelsOf(collection(sion, brindas), "en")).toEqual(["Salle polyvalente Marie-Curie, 1950 Sion, Switzerland", "Mairie, 69126 Brindas"]);
+    // Photon is asked with `lang=fr`, then with `lang=en`.
+    expect(labelsOf(collection(sion("Suisse"), brindas))).toEqual(["Salle polyvalente Marie-Curie, 1950 Sion, Suisse", "Mairie, 69126 Brindas"]);
+    expect(labelsOf(collection(sion("Switzerland"), brindas))).toEqual([
+      "Salle polyvalente Marie-Curie, 1950 Sion, Switzerland",
+      "Mairie, 69126 Brindas",
+    ]);
   });
 
   it("reads the country code whatever its case", () => {
@@ -181,15 +181,10 @@ describe("suggestionsOf: the label", () => {
     expect(labelsOf(collection(brindas, sion))).toEqual(["Mairie, 69126 Brindas", "Mairie, 1950 Sion, Suisse"]);
   });
 
-  it("falls back on Photon's country when the code is not one, or names no country", () => {
-    const notACode = feature({ name: "Mairie", city: "Sion", type: "house", country: "Suisse", countrycode: "CHE" });
-    const unnamed = feature({ name: "Mairie", city: "Bern", type: "house", country: "Schweiz", countrycode: "AA" });
-    const noCode = feature({ name: "Mairie", city: "Genève", type: "house", country: "Suisse" });
-    expect(labelsOf(collection(notACode, unnamed, noCode))).toEqual([
-      "Mairie, Sion, Suisse",
-      "Mairie, Bern, Schweiz",
-      "Mairie, Genève, Suisse",
-    ]);
+  it("without a country code, tells France by its name", () => {
+    const brindas = feature({ name: "Mairie", postcode: "69126", city: "Brindas", type: "house", country: "France" });
+    const geneva = feature({ name: "Mairie", city: "Genève", type: "house", country: "Suisse" });
+    expect(labelsOf(collection(brindas, geneva))).toEqual(["Mairie, 69126 Brindas", "Mairie, Genève, Suisse"]);
   });
 
   it("ends the label with no country when Photon gives none", () => {
@@ -242,7 +237,7 @@ describe("suggestionsOf: the list (AL1.4)", () => {
       feature({ name: "Salle des fêtes", postcode: "69126", city: "Brindas", type: "house", ...FR }),
       feature({ name: "Mairie", postcode: "69126", city: "Brindas", type: "house", ...FR }, 4.7, 45.76),
     );
-    expect(suggestionsOf(json, "fr")).toEqual([
+    expect(suggestionsOf(json)).toEqual([
       { label: "Mairie, 69126 Brindas", lat: 45.75, lng: 4.69 },
       { label: "Salle des fêtes, 69126 Brindas", lat: 45.7581, lng: 4.6894 },
     ]);
@@ -268,7 +263,7 @@ describe("suggestionsOf: the list (AL1.4)", () => {
 
   it("reads [lon, lat] in that order, rounded to 5 decimals", () => {
     const json = collection(feature({ name: "Gymnase des Lilas", city: "Rennes", type: "house", ...FR }, -1.680024, 48.111986));
-    expect(suggestionsOf(json, "fr")).toEqual([{ label: "Gymnase des Lilas, Rennes", lat: 48.11199, lng: -1.68002 }]);
+    expect(suggestionsOf(json)).toEqual([{ label: "Gymnase des Lilas, Rennes", lat: 48.11199, lng: -1.68002 }]);
   });
 
   it.each([
@@ -290,7 +285,7 @@ describe("suggestionsOf: the list (AL1.4)", () => {
   });
 
   it("reads no features as no suggestion", () => {
-    expect(suggestionsOf(collection(), "fr")).toEqual([]);
+    expect(suggestionsOf(collection())).toEqual([]);
   });
 
   it.each([
@@ -299,7 +294,7 @@ describe("suggestionsOf: the list (AL1.4)", () => {
     ["an object without features", { type: "FeatureCollection" }],
     ["features that are not a list", { type: "FeatureCollection", features: {} }],
   ])("reads an answer that is %s as unreadable: null, not an empty list", (_, json) => {
-    expect(suggestionsOf(json, "fr")).toBeNull();
+    expect(suggestionsOf(json)).toBeNull();
   });
 });
 
