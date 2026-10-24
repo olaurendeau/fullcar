@@ -648,10 +648,14 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
   (CA1.2, `e2e/event-map.spec.ts`). Aucun lint ne l'impose : la revue le tient. `createEventMap`
   rend `{ update, resize, retryTiles, destroy }`, et n'a aucun mot : `event-map.tsx` les lui
   donne traduits.
-- **`src/components/event/event-map.tsx`** : `EventMap`, le bouton « Carte »
-  (`aria-expanded`, masqué sans JavaScript), le conteneur qu'il replie (`hidden`), la boîte de
-  240 px, 280 px à partir d'une fenêtre de 448 px, le chargement, les avis et les phrases sous
-  la carte ; et `OrganiserHint`. D'une voiture, la carte ne reçoit que son identifiant, son
+- **`src/components/event/event-map.tsx`** : `EventMap`, le conteneur (#562 : bordé, au
+  motif de « Vos inscriptions », masqué entier sans JavaScript, pas un repère), dont le bouton
+  « Carte » (`aria-expanded`) est l'en-tête ; la partie qu'il replie (`hidden`), la boîte de
+  240 px, 280 px à partir d'une fenêtre de 448 px, d'un bord à l'autre du conteneur, le
+  chargement, les avis et les phrases sous la carte ; et `OrganiserHint`. L'anneau de focus de
+  la boîte de chargement et de la région de la carte (le conteneur de Leaflet) est un seul
+  élément à nous, au-dessus des panneaux de Leaflet et du texte de chargement (z-index 1002),
+  affiché tant que l'une ou l'autre a le focus clavier. D'une voiture, la carte ne reçoit que son identifiant, son
   lieu, sa position, ses places libres et le prénom de qui conduit, jamais un numéro.
 - **L'état ouvert ou replié** est celui de la page : `EventView` le tient (`useState`), un
   seul pour les deux legs, en mémoire, replié à chaque chargement et quand la position de

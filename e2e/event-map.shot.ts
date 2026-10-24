@@ -29,7 +29,8 @@ async function shoot(page: Page, testInfo: TestInfo, name: string) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow, `${name} scrolls sideways`).toBe(0);
   const open = (await mapButton(page).getAttribute("aria-expanded")) === "true";
-  if (!desk && open) await mapButton(page).evaluate((button) => button.scrollIntoView({ block: "start" }));
+  // From the top of le conteneur, its border included (#562).
+  if (!desk && open) await mapButton(page).evaluate((button) => button.parentElement!.scrollIntoView({ block: "start" }));
   await page.screenshot({
     path: `var/shots/${name}-${testInfo.project.use.viewport?.width}.png`,
     fullPage: desk,
