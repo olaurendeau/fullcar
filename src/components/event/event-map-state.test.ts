@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { distanceMetres, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
-import { mapUpdate, pointKey, type MapFocus, type MapView } from "./event-map-state";
+import { leafletStep, mapUpdate, pointKey, TILES_QUIET, tilesStep, type MapFocus, type MapView, type TilesView } from "./event-map-state";
 
 /** The event's place: the flag. */
 const FLAG: Position = { lat: 45.764, lng: 4.8357 };
@@ -435,5 +435,83 @@ describe("never <body>: the map's container, failing all else", () => {
     expect(mapUpdate(before, before, focused({ kind: "bubble", car: "nina" }, { bubble: "paul" })).focus).toEqual({
       kind: "container",
     });
+  });
+});
+
+describe("Leaflet's import (CA2.8)", () => {
+  it("failed at the first opening: the notice, the focus where it was", () => {
+    expect(leafletStep("loading", "failed", false)).toEqual({ phase: "failed", focus: null });
+  });
+
+  it("loaded at the first opening: the map, the focus where it was", () => {
+    expect(leafletStep("loading", "loaded", false)).toEqual({ phase: "ready", focus: null });
+  });
+
+  it("« Réessayer »: loading again, the focus to the box", () => {
+    expect(leafletStep("failed", "retry", false)).toEqual({ phase: "loading", focus: "box" });
+    expect(leafletStep("failed", "retry", true)).toEqual({ phase: "loading", focus: "box" });
+  });
+
+  it("loaded while the box has the focus: to « Carte »", () => {
+    expect(leafletStep("loading", "loaded", true)).toEqual({ phase: "ready", focus: "toggle" });
+  });
+
+  it("failed again while the box has the focus: to its « Réessayer »", () => {
+    expect(leafletStep("loading", "failed", true)).toEqual({ phase: "failed", focus: "retry" });
+  });
+
+  it("an import that ends when nothing waits for it changes nothing", () => {
+    for (const event of ["loaded", "failed"] as const) {
+      expect(leafletStep("ready", event, true)).toEqual({ phase: "ready", focus: null });
+      expect(leafletStep("failed", event, true)).toEqual({ phase: "failed", focus: null });
+    }
+    expect(leafletStep("loading", "retry", true)).toEqual({ phase: "loading", focus: null });
+    expect(leafletStep("ready", "retry", true)).toEqual({ phase: "ready", focus: null });
+  });
+});
+
+describe("the tiles' notice (CA2.4)", () => {
+  /** The view after `events`, from `from`, nothing of the notice focused. */
+  function after(events: Parameters<typeof tilesStep>[1][], from: TilesView = TILES_QUIET): TilesView {
+    return events.reduce((view, event) => tilesStep(view, event, false).view, from);
+  }
+
+  it("shows when a view ends loading with a tile in error, not before", () => {
+    expect(after(["loading", "tileerror"]).notice).toBe(false);
+    expect(after(["loading", "tileerror", "load"]).notice).toBe(true);
+  });
+
+  it("stays away when a view ends loading without an error", () => {
+    expect(after(["loading", "load"]).notice).toBe(false);
+  });
+
+  it("stays while the next view loads, and goes when it ends without an error", () => {
+    const shown = after(["loading", "tileerror", "load"]);
+    expect(after(["loading"], shown).notice).toBe(true);
+    expect(after(["loading", "load"], shown).notice).toBe(false);
+  });
+
+  it("stays when the next view ends with an error too", () => {
+    const shown = after(["loading", "tileerror", "load"]);
+    expect(after(["loading", "tileerror", "load"], shown).notice).toBe(true);
+  });
+
+  it("« Réessayer » forgets the errors of the tiles it asks for again, even while a view loads", () => {
+    const shown = after(["loading", "tileerror", "load", "loading", "tileerror"]);
+    expect(after(["retry", "load"], shown).notice).toBe(false);
+    expect(after(["retry"], shown).notice).toBe(true);
+  });
+
+  it("gone while « Réessayer » has the focus: to the map's container", () => {
+    const shown = after(["loading", "tileerror", "load", "loading"]);
+    expect(tilesStep(shown, "load", true).focus).toBe("container");
+    expect(tilesStep(shown, "load", false).focus).toBeNull();
+  });
+
+  it("staying, or not shown: the focus where it is", () => {
+    const shown = after(["loading", "tileerror", "load", "loading", "tileerror"]);
+    expect(tilesStep(shown, "load", true)).toEqual({ view: { failing: true, notice: true }, focus: null });
+    for (const event of ["loading", "tileerror", "retry"] as const) expect(tilesStep(shown, event, true).focus).toBeNull();
+    expect(tilesStep(after(["loading"]), "load", true).focus).toBeNull();
   });
 });
