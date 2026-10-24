@@ -2,6 +2,7 @@ import type { Locator, Page, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
+import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { contrast } from "./contrast";
 import { around, points, seedCar, test } from "./event-map-points";
@@ -10,8 +11,9 @@ import { answerTiles, requestsForTile, tileAt, type IgnAnswer } from "./ign";
 
 /*
  * #483, event-map v15: the map's loading and its failures, « Le chargement », « Des tuiles en
- * échec » and « Leaflet ne se charge pas ». Leaflet's code is held or answered 404 by the test,
- * as an old build's chunk is after a deploy. The fake IGN is set for one tile only, the one
+ * échec » and « Leaflet ne se charge pas »; #553, v23: « Leaflet échoue encore », one import
+ * for both legs. Leaflet's code is held or answered 404 by the test, as an old build's chunk
+ * is after a deploy. The fake IGN is set for one tile only, the one
  * the test checks: the flag's, at the zoom of the view (#238, the fake IGN's capacity).
  */
 
@@ -20,6 +22,8 @@ test.use({ locale: "fr-FR" });
 const ALLER_MAP = /^Carte de l’aller : /;
 const LOADING = "Chargement de la carte…";
 const FAILED = "La carte n’a pas pu se charger.";
+const FAILED_AGAIN = "La carte n’a toujours pas pu se charger.";
+const AGAIN_BODY = "La page a peut-être été mise à jour depuis votre arrivée : rechargez-la.";
 const TILES_FAILED = "Le fond de carte n’a pas pu se charger.";
 const BODY = "Vérifiez la connexion, puis réessayez.";
 const NOT_ON_MAP = "1 voiture n’est pas sur la carte : son lieu n’a pas de position.";
@@ -33,15 +37,24 @@ const seedMarc = (db: Kysely<Database>, placed: SeededEvent & { place: Position 
 
 const panel = (page: Page) => page.getByRole("tabpanel");
 const mapButton = (page: Page) => panel(page).getByRole("button", { name: "Carte", exact: true });
-const container = (page: Page) => page.locator('[id="event-map-aller"]');
-const notice = (page: Page, title: string) => container(page).locator("div", { has: page.getByText(title, { exact: true }) }).last();
+const container = (page: Page, leg: Leg = "aller") => page.locator(`[id="event-map-${leg}"]`);
+const notice = (page: Page, title: string, leg: Leg = "aller") =>
+  container(page, leg).locator("div", { has: page.getByText(title, { exact: true }) }).last();
 const retry = (page: Page) => container(page).getByRole("button", { name: "Réessayer", exact: true });
+const reload = (page: Page) => container(page).getByRole("button", { name: "Recharger la page", exact: true });
+const tab = (page: Page, name: "Aller" | "Retour") => page.getByRole("tab", { name });
+
+/** Shows the leg of `name`. */
+async function selectTab(page: Page, name: "Aller" | "Retour") {
+  await tab(page, name).click();
+  await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
+}
 /** The box of the map while it loads: the one element of the container with `aria-busy`. */
 const busyBox = (page: Page) => container(page).locator('[aria-busy="true"]');
 
 /** The page hydrated and quiet: what it loads on its own is loaded, so that a route set now catches Leaflet's code alone. */
-async function quiet(page: Page, id: string) {
-  await page.goto(`/e/${id}`);
+async function quiet(page: Page, id: string, fragment = "") {
+  await page.goto(`/e/${id}${fragment}`);
   await expect(panel(page)).toBeVisible();
   await page.waitForLoadState("networkidle");
   await expect(page.locator(".leaflet-container")).toHaveCount(0);
@@ -63,14 +76,25 @@ const answers = { pass: (route: Route) => route.continue(), refuse: (route: Rout
  */
 async function holdBuild(page: Page) {
   const held: Route[] = [];
+  // Every request routed: Leaflet's code, since nothing else is loading.
+  const asked: string[] = [];
   let answer: ((route: Route) => Promise<void>) | null = null;
-  await page.route("**/_next/static/**", (route) => (answer ? answer(route) : void held.push(route)));
+  await page.route("**/_next/static/**", (route) => {
+    asked.push(new URL(route.request().url()).pathname);
+    return answer ? answer(route) : void held.push(route);
+  });
   const settle = async (next: (route: Route) => Promise<void>) => {
     await expect.poll(() => held.length).toBeGreaterThan(0);
     answer = next;
     await Promise.all(held.splice(0).map(next));
   };
   return {
+    asked,
+    /** Waits for the build's files held, then gives the path of each request. */
+    held: async () => {
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      return held.map((route) => new URL(route.request().url()).pathname);
+    },
     hold: () => (answer = null),
     refuseAll: () => (answer = answers.refuse),
     release: () => settle(answers.pass),
@@ -97,7 +121,7 @@ test.describe("Leaflet's code", () => {
     await expect(container(page).getByText(LOADING)).toHaveCount(0);
   });
 
-  test("CA2.8: refused, the notice in place of the map; « Réessayer » refused again, then loaded, the focus at each step", async ({ page, placed }) => {
+  test("CA2.8: refused, the notice in place of the map; « Réessayer », the box focused; loaded, the focus on « Carte »", async ({ page, placed }) => {
     await quiet(page, placed.id);
     const build = await holdBuild(page);
     build.refuseAll();
@@ -105,30 +129,102 @@ test.describe("Leaflet's code", () => {
     await mapButton(page).click();
     await expect(notice(page, FAILED)).toBeVisible();
     await expect(notice(page, FAILED).getByText(BODY, { exact: true })).toBeVisible();
+    await expect(notice(page, FAILED).getByRole("button")).toHaveText(["Réessayer"]);
     // No empty box: neither the map nor its loading.
     await expect(page.getByRole("region", { name: ALLER_MAP })).toHaveCount(0);
     await expect(container(page).getByText(LOADING)).toBeHidden();
     await expect(mapButton(page)).toBeFocused();
 
-    // « Réessayer »: the box, loading, has the focus; refused again, the notice and its « Réessayer ».
+    // « Réessayer »: the box, loading, in place of the notice, has the focus; loaded, the map, and the focus on « Carte ».
     build.hold();
     await retry(page).click();
     await expect(busyBox(page).getByText(LOADING, { exact: true })).toBeVisible();
     await expect(busyBox(page)).toBeFocused();
     await expect(container(page).getByText(FAILED)).toHaveCount(0);
-    await build.refuse();
-    await expect(notice(page, FAILED)).toBeVisible();
-    await expect(retry(page)).toBeFocused();
-
-    // Again, and loaded: the map, and the focus on « Carte ».
-    build.hold();
-    await retry(page).click();
-    await expect(busyBox(page)).toBeFocused();
     await build.release();
     const map = page.getByRole("region", { name: ALLER_MAP });
     await expect(map.locator(".leaflet-tile-loaded").first()).toBeVisible();
     await expect(mapButton(page)).toBeFocused();
     await expect(container(page).getByText(FAILED)).toHaveCount(0);
+  });
+
+  test("CA2.8: online, the second then the third failure, « toujours » and the focus on « Recharger la page », which reloads the same address", async ({ page, placed }) => {
+    await quiet(page, placed.id, "#carte");
+    const address = page.url();
+    const build = await holdBuild(page);
+    build.refuseAll();
+    await mapButton(page).click();
+    await expect(notice(page, FAILED)).toBeVisible();
+
+    for (const failure of ["second", "third"]) {
+      await retry(page).click();
+      await expect(notice(page, FAILED_AGAIN), failure).toBeVisible();
+      await expect(notice(page, FAILED_AGAIN).getByText(AGAIN_BODY, { exact: true })).toBeVisible();
+      await expect(notice(page, FAILED_AGAIN).getByRole("button")).toHaveText(["Recharger la page", "Réessayer"]);
+      await expect(container(page).getByText(FAILED, { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("region", { name: ALLER_MAP })).toHaveCount(0);
+      await expect(reload(page), failure).toBeFocused();
+    }
+
+    // The build answers again, as it does after a deploy: the same address, its fragment kept, loaded again.
+    await page.unroute("**/_next/static/**");
+    const loaded = page.waitForEvent("load");
+    await reload(page).click();
+    await loaded;
+    expect(page.url()).toBe(address);
+    await expect(panel(page)).toBeVisible();
+    await expect(container(page).getByText(FAILED_AGAIN)).toHaveCount(0);
+  });
+
+  test("CA2.8: offline, the second failure gives the first notice, the focus on its « Réessayer »", async ({ context, page, placed }) => {
+    await quiet(page, placed.id);
+    const build = await holdBuild(page);
+    build.refuseAll();
+    await mapButton(page).click();
+    await expect(notice(page, FAILED)).toBeVisible();
+
+    await context.setOffline(true);
+    await retry(page).click();
+    await expect(retry(page)).toBeFocused();
+    await expect(notice(page, FAILED)).toBeVisible();
+    await expect(notice(page, FAILED).getByRole("button")).toHaveText(["Réessayer"]);
+    await expect(container(page).getByText(FAILED_AGAIN)).toHaveCount(0);
+    await context.setOffline(false);
+  });
+
+  test("CA2.10: one import for both legs; « Réessayer » on the aller, loaded, and the retour shows its map, not the notice", async ({ page, placed }) => {
+    await quiet(page, placed.id);
+    const build = await holdBuild(page);
+
+    // Both legs open, one state for the page: the module asked for once, then refused.
+    await mapButton(page).click();
+    const first = await build.held();
+    expect(new Set(first).size).toBe(first.length);
+    await build.refuse();
+    await expect(notice(page, FAILED)).toBeVisible();
+    await expect(container(page, "retour").getByText(FAILED, { exact: true })).toHaveCount(1);
+
+    // The retour shown after the failure, before any attempt: the notice, no request, the focus on its tab.
+    const asked = build.asked.length;
+    await selectTab(page, "Retour");
+    await expect(notice(page, FAILED, "retour")).toBeVisible();
+    await expect(tab(page, "Retour")).toBeFocused();
+    expect(build.asked.length).toBe(asked);
+
+    // « Réessayer » on the aller: the module asked for once again, for both legs.
+    await selectTab(page, "Aller");
+    build.hold();
+    await retry(page).click();
+    const second = await build.held();
+    expect(new Set(second).size).toBe(second.length);
+    await build.release();
+    await expect(page.getByRole("region", { name: ALLER_MAP }).locator(".leaflet-tile-loaded").first()).toBeVisible();
+    await expect(mapButton(page)).toBeFocused();
+
+    // The retour, once shown: its map, started now, and not the notice.
+    await selectTab(page, "Retour");
+    await expect(page.getByRole("region", { name: /^Carte du retour : / }).locator(".leaflet-tile-loaded").first()).toBeVisible();
+    await expect(container(page, "retour").getByText(FAILED)).toHaveCount(0);
   });
 });
 

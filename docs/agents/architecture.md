@@ -642,9 +642,10 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
 ### Dans le navigateur (#478 à #485)
 
 - **`src/components/event/leaflet-map.ts`** est le seul fichier qui importe `leaflet` et
-  `leaflet/dist/leaflet.css`, et `event-map.tsx` ne l'atteint que par `import()`, à la
-  première ouverture d'une carte : avant, la page ne charge ni l'un ni l'autre (CA1.2,
-  `e2e/event-map.spec.ts`). Aucun lint ne l'impose : la revue le tient. `createEventMap`
+  `leaflet/dist/leaflet.css`, et on ne l'atteint que par l'`import()` de
+  `src/components/event/leaflet-import.ts`, un seul pour la page et ses deux legs (#553,
+  CA2.10), à la première ouverture d'une carte : avant, la page ne charge ni l'un ni l'autre
+  (CA1.2, `e2e/event-map.spec.ts`). Aucun lint ne l'impose : la revue le tient. `createEventMap`
   rend `{ update, resize, retryTiles, destroy }`, et n'a aucun mot : `event-map.tsx` les lui
   donne traduits.
 - **`src/components/event/event-map.tsx`** : `EventMap`, le bouton « Carte »
@@ -704,8 +705,12 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
   celle du bandeau. `leafletStep` : un `import()` refusé (hors ligne, ou le morceau
   d'un ancien build après un déploiement) met « La carte n’a pas pu se charger. » à la place
   de la boîte, et son « Réessayer » importe de nouveau (CA2.8). Après un déploiement, ce
-  morceau répond 404 pour toujours et « Réessayer » ne peut pas réussir : seul un
-  rechargement de la page aide, cas noté sur #238 pour la prochaine révision de la maquette.
+  morceau répond 404 pour toujours et « Réessayer » ne peut pas réussir : à partir du second
+  échec de suite, en ligne, l'avis devient « … toujours … » avec « Recharger la page »
+  (`location.reload()`, qui garde l'adresse et son fragment) avant « Réessayer » (#553).
+  L'état de l'import est celui de la page (`leaflet-import.ts`, lu par
+  `useSyncExternalStore`) : un essai à la fois, et une réussite depuis un leg vaut pour
+  l'autre ; `leafletFocus` dit où va le focus, dans le leg montré seulement.
   `tilesStep` : l'avis de tuiles apparaît quand une vue finit de charger (`load`) avec au
   moins un `tileerror`, part quand une vue finit sans, jamais entre les deux, et son
   « Réessayer » redemande toutes les tuiles (CA2.4).
