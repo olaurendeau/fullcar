@@ -73,6 +73,16 @@ export function showCar(leg: Leg, rideId: string): boolean {
   return true;
 }
 
+/** « Carte » of `leg` (event-map v15); false while the event has no position, or while that tab is not the active one. */
+export function focusMapToggle(leg: Leg): boolean {
+  return focus(document.querySelector<HTMLElement>(`[data-map-toggle="${leg}"]`));
+}
+
+/** « Modifier l’événement » of the organiser's sentence on `leg` (CA2.1); false when that leg shows none. */
+export function focusMapHint(leg: Leg): boolean {
+  return focus(document.querySelector<HTMLElement>(`[data-map-hint="${leg}"]`));
+}
+
 /**
  * The first free seat of car `rideId` on `leg` (« Trouver une place », C3.8): the car, then the
  * seat, scrolled into view above the bar (`scroll-margin-bottom`, C11.4). False when it is not shown.

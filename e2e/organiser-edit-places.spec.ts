@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
-import { expect, isAction, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, isAction, organiserPath, test } from "./organiser";
 import { answerFor, requestsFor } from "./photon";
 import { ECOLE, PLACES, SALLE, isSearch, searchedText, searches, textOf } from "./place-field";
 
@@ -32,7 +32,7 @@ const FR = {
   tooLong: "120 caractères au maximum.",
 };
 
-const editButton = (page: Page) => page.getByRole("button", { name: FR.edit, exact: true });
+const editButton = (page: Page) => areaEditButton(page);
 const sheet = (page: Page) => page.getByRole("dialog", { name: FR.edit });
 const place = (page: Page) => sheet(page).getByRole("combobox", { name: "Lieu", exact: true });
 const list = (page: Page) => sheet(page).getByRole("listbox", { name: "Propositions pour Lieu", exact: true });

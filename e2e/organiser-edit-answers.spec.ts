@@ -1,7 +1,7 @@
 import type { Page, Request } from "@playwright/test";
 import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { expect, isAction, oneCharOff, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, isAction, oneCharOff, organiserPath, test } from "./organiser";
 
 /*
  * #269, epic #250 (organizer-view v3.3.6, « Modifier l’événement »): what the sheet does with the
@@ -37,7 +37,7 @@ const FR = WORDS.fr;
 const U13 = "Tournoi de Rennes U13";
 
 const panel = (page: Page) => page.getByRole("region", { name: "Espace organisateur" });
-const editButton = (page: Page, name = FR.edit) => page.getByRole("button", { name, exact: true });
+const editButton = (page: Page, name = FR.edit) => areaEditButton(page, name);
 const sheet = (page: Page, name = FR.edit) => page.getByRole("dialog", { name });
 const field = (page: Page, label: string) => sheet(page).getByLabel(label, { exact: true });
 const retourBox = (page: Page) => sheet(page).getByRole("checkbox", { name: "Retour", exact: true });

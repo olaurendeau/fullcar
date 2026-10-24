@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdClose, messages } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { expect, isAction, organiserPath, test } from "./organiser";
+import { areaEditButton, areaEditByText, expect, isAction, organiserPath, test } from "./organiser";
 
 /*
  * #273, epic #250 (organizer-view v3.3.8, decisions 39, 49 to 51): a change that gets no answer
@@ -28,7 +28,7 @@ const FR = {
   body3: "Les 3 voitures proposées pour le retour seront retirées. 10 personnes ne seront plus inscrites au retour.",
 };
 
-const editButton = (page: Page) => page.getByRole("button", { name: FR.edit, exact: true });
+const editButton = (page: Page) => areaEditButton(page);
 const sheet = (page: Page) => page.getByRole("dialog", { name: FR.edit });
 const field = (page: Page, label: string) => sheet(page).getByLabel(label, { exact: true });
 const retourBox = (page: Page) => sheet(page).getByRole("checkbox", { name: "Retour", exact: true });
@@ -267,7 +267,7 @@ test("reopened while it closes, after 10 s: the late failure is the bar's alone,
   await expect(page.getByRole("dialog", { includeHidden: true })).toHaveAttribute("data-state", "closed");
   await page.clock.fastForward(10_000);
   // The page is aria-hidden while the sheet is mounted: the button found by its words.
-  const button = page.locator("button", { hasText: FR.edit });
+  const button = areaEditByText(page);
   await expect(button).not.toHaveAttribute("aria-disabled");
   await button.focus();
   await page.keyboard.press("Enter");

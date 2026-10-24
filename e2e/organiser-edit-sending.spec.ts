@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
-import { expect, isAction, oneCharOff, organiserPath, test, type OrganiserTraffic } from "./organiser";
+import { areaEditButton, expect, isAction, oneCharOff, organiserPath, test, type OrganiserTraffic } from "./organiser";
 
 /*
  * #272, epic #250 (organizer-view v3.3.8, « Enregistrer », « Une réponse qui arrive feuille
@@ -33,7 +33,7 @@ const FR = {
 };
 
 const panel = (page: Page) => page.getByRole("region", { name: "Espace organisateur" });
-const editButton = (page: Page) => page.getByRole("button", { name: FR.edit, exact: true });
+const editButton = (page: Page) => areaEditButton(page);
 const sheet = (page: Page) => page.getByRole("dialog", { name: FR.edit });
 const field = (page: Page, label: string) => sheet(page).getByLabel(label, { exact: true });
 const retourBox = (page: Page) => sheet(page).getByRole("checkbox", { name: "Retour", exact: true });

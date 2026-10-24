@@ -6,7 +6,7 @@ import type { Leg } from "@/domain/leg";
 import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
 import { DevicePersons } from "./device-persons";
 import { EventDates } from "./event-dates";
-import type { LegMap } from "./event-map";
+import type { LegMap, MapHint } from "./event-map";
 import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabs } from "./leg-tabs";
 
@@ -21,6 +21,8 @@ export interface EventViewProps extends EventHeader {
   /** The active tab, the page's: « Voir la voiture » makes its leg's active (#89). */
   tab: Leg;
   onTab: (leg: Leg) => void;
+  /** On `/e/{id}/admin` once the link is checked: the organiser's sentence, while the place has no position (#485). */
+  hint?: MapHint;
 }
 
 /** A leg's state; one the board does not have is empty. */
@@ -35,9 +37,10 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
  * and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
  * When the place has a position, each leg has its map, folded on each load: one open or folded
- * state for the page, in memory only, which outlives the remount of a leg's panel (#478).
+ * state for the page, in memory only, which outlives the remount of a leg's panel (#478). Without
+ * a position, each leg has the organiser's sentence instead, when `hint` is given (#485).
  */
-export function EventView({ title, location, locationPosition, allerAt, retourAt, board, device, messageBar, tab, onTab }: EventViewProps) {
+export function EventView({ title, location, locationPosition, allerAt, retourAt, board, device, messageBar, tab, onTab, hint }: EventViewProps) {
   const t = useTranslations("Event.legs");
   const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
   const [mapOpen, setMapOpen] = useState(false);
@@ -70,6 +73,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           tab={tab}
           onTab={onTab}
           map={map}
+          hint={hint}
         />
       ) : (
         <section aria-labelledby="leg-aller" className="flex flex-col gap-4">
@@ -77,7 +81,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           <h2 id="leg-aller" className="sr-only">
             {t("aller")}
           </h2>
-          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} near={locationPosition} map={map} />
+          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} near={locationPosition} map={map} hint={hint} />
         </section>
       )}
     </div>
