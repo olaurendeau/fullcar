@@ -32,6 +32,8 @@ const FR = {
   required: "Champ requis.",
   // Under each place of a car, after its error (place-autocomplete, AL1.9 (b), AL4.4).
   placeHint: "Visible par toutes les personnes qui ont le lien.",
+  // The end of « Aucune proposition… » and of « Propositions indisponibles… », under a place field.
+  placeAnswered: "Votre texte sera gardé tel quel.",
   seatsError: "De 1 à 8 places.",
   chooseDriver: "Choisissez qui conduit.",
   failed: "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
@@ -78,11 +80,23 @@ async function openForm(page: Page) {
   await expect(form(page)).toBeVisible();
 }
 
+/**
+ * Types `text` in a place field, then waits for its answer, none from the fake Photon: « Aucune
+ * proposition… », or « indisponibles » past 3 s. Its line, under the field, moves « Valider » 24 px
+ * down, more than half its height: a click aimed before it lands above the button (#546). Once
+ * there, the line stays when the focus leaves.
+ */
+async function fillPlace(page: Page, label: string, text: string) {
+  const input = field(page, label);
+  await input.fill(text);
+  await expect(input.locator("xpath=ancestor::div[2]").locator("p", { hasText: FR.placeAnswered })).toBeVisible();
+}
+
 /** Opens the form, and fills it for Marc's car from the Mairie de Vitré. */
 async function fillOffer(page: Page) {
   await openForm(page);
   await field(page, FR.firstName).fill("Marc");
-  await field(page, FR.location.aller).fill("Mairie de Vitré");
+  await fillPlace(page, FR.location.aller, "Mairie de Vitré");
 }
 
 /** The offers the page sends: server actions whose body carries `marker`. */
@@ -154,7 +168,7 @@ test.describe("offer a car", () => {
     await expect(form(page).getByRole("group", { name: FR.driver })).toBeVisible();
     await expect(form(page)).not.toContainText(FR.storageTitle);
     await field(page, FR.firstName).fill("Marc");
-    await field(page, FR.location.aller).fill("Mairie de Vitré");
+    await fillPlace(page, FR.location.aller, "Mairie de Vitré");
     await submit(page).click();
 
     await expect(form(page)).toHaveCount(0);
@@ -196,7 +210,7 @@ test.describe("offer a car", () => {
     await expect(field(page, FR.note)).toHaveAccessibleDescription(FR.noteHint);
 
     await field(page, FR.firstName).fill("Karim");
-    await field(page, FR.location.retour).fill("Place des Lices");
+    await fillPlace(page, FR.location.retour, "Place des Lices");
     await field(page, FR.time).fill("18:30");
     await field(page, FR.seats).fill("2");
     await field(page, FR.note).fill("Coffre plein, pas de gros sac.");
@@ -230,7 +244,7 @@ test.describe("offer a car", () => {
     for (const radio of await choices.getByRole("radio").all()) await expect(radio).not.toBeChecked();
     await expect(field(page, FR.firstName)).toHaveCount(0);
     await choices.getByRole("radio", { name: "Léa" }).check();
-    await field(page, FR.location.aller).fill("Gare de Vitré");
+    await fillPlace(page, FR.location.aller, "Gare de Vitré");
     await submit(page).click();
     await expect(form(page)).toHaveCount(0);
     await expect(freeSeats(car(panel(page), "Marc"))).toHaveCount(3);
@@ -243,7 +257,7 @@ test.describe("offer a car", () => {
     await openForm(page);
     expect(await radioNames(choices)).toEqual(["Tom", FR.newDriver]);
     await expect(choices.getByRole("radio", { name: "Tom" })).toBeChecked();
-    await field(page, FR.location.aller).fill("Église");
+    await fillPlace(page, FR.location.aller, "Église");
     await submit(page).click();
     await expect(form(page)).toHaveCount(0);
     await expect(withoutCar(panel(page))).toHaveCount(0);
@@ -263,7 +277,7 @@ test.describe("offer a car", () => {
     await page.goto(`/e/${id}`);
     await openForm(page);
     await expect(form(page).getByRole("radio", { name: "Léa" })).toBeChecked();
-    await field(page, FR.location.aller).fill("Gare");
+    await fillPlace(page, FR.location.aller, "Gare");
     await seedRide(db, id, lea);
     await submit(page).click();
     await expect(failure(page)).toHaveText(FR.failed);
@@ -283,7 +297,7 @@ test.describe("offer a car", () => {
     await openForm(page);
     const choices = form(page).getByRole("radiogroup", { name: FR.driver });
     await choices.getByRole("radio", { name: "Léa" }).check();
-    await field(page, FR.location.aller).fill("Gare");
+    await fillPlace(page, FR.location.aller, "Gare");
     await seedRide(db, id, lea);
     await submit(page).click();
     await expect(failure(page)).toHaveText(FR.failed);
@@ -318,7 +332,7 @@ test.describe("offer a car", () => {
 
     // A new person, without a first name; too many seats.
     await choices.getByRole("radio", { name: FR.newDriver }).check();
-    await field(page, FR.location.aller).fill("Gare");
+    await fillPlace(page, FR.location.aller, "Gare");
     await field(page, FR.seats).fill("9");
     await submit(page).click();
     await expect(choices).not.toHaveAttribute("aria-invalid");
@@ -439,7 +453,7 @@ test.describe("offer a car", () => {
         await expect(failure(page)).toHaveCount(0);
         await expect(field(page, FR.location.aller)).toHaveValue("");
         await field(page, FR.firstName).fill("Léa");
-        await field(page, FR.location.aller).fill("Gare");
+        await fillPlace(page, FR.location.aller, "Gare");
         await submit(page).click();
       } else if (when.startsWith("reopened")) {
         // Hidden from role queries while the sheet is mounted.
@@ -476,7 +490,7 @@ test.describe("offer a car", () => {
     await openForm(page);
     const second = await holdFirst(page, "Gare", false);
     await field(page, FR.firstName).fill("Léa");
-    await field(page, FR.location.aller).fill("Gare");
+    await fillPlace(page, FR.location.aller, "Gare");
     await submit(page).click();
     await expect(submit(page)).toBeDisabled(); // Sent after the first, not dropped (#208).
     answer();
@@ -541,7 +555,7 @@ test.describe("offer a car", () => {
     await selectTab(page, "Aller");
     await openForm(page);
     await expect(form(page).getByRole("radio", { name: "Léa" })).toBeChecked();
-    await field(page, FR.location.aller).fill("Gare de Vitré");
+    await fillPlace(page, FR.location.aller, "Gare de Vitré");
     await submit(page).click();
     await expect(form(page)).toHaveCount(0);
     await expect(aller).toHaveText("Aller 1 sans voiture");
