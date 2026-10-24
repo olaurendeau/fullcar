@@ -62,6 +62,9 @@ export function scrubUrl(url: string): string {
  * A host name as DNS writes it, lowercase, with a dot and a TLD of letters, and an optional
  * port. Each label is shorter than a token's 22 characters, and digits are counted apart:
  * neither a token nor a phone number is one. An id's 8 letters may be one (`geoapify`).
+ *
+ * Safe only while no request targets a host built from data: an id, a token, what a user
+ * typed. A change that builds one must move that value into the path, or extend these rules.
  */
 const HOST_NAME = /^(?:[a-z\d](?:[a-z\d-]{0,19}[a-z\d])?\.)+[a-z]{2,21}(?::\d{1,5})?$/;
 
