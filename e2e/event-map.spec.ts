@@ -3,16 +3,14 @@ import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { generatePublicId } from "@/domain/public-id";
-import { PLAN_IGN_UPDATED } from "@/domain/tile";
 import { expect, test as base } from "./fixtures";
-import { requestsForTile } from "./ign";
-import { placeOf, tileAt } from "./tiles";
+import { placeOf, requestsForTile, tileAt } from "./tiles";
 
 /*
  * #478, event-map v11: the « Carte » button of each leg and the map behind it, with the
  * event's place alone (the cars come with #480). The event is seeded with a position, the one
- * `placeOf` draws from its id, so that its tiles are its own. The fake IGN answers its default
- * tile: no test here sets one.
+ * `placeOf` draws from its id, so that its tiles are its own. The fake tile provider answers
+ * its default tile: no test here sets one.
  */
 
 /** An event of the test's own, at `placeOf` its id; `eventFields` as the fixture's. */
@@ -30,14 +28,6 @@ const FLAG = "Lieu de l’événement : Gymnase des Gayeulles";
 const ALLER_MAP = "Carte de l’aller : le lieu de l’événement et aucune voiture";
 const RETOUR_MAP = "Carte du retour : le lieu de l’événement et aucune voiture";
 const NEEDS_JAVASCRIPT = "S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page.";
-
-/** « octobre 2026 »: the month of `PLAN_IGN_UPDATED`, as the French page writes it. */
-function updated(): string {
-  const [year, month] = PLAN_IGN_UPDATED.split("-").map(Number);
-  return new Intl.DateTimeFormat("fr", { month: "long", year: "numeric", timeZone: "UTC" }).format(
-    new Date(Date.UTC(year, month - 1, 1)),
-  );
-}
 
 const mapButton = (scope: Page | Locator) => scope.getByRole("button", { name: "Carte", exact: true });
 
@@ -172,7 +162,7 @@ test.describe("the map, open", () => {
     expect(before.filter(isTile).length).toBe(0);
     expect(await leafletCount(after)).toBeGreaterThan(0);
     expect(after.filter(isTile).length).toBeGreaterThan(0);
-    // The flag's tile went through our route to the fake IGN.
+    // The flag's tile went through our route to the fake tile provider.
     await expect.poll(async () => (await requestsForTile(tileAt(placed.place, 14))).length).toBeGreaterThan(0);
   });
 
@@ -196,7 +186,8 @@ test.describe("the map, open", () => {
     }
 
     const attribution = map.locator(".leaflet-control-attribution");
-    await expect(attribution).toHaveText(`Leaflet | Source : IGN – Plan IGN v2, ${updated()}`);
+    // Until #558: v27's words, as text, after Leaflet's prefix; never the IGN for Geoapify's tiles.
+    await expect(attribution).toHaveText("Leaflet | Geoapify · © OpenMapTiles.org · © OpenStreetMap");
     await expect(attribution.locator("a")).toHaveCount(0);
   });
 

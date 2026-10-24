@@ -9,7 +9,7 @@ import { placeOf } from "./tiles";
 /*
  * #479, event-map v15 (CA1.10 as amended after #479 and before #480): the map without animation (CA1.10), and at touch (CA1.11). The project
  * `e2e` is a Pixel 7, touch-enabled (`hasTouch`, `isMobile`): each test checks it first, and the
- * mouse half runs in a context of its own, without touch. The fake IGN answers its default
+ * mouse half runs in a context of its own, without touch. The fake tile provider answers its default
  * tile: no test here sets one.
  */
 

@@ -51,7 +51,7 @@ export interface EventMapOptions {
   zoomOut: string;
   /** « Fermer », the bubble's last button. */
   close: string;
-  /** « Source : IGN – Plan IGN v2, {date} », after « Leaflet ». */
+  /** « Geoapify · © OpenMapTiles.org · © OpenStreetMap », after « Leaflet », as text (until #558). */
   attribution: string;
   /** The media query of a touch screen, the one the two-finger sentence follows (CA1.11). */
   touchQuery: string;
@@ -261,7 +261,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   const pointerChanged = () => (touch.matches ? map.dragging.disable() : map.dragging.enable());
   touch.addEventListener("change", pointerChanged);
 
-  // Our route answers a missing tile with a blank one: only a failure (502, the network) is a `tileerror`.
+  // Our route answers a tile, or a 502 for everything else: a 502, or the network, is a `tileerror`.
   const tiles = L.tileLayer("/tuiles/{z}/{x}/{y}", { noWrap: true, bounds: WORLD, maxZoom: MAX_ZOOM })
     .on("loading", () => options.onTiles("loading"))
     .on("tileerror", () => options.onTiles("tileerror"))

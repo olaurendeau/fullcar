@@ -7,15 +7,14 @@ import type { Position } from "@/domain/place";
 import { contrast } from "./contrast";
 import { around, points, seedCar, test } from "./event-map-points";
 import { expect } from "./fixtures";
-import { answerTiles, requestsForTile, type IgnAnswer } from "./ign";
-import { tileAt } from "./tiles";
+import { answerTiles, requestsForTile, tileAt, type TileAnswer } from "./tiles";
 
 /*
  * #483, event-map v15: the map's loading and its failures, « Le chargement », « Des tuiles en
  * échec » and « Leaflet ne se charge pas »; #553, v23: « Leaflet échoue encore », one import
- * for both legs. Leaflet's code is held or answered 404 by the test, as an old build's chunk
- * is after a deploy. The fake IGN is set for one tile only, the one
- * the test checks: the flag's, at the zoom of the view (#238, the fake IGN's capacity).
+ * for both legs; #554, v27: the tiles from the fake tile provider. Leaflet's code is held or
+ * answered 404 by the test, as an old build's chunk is after a deploy. The fake is set for one
+ * tile only, the one the test checks: the flag's, at the zoom of the view (#238, the fake's capacity).
  */
 
 test.use({ locale: "fr-FR" });
@@ -27,6 +26,7 @@ const FAILED_AGAIN = "La carte n’a toujours pas pu se charger.";
 const AGAIN_BODY = "La page a peut-être été mise à jour depuis votre arrivée : rechargez-la.";
 const TILES_FAILED = "Le fond de carte n’a pas pu se charger.";
 const BODY = "Vérifiez la connexion, puis réessayez.";
+const TILES_BODY = "Vérifiez la connexion, ou réessayez dans un moment.";
 const NOT_ON_MAP = "1 voiture n’est pas sur la carte : son lieu n’a pas de position.";
 const TOUCH_HINT = "Deux doigts pour déplacer ou zoomer la carte.";
 /** A car 100 m north of the flag frames the view at zoom 15, `framing`'s most. */
@@ -273,7 +273,7 @@ test.describe("Leaflet's code", () => {
  * Opens the aller's map, `answer` set for the flag's tile of the view, zoom 15: the map, the
  * status our route gave that tile, and the live regions' text before the opening.
  */
-async function openWithFlagTile(page: Page, place: Position, id: string, answer: IgnAnswer) {
+async function openWithFlagTile(page: Page, place: Position, id: string, answer: TileAnswer) {
   const tile = tileAt(place, FRAMED_ZOOM);
   await answerTiles([tile], answer);
   await page.goto(`/e/${id}`);
@@ -285,7 +285,7 @@ async function openWithFlagTile(page: Page, place: Position, id: string, answer:
     await expect(mapButton(page)).toHaveAttribute("aria-expanded", "true", { timeout: 500 });
   }).toPass();
   const status = (await response).status();
-  // Through our route to the fake IGN.
+  // Through our route to the fake tile provider.
   await expect.poll(async () => (await requestsForTile(tile)).length).toBeGreaterThan(0);
   return { map: page.getByRole("region", { name: ALLER_MAP }), status, live, tile };
 }
@@ -300,13 +300,13 @@ test.describe("the tiles", () => {
     const { map, status, live, tile } = await openWithFlagTile(page, placed.place, placed.id, { kind: "error" });
     expect(status).toBe(502);
     await expect(notice(page, TILES_FAILED)).toBeVisible();
-    await expect(notice(page, TILES_FAILED).getByText(BODY, { exact: true })).toBeVisible();
+    await expect(notice(page, TILES_FAILED).getByText(TILES_BODY, { exact: true })).toBeVisible();
     await expect(points(map)).toHaveCount(1);
     await expect(map.getByRole("img", { name: /^Lieu de l’événement/ })).toBeVisible();
     // Not announced: no live region changed, and the notice is in none; it describes the map.
     expect(await liveRegions(page)).toEqual(live);
     await expect(liveAround(notice(page, TILES_FAILED))).toHaveCount(0);
-    await expect(map).toHaveAccessibleDescription(`${TILES_FAILED} ${BODY}`);
+    await expect(map).toHaveAccessibleDescription(`${TILES_FAILED} ${TILES_BODY}`);
 
     // The tile answers again: « Réessayer » asks for the tiles, the view ends without an error.
     await answerTiles([tile], { kind: "tile" });
@@ -318,26 +318,25 @@ test.describe("the tiles", () => {
     await expect(points(map)).toHaveCount(1);
   });
 
-  for (const kind of ["notFound", "notFoundBare"] as const) {
-    test(`CA2.6: the fake IGN in ${kind}, a blank tile, no notice, the points stay`, async ({ db, page, placed }) => {
+  // Everything that is not a tile: no transparent PNG any more, a 502, and the notice.
+  const failures: [name: string, answer: TileAnswer][] = [
+    ["a 401", { kind: "unauthorized" }],
+    ["a 403", { kind: "forbidden" }],
+    ["a 404", { kind: "notFound" }],
+    ["a 429", { kind: "tooMany" }],
+    ["a 500", { kind: "error" }],
+    ["a 200 that is not a PNG", { kind: "notPng" }],
+    ["slower than 5 s", { kind: "tile", delayMs: 6_000 }],
+  ];
+  for (const [name, answer] of failures) {
+    test(`CA2.6: the fake tile provider in ${name}, a 502, the notice, the points stay`, async ({ db, page, placed }) => {
       await seedMarc(db, placed);
-      const { map, status, tile } = await openWithFlagTile(page, placed.place, placed.id, { kind });
-      expect(status).toBe(200);
-      // The view ended: the blank tile loaded, like every other, none in error.
-      await expect(map.locator(`img.leaflet-tile-loaded[src="/tuiles/${tile}"]`)).toHaveCount(1);
-      await expect(map.locator("img.leaflet-tile:not(.leaflet-tile-loaded)")).toHaveCount(0);
-      await expect(container(page).getByText(TILES_FAILED)).toHaveCount(0);
-      await expect(points(map)).toHaveCount(1);
-    });
-  }
-
-  for (const kind of ["invalidParameter", "forbidden", "tooMany"] as const) {
-    test(`CA2.6: the fake IGN in ${kind}, a 502, the notice`, async ({ db, page, placed }) => {
-      await seedMarc(db, placed);
-      const { map, status } = await openWithFlagTile(page, placed.place, placed.id, { kind });
+      const { map, status } = await openWithFlagTile(page, placed.place, placed.id, answer);
       expect(status).toBe(502);
       await expect(notice(page, TILES_FAILED)).toBeVisible();
+      await expect(notice(page, TILES_FAILED).getByText(TILES_BODY, { exact: true })).toBeVisible();
       await expect(points(map)).toHaveCount(1);
+      await expect(map.getByRole("img", { name: /^Lieu de l’événement/ })).toBeVisible();
     });
   }
 
@@ -349,6 +348,6 @@ test.describe("the tiles", () => {
     const lines = await container(page).evaluate((element) =>
       Array.from(element.children).map((child) => (child.querySelector(".leaflet-container") ? "map" : child.textContent)),
     );
-    expect(lines).toEqual(["map", `${TILES_FAILED}${BODY}Réessayer`, NOT_ON_MAP, TOUCH_HINT]);
+    expect(lines).toEqual(["map", `${TILES_FAILED}${TILES_BODY}Réessayer`, NOT_ON_MAP, TOUCH_HINT]);
   });
 });

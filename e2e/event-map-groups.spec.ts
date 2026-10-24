@@ -6,7 +6,7 @@ import { expect } from "./fixtures";
  * #481, event-map v18: cars less than 25 m apart make one point, its number on its label and
  * its name « N voitures : {prénoms} », and activated it opens our bubble, inserted in the DOM
  * just after it. The flag first: cars less than 25 m from the flag are its one point. The
- * cards follow the departure times, which the cars get here. The fake IGN answers its default
+ * cards follow the departure times, which the cars get here. The fake tile provider answers its default
  * tile: no test here sets one. The project `e2e` is a Pixel 7, touch-enabled.
  */
 

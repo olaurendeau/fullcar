@@ -435,12 +435,14 @@
       "body": "La page a peut-être été mise à jour depuis votre arrivée : rechargez-la."
     },
     "tilesFailed": {
-      "title": "Le fond de carte n’a pas pu se charger."
+      "title": "Le fond de carte n’a pas pu se charger.",
+      "body": "Vérifiez la connexion, ou réessayez dans un moment."
     },
     "retry": "Réessayer",
     "reload": "Recharger la page",
     "zoomIn": "Zoom avant",
     "zoomOut": "Zoom arrière",
-    "attribution": "Source : IGN – Plan IGN v2, {date}"
+    "attribution": "Geoapify · © OpenMapTiles.org ·",
+    "osmLink": "© OpenStreetMap"
   }
 }
