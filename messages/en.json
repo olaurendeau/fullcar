@@ -416,6 +416,12 @@
       "retour": "Return map: the event place and {count, plural, =0 {no cars} one {# car} other {# cars}}"
     },
     "event": "Event place: {location}",
+    "car": {
+      "aller": "{car}, departs from {location}, {seats}",
+      "retour": "{car}, drops off at {location}, {seats}"
+    },
+    "freeSeats": "{free, plural, one {# free seat} other {# free seats}}",
+    "notOnMap": "{count, plural, one {# car is not on the map: its place has no position.} other {# cars are not on the map: their places have no position.}}",
     "touchHint": "Use two fingers to move or zoom the map.",
     "loading": "Loading the map…",
     "zoomIn": "Zoom in",

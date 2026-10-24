@@ -1,0 +1,321 @@
+import type { Locator, Page } from "@playwright/test";
+import type { Kysely } from "kysely";
+import type { Database } from "@/db/schema";
+import { seedEvent, type SeededEvent } from "@/db/test-events";
+import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import type { Leg } from "@/domain/leg";
+import type { Position } from "@/domain/place";
+import { generatePublicId } from "@/domain/public-id";
+import { expect, test as base } from "./fixtures";
+import { placeOf } from "./ign";
+
+/*
+ * #480, event-map v15: the cars on the map. Each car has its own point, even less than 25 m
+ * from another (the groups come with #481). The event is seeded at `placeOf` its id, and its
+ * cars around it, so that its tiles are its own; the fake IGN answers its default tile: no
+ * test here sets one. The project `e2e` is a Pixel 7, touch-enabled.
+ */
+
+/** An event of the test's own, at `placeOf` its id; `eventFields` as the fixture's. */
+const test = base.extend<{ placed: SeededEvent & { place: Position } }>({
+  placed: async ({ db, eventFields }, provide) => {
+    const id = generatePublicId();
+    const place = placeOf(id);
+    const event = await seedEvent(db, { ...eventFields, locationPosition: place }, undefined, () => id);
+    await provide({ ...event, place });
+    await db.deleteFrom("event").where("id", "=", event.id).execute();
+  },
+});
+
+test.use({ locale: "fr-FR" });
+
+const FLAG = "Lieu de l’événement : Gymnase des Gayeulles";
+const TOUCH_HINT = "Deux doigts pour déplacer ou zoomer la carte.";
+const mapName = (leg: Leg, cars: string) =>
+  `${leg === "aller" ? "Carte de l’aller" : "Carte du retour"} : le lieu de l’événement et ${cars}`;
+
+/** The metres of a degree of latitude (the sphere of `distanceMetres`). */
+const METRES_PER_DEGREE = (6_371_008.8 * Math.PI) / 180;
+
+/** `north` and `east` metres from `from`. */
+function around(from: Position, { north = 0, east = 0 }: { north?: number; east?: number }): Position {
+  return {
+    lat: from.lat + north / METRES_PER_DEGREE,
+    lng: from.lng + east / (METRES_PER_DEGREE * Math.cos((from.lat * Math.PI) / 180)),
+  };
+}
+
+/** A car driven by `firstName`, with the place and time a test gives it; its id. */
+async function seedCar(
+  db: Kysely<Database>,
+  eventId: string,
+  firstName: string,
+  fields: { position: Position | null; location?: string; leg?: Leg; departureTime?: `${string}:00`; seats?: number },
+): Promise<string> {
+  const driver = await seedPerson(db, eventId, { firstName });
+  return seedRide(db, eventId, driver.id, fields);
+}
+
+/** Opens the map of the shown leg, clicked again only while it stays folded (a click before hydration), until a tile shows. */
+async function openMap(page: Page, name: string): Promise<Locator> {
+  const button = page.getByRole("tabpanel").getByRole("button", { name: "Carte", exact: true });
+  await expect(async () => {
+    if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+    await expect(button).toHaveAttribute("aria-expanded", "true", { timeout: 500 });
+  }).toPass();
+  const map = page.getByRole("region", { name, exact: true });
+  await expect(map.locator(".leaflet-tile-loaded").first()).toBeVisible();
+  return map;
+}
+
+/** Clicks a tab until it is selected. */
+async function selectTab(page: Page, name: string) {
+  const tab = page.getByRole("tab", { name });
+  await expect(async () => {
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 500 });
+  }).toPass();
+}
+
+/** The car points of `map`, in the DOM's order. */
+const points = (map: Locator) => map.locator(".leaflet-marker-pane button");
+/** The lines of `map`. */
+const lines = (map: Locator) => map.locator(".leaflet-overlay-pane path");
+
+type Box = { x: number; y: number; width: number; height: number };
+const centre = (box: Box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+const overlap = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+const inside = (inner: Box, outer: Box) =>
+  inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
+
+/** The labels of what takes the focus inside `map`, its container excluded, in the DOM's order. */
+function focusableIn(map: Locator): Promise<(string | null)[]> {
+  return map.evaluate((container) =>
+    Array.from(container.querySelectorAll<HTMLElement | SVGElement>("*"))
+      .filter((element) => element.tabIndex >= 0)
+      .map((element) => element.getAttribute("aria-label")),
+  );
+}
+
+/** Whether a line of `map` goes from `a` to `b`: its box has them at opposite corners, to 2 px. */
+async function joins(map: Locator, a: { x: number; y: number }, b: { x: number; y: number }): Promise<boolean> {
+  const boxes = await lines(map).evaluateAll((paths) => paths.map((path) => path.getBoundingClientRect().toJSON() as Box));
+  const near = (u: number, v: number) => Math.abs(u - v) <= 2;
+  return boxes.some(
+    (box) =>
+      near(box.x, Math.min(a.x, b.x)) &&
+      near(box.y, Math.min(a.y, b.y)) &&
+      near(box.x + box.width, Math.max(a.x, b.x)) &&
+      near(box.y + box.height, Math.max(a.y, b.y)),
+  );
+}
+
+/** Where `marker` (a point or the flag) is anchored: the centre of the icon Leaflet places there. */
+async function anchor(marker: Locator): Promise<{ x: number; y: number }> {
+  return marker.evaluate((element) => {
+    const { x, y, width, height } = element.closest(".leaflet-marker-icon")!.getBoundingClientRect();
+    return { x: x + width / 2, y: y + height / 2 };
+  });
+}
+
+test("CA1.3: the flag and a point per car of the leg with a position, each with its line but at the flag; the view holds them all", async ({ db, page, placed }) => {
+  await seedCar(db, placed.id, "Marc", { position: around(placed.place, { east: 3000 }), location: "Place de la mairie" });
+  await seedCar(db, placed.id, "Zoé", { position: around(placed.place, { north: 600 }), location: "12 rue des Lilas" });
+  await seedCar(db, placed.id, "Sophie", { position: around(placed.place, { north: 10 }), location: "Parking du gymnase" });
+  await seedCar(db, placed.id, "Inès", { position: around(placed.place, { north: -500, east: -500 }), location: "Gare", leg: "retour" });
+
+  await page.goto(`/e/${placed.id}`);
+  const map = await openMap(page, mapName("aller", "3 voitures"));
+  const flag = map.getByRole("img", { name: FLAG, exact: true });
+  await expect(flag).toBeVisible();
+  await expect(points(map)).toHaveCount(3);
+  await expect(map.getByRole("button", { name: /^Voiture de Inès/ })).toHaveCount(0);
+  // Sophie, 10 m from the flag, has none.
+  await expect(lines(map)).toHaveCount(2);
+  const at = await anchor(flag);
+  for (const driver of ["Marc", "Zoé"]) {
+    const point = map.getByRole("button", { name: new RegExp(`^Voiture de ${driver}, départ : `) });
+    expect(await joins(map, at, await anchor(point))).toBe(true);
+  }
+  const view = (await map.boundingBox())!;
+  for (const marker of [flag, ...(await points(map).all())]) expect(inside((await marker.boundingBox())!, view)).toBe(true);
+
+  // The retour's map: its own cars, at their drop-off places.
+  await selectTab(page, "Retour");
+  const retour = page.getByRole("region", { name: mapName("retour", "1 voiture"), exact: true });
+  await expect(retour.locator(".leaflet-tile-loaded").first()).toBeVisible();
+  await expect(points(retour)).toHaveCount(1);
+  const ines = retour.getByRole("button", { name: "Voiture de Inès, dépose : Gare, 3 places libres", exact: true });
+  await expect(ines).toBeVisible();
+  await expect(lines(retour)).toHaveCount(1);
+  expect(await joins(retour, await anchor(retour.getByRole("img", { name: FLAG })), await anchor(ines))).toBe(true);
+});
+
+test("CA1.4, CA1.5: points in the order of the cards, between the container and the zoom; each says what its card says, and leads to it", async ({ db, page, placed }) => {
+  // Created out of the cards' order, which follows the departure times.
+  const marc = await seedCar(db, placed.id, "Marc", { position: around(placed.place, { east: 900 }), location: "Place de la mairie", departureTime: "09:00:00" });
+  const zoe = await seedCar(db, placed.id, "Zoé", { position: around(placed.place, { north: 700 }), location: "12 rue des Lilas", departureTime: "08:00:00", seats: 1 });
+  await seedCar(db, placed.id, "Inès", { position: around(placed.place, { north: -600 }), location: "Gare de Cesson", departureTime: "10:00:00" });
+  for (const [firstName, rideId] of [["Hugo", zoe], ["Léo", marc]] as const) {
+    await seedPlacement(db, { personId: (await seedPerson(db, placed.id, { firstName })).id, eventId: placed.id, leg: "aller", rideId });
+  }
+
+  const names = [
+    "Voiture de Zoé, départ : 12 rue des Lilas, Complet",
+    "Voiture de Marc, départ : Place de la mairie, 2 places libres",
+    "Voiture de Inès, départ : Gare de Cesson, 3 places libres",
+  ];
+  // Short enough for the last card to be out of view under the map.
+  await page.setViewportSize({ width: 412, height: 500 });
+  await page.goto(`/e/${placed.id}`);
+  const map = await openMap(page, mapName("aller", "3 voitures"));
+  expect(await focusableIn(map)).toEqual([...names, "Zoom avant", "Zoom arrière"]);
+
+  // CA1.5: the first name, the place and the free seats (or « Complet ») of each name are on its card.
+  const panel = page.getByRole("tabpanel");
+  for (const [driver, location, seats] of [
+    ["Zoé", "12 rue des Lilas", "Complet"],
+    ["Marc", "Place de la mairie", 2],
+    ["Inès", "Gare de Cesson", 3],
+  ] as const) {
+    const card = panel.getByRole("article", { name: `Voiture de ${driver}`, exact: true });
+    await expect(card.getByText(location, { exact: true })).toBeVisible();
+    if (seats === "Complet") await expect(card.getByText("Complet", { exact: true })).toBeVisible();
+    else await expect(card.getByRole("button", { name: /^Place libre/ })).toHaveCount(seats);
+  }
+
+  // CA1.4: Tab, from the container through the points, to the zoom.
+  await map.evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await map.focus();
+  for (const name of [...names, "Zoom avant", "Zoom arrière"]) {
+    await page.keyboard.press("Tab");
+    await expect(map.getByRole("button", { name, exact: true })).toBeFocused();
+  }
+
+  // Enter on a point: its card's title, scrolled into view and focused.
+  const inesTitle = panel.getByRole("heading", { name: "Voiture de Inès", exact: true });
+  await expect(inesTitle).not.toBeInViewport();
+  await map.getByRole("button", { name: names[2], exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(inesTitle).toBeFocused();
+  await expect(inesTitle).toBeInViewport();
+
+  // Space, too.
+  await map.evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await map.getByRole("button", { name: names[1], exact: true }).focus();
+  await page.keyboard.press(" ");
+  await expect(panel.getByRole("heading", { name: "Voiture de Marc", exact: true })).toBeFocused();
+});
+
+test("CA1.15: less than 25 m from the flag, no line and its label under the flag, both seen; at 100 m, a line, and the flag on top", async ({ db, page, placed }) => {
+  await seedCar(db, placed.id, "Sophie", { position: around(placed.place, { east: 10 }), location: "Parking du gymnase" });
+  await seedCar(db, placed.id, "Claire", { position: around(placed.place, { east: 100 }), location: "Rue du stade" });
+
+  await page.goto(`/e/${placed.id}`);
+  const map = await openMap(page, mapName("aller", "2 voitures"));
+  const flag = map.getByRole("img", { name: FLAG, exact: true });
+  const sophie = map.getByRole("button", { name: /^Voiture de Sophie/ });
+  const claire = map.getByRole("button", { name: /^Voiture de Claire/ });
+  await expect(lines(map)).toHaveCount(1);
+  expect(await joins(map, await anchor(flag), await anchor(claire))).toBe(true);
+
+  // Sophie's label: under the flag, neither covering the other, each on top where it is.
+  const flagBox = (await flag.boundingBox())!;
+  const sophieBox = (await sophie.boundingBox())!;
+  expect(overlap(flagBox, sophieBox)).toBe(false);
+  expect(sophieBox.y).toBeGreaterThanOrEqual(flagBox.y + flagBox.height);
+  const topAt = (point: { x: number; y: number }) =>
+    page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('button, [role="img"]')?.getAttribute("aria-label") ?? null, point);
+  expect(await topAt(centre(flagBox))).toBe(FLAG);
+  expect(await topAt(centre(sophieBox))).toMatch(/^Voiture de Sophie/);
+
+  // Claire's label, at 100 m: zoomed out until it touches the flag, which stays on top.
+  const zoomOut = map.getByRole("button", { name: "Zoom arrière", exact: true });
+  /** The middle of where the flag and Claire's label meet, or null where they do not. */
+  const shared = async () => {
+    const [a, b] = [(await flag.boundingBox())!, (await claire.boundingBox())!];
+    if (!overlap(a, b)) return null;
+    return { x: (Math.max(a.x, b.x) + Math.min(a.x + a.width, b.x + b.width)) / 2, y: (Math.max(a.y, b.y) + Math.min(a.y + a.height, b.y + b.height)) / 2 };
+  };
+  await expect(async () => {
+    const meet = await shared();
+    if (meet === null) await zoomOut.click();
+    expect(meet && (await topAt(meet))).toBe(FLAG);
+  }).toPass();
+
+  // Also where Leaflet's `z-index` by latitude would put the flag under: its place above the
+  // top of the view at its last reset. The view 320 px south, one zoom out, 80 px north again.
+  await map.focus();
+  for (let step = 0; step < 4; step++) await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("-");
+  await page.keyboard.press("ArrowUp");
+  await expect(flag).toBeInViewport();
+  expect(await flag.evaluate((element) => Number((element.closest(".leaflet-marker-icon") as HTMLElement).style.zIndex))).toBeLessThan(0);
+  const meet = await shared();
+  expect(meet && (await topAt(meet))).toBe(FLAG);
+});
+
+test("CA1.16, CA1.8: a first name of 40 characters, its label cut at 120 px, its name whole; two « Claire », two names", async ({ db, page, placed }) => {
+  const long = "Marie-Bérengère-Anne-Charlotte-Hortensia";
+  expect(long.length).toBe(40);
+  await seedCar(db, placed.id, long, { position: around(placed.place, { north: 500 }), location: "Chemin des Vignes" });
+  await seedCar(db, placed.id, "Claire", { position: around(placed.place, { east: 600 }), location: "12 rue des Lilas" });
+  await seedCar(db, placed.id, "Claire", { position: around(placed.place, { east: -600 }), location: "Place de la mairie" });
+
+  await page.goto(`/e/${placed.id}`);
+  const map = await openMap(page, mapName("aller", "3 voitures"));
+  const longPoint = map.getByRole("button", { name: `Voiture de ${long}, départ : Chemin des Vignes, 3 places libres`, exact: true });
+  await expect(longPoint).toBeVisible();
+  const label = longPoint.getByText(long, { exact: true });
+  expect((await label.boundingBox())!.width).toBeLessThanOrEqual(120);
+  expect(await label.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+
+  await expect(map.getByRole("button", { name: "Voiture de Claire, départ : 12 rue des Lilas, 3 places libres", exact: true })).toBeVisible();
+  await expect(map.getByRole("button", { name: "Voiture de Claire, départ : Place de la mairie, 3 places libres", exact: true })).toBeVisible();
+  await expect(map.locator(".leaflet-marker-pane button", { hasText: /^Claire$/ })).toHaveCount(2);
+
+  // CA1.8, the points' part: a text of 12 px at least, a target of 44 × 44 px at least.
+  for (const point of await points(map).all()) {
+    const box = (await point.boundingBox())!;
+    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    expect(await point.evaluate((element) => parseFloat(getComputedStyle(element.querySelector("span")!).fontSize))).toBeGreaterThanOrEqual(12);
+  }
+});
+
+test.describe("an empty leg", () => {
+  test("CA2.2: the flag alone, « … et aucune voiture », and the empty state stays", async ({ page, placed }) => {
+    await page.goto(`/e/${placed.id}`);
+    const map = await openMap(page, mapName("aller", "aucune voiture"));
+    await expect(map.getByRole("img", { name: FLAG, exact: true })).toBeVisible();
+    await expect(points(map)).toHaveCount(0);
+    await expect(lines(map)).toHaveCount(0);
+    const panel = page.getByRole("tabpanel");
+    await expect(panel.getByText("Aucune voiture proposée pour l’aller", { exact: true })).toBeVisible();
+    await expect(panel.getByText("Personne ne s’est encore inscrit.", { exact: true })).toBeVisible();
+    await expect(panel.getByText(/pas sur la carte/)).toHaveCount(0);
+  });
+});
+
+test("CA2.3, CA1.17: cars without a position are counted under the map, not in its name, before the two-finger sentence; none, no sentence", async ({ db, page, placed }) => {
+  await seedCar(db, placed.id, "Marc", { position: null });
+  await seedCar(db, placed.id, "Zoé", { position: around(placed.place, { north: 400 }) });
+  await seedCar(db, placed.id, "Inès", { position: null });
+  await seedCar(db, placed.id, "Hugo", { position: around(placed.place, { east: 400 }), leg: "retour" });
+
+  await page.goto(`/e/${placed.id}`);
+  const map = await openMap(page, mapName("aller", "1 voiture"));
+  await expect(points(map)).toHaveCount(1);
+  await expect(page.locator('[id="event-map-aller"] > p')).toHaveText(["2 voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.", TOUCH_HINT]);
+
+  await selectTab(page, "Retour");
+  await expect(page.getByRole("region", { name: mapName("retour", "1 voiture"), exact: true }).locator(".leaflet-tile-loaded").first()).toBeVisible();
+  await expect(page.locator('[id="event-map-retour"] > p')).toHaveText([TOUCH_HINT]);
+});
+
+test("CA2.3: one car without a position, in the singular", async ({ db, page, placed }) => {
+  await seedCar(db, placed.id, "Marc", { position: null });
+
+  await page.goto(`/e/${placed.id}`);
+  await openMap(page, mapName("aller", "aucune voiture"));
+  await expect(page.locator('[id="event-map-aller"] > p').first()).toHaveText("1 voiture n’est pas sur la carte : son lieu n’a pas de position.");
+});

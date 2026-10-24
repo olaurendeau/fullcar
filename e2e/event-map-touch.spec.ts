@@ -7,7 +7,7 @@ import { expect, test as base } from "./fixtures";
 import { placeOf } from "./ign";
 
 /*
- * #479, event-map v13 (CA1.10 as amended after #479): the map without animation (CA1.10), and at touch (CA1.11). The project
+ * #479, event-map v15 (CA1.10 as amended after #479 and before #480): the map without animation (CA1.10), and at touch (CA1.11). The project
  * `e2e` is a Pixel 7, touch-enabled (`hasTouch`, `isMobile`): each test checks it first, and the
  * mouse half runs in a context of its own, without touch. The fake IGN answers its default
  * tile: no test here sets one.
@@ -31,22 +31,21 @@ const TOUCH_HINT = "Deux doigts pour déplacer ou zoomer la carte.";
 /** Leaflet 1.9.4's classes for an animation (CA1.10), and the one of an animated pan. */
 const ANIMATED = ["leaflet-zoom-anim", "leaflet-zoom-animated", "leaflet-proxy", "leaflet-fade-anim", "leaflet-pan-anim"];
 /**
- * Except on a tile container: Leaflet 1.9.4 creates each one with `leaflet-zoom-animated`,
- * whatever `zoomAnimation` says (GridLayer `_updateLevels`). There it only sets a
- * `transform-origin`: its transition applies under `leaflet-zoom-anim` alone. CA1.10 excludes
- * them since event-map v13 (coordinator's decision on #479), and them only: not the lines' SVG
- * renderer (#480), for one.
+ * Except on a tile container and on the lines' SVG renderer: Leaflet 1.9.4 creates each with
+ * `leaflet-zoom-animated`, whatever `zoomAnimation` says (GridLayer `_updateLevels`,
+ * `Renderer.onAdd`). There it only sets a `transform-origin`: its transition applies under
+ * `leaflet-zoom-anim` alone. CA1.10 excludes them since event-map v14, and them only.
  */
-const TILE_LEVEL = "leaflet-tile-container";
+const ZOOM_ANIMATED_ALLOWED = ".leaflet-tile-container, .leaflet-overlay-pane > svg";
 
 /** Opens the aller's map, clicked again only while it stays folded (a click before hydration), until a tile shows. */
-async function openMap(page: Page): Promise<Locator> {
+async function openMap(page: Page, name = ALLER_MAP): Promise<Locator> {
   const button = page.getByRole("tabpanel").getByRole("button", { name: "Carte", exact: true });
   await expect(async () => {
     if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
     await expect(button).toHaveAttribute("aria-expanded", "true", { timeout: 500 });
   }).toPass();
-  const map = page.getByRole("region", { name: ALLER_MAP });
+  const map = page.getByRole("region", { name });
   await expect(map.locator(".leaflet-tile-loaded").first()).toBeVisible();
   return map;
 }
@@ -78,10 +77,10 @@ async function middle(locator: Locator): Promise<{ x: number; y: number }> {
  * `leaflet-pan-anim`, and a check of the DOM afterwards would miss them.
  */
 function watchAnimations(page: Page): Promise<JSHandle<string[]>> {
-  return page.evaluateHandle(([names, level]) => {
+  return page.evaluateHandle(([names, allowed]) => {
     const seen: string[] = [];
     const note = (element: Element) =>
-      seen.push(...names.filter((name) => element.classList.contains(name) && !(name === "leaflet-zoom-animated" && element.classList.contains(level))));
+      seen.push(...names.filter((name) => element.classList.contains(name) && !(name === "leaflet-zoom-animated" && element.matches(allowed))));
     new MutationObserver((records) => {
       for (const record of records) {
         if (record.target instanceof Element) note(record.target);
@@ -89,7 +88,7 @@ function watchAnimations(page: Page): Promise<JSHandle<string[]>> {
       }
     }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
     return seen;
-  }, [ANIMATED, TILE_LEVEL] as const);
+  }, [ANIMATED, ZOOM_ANIMATED_ALLOWED] as const);
 }
 
 /**
@@ -151,30 +150,38 @@ async function drag(page: Page, map: Locator) {
 test.describe("the map, at touch", () => {
   test.use({ locale: "fr-FR" });
 
-  test("CA1.10: no animation class, before or after « Zoom avant », and no step in between", async ({ page, placed }) => {
+  test("CA1.10: no animation class, before or after « Zoom avant », and no step in between", async ({ db, page, placed }) => {
     expect(await coarse(page)).toBe(true);
+    // A car about 220 m north: a line, so the lines' SVG renderer is there. The view frames
+    // the flag and the car at the framing's highest zoom, 15.
+    await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Lou" })).id, {
+      position: { lat: placed.place.lat + 0.002, lng: placed.place.lng },
+    });
     await page.goto(`/e/${placed.id}`);
     await expect(page.getByRole("tabpanel")).toBeVisible();
     const seen = await watchAnimations(page);
-    const map = await openMap(page);
-    // `leaflet-zoom-animated` on tile containers only (the SVG renderer included); never `leaflet-pan-anim`.
-    const animated = map.locator(`.leaflet-zoom-anim, .leaflet-zoom-animated:not(.${TILE_LEVEL}), .leaflet-proxy, .leaflet-pan-anim`);
+    const map = await openMap(page, "Carte de l’aller : le lieu de l’événement et 1 voiture");
+    await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/15/"]').first()).toBeVisible();
+    // Leaflet puts `leaflet-zoom-animated` on the lines' renderer: the exception is the one at work here.
+    await expect(map.locator(".leaflet-overlay-pane > svg.leaflet-zoom-animated")).toHaveCount(1);
+    // `leaflet-zoom-animated` on tile containers and the lines' renderer only; never `leaflet-pan-anim`.
+    const animated = map.locator(`.leaflet-zoom-anim, .leaflet-zoom-animated:not(${ZOOM_ANIMATED_ALLOWED}), .leaflet-proxy, .leaflet-pan-anim`);
     await expect(animated).toHaveCount(0);
     await expect(map).not.toHaveClass(/leaflet-fade-anim/);
 
-    // Every frame from the click to the first tile of zoom 15: a zoom in steps would run a transition.
+    // Every frame from the click to the first tile of zoom 16: a zoom in steps would run a transition.
     const steps = await map.evaluateHandle((element) => {
       const running: number[] = [];
       const sample = () => {
         running.push(element.getAnimations({ subtree: true }).length);
-        if (!element.querySelector('img.leaflet-tile-loaded[src^="/tuiles/15/"]')) requestAnimationFrame(sample);
+        if (!element.querySelector('img.leaflet-tile-loaded[src^="/tuiles/16/"]')) requestAnimationFrame(sample);
       };
       requestAnimationFrame(sample);
       return running;
     });
     await map.getByRole("button", { name: "Zoom avant", exact: true }).click();
     expect(await still(map)).toBe(true);
-    await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/15/"]').first()).toBeVisible();
+    await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/16/"]').first()).toBeVisible();
     await twoFrames(page);
     await expect(animated).toHaveCount(0);
     await expect(map).not.toHaveClass(/leaflet-fade-anim/);
