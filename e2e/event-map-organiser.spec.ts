@@ -2,7 +2,7 @@ import type { Locator, Page, Route } from "@playwright/test";
 import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
 import { placeOf } from "./ign";
-import { expect, isAction, oneCharOff, organiserPath, test } from "./organiser";
+import { expect, holdActionsWith, isAction, oneCharOff, organiserPath, test } from "./organiser";
 import { answerFor } from "./photon";
 import { namedPlace, textOf } from "./place-field";
 
@@ -76,6 +76,21 @@ async function choosePlace(page: Page, eventId: string) {
   await field(page, "Lieu").fill(text);
   await sheet(page).getByRole("option").first().click();
   await expect(sheet(page).getByText(`Position : ${salle.label}`, { exact: true })).toBeVisible();
+}
+
+/** Holds every change sent from now on (the actions whose body carries the form's fields), until `release`. */
+async function holdEdits(page: Page) {
+  const held: Route[] = [];
+  await page.route(
+    (url) => url.pathname.endsWith("/admin"),
+    (route) => (isAction(route.request()) && (route.request().postData() ?? "").includes('"allerDate"') ? void held.push(route) : route.fallback()),
+  );
+  return {
+    held: () => held.length,
+    release: async () => {
+      for (const route of held.splice(0)) await route.fallback();
+    },
+  };
 }
 
 /** « Valider », the change saved: the sheet closes and the bar says so. */
@@ -193,22 +208,51 @@ test.describe("CA2.1: the organiser's sentence, an event without a position", ()
   });
 
   test("while a change is sent, the sentence's button is inactive too", async ({ page, seededEvent }) => {
-    const held: Route[] = [];
-    await page.route(
-      (url) => url.pathname.endsWith("/admin"),
-      (route) => (isAction(route.request()) && (route.request().postData() ?? "").includes('"allerDate"') ? void held.push(route) : route.fallback()),
-    );
+    const edits = await holdEdits(page);
     await openAdmin(page, organiserPath(seededEvent));
     await openFromHint(page);
     await field(page, "Titre").fill("Tournoi de Rennes U13");
     await submit(page).click();
-    await expect.poll(() => held.length).toBe(1);
+    await expect.poll(edits.held).toBe(1);
     await page.keyboard.press("Escape");
     await expect(sheet(page)).toHaveCount(0);
     await expect(hintButton(tabPanel(page))).toHaveAttribute("aria-disabled", "true");
-    for (const route of held.splice(0)) await route.fallback();
+    await edits.release();
     await expect(messages(page)).toHaveText([FR.saved]);
     await expect(hintButton(tabPanel(page))).not.toHaveAttribute("aria-disabled");
+  });
+
+  test("closed by Escape while a position is sent, the late `saved` takes the sentence away: the focus on « Carte » of that leg, never on <body>", async ({
+    page,
+    seededEvent,
+  }) => {
+    const edits = await holdEdits(page);
+    await openAdmin(page, organiserPath(seededEvent));
+    await foldArea(page);
+    await openFromHint(page);
+    await choosePlace(page, seededEvent.id);
+    await submit(page).click();
+    await expect.poll(edits.held).toBe(1);
+    await page.keyboard.press("Escape");
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(hintButton(tabPanel(page))).toBeFocused();
+
+    await edits.release();
+    await expect(messages(page)).toHaveText([FR.saved]);
+    await expect(hint(page)).toHaveCount(0);
+    await expect(mapButton(tabPanel(page))).toBeFocused();
+    expect(await onBody(page)).toBe(false);
+  });
+
+  test("after a failed check of the link, neither the sentence nor its button", async ({ page, seededEvent }) => {
+    const held = await holdActionsWith(page, seededEvent.token);
+    await page.goto(organiserPath(seededEvent));
+    await expect.poll(held.held).toBe(1);
+    await held.fail();
+    await expect(page.getByText("Le lien d’organisateur n’a pas pu être vérifié.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Proposer une voiture" })).toBeVisible();
+    await expect(hint(page)).toHaveCount(0);
+    await expect(hintButton(page)).toHaveCount(0);
   });
 });
 

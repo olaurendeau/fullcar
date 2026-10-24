@@ -101,23 +101,25 @@ test("M1.3: no « Modifier l’événement » while the panel loads, on an inval
   page,
   seededEvent,
 }) => {
+  // Page-wide: neither the area's button nor a leg's sentence's (#485) in any of these states.
+  const anyEdit = page.getByRole("button", { name: FR.edit, exact: true });
   const held = await holdActionsWith(page, seededEvent.token);
   await page.goto(organiserPath(seededEvent));
   await expect(page.getByText("Chargement de l’espace organisateur…")).toBeVisible();
   await expect.poll(held.held).toBe(1);
-  await expect(editButton(page)).toHaveCount(0);
+  await expect(anyEdit).toHaveCount(0);
   await held.fail();
   await expect(page.getByText("Le lien d’organisateur n’a pas pu être vérifié.")).toBeVisible();
-  await expect(editButton(page)).toHaveCount(0);
+  await expect(anyEdit).toHaveCount(0);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 
   await page.goto(`/e/${seededEvent.id}/admin#${oneCharOff(seededEvent.token)}`);
   await expect(page.getByText("Ce lien d’organisateur n’est pas valide.")).toBeVisible();
-  await expect(editButton(page)).toHaveCount(0);
+  await expect(anyEdit).toHaveCount(0);
 
   await page.goto(`/e/${seededEvent.id}`);
   await expect(page.getByRole("tabpanel").getByRole("button", { name: "Ajouter une personne", exact: true })).toBeEnabled();
-  await expect(editButton(page)).toHaveCount(0);
+  await expect(anyEdit).toHaveCount(0);
 });
 
 test.describe("without JavaScript", () => {
