@@ -110,9 +110,10 @@ test.describe("the place of « Modifier l’événement », the event with a pos
 
     await submit(page).click();
     await expect(sheet(page)).toHaveCount(0);
+    // Closed once answered: a change sent is already counted.
+    expect(changed.length).toBe(0);
     await expect(messages(page)).toHaveCount(0);
     expect(sent.length).toBe(0);
-    expect(changed.length).toBe(0);
     expect(await stored(db, seededEvent.id)).toEqual({ title: "Tournoi de Rennes", location: LOCATION, location_lat: AT.lat, location_lng: AT.lng });
   });
 
