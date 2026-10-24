@@ -21,6 +21,16 @@ export function organiserPath({ id, token }: SeededEvent): string {
   return `/e/${id}/admin#${token}`;
 }
 
+/**
+ * The organiser area's « Modifier l’événement » (`name` in another language), not the one of a
+ * leg's sentence, which an event without a position has too (#485, CA2.1).
+ */
+export const areaEditButton = (page: Page, name = "Modifier l’événement") =>
+  page.getByRole("button", { name, exact: true }).and(page.locator(":not([data-map-hint])"));
+
+/** The same, found by its words while a sheet makes the page `aria-hidden`. */
+export const areaEditByText = (page: Page, text = "Modifier l’événement") => page.locator("button:not([data-map-hint])", { hasText: text });
+
 /** A token one character off: the same length and alphabet, its last character changed. */
 export function oneCharOff(token: string): string {
   return `${token.slice(0, -1)}${token.at(-1) === "A" ? "B" : "A"}`;

@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { expect, holdActionsWith, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, holdActionsWith, organiserPath, test } from "./organiser";
 
 leaveNoToken();
 
@@ -60,7 +60,7 @@ async function seedScene(db: Kysely<Database>, eventId: string) {
 /** The organiser's page, its sheet open and still. */
 async function openSheet(page: Page, path: string) {
   await page.goto(path);
-  await page.getByRole("button", { name: EDIT, exact: true }).click();
+  await areaEditButton(page).click();
   await grownIn(sheet(page));
 }
 

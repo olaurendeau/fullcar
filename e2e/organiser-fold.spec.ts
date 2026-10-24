@@ -169,7 +169,7 @@ test.describe("the scene of O2.5", () => {
         panel(page).getByRole("region"),
         panel(page).getByRole("heading", { level: 3 }),
         // O8.2 amended by #250, M1.2.
-        page.getByRole("button", { name: "Modifier l’événement" }),
+        panel(page).getByRole("button", { name: "Modifier l’événement" }),
       ]) {
         await expect(hidden).toHaveCount(0);
       }

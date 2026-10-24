@@ -3,6 +3,7 @@
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
+import type { MapHint } from "@/components/event/event-map";
 import { EventView } from "@/components/event/event-view";
 import { offerChanges, personLeg, type Failure, type Message, type Undo } from "@/components/event/bar-state";
 import {
@@ -90,12 +91,15 @@ export function ParticipantBoard({
   ref,
   onAction,
   onState,
+  hint,
 }: {
   id: string;
   state: EventState;
   ref?: Ref<BoardHandle>;
   onAction?: () => void;
   onState?: (state: EventState) => void;
+  /** The organiser's sentence of each leg, without a position: on `/e/{id}/admin` once the link is checked (#485). */
+  hint?: MapHint;
 }) {
   const words = wordsOf(useTranslations(), useFormatter());
   const [state, setState] = useState(rendered);
@@ -472,6 +476,7 @@ export function ParticipantBoard({
       board={state.legs}
       tab={tab}
       onTab={setTab}
+      hint={hint}
       device={{
         status: device.status,
         retry: () => {

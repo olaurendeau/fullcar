@@ -2,7 +2,7 @@ import type { Locator, Page, Request, Route } from "@playwright/test";
 import { animationsDone, holdClose, messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
-import { expect, holdActionsWith, isAction, oneCharOff, organiserPath, seedOrganiserScene, test } from "./organiser";
+import { areaEditButton, areaEditByText, expect, holdActionsWith, isAction, oneCharOff, organiserPath, seedOrganiserScene, test } from "./organiser";
 
 /*
  * #268, epic #250 (organizer-view v3.3.6, « Modifier l’événement »): the button in the organiser's
@@ -24,7 +24,7 @@ const FR = {
 };
 
 const panel = (page: Page) => page.getByRole("region", { name: "Espace organisateur" });
-const editButton = (page: Page) => page.getByRole("button", { name: FR.edit, exact: true });
+const editButton = (page: Page) => areaEditButton(page);
 const sheet = (page: Page) => page.getByRole("dialog", { name: FR.edit });
 const field = (page: Page, label: string) => sheet(page).getByLabel(label, { exact: true });
 const retourBox = (page: Page) => sheet(page).getByRole("checkbox", { name: "Retour", exact: true });
@@ -101,23 +101,25 @@ test("M1.3: no « Modifier l’événement » while the panel loads, on an inval
   page,
   seededEvent,
 }) => {
+  // Page-wide: neither the area's button nor a leg's sentence's (#485) in any of these states.
+  const anyEdit = page.getByRole("button", { name: FR.edit, exact: true });
   const held = await holdActionsWith(page, seededEvent.token);
   await page.goto(organiserPath(seededEvent));
   await expect(page.getByText("Chargement de l’espace organisateur…")).toBeVisible();
   await expect.poll(held.held).toBe(1);
-  await expect(editButton(page)).toHaveCount(0);
+  await expect(anyEdit).toHaveCount(0);
   await held.fail();
   await expect(page.getByText("Le lien d’organisateur n’a pas pu être vérifié.")).toBeVisible();
-  await expect(editButton(page)).toHaveCount(0);
+  await expect(anyEdit).toHaveCount(0);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 
   await page.goto(`/e/${seededEvent.id}/admin#${oneCharOff(seededEvent.token)}`);
   await expect(page.getByText("Ce lien d’organisateur n’est pas valide.")).toBeVisible();
-  await expect(editButton(page)).toHaveCount(0);
+  await expect(anyEdit).toHaveCount(0);
 
   await page.goto(`/e/${seededEvent.id}`);
   await expect(page.getByRole("tabpanel").getByRole("button", { name: "Ajouter une personne", exact: true })).toBeEnabled();
-  await expect(editButton(page)).toHaveCount(0);
+  await expect(anyEdit).toHaveCount(0);
 });
 
 test.describe("without JavaScript", () => {
@@ -174,7 +176,7 @@ test("#447: reopened while it closes, the sheet takes the focus on « Titre », 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
   // Hidden from role queries while the sheet is mounted.
-  await page.locator("button", { hasText: FR.edit }).focus();
+  await areaEditByText(page).focus();
   await page.keyboard.press("Enter");
   await expect(sheet(page)).toHaveAttribute("data-state", "open");
   await expect(field(page, "Titre")).toBeFocused();

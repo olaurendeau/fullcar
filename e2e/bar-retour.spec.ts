@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { organiserPath, test as organiserTest } from "./organiser";
+import { areaEditButton, organiserPath, test as organiserTest } from "./organiser";
 
 leaveNoToken();
 
@@ -351,7 +351,7 @@ organiserTest.describe("the organiser's bar, the retour removed meanwhile", () =
     await expect(cell(page, "Tom", "Retour")).toBeVisible();
     await failOffline(page, tom, "Je cherche une place", TEXT.lookingOffline);
     // The retour holds nothing: unchecked, it is removed with no confirmation.
-    await page.getByRole("button", { name: "Modifier l’événement", exact: true }).click();
+    await areaEditButton(page).click();
     await sheet(page, "Modifier l’événement").getByRole("checkbox", { name: "Retour", exact: true }).uncheck();
     await sheet(page, "Modifier l’événement").getByRole("button", { name: "Valider", exact: true }).click();
 

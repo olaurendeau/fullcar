@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, messages, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { expect, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, organiserPath, test } from "./organiser";
 
 /*
  * #271, epic #250 (organizer-view v3.3.8): what « Modifier l’événement » does to the legs. A retour
@@ -26,7 +26,7 @@ const FR = {
 };
 
 const panel = (page: Page) => page.getByRole("region", { name: "Espace organisateur" });
-const editButton = (page: Page) => page.getByRole("button", { name: FR.edit, exact: true });
+const editButton = (page: Page) => areaEditButton(page);
 const sheet = (page: Page, name = FR.edit) => page.getByRole("dialog", { name });
 const field = (page: Page, label: string) => sheet(page).getByLabel(label, { exact: true });
 const retourBox = (page: Page) => sheet(page).getByRole("checkbox", { name: "Retour", exact: true });
