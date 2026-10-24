@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLeafletImport, type LeafletChange } from "./leaflet-import";
 
 /** A fake module and a fake `import()`: each call is one request, ended by the test. */
@@ -11,7 +11,7 @@ function fakeImport() {
   let online = true;
   const leaflet = createLeafletImport(load, () => online);
   const changes: LeafletChange[] = [];
-  leaflet.subscribe((change) => changes.push(change));
+  const unsubscribe = leaflet.subscribe((change) => changes.push(change));
   /** Ends the last request, then lets its handlers run. */
   const end = async (outcome: "loaded" | "failed") => {
     const call = calls.at(-1)!;
@@ -20,7 +20,7 @@ function fakeImport() {
     await Promise.resolve();
     await Promise.resolve();
   };
-  return { leaflet, calls, changes, end, setOnline: (value: boolean) => (online = value) };
+  return { leaflet, calls, changes, end, unsubscribe, setOnline: (value: boolean) => (online = value) };
 }
 
 describe("Leaflet's import, one for the page (CA2.10)", () => {
@@ -98,5 +98,78 @@ describe("Leaflet's import, one for the page (CA2.10)", () => {
     expect(leaflet.snapshot()).toBe(first);
     leaflet.open();
     expect(leaflet.snapshot()).not.toBe(first);
+  });
+});
+
+/*
+ * #567: the import is the page's, not the document's. Left by a client-side navigation, the
+ * page's maps no longer read it; back on an event page, a failure is forgotten: the opening of
+ * a map is a first attempt again. A map that only remounts on the page (a retour added: the
+ * aller moves into its tab) reads it again in the same commit, and keeps it.
+ */
+describe("Leaflet's import, for as long as a page reads it (#567)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("failed, then read by no map: back on a page, a fresh state, and the opening asks again", async () => {
+    vi.useFakeTimers();
+    const { leaflet, calls, end, unsubscribe } = fakeImport();
+    leaflet.open();
+    await end("failed");
+    leaflet.retry();
+    await end("failed");
+    expect(leaflet.snapshot().state).toEqual({ phase: "failed", failures: 2, again: true });
+
+    unsubscribe();
+    vi.runAllTimers();
+    expect(leaflet.snapshot().state).toEqual({ phase: "idle", failures: 0, again: false });
+
+    leaflet.subscribe(() => {});
+    leaflet.open();
+    expect(calls).toHaveLength(3);
+    await end("failed");
+    expect(leaflet.snapshot().state).toEqual({ phase: "failed", failures: 1, again: false });
+  });
+
+  it("failed while no map reads it: back on a page, a fresh state", async () => {
+    vi.useFakeTimers();
+    const { leaflet, end, unsubscribe } = fakeImport();
+    leaflet.open();
+    unsubscribe();
+    vi.runAllTimers();
+    expect(leaflet.snapshot().state.phase).toBe("loading");
+    await end("failed");
+    vi.runAllTimers();
+    expect(leaflet.snapshot().state).toEqual({ phase: "idle", failures: 0, again: false });
+  });
+
+  it("a map remounted on the page, read again at once: the failure stays, the opening asks nothing", async () => {
+    vi.useFakeTimers();
+    const { leaflet, calls, end, unsubscribe } = fakeImport();
+    leaflet.open();
+    await end("failed");
+    const failed = leaflet.snapshot();
+
+    unsubscribe();
+    leaflet.subscribe(() => {});
+    vi.runAllTimers();
+    expect(leaflet.snapshot()).toBe(failed);
+    leaflet.open();
+    expect(calls).toHaveLength(1);
+  });
+
+  it("loaded, then read by no map: the module stays, no request more", async () => {
+    vi.useFakeTimers();
+    const { leaflet, calls, end, unsubscribe } = fakeImport();
+    leaflet.open();
+    await end("loaded");
+    const ready = leaflet.snapshot();
+    unsubscribe();
+    vi.runAllTimers();
+    expect(leaflet.snapshot()).toBe(ready);
+    leaflet.subscribe(() => {});
+    leaflet.open();
+    expect(calls).toHaveLength(1);
   });
 });
