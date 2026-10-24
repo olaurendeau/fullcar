@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
-import { expect, holdActionsWith, isAction, oneCharOff, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, holdActionsWith, isAction, oneCharOff, organiserPath, test } from "./organiser";
 
 /*
  * #270, epic #250 (organizer-view v3.3.8, « Supprimer le retour »): unchecking « Retour » on a
@@ -55,7 +55,7 @@ const SAID = {
 };
 
 const panel = (page: Page) => page.getByRole("region", { name: "Espace organisateur" });
-const editButton = (page: Page, name = FR.edit) => page.getByRole("button", { name, exact: true });
+const editButton = (page: Page, name = FR.edit) => areaEditButton(page, name);
 const sheet = (page: Page, name = FR.edit) => page.getByRole("dialog", { name });
 const field = (page: Page, label: string) => sheet(page).getByLabel(label, { exact: true });
 const retourBox = (page: Page) => sheet(page).getByRole("checkbox", { name: "Retour", exact: true });
