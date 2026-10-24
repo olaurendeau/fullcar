@@ -30,8 +30,8 @@ const typed = (value: unknown) => /Lilas|q=/.test(JSON.stringify(value));
 /** A tile the server asks Geoapify for (event-map, CA3.5): the key is in its query, the tile in its path. */
 const GEOAPIFY_KEY = "fullcar-test-key-7f3a9c2e";
 const GEOAPIFY_TILE = `https://maps.geoapify.com/v1/tile/positron/14/8299/5636@2x.png?apiKey=${GEOAPIFY_KEY}`;
-/** « geoapify » has the 8 letters of an event's id, which `scrubText` redacts on its own. */
-const GEOAPIFY_SCRUBBED = "https://maps.[redacted].com/[id]/[id]/[id]/[id]/[id]/[id]";
+/** « geoapify » has the 8 letters of an event's id: the host of a request is kept all the same (#565). */
+const GEOAPIFY_SCRUBBED = "https://maps.geoapify.com/[id]/[id]/[id]/[id]/[id]/[id]";
 const keyed = (value: unknown) => /apiKey|fullcar-test-key|8299|5636/.test(JSON.stringify(value));
 
 describe("scrubUrl", () => {
@@ -158,6 +158,24 @@ describe("scrubBreadcrumb", () => {
       { ...head, data: { method: "GET", url: GEOAPIFY_SCRUBBED, status_code: 429 } },
       { type: "http", category: "http", data: { url: GEOAPIFY_SCRUBBED, status_code: 200 } },
     ]);
+  });
+
+  it("keeps the host of a request, and drops a token or an id from its path, its query and its fragment (#565)", () => {
+    for (const fixed of [secrets, drawSecrets(lowercaseBytes), drawSecrets(mixedBytes)]) {
+      const url = `https://maps.geoapify.com/e/${fixed.id}/admin/${fixed.adminToken}?token=${fixed.personalToken}&id=${fixed.id}#${fixed.adminToken}`;
+      const sent = ["fetch", "xhr", "http"].map((category) => scrubBreadcrumb({ category, data: { url } }));
+      expect(leakedKinds(JSON.stringify(sent), fixed)).toEqual([]);
+      same(sent.map((breadcrumb) => breadcrumb?.data?.url), Array(3).fill("https://maps.geoapify.com/e/[id]/admin/[id]"));
+    }
+  });
+
+  it("scrubs the host of a request when it is not a host name: one label, a capital, a token's length, a phone", () => {
+    const lowercase = drawSecrets(lowercaseBytes);
+    const mixed = drawSecrets(mixedBytes);
+    const hosts = [lowercase.id, `${mixed.id}.example.com`, `${lowercase.adminToken}.example.com`, `a.${lowercase.personalToken}.com`];
+    hosts.push(`${PHONES[1]}.example.com`, "06-47-81-29-53.example.com", `u:${lowercase.adminToken}@${lowercase.id}`);
+    const sent = hosts.map((host) => scrubBreadcrumb({ category: "fetch", data: { url: `https://${host}/x` } }));
+    expect([lowercase, mixed].flatMap((fixed) => leakedKinds(JSON.stringify(sent), fixed))).toEqual([]);
   });
 
   it("keeps of the browser's request to /api/lieux its method, its URL and its status only", () => {
@@ -295,6 +313,7 @@ describe("scrubEvent", () => {
     ["the browser's User-Agent", (line: string) => scrubEvent({ ...leakyEvent(secrets), request: { headers: { "User-Agent": line } } })],
     ["the trace and the system contexts", (line: string) => scrubEvent({ ...leakyEvent(secrets), contexts: { trace: { trace_id: line, span_id: line }, os: { name: line } } })],
     ["the dynamic sampling context", (line: string) => scrubDsc(Object.fromEntries(DSC_FIELDS.map((key) => [key, line])))],
+    ["a request's host", (line: string) => [scrubBreadcrumb({ category: "fetch", data: { url: `https://${line}/x` } }), scrubSpan(span(`GET https://${line}/x`, { "sentry.op": "http.client" }))]],
     ["a span's ids and Sentry's own attributes", (line: string) => scrubSpan(span(line, { "sentry.release": line, "sentry.dist": line, "sentry.sdk.integrations": [line] }, line))],
   ])("sends %s as it is only when the whole of it may be", (_, send) => {
     const line = `Could not seat "${NAMES[0]}" (${PHONES[0]}) from ${secrets.adminUrl}, see ${secrets.personalUrl}, event ${secrets.id}`;
@@ -460,6 +479,23 @@ describe("scrubSpan", () => {
       "http.request.method": "GET",
       "http.response.status_code": 200,
     });
+  });
+
+  it("keeps the host of an http.client span, and drops a token or an id from the rest of its URL (#565)", () => {
+    for (const fixed of [secrets, drawSecrets(lowercaseBytes), drawSecrets(mixedBytes)]) {
+      const url = `https://maps.geoapify.com/e/${fixed.id}/moi?token=${fixed.personalToken}#${fixed.adminToken}`;
+      const ops = ["http.client", { value: "http.client", type: "string" }];
+      const sent = ops.map((op) => scrubSpan(span(`GET ${url}`, { "sentry.op": op })));
+      expect(leakedKinds(JSON.stringify(sent), fixed)).toEqual([]);
+      same(sent.map((each) => each.name), Array(2).fill("GET https://maps.geoapify.com/e/[id]/moi"));
+    }
+  });
+
+  it("keeps a host with an id's letters only in a request: in a message or another span, it is redacted", () => {
+    const lowercase = drawSecrets(lowercaseBytes);
+    const url = `https://${lowercase.id}.example.com/x`;
+    const sent = [scrubText(`fetch failed: ${url}`), scrubSpan(span(`GET ${url}`, { "sentry.op": "function" })).name, scrubUrl(url)];
+    expect(leakedKinds(JSON.stringify(sent), lowercase)).toEqual([]);
   });
 
   it("keeps of a db span its system and operation, and drops its query and parameters", () => {

@@ -55,8 +55,31 @@ const URL_PARTS = /^([a-z][a-z\d+.-]*:)?(?:\/\/([^/?#]*))?([^?#]*)/i;
  * whose scheme is whatever came before a colon.
  */
 export function scrubUrl(url: string): string {
+  return scrubUrlWith(url, scrubText);
+}
+
+/**
+ * A host name as DNS writes it, lowercase, with a dot and a TLD of letters, and an optional
+ * port. Each label is shorter than a token's 22 characters, and digits are counted apart:
+ * neither a token nor a phone number is one. An id's 8 letters may be one (`geoapify`).
+ *
+ * Safe only while no request targets a host built from data: an id, a token, what a user
+ * typed. A change that builds one must move that value into the path, or extend these rules.
+ */
+const HOST_NAME = /^(?:[a-z\d](?:[a-z\d-]{0,19}[a-z\d])?\.)+[a-z]{2,21}(?::\d{1,5})?$/;
+
+/**
+ * The URL of a request the application made, as the SDK writes it in a breadcrumb or an
+ * `http.client` span: its host names a service, and is kept when it is a host name (#565).
+ * Any other host, and every host of a message or a frame, goes through `scrubText`.
+ */
+function scrubRequestUrl(url: string): string {
+  return scrubUrlWith(url, (host) => (HOST_NAME.test(host) && digitCount(host.split(":", 1)[0]) < PHONE_DIGITS ? host : scrubText(host)));
+}
+
+function scrubUrlWith(url: string, scrubHost: (host: string) => string): string {
   const [, scheme = "", authority, path = ""] = URL_PARTS.exec(url) ?? [];
-  const origin = `${scrubText(scheme)}${authority === undefined ? "" : `//${scrubText(authority.slice(authority.lastIndexOf("@") + 1))}`}`;
+  const origin = `${scrubText(scheme)}${authority === undefined ? "" : `//${scrubHost(authority.slice(authority.lastIndexOf("@") + 1))}`}`;
   if (path.startsWith(STATIC_PATH) && safePath(path)) return `${origin}${path}`;
   const segments = path.split("/").map((segment) => (segment === "" || LITERAL_SEGMENTS.has(segment) ? segment : ID));
   return `${origin}${segments.join("/")}`;
@@ -118,18 +141,23 @@ const KEPT_WORDS = new Set("argument database expected function instance propert
  * A message or a span's name without what may name someone: URLs through `scrubUrl`, and
  * quoted passages, token-like runs and phone numbers replaced by `[redacted]`. A `db` span
  * keeps its double-quoted identifiers (`"person"."id"`): SQL quotes its values with `'`.
+ * An `http` span's name is the SDK's, a method and the URL of a request: `scrubRequestUrl`.
  */
-export function scrubText(text: string, kind: "text" | "db" = "text"): string {
+export function scrubText(text: string, kind: "text" | "db" | "http" = "text"): string {
   let scrubbed = String(text);
   for (const quoted of kind === "db" ? OTHER_QUOTED : [DOUBLE_QUOTED, ...OTHER_QUOTED]) {
     scrubbed = scrubbed.replace(quoted, REDACTED);
   }
   return scrubbed.replace(IN_TEXT, (match: string, url?: string, run?: string, id?: string) => {
-    if (url) return scrubUrl(url);
+    if (url) return kind === "http" ? scrubRequestUrl(url) : scrubUrl(url);
     if (id) return KEPT_WORDS.has(id.toLowerCase()) ? id : REDACTED;
-    if (run || (match.match(/\d/g) ?? []).length >= PHONE_DIGITS) return REDACTED;
+    if (run || digitCount(match) >= PHONE_DIGITS) return REDACTED;
     return match;
   });
+}
+
+function digitCount(text: string): number {
+  return (text.match(/\d/g) ?? []).length;
 }
 
 const KEPT_CATEGORIES = new Set(["navigation", "fetch", "xhr", "http"]);
@@ -150,7 +178,7 @@ export function scrubBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb | null {
       timestamp: finite(timestamp),
       data: compact({
         method: method(data.method),
-        url: stringOr(data.url, scrubUrl),
+        url: stringOr(data.url, scrubRequestUrl),
         status_code: finite(data.status_code),
         from: stringOr(data.from, scrubUrl),
         to: stringOr(data.to, scrubUrl),
@@ -415,9 +443,10 @@ export function scrubSpan(span: StreamedSpan): StreamedSpan {
   }
   const op = attributes["sentry.op"];
   const db = "db.system" in attributes || "db.system.name" in attributes || (typeof op === "string" && op.startsWith("db"));
+  const http = (typeof op === "string" ? op : record(op).value) === "http.client";
   let name = REDACTED;
   try {
-    name = scrubText(span.name, db ? "db" : "text");
+    name = scrubText(span.name, db ? "db" : http ? "http" : "text");
   } catch {
     // A name that cannot be read is sent as `[redacted]`.
   }
