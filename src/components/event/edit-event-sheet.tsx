@@ -93,7 +93,9 @@ type Said = ActionProblem | "changed" | "invalid" | "eventNotFound";
  * device's date, a saved date kept even past (M2.4), then sent; while the request runs,
  * « Valider » is `aria-disabled` and keeps the focus, and a second tap or Enter sends nothing;
  * the fields are locked, and « Envoi en cours… », above it, describes it (M2.6, decision 52).
- * Saved, the sheet closes; a field refused shows under it, the focus on the first. Otherwise
+ * The place proposes suggestions (#432): it is sent with its position, `null` without one, both
+ * among the values; while sending, it is read-only, asks nothing and its « Retirer » does nothing
+ * (AL5.4). Saved, the sheet closes; a field refused shows under it, the focus on the first. Otherwise
  * the sheet says why above « Valider », which gets the focus, and what was typed stays:
  * offline, a failure, or the link refused (M8.2). Changed on another device (M6.1, M6.2), the
  * fields not changed take the saved values, which become the ones loaded and `before`. The event
@@ -297,7 +299,7 @@ function EditEventForm({
   }
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-      <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} notes={notes} locked={sending} />
+      <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} notes={notes} locked={sending} suggestions />
       {(said === "offline" || said === "failed") && (
         <p role="alert" className="text-sm text-destructive">
           {tActions(said)}
