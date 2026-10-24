@@ -1,5 +1,5 @@
 /*
- * A leg's map when the page applies a new state (docs/design/event-map/, v15, the « carte »
+ * A leg's map when the page applies a new state (docs/design/event-map/, v18, the « carte »
  * rows of « Mises à jour et focus »; design « Conception technique », § 6): between two
  * outputs of `mapOf`, the points kept, moved, created and removed, whether to reframe, to
  * close the bubble, and where the focus goes. Then (#483) Leaflet's import and the tiles'
@@ -23,6 +23,9 @@ export interface MapView {
   /** Somebody moved or zoomed the map since it opened. */
   touched: boolean;
 }
+
+/** What an update reads of `mapOf`'s output: the flag and the points, as the map draws them. */
+export type MapPoints<Car extends MapCar> = Pick<EventMapPoints<Car>, "flag" | "points">;
 
 /** The same element (`kept`, its name redrawn), the same element at a new position (`setLatLng`), or a new one. */
 export type PointChange = "kept" | "moved" | "created";
@@ -64,7 +67,7 @@ function samePosition(a: Position | null, b: Position | null): boolean {
   return a?.lat === b?.lat && a?.lng === b?.lng;
 }
 
-function carIds<Car extends MapCar>(map: EventMapPoints<Car>): Set<string> {
+function carIds<Car extends MapCar>(map: MapPoints<Car>): Set<string> {
   return new Set(map.points.flatMap((point) => point.cars.map((car) => car.id)));
 }
 
@@ -75,7 +78,7 @@ const CONTAINER: MapFocus = { kind: "container" };
  * whose position changed; none moved, the first still on the map, so itself while it stays;
  * none left, to the container.
  */
-function pointFocus<Car extends MapCar>(key: string, before: EventMapPoints<Car>, after: EventMapPoints<Car>): MapFocus {
+function pointFocus<Car extends MapCar>(key: string, before: MapPoints<Car>, after: MapPoints<Car>): MapFocus {
   const cars = before.points.find((point) => pointKey(point) === key)?.cars ?? [];
   const still = cars.flatMap((was) =>
     after.points.flatMap((holder) =>
@@ -87,7 +90,7 @@ function pointFocus<Car extends MapCar>(key: string, before: EventMapPoints<Car>
 }
 
 /** The focus the closed bubble had: the first point less than 25 m from its point's position, else the container. */
-function bubbleFocus<Car extends MapCar>(key: string | null, before: EventMapPoints<Car>, after: EventMapPoints<Car>): MapFocus {
+function bubbleFocus<Car extends MapCar>(key: string | null, before: MapPoints<Car>, after: MapPoints<Car>): MapFocus {
   const position = before.points.find((point) => pointKey(point) === key)?.position;
   const there = position && after.points.find((point) => distanceMetres(point.position, position) < SAME_POSITION_METRES);
   return there ? { kind: "point", key: pointKey(there) } : CONTAINER;
@@ -97,11 +100,7 @@ function bubbleFocus<Car extends MapCar>(key: string | null, before: EventMapPoi
  * The map going from `before` to `after`, two outputs of `mapOf` for the same leg, with what
  * had the focus, the open bubble, and whether somebody touched the map.
  */
-export function mapUpdate<Car extends MapCar>(
-  before: EventMapPoints<Car>,
-  after: EventMapPoints<Car>,
-  view: MapView,
-): MapUpdate<Car> {
+export function mapUpdate<Car extends MapCar>(before: MapPoints<Car>, after: MapPoints<Car>, view: MapView): MapUpdate<Car> {
   const former = new Map(before.points.map((point) => [pointKey(point), point]));
   const points = after.points.map((point) => {
     const key = pointKey(point);
