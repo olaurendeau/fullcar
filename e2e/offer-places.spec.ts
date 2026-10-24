@@ -1,9 +1,9 @@
-import { randomUUID } from "node:crypto";
-import type { Locator, Page, Request, Route } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { answerFor, photonFeature, requestsFor, type PhotonFeature } from "./photon";
+import { answerFor, requestsFor, type PhotonFeature } from "./photon";
+import { namedPlace, recordStatus, searches, textOf } from "./place-field";
 
 // A new driver's token is drawn as her car is offered.
 leaveNoToken();
@@ -31,21 +31,13 @@ const FR = {
 /** The event's position, which Photon receives rounded to 1 decimal (AL4.1). */
 const EVENT_AT = { lat: 45.7581, lng: 4.6894 };
 
-/** A text of this test's own: the fake keeps its answers an hour, and the app its cache. */
-const textOf = (label: string) => `${label} ${randomUUID()}`;
+/** A named place in Brindas, « {name}, 69126 Brindas ». */
+const inBrindas = (name: string, lat: number, lon: number) => namedPlace(name, lat, lon, "69126", "Brindas");
 
-/** A named place in France, which the page writes « {name}, {postcode} {city} ». */
-function namedPlace(name: string, lat: number, lon: number, city = "Brindas"): { feature: PhotonFeature; label: string } {
-  return {
-    feature: photonFeature({ lat, lon, name, postcode: "69126", city, countrycode: "FR", country: "France" }),
-    label: `${name}, 69126 ${city}`,
-  };
-}
-
-const LILAS = namedPlace("12 rue des Lilas", 45.721234, 4.698762);
-const MAIRIE = namedPlace("Mairie", 45.718901, 4.701234);
-const GARE = namedPlace("Gare", 45.710009, 4.690001);
-const PLACES = [LILAS, MAIRIE, GARE, namedPlace("Stade", 45.7151, 4.6952), namedPlace("Église", 45.7193, 4.7004)];
+const LILAS = inBrindas("12 rue des Lilas", 45.721234, 4.698762);
+const MAIRIE = inBrindas("Mairie", 45.718901, 4.701234);
+const GARE = inBrindas("Gare", 45.710009, 4.690001);
+const PLACES = [LILAS, MAIRIE, GARE, inBrindas("Stade", 45.7151, 4.6952), inBrindas("Église", 45.7193, 4.7004)];
 
 const form = (page: Page) => page.getByRole("dialog", { name: FR.offer });
 const place = (page: Page, label: string) => form(page).getByRole("combobox", { name: label, exact: true });
@@ -56,15 +48,6 @@ const status = (page: Page, nth: 0 | 1) => form(page).getByRole("status").nth(nt
 const positionLines = (page: Page) => form(page).getByText(/^Position : /);
 const removeButton = (page: Page, label: string) => form(page).getByRole("button", { name: `Retirer la position (${label})`, exact: true });
 const submit = (page: Page) => form(page).getByRole("button", { name: "Valider", exact: true });
-
-const isSearch = (request: Request) => new URL(request.url()).pathname === "/api/lieux";
-
-/** The page's requests to `/api/lieux`, from now on. */
-function searches(page: Page): Request[] {
-  const sent: Request[] = [];
-  page.on("request", (request) => isSearch(request) && sent.push(request));
-  return sent;
-}
 
 /** « Proposer une voiture » on the event's Aller, for a new driver, Marc. */
 async function openForm(page: Page, eventId: string) {
@@ -87,21 +70,6 @@ async function choose(page: Page, label: string, places: { feature: PhotonFeatur
   await place(page, label).fill(text);
   await expect(options(page, label)).toHaveCount(places.length);
   await options(page, label).nth(chosen).click();
-}
-
-/** Each text the `nth` status region of the form is given, from now on, in order. */
-async function recordStatus(page: Page, nth: 0 | 1) {
-  const key = `said${nth}`;
-  await status(page, nth).evaluate((region, name) => {
-    const said: string[] = [];
-    (window as unknown as Record<string, string[]>)[name] = said;
-    new MutationObserver(() => region.textContent && said.push(region.textContent)).observe(region, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-  }, key);
-  return () => page.evaluate((name) => (window as unknown as Record<string, string[]>)[name], key);
 }
 
 /** The cars of the event, as stored, Aller first: their place's text and position. */
@@ -172,7 +140,7 @@ test.describe("the places of « Proposer une voiture », the event with a positi
     await openForm(page, seededEvent.id);
     await choose(page, FR.departure, [LILAS]);
     await expect(positionLines(page)).toHaveText([`Position : ${LILAS.label}`]);
-    const said = await recordStatus(page, 0);
+    const said = await recordStatus(status(page, 0));
 
     await place(page, FR.departure).press("End");
     await place(page, FR.departure).press("Backspace");
@@ -197,7 +165,7 @@ test.describe("the places of « Proposer une voiture », the event with a positi
   test("AL3.3, AL3.8: emptying a car's place takes its position and says « Position retirée. » once; emptied without a position, nothing", async ({ page, seededEvent }) => {
     await openForm(page, seededEvent.id);
     await choose(page, FR.departure, [GARE]);
-    const said = await recordStatus(page, 0);
+    const said = await recordStatus(status(page, 0));
 
     await place(page, FR.departure).fill("");
     await expect(positionLines(page)).toHaveCount(0);
@@ -225,8 +193,8 @@ test.describe("the places of « Proposer une voiture », the event with a positi
     await expect(removeButton(page, FR.departure)).toBeVisible();
     await expect(removeButton(page, FR.dropOff)).toBeVisible();
     await expect(place(page, FR.dropOff)).toHaveAccessibleDescription(`Position : ${LILAS.label} ${FR.hint}`);
-    const departureSaid = await recordStatus(page, 0);
-    const dropOffSaid = await recordStatus(page, 1);
+    const departureSaid = await recordStatus(status(page, 0));
+    const dropOffSaid = await recordStatus(status(page, 1));
 
     await place(page, FR.departure).press("End");
     await place(page, FR.departure).press("Backspace");
@@ -257,8 +225,8 @@ test.describe("the places of « Proposer une voiture », the event with a positi
     await openForm(page, seededEvent.id);
     await driveBack(page);
     await choose(page, FR.departure, [LILAS]);
-    const departureSaid = await recordStatus(page, 0);
-    const dropOffSaid = await recordStatus(page, 1);
+    const departureSaid = await recordStatus(status(page, 0));
+    const dropOffSaid = await recordStatus(status(page, 1));
 
     await place(page, FR.dropOff).press("End");
     await place(page, FR.dropOff).press("Backspace");
@@ -374,7 +342,7 @@ test.describe("the places of « Proposer une voiture », the event with a positi
     await openForm(page, seededEvent.id);
     await form(page).getByLabel(FR.note, { exact: true }).fill(marker);
     await choose(page, FR.departure, [GARE]);
-    const said = await recordStatus(page, 0);
+    const said = await recordStatus(status(page, 0));
 
     await submit(page).click();
     await offer.sent;
@@ -422,14 +390,26 @@ test.describe("the drop-off place at the bottom of the sheet, in a window of 360
     await expect(popupBox).toBeInViewport({ ratio: 1 });
   }
 
+  /** How far the drop-off's field, its label first, is under the top of what the sheet shows. */
+  const underTop = (page: Page) =>
+    form(page)
+      .getByText(FR.dropOff, { exact: true })
+      .evaluate((label) => {
+        const sheet = label.closest('[role="dialog"]')!;
+        return label.getBoundingClientRect().top - (sheet.getBoundingClientRect().top + sheet.clientTop);
+      });
+
   test("AL1.11: the drop-off's list opens under the field, whole in the window, five options and the footer in it", async ({ page, seededEvent }) => {
     const text = textOf("Gare de Br");
     await answerFor(text, { features: PLACES.map(({ feature }) => feature) });
     await openForm(page, seededEvent.id);
     await driveBack(page);
+    expect(await underTop(page)).toBeGreaterThan(100);
     await place(page, FR.dropOff).fill(text);
     await expect(options(page, FR.dropOff)).toHaveCount(5);
 
+    // The field has moved to the top of what the sheet shows, the list under it.
+    await expect.poll(() => underTop(page)).toBeCloseTo(0, 0);
     await expectFits(page, popup(page));
     for (const option of await options(page, FR.dropOff).all()) await expect(option).toBeInViewport({ ratio: 1 });
     await expect(popup(page).getByText("Ou gardez votre texte tel quel.")).toBeInViewport({ ratio: 1 });
@@ -437,7 +417,7 @@ test.describe("the drop-off place at the bottom of the sheet, in a window of 360
 
   test("AL1.11: longer labels: the list keeps to the window, and scrolls in itself", async ({ page, seededEvent }) => {
     const text = textOf("Gare de Br");
-    const long = (n: number) => namedPlace(`Gare de Brignais, quai ${n}, devant le grand parking couvert des voyageurs et des cars de la région`, 45.7 + n / 100, 4.7, "Brignais");
+    const long = (n: number) => namedPlace(`Gare de Brignais, quai ${n}, devant le grand parking couvert des voyageurs et des cars de la région`, 45.7 + n / 100, 4.7, "69126", "Brignais");
     await answerFor(text, { features: [1, 2, 3, 4, 5].map((n) => long(n).feature) });
     await openForm(page, seededEvent.id);
     await driveBack(page);

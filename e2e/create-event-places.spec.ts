@@ -161,7 +161,7 @@ test.describe("the place field of « Créer un événement »", () => {
     await fillTheRest(page);
     await typeAndList(page, text, 1);
     await options(page).first().click();
-    const said = await recordStatus(page);
+    const said = await recordStatus(status(page));
 
     await removeButton(page).click();
     await expect(positionLine(page)).toHaveCount(0);
@@ -183,7 +183,7 @@ test.describe("the place field of « Créer un événement »", () => {
     await openForm(page);
     await typeAndList(page, text, 1);
     await options(page).first().click();
-    const said = await recordStatus(page);
+    const said = await recordStatus(status(page));
 
     await place(page).fill("");
     await expect(positionLine(page)).toHaveCount(0);

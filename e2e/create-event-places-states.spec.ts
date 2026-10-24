@@ -160,7 +160,7 @@ test.describe("the place field of « Créer un événement », waiting and unava
     const text = textOf("Gymnase Colette-Bes");
     await answerFor(text, { features: [SALLE.feature, ECOLE.feature], delayMs: 1_500 });
     await openWithClock(page);
-    const said = await recordStatus(page);
+    const said = await recordStatus(status(page));
     const shown = await recordShown(page, FR.searching);
 
     await typeAndAsk(page, text);
@@ -319,7 +319,7 @@ test.describe("the place field of « Créer un événement », waiting and unava
     await answerFor(first, { status: 500 });
     await answerFor(second, { status: 500 });
     await openForm(page);
-    const said = await recordStatus(page);
+    const said = await recordStatus(status(page));
 
     await place(page).fill(first);
     await expect(line(page, FR.unavailable)).toBeVisible();
