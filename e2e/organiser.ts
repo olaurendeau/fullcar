@@ -324,7 +324,11 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
         const body = answer.then((response) => response.text());
         body.catch(() => {});
         fetched.set(request, body);
-        return answer.then((response) => route.fulfill({ response })).catch(() => {});
+        // Not fetched (the app's server down), it is abandoned here rather than left pending (#535).
+        return answer.then(
+          (response) => route.fulfill({ response }).catch(() => {}),
+          () => route.abort().catch(() => {}),
+        );
       }
       if (!isAction(request) && !isRouterRead(request)) return route.fallback();
       const answer = route.fetch({ maxRedirects: 0 });
