@@ -57,6 +57,17 @@
   .actions.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   /* The fold button of the map: an outline button, full width, map icon then chevron */
   .maptoggle { min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--app-border); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-weight: 500; outline: 2px dashed var(--accent); outline-offset: 3px; }
+  /* v24: the map’s card, the pattern of « Vos inscriptions » (device-persons.tsx): rounded-[14px] border, the button as its header; the map full-bleed inside */
+  .mapcard { border: 1px solid var(--app-border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; background: var(--app-bg); }
+  .mapcard.new { outline: 2px dashed var(--accent); outline-offset: 3px; }
+  .mapcard .maptoggle { border: 0; outline: none; border-radius: 8px; margin: 4px 12px; padding: 0 2px; }
+  .mapcard .map { border: 0; border-radius: 0; outline: none; border-top: 1px solid var(--app-border); }
+  .mapcard:not(.folded) { padding-bottom: 12px; }
+  /* v25: the region’s focus ring, drawn by an element above Leaflet’s panes: an inside outline, never a box-shadow */
+  .ringover { position: absolute; inset: 0; z-index: 6; pointer-events: none; outline: 2px solid #737373; outline-offset: -2px; box-shadow: none; }
+  .mapcard .below { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 0; }
+  .mapcard .below > .mapnote, .mapcard .below > .touchhint { margin: 0; outline: none; }
+  .mapcard .below > .notice { outline: none; }
   .maptoggle .grow { flex: 1; }
   .maptoggle .chev { width: 16px; height: 16px; color: var(--app-muted); }
   .new { outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 10px; }
@@ -167,28 +178,32 @@
 
 <div class="wrap">
   <h1>Carte de l’événement</h1>
-  <p class="lead">Issue <a href="https://github.com/olaurendeau/fullcar/issues/238">#238</a>, <strong>version 23</strong>, après <a href="https://github.com/olaurendeau/fullcar/issues/237">#237</a> (maquette <code>place-autocomplete</code>, v5), qui donne leur <strong>position</strong> aux lieux. Dans chaque leg, une <strong>carte</strong> repliée montre le lieu de l’événement, le lieu de départ (aller) ou de dépose (retour) de chaque voiture qui a une position, et une ligne droite de chacune vers l’événement. Elle ne dit rien que la liste ne dise déjà, et chaque point de voiture mène à la <strong>fiche</strong> de sa voiture.</p>
+  <p class="lead">Issue <a href="https://github.com/olaurendeau/fullcar/issues/238">#238</a>, <strong>version 27</strong>, après <a href="https://github.com/olaurendeau/fullcar/issues/237">#237</a> (maquette <code>place-autocomplete</code>, v5), qui donne leur <strong>position</strong> aux lieux. Dans chaque leg, une <strong>carte</strong> repliée montre le lieu de l’événement, le lieu de départ (aller) ou de dépose (retour) de chaque voiture qui a une position, et une ligne droite de chacune vers l’événement. Elle ne dit rien que la liste ne dise déjà, et chaque point de voiture mène à la <strong>fiche</strong> de sa voiture.</p>
   <p class="lead">Décisions du propriétaire : la carte sort du hors-périmètre V1 (D1) ; le point exact (D5) ; de vraies tuiles par notre route en cache au CDN, avec Leaflet (D7) ; une ligne droite (D8) ; « Carte », « fiche » (D9) ; et, depuis la v3 de <code>place-autocomplete</code>, <strong>toute modification du texte d’un lieu de voiture retire sa position</strong> : une voiture sur la carte est donc exactement là où son texte le dit. Décision du coordinateur : la carte se met à jour quand la page applique un nouvel état (pas de rafraîchissement automatique sur main, #67).</p>
+  <p class="lead"><strong>La v25</strong> (revue de la v24) : l’anneau de focus de la région de la carte tracé par un élément posé au-dessus des panneaux de Leaflet ; 12 px sous la boîte de la carte quand elle est la dernière du conteneur ; CA1.18 comparé aux valeurs ; « le conteneur » pour le bloc bordé, « la région de la carte » pour celui de Leaflet.</p>
+  <p class="lead"><strong>La v24</strong> (retour du propriétaire, 24/10) : le bouton « Carte », la carte et les lignes sous elle sont dans un seul conteneur bordé, au motif de « Vos inscriptions » ; la boîte de la carte va d’un bord à l’autre (voir « <a href="#carte-carte">Le conteneur de la carte</a> »). Rien ne change pour le fournisseur de tuiles.</p>
   <p class="lead"><strong>La v22</strong> (revue de la v21) : marge de cadrage du bas et hauteur de la bulle dérivées de la hauteur mesurée des crédits (le point sous le drapeau compris) ; la bulle garde sa place en haut à droite ; les gestes sur les crédits suivent le motif des points (#484) ; la notice de Leaflet devient une exigence pour #558.</p>
   <p class="lead"><strong>La v21</strong> (décision du propriétaire du 24/10) : les crédits redeviennent une ligne courte posée sur la carte, en bas à droite : « Geoapify · © OpenMapTiles.org · © OpenStreetMap », le lien OpenStreetMap avec une cible de 24 px. Plus de ligne sous la carte.</p>
   <p class="lead"><strong>La v20</strong> (revue de la v19) : l’avis de tuiles sous l’attribution ; la ligne d’attribution présente pendant le chargement et absente sous un avis de Leaflet ; le lien OpenStreetMap au motif du bas de page (nouvel onglet dit au lecteur d’écran, anneau de focus) ; CA3.5 observable ; disjoncteur sur 429 seulement, 10 s par défaut (décision du coordinateur).</p>
   <p class="lead"><strong>La v19</strong> (epic <a href="https://github.com/olaurendeau/fullcar/issues/549">#549</a>, décisions du propriétaire du 24/10) : <strong>Geoapify remplace Plan IGN partout</strong>, pour avoir un fond de carte dans tous les pays (en Italie, Plan IGN ne montrait rien). Tuiles raster <code>positron</code> en @2x, toujours par notre route <code>/tuiles</code> mise en cache ; la clé reste sur le serveur. L’attribution passe sous la carte, avec un lien de 44 px vers la licence d’OpenStreetMap. Toute réponse de Geoapify autre qu’une tuile est un échec (502), avec un disjoncteur après un 429. Tout ce qui est propre à l’IGN est retiré. Suites de #238 : « Recharger la page » après un second échec de Leaflet, l’import de Leaflet partagé par les deux legs, CA1.9 mesuré. Le reste de la v18 ne change pas. Les notes des versions précédentes décrivent ces versions.</p>
   <p class="lead"><span class="legend"></span>Ce qui est nouveau est entouré de pointillés bleus. Le fond dessiné ici imite les tuiles <code>positron</code> de Geoapify.</p>
   <nav class="toc" aria-label="Sections">
-    <a href="#place">Où est la carte</a><a href="#etats">Les états</a><a href="#cas">Cas difficiles</a><a href="#vides">Vides et cassés</a><a href="#maj">Mises à jour et focus</a><a href="#anglais">En anglais</a><a href="#bureau">À 1280 px</a><a href="#tuiles">Les tuiles</a><a href="#anatomie">Anatomie</a><a href="#mots">Les mots</a><a href="#criteres">Critères</a><a href="#decisions">Décisions</a><a href="#hors">Hors périmètre</a><a href="#plus-tard">Plus tard : les Arrêts</a><a href="#proprietaire">Pour le propriétaire</a><a href="#revisions">Révisions</a>
+    <a href="#place">Où est la carte</a><a href="#carte-carte">Le conteneur de la carte</a><a href="#etats">Les états</a><a href="#cas">Cas difficiles</a><a href="#vides">Vides et cassés</a><a href="#maj">Mises à jour et focus</a><a href="#anglais">En anglais</a><a href="#bureau">À 1280 px</a><a href="#tuiles">Les tuiles</a><a href="#anatomie">Anatomie</a><a href="#mots">Les mots</a><a href="#criteres">Critères</a><a href="#decisions">Décisions</a><a href="#hors">Hors périmètre</a><a href="#plus-tard">Plus tard : les Arrêts</a><a href="#proprietaire">Pour le propriétaire</a><a href="#revisions">Révisions</a>
   </nav>
 
   <!-- ============================================================ -->
   <h2 id="place">Où est la carte</h2>
-  <p class="lead">Dans chaque leg, entre « Ajouter une personne » / « Proposer une voiture » et la première fiche. Repliée par défaut, à 360 px comme à 1280 px : rien n’est chargé, ni Leaflet ni tuile, tant que personne ne l’ouvre.</p>
+  <p class="lead">Dans chaque leg, entre « Ajouter une personne » / « Proposer une voiture » et la première fiche. Repliée par défaut, à 360 px comme à 1280 px : rien n’est chargé, ni Leaflet ni tuile, tant que personne ne l’ouvre. Depuis la v24, le bouton, la carte et les lignes sous la carte sont dans <strong>un seul conteneur</strong> bordé (voir « <a href="#carte-carte">Le conteneur de la carte</a> »).</p>
   <div class="grid">
-    <div class="state"><h3>Repliée : un bouton de 44 px</h3><p>« Carte » : un <code>&lt;button aria-expanded="false" aria-controls&gt;</code> au libellé fixe, le chevron disant l’état, la carte dans un conteneur <code>hidden</code>, comme « Vos inscriptions » et « Espace organisateur ». Il ajoute 60 px (44 + l’écart de 16) : avec un titre et un lieu de 30 caractères, le bandeau est entre 538 et 578 px et le haut de la première fiche à 714 px, au-dessus du pli de 780 px (<strong>mesuré</strong> à 360 × 780 par la relecture de #542, #484) ; C9.2 tient. <span class="crit">CA1.1, CA1.2, CA1.9</span></p>
+    <div class="state"><h3>Repliée : un conteneur de 54 px, un bouton de 44 px</h3><p>« Carte » : un <code>&lt;button aria-expanded="false" aria-controls&gt;</code> au libellé fixe, le chevron disant l’état, la carte dans une partie repliable <code>hidden</code>, comme « Vos inscriptions » et « Espace organisateur ». Depuis la v24, le bouton est l’en-tête d’un conteneur bordé, qui fait 54 px replié : avec un titre et un lieu de 30 caractères, le bandeau reste entre 538 et 578 px ; le haut de la première fiche passe de 714 px (<strong>mesuré</strong> à 360 × 780 par la relecture de #542, #484) à environ 724 px (<strong>calculé</strong>), au-dessus du pli de 780 px ; C9.2 tient. <span class="crit">CA1.1, CA1.2, CA1.9, CA1.18</span></p>
       <div class="phone"><div class="urlbar">{hôte}/e/Kp7mQx3a</div><div class="screen">
         <div class="cut">… en-tête, « Vos inscriptions »</div>
         <div class="tabs"><span class="on">Aller<span class="pill">2 sans voiture</span></span><span>Retour</span></div>
         <div class="banner"><svg class="ico"><use href="#users"/></svg><span>2 sans voiture · 4 places libres</span></div>
         <div class="actions two"><div class="btn outline wrap"><svg class="ico"><use href="#userplus"/></svg><span>Ajouter une personne</span></div><div class="btn outline wrap"><svg class="ico"><use href="#car"/></svg><span>Proposer une voiture</span></div></div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevdown"/></svg></div>
+        <div class="mapcard new folded">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevdown"/></svg></div>
+        </div>
         <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p><ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span>Léa</span></li><li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li></ul></article>
         <div class="cut">… les autres fiches, puis « Sans voiture »</div>
       </div></div></div>
@@ -196,20 +211,24 @@
     <div class="state"><h3>Ouverte : la carte de l’aller, au toucher</h3><p>Le lieu de l’événement (drapeau, carré noir), une étiquette par voiture avec le prénom de qui conduit, des lignes droites vers l’événement, deux voitures au même point en une seule étiquette « 2 ». La vue cadre tous les points, sans animation. Au toucher, un doigt fait défiler la page, pas la carte. Les crédits sont dans le coin en bas à droite de la carte, sur un fond blanc translucide (v21). Sous la carte, toujours dans cet ordre : l’avis de tuiles (s’il y en a un), le nombre de voitures qui n’y sont pas (s’il y en a), la phrase « deux doigts » (au toucher). <span class="crit">CA1.3 à CA1.6, CA1.10, CA1.11</span></p>
       <div class="phone"><div class="urlbar">{hôte}/e/Kp7mQx3a</div><div class="screen">
         <div class="cut">… onglets, bandeau, actions</div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
-          <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
+            <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
+          <div class="below">
+            <p class="mapnote">1 voiture n’est pas sur la carte : son lieu n’a pas de position.</p>
+            <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
+          </div>
         </div>
-        <p class="mapnote">1 voiture n’est pas sur la carte : son lieu n’a pas de position.</p>
-        <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
         <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p></article>
         <div class="cut">… les autres fiches</div>
       </div></div></div>
@@ -220,36 +239,96 @@
         <dl class="dl"><dt>Début</dt><dd>samedi 12 décembre 2026 à 09:30</dd></dl>
         <div class="banner"><svg class="ico"><use href="#circlecheck"/></svg><span>Tout le monde a une place · 3 places libres</span></div>
         <div class="actions two"><div class="btn outline wrap"><svg class="ico"><use href="#userplus"/></svg><span>Ajouter une personne</span></div><div class="btn outline wrap"><svg class="ico"><use href="#car"/></svg><span>Proposer une voiture</span></div></div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L268 40"/><path d="M96 196 L268 40"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:81.7%;top:16.7%" role="img"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L268 40"/><path d="M96 196 L268 40"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:81.7%;top:16.7%" role="img"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
+          <div class="below">
+            <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
+          </div>
         </div>
-        <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
         <div class="cut">… fiches</div>
       </div></div></div>
   </div>
 
   <!-- ============================================================ -->
+  <h2 id="carte-carte">Le conteneur de la carte (v24)</h2>
+  <p class="lead"><strong>Le problème</strong> (le propriétaire, 24/10) : « C’est bizarre que l’en-tête / le bouton de la carte ne contienne pas la carte dans une carte ; on ne voit pas qu’ils vont ensemble. » Jusqu’à la v23, le bouton « Carte » était un bouton <code>outline</code> isolé, et la carte, une boîte bordée posée dessous, puis des lignes libres : trois objets, sans rien qui dise qu’ils forment un tout. Les fiches des voitures, juste dessous, sont des cartes bordées ; la carte ressemblait à une fiche de plus.</p>
+  <p class="lead"><strong>L’histoire</strong> : en tant que personne qui regarde l’événement, quand j’ouvre la carte d’un leg, je vois d’un coup d’œil que le bouton « Carte », la carte et ce qui est écrit dessous vont ensemble, et où ce bloc s’arrête avant la première fiche.</p>
+  <div class="anatomy">
+    <div class="card"><h3>Le motif : celui de « Vos inscriptions »</h3><ul>
+      <li>Dans tout ce qui suit, « le conteneur » est ce bloc bordé ; « la carte » reste la Carte (le glossaire). Le conteneur prend le style du bloc qui replie déjà un contenu sur cet écran, « Vos inscriptions » (<code>device-persons.tsx</code>) : un conteneur bordé, <code>rounded-[14px] border</code>, dont le bouton est l’en-tête (<code>min-h-11</code>, <code>rounded-lg</code>, <code>focus-visible:focus-ring</code>), avec 4 px au-dessus et 12 px sur les côtés.</li>
+      <li>Le bouton perd sa bordure <code>outline</code> : c’est le conteneur qui est bordé. Libellé fixe « Carte », icône, chevron, <code>aria-expanded</code>, <code>aria-controls</code> : inchangés.</li>
+      <li>Replié, le conteneur ne contient que le bouton (4 px dessous). Ouvert, dans cet ordre : le bouton ; la boîte de la carte ; les lignes sous la carte (l’avis de tuiles, <code>notOnMap</code>, la phrase « deux doigts »), à 12 px des bords, 10 px entre elles ; et toujours <strong>12 px en bas</strong> (<code>pb-3</code>, comme « Vos inscriptions » ouvert), même quand la boîte de la carte est la dernière chose du conteneur : son rayon intérieur (13 px) ne coupe donc jamais le coin de la boîte, ni les crédits, ni l’anneau du lien. Cela ajoute 12 px sous la boîte quand aucune ligne ne la suit ; replié, rien ne change (54 px). Sous un avis de Leaflet, l’avis prend la place de la boîte, dans le conteneur.</li>
+      <li>Le conteneur n’est pas un repère (pas de <code>section</code> ni de <code>role</code>) : la boîte de la carte reste la seule région, nommée « Carte de l’aller : … ».</li>
+      <li>Sans JavaScript, tout le conteneur est masqué (<code>noscript:hidden</code> sur le conteneur, plus seulement sur le bouton).</li></ul></div>
+    <div class="card"><h3>La boîte de la carte, d’un bord à l’autre</h3><ul>
+      <li>Dans le conteneur, la boîte de la carte va d’un bord à l’autre (<code>-mx-3</code>) : plus de bordure ni de coins arrondis à elle, un trait de 1 px au-dessus la sépare du bouton ; les 12 px du bas du conteneur la gardent loin de ses coins arrondis.</li>
+      <li>Largeur de la boîte : la largeur du conteneur moins ses 2 px de bordure : <strong>326 px</strong> à 360 px (au lieu de 328), <strong>382 px</strong> à 416 px, <strong>414 px</strong> dans la colonne de 448 px à 1280 px (au lieu de 416). Hauteur inchangée : 240 px, 280 px à partir d’une fenêtre de 448 px.</li>
+      <li>Les crédits (CA3.7) tiennent toujours sur une ligne à 360 px : 303 px dans 326 (mesuré dans la maquette). La marge de cadrage du bas et la hauteur maximale de la bulle se lisent sur la boîte de la carte et sur la hauteur mesurée des crédits : rien ne change dans leur règle.</li>
+      <li><strong>L’anneau de focus de la région de la carte</strong> (focusable : flèches, + et −) ne peut pas être tracé sur la région elle-même : tout ce qui est dessiné à l’intérieur, contour ou ombre, passe sous les panneaux de Leaflet (z-index 400 et plus, sur toute la surface). Il est donc tracé par <strong>un élément à nous, posé au-dessus</strong> : <code>pointer-events-none absolute inset-0</code>, z-index 1002 (au-dessus des crédits, 1000, et de la bulle, 1001), affiché seulement quand la région a le focus clavier (<code>:focus-visible</code>). Il porte l’anneau du projet, un contour et pas une ombre (« An outline, not a box-shadow: it stays in forced colours », <code>globals.css</code>) : <code>focus-ring</code> avec <code>-outline-offset-2</code>, donc à l’intérieur, jamais coupé par les bords du conteneur. Couleur : #737373 (<code>--ring</code>) sur les gris clairs de <code>positron</code> dépasse les 3:1 qu’exige un indicateur de focus (WCAG 2.2, 1.4.11) ; mesuré sur les couleurs qui imitent <code>positron</code> dans cette maquette : 4,31:1 sur le fond (#f4f4f2), 3,92:1 sur les parcs (#e6ebe2), 3,42:1 sur l’eau (#d4dce2, la plus basse), 4,74:1 sur les routes blanches. À revoir d’un coup d’œil sur les vraies tuiles, avec la clé.</li>
+      <li><strong>La boîte de chargement</strong> (« Chargement de la carte… », <code>tabindex="-1"</code>, qui reçoit le focus après « Réessayer ») a le <strong>même élément d’anneau</strong> que la région de la carte (v27) : son texte est un paragraphe <code>absolute inset-0</code> à fond opaque (<code>bg-background</code>) qui recouvre toute la boîte, et un contour tracé à l’intérieur de la boîte passerait dessous, comme sous les panneaux de Leaflet. <strong>Un seul élément sert aux deux états</strong> : <code>pointer-events-none absolute inset-0</code>, z-index 1002, <code>focus-ring</code> avec <code>-outline-offset-2</code>, posé au-dessus du texte de chargement comme des panneaux, affiché tant que la boîte de chargement <em>ou</em> la région de la carte a le focus clavier.</li>
+      <li>Pourquoi d’un bord à l’autre et pas à 12 px des bords comme le reste du contenu : à 12 px, la boîte ne ferait que 302 px à 360 px, et les crédits (303 px) passeraient sur deux lignes ; la carte est le contenu du conteneur, comme une image dans un bloc.</li></ul></div>
+    <div class="card"><h3>Ce que cela déplace (CA1.9)</h3><ul>
+      <li>Replié, le conteneur fait 54 px de haut (1 + 4 + 44 + 4 + 1) au lieu des 44 px du bouton : 10 px de plus. Les 12 px du bas ne comptent qu’ouvert.</li>
+      <li>Le bandeau ne bouge pas (538 à 578 px, au-dessus de la carte). Le haut de la première fiche passe de 714 px (mesuré par la relecture de #542, #484) à <strong>724 px</strong> environ (<strong>calculé</strong>, à mesurer par le test) : toujours au-dessus du pli de 780 px ; C9.2 tient.</li></ul></div>
+    <div class="card"><h3>Les tâches #551 à #558</h3><ul>
+      <li>Rien ne change pour le fournisseur de tuiles : la route <code>/tuiles</code>, la clé, le disjoncteur, le faux fournisseur, les crédits et leurs mesures, la notice de Leaflet. Seul le conteneur visuel change.</li>
+      <li>D’où une tâche de plus, indépendante : « le conteneur de la carte » (le conteneur et le bouton dans <code>event-map.tsx</code>, l’élément d’anneau au-dessus de la région, <code>noscript:hidden</code> sur le conteneur, CA1.18, CA1.9 remesuré).</li></ul></div>
+  </div>
+  <div class="grid">
+    <div class="state" style="grid-column:1/-1"><h3>À 416 px</h3><p>Une fenêtre de 416 px : le conteneur fait 384 px de large, la boîte de la carte 382 px, 240 px de haut (moins de 448 px de fenêtre). Les crédits tiennent sur une ligne. Ici, la région de la carte a le focus clavier : l’anneau, en #737373 (<code>--ring</code>), est tracé par l’élément posé au-dessus des panneaux de Leaflet, à l’intérieur, au-dessus des crédits aussi (v25, v26). <span class="crit">CA1.8, CA1.18</span></p>
+      <div class="phone" style="width:416px"><div class="screen">
+        <div class="cut">… onglets, bandeau, actions</div>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
+            <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+            <span class="ringover"></span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
+          <div class="below">
+            <p class="mapnote">1 voiture n’est pas sur la carte : son lieu n’a pas de position.</p>
+            <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
+          </div>
+        </div>
+        <div class="cut">… fiches</div>
+      </div></div></div>
+    <div class="state"><h3>Pas de bascule carte / liste</h3><p>Le bouton « Carte » montre ou cache la carte ; il ne bascule pas entre une carte et une liste. La liste des fiches reste toujours sous la carte, ouverte ou repliée : il n’y a pas d’état « liste » à dessiner.</p></div>
+  </div>
+
+  <!-- ============================================================ -->
   <h2 id="etats">Les états</h2>
   <div class="grid">
-    <div class="state"><h3>Un point au clavier, puis sa fiche</h3><p>Tab entre dans la carte (son conteneur : flèches pour déplacer, + et − pour zoomer), puis passe de point de voiture en point de voiture dans l’ordre des fiches, puis aux boutons de zoom. Le point de Marc a le focus : « Voiture de Marc, départ : Place de la mairie, 69290 Craponne, 1 place libre ». Chaque étiquette est un vrai <code>&lt;button&gt;</code> (dans l’icône du marqueur, le marqueur lui-même n’étant pas focusable) : Entrée, Espace ou un tap font défiler jusqu’à sa fiche et mettent le focus sur son titre, la cible de « Voir la voiture ». Le drapeau de l’événement n’est pas un bouton : c’est une image nommée, hors de l’ordre de Tab. <span class="crit">CA1.4, CA1.5</span></p>
+    <div class="state"><h3>Un point au clavier, puis sa fiche</h3><p>Tab entre dans la carte (sa région : flèches pour déplacer, + et − pour zoomer), puis passe de point de voiture en point de voiture dans l’ordre des fiches, puis aux boutons de zoom. Le point de Marc a le focus : « Voiture de Marc, départ : Place de la mairie, 69290 Craponne, 1 place libre ». Chaque étiquette est un vrai <code>&lt;button&gt;</code> (dans l’icône du marqueur, le marqueur lui-même n’étant pas focusable) : Entrée, Espace ou un tap font défiler jusqu’à sa fiche et mettent le focus sur son titre, la cible de « Voir la voiture ». Le drapeau de l’événement n’est pas un bouton : c’est une image nommée, hors de l’ordre de Tab. <span class="crit">CA1.4, CA1.5</span></p>
       <div class="phone"><div class="screen">
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk focusring" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
-          <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk focusring" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
+            <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
         <div class="cut">Entrée ↓ défile jusqu’à la fiche</div>
         <article class="car"><div class="car-h"><strong class="focusring">Voiture de Marc</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:00</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Place de la mairie, 69290 Craponne</span></p><ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span>Hugo</span></li><li class="pass"><svg class="ico"><use href="#user"/></svg><span>Zoé</span></li><li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li></ul></article>
@@ -257,15 +336,18 @@
 
     <div class="state"><h3>Deux voitures au même point : la bulle</h3><p>Le point « 2 », nommé « 2 voitures : Nina, Paul », prend dans l’ordre de Tab la place de la première de ses voitures dans l’ordre des fiches. Activé, il ouvre une bulle (la nôtre, pas la croix anglaise de Leaflet) : un bouton par voiture, dans l’ordre des fiches, puis « Fermer ». Le focus va au premier bouton. Chaque bouton de voiture mène à sa fiche (défilement, focus sur son titre) et ferme la bulle. Échap ou « Fermer » ferme la bulle et rend le focus au point. La bulle est dans le DOM juste après son point : Tab depuis « Fermer » va au point suivant dans l’ordre des fiches, et la bulle se ferme quand le focus la quitte. <span class="crit">CA1.6</span></p>
       <div class="phone"><div class="screen">
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <div class="popup" style="right:10px;top:10px;width:210px"><strong>2 voitures : Nina, Paul</strong><span class="btn outline focusring">Voiture de Nina</span><span class="btn outline">Voiture de Paul</span><span class="btn outline">Fermer</span></div>
-          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <div class="popup" style="right:10px;top:10px;width:210px"><strong>2 voitures : Nina, Paul</strong><span class="btn outline focusring">Voiture de Nina</span><span class="btn outline">Voiture de Paul</span><span class="btn outline">Fermer</span></div>
+            <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
       </div></div></div>
 
@@ -273,24 +355,30 @@
       <div class="phone"><div class="screen">
         <div class="tabs"><span>Aller</span><span class="on">Retour<span class="pill">1 sans voiture</span></span></div>
         <div class="cut">… bandeau, actions</div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M110 190 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:33.5%;top:79%"><svg class="ico"><use href="#car"/></svg>Inès</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M110 190 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:33.5%;top:79%"><svg class="ico"><use href="#car"/></svg>Inès</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
+          <div class="below">
+            <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
+          </div>
         </div>
-        <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
         <div class="cut">… fiches du retour</div>
       </div></div></div>
 
     <div class="state"><h3>Le chargement</h3><p>À la première ouverture : la boîte de la carte à sa hauteur finale, ses crédits déjà dans le coin en bas à droite (v21). Rien ne saute quand la carte arrive. « Chargement de la carte… » est dans la boîte, en texte visible (#737373 sur blanc, 4,7:1), sans aucune région <code>status</code> de plus : le panneau du leg n’en a qu’une, celle du bandeau. La boîte de la carte porte <code>aria-busy="true"</code> pendant ce temps. <span class="crit">CA1.14</span></p>
       <div class="phone"><div class="screen">
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map"><div class="maploading"><span style="display:flex;gap:8px;align-items:center"><svg class="ico"><use href="#loader"/></svg>Chargement de la carte…</span></div><span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span></div>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map"><div class="maploading"><span style="display:flex;gap:8px;align-items:center"><svg class="ico"><use href="#loader"/></svg>Chargement de la carte…</span></div><span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span></div>
+        </div>
         <div class="cut">… fiches</div>
       </div></div></div>
   </div>
@@ -300,60 +388,72 @@
   <div class="grid">
     <div class="state"><h3>Beaucoup de voitures autour d’un village</h3><p>Huit voitures entre Brindas et Vaugneray. Les voitures à moins de <strong>25 m</strong> l’une de l’autre forment un seul point, une fois formé le point du drapeau (voir « Les points ») (un même parking, deux maisons voisines : à zoom 18, elles seraient à quelques pixels). Au-delà, les étiquettes peuvent se toucher ; la dernière dans l’ordre des fiches est dessus ; leur texte reste à 12 px, jamais moins, et zoomer les sépare. <span class="crit">CA1.6</span></p>
       <div class="phone"><div class="screen">
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".55" stroke-width="2" fill="none"><path d="M108 36 L214 128"/><path d="M151 70 L214 128"/><path d="M90 110 L214 128"/><path d="M150 100 L214 128"/><path d="M60 160 L214 128"/><path d="M130 175 L214 128"/><path d="M207 36 L214 128"/><path d="M250 180 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk near" style="left:33%;top:15%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk near" style="left:46%;top:29%"><svg class="ico"><use href="#car"/></svg>Marc</span>
-          <span class="mk near" style="left:28%;top:47%"><svg class="ico"><use href="#car"/></svg>Inès</span>
-          <span class="mk near" style="left:50%;top:45%"><svg class="ico"><use href="#car"/></svg>Hugo</span>
-          <span class="mk near" style="left:20%;top:67%"><svg class="ico"><use href="#car"/></svg>Nina</span>
-          <span class="mk near" style="left:41%;top:73%"><svg class="ico"><use href="#car"/></svg>Paul</span>
-          <span class="mk near" style="left:63%;top:15%"><svg class="ico"><use href="#car"/></svg>Zoé</span>
-          <span class="mk near" style="left:77%;top:75%"><svg class="ico"><use href="#car"/></svg>Lou</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".55" stroke-width="2" fill="none"><path d="M108 36 L214 128"/><path d="M151 70 L214 128"/><path d="M90 110 L214 128"/><path d="M150 100 L214 128"/><path d="M60 160 L214 128"/><path d="M130 175 L214 128"/><path d="M207 36 L214 128"/><path d="M250 180 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk near" style="left:33%;top:15%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk near" style="left:46%;top:29%"><svg class="ico"><use href="#car"/></svg>Marc</span>
+            <span class="mk near" style="left:28%;top:47%"><svg class="ico"><use href="#car"/></svg>Inès</span>
+            <span class="mk near" style="left:50%;top:45%"><svg class="ico"><use href="#car"/></svg>Hugo</span>
+            <span class="mk near" style="left:20%;top:67%"><svg class="ico"><use href="#car"/></svg>Nina</span>
+            <span class="mk near" style="left:41%;top:73%"><svg class="ico"><use href="#car"/></svg>Paul</span>
+            <span class="mk near" style="left:63%;top:15%"><svg class="ico"><use href="#car"/></svg>Zoé</span>
+            <span class="mk near" style="left:77%;top:75%"><svg class="ico"><use href="#car"/></svg>Lou</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
       </div></div></div>
 
     <div class="state"><h3>Une voiture au lieu même de l’événement</h3><p>Sophie part du parking de l’événement : à moins de 25 m du drapeau, c’est « la même position ». Pas de ligne ; l’étiquette de la voiture est ancrée 24 px sous le drapeau. Une voiture à 100 m a un point et une ligne ordinaires ; à faible zoom son étiquette peut toucher le drapeau, qui est toujours dessus. Son nom dit son lieu, comme sa fiche. <span class="crit">CA1.15</span></p>
       <div class="phone"><div class="screen">
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:65.2%;top:66%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:65.2%;top:66%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
       </div></div></div>
 
     <div class="state"><h3>Deux voitures au lieu de l’événement : le point « 2 »</h3><p>Sophie et Nina partent toutes deux à moins de 25 m du drapeau (à 20 m au nord, à 20 m au sud : 40 m l’une de l’autre). Un seul point sous le drapeau, « 2 », nommé « 2 voitures : Sophie, Nina » dans l’ordre des fiches, avec la bulle ; pas de ligne pour elles. Il prend dans l’ordre de Tab la place de Sophie, sa première voiture. <span class="crit">CA1.15</span></p>
       <div class="phone"><div class="screen">
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk group" style="left:65.2%;top:66%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk group" style="left:65.2%;top:66%"><svg class="ico"><use href="#car"/></svg>2</span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
       </div></div></div>
 
     <div class="state"><h3>Un prénom de 40 caractères, deux « Claire »</h3><p>L’étiquette coupe à 120 px avec « … » ; le nom accessible et la fiche donnent le prénom entier (C11.3). Deux personnes qui conduisent s’appellent Claire : deux étiquettes « Claire », comme deux fiches « Voiture de Claire » ; leurs noms accessibles diffèrent par le lieu. <span class="crit">CA1.16</span></p>
       <div class="phone"><div class="screen">
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:76%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:34%;top:81.7%"><svg class="ico"><use href="#car"/></svg><span class="nm">Marie-Bérengère-Anne-Charlotte-Hortense</span></span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:76%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:34%;top:81.7%"><svg class="ico"><use href="#car"/></svg><span class="nm">Marie-Bérengère-Anne-Charlotte-Hortense</span></span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
       </div></div></div>
   </div>
@@ -364,26 +464,32 @@
     <div class="state"><h3>Un leg vide</h3><p>L’état vide d’aujourd’hui (<code>EmptyLeg</code>) reste, sous la carte : « Aucune voiture proposée pour l’aller » et « Personne ne s’est encore inscrit. ». La carte montre le drapeau seul, zoom 14 ; son nom : « Carte de l’aller : le lieu de l’événement et aucune voiture ». <span class="crit">CA2.2</span></p>
       <div class="phone"><div class="screen">
         <div class="cut">… onglets, actions (pas de bandeau sur un leg vide)</div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:50%;top:50%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:50%;top:50%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
         <div class="empty"><div class="ibox"><svg class="ico"><use href="#car"/></svg></div><strong>Aucune voiture proposée pour l’aller</strong><span class="small-muted">Personne ne s’est encore inscrit.</span></div>
       </div></div></div>
 
     <div class="state"><h3>Des voitures, aucune avec une position</h3><p>Le drapeau seul, puis la phrase au pluriel. « {count} » du nom de la carte compte les voitures <strong>sur la carte</strong> : ici « aucune voiture ». À 0 voiture sans position, la phrase est absente (en français, <code>one</code> couvrirait 0). <span class="crit">CA2.3</span></p>
       <div class="phone"><div class="screen">
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:50%;top:50%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:50%;top:50%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
+          <div class="below">
+            <p class="mapnote">3 voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.</p>
+          </div>
         </div>
-        <p class="mapnote">3 voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.</p>
         <div class="cut">… fiches</div>
       </div></div></div>
 
@@ -404,39 +510,51 @@
         <div class="cut">… fiches</div>
       </div></div></div>
 
-    <div class="state"><h3>Des tuiles en échec</h3><p>Une tuile en échec (réseau coupé, ou un 502 de notre route : un 401, un 403, un 404, un 429 ou un 5xx de Geoapify, un délai dépassé, le disjoncteur ouvert) déclenche <code>tileerror</code>. Il n’y a plus de tuile « manquante » : Geoapify couvre le monde. Quand la couche a fini de charger la vue (<code>load</code>) avec au moins une tuile en échec, l’avis apparaît sous la carte, en premier des lignes (CA1.17 ; les crédits sont dans la carte) ; les points et les lignes restent. Il disparaît quand une vue suivante finit de charger sans échec (après « Réessayer », un déplacement ou un zoom) ; si « Réessayer » avait le focus, le focus va au conteneur de la carte. Rien n’est annoncé : les tuiles sont décoratives (<code>alt=""</code>), et tout ce qui compte est dans les points et la liste ; l’avis entre dans la description du conteneur de la carte. <span class="crit">CA2.4</span></p>
+    <div class="state"><h3>Des tuiles en échec</h3><p>Une tuile en échec (réseau coupé, ou un 502 de notre route : un 401, un 403, un 404, un 429 ou un 5xx de Geoapify, un délai dépassé, le disjoncteur ouvert) déclenche <code>tileerror</code>. Il n’y a plus de tuile « manquante » : Geoapify couvre le monde. Quand la couche a fini de charger la vue (<code>load</code>) avec au moins une tuile en échec, l’avis apparaît sous la carte, en premier des lignes (CA1.17 ; les crédits sont dans la carte) ; les points et les lignes restent. Il disparaît quand une vue suivante finit de charger sans échec (après « Réessayer », un déplacement ou un zoom) ; si « Réessayer » avait le focus, le focus va à la région de la carte. Rien n’est annoncé : les tuiles sont décoratives (<code>alt=""</code>), et tout ce qui compte est dans les points et la liste ; l’avis entre dans la description de la région de la carte. <span class="crit">CA2.4</span></p>
       <div class="phone"><div class="screen">
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map blank">
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="164" height="120" fill="var(--m-land)"/><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
-          <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map blank">
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="164" height="120" fill="var(--m-land)"/><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
+            <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
+          <div class="below">
+            <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>Le fond de carte n’a pas pu se charger.</strong></p><p class="small-muted">Vérifiez la connexion, ou réessayez dans un moment.</p><div class="act"><span class="btn outline">Réessayer</span></div></div>
+          </div>
         </div>
-        <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>Le fond de carte n’a pas pu se charger.</strong></p><p class="small-muted">Vérifiez la connexion, ou réessayez dans un moment.</p><div class="act"><span class="btn outline">Réessayer</span></div></div>
       </div></div></div>
 
-    <div class="state"><h3>Leaflet ne se charge pas, à 360 px</h3><p>L’import de Leaflet échoue (hors ligne, déploiement en cours) : pas de boîte vide, l’avis seul à la place de la carte, <strong>et pas de crédits</strong> : il n’y a pas de fond de carte à attribuer. Ils reviennent avec la boîte, dès « Chargement de la carte… ». « Réessayer » relance l’import : « Chargement de la carte… » remplace l’avis, dans la boîte (<code>tabindex="-1"</code>, <code>aria-busy="true"</code>), qui prend le focus. Réussi, la carte s’affiche et le focus va au bouton « Carte ». Un second échec remet l’avis, et le focus sur son « Réessayer ». Jamais sur <code>&lt;body&gt;</code>. <span class="crit">CA2.8</span></p>
+    <div class="state"><h3>Leaflet ne se charge pas, à 360 px</h3><p>L’import de Leaflet échoue (hors ligne, déploiement en cours) : pas de boîte vide, l’avis seul à la place de la carte, <strong>et pas de crédits</strong> : il n’y a pas de fond de carte à attribuer. Ils reviennent avec la boîte, dès « Chargement de la carte… ». « Réessayer » relance l’import : « Chargement de la carte… » remplace l’avis, dans la boîte (<code>tabindex="-1"</code>, <code>aria-busy="true"</code>), qui prend le focus ; son anneau est tracé par l’élément d’anneau posé au-dessus du texte de chargement (le même que pour la région de la carte, v27), à l’intérieur, visible malgré les bords du conteneur. Réussi, la carte s’affiche et le focus va au bouton « Carte ». Un second échec remet l’avis, et le focus sur son « Réessayer ». Jamais sur <code>&lt;body&gt;</code>. <span class="crit">CA2.8</span></p>
       <div class="phone"><div class="screen">
         <div class="cut">… bandeau, actions</div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>La carte n’a pas pu se charger.</strong></p><p class="small-muted">Vérifiez la connexion, puis réessayez.</p><div class="act"><span class="btn outline">Réessayer</span></div></div>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="below">
+            <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>La carte n’a pas pu se charger.</strong></p><p class="small-muted">Vérifiez la connexion, puis réessayez.</p><div class="act"><span class="btn outline">Réessayer</span></div></div>
+          </div>
+        </div>
         <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p></article>
       </div></div></div>
 
     <div class="state"><h3>Leaflet échoue encore : « Recharger la page »</h3><p>Après un déploiement, l’ancienne adresse du morceau de code répond 404 pour toujours : « Réessayer » ne peut plus réussir, seul un rechargement aide (relecture de #540). Donc, à partir du <strong>second</strong> échec de suite, le navigateur en ligne (<code>navigator.onLine</code>), l’avis devient celui-ci : « Recharger la page » d’abord (<code>location.reload()</code> : l’adresse, son fragment compris, reste la même), puis « Réessayer ». Le focus va à « Recharger la page ». Hors ligne, c’est toujours le premier avis. Pas de crédits sous ces avis. <span class="crit">CA2.8</span></p>
       <div class="phone"><div class="screen">
         <div class="cut">… bandeau, actions</div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>La carte n’a toujours pas pu se charger.</strong></p><p class="small-muted">La page a peut-être été mise à jour depuis votre arrivée : rechargez-la.</p><div class="act" style="display:flex;flex-direction:column;gap:8px"><span class="btn focusring">Recharger la page</span><span class="btn outline">Réessayer</span></div></div>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="below">
+            <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>La carte n’a toujours pas pu se charger.</strong></p><p class="small-muted">La page a peut-être été mise à jour depuis votre arrivée : rechargez-la.</p><div class="act" style="display:flex;flex-direction:column;gap:8px"><span class="btn focusring">Recharger la page</span><span class="btn outline">Réessayer</span></div></div>
+          </div>
+        </div>
         <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p></article>
       </div></div>
       <p class="small-muted" style="margin-top:8px">Les deux legs : l’import de Leaflet est <strong>un seul</strong> pour la page. Un échec met l’avis dans la carte de chaque leg ouvert ; « Réessayer » ou « Recharger la page », d’un leg ou de l’autre, agit pour les deux ; une réussite démarre la carte du leg montré, et celle du leg caché quand il est montré, sans qu’il reste sur l’échec. Le compte des échecs (pour « Recharger la page ») est celui de la page. Le focus ne va que dans le leg montré : montrer l’autre onglet après un échec y montre l’avis sans redemander le module, et le focus reste sur l’onglet. <span class="crit">CA2.10</span></p></div>
 
-    <div class="state"><h3>Sans JavaScript</h3><p>Le bouton « Carte » porte <code>noscript:hidden</code>, comme les onglets et la ligne de l’espace organisateur : sans JavaScript, il n’est pas affiché, et aucune phrase de plus. La phrase d’aujourd’hui (<code>Board.needsJavaScript</code>) reste la seule. <span class="crit">CA2.5</span></p>
+    <div class="state"><h3>Sans JavaScript</h3><p>Le conteneur du bouton « Carte » porte <code>noscript:hidden</code> (v24 : tout le conteneur, plus seulement le bouton), comme les onglets et la ligne de l’espace organisateur : sans JavaScript, il n’est pas affiché, et aucune phrase de plus. La phrase d’aujourd’hui (<code>Board.needsJavaScript</code>) reste la seule. <span class="crit">CA2.5</span></p>
       <div class="phone"><div class="screen">
         <div class="cut">… bandeau, actions</div>
         <p class="small-muted" style="margin:0">S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page.</p>
@@ -445,14 +563,17 @@
 
     <div class="state"><h3>Un événement à l’étranger</h3><p>Depuis la v19, un cas ordinaire : Geoapify couvre le monde (#549). Un week-end à Courmayeur montre un fond de carte comme en France, le drapeau, les étiquettes, les lignes, les crédits dans le coin. Plus de fond blanc. <span class="crit">CA2.6</span></p>
       <div class="phone"><div class="screen">
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M80 80 L190 140"/><path d="M270 60 L190 140"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:58%;top:58%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:24%;top:33%"><svg class="ico"><use href="#car"/></svg>Anna</span>
-          <span class="mk" style="left:82%;top:25%"><svg class="ico"><use href="#car"/></svg>Luca</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M80 80 L190 140"/><path d="M270 60 L190 140"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:58%;top:58%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:24%;top:33%"><svg class="ico"><use href="#car"/></svg>Anna</span>
+            <span class="mk" style="left:82%;top:25%"><svg class="ico"><use href="#car"/></svg>Luca</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
       </div></div></div>
 
@@ -460,17 +581,19 @@
       <div class="phone"><div class="screen">
         <div class="stack tight" style="display:flex;flex-direction:column;gap:4px"><p class="ev-h1"><span class="focusring">Kermesse de l’école</span></p><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Salle des fêtes, 69670 Vaugneray</span></p></div>
         <div class="cut">… début, sans fin ; plus d’onglets</div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
-          <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
+            <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
         </div>
       </div></div></div>
   </div>
@@ -482,16 +605,16 @@
     <thead><tr><th>ce qui change</th><th>la carte</th><th>le focus, s’il était dans ce qui change</th></tr></thead>
     <tbody>
       <tr><td>une voiture ajoutée, ou une position ajoutée à une voiture</td><td>un point de plus, à sa place dans l’ordre des fiches ; la vue se recadre seulement si personne n’a touché la carte</td><td>—</td></tr>
-      <tr><td>une voiture retirée, ou sa position retirée</td><td>son point disparaît</td><td>au conteneur de la carte</td></tr>
+      <tr><td>une voiture retirée, ou sa position retirée</td><td>son point disparaît</td><td>à la région de la carte</td></tr>
       <tr><td>la position d’une voiture change</td><td>son point se déplace (même élément)</td><td>reste sur le point</td></tr>
       <tr><td>une voiture rejoint une autre position ou un groupe (regroupement, séparation)</td><td>points recréés</td><td>au point (seul ou groupe) qui contient maintenant cette voiture</td></tr>
-      <tr><td>une bulle ouverte, et sa liste de voitures change (une des deux part, une troisième arrive)</td><td>la bulle se ferme</td><td>au point à cette position s’il en reste un, sinon au conteneur de la carte</td></tr>
+      <tr><td>une bulle ouverte, et sa liste de voitures change (une des deux part, une troisième arrive)</td><td>la bulle se ferme</td><td>au point à cette position s’il en reste un, sinon à la région de la carte</td></tr>
       <tr><td>les places libres changent</td><td>le nom du point change ; rien ne bouge</td><td>reste</td></tr>
       <tr><td>la position de l’événement est retirée</td><td>la carte et son bouton disparaissent ; sur <code>/admin</code>, la phrase de l’organisateur arrive</td><td>à l’onglet actif, ou au titre de l’événement sans onglets (<code>focusLandmark</code>)</td></tr>
       <tr><td>la position de l’événement est ajoutée</td><td>le bouton apparaît, replié</td><td>sur <code>/admin</code>, après un « Valider » de la feuille ouverte depuis la phrase : au bouton « Carte » de ce leg</td></tr>
       <tr><td>la position de l’événement change</td><td>le drapeau et les lignes se déplacent ; recadrage seulement si personne n’a touché la carte</td><td>reste (le drapeau n’est pas focusable) ; si le point du drapeau gagne ou perd une voiture : comme « regroupement ou séparation »</td></tr>
       <tr><td>la feuille « Modifier l’événement » ouverte depuis la phrase de l’organisateur se ferme</td><td>—</td><td>au bouton « Modifier l’événement » de la phrase (s’il est encore là) ; « Événement modifié. » sans position : même cible ; avec une position : « Carte » de ce leg</td></tr>
-      <tr><td>tuiles : l’avis disparaît après une vue chargée sans échec</td><td>l’avis part</td><td>si « Réessayer » l’avait : au conteneur de la carte</td></tr>
+      <tr><td>tuiles : l’avis disparaît après une vue chargée sans échec</td><td>l’avis part</td><td>si « Réessayer » l’avait : à la région de la carte</td></tr>
       <tr><td>Leaflet : « Réessayer », l’import relancé</td><td>« Chargement de la carte… » remplace l’avis</td><td>à la boîte de chargement (<code>tabindex="-1"</code>)</td></tr>
       <tr><td>Leaflet : l’import réussit</td><td>la carte s’affiche</td><td>au bouton « Carte »</td></tr>
       <tr><td>Leaflet : second échec de suite, en ligne</td><td>l’avis « toujours », avec « Recharger la page » puis « Réessayer »</td><td>à « Recharger la page »</td></tr>
@@ -499,7 +622,7 @@
       <tr><td>Leaflet : une réussite depuis l’autre leg</td><td>l’avis du leg caché part ; sa carte démarre quand il est montré</td><td>— (le focus reste dans le leg montré)</td></tr>
       <tr><td>le retour est supprimé</td><td>les onglets et la carte du retour disparaissent ; celle de l’aller reste</td><td>au titre de l’événement (<code>focusTitle</code>)</td></tr>
     </tbody></table></div>
-  <div class="note">Le focus ne reste jamais sur <code>&lt;body&gt;</code> (règle de <code>focus.ts</code>) : quand ni la cible de la table ni le conteneur de la carte n’existent plus, <code>focusLandmark</code>.</div>
+  <div class="note">Le focus ne reste jamais sur <code>&lt;body&gt;</code> (règle de <code>focus.ts</code>) : quand ni la cible de la table ni la région de la carte n’existent plus, <code>focusLandmark</code>.</div>
   <div class="note"><strong>L’ordre de Tab après une mise à jour.</strong> Leaflet ajoute un point recréé à la fin de son panneau. Après chaque mise à jour, les éléments des points sont remis dans l’ordre des fiches (déplacés dans le DOM seulement si l’ordre a changé), et un point qui avait le focus le retrouve après ce déplacement.</div>
   <div class="note"><strong>Aucune animation</strong> (décision 24 d’organizer-view) : <code>zoomAnimation: false</code>, <code>fadeAnimation: false</code>, <code>markerZoomAnimation: false</code>, <code>inertia: false</code>, <code>boxZoom: false</code> et <code>doubleClickZoom: false</code> (décision du coordinateur sur #529 : à la souris, seuls le glisser et les boutons), tout cadrage avec <code>{ animate: false }</code>, et les déplacements au clavier (flèches) aussi sans animation (décision du coordinateur : le gestionnaire clavier déplace la carte avec <code>{ animate: false }</code>). Faisabilité : Leaflet 1.9.4 n’a pas d’option pour cela ; le gestionnaire clavier est donc remplacé ou surchargé, et le remplaçant garde Maj pour trois fois la distance, la limite <code>maxBounds</code>, et + / − pour zoomer. Aucun élément de la carte n’a donc les classes <code>leaflet-zoom-anim</code> (posée par Leaflet 1.9.4 sur le panneau de la carte), <code>leaflet-pan-anim</code> ni <code>leaflet-proxy</code> ; seuls les conteneurs de tuiles et le moteur SVG des lignes portent <code>leaflet-zoom-animated</code>, sans effet puisque rien n’anime (CA1.10).</div>
 
@@ -510,20 +633,24 @@
       <div class="phone"><div class="screen">
         <div class="tabs"><span class="on">Outbound<span class="pill">2 without a car</span></span><span>Return</span></div>
         <div class="cut">… banner, actions</div>
-        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Map</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
-          <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+        <div class="mapcard new">
+          <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Map</span><svg class="chev"><use href="#chevup"/></svg></div>
+          <div class="map">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
+            <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
+          </div>
+          <div class="below">
+            <p class="mapnote">1 car is not on the map: its place has no position.</p>
+            <p class="touchhint">Use two fingers to move or zoom the map.</p>
+          </div>
         </div>
-        <p class="mapnote">1 car is not on the map: its place has no position.</p>
-        <p class="touchhint">Use two fingers to move or zoom the map.</p>
       </div></div></div>
     <div class="state"><h3>Failures, the organiser’s line</h3><p><span class="crit">CA2.1, CA2.3, CA2.4, CA2.8</span></p>
       <div class="phone"><div class="screen">
@@ -542,19 +669,23 @@
     <div class="tabs"><span class="on">Aller<span class="pill">2 sans voiture</span></span><span>Retour</span></div>
     <div class="banner"><svg class="ico"><use href="#users"/></svg><span>2 sans voiture · 4 places libres</span></div>
     <div class="actions two"><div class="btn outline wrap"><svg class="ico"><use href="#userplus"/></svg><span>Ajouter une personne</span></div><div class="btn outline wrap"><svg class="ico"><use href="#car"/></svg><span>Proposer une voiture</span></div></div>
-    <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-    <div class="map tall">
-          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
-          <div class="zoom"><span>+</span><span>−</span></div>
-          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
-          <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm ringmap">© OpenStreetMap</a></span>
-        </div>
-    <p class="mapnote">1 voiture n’est pas sur la carte : son lieu n’a pas de position.</p>
+    <div class="mapcard new">
+      <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+      <div class="map tall">
+            <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+            <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
+            <div class="zoom"><span>+</span><span>−</span></div>
+            <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+            <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+            <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
+            <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+            <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+            <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm ringmap">© OpenStreetMap</a></span>
+          </div>
+      <div class="below">
+        <p class="mapnote">1 voiture n’est pas sur la carte : son lieu n’a pas de position.</p>
+      </div>
+    </div>
     <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p></article>
   </div></div></div>
 
@@ -611,21 +742,21 @@
   <h2 id="anatomie">Anatomie et accessibilité</h2>
   <div class="anatomy">
     <div class="card"><h3>Le bouton</h3><ul>
-      <li>Un <code>&lt;button type="button" aria-expanded aria-controls&gt;</code> de 44 px, style <code>outline</code>, au libellé fixe « Carte » et au chevron qui dit l’état, puis le conteneur de la carte avec <code>hidden</code> quand elle est repliée : le même motif que « Vos inscriptions » et « Espace organisateur ». <code>noscript:hidden</code> : absent sans JavaScript.</li>
+      <li>Un <code>&lt;button type="button" aria-expanded aria-controls&gt;</code> de 44 px au libellé fixe « Carte » et au chevron qui dit l’état, <strong>en-tête d’un conteneur bordé</strong> (v24, « Le conteneur de la carte »), puis, dans le même conteneur, la partie repliable avec <code>hidden</code> quand la carte est repliée : le même motif que « Vos inscriptions ». <code>noscript:hidden</code> sur tout le conteneur : absent sans JavaScript.</li>
       <li>Un seul état ouvert/replié pour la page, partagé par les legs, en mémoire seulement : chaque chargement la montre repliée.</li>
       <li>La première ouverture charge Leaflet (import dynamique) ; une carte ne démarre que dans un panneau montré.</li>
       <li>Pendant le chargement, <code>aria-busy="true"</code> sur la boîte de la carte ; aucune région <code>status</code> de plus : le panneau du leg garde la seule, celle du bandeau.</li>
-      <li>Hauteur : 240 px ; 280 px à partir d’une fenêtre de 448 px de large, où la colonne (<code>max-w-md</code>) est pleine et la carte fait 416 px.</li>
-      <li>Sous la carte, dans cet ordre : l’avis de tuiles, <code>notOnMap</code>, la phrase « deux doigts » (les crédits sont dans la carte depuis la v21).</li>
-      <li>Les crédits (v21, décision du propriétaire du 24/10) : <strong>une ligne courte posée sur la carte, en bas à droite</strong>, sur un fond blanc translucide (<code>rgba(255,255,255,.8)</code>), à la manière du contrôle d’attribution de Leaflet : « Geoapify · © OpenMapTiles.org · » puis le lien « © OpenStreetMap » vers <code>https://www.openstreetmap.org/copyright</code>. Texte à 12 px, #333 sur ce fond (au moins 9:1 sur une tuile <code>positron</code>) ; le lien en #0a0a0a, souligné. La ligne fait 24 px de haut et tient sur une ligne à 360 px : environ 303 px dans une carte de 328 px, c’est-à-dire presque toute la bande du bas de la carte. Plus étroit (320 px), ou avec un texte agrandi, elle passe sur deux lignes, alignées à droite, et monte d’autant (48 px) : jamais coupée, jamais cachée. <strong>Sa hauteur est mesurée</strong> (<code>offsetHeight</code> de notre élément de crédits, à chaque cadrage et à chaque changement de taille de la carte) : la marge de cadrage et la hauteur de la bulle en dépendent (ci-dessous), si bien que deux lignes ne cachent rien de plus qu’une. Repli, si Geoapify exige « Powered by Geoapify » mot pour mot : « Powered by Geoapify · © OpenMapTiles.org · © OpenStreetMap » mesure environ 373 px et passe sur deux lignes à 360 px ; grâce à la hauteur mesurée, la mise en page reste juste ; la promesse « une ligne à 360 px » ne vaut alors que pour la forme courte.</li>
+      <li>Hauteur : 240 px ; 280 px à partir d’une fenêtre de 448 px de large, où la colonne (<code>max-w-md</code>) est pleine. Largeur de la boîte de la carte, d’un bord à l’autre de son conteneur : 326 px à 360 px, 382 px à 416 px, 414 px dans la colonne de 448 px.</li>
+      <li>Sous la carte, dans le même conteneur (v24), dans cet ordre : l’avis de tuiles, <code>notOnMap</code>, la phrase « deux doigts » (les crédits sont dans la carte depuis la v21).</li>
+      <li>Les crédits (v21, décision du propriétaire du 24/10) : <strong>une ligne courte posée sur la carte, en bas à droite</strong>, sur un fond blanc translucide (<code>rgba(255,255,255,.8)</code>), à la manière du contrôle d’attribution de Leaflet : « Geoapify · © OpenMapTiles.org · » puis le lien « © OpenStreetMap » vers <code>https://www.openstreetmap.org/copyright</code>. Texte à 12 px, #333 sur ce fond (au moins 9:1 sur une tuile <code>positron</code>) ; le lien en #0a0a0a, souligné. La ligne fait 24 px de haut et tient sur une ligne à 360 px : environ 303 px dans une boîte de 326 px (328 avant la v24), c’est-à-dire presque toute la bande du bas de la carte. Plus étroit (320 px), ou avec un texte agrandi, elle passe sur deux lignes, alignées à droite, et monte d’autant (48 px) : jamais coupée, jamais cachée. <strong>Sa hauteur est mesurée</strong> (<code>offsetHeight</code> de notre élément de crédits, à chaque cadrage et à chaque changement de taille de la carte) : la marge de cadrage et la hauteur de la bulle en dépendent (ci-dessous), si bien que deux lignes ne cachent rien de plus qu’une. Repli, si Geoapify exige « Powered by Geoapify » mot pour mot : « Powered by Geoapify · © OpenMapTiles.org · © OpenStreetMap » mesure environ 373 px et passe sur deux lignes à 360 px ; grâce à la hauteur mesurée, la mise en page reste juste ; la promesse « une ligne à 360 px » ne vaut alors que pour la forme courte.</li>
       <li>Le lien « © OpenStreetMap » : cible de <strong>24 px</strong> de haut au moins (le minimum de WCAG 2.2 AA, 2.5.8) ; il s’ouvre dans un nouvel onglet (<code>target="_blank"</code>, <code>rel="noopener noreferrer"</code>) et le dit au lecteur d’écran par <code>&lt;span class="sr-only"&gt; {t("newTab")}&lt;/span&gt;</code> (<code>Contact.newTab</code>). Anneau de focus lisible sur la carte : un anneau sombre de 2 px à l’intérieur du lien (<code>outline-offset: -2px</code>) sur un fond blanc opaque, jamais coupé par le bord de la carte.</li>
-      <li>Les crédits sont <strong>notre propre élément</strong>, dans la boîte de la carte, à z-index 1000 (celui des coins de Leaflet), au-dessus des points, <strong>rendu dès le départ</strong> : il est là pendant le chargement (CA1.14), avant que Leaflet soit importé ; ce n’est donc ni un <code>L.Control</code> ni le contrôle d’attribution de Leaflet, et celui-ci est coupé (<code>attributionControl: false</code>). Son <code>offsetHeight</code> est ce que lisent la marge de cadrage et la hauteur maximale de la bulle. Gestes : le même motif que les points (#484, <code>pointButton</code> de <code>leaflet-map.ts</code>), ses écouteurs étant posés une fois Leaflet chargé : <code>L.DomEvent.disableClickPropagation</code> sur les crédits, puis le <code>touchstart</code> arrêté <strong>seulement à un doigt</strong>. Donc : un glisser à la souris qui commence sur les crédits ne déplace pas la carte ; un tap à un doigt ouvre le lien (et ni un glisser ni le <code>tapHold</code> de Safari ne le voient) ; un pincement dont un doigt est sur les crédits zoome comme partout ailleurs, le second toucher atteignant la carte. Dans l’ordre de Tab, le lien vient <strong>en dernier</strong> : le conteneur, les points, « Zoom avant », « Zoom arrière », puis « © OpenStreetMap ».</li>
+      <li>Les crédits sont <strong>notre propre élément</strong>, dans la boîte de la carte, à z-index 1000 (celui des coins de Leaflet), au-dessus des points, <strong>rendu dès le départ</strong> : il est là pendant le chargement (CA1.14), avant que Leaflet soit importé ; ce n’est donc ni un <code>L.Control</code> ni le contrôle d’attribution de Leaflet, et celui-ci est coupé (<code>attributionControl: false</code>). Son <code>offsetHeight</code> est ce que lisent la marge de cadrage et la hauteur maximale de la bulle. Gestes : le même motif que les points (#484, <code>pointButton</code> de <code>leaflet-map.ts</code>), ses écouteurs étant posés une fois Leaflet chargé : <code>L.DomEvent.disableClickPropagation</code> sur les crédits, puis le <code>touchstart</code> arrêté <strong>seulement à un doigt</strong>. Donc : un glisser à la souris qui commence sur les crédits ne déplace pas la carte ; un tap à un doigt ouvre le lien (et ni un glisser ni le <code>tapHold</code> de Safari ne le voient) ; un pincement dont un doigt est sur les crédits zoome comme partout ailleurs, le second toucher atteignant la carte. Dans l’ordre de Tab, le lien vient <strong>en dernier</strong> : la région de la carte, les points, « Zoom avant », « Zoom arrière », puis « © OpenStreetMap ».</li>
       <li>Points près des crédits : la marge de cadrage du bas est <strong>dérivée</strong> de la hauteur mesurée des crédits <code>h</code> : <code>h + 32</code> (56 px à une ligne, 80 px à deux) ; et <code>h + 64</code> quand le drapeau a un point sous lui (88 px à une ligne), car ce bouton est ancré 16 px sous le drapeau (<code>top-4</code>) et haut de 44 px, soit jusqu’à 60 px sous la position du drapeau, son étiquette de +24 à +52 px. Marges de 32 px en haut et sur les côtés, inchangées. Ainsi, après un cadrage, aucun point, aucune étiquette ni aucun bouton de point ne recoupe la boîte des crédits, drapeau le plus au sud compris. Après un déplacement à la main, un point peut passer dessous : les crédits restent au-dessus, le point reste atteignable au clavier et dans la liste, et un déplacement le dégage.</li>
       <li>La bulle garde sa place de #238 : en haut à droite de la carte (<code>place()</code>, à <code>BUBBLE_INSET</code> = 10 px des bords). Sa hauteur maximale devient <code>size.y − 2·BUBBLE_INSET − h</code> (avant : <code>size.y − 2·BUBBLE_INSET</code>) : son bas s’arrête 10 px au-dessus des crédits, et elle défile en elle-même au-delà. Elle reste au-dessus des crédits dans l’ordre d’empilement (z-index 1001 contre 1000) ; comme elle ne descend plus dans leur bande, aucun ne cache l’autre.</li>
       <li>Les crédits sont là dès que la boîte de la carte l’est, chargement compris (rien ne saute), et absents sous un avis de Leaflet. Le préfixe « Leaflet » n’est pas affiché : sa licence (BSD 2-Clause) ne demande rien sur la carte. <strong>Exigence</strong> : la notice de licence de Leaflet part avec le build de production, soit parce que le minificateur garde son en-tête <code>@preserve</code>, soit par un fichier de notices ; sa mise en œuvre et sa preuve reviennent à la tâche des crédits, #558.</li></ul></div>
     <div class="card"><h3>La carte</h3><ul>
-      <li>Le conteneur Leaflet : <code>role="region"</code>, nommé « Carte de l’aller : … » ou « Carte du retour : … », focusable (flèches, + et −), décrit par l’avis de tuiles quand il est là.</li>
-      <li>Ordre de Tab : le conteneur, puis les points de voiture dans l’ordre des fiches (un groupe à la place de sa première voiture), puis « Zoom avant », « Zoom arrière » (44 px chacun).</li>
+      <li>La région de la carte (le conteneur de Leaflet) : <code>role="region"</code>, nommé « Carte de l’aller : … » ou « Carte du retour : … », focusable (flèches, + et −), décrit par l’avis de tuiles quand il est là ; son anneau de focus est tracé par l’élément posé au-dessus (v25, « Le conteneur de la carte »), car tout ce qui est dessiné sur la région passe sous les panneaux de Leaflet.</li>
+      <li>Ordre de Tab : la région de la carte, puis les points de voiture dans l’ordre des fiches (un groupe à la place de sa première voiture), puis « Zoom avant », « Zoom arrière » (44 px chacun).</li>
       <li>Textes de Leaflet remplacés : <code>zoomInTitle</code>, <code>zoomOutTitle</code> traduits ; crédits dans le coin en bas à droite, en ligne de texte à nous (voir ci-dessous) ; pas de popup Leaflet (pas de « Close popup ») : la bulle est la nôtre.</li>
       <li>Au toucher (<code>pointer: coarse</code>) : <code>dragging: false</code>, un doigt fait défiler la page ; deux doigts déplacent et zooment (<code>touchZoom</code>) ; la phrase « Deux doigts pour déplacer ou zoomer la carte. » sous la carte. À la souris : seuls le glisser et les boutons ; la molette fait défiler la page (<code>scrollWheelZoom: false</code>) ; ni double-clic ni glisser avec Maj ne zooment (<code>doubleClickZoom: false</code>, <code>boxZoom: false</code>).</li>
       <li>Cadrage à l’ouverture sur tous les points (marge 32 px ; en bas, la hauteur mesurée des crédits plus 32 px, ou plus 64 px quand le drapeau a un point, depuis la v22 ; zoom 15 au plus) ; drapeau seul : zoom 14. À une mise à jour, recadrage seulement si personne n’a déplacé ni zoomé la carte. Jamais animé.</li>
@@ -678,31 +809,32 @@
   <!-- ============================================================ -->
   <h2 id="criteres">Critères d’acceptation</h2>
   <ol class="crits">
-    <li><strong>CA1.1</strong> Quand l’événement a une position, chaque leg a un bouton nommé « Carte » entre les actions et la première fiche, avec <code>aria-expanded="false"</code> (puis <code>"true"</code> ouvert, le nom ne changeant pas) et <code>aria-controls</code> vers un conteneur <code>hidden</code>, à 360 et à 1280 px.</li>
+    <li><strong>CA1.1</strong> Quand l’événement a une position, chaque leg a, entre les actions et la première fiche, un conteneur bordé dont l’en-tête est un bouton nommé « Carte », avec <code>aria-expanded="false"</code> (puis <code>"true"</code> ouvert, le nom ne changeant pas) et <code>aria-controls</code> vers une partie repliable <code>hidden</code>, à 360, 416 et 1280 px.</li>
     <li><strong>CA1.2</strong> Avant l’ouverture : aucun <code>.leaflet-container</code>, le morceau JavaScript de Leaflet n’est pas demandé, aucune requête vers <code>/tuiles/</code>. À l’ouverture, ce morceau est demandé, puis des tuiles (Playwright, requêtes comparées avant et après le clic).</li>
     <li><strong>CA1.3</strong> Ouverte, la carte du leg a le drapeau et un point par voiture de ce leg qui a une position (aller : départ ; retour : dépose), chacun relié au drapeau par une ligne droite, sauf à la même position que lui ; la vue contient tous les points.</li>
-    <li><strong>CA1.4</strong> Chaque point de voiture est un bouton nommé selon « Les mots » ; le drapeau a <code>role="img"</code>, son nom, et n’est pas dans l’ordre de Tab. Tab parcourt : le conteneur, les points dans l’ordre des fiches, « Zoom avant », « Zoom arrière ». Entrée, et aussi Espace, sur un point font défiler jusqu’à sa fiche et mettent le focus sur son titre.</li>
+    <li><strong>CA1.4</strong> Chaque point de voiture est un bouton nommé selon « Les mots » ; le drapeau a <code>role="img"</code>, son nom, et n’est pas dans l’ordre de Tab. Tab parcourt : la région de la carte, les points dans l’ordre des fiches, « Zoom avant », « Zoom arrière ». Entrée, et aussi Espace, sur un point font défiler jusqu’à sa fiche et mettent le focus sur son titre.</li>
     <li><strong>CA1.5</strong> Pour chaque point, le prénom, le texte du lieu et les places libres (ou « Complet ») de son nom se lisent sur la fiche de sa voiture, dans la liste de ce leg.</li>
     <li><strong>CA1.6</strong> Deux voitures à moins de 25 m l’une de l’autre (à 10 m, par exemple) font un seul point ; à 40 m, deux points. Deux voitures à la même position font un seul point « 2 voitures : {prénoms} » ; l’activer ouvre une bulle avec un bouton par voiture puis « Fermer », le focus sur le premier ; Échap ou « Fermer » la ferment et rendent le focus au point ; un bouton de voiture mène à sa fiche ; Tab depuis « Fermer » va au point suivant et ferme la bulle. Aucun texte anglais de Leaflet (« Close popup », « A JavaScript library… ») dans la page en français.</li>
     <li><strong>CA1.7</strong> Carte ouverte, quand la page applique un nouvel état (réponse d’une action, ou « Actualiser » sur <code>/admin</code>) : une voiture ajoutée ou retirée apparaît ou disparaît, sans refermer la carte ; le focus suit la table « Mises à jour et focus » ; l’ordre de Tab des points reste celui des fiches.</li>
-    <li><strong>CA1.8</strong> Aucun débordement horizontal à 360 ni à 1280 px ; la carte fait 240 px de haut sous une fenêtre de 448 px de large et 280 px à partir de 448 px ; aucun texte d’étiquette sous 12 px ; boutons de zoom, points et boutons de la bulle ont des cibles de 44 px au moins.</li>
-    <li><strong>CA1.9</strong> Avec un titre et un lieu de 30 caractères, à 360 × 780, carte repliée, le bandeau (538 à 578 px) et le haut de la première fiche (714 px) sont au-dessus du pli (C9.2) : valeurs mesurées par la relecture de #542 (#484), que le test retrouve.</li>
-    <li><strong>CA1.10</strong> Rien n’anime dans la carte : à chaque image (<code>requestAnimationFrame</code>) d’un clic sur « Zoom avant », d’un cadrage et d’un déplacement au clavier (flèches), <code>getAnimations()</code> ne renvoie aucune animation sur aucun élément de la carte. Aucun élément n’a <code>leaflet-zoom-anim</code>, <code>leaflet-pan-anim</code> (que Leaflet pose sur le panneau de la carte pendant tout un déplacement animé) ni <code>leaflet-proxy</code>, et le conteneur n’a pas <code>leaflet-fade-anim</code>. <strong>Seuls</strong> les conteneurs de tuiles et le moteur SVG des lignes peuvent porter <code>leaflet-zoom-animated</code> : Leaflet 1.9.4 la leur pose toujours, quelles que soient les options (<code>GridLayer._updateLevels</code> pour les tuiles, <code>Renderer.onAdd</code> pour le SVG) ; elle n’y fixe qu’un <code>transform-origin</code>, et sa transition ne s’applique que sous <code>leaflet-zoom-anim</code>, qui n’apparaît jamais. Sur tout autre élément, <code>leaflet-zoom-animated</code> reste interdit. Cette classe ne peut donc pas signaler un <code>zoomAnimation: false</code> oublié : ce sont <code>getAnimations()</code> et la transformation atteinte en une image qui le détectent. Un zoom, un cadrage et un déplacement au clavier (flèches) ne passent par aucune position intermédiaire : la transformation du panneau de la carte atteint sa valeur finale en une image et n’en change plus ensuite.</li>
+    <li><strong>CA1.8</strong> Aucun débordement horizontal à 360, 416 ni 1280 px ; la carte fait 240 px de haut sous une fenêtre de 448 px de large et 280 px à partir de 448 px ; sa boîte fait la largeur de son conteneur moins 2 px (326 px à 360, 382 px à 416, 414 px à 1280) ; aucun texte d’étiquette sous 12 px ; boutons de zoom, points et boutons de la bulle ont des cibles de 44 px au moins.</li>
+    <li><strong>CA1.9</strong> Avec un titre et un lieu de 30 caractères, à 360 × 780, carte repliée, le bandeau (538 à 578 px, mesuré par la relecture de #542, #484) et le haut de la première fiche sont au-dessus du pli (C9.2). Depuis la v24, le conteneur replié fait 54 px au lieu de 44 (les 12 px du bas ne comptent qu’ouvert) : la première fiche passe d’environ 714 à 724 px (calculé) ; le test mesure la nouvelle valeur et la note.</li>
+    <li><strong>CA1.10</strong> Rien n’anime dans la carte : à chaque image (<code>requestAnimationFrame</code>) d’un clic sur « Zoom avant », d’un cadrage et d’un déplacement au clavier (flèches), <code>getAnimations()</code> ne renvoie aucune animation sur aucun élément de la carte. Aucun élément n’a <code>leaflet-zoom-anim</code>, <code>leaflet-pan-anim</code> (que Leaflet pose sur le panneau de la carte pendant tout un déplacement animé) ni <code>leaflet-proxy</code>, et la région de la carte n’a pas <code>leaflet-fade-anim</code>. <strong>Seuls</strong> les conteneurs de tuiles et le moteur SVG des lignes peuvent porter <code>leaflet-zoom-animated</code> : Leaflet 1.9.4 la leur pose toujours, quelles que soient les options (<code>GridLayer._updateLevels</code> pour les tuiles, <code>Renderer.onAdd</code> pour le SVG) ; elle n’y fixe qu’un <code>transform-origin</code>, et sa transition ne s’applique que sous <code>leaflet-zoom-anim</code>, qui n’apparaît jamais. Sur tout autre élément, <code>leaflet-zoom-animated</code> reste interdit. Cette classe ne peut donc pas signaler un <code>zoomAnimation: false</code> oublié : ce sont <code>getAnimations()</code> et la transformation atteinte en une image qui le détectent. Un zoom, un cadrage et un déplacement au clavier (flèches) ne passent par aucune position intermédiaire : la transformation du panneau de la carte atteint sa valeur finale en une image et n’en change plus ensuite.</li>
     <li><strong>CA1.11</strong> Au toucher (Playwright <code>hasTouch</code>, <code>isMobile</code>), un glisser d’un doigt sur la carte fait défiler la page et ne déplace pas la carte ; la phrase « Deux doigts pour déplacer ou zoomer la carte. » est visible ; à la souris, elle ne l’est pas. À la souris, un double-clic sur la carte et un glisser avec Maj laissent le zoom et la vue inchangés.</li>
     <li><strong>CA1.12</strong> Un événement sans retour (pas d’onglets) a le bouton et la carte dans sa section unique, nommée « Carte de l’aller : … ».</li>
     <li><strong>CA1.13</strong> Ouverte sur l’aller, la carte du retour n’a pas de <code>.leaflet-container</code> et ne demande aucune tuile tant que l’onglet Retour n’est pas montré.</li>
     <li><strong>CA1.14</strong> Le chargement de Leaflet retenu par le test, « Chargement de la carte… » est visible dans la boîte de la carte, qui a <code>aria-busy="true"</code>, les crédits sont déjà dans son coin en bas à droite, et le haut de la première fiche ne bouge pas quand la carte arrive ; son texte contraste à 4,5:1 au moins avec son fond, et la page n’a aucune région <code>status</code> de plus qu’avant l’ouverture.</li>
     <li><strong>CA1.15</strong> Une voiture à moins de 25 m de l’événement : pas de ligne pour elle, et son étiquette et le drapeau sont tous deux visibles (aucun ne recouvre l’autre). Deux voitures à moins de 25 m du drapeau mais à 25 m ou plus l’une de l’autre (par exemple à 20 m au nord et à 20 m au sud) : un seul point sous le drapeau, nommé « 2 voitures : {prénoms} » dans l’ordre des fiches, avec la bulle ; aucune étiquette n’en cache une autre. Le drapeau d’abord : la voiture A, à 30 m du drapeau et première dans l’ordre des fiches, et la voiture B, à 20 m du drapeau et à 10 m de A, donnent B sous le drapeau et A en point à part, avec sa ligne. À 100 m : une ligne, et le drapeau au-dessus de l’étiquette.</li>
     <li><strong>CA1.16</strong> Un prénom de 40 caractères : l’étiquette ne dépasse pas 120 px de texte et le nom accessible porte le prénom entier ; deux voitures de deux « Claire » donnent deux points aux noms distincts par leur lieu.</li>
-    <li><strong>CA1.17</strong> Sous la carte, quand elles sont là : l’avis de tuiles, puis <code>notOnMap</code>, puis la phrase « deux doigts », dans cet ordre du DOM.</li>
+    <li><strong>CA1.17</strong> Sous la carte, dans le même conteneur, quand elles sont là : l’avis de tuiles, puis <code>notOnMap</code>, puis la phrase « deux doigts », dans cet ordre du DOM.</li>
+    <li><strong>CA1.18</strong> (v24, v25) Le bouton « Carte », la boîte de la carte, les lignes sous la carte et, le cas échéant, l’avis de Leaflet sont tous dans un même conteneur, dont la bordure fait 1 px de la couleur <code>--border</code> et le rayon 14 px (styles calculés comparés à ces valeurs) ; le bouton n’a pas de bordure à lui. Replié, le conteneur ne montre que le bouton et fait 54 px de haut. Ouvert, la boîte de la carte va d’un bord intérieur à l’autre du conteneur (même largeur, à 1 px près de chaque côté), sans bordure ni coins arrondis à elle, et le conteneur garde 12 px sous son dernier élément, la boîte comprise : le coin en bas à droite de la boîte (et les crédits) n’est pas coupé. Le conteneur n’a pas de rôle de repère. <strong>Anneau de focus de la région</strong> : la région de la carte ayant le focus clavier, l’élément d’anneau est affiché, au-dessus de tout (z-index supérieur à ceux des panneaux de Leaflet, des crédits et de la bulle), son contour est celui de <code>focus-ring</code> à l’intérieur (<code>outline-offset</code> négatif), et, sur une capture, un pixel à 1 px à l’intérieur du bord haut de la région a la couleur de l’anneau ; sans le focus, l’élément est masqué. Au chargement, la région n’est pas encore là : l’anneau vérifié est celui de la <strong>boîte de chargement</strong> (focus après « Réessayer »), tracé par le même élément d’anneau, affiché au-dessus du texte de chargement opaque, avec la même vérification de pixel ; un seul élément d’anneau existe pour les deux états. La couleur attendue est <code>--ring</code> (#737373). Vrai pour l’aller et le retour, à 360, 416 et 1280 px, au chargement, sous un avis de tuiles et sous un avis de Leaflet.</li>
     <li><strong>CA2.1</strong> Événement sans position : ni bouton ni carte sur <code>/e/{id}</code> ; sur <code>/e/{id}/admin</code>, le lien vérifié, la phrase et le bouton « Modifier l’événement », qui ouvre la feuille même quand l’espace organisateur est replié. Espace replié : « Annuler » rend le focus à ce bouton ; « Valider » sans position, « Événement modifié. » et le focus sur ce bouton ; « Valider » avec une position choisie, le focus sur « Carte » de ce leg. Jamais sur <code>&lt;body&gt;</code>.</li>
     <li><strong>CA2.2</strong> Leg vide : le drapeau seul, nommé « … et aucune voiture », et l’état vide « Aucune voiture proposée pour l’aller » / « Personne ne s’est encore inscrit. » reste.</li>
     <li><strong>CA2.3</strong> Des voitures sans position : <code>EventMap.notOnMap</code> donne leur nombre sous la carte, et <code>count</code> du nom de la carte ne les compte pas ; toutes les voitures ont une position : la phrase est absente.</li>
-    <li><strong>CA2.4</strong> Le faux fournisseur en 500 pour une partie des tuiles : quand la vue a fini de charger, l’avis « Le fond de carte n’a pas pu se charger. » est sous la carte, les points restent, et rien n’est annoncé (aucune région vivante ne change) ; « Réessayer » redemande les tuiles, et l’avis disparaît quand une vue finit de charger sans échec ; le focus, s’il était sur « Réessayer », est alors sur le conteneur de la carte, pas sur <code>&lt;body&gt;</code>.</li>
-    <li><strong>CA2.5</strong> Sans JavaScript, le bouton « Carte » n’est pas affiché, et le panneau n’a pas d’autre phrase que <code>Board.needsJavaScript</code>.</li>
+    <li><strong>CA2.4</strong> Le faux fournisseur en 500 pour une partie des tuiles : quand la vue a fini de charger, l’avis « Le fond de carte n’a pas pu se charger. » est sous la carte, les points restent, et rien n’est annoncé (aucune région vivante ne change) ; « Réessayer » redemande les tuiles, et l’avis disparaît quand une vue finit de charger sans échec ; le focus, s’il était sur « Réessayer », est alors sur la région de la carte, pas sur <code>&lt;body&gt;</code>.</li>
+    <li><strong>CA2.5</strong> Sans JavaScript, le conteneur du bouton « Carte » n’est pas affiché, et le panneau n’a pas d’autre phrase que <code>Board.needsJavaScript</code>.</li>
     <li><strong>CA2.6</strong> Le faux fournisseur en 401, 403, 404, 429 ou 500 pour une tuile, ou plus lent que 5 s, ou rendant autre chose qu’un PNG : <code>/tuiles/</code> répond 502, <code>Cache-Control: no-store</code>, corps vide ; l’avis « Le fond de carte n’a pas pu se charger. » / « Vérifiez la connexion, ou réessayez dans un moment. » s’affiche, et les points restent. Aucune tuile n’est plus rendue en PNG transparent. Une coordonnée hors de France (Courmayeur) donne une tuile comme une autre : cela ne prouve que la route et la requête ; la couverture réelle du monde est le coup d’œil du propriétaire, une fois la clé là.</li>
     <li><strong>CA2.7</strong> Le retour supprimé, carte ouverte sur le retour avec le focus sur un point : les onglets disparaissent, la carte de l’aller est ouverte, le focus est sur le titre de l’événement.</li>
-    <li><strong>CA2.8</strong> L’import de Leaflet en échec : l’avis « La carte n’a pas pu se charger. » à la place de la carte, sans boîte vide et sans crédits ; pendant « Réessayer », « Chargement de la carte… » remplace l’avis et la boîte a le focus ; réussi, la carte s’affiche et le focus est sur « Carte ». À partir du second échec de suite, en ligne (le troisième compris) : « La carte n’a toujours pas pu se charger. », « Recharger la page » puis « Réessayer », le focus sur « Recharger la page », qui recharge la même adresse ; hors ligne : le premier avis, le focus sur son « Réessayer ».</li>
+    <li><strong>CA2.8</strong> L’import de Leaflet en échec : l’avis « La carte n’a pas pu se charger. » à la place de la carte, sans boîte vide et sans crédits ; pendant « Réessayer », « Chargement de la carte… » remplace l’avis et la boîte a le focus, son anneau tracé par l’élément d’anneau posé au-dessus du texte de chargement (à l’intérieur, visible) ; réussi, la carte s’affiche et le focus est sur « Carte ». À partir du second échec de suite, en ligne (le troisième compris) : « La carte n’a toujours pas pu se charger. », « Recharger la page » puis « Réessayer », le focus sur « Recharger la page », qui recharge la même adresse ; hors ligne : le premier avis, le focus sur son « Réessayer ».</li>
     <li><strong>CA2.9</strong> Un retour ajouté plus tard (#271), carte ouverte sur l’aller : l’onglet Retour, une fois montré, a sa carte ouverte.</li>
     <li><strong>CA2.10</strong> Les deux legs ouverts, l’import de Leaflet en échec : chacun montre l’avis ; « Réessayer » sur l’aller, réussi : la carte de l’aller s’affiche, et l’onglet Retour, une fois montré, montre sa carte et pas l’avis. Le module de Leaflet n’est demandé qu’une fois par essai, pour les deux legs. Montrer l’onglet Retour après l’échec, avant tout essai : il montre l’avis, aucune nouvelle demande du module ne part, et le focus reste sur l’onglet.</li>
     <li><strong>CA3.1</strong> Carte ouverte, toute requête du navigateur va à notre origine.</li>
@@ -711,7 +843,7 @@
     <li><strong>CA3.4</strong> <em>Retiré en v19</em> : plus de date d’attribution (<code>PLAN_IGN_UPDATED</code> part avec Plan IGN).</li>
     <li><strong>CA3.5</strong> La clé ne quitte jamais le serveur. Dans le slot, <code>GEOAPIFY_API_KEY</code> vaut une valeur de test qu’on ne peut confondre avec rien d’autre (par exemple <code>fullcar-test-key-7f3a9c2e</code>), donnée par <code>compose.yaml</code> à <code>web</code>, où tourne aussi <code>next build</code> : (bout en bout) cette valeur n’apparaît dans aucun fichier de <code>.next/static</code>, ce qui ne vaut que parce que le build a cette clé dans son environnement ; ni dans un HTML, ni dans une réponse de notre origine (en-têtes et corps, 502 compris, relevés par Playwright), ni dans une URL demandée par le navigateur. (Vitest) Sur chaque chemin du module du fournisseur (tuile, 401, 403, 404, 429, 5xx, erreur réseau, délai, autre chose qu’un PNG, trop gros, disjoncteur ouvert, sans clé), aucun appel de <code>console</code> ne contient la clé, <code>apiKey</code>, l’URL amont ni la tuile ; un fil d’Ariane et un span de la requête sortante sortent de <code>scrub.ts</code> sans <code>apiKey</code> ni la clé ; l’erreur levée sur un échec ne contient pas l’URL. Sans clé configurée, <code>/tuiles/</code> répond 502 <code>no-store</code> sans appeler le fournisseur, et le module écrit la seule ligne « tiles: no key ».</li>
     <li><strong>CA3.6</strong> (Vitest, horloge et <code>fetch</code> injectés) Après un <strong>429</strong> du fournisseur, aucun appel pendant la durée du disjoncteur, et la route répond aussitôt 502 <code>no-store</code> ; un 5xx (ou un 401, 403, 404) n’ouvre <strong>jamais</strong> le disjoncteur : l’appel suivant part. Durée : <code>TILES_BREAKER_MS</code>, 10 000 par défaut, lu seulement s’il n’est fait que de chiffres (sinon, le défaut) ; <code>Retry-After</code> borné entre <code>TILES_BREAKER_MS</code> et 1 h ; une valeur absente, invalide ou d’une forme obsolète donne <code>TILES_BREAKER_MS</code> ; 0 : jamais ouvert. Avec 10 000 : <code>Retry-After: 1</code>, 10 s ; <code>Retry-After: 120</code>, 120 s ; <code>Retry-After: 7200</code>, 1 h ; <code>TILES_BREAKER_MS=abc</code>, 10 s.</li>
-    <li><strong>CA3.7</strong> Les crédits sont <strong>dans</strong> la carte, posés dans son coin en bas à droite : « Geoapify · © OpenMapTiles.org · © OpenStreetMap », sur une seule ligne de 24 px de haut à 360 × 780 (pour cette forme courte) ; à 320 px de large, sur deux lignes alignées à droite, sans être coupés. « © OpenStreetMap » est un lien vers <code>https://www.openstreetmap.org/copyright</code>, de 24 × 24 px au moins, ouvert dans un nouvel onglet, dont le nom accessible finit par « (s’ouvre dans un nouvel onglet) » (« (opens in a new tab) »), texte <code>sr-only</code>. Au clavier, il vient en dernier dans la carte, après « Zoom arrière », et son anneau de focus reste entier (non coupé par le bord) ; le texte contraste à 4,5:1 au moins sur son fond. Trois gestes : un glisser à la souris qui commence sur les crédits ne déplace pas la carte ; un tap à un doigt sur le lien l’ouvre ; un pincement dont un doigt est sur les crédits zoome la carte. Après un cadrage, aucun point, aucune étiquette ni aucun bouton de point ne recoupe la boîte des crédits, y compris quand le drapeau, avec un point sous lui, est le plus au sud, et quand les crédits font deux lignes (320 px). Une bulle de trois voitures ou plus ne recoupe pas la boîte des crédits (sa hauteur maximale vaut la hauteur de la carte moins 20 px moins celle des crédits). Les crédits sont présents pendant le chargement et absents sous un avis de Leaflet.</li>
+    <li><strong>CA3.7</strong> Les crédits sont <strong>dans</strong> la carte, posés dans son coin en bas à droite : « Geoapify · © OpenMapTiles.org · © OpenStreetMap », sur une seule ligne de 24 px de haut à 360 × 780 (pour cette forme courte) ; à 320 px de large, sur deux lignes alignées à droite, sans être coupés. « © OpenStreetMap » est un lien vers <code>https://www.openstreetmap.org/copyright</code>, de 24 × 24 px au moins, ouvert dans un nouvel onglet, dont le nom accessible finit par « (s’ouvre dans un nouvel onglet) » (« (opens in a new tab) »), texte <code>sr-only</code>. Au clavier, il vient en dernier dans la carte, après « Zoom arrière », et son anneau de focus reste entier (non coupé par le bord) ; le texte contraste à 4,5:1 au moins sur son fond. Trois gestes : un glisser à la souris qui commence sur les crédits ne déplace pas la carte ; un tap à un doigt sur le lien l’ouvre ; un pincement dont un doigt est sur les crédits zoome la carte. Après un cadrage, aucun point, aucune étiquette ni aucun bouton de point ne recoupe la boîte des crédits, y compris quand le drapeau, avec un point sous lui, est le plus au sud, et quand les crédits font deux lignes (320 px). Une bulle de trois voitures ou plus ne recoupe pas la boîte des crédits (sa hauteur maximale vaut la hauteur de la boîte de la carte moins 20 px moins celle des crédits). Les crédits sont présents pendant le chargement et absents sous un avis de Leaflet.</li>
   </ol>
 
   <!-- ============================================================ -->
@@ -730,6 +862,11 @@
     <li>Décision (v22) : la notice de licence de Leaflet part avec le build de production (<code>@preserve</code> ou fichier de notices), à mettre en œuvre et prouver dans #558. — Raison : c’est ce que demande la BSD 2-Clause, à la place d’un crédit sur la carte.</li>
     <li>Décision (v21) : le lien « © OpenStreetMap » garde le texte <code>sr-only</code> « (s’ouvre dans un nouvel onglet) » de <code>Contact.newTab</code> ; son style et son anneau de focus sont ceux d’un lien posé sur la carte (sombre, souligné, anneau intérieur sur fond blanc), plus ceux du bas de page. — Raison : le nouvel onglet doit être dit ; un anneau extérieur serait coupé par le bord de la carte et illisible sur certaines tuiles.</li>
     <li>Décision (v19) : tuiles @2x seulement, une seule entrée de cache par tuile. — Raison : net sur les téléphones, qui sont le cas principal ; un seul chemin, sans détection d’écran.</li>
+    <li><strong>Propriétaire (24/10, v24).</strong> Décision : le bouton « Carte », la carte et les lignes sous elle sont dans un seul conteneur bordé. — Raison : « on ne voit pas qu’ils vont ensemble ».</li>
+    <li>Décision (v24) : le conteneur reprend le motif de « Vos inscriptions » (<code>rounded-[14px] border</code>, bouton en en-tête sans bordure) ; la boîte de la carte va d’un bord à l’autre ; le conteneur n’est pas un repère ; <code>noscript:hidden</code> sur tout le conteneur. — Raison : un seul motif pour un contenu replié sur cet écran ; à 12 px des bords, la boîte ne ferait que 302 px à 360 px et les crédits passeraient sur deux lignes ; un repère de plus doublerait la région de la carte.</li>
+    <li>Décision (v25) : l’anneau de focus de la région de la carte est tracé par un élément à nous, posé au-dessus (<code>pointer-events-none absolute inset-0</code>, z-index 1002), visible seulement au focus clavier, avec l’anneau du projet à l’intérieur (<code>focus-ring</code>, <code>-outline-offset-2</code>). — Raison : revue de la v24 : un anneau tracé sur la région passe sous les panneaux de Leaflet, et <code>ring-inset</code> est une ombre, contraire à la règle de <code>globals.css</code> (un contour reste en couleurs forcées).</li>
+    <li>Décision (v25) : le conteneur garde 12 px en bas, ouvert, même quand la boîte de la carte est sa dernière chose. — Raison : son rayon intérieur de 13 px coupait le coin de la boîte, le bas du lien des crédits et le coin de son anneau ; c’est ce que fait « Vos inscriptions » ouvert.</li>
+    <li>Décision (v25) : « le conteneur » nomme le bloc bordé ; la région de Leaflet s’appelle « la région de la carte ». — Raison : « carte » est la Carte du glossaire ; deux sens pour un mot est un défaut.</li>
     <li><strong>Propriétaire (24/10, v21).</strong> Décision : les crédits redeviennent une ligne courte posée sur la carte, en bas à droite, sur un fond blanc translucide, comme le contrôle de Leaflet : « Geoapify · © OpenMapTiles.org · © OpenStreetMap », le lien « © OpenStreetMap » avec une cible de 24 px (minimum de WCAG 2.2 AA). Remplace le lien de 44 px sous la carte (v19, v20). — Raison : une ligne de 64 px sous chaque carte pesait trop pour des crédits ; dans le coin, ils ne prennent que 24 px.</li>
     <li>Décision (v19) : « Recharger la page » au second échec de Leaflet, en ligne. — Raison : après un déploiement, l’ancien morceau de code répond 404 pour toujours, et « Réessayer » ne peut plus réussir (relecture de #540).</li>
     <li>Décision (v19) : un seul import de Leaflet pour la page, partagé par les legs. — Raison : un essai réussi sur un leg ne doit pas laisser l’autre sur l’échec (relecture de #540).</li>
@@ -817,5 +954,10 @@
     <li><strong>Verdict de la v21</strong> : changements demandés (trois bloquants : le point sous le drapeau caché par les crédits après un cadrage ; un pincement sur les crédits, contraire à #484 ; la bulle, qui couvrait les crédits et que « au-dessus de son point » aurait changée ; trois suggestions retenues par le coordinateur).</li>
     <li><strong>v22</strong> (2026-10-24) : revue de la v21 appliquée, la décision du propriétaire sur les crédits inchangée. Marge de cadrage du bas = hauteur mesurée des crédits + 32 px, ou + 64 px quand le drapeau a un point (son bouton descend à 60 px sous lui) ; bulle en haut à droite comme en #238, hauteur maximale <code>size.y − 2·BUBBLE_INSET − h</code>, au-dessus des crédits dans l’empilement (1001 contre 1000) sans recouvrement ; gestes au motif des points : clic arrêté, <code>touchstart</code> arrêté à un doigt, un pincement avec un doigt sur les crédits zoome ; CA3.7 en trois gestes, sans « glisser à un doigt » ; repli « Powered by Geoapify » (373 px, deux lignes à 360 px, mise en page juste grâce à la hauteur mesurée) ; notice de Leaflet : exigence pour #558.</li>
     <li><strong>v23</strong> (2026-10-24) : v22 approuvée. Correction de texte (suggestion de la revue, retenue par le coordinateur) : les crédits ne sont pas un contrôle de Leaflet mais notre propre élément dans la boîte de la carte, à z-index 1000, rendu dès le départ (il existe pendant le chargement, avant l’import de Leaflet) ; ses écouteurs (clic arrêté, <code>touchstart</code> arrêté à un doigt) sont posés une fois Leaflet chargé ; son <code>offsetHeight</code> donne la marge de cadrage et la hauteur maximale de la bulle ; ni <code>L.Control</code> ni contrôle d’attribution de Leaflet, coupé.</li>
+    <li><strong>v24</strong> (2026-10-24) : retour du propriétaire (« on ne voit pas qu’ils vont ensemble ») : le bouton, la carte et les lignes sous elle dans une seule carte bordée, au motif de « Vos inscriptions » ; boîte de la carte d’un bord à l’autre (326 px à 360, 382 à 416, 414 à 1280), anneau de focus intérieur ; repliée, 54 px au lieu de 44, première fiche vers 724 px (calculé) ; toutes les maquettes redessinées dans leur carte, une vue à 416 px ; CA1.1, CA1.8, CA1.9, CA1.17, CA2.5 changés, CA1.18 nouveau ; crédits, marge de cadrage et bulle inchangés dans leur règle ; rien ne change pour #551 à #558, une tâche de plus.</li>
+    <li><strong>Verdict de la v24</strong> : changements demandés (un bloquant : l’anneau de focus intérieur de la région de la carte, invisible sous les panneaux de Leaflet et tracé en ombre ; trois suggestions retenues par le coordinateur).</li>
+    <li><strong>v25</strong> (2026-10-24) : revue de la v24 appliquée : l’anneau de focus de la région de la carte tracé par un élément à nous au-dessus (<code>pointer-events-none absolute inset-0</code>, z-index 1002), contour <code>focus-ring</code> à l’intérieur, visible seulement au focus clavier ; CA1.18 vérifie qu’il est visible (pixel sur une capture) et compare la bordure et le rayon à leurs valeurs (1 px, <code>--border</code>, 14 px) ; 12 px sous la boîte de la carte quand elle est la dernière du conteneur (le replié, 54 px, ne change pas ; CA1.9 non plus) ; « le conteneur » pour le bloc bordé, « la région de la carte » pour celui de Leaflet, partout.</li>
+    <li><strong>v26</strong> (2026-10-24) : v25 approuvée ; deux suggestions de la revue retenues par le coordinateur : la boîte de chargement (focus après « Réessayer ») a un anneau intérieur (<code>-outline-offset-2</code>), qu’un anneau extérieur coupé des deux côtés par le conteneur rendait illisible ; CA1.18 la nomme comme l’élément vérifié au chargement, et CA2.8 le dit ; l’anneau dessiné prend la couleur de <code>focus-ring</code>, #737373 (<code>--ring</code>), avec son contraste mesuré sur les couleurs de la maquette (3,42:1 au plus bas, sur l’eau ; au-dessus de 3:1).</li>
+    <li><strong>v27</strong> (2026-10-24) : vérification de la v26, un bloquant : le texte « Chargement de la carte… » est un paragraphe <code>absolute inset-0</code> à fond opaque, sous lequel un contour intérieur de la boîte disparaît. Décision du coordinateur : un seul mécanisme : l’élément d’anneau de la région (<code>pointer-events-none absolute inset-0</code>, z-index 1002, <code>focus-ring -outline-offset-2</code>) trace aussi l’anneau de la boîte de chargement, au-dessus de son texte, affiché tant que la boîte ou la région a le focus clavier. CA1.18, CA2.8 et la légende mis à jour.</li>
   </ul>
 </div>
