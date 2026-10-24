@@ -4,7 +4,7 @@ import { seedPerson, seedPlacement } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { holdToken, newToken } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
-import { anchor, around, FLAG, focusableIn, inside, joins, mapName, openMap, points, seedCar, test } from "./event-map-points";
+import { anchor, around, FLAG, focusableIn, inside, joins, lines, mapName, openMap, points, seedCar, test } from "./event-map-points";
 import { leaveNoToken } from "./fixtures";
 import { placeOf } from "./ign";
 import { expect, isAction, organiserPath, test as organiser } from "./organiser";
@@ -37,6 +37,12 @@ onAdmin.use({ locale: "fr-FR" });
 /** The map of `leg`, whatever its name, which counts its cars. */
 const region = (page: Page, leg: "aller" | "retour" = "aller") => page.locator(`[id="event-map-${leg}"] [role="region"]`);
 const toggle = (scope: Page | Locator) => scope.getByRole("button", { name: "Carte", exact: true });
+
+/** Where `marker` is anchored in `map`, whatever the page's scroll: « Actualiser » scrolls to the top. */
+async function anchorIn(map: Locator, marker: Locator) {
+  const [{ x, y }, box] = [await anchor(marker), (await map.boundingBox())!];
+  return { x: x - box.x, y: y - box.y };
+}
 
 /**
  * « Actualiser », its reads held while `meanwhile` writes another device's changes and puts
@@ -199,11 +205,7 @@ onAdmin("the event's position changes: the flag and its line move; framed again 
   const flag = map.getByRole("img", { name: FLAG, exact: true });
   const marc = points(map).first();
   const inView = async (marker: Locator) => inside((await marker.boundingBox())!, (await map.boundingBox())!);
-  // In the map, whatever the page's scroll: the panel above it may change with « Actualiser ».
-  const at = async (marker: Locator) => {
-    const [{ x, y }, box] = [await anchor(marker), (await map.boundingBox())!];
-    return { x: x - box.x, y: y - box.y };
-  };
+  const at = (marker: Locator) => anchorIn(map, marker);
 
   // 3 km west: the view frames the flag and Marc again.
   const flagBefore = await at(flag);
@@ -223,6 +225,64 @@ onAdmin("the event's position changes: the flag and its line move; framed again 
   await expect.poll(() => at(flag)).not.toEqual(flagZoomed);
   expect(await at(marc)).toEqual(marcZoomed);
   expect(await joins(map, await anchor(flag), await anchor(marc))).toBe(true);
+});
+
+onAdmin("a car's place changes on another device: its point moves, the same element, with the focus and its line; the view stays", async ({ db, page, seededEvent, place }) => {
+  const { id } = seededEvent;
+  await seedCar(db, id, "Zoé", { position: around(place, { north: 2000 }), location: "12 rue des Lilas", departureTime: "08:00:00" });
+  const marc = await seedCar(db, id, "Marc", { position: around(place, { east: 2000 }), location: "Place de la mairie", departureTime: "09:00:00" });
+  const moveMarc = async (position: Position, location: string) => {
+    await db.updateTable("ride").set({ location, location_lat: position.lat, location_lng: position.lng }).where("id", "=", marc).execute();
+  };
+  await page.goto(organiserPath(seededEvent));
+  const map = await openMap(page, mapName("aller", "2 voitures"));
+  const flag = map.getByRole("img", { name: FLAG, exact: true });
+  const point = region(page).locator("[data-kept]");
+  await region(page).getByRole("button", { name: /^Voiture de Marc/ }).evaluate((button) => button.setAttribute("data-kept", ""));
+  const flagAt = await anchorIn(map, flag);
+
+  // 15 km east, out of the view: no framing for a car that moves, and the focus stays on its point.
+  const before = await anchorIn(map, point);
+  await refreshWhile(page, seededEvent, async () => {
+    await moveMarc(around(place, { east: 15_000 }), "Zone des Landes");
+    await point.focus();
+  });
+  await expect(point).toHaveAccessibleName("Voiture de Marc, départ : Zone des Landes, 3 places libres");
+  await expect(point).toBeFocused();
+  await expect.poll(() => anchorIn(map, point)).not.toEqual(before);
+  expect(await anchorIn(map, flag)).toEqual(flagAt);
+
+  // Back inside the view: the same point, there, and its line from the flag to it.
+  const away = await anchorIn(map, point);
+  await refreshWhile(page, seededEvent, () => moveMarc(around(place, { east: 1000, north: 1000 }), "Église"));
+  await expect(point).toHaveAccessibleName("Voiture de Marc, départ : Église, 3 places libres");
+  await expect.poll(() => anchorIn(map, point)).not.toEqual(away);
+  expect(inside((await point.boundingBox())!, (await map.boundingBox())!)).toBe(true);
+  expect(await joins(map, await anchor(flag), await anchor(point))).toBe(true);
+  expect(await anchorIn(map, flag)).toEqual(flagAt);
+});
+
+onAdmin("the event's position changes, a car at the flag: its point follows the flag, the same element, without a line", async ({ db, page, seededEvent, place }) => {
+  await seedCar(db, seededEvent.id, "Sophie", { position: around(place, { east: 10 }), location: "Parking du gymnase" });
+  await page.goto(organiserPath(seededEvent));
+  const map = await openMap(page, mapName("aller", "1 voiture"));
+  const flag = map.getByRole("img", { name: FLAG, exact: true });
+  const point = region(page).locator("[data-kept]");
+  await points(map).first().evaluate((button) => button.setAttribute("data-kept", ""));
+  // Zoomed in to the last zoom, where 15 m are some 36 px: the view stays, and the flag's move shows.
+  const zoomIn = map.getByRole("button", { name: "Zoom avant", exact: true });
+  for (let step = 0; step < 3; step++) await zoomIn.click();
+  const flagBefore = await anchorIn(map, flag);
+  expect(await anchorIn(map, point)).toEqual(flagBefore);
+
+  // 15 m east: Sophie's car, 5 m from it, is still at the flag.
+  await refreshWhile(page, seededEvent, () => editEventInDb(db, seededEvent.id, { locationPosition: around(place, { east: 15 }) }));
+  await expect.poll(async () => (await anchorIn(map, flag)).x - flagBefore.x).toBeGreaterThan(20);
+  const flagAfter = await anchorIn(map, flag);
+  const pointAfter = await anchorIn(map, point);
+  expect(Math.abs(pointAfter.x - flagAfter.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(pointAfter.y - flagAfter.y)).toBeLessThanOrEqual(1);
+  await expect(lines(map)).toHaveCount(0);
 });
 
 onAdmin("the event's position removed, the focus on a point: the map and its button go, the focus to the active tab; back, the button is folded", async ({ db, page, seededEvent, place }) => {
