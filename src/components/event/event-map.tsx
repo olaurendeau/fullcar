@@ -119,8 +119,14 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       position,
       atFlag,
       label: format.number(here.length),
-      // « Nina, Paul », as the design writes it: `Intl.ListFormat` would say « Nina et Paul ».
-      name: t("group", { count: here.length, drivers: here.map((car) => car.driver.firstName).join(", ") }),
+      // « Nina, Paul », as the design writes it: the narrow conjunction, without « et » or « and ».
+      name: t("group", {
+        count: here.length,
+        drivers: format.list(
+          here.map((car) => car.driver.firstName),
+          { type: "conjunction", style: "narrow" },
+        ),
+      }),
       cars: pointCars,
     };
   });

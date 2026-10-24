@@ -166,21 +166,26 @@ function bubbleButton(text: string, name?: string): HTMLButtonElement {
   return button;
 }
 
+/** Bubbles opened so far, for each its own title's id: two maps, the aller's and the retour's, may each have one. */
+let bubbles = 0;
+
 /**
  * Our bubble (no popup of Leaflet's, whose « Close popup » is English): its title, the point's
- * name, a button per car in the order of the cards, then « Fermer ». Focusable itself, so that
- * a press on its title keeps the focus in it.
+ * name, which names it, a button per car in the order of the cards, then « Fermer ». Focusable
+ * itself, so that a press on its title keeps the focus in it.
  */
 function bubbleOf(point: CarPoint, close: string): { bubble: HTMLDivElement; cars: HTMLButtonElement[]; close: HTMLButtonElement } {
   const bubble = document.createElement("div");
+  const title = document.createElement("p");
+  title.id = `event-map-bubble-${++bubbles}`;
+  title.className = "font-semibold";
+  title.textContent = point.name;
   bubble.setAttribute("role", "group");
-  bubble.setAttribute("aria-label", point.name);
+  // Named by its title, not again by an `aria-label` that a reader would say twice.
+  bubble.setAttribute("aria-labelledby", title.id);
   bubble.tabIndex = -1;
   bubble.className =
     "pointer-events-auto absolute z-1001 flex flex-col gap-1.5 overflow-y-auto rounded-xl bg-background p-2.5 text-[13px] text-foreground shadow-[0_6px_20px_rgba(0,0,0,0.25)] outline-hidden";
-  const title = document.createElement("p");
-  title.className = "font-semibold";
-  title.textContent = point.name;
   const cars = point.cars.map((car) => bubbleButton(car.title, car.name));
   const last = bubbleButton(close);
   bubble.append(title, ...cars, last);
@@ -283,8 +288,10 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
       event.preventDefault();
       back();
     });
-    // Closed when the focus leaves it, by Tab or elsewhere.
+    // Closed when the focus leaves it, by Tab or elsewhere; not when the window does, the focus
+    // staying in the bubble: closed then, it would leave the focus on <body> on the way back.
     bubble.addEventListener("focusout", (event) => {
+      if (!document.hasFocus()) return;
       if (!(event.relatedTarget instanceof Node && bubble.contains(event.relatedTarget)) && open?.bubble === bubble) closeBubble();
     });
     open = { bubble, button, at };

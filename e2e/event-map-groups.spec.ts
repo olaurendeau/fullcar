@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { anchor, around, centre, FLAG, focusableIn, joins, lines, mapName, openMap, overlap, points, seedCar, test } from "./event-map-points";
+import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, overlap, points, seedCar, test } from "./event-map-points";
 import { expect } from "./fixtures";
 
 /*
@@ -74,18 +74,31 @@ test("CA1.6, CA1.8: the bubble of two cars at the same position, its buttons, Es
   await expect(cars).toHaveText(["Voiture de Nina", "Voiture de Paul", "Fermer"]);
   await expect(nina).toBeFocused();
   // Just after its point in the DOM: the same marker's next element.
-  expect(await group.evaluate((element) => element.nextElementSibling?.getAttribute("aria-label"))).toBe(name);
+  const next = group.locator("xpath=following-sibling::*[1]");
+  await expect(next).toHaveAttribute("role", "group");
+  await expect(next).toHaveAccessibleName(name);
   // CA1.8, the bubble's part: targets of 44 px at least, and nothing of the bubble outside the map.
   const view = (await map.boundingBox())!;
   for (const button of await cars.all()) {
     const box = (await button.boundingBox())!;
     expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
-    expect(box.x >= view.x && box.x + box.width <= view.x + view.width && box.y + box.height <= view.y + view.height).toBe(true);
+    expect(inside(box, view)).toBe(true);
   }
   // On top of what it covers: its buttons take the touch there.
   for (const button of await cars.all()) expect(await topAt(page, (await button.boundingBox())!)).toBe(await button.getAttribute("aria-label"));
   // None of Leaflet's English, its popup's « Close popup » or its attribution's title.
   expect(await page.evaluate(() => /Close popup|A JavaScript library/.test(document.documentElement.outerHTML))).toBe(false);
+
+  // The window losing the focus leaves it open. Playwright keeps every page focused (its focus
+  // emulation): the window's blur is played by `document.hasFocus` answering false, and a blur.
+  await nina.evaluate((element: HTMLElement) => {
+    const hasFocus = document.hasFocus;
+    document.hasFocus = () => false;
+    element.blur();
+    document.hasFocus = hasFocus;
+  });
+  await expect(bubble).toBeVisible();
+  await nina.focus();
 
   // Escape closes it, the focus back on the point.
   await page.keyboard.press("Escape");
