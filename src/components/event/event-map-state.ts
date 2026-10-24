@@ -1,8 +1,10 @@
 /*
- * A leg's map when the page applies a new state (docs/design/event-map/, v11, the « carte »
+ * A leg's map when the page applies a new state (docs/design/event-map/, v15, the « carte »
  * rows of « Mises à jour et focus »; design « Conception technique », § 6): between two
  * outputs of `mapOf`, the points kept, moved, created and removed, whether to reframe, to
- * close the bubble, and where the focus goes. Pure functions: the map draws what they say.
+ * close the bubble, and where the focus goes. Then (#483) Leaflet's import and the tiles'
+ * notice, the rows « Leaflet : … » and « tuiles : … ». Pure functions: the map draws what
+ * they say.
  */
 import { distanceMetres, SAME_POSITION_METRES, type EventMapPoints, type MapCar, type MapPoint } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
@@ -129,4 +131,52 @@ export function mapUpdate<Car extends MapCar>(
   else next = bubbleStays ? focus : bubbleFocus(view.bubble, before, after);
 
   return { points, removed, reorder, reframe, closeBubble, focus: next };
+}
+
+/** Leaflet's import: « Chargement de la carte… », the notice « La carte n’a pas pu se charger. », or the map. */
+export type LeafletPhase = "loading" | "failed" | "ready";
+
+/** « Réessayer » pressed, or the import ended. */
+export type LeafletEvent = "retry" | "loaded" | "failed";
+
+/** Where the focus goes: the loading box (`tabindex="-1"`), « Carte », the notice's « Réessayer »; `null`, it stays. */
+export type LeafletFocus = "box" | "toggle" | "retry" | null;
+
+/**
+ * Leaflet's import after `event` (CA2.8): « Réessayer » loads again and gives the focus to the
+ * box, which takes the place of the notice and its button; the import ended, the box goes, and
+ * its focus with it (`focusInBox`): to « Carte » once loaded, to « Réessayer » once failed
+ * again. An event that nothing waits for changes nothing.
+ */
+export function leafletStep(phase: LeafletPhase, event: LeafletEvent, focusInBox: boolean): { phase: LeafletPhase; focus: LeafletFocus } {
+  if (event === "retry") return phase === "failed" ? { phase: "loading", focus: "box" } : { phase, focus: null };
+  if (phase !== "loading") return { phase, focus: null };
+  if (event === "loaded") return { phase: "ready", focus: focusInBox ? "toggle" : null };
+  return { phase: "failed", focus: focusInBox ? "retry" : null };
+}
+
+/** A map's tiles: whether a tile of the view loading now failed, and whether the notice shows. */
+export interface TilesView {
+  failing: boolean;
+  notice: boolean;
+}
+
+export const TILES_QUIET: TilesView = { failing: false, notice: false };
+
+/**
+ * The tile layer's `loading` (a view starts loading), `tileerror`, `load` (the view ended, its
+ * failed tiles included), or « Réessayer », which asks for every tile again.
+ */
+export type TilesEvent = "loading" | "tileerror" | "load" | "retry";
+
+/**
+ * The tiles' notice after `event` (CA2.4): shown when a view ends loading with at least one
+ * tile in error, gone when a view ends without one, never in between, so that it does not
+ * blink. Gone while its « Réessayer » had the focus (`retryFocused`): to the map's container.
+ */
+export function tilesStep(view: TilesView, event: TilesEvent, retryFocused: boolean): { view: TilesView; focus: "container" | null } {
+  if (event === "loading" || event === "retry") return { view: { ...view, failing: false }, focus: null };
+  if (event === "tileerror") return { view: { ...view, failing: true }, focus: null };
+  const gone = view.notice && !view.failing;
+  return { view: { ...view, notice: view.failing }, focus: gone && retryFocused ? "container" : null };
 }

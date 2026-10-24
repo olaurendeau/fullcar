@@ -8,6 +8,7 @@ import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { framing } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
+import type { TilesEvent } from "./event-map-state";
 
 /** A car's point: where it is, its label (the driver's first name) and its whole name. */
 export interface CarPoint {
@@ -35,11 +36,15 @@ export interface EventMapOptions {
   cars: readonly CarPoint[];
   /** A point activated: to its car's card. */
   onCar: (id: string) => void;
+  /** The tile layer's `loading`, `tileerror` and `load`, view by view (CA2.4): `tilesStep` reads them. */
+  onTiles: (event: Exclude<TilesEvent, "retry">) => void;
 }
 
 export interface EventMapHandle {
   /** To call when the container's size changes, as when its panel is shown again: a map made without a size is framed then. */
   resize(): void;
+  /** « Réessayer » of the tiles' notice: every tile of the view asked for again. */
+  retryTiles(): void;
   destroy(): void;
 }
 
@@ -173,7 +178,12 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   const pointerChanged = () => (touch.matches ? map.dragging.disable() : map.dragging.enable());
   touch.addEventListener("change", pointerChanged);
 
-  L.tileLayer("/tuiles/{z}/{x}/{y}", { noWrap: true, bounds: WORLD, maxZoom: MAX_ZOOM }).addTo(map);
+  // Our route answers a missing tile with a blank one: only a failure (502, the network) is a `tileerror`.
+  const tiles = L.tileLayer("/tuiles/{z}/{x}/{y}", { noWrap: true, bounds: WORLD, maxZoom: MAX_ZOOM })
+    .on("loading", () => options.onTiles("loading"))
+    .on("tileerror", () => options.onTiles("tileerror"))
+    .on("load", () => options.onTiles("load"))
+    .addTo(map);
   L.control.attribution({ prefix: "Leaflet" }).addAttribution(asText(options.attribution)).addTo(map);
   const zoom = L.control.zoom({ zoomInTitle: options.zoomIn, zoomOutTitle: options.zoomOut }).addTo(map);
   for (const button of Array.from(zoom.getContainer()?.querySelectorAll("a") ?? [])) {
@@ -214,6 +224,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
       map.invalidateSize();
       frame();
     },
+    retryTiles: () => tiles.redraw(),
     destroy: () => {
       touch.removeEventListener("change", pointerChanged);
       map.remove();
