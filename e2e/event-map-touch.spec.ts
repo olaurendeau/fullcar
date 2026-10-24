@@ -216,6 +216,33 @@ test.describe("the map, at touch", () => {
     await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/16/"]').first()).toBeVisible();
   });
 
+  // #484: a pinch with a finger on a car's point zooms too, whichever finger lands there; the
+  // browser puts the fingers down one by one, in the order given.
+  for (const onPoint of ["first", "second"] as const) {
+    test(`CA1.11: two fingers spread apart zoom the map in, the ${onPoint} one on a car's point`, async ({ db, page, placed }) => {
+      expect(await coarse(page)).toBe(true);
+      // About 220 m north of the flag: the view frames both at zoom 15.
+      await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Lou" })).id, {
+        position: { lat: placed.place.lat + 0.002, lng: placed.place.lng },
+      });
+      await page.goto(`/e/${placed.id}`);
+      const map = await openMap(page, "Carte de l’aller : le lieu de l’événement et 1 voiture");
+      await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/15/"]').first()).toBeVisible();
+      await map.scrollIntoViewIfNeeded();
+      const at = await middle(map.locator(".leaflet-marker-pane button"));
+      // The other finger 80 px aside, on the map, off the point.
+      const aside = { x: at.x + (onPoint === "first" ? 80 : -80), y: at.y };
+      const onButton = (finger: { x: number; y: number }) =>
+        page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest(".leaflet-marker-pane button"), finger);
+      expect([await onButton(at), await onButton(aside)]).toEqual([true, false]);
+      // The left finger first, from 80 px apart to 180: twice and a quarter, from zoom 15 to 16.
+      await swipe(page, onPoint === "first" ? [at, aside] : [aside, at], { x: 50, y: 0 });
+      await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/16/"]').first()).toBeVisible();
+      // A pinch, not a press: Lou's card does not take the focus.
+      await expect(page.locator("[data-car-title]:focus")).toHaveCount(0);
+    });
+  }
+
   test("CA1.10: the keyboard pans and zooms at once: an arrow, Shift and an arrow, + and −", async ({ page, placed }) => {
     expect(await coarse(page)).toBe(true);
     await page.goto(`/e/${placed.id}`);

@@ -154,8 +154,10 @@ function pointIcon(point: CarPoint, onPress: (button: HTMLButtonElement) => void
   text.textContent = point.label;
   label.append(text);
   button.append(label);
-  // A press on a point neither drags nor zooms the map.
+  // A press on a point neither drags nor zooms the map. A finger on it still reaches the map:
+  // a pinch whose second finger lands on a point zooms it (#484).
   L.DomEvent.disableClickPropagation(button);
+  L.DomEvent.off(button, "touchstart", L.DomEvent.stopPropagation);
   button.addEventListener("click", () => onPress(button));
   return L.divIcon({ html: button, className: "z-auto!", iconSize: [0, 0] });
 }
