@@ -1,4 +1,4 @@
-import type { JSHandle, Locator, Page } from "@playwright/test";
+import { devices, type JSHandle, type Locator, type Page } from "@playwright/test";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
@@ -216,6 +216,33 @@ test.describe("the map, at touch", () => {
     await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/16/"]').first()).toBeVisible();
   });
 
+  // #484: a pinch with a finger on a car's point zooms too, whichever finger lands there; the
+  // browser puts the fingers down one by one, in the order given.
+  for (const onPoint of ["first", "second"] as const) {
+    test(`CA1.11: two fingers spread apart zoom the map in, the ${onPoint} one on a car's point`, async ({ db, page, placed }) => {
+      expect(await coarse(page)).toBe(true);
+      // About 220 m north of the flag: the view frames both at zoom 15.
+      await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Lou" })).id, {
+        position: { lat: placed.place.lat + 0.002, lng: placed.place.lng },
+      });
+      await page.goto(`/e/${placed.id}`);
+      const map = await openMap(page, "Carte de l’aller : le lieu de l’événement et 1 voiture");
+      await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/15/"]').first()).toBeVisible();
+      await map.scrollIntoViewIfNeeded();
+      const at = await middle(map.locator(".leaflet-marker-pane button"));
+      // The other finger 80 px aside, on the map, off the point.
+      const aside = { x: at.x + (onPoint === "first" ? 80 : -80), y: at.y };
+      const onButton = (finger: { x: number; y: number }) =>
+        page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest(".leaflet-marker-pane button"), finger);
+      expect([await onButton(at), await onButton(aside)]).toEqual([true, false]);
+      // The left finger first, from 80 px apart to 180: twice and a quarter, from zoom 15 to 16.
+      await swipe(page, onPoint === "first" ? [at, aside] : [aside, at], { x: 50, y: 0 });
+      await expect(map.locator('img.leaflet-tile-loaded[src^="/tuiles/16/"]').first()).toBeVisible();
+      // A pinch, not a press: Lou's card does not take the focus.
+      await expect(page.locator("[data-car-title]:focus")).toHaveCount(0);
+    });
+  }
+
   test("CA1.10: the keyboard pans and zooms at once: an arrow, Shift and an arrow, + and −", async ({ page, placed }) => {
     expect(await coarse(page)).toBe(true);
     await page.goto(`/e/${placed.id}`);
@@ -341,5 +368,31 @@ test.describe("the map, with a mouse", () => {
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(before.scroll);
     expect(await flagInMap(map)).toEqual(before.flag);
     expect(await map.evaluate((box, earlier) => box.querySelector(".leaflet-map-pane") === earlier, pane)).toBe(true);
+  });
+});
+
+test.describe("the map, on an iPhone", () => {
+  // Safari's user agent on a phone: Leaflet 1.9.4 turns its `tapHold` on, which listens to
+  // `touchstart` on the map and, after 600 ms held, cancels the `touchend` and its click.
+  test.use({ locale: "fr-FR", userAgent: devices["iPhone 13"].userAgent });
+
+  test("#542: a press of 700 ms on a car's point opens its card", async ({ db, page, placed }) => {
+    expect(await coarse(page)).toBe(true);
+    await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Lou" })).id, {
+      position: { lat: placed.place.lat + 0.002, lng: placed.place.lng },
+    });
+    // The page's clock, so that the press lasts 700 ms without the test waiting for them.
+    await page.clock.install();
+    await page.goto(`/e/${placed.id}`);
+    const map = await openMap(page, "Carte de l’aller : le lieu de l’événement et 1 voiture");
+    await map.scrollIntoViewIfNeeded();
+    const at = await middle(map.locator(".leaflet-marker-pane button"));
+
+    const finger = await page.context().newCDPSession(page);
+    await finger.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
+    await page.clock.runFor(700);
+    await finger.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await finger.detach();
+    await expect(page.locator("[data-car-title]:focus")).toHaveText("Voiture de Lou");
   });
 });

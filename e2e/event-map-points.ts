@@ -50,6 +50,17 @@ export async function seedCar(
   return seedRide(db, eventId, driver.id, fields);
 }
 
+/**
+ * Marc's car, 250 m north of `place`, then Nina's and Paul's at one parking 350 m east: two
+ * points, one grouped (« 2 voitures : Nina, Paul »), all in a view at zoom 15, `framing`'s most.
+ */
+export async function seedParking(db: Kysely<Database>, eventId: string, place: Position): Promise<void> {
+  await seedCar(db, eventId, "Marc", { position: around(place, { north: 250 }), location: "Gare", departureTime: "08:00:00" });
+  const parking = around(place, { east: 350 });
+  await seedCar(db, eventId, "Nina", { position: parking, location: "Parking du marché", departureTime: "09:00:00" });
+  await seedCar(db, eventId, "Paul", { position: { ...parking }, location: "Parking du marché", departureTime: "10:00:00" });
+}
+
 /** Opens the map of the shown leg, clicked again only while it stays folded (a click before hydration), until a tile shows. */
 export async function openMap(page: Page, name: string): Promise<Locator> {
   const button = page.getByRole("tabpanel").getByRole("button", { name: "Carte", exact: true });
