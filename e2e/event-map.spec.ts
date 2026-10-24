@@ -5,7 +5,8 @@ import type { Position } from "@/domain/place";
 import { generatePublicId } from "@/domain/public-id";
 import { PLAN_IGN_UPDATED } from "@/domain/tile";
 import { expect, test as base } from "./fixtures";
-import { placeOf, requestsForTile, tileAt } from "./ign";
+import { requestsForTile } from "./ign";
+import { placeOf, tileAt } from "./tiles";
 
 /*
  * #478, event-map v11: the « Carte » button of each leg and the map behind it, with the

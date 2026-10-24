@@ -1,7 +1,8 @@
 import type { APIResponse } from "@playwright/test";
 import { BLANK_TILE } from "@/app/tuiles/[z]/[x]/[y]/blank-tile";
 import { expect, test } from "./fixtures";
-import { answerTiles, PNG_SIGNATURE, requestsForTile, tileOf, type IgnAnswer } from "./ign";
+import { answerTiles, requestsForTile, type IgnAnswer } from "./ign";
+import { PNG_SIGNATURE, tileOf } from "./tiles";
 
 // #475: `GET /tuiles/{z}/{x}/{y}` (event-map v11, « Les tuiles », CA2.6, CA3.2) against the
 // slot's fake IGN, through `next start`: what the IGN receives, and what the route answers to

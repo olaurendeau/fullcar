@@ -1,7 +1,8 @@
 import type { Page, TestInfo } from "@playwright/test";
 import { mapName, openMap, points, seedParking, test } from "./event-map-points";
 import { expect } from "./fixtures";
-import { answerTiles, tileAt } from "./ign";
+import { answerTiles } from "./ign";
+import { tileAt } from "./tiles";
 
 /*
  * #484, event-map v18: the design's states at WIDTH px, 360 by default, at touch; from 1024 px,

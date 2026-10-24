@@ -7,7 +7,8 @@ import type { Position } from "@/domain/place";
 import { contrast } from "./contrast";
 import { around, points, seedCar, test } from "./event-map-points";
 import { expect } from "./fixtures";
-import { answerTiles, requestsForTile, tileAt, type IgnAnswer } from "./ign";
+import { answerTiles, requestsForTile, type IgnAnswer } from "./ign";
+import { tileAt } from "./tiles";
 
 /*
  * #483, event-map v15: the map's loading and its failures, « Le chargement », « Des tuiles en

@@ -8,7 +8,7 @@
 //   GET /requests?tile=z/x/y  the requests received for that tile, oldest first: path, query as sent, headers;
 //   GET /health  for the healthcheck.
 // Set by tile, never for all: the tests run in parallel. Nothing is ever forgotten while it
-// runs: each test takes tiles of its own (`placeOf` in e2e/ign.ts).
+// runs: each test takes tiles of its own (`placeOf` in e2e/tiles.ts).
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { crc32, deflateSync } from "node:zlib";
