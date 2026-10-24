@@ -609,8 +609,9 @@ jamais l'IP ni le navigateur du visiteur.
   `http://www.opengis.net/ows/1.1`, l'`ExceptionReport` comme l'`Exception`). L'attribut est
   lu, jamais le corps comparé comme une chaîne. Un corps que le lecteur ne sait pas lire
   n'est pas ce rapport : aucune tuile vide ne reste un jour au cache sur un doute.
-- `BLANK_TILE` (`blank-tile.ts`) : un PNG transparent de 256 × 256, une constante. Seul le
-  502 lève le `tileerror` de Leaflet : une tuile absente est un fond blanc, pas un avis.
+- `BLANK_TILE` (`blank-tile.ts`) : un PNG transparent de 256 × 256, une constante. Seuls
+  le 502 et une tuile perdue par le réseau (hors ligne) lèvent le `tileerror` de Leaflet :
+  une tuile absente est un fond blanc, pas un avis.
 - **Journal** : une tuile absente n'écrit rien (c'est le cas normal à l'étranger) ; un autre
   404 écrit `ign: blank tile (HTTP 404 without a Not Found report)` ; un échec,
   `ign: tile failed (…)`, avec un mot fixe (`timeout`, `no answer`, `not a PNG`,
@@ -653,14 +654,16 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
   lieu, sa position, ses places libres et le prénom de qui conduit, jamais un numéro.
 - **L'état ouvert ou replié** est celui de la page : `EventView` le tient (`useState`), un
   seul pour les deux legs, en mémoire, replié à chaque chargement et quand la position de
-  l'événement part. Il passe par `LegTabs` puis `LegPanel`, qui pose la carte après les
-  actions et le `<noscript>`, avant les fiches. Tenu par la page, il survit au remontage du
-  panneau de l'aller quand le retour part (CA2.7).
+  l'événement part. Il passe par `LegTabs` puis `LegPanel`, ou droit à `LegPanel` pour un
+  événement sans retour ; `LegPanel` pose la carte après les actions et le `<noscript>`,
+  avant les fiches. Tenu par la page, il survit au remontage du panneau de l'aller quand le
+  retour part (CA2.7).
 - **Le démarrage** : Leaflet ne démarre que carte ouverte et boîte d'une largeur non nulle
   (`ResizeObserver`), puisqu'un onglet caché n'a pas de taille (CA1.13). Une carte démarrée
   reste ; montrée de nouveau, elle prend sa taille (`resize`). Elle n'est cadrée qu'une fois
-  son conteneur d'une taille non nulle (`frame`) : repliée ou dans un onglet caché, elle
-  cadrerait ses points dans 0 × 0 px (CA1.3, #482).
+  son conteneur d'une taille non nulle (`frame`, #480) : repliée ou dans un onglet caché,
+  elle cadrerait ses points dans 0 × 0 px ; #482 étend cette garde aux recadrages après une
+  mise à jour (CA1.3).
 - **Les tuiles** : `L.tileLayer("/tuiles/{z}/{x}/{y}")`, avec `noWrap`, l'emprise du monde et
   le zoom 18 au plus : Leaflet ne demande jamais une tuile hors de la grille.
 - **Aucune animation** (CA1.10, décision 24 d'organizer-view, #479) : `zoomAnimation`,
@@ -669,8 +672,9 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
   un `setView` animé ; la molette fait défiler la page (`scrollWheelZoom: false`). Leaflet n'a
   pas d'option pour les flèches : `StillKeyboard` étend `L.Map.Keyboard` et le remplace ; il
   appelle son `_onKeyDown` avec un `panBy` immédiat le temps de la touche, et garde ainsi Maj
-  (trois fois la distance), `maxBounds` et + / −. Il surcharge un interne de Leaflet : c'est pourquoi
-  `package.json` épingle `leaflet` à exactement 1.9.4, et une montée de version le relit
+  (trois fois la distance), `maxBounds` et + / −. Il surcharge un interne de Leaflet, et ne
+  tient que grâce à la version exacte de `leaflet` dans `package.json`, 1.9.4, épinglée par
+  #471 avant lui, comme toute dépendance du projet : une montée de version le relit
   (`e2e/event-map-touch.spec.ts` teste les flèches, Maj, + et −).
 - **Au toucher** (CA1.11, #479, #484) : `dragging` suit `(pointer: coarse)`, même quand elle
   change, la carte restant la même : un doigt fait défiler la page, deux déplacent et zooment
@@ -699,10 +703,12 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
 - **Les échecs** (#483), sans région `status` de plus : le panneau d'un leg n'en a qu'une,
   celle du bandeau. `leafletStep` : un `import()` refusé (hors ligne, ou le morceau
   d'un ancien build après un déploiement) met « La carte n’a pas pu se charger. » à la place
-  de la boîte, et son « Réessayer » importe de nouveau (CA2.8). `tilesStep` : l'avis de tuiles
-  apparaît quand une vue finit de charger (`load`) avec au moins un `tileerror`, part quand
-  une vue finit sans, jamais entre les deux, et son « Réessayer » redemande toutes les tuiles
-  (CA2.4).
+  de la boîte, et son « Réessayer » importe de nouveau (CA2.8). Après un déploiement, ce
+  morceau répond 404 pour toujours et « Réessayer » ne peut pas réussir : seul un
+  rechargement de la page aide, cas noté sur #238 pour la prochaine révision de la maquette.
+  `tilesStep` : l'avis de tuiles apparaît quand une vue finit de charger (`load`) avec au
+  moins un `tileerror`, part quand une vue finit sans, jamais entre les deux, et son
+  « Réessayer » redemande toutes les tuiles (CA2.4).
 - **L'organisateur** (#485) : sur `/e/{id}/admin`, une fois le lien vérifié, un événement sans
   position montre dans chaque leg, à la place de la carte, la phrase `EventMap.organiserHint`
   et son propre « Modifier l’événement » (`OrganiserHint`), qui ouvre la même feuille que
