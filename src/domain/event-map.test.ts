@@ -150,11 +150,33 @@ describe("mapOf: a point at the event's place (CA1.15)", () => {
     expect(mapOf(FLAG, [car("a", east(FLAG, 26))]).points[0].atFlag).toBe(false);
   });
 
-  it("measures from the point's first car, as the grouping does", () => {
-    const map = mapOf(FLAG, [car("a", north(FLAG, 30)), car("b", north(FLAG, 10))]);
+  it("makes one point at the flag of two cars less than 25 m from it, 40 m apart, in the order of the cards (v16)", () => {
+    const map = mapOf(FLAG, [car("n", north(FLAG, 20)), car("s", north(FLAG, -20))]);
 
-    expect(idsOf(map)).toEqual([["a", "b"]]);
-    expect(map.points[0].atFlag).toBe(false);
+    expect(idsOf(map)).toEqual([["n", "s"]]);
+    expect(map.points[0].atFlag).toBe(true);
+    expect(map.points[0].position).toEqual(north(FLAG, 20));
+  });
+
+  it("puts the flag first: a car less than 25 m from the flag joins it, not an earlier point 10 m away", () => {
+    // A, 30 m from the flag and first in the order of the cards; B, 20 m from the flag and 10 m from A.
+    const map = mapOf(FLAG, [car("a", north(FLAG, 30)), car("b", north(FLAG, 20))]);
+
+    expect(idsOf(map)).toEqual([["a"], ["b"]]);
+    expect(map.points.map((point) => point.atFlag)).toEqual([false, true]);
+  });
+
+  it("never puts a car 25 m or more from the flag in the flag's point, even 10 m from its first car", () => {
+    const map = mapOf(FLAG, [car("b", north(FLAG, 20)), car("a", north(FLAG, 30))]);
+
+    expect(idsOf(map)).toEqual([["b"], ["a"]]);
+    expect(map.points.map((point) => point.atFlag)).toEqual([true, false]);
+  });
+
+  it("groups the other cars with each other at 25 m, as before, whatever the flag's point holds", () => {
+    const cars = [car("f", FLAG), car("a", east(FLAG, 30)), car("b", east(FLAG, 40)), car("c", north(FLAG, 5))];
+
+    expect(idsOf(mapOf(FLAG, cars))).toEqual([["f", "c"], ["a", "b"]]);
   });
 });
 

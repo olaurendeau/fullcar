@@ -9,15 +9,27 @@ import "leaflet/dist/leaflet.css";
 import { framing } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
 
-/** A car's point: where it is, its label (the driver's first name) and its whole name. */
-export interface CarPoint {
+/** A car of a point: its button in a bubble says « Voiture de {prénom} », and is named what its card says. */
+export interface PointCar {
   id: string;
+  /** « Voiture de {prénom} ». */
+  title: string;
+  /** « Voiture de {prénom}, départ : {lieu}, {places} ». */
+  name: string;
+}
+
+/**
+ * A point of `mapOf`: where it is, its label and its name; one car, the driver's first name and
+ * the car's name; more, their number and « N voitures : {prénoms} », and a bubble (CA1.6).
+ */
+export interface CarPoint {
   position: Position;
-  /** Less than 25 m from the flag: no line, and the label under the flag. */
+  /** The flag's point: no line, and the label under the flag. */
   atFlag: boolean;
   label: string;
-  /** « Voiture de {prénom}, départ : {lieu}, {places} », what its card says. */
   name: string;
+  /** In the order of the cards. */
+  cars: PointCar[];
 }
 
 export interface EventMapOptions {
@@ -27,13 +39,15 @@ export interface EventMapOptions {
   flagLabel: string;
   zoomIn: string;
   zoomOut: string;
+  /** « Fermer », the bubble's last button. */
+  close: string;
   /** « Source : IGN – Plan IGN v2, {date} », after « Leaflet ». */
   attribution: string;
   /** The media query of a touch screen, the one the two-finger sentence follows (CA1.11). */
   touchQuery: string;
-  /** In the order of the cards. */
-  cars: readonly CarPoint[];
-  /** A point activated: to its car's card. */
+  /** In the order of their first car's card. */
+  points: readonly CarPoint[];
+  /** A car's point or a bubble's car button activated: to its card. */
   onCar: (id: string) => void;
 }
 
@@ -54,6 +68,9 @@ const WORLD: L.LatLngBoundsExpression = [
 const ZOOM_TARGET = "44px";
 /** A line, as the design draws it: straight, 2 px, #171717 at 70 %, and nothing happens on it. */
 const LINE: L.PolylineOptions = { color: "#171717", opacity: 0.7, weight: 2, interactive: false };
+/** The bubble, as the design draws it: 10 px from the map's top right corner, 210 px wide at most. */
+const BUBBLE_INSET = 10;
+const BUBBLE_WIDTH = 210;
 
 /** Leaflet 1.9.4's keyboard handler, `L.Map.Keyboard`, which @types/leaflet does not declare. */
 const LeafletKeyboard = (L.Map as unknown as { Keyboard: typeof L.Handler }).Keyboard;
@@ -107,20 +124,21 @@ const CAR_SVG =
   '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>';
 
 /**
- * A car's point: a real `<button>`, so Enter and Space need no code of ours, 44 × 44 px at
- * least around its label: the driver's first name, cut at 120 px, in a 12 px text. Its name is
- * the whole one. The icon Leaflet places has no size, and the button sits around its point:
+ * A point: a real `<button>`, so Enter and Space need no code of ours, 44 × 44 px at least
+ * around its label: the driver's first name, cut at 120 px, or the number of its cars, in a
+ * 12 px text. Its name is the whole one. The icon Leaflet places has no size, and the button sits around its point:
  * centred on the car's place, or, at the flag, from the flag's lower edge, its label 24 px under
  * the flag's place, where the flag does not cover it (CA1.15). Without a `z-index` of their own,
  * the labels stack in the DOM's order, the cards' one: the last on top.
  */
-function carIcon(car: CarPoint, onCar: (id: string) => void): L.DivIcon {
+function pointIcon(point: CarPoint, onPress: (button: HTMLButtonElement) => void): L.DivIcon {
   const button = document.createElement("button");
   button.type = "button";
-  button.setAttribute("aria-label", car.name);
+  button.setAttribute("aria-label", point.name);
+  if (point.cars.length > 1) button.setAttribute("aria-expanded", "false");
   button.className = [
     "group pointer-events-auto absolute left-0 flex min-h-11 w-max min-w-11 -translate-x-1/2 items-center justify-center focus-visible:outline-hidden",
-    car.atFlag ? "top-4" : "top-0 -translate-y-1/2",
+    point.atFlag ? "top-4" : "top-0 -translate-y-1/2",
   ].join(" ");
   const label = document.createElement("span");
   label.className =
@@ -128,18 +146,54 @@ function carIcon(car: CarPoint, onCar: (id: string) => void): L.DivIcon {
   label.innerHTML = CAR_SVG;
   const text = document.createElement("span");
   text.className = "max-w-30 truncate";
-  text.textContent = car.label;
+  text.textContent = point.label;
   label.append(text);
   button.append(label);
   // A press on a point neither drags nor zooms the map.
   L.DomEvent.disableClickPropagation(button);
-  button.addEventListener("click", () => onCar(car.id));
+  button.addEventListener("click", () => onPress(button));
   return L.divIcon({ html: button, className: "z-auto!", iconSize: [0, 0] });
 }
 
+/** A button of the bubble, as the design's outline buttons: 44 px high at least (CA1.8). */
+function bubbleButton(text: string, name?: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = text;
+  if (name) button.setAttribute("aria-label", name);
+  button.className =
+    "flex min-h-11 w-full items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted focus-visible:focus-ring";
+  return button;
+}
+
 /**
- * The map of a leg in `container`: our tiles, the flag, a point per car with its line to the
- * flag (none at the flag), the zoom and the attribution. The view frames them all (`framing`):
+ * Our bubble (no popup of Leaflet's, whose « Close popup » is English): its title, the point's
+ * name, a button per car in the order of the cards, then « Fermer ». Focusable itself, so that
+ * a press on its title keeps the focus in it.
+ */
+function bubbleOf(point: CarPoint, close: string): { bubble: HTMLDivElement; cars: HTMLButtonElement[]; close: HTMLButtonElement } {
+  const bubble = document.createElement("div");
+  bubble.setAttribute("role", "group");
+  bubble.setAttribute("aria-label", point.name);
+  bubble.tabIndex = -1;
+  bubble.className =
+    "pointer-events-auto absolute z-1001 flex flex-col gap-1.5 overflow-y-auto rounded-xl bg-background p-2.5 text-[13px] text-foreground shadow-[0_6px_20px_rgba(0,0,0,0.25)] outline-hidden";
+  const title = document.createElement("p");
+  title.className = "font-semibold";
+  title.textContent = point.name;
+  const cars = point.cars.map((car) => bubbleButton(car.title, car.name));
+  const last = bubbleButton(close);
+  bubble.append(title, ...cars, last);
+  // Neither a press nor the wheel in it reaches the map.
+  L.DomEvent.disableClickPropagation(bubble);
+  L.DomEvent.disableScrollPropagation(bubble);
+  return { bubble, cars, close: last };
+}
+
+/**
+ * The map of a leg in `container`: our tiles, the flag, the points of `mapOf` as they are, each
+ * with its line to the flag (none at the flag), a grouped one with its bubble, the zoom and
+ * the attribution. The view frames them all (`framing`):
  * the flag alone at zoom 14, else every point, 32 px around, zoom 15 at most. The container is a region, focusable (arrows, + and −);
  * the flag is not a button and stays out of the Tab order.
  * Nothing moves by degrees (CA1.10, decision 24 of organizer-view): no zoom, fade or marker
@@ -183,11 +237,70 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
 
   const flag: L.LatLngTuple = [options.flag.lat, options.flag.lng];
   L.marker(flag, { icon: flagIcon(options.flagLabel), keyboard: false, interactive: false }).addTo(map);
-  // Added in the order of the cards: the marker pane's order, and so the Tab order (CA1.4).
-  for (const car of options.cars) {
-    const at: L.LatLngTuple = car.atFlag ? flag : [car.position.lat, car.position.lng];
-    if (!car.atFlag) L.polyline([flag, at], LINE).addTo(map);
-    L.marker(at, { icon: carIcon(car, options.onCar), keyboard: false, interactive: false }).addTo(map);
+
+  /**
+   * The open bubble, in the DOM just after its point (CA1.6): Tab from « Fermer » goes on to the
+   * next point. Placed at the map's top right corner, again whenever the map moves.
+   */
+  let open: { bubble: HTMLDivElement; button: HTMLButtonElement; at: L.LatLng } | null = null;
+  const place = () => {
+    if (!open) return;
+    const size = map.getSize();
+    const from = map.latLngToContainerPoint(open.at);
+    const width = Math.min(BUBBLE_WIDTH, size.x - 2 * BUBBLE_INSET);
+    Object.assign(open.bubble.style, {
+      width: `${width}px`,
+      maxHeight: `${size.y - 2 * BUBBLE_INSET}px`,
+      left: `${size.x - BUBBLE_INSET - width - from.x}px`,
+      top: `${BUBBLE_INSET - from.y}px`,
+    });
+  };
+  map.on("move zoom resize", place);
+  const closeBubble = () => {
+    if (!open) return;
+    const { bubble, button } = open;
+    open = null;
+    button.setAttribute("aria-expanded", "false");
+    bubble.remove();
+  };
+  const openBubble = (point: CarPoint, button: HTMLButtonElement, at: L.LatLng) => {
+    closeBubble();
+    const { bubble, cars, close } = bubbleOf(point, options.close);
+    const back = () => {
+      closeBubble();
+      button.focus();
+    };
+    point.cars.forEach((car, n) =>
+      cars[n].addEventListener("click", () => {
+        options.onCar(car.id);
+        // Its card has the focus now, and the bubble closed with it; otherwise, back to the point.
+        if (open?.bubble === bubble) back();
+      }),
+    );
+    close.addEventListener("click", back);
+    bubble.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      back();
+    });
+    // Closed when the focus leaves it, by Tab or elsewhere.
+    bubble.addEventListener("focusout", (event) => {
+      if (!(event.relatedTarget instanceof Node && bubble.contains(event.relatedTarget)) && open?.bubble === bubble) closeBubble();
+    });
+    open = { bubble, button, at };
+    button.after(bubble);
+    button.setAttribute("aria-expanded", "true");
+    place();
+    cars[0].focus();
+  };
+
+  // Added in the order of their first car's card: the marker pane's order, and so the Tab order (CA1.4).
+  for (const point of options.points) {
+    const at: L.LatLngTuple = point.atFlag ? flag : [point.position.lat, point.position.lng];
+    if (!point.atFlag) L.polyline([flag, at], LINE).addTo(map);
+    const press = (button: HTMLButtonElement) =>
+      point.cars.length > 1 ? openBubble(point, button, L.latLng(at)) : options.onCar(point.cars[0].id);
+    L.marker(at, { icon: pointIcon(point, press), keyboard: false, interactive: false }).addTo(map);
   }
 
   // Framed once the container has a size: created again while folded or in a hidden tab, a map
@@ -197,7 +310,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   const frame = () => {
     if (framed || container.clientWidth === 0 || container.clientHeight === 0) return;
     framed = true;
-    const view = framing(options.flag, options.cars);
+    const view = framing(options.flag, options.points);
     if (view.kind === "flag") map.setView([view.center.lat, view.center.lng], view.zoom, { animate: false });
     else {
       const box: L.LatLngBoundsExpression = [
@@ -215,6 +328,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
       frame();
     },
     destroy: () => {
+      closeBubble();
       touch.removeEventListener("change", pointerChanged);
       map.remove();
     },
