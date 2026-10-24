@@ -22,6 +22,7 @@ est lu par trente personnes pendant trois jours, puis purgé.
 | PWA | manifeste et service worker minimal, pas de mode hors ligne en V1 |
 | purge | Vercel Cron quotidienne vers une route protégée par `CRON_SECRET` |
 | lieux | Photon (instance publique de komoot, OpenStreetMap), appelé par notre serveur seulement, derrière `POST /api/lieux` (voir « Auto-complétion des lieux ») |
+| carte | Leaflet 1.9.4, version exacte, chargé par `import()` à la première ouverture d'une carte ; tuiles Plan IGN v2 (WMTS public de la Géoplateforme), demandées par notre serveur seulement, derrière `GET /tuiles/{z}/{x}/{y}`, en cache au CDN de Vercel (voir « La carte de l'événement ») |
 
 Polices : la pile de polices système, **aucune police web**, ni distante ni servie par
 l'application. Aucune requête du navigateur vers un tiers, et rien à télécharger avant le
@@ -33,7 +34,9 @@ l'IP du visiteur (`X-Forwarded-For`) : ce qui la tient hors de Sentry, c'est
 script et envoie ses pages vues à notre origine aussi (`/_vercel/insights/…`, ou un chemin
 propre au projet). Les propositions de lieux (#425) passent par notre origine elles aussi,
 `POST /api/lieux` : c'est notre serveur qui appelle Photon, qui ne voit ni l'IP ni le
-navigateur du visiteur.
+navigateur du visiteur. Les tuiles de la carte (#474) aussi, `GET /tuiles/{z}/{x}/{y}` : c'est
+notre serveur qui appelle l'IGN, qui voit l'IP de Vercel, jamais celle du visiteur. Leaflet et
+sa feuille de style viennent de notre build, servis par notre origine.
 
 ## Environnements et base de données
 
@@ -66,7 +69,7 @@ et force alors HTTPS sur `http://app:3000`, ce qui casse les tests de bout en bo
 ### Slots
 
 Chaque slot est un **projet Compose distinct** (`fullcar-slot{slot}`) : son conteneur Node (`web`),
-son conteneur Postgres, son faux Photon (`photon`, voir plus bas), ses volumes. Rien n'est partagé, donc deux développeurs en parallèle
+son conteneur Postgres, son faux Photon (`photon`) et son faux IGN (`ign`, voir plus bas), ses volumes. Rien n'est partagé, donc deux développeurs en parallèle
 ne se marchent pas dessus, et `make down SLOT={slot}` efface tout ce que le slot a créé.
 L'application du slot écoute sur le port `30{slot}0` de l'hôte, en `127.0.0.1` seulement ;
 Postgres n'est pas exposé, il n'est joignable que par le nom `db` dans le réseau du slot. Dans
@@ -99,6 +102,15 @@ SLOT=0 docker compose exec photon node -e 'fetch("http://localhost:2323/answers"
 
 Le faux répond `204`, puis propose « Annecy (74000) » au texte `Annecy`, exactement, tant
 qu'il tourne.
+
+**Le faux IGN du slot (#472).** Le service `ign` lance `e2e/fake-ign.mjs` (Node seul, sans
+dépendance) : le WMTS de la Géoplateforme sur le port 2324 (`GET /wmts`, un `GetTile` KVP, lu
+sur `TILEMATRIX`, `TILEROW` et `TILECOL`), et son contrôle sur le port 2325. Comme le faux
+Photon, il n'est joignable que par son nom dans le réseau du slot, et `web` y est branché dans
+tous les slots, `make up` compris (`IGN_WMTS_URL=http://ign:2324/wmts`) : un slot ne demande
+jamais une tuile à l'IGN. Par défaut, il répond à toute tuile une petite tuile PNG grise, si
+bien qu'une carte s'affiche en local sans réglage ; une requête qu'il ne sait pas lire reçoit
+un 400 `InvalidParameterValue`.
 
 **Un worktree git par slot** : chaque développeur travaille dans son propre worktree, avec
 son slot. Deux slots dans le même répertoire partageraient `node_modules`, `.next` et les
@@ -173,7 +185,27 @@ configurée échoue au lieu d'effacer une base qui n'est pas la sienne.
   garde une réponse une heure : **chaque test choisit ses propres textes**.
   `PLACES_BREAKER_MS=0` empêche le 429 ou le 500 d'un test d'ouvrir le disjoncteur pour les
   autres. `make e2e` sert `web` sans ses dépendances : c'est le conteneur Playwright, qui
-  dépend de `photon`, qui démarre le faux.
+  dépend de `photon` et d'`ign`, qui démarre les deux faux.
+- Les tuiles viennent du **faux IGN du slot** (voir « Slots »), jamais de la Géoplateforme. Un
+  test le règle **par tuile** (`z/x/y`, comme Leaflet et `/tuiles` la nomment), jamais pour
+  toutes, au travers de son port de contrôle, que le conteneur Playwright reçoit en
+  `IGN_CONTROL_URL` (`e2e/ign.ts`) : `answerTiles` fixe la réponse à des tuiles, et
+  `requestsForTile` rend les requêtes reçues pour une tuile (chemin, query telle qu'envoyée,
+  en-têtes). Les réponses : `tile` (par défaut), `notFound` (le vrai 404 `Not Found` de l'IGN,
+  relevé par #473, rendu octet pour octet depuis `e2e/ign-not-found.xml`), `notFoundBare` (un
+  404 sans ce rapport), `invalidParameter` (400), `forbidden` (403), `tooMany` (429), `error`
+  (500), chacune avec un délai facultatif (`delayMs`, de 0 à 2³¹ − 1 ms). Aucune route
+  réservée aux tests.
+- **Chaque test de la carte a ses tuiles** (règle de capacité, #472 sur #238) : le faux
+  n'oublie rien avant `make down`. `placeOf(eventId)` (`e2e/ign.ts`) tire de l'identifiant
+  de l'événement amorcé une position dans un rectangle de la France métropolitaine (97 818
+  tuiles à z 14), sans aléa, et `tileOf(eventId, dx)` une tuile de z 18 qui n'est qu'à
+  ce test. Un test ne règle **que les tuiles qu'il vérifie lui-même**, jamais une zone
+  entière : à z 14, trente tests d'une tuile se chevauchent avec une probabilité de 0,5 %,
+  trente tests d'une vue de 3 × 3 tuiles de 10 %. Si beaucoup de tests de la carte finissent
+  par régler des tuiles, on agrandit le rectangle de `placeOf`. `e2e/event-map-points.ts`
+  amorce l'événement du test à `placeOf` son identifiant (fixture `placed`), et ses voitures
+  autour (`seedCar`, `around`).
 
 ### Production
 
@@ -395,10 +427,11 @@ ailleurs serait une nouvelle lecture.
 
 À partir de l'épic #237 (maquette `docs/design/place-autocomplete/`), le lieu de l'événement
 et celui d'une voiture peuvent recevoir une **position**, choisie parmi des propositions. Sur
-main : la position dans le domaine et en base, les voitures qui l'enregistrent (#421) et
-l'état de la page qui la porte (#422), la route des propositions et son appel à Photon,
-l'état du champ dans le navigateur. **À venir** : l'écriture et la lecture de la position de
-l'événement (#420), puis les formulaires qui montrent le champ (#428 et suivantes).
+main : la position dans le domaine et en base, l'événement (#420) et les voitures (#421) qui
+l'enregistrent, l'état de la page qui la porte (#422), la route des propositions et son appel à
+Photon, l'état du champ dans le navigateur, et les quatre formulaires qui montrent le champ :
+« Créer un événement » (#428), « Proposer une voiture » (#430), « Modifier la voiture » (#431)
+et « Modifier l’événement » (#432).
 
 ### Un lieu, une valeur
 
@@ -523,7 +556,164 @@ qu'elle.
 `src/components/event/place-search.ts` (#427) envoie `POST /api/lieux` 300 ms après la
 dernière frappe, une requête à la fois par champ, 3 s au plus, et aucune hors ligne ; tout ce
 qui n'est pas un `ok` lisible est `unavailable`. `place-field-state.ts` tient l'état du champ
-en fonctions pures. **À venir** (#428) : aucun formulaire ne s'en sert encore.
+en fonctions pures. Le champ, `place-field.tsx`, s'en sert dans les quatre formulaires.
+
+## La carte de l'événement (#238)
+
+À partir de l'épic #238 (maquette `docs/design/event-map/`, v18, qui fait foi pour l'écran, les
+mots, les critères et la table « Mises à jour et focus »), chaque leg a sa **Carte** quand le
+lieu de l'événement a une position. Rien de plus n'est stocké, et le serveur ne reçoit rien de
+nouveau, sauf les demandes de tuiles : la carte lit la position de l'événement
+(`EventHeader.locationPosition`, que `headerFrom` lit, `src/app/e/[id]/event.ts`) et celle de
+chaque voiture (`BoardCar.position`, voir « La position d'une voiture »), dans l'état que la
+page applique déjà. Les Arrêts (#68) ne sont pas sur la carte.
+
+### Les tuiles : `/tuiles/{z}/{x}/{y}` (#473, #474)
+
+Le navigateur ne joint jamais l'IGN : Leaflet demande chaque tuile à notre route, qui la
+demande au WMTS de la Géoplateforme et la rend avec les en-têtes de cache du CDN de Vercel
+(`CDN-Cache-Control`). L'IGN voit l'IP de Vercel et les tuiles qui ne sont pas au cache,
+jamais l'IP ni le navigateur du visiteur.
+
+- **Le domaine** (`src/domain/tile.ts`) : `tileOf` lit les trois segments, en écriture
+  décimale canonique (`^(0|[1-9]\d*)$` : une tuile n'a qu'une URL au cache du CDN), `z` de 0
+  à 18, `x` et `y` de 0 à 2^z − 1, et rend `null` pour tout le reste. `wmtsTileUrl` écrit le
+  `GetTile` KVP (`LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2`, `STYLE=normal`,
+  `FORMAT=image/png`, `TILEMATRIXSET=PM_0_19`, `TILEMATRIX`, `TILEROW`, `TILECOL`), sans la
+  query ni le fragment d'`IGN_WMTS_URL`. `isNotFoundReport` lit le rapport d'une tuile
+  absente (voir la règle), avec un petit lecteur XML écrit là : Node n'a pas de `DOMParser`,
+  et une bibliothèque serait une dépendance de plus.
+- **La route** : `src/app/tuiles/[z]/[x]/[y]/route.ts` n'exporte que `GET`. Next répond
+  lui-même à `HEAD` en l'appelant (un `HEAD` qui n'est pas au cache du CDN appelle donc l'IGN,
+  ce qui est accepté, décision du coordinateur sur #238), 204 à `OPTIONS` et 405 aux autres
+  méthodes. `GET` délègue à `handleTile` (`handle.ts`), qui ne reçoit que les trois segments :
+  ni en-tête ni query du visiteur.
+- **L'appel à l'IGN** (`ign.ts`) : `createIgn` crée le client, une fois par instance serveur,
+  au chargement de `route.ts`. En en-têtes, le code ne pose que
+  `User-Agent: fullcar/{version} (+https://github.com/olaurendeau/fullcar)` et
+  `Accept: image/png`, et rien n'est recopié de la requête du visiteur. `cache: "no-store"`
+  (le cache est celui du CDN, pas le cache de données de Next), `redirect: "error"`, 5 s ; une
+  tuile est lue jusqu'à 512 Kio, un rapport jusqu'à 4 Kio, jamais au-delà. Rien n'est levé :
+  `tile` rend une tuile, `absent`, `blank` ou `failed`.
+
+| l'IGN répond | la route répond | `Cache-Control` | `CDN-Cache-Control` |
+|---|---|---|---|
+| 200 `image/png`, qui commence par la signature PNG | 200, la tuile | `public, max-age=86400` | `public, s-maxage=2592000` |
+| 404 dont le corps est le rapport `Not Found` : une tuile absente (hors de la couche, hors de la grille, à l'étranger) | 200, `BLANK_TILE` | `public, max-age=86400` | `public, s-maxage=86400` |
+| tout autre 404 : sans ce rapport, illisible, de plus de 4 Kio (une `IGN_WMTS_URL` fausse) | 200, `BLANK_TILE` | `no-store` | — |
+| tout autre statut (400 `InvalidParameterValue` d'une couche retirée, 403, 429, 5xx…), un 200 qui n'est pas un PNG ou de plus de 512 Kio, pas de réponse, 5 s | 502, sans corps | `no-store` | — |
+| rien : les segments que `tileOf` refuse ne l'appellent pas | 404, sans corps | `no-store` | — |
+
+- **Une tuile absente** est un 404 de l'IGN dont le rapport d'exception OWS a une
+  `Exception` d'attribut `exceptionCode` à `Not Found` (espace de noms
+  `http://www.opengis.net/ows/1.1`, l'`ExceptionReport` comme l'`Exception`). L'attribut est
+  lu, jamais le corps comparé comme une chaîne. Un corps que le lecteur ne sait pas lire
+  n'est pas ce rapport : aucune tuile vide ne reste un jour au cache sur un doute.
+- `BLANK_TILE` (`blank-tile.ts`) : un PNG transparent de 256 × 256, une constante. Seul le
+  502 lève le `tileerror` de Leaflet : une tuile absente est un fond blanc, pas un avis.
+- **Journal** : une tuile absente n'écrit rien (c'est le cas normal à l'étranger) ; un autre
+  404 écrit `ign: blank tile (HTTP 404 without a Not Found report)` ; un échec,
+  `ign: tile failed (…)`, avec un mot fixe (`timeout`, `no answer`, `not a PNG`,
+  `answer too large`) ou `HTTP {statut}`. Jamais la tuile ni l'URL : une tuile dit la zone
+  regardée. Pour Sentry, `scrubUrl` garde `/tuiles` et masque les trois nombres
+  (`/tuiles/[id]/[id]/[id]`).
+- **Attribution** : « Leaflet | Source : IGN – Plan IGN v2, {mois année} », en texte. La date
+  vient de `PLAN_IGN_UPDATED` (`src/domain/tile.ts`, `"2026-10"`, la révision de la fiche
+  `IGNF_PLAN-IGN`), et son test (`tile.test.ts`, CA3.4) échoue quand elle a plus de 12 mois :
+  la Licence Ouverte demande la date de dernière mise à jour, qu'il faut alors relire.
+
+| variable | sans elle | effet |
+|---|---|---|
+| `IGN_WMTS_URL` | `https://data.geopf.fr/wmts` (aussi quand elle est vide) | l'adresse du WMTS ; chaque slot pointe vers son faux IGN |
+
+### Les points (#476, #481)
+
+`src/domain/event-map.ts`, en fonctions pures, sans mots ni Leaflet. `mapOf(flag, cars)` lit
+les voitures d'un leg dans l'ordre des fiches : une voiture sans position n'est pas sur la carte
+(`notOnMap`) ; **le drapeau d'abord** (v18) : toute voiture à moins de 25 m du drapeau
+(`SAME_POSITION_METRES`, distance `distanceMetres`, haversine) est dans son seul point
+(`atFlag` : pas de ligne, l'étiquette sous le drapeau), même à 25 m ou plus d'une autre ;
+toute autre rejoint le premier point, dans l'ordre des fiches, hors du drapeau, à moins de
+25 m de la position de sa première voiture, ou en ouvre un. `onMap` compte les voitures sur
+la carte, le nombre que dit son nom. `framing` cadre le drapeau seul au zoom 14, ou
+l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
+
+### Dans le navigateur (#478 à #485)
+
+- **`src/components/event/leaflet-map.ts`** est le seul fichier qui importe `leaflet` et
+  `leaflet/dist/leaflet.css`, et `event-map.tsx` ne l'atteint que par `import()`, à la
+  première ouverture d'une carte : avant, la page ne charge ni l'un ni l'autre (CA1.2,
+  `e2e/event-map.spec.ts`). Aucun lint ne l'impose : la revue le tient. `createEventMap`
+  rend `{ update, resize, retryTiles, destroy }`, et n'a aucun mot : `event-map.tsx` les lui
+  donne traduits.
+- **`src/components/event/event-map.tsx`** : `EventMap`, le bouton « Carte »
+  (`aria-expanded`, masqué sans JavaScript), le conteneur qu'il replie (`hidden`), la boîte de
+  240 px, 280 px à partir d'une fenêtre de 448 px, le chargement, les avis et les phrases sous
+  la carte ; et `OrganiserHint`. D'une voiture, la carte ne reçoit que son identifiant, son
+  lieu, sa position, ses places libres et le prénom de qui conduit, jamais un numéro.
+- **L'état ouvert ou replié** est celui de la page : `EventView` le tient (`useState`), un
+  seul pour les deux legs, en mémoire, replié à chaque chargement et quand la position de
+  l'événement part. Il passe par `LegTabs` puis `LegPanel`, qui pose la carte après les
+  actions et le `<noscript>`, avant les fiches. Tenu par la page, il survit au remontage du
+  panneau de l'aller quand le retour part (CA2.7).
+- **Le démarrage** : Leaflet ne démarre que carte ouverte et boîte d'une largeur non nulle
+  (`ResizeObserver`), puisqu'un onglet caché n'a pas de taille (CA1.13). Une carte démarrée
+  reste ; montrée de nouveau, elle prend sa taille (`resize`). Elle n'est cadrée qu'une fois
+  son conteneur d'une taille non nulle (`frame`) : repliée ou dans un onglet caché, elle
+  cadrerait ses points dans 0 × 0 px (CA1.3, #482).
+- **Les tuiles** : `L.tileLayer("/tuiles/{z}/{x}/{y}")`, avec `noWrap`, l'emprise du monde et
+  le zoom 18 au plus : Leaflet ne demande jamais une tuile hors de la grille.
+- **Aucune animation** (CA1.10, décision 24 d'organizer-view, #479) : `zoomAnimation`,
+  `fadeAnimation`, `markerZoomAnimation` et `inertia` à `false`, chaque cadrage
+  `{ animate: false }` ; `boxZoom` et `doubleClickZoom` à `false`, parce qu'ils finissent par
+  un `setView` animé ; la molette fait défiler la page (`scrollWheelZoom: false`). Leaflet n'a
+  pas d'option pour les flèches : `StillKeyboard` étend `L.Map.Keyboard` et le remplace ; il
+  appelle son `_onKeyDown` avec un `panBy` immédiat le temps de la touche, et garde ainsi Maj
+  (trois fois la distance), `maxBounds` et + / −. Il surcharge un interne de Leaflet : c'est pourquoi
+  `package.json` épingle `leaflet` à exactement 1.9.4, et une montée de version le relit
+  (`e2e/event-map-touch.spec.ts` teste les flèches, Maj, + et −).
+- **Au toucher** (CA1.11, #479, #484) : `dragging` suit `(pointer: coarse)`, même quand elle
+  change, la carte restant la même : un doigt fait défiler la page, deux déplacent et zooment
+  la carte. Sur un point, un `touchstart` à un doigt s'arrête au bouton : ni un glisser ni le
+  `tapHold` de Leaflet (Safari sur iPhone), qui annulerait le clic d'un appui long, ne le
+  voient. À deux doigts, il passe : un pincement dont le second doigt se pose sur un point
+  zoome la carte.
+- **Les points, le drapeau, les lignes** (#480, #481) : chaque point est un vrai `<button>`
+  dans un `divIcon`, son marqueur en `keyboard: false` ; seul, il mène à la fiche de sa
+  voiture (`showCar`, `src/components/event/focus.ts`) ; groupé, il ouvre notre bulle
+  (`role="group"`, pas la popup de Leaflet, dont « Close popup » est en anglais), un bouton
+  par voiture dans l'ordre des fiches, puis « Fermer ». Le drapeau est une image nommée
+  (`role="img"`), pas un bouton. Les lignes sont des `L.polyline` sans interaction.
+- **Les mises à jour** (#482) : la carte suit l'état que la page applique (la réponse d'une
+  action, « Actualiser » sur `/e/{id}/admin`) ; il n'y a pas de rafraîchissement automatique
+  (#67). `event-map.tsx` compare en JSON ce que la carte montre (`MapState`) : un état qui
+  n'en change rien ne la touche pas. Sinon, `update` applique `mapUpdate`
+  (`src/components/event/event-map-state.ts`, fonctions pures) à la même carte, jamais
+  recréée : un point est ses voitures (`pointKey`), gardé, déplacé (le même élément), créé ou
+  retiré ; les éléments sont remis dans l'ordre des fiches, qui est l'ordre de Tab ; le
+  recadrage n'a lieu que si une voiture arrive ou si le drapeau bouge, et si personne n'a
+  déplacé ni zoomé la carte ; la bulle se ferme quand sa liste change ; le focus va où la
+  table le dit, jamais à `<body>`. Une carte démarrée suit aussi repliée ou dans un onglet
+  caché, et son cadrage attend une taille. Partie avec la position de l'événement ou avec son
+  leg, elle rend à `focusLandmark` le focus qu'elle avait, si rien d'autre ne l'a pris.
+- **Les échecs** (#483), sans région `status` de plus : le panneau d'un leg n'en a qu'une,
+  celle du bandeau. `leafletStep` : un `import()` refusé (hors ligne, ou le morceau
+  d'un ancien build après un déploiement) met « La carte n’a pas pu se charger. » à la place
+  de la boîte, et son « Réessayer » importe de nouveau (CA2.8). `tilesStep` : l'avis de tuiles
+  apparaît quand une vue finit de charger (`load`) avec au moins un `tileerror`, part quand
+  une vue finit sans, jamais entre les deux, et son « Réessayer » redemande toutes les tuiles
+  (CA2.4).
+- **L'organisateur** (#485) : sur `/e/{id}/admin`, une fois le lien vérifié, un événement sans
+  position montre dans chaque leg, à la place de la carte, la phrase `EventMap.organiserHint`
+  et son propre « Modifier l’événement » (`OrganiserHint`), qui ouvre la même feuille que
+  l'espace organisateur, sauf pendant qu'une modification part. `OrganiserScreen` retient
+  d'où la feuille a été ouverte (`editFrom`) : à sa fermeture, et pour le repère de
+  « Événement modifié. », le focus va à « Carte » de ce leg si l'événement a maintenant une
+  position, sinon au bouton de la phrase. Sur `/e/{id}`, sans position, ni carte ni phrase.
+
+Les tests de bout en bout de la carte sont `e2e/event-map*.spec.ts` (la mise en page à 360
+et à 1280 px dans `event-map-layout.spec.ts`, CA1.8 et CA1.9), ceux de la route
+`e2e/tiles.spec.ts`, et les captures de la maquette `e2e/event-map.shot.ts`.
 
 ## i18n
 
@@ -552,7 +742,7 @@ navigation. Le fragment (`#{jeton}`) et ce qui est saisi restent, et le jeton n'
 revérifié. Jamais de `redirect()` ni de langue dans l'URL.
 
 **Quand le changement échoue** (`src/components/i18n/language-switch.tsx`, #129). Un
-message s'affiche au-dessus de la ligne du bas de page, en `role="alert"`, dans la langue
+message s'affiche au-dessus de la ligne 1 du bas de page, en `role="alert"`, dans la langue
 demandée et avec son `lang` (les messages `LanguageSwitch` sont écrits dans l'autre
 langue, décision 4 de #113) :
 - hors ligne, ou quand le serveur échoue, l'appel à `setLocale` lève une erreur, que le
@@ -596,9 +786,11 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | cas d'usage de l'événement | `src/app/e/[id]/*.ts` (précédent : `src/app/e/[id]/event.ts`) | reçoivent `db` en paramètre, composent le domaine et l'accès aux données ; testés avec `withRollback`, comme une fonction d'accès aux données |
 | jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur |
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones |
-| lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position ; `samePlace` compare deux lieux (texte et position), mais aucun code de main ne l'appelle encore (à venir, #428) |
+| lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position ; `samePlace` compare deux lieux (texte et position) |
 | propositions de lieux | `src/domain/suggestion.ts` ; `src/app/api/lieux/` (`route.ts`, `handle.ts`, `photon.ts`), à partir de #425 | le domaine lit la requête, écrit l'URL de Photon et les libellés ; la route n'exporte que `POST` ; seul `photon.ts` appelle Photon, avec son cache, son plafond et son disjoncteur (voir « Auto-complétion des lieux ») |
 | champ de lieu | `src/components/event/place-field-state.ts` et `place-search.ts`, à partir de #427 | l'état du champ en fonctions pures, et la seule requête du navigateur vers `/api/lieux` |
+| tuiles | `src/domain/tile.ts` ; `src/app/tuiles/[z]/[x]/[y]/` (`route.ts`, `handle.ts`, `ign.ts`, `blank-tile.ts`), à partir de #473 et #474 | le domaine lit la tuile, écrit l'URL du WMTS et lit le rapport `Not Found` ; la route n'exporte que `GET` ; seul `ign.ts` appelle l'IGN (voir « La carte de l'événement ») |
+| carte | `src/domain/event-map.ts` ; `src/components/event/event-map.tsx`, `event-map-state.ts` et `leaflet-map.ts`, à partir de #476 | les points et le cadrage en fonctions pures ; les mises à jour, le chargement et les tuiles en fonctions pures ; seul `leaflet-map.ts` importe `leaflet`, et seulement par `import()` |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 | rapports d'erreur | `src/observability/`, à partir de #234 | Sentry, seulement avec `NEXT_PUBLIC_SENTRY_DSN` : `register()` (`src/instrumentation.ts`) et `src/instrumentation-client.ts` importent le SDK dynamiquement, et sans DSN ne le chargent pas ; `options.ts` coupe `dataCollection`, la propagation de trace et toute intégration hors d'une liste exacte (`server.ts`, `client.ts`) ; les hooks de `scrub.ts` reconstruisent chaque envoi, et `registerHooks` y ajoute `createDsc` et `beforeEnvelope` ; une erreur de base part en `database error (SQLSTATE x)` |
@@ -651,9 +843,10 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
 - **360 px** : la largeur de référence, pas un cas limite.
 - **Un lieu, une valeur** : un lieu est le couple `{ text, position }`, et sa position voyage
   avec son texte ; la position d'une voiture est toujours celle de son texte. Exception
-  voulue : `ridePositionChange` compare le texte seul quand une page d'avant le déploiement
-  n'envoie pas de position (voir « Auto-complétion des lieux »).
-- **Aucun tiers depuis le navigateur** : Photon n'est appelé que par notre serveur.
+  voulue, côté serveur : `ridePositionChange` compare le texte seul quand une page d'avant le
+  déploiement n'envoie pas de position (voir « Auto-complétion des lieux »).
+- **Aucun tiers depuis le navigateur** : Photon et l'IGN ne sont appelés que par notre
+  serveur ; Leaflet et sa feuille de style viennent de notre build.
 - **Options** : désactivée, une option est **absente** de l'UI, pas grisée. Le code ne doit
   pas supposer qu'une option est active.
 - **Purge** : chaque table a une clé étrangère vers l'Event en `ON DELETE CASCADE`. C'est
