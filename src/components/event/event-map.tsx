@@ -24,6 +24,16 @@ export interface LegMap {
   onToggle: () => void;
 }
 
+/**
+ * What the organiser's sentence needs, on `/e/{id}/admin` once the link is checked (CA2.1): how to
+ * open « Modifier l’événement » from a leg, and whether a change is on its way, while the button
+ * opens nothing, as the organiser area's (M2.11).
+ */
+export interface MapHint {
+  onEdit: (leg: Leg) => void;
+  sending: boolean;
+}
+
 /** What the map reads of a car, and nothing more: the driver's first name, never their number. */
 type MapCar = Pick<BoardCar, "id" | "location" | "position" | "freeSeats" | "full"> & { driver: Pick<BoardCar["driver"], "firstName"> };
 
@@ -258,6 +268,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       <button
         ref={toggle}
         type="button"
+        data-map-toggle={leg}
         aria-expanded={map.open}
         aria-controls={containerId}
         onClick={map.onToggle}
@@ -317,5 +328,30 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
         {touch && <p className="text-[13px] leading-[18px] text-muted-foreground">{t("touchHint")}</p>}
       </div>
     </>
+  );
+}
+
+/**
+ * In place of « Carte », for an event without a position, on `/e/{id}/admin` (event-map v15,
+ * « … côté organisateur », CA2.1): the organiser's sentence, then its own « Modifier l’événement »,
+ * which opens the same sheet as the organiser area's, even folded.
+ */
+export function OrganiserHint({ leg, hint }: { leg: Leg; hint: MapHint }) {
+  const t = useTranslations("EventMap");
+  const tAdmin = useTranslations("Admin");
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[13px] leading-[18px] text-muted-foreground">{t("organiserHint")}</p>
+      <Button
+        type="button"
+        variant="outline"
+        data-map-hint={leg}
+        className="h-11 w-full aria-disabled:text-muted-foreground"
+        aria-disabled={hint.sending || undefined}
+        onClick={() => hint.onEdit(leg)}
+      >
+        {tAdmin("edit")}
+      </Button>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "r
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
 import { EditEventSheet, LONG_WAIT } from "@/components/event/edit-event-sheet";
 import { failureText, wordsOf } from "@/components/event/failure-words";
+import { focusLandmark, focusMapHint, focusMapToggle } from "@/components/event/focus";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
@@ -39,6 +40,10 @@ import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRea
  *   shows last (epic #250): the panel's answer does not carry them.
  * - « Modifier l’événement » opens a sheet loaded with the header shown; a change saved shows at
  *   once, the bar says so, and the screen is read again (epic #250, v3.3).
+ * - Once the link is checked, an event without a position has, in each leg, the organiser's
+ *   sentence and its own « Modifier l’événement » (#485, event-map v15, CA2.1). The screen keeps
+ *   where the sheet was opened from: closed, and as the landmark of « Événement modifié. », the
+ *   focus goes back there, or to « Carte » of that leg once the event has a position.
  */
 export function OrganiserScreen({ id, state, children }: { id: string; state: EventState; children: ReactNode }) {
   const t = useTranslations("Admin");
@@ -133,6 +138,18 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     editButton.current?.focus();
     return !!editButton.current && document.activeElement === editButton.current;
   };
+  // Where the sheet was opened from: the area's button (`null`), or a leg's sentence (#485, CA2.1).
+  const editFrom = useRef<Leg | null>(null);
+  const openEdit = (from: Leg | null) => {
+    if (editSending) return;
+    editFrom.current = from;
+    setEditing(true);
+  };
+  /**
+   * The place of the sheet opened from `from` (event-map v15, « Mises à jour et focus »): the area's
+   * button, or the sentence's of that leg, « Carte » there once the event has a position.
+   */
+  const focusFrom = (from: Leg | null) => () => (from === null ? focusEdit() : focusMapToggle(from) || focusMapHint(from));
 
   /**
    * Sends the change. Saved, the board shows the header saved at once, the bar says so once no
@@ -148,6 +165,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   async function edit(fields: EventFields, before: EventHeader, removal?: LegCounts): Promise<EditAnswer> {
     const send = sendAbout(["event:edit"]);
     const from = openSheet.current;
+    // The landmark of « Événement modifié. », from where the sheet that sends was opened.
+    const savedLandmark = focusFrom(editFrom.current);
     send.leaves();
     const wait = (editWaits.current += 1);
     setEditSending(true);
@@ -165,7 +184,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     }
     if (answer.kind === "saved") {
       if (!sheetSays) lateSaved.current?.(answer.event);
-      send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: focusEdit }));
+      send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: savedLandmark }));
     } else if (!sheetSays) {
       const { notDone, why } = editFailure(answer, removal !== undefined);
       const text = failureText(words, notDone, why);
@@ -223,7 +242,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         }}
         editRef={editButton}
         editSending={editSending}
-        onEdit={() => !editSending && setEditing(true)}
+        onEdit={() => openEdit(null)}
       />
     );
   } else if (screen.state === "loading") {
@@ -262,13 +281,21 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           event={event}
           cars={{ aller: carsOn("aller"), retour: carsOn("retour") }}
           onEdit={edit}
-          onClosed={focusEdit}
+          // Its place gone (the retour removed under a sentence), the active tab or the title: never `<body>`.
+          onClosed={() => focusFrom(editFrom.current)() || focusLandmark()}
           lateSavedRef={lateSaved}
           opening={opening}
         />
       )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">
-        <ParticipantBoard ref={boardRef} id={id} state={state} onAction={reread} onState={setShown} />
+        <ParticipantBoard
+          ref={boardRef}
+          id={id}
+          state={state}
+          onAction={reread}
+          onState={setShown}
+          hint={screen.state === "ready" ? { onEdit: openEdit, sending: editSending } : undefined}
+        />
         {children}
       </div>
     </>
