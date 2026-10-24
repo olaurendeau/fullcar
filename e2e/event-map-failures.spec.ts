@@ -1,13 +1,12 @@
 import type { Locator, Page, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
-import { seedEvent, type SeededEvent } from "@/db/test-events";
-import { seedPerson, seedRide } from "@/db/test-participants";
+import type { SeededEvent } from "@/db/test-events";
 import type { Position } from "@/domain/place";
-import { generatePublicId } from "@/domain/public-id";
 import { contrast } from "./contrast";
-import { expect, test as base } from "./fixtures";
-import { answerTiles, placeOf, requestsForTile, tileAt, type IgnAnswer } from "./ign";
+import { around, points, seedCar, test } from "./event-map-points";
+import { expect } from "./fixtures";
+import { answerTiles, requestsForTile, tileAt, type IgnAnswer } from "./ign";
 
 /*
  * #483, event-map v15: the map's loading and its failures, « Le chargement », « Des tuiles en
@@ -15,17 +14,6 @@ import { answerTiles, placeOf, requestsForTile, tileAt, type IgnAnswer } from ".
  * as an old build's chunk is after a deploy. The fake IGN is set for one tile only, the one
  * the test checks: the flag's, at the zoom of the view (#238, the fake IGN's capacity).
  */
-
-/** An event of the test's own, at `placeOf` its id; `eventFields` as the fixture's. */
-const test = base.extend<{ placed: SeededEvent & { place: Position } }>({
-  placed: async ({ db, eventFields }, provide) => {
-    const id = generatePublicId();
-    const place = placeOf(id);
-    const event = await seedEvent(db, { ...eventFields, locationPosition: place }, undefined, () => id);
-    await provide({ ...event, place });
-    await db.deleteFrom("event").where("id", "=", event.id).execute();
-  },
-});
 
 test.use({ locale: "fr-FR" });
 
@@ -39,14 +27,9 @@ const TOUCH_HINT = "Deux doigts pour déplacer ou zoomer la carte.";
 /** A car 100 m north of the flag frames the view at zoom 15, `framing`'s most. */
 const FRAMED_ZOOM = 15;
 
-/** The metres of a degree of latitude (the sphere of `distanceMetres`). */
-const METRES_PER_DEGREE = (6_371_008.8 * Math.PI) / 180;
-
 /** Marc's car, 100 m north of the flag: one point, and a view at zoom 15. */
-async function seedCar(db: Kysely<Database>, placed: SeededEvent & { place: Position }) {
-  const driver = await seedPerson(db, placed.id, { firstName: "Marc" });
-  await seedRide(db, placed.id, driver.id, { position: { lat: placed.place.lat + 100 / METRES_PER_DEGREE, lng: placed.place.lng } });
-}
+const seedMarc = (db: Kysely<Database>, placed: SeededEvent & { place: Position }) =>
+  seedCar(db, placed.id, "Marc", { position: around(placed.place, { north: 100 }) });
 
 const panel = (page: Page) => page.getByRole("tabpanel");
 const mapButton = (page: Page) => panel(page).getByRole("button", { name: "Carte", exact: true });
@@ -55,7 +38,6 @@ const notice = (page: Page, title: string) => container(page).locator("div", { h
 const retry = (page: Page) => container(page).getByRole("button", { name: "Réessayer", exact: true });
 /** The box of the map while it loads: the one element of the container with `aria-busy`. */
 const busyBox = (page: Page) => container(page).locator('[aria-busy="true"]');
-const points = (map: Locator) => map.locator(".leaflet-marker-pane button");
 
 /** The page hydrated and quiet: what it loads on its own is loaded, so that a route set now catches Leaflet's code alone. */
 async function quiet(page: Page, id: string) {
@@ -177,7 +159,7 @@ const liveAround = (locator: Locator) =>
 
 test.describe("the tiles", () => {
   test("CA2.4: a tile in error, the notice under the map, the points stay, nothing announced; « Réessayer », gone, the focus to the container", async ({ db, page, placed }) => {
-    await seedCar(db, placed);
+    await seedMarc(db, placed);
     const { map, status, live, tile } = await openWithFlagTile(page, placed.place, placed.id, { kind: "error" });
     expect(status).toBe(502);
     await expect(notice(page, TILES_FAILED)).toBeVisible();
@@ -201,7 +183,7 @@ test.describe("the tiles", () => {
 
   for (const kind of ["notFound", "notFoundBare"] as const) {
     test(`CA2.6: the fake IGN in ${kind}, a blank tile, no notice, the points stay`, async ({ db, page, placed }) => {
-      await seedCar(db, placed);
+      await seedMarc(db, placed);
       const { map, status, tile } = await openWithFlagTile(page, placed.place, placed.id, { kind });
       expect(status).toBe(200);
       // The view ended: the blank tile loaded, like every other, none in error.
@@ -214,7 +196,7 @@ test.describe("the tiles", () => {
 
   for (const kind of ["invalidParameter", "forbidden", "tooMany"] as const) {
     test(`CA2.6: the fake IGN in ${kind}, a 502, the notice`, async ({ db, page, placed }) => {
-      await seedCar(db, placed);
+      await seedMarc(db, placed);
       const { map, status } = await openWithFlagTile(page, placed.place, placed.id, { kind });
       expect(status).toBe(502);
       await expect(notice(page, TILES_FAILED)).toBeVisible();
@@ -223,9 +205,8 @@ test.describe("the tiles", () => {
   }
 
   test("CA1.17: the tiles' notice, then notOnMap, then the two-finger sentence, in the DOM's order", async ({ db, page, placed }) => {
-    await seedCar(db, placed);
-    const lea = await seedPerson(db, placed.id, { firstName: "Léa" });
-    await seedRide(db, placed.id, lea.id, { position: null });
+    await seedMarc(db, placed);
+    await seedCar(db, placed.id, "Léa", { position: null });
     await openWithFlagTile(page, placed.place, placed.id, { kind: "error" });
     await expect(notice(page, TILES_FAILED)).toBeVisible();
     const lines = await container(page).evaluate((element) =>
