@@ -202,7 +202,10 @@ test.describe("the map, at touch", () => {
     await expect(page.getByRole("tabpanel")).toBeVisible();
     const seen = await watchAnimations(page);
     const map = await openMap(page);
-    await map.focus();
+    // CA1.4: Tab goes from « Carte » to the map's container, which holds the focus.
+    await page.getByRole("tabpanel").getByRole("button", { name: "Carte", exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await expect(map).toBeFocused();
     const flag = await flagInMap(map);
     const tiles = (z: number) => map.locator(`img[src^="/tuiles/${z}/"]`);
 
