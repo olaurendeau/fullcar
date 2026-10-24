@@ -1,6 +1,7 @@
 import { Clock, MapPin, Plus, User } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import type { VisibleCar } from "@/domain/phone-visibility";
+import type { Position } from "@/domain/place";
 import { wallClockAsUtc, type WallDate } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { PhoneLink } from "./phone-link";
@@ -18,7 +19,7 @@ const ABOVE_BAR = "scroll-mb-[calc(1rem+var(--message-bar-height,0px)+12px+env(s
  * known (C5.9) and without JavaScript; its tap takes a seat or opens a sheet (`onTakeSeat`, #92). Long
  * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
  * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
- * removes it (C8.1).
+ * removes it (C8.1); `near`, the event's position, brings its place's suggestions closer (AL4.1).
  */
 export function RideCard({
   car,
@@ -27,6 +28,7 @@ export function RideCard({
   onTakeSeat,
   updateRide,
   removeRide,
+  near = null,
 }: {
   car: VisibleCar;
   date: WallDate;
@@ -34,6 +36,7 @@ export function RideCard({
   onTakeSeat: (seat: HTMLElement) => void;
   updateRide?: UpdateRide;
   removeRide?: RemoveRide;
+  near?: Position | null;
 }) {
   const t = useTranslations("Board.car");
   const format = useFormatter();
@@ -107,7 +110,7 @@ export function RideCard({
       </ul>
       {(updateRide || removeRide) && (
         <div className="flex gap-2">
-          {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} />}
+          {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} near={near} />}
           {removeRide && (
             <RemoveRideButton
               car={{ id: car.id, leg: car.leg, driverId: car.driver.id, driver: car.driver.firstName, passengers: car.passengers.length }}

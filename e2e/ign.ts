@@ -10,7 +10,8 @@ import type { Position } from "@/domain/place";
  * What the fake answers to a tile: by default (`tile`) a small PNG; `notFound`, the real
  * service's 404 report (e2e/ign-not-found.xml), byte for byte; `notFoundBare`, a 404 without
  * that report; `invalidParameter`, a 400 `InvalidParameterValue` report; `forbidden` (403),
- * `tooMany` (429), `error` (500). `delayMs` delays it, whatever it is.
+ * `tooMany` (429), `error` (500). `delayMs` delays it, whatever it is, 2³¹ − 1 ms at most:
+ * Node would cut a longer timer to 1 ms.
  */
 export type IgnAnswer = {
   kind?: "tile" | "notFound" | "notFoundBare" | "invalidParameter" | "forbidden" | "tooMany" | "error";

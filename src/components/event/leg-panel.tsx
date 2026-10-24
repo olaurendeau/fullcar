@@ -134,6 +134,7 @@ export function LegPanel({
                 onTakeSeat={(seat) => seats.tap(car, seat)}
                 updateRide={drivesIt(car.id) ? device.updateRide : undefined}
                 removeRide={drivesIt(car.id) ? device.removeRide : undefined}
+                near={near}
               />
             ))
           ) : (

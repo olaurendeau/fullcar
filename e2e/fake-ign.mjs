@@ -3,7 +3,8 @@
 //   `GetTile`, read from TILEMATRIX, TILEROW and TILECOL: a small PNG tile by default; a
 //   request it cannot read, a 400 `InvalidParameterValue` report.
 // Port 2325: its control, for the end-to-end tests (e2e/ign.ts):
-//   POST /answers {"tiles": ["z/x/y", …], "answer": {"kind", "delayMs"}}  sets the answer to those tiles;
+//   POST /answers {"tiles": ["z/x/y", …], "answer": {"kind", "delayMs"}}  sets the answer to those tiles
+//     (`delayMs` from 0 to 2³¹ − 1);
 //   GET /requests?tile=z/x/y  the requests received for that tile, oldest first: path, query as sent, headers;
 //   GET /health  for the healthcheck.
 // Set by tile, never for all: the tests run in parallel. Nothing is ever forgotten while it
@@ -16,6 +17,8 @@ const WMTS_PORT = 2324;
 const CONTROL_PORT = 2325;
 /** A control request larger than this is refused: a test sets a handful of tiles. */
 const MAX_CONTROL_BODY = 1_000_000;
+/** The longest a timer holds: past it, Node waits 1 ms, and « never answers » would answer at once. */
+const MAX_DELAY_MS = 2 ** 31 - 1;
 /** A decimal integer as written once: `014` would be another URL for the same tile. */
 const INTEGER = /^(0|[1-9]\d*)$/;
 const TILE = /^(0|[1-9]\d*)\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/;
@@ -111,7 +114,7 @@ function settingOf(body) {
   if (typeof answer !== "object" || answer === null) return null;
   const { kind = "tile", delayMs = 0 } = answer;
   if (typeof kind !== "string" || !Object.hasOwn(RESPONSES, kind)) return null;
-  if (typeof delayMs !== "number" || !Number.isFinite(delayMs) || delayMs < 0) return null;
+  if (typeof delayMs !== "number" || !Number.isFinite(delayMs) || delayMs < 0 || delayMs > MAX_DELAY_MS) return null;
   return { tiles, answer: { kind, delayMs } };
 }
 

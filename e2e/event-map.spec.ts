@@ -80,6 +80,35 @@ async function folded(page: Page, button: Locator): Promise<Locator> {
   return page.locator(`[id="${id}"]`);
 }
 
+/** A tile request, to our route. */
+const isTile = (request: Request) => new URL(request.url()).pathname.startsWith("/tuiles/");
+
+/** How many of `requests` brought Leaflet: its class names, in its script and in its style sheet, none of ours has. */
+async function leafletCount(requests: Request[]): Promise<number> {
+  const texts = await Promise.all(
+    requests
+      .filter((request) => ["script", "stylesheet"].includes(request.resourceType()))
+      .map((request) => request.response().then((response) => response?.text() ?? "").catch(() => "")),
+  );
+  return texts.filter((text) => text.includes("leaflet-control-zoom")).length;
+}
+
+/** The names of what takes the focus inside `map`, its container excluded, in the DOM's order. */
+function focusableIn(map: Locator): Promise<(string | null)[]> {
+  return map.evaluate((container) =>
+    Array.from(container.querySelectorAll<HTMLElement | SVGElement>("*"))
+      .filter((element) => element.tabIndex >= 0)
+      .map((element) => element.getAttribute("aria-label")),
+  );
+}
+
+/** `map` at zoom `z`: its zoom ended (Leaflet's `zoomend`, `moveend`), then each of its tiles loaded. */
+async function settled(map: Locator, z: number) {
+  await expect(map.locator(`img.leaflet-tile-loaded[src*="/tuiles/${z}/"]`).first()).toBeVisible();
+  await expect(map.locator(".leaflet-zoom-anim")).toHaveCount(0);
+  await expect(map.locator("img.leaflet-tile:not(.leaflet-tile-loaded)")).toHaveCount(0);
+}
+
 /** CA1.1 on a leg: « Carte » between its actions and its first card, folded, then open under the same name. */
 async function expectButton(page: Page, panel: Locator, driver: string) {
   const button = mapButton(panel);
@@ -122,28 +151,26 @@ test.describe("the map, open", () => {
   test.use({ locale: "fr-FR" });
 
   test("CA1.2: neither Leaflet nor a tile before the first opening; both after", async ({ page, placed }) => {
-    const leaflet: Promise<boolean>[] = [];
-    const tiles: Request[] = [];
-    page.on("response", (response) => {
-      const type = response.request().resourceType();
-      // Leaflet's own class names, in its script and in its style sheet: none of ours has them.
-      if (type === "script" || type === "stylesheet") leaflet.push(response.text().then((text) => text.includes("leaflet-control-zoom"), () => false));
-    });
-    page.on("request", (request) => {
-      if (new URL(request.url()).pathname.startsWith("/tuiles/")) tiles.push(request);
-    });
+    // Requests, not responses: one sent before the click and still waiting for its answer counts.
+    const before: Request[] = [];
+    const after: Request[] = [];
+    let clicked = false;
+    page.on("request", (request) => (clicked ? after : before).push(request));
 
     await page.goto(`/e/${placed.id}`);
     await hydrated(page);
-    expect((await Promise.all(leaflet)).filter(Boolean).length).toBe(0);
-    expect(tiles.length).toBe(0);
+    // What the page starts on its own, at its mount or just after, has been sent by then.
+    await page.waitForLoadState("networkidle");
     await expect(page.locator(".leaflet-container")).toHaveCount(0);
 
+    clicked = true;
     await mapButton(page.getByRole("tabpanel")).click();
     await expect(page.getByRole("region", { name: ALLER_MAP })).toBeVisible();
-    await expect.poll(async () => (await Promise.all(leaflet)).filter(Boolean).length).toBeGreaterThan(0);
     await expect(page.locator(".leaflet-tile-loaded").first()).toBeVisible();
-    expect(tiles.length).toBeGreaterThan(0);
+    expect(await leafletCount(before)).toBe(0);
+    expect(before.filter(isTile).length).toBe(0);
+    expect(await leafletCount(after)).toBeGreaterThan(0);
+    expect(after.filter(isTile).length).toBeGreaterThan(0);
     // The flag's tile went through our route to the fake IGN.
     await expect.poll(async () => (await requestsForTile(tileAt(placed.place, 14))).length).toBeGreaterThan(0);
   });
@@ -154,8 +181,8 @@ test.describe("the map, open", () => {
     const map = page.getByRole("region", { name: ALLER_MAP });
     const flag = map.getByRole("img", { name: FLAG, exact: true });
     await expect(flag).toBeVisible();
-    expect(await flag.evaluate((element) => element.closest("[tabindex]")?.getAttribute("tabindex") ?? null)).toBe("0");
-    await expect(map.locator("[tabindex]:not([tabindex='-1'])")).toHaveCount(0);
+    // Inside the container, the zoom alone takes the focus: neither the flag nor its icon, nor a link.
+    expect(await focusableIn(map)).toEqual(["Zoom avant", "Zoom arrière"]);
 
     await map.focus();
     await page.keyboard.press("Tab");
@@ -192,14 +219,19 @@ test.describe("the map, open", () => {
 
     await page.goto(`/e/${placed.id}`);
     await openMap(page.getByRole("tabpanel"));
-    await expect(page.getByRole("region", { name: ALLER_MAP }).locator(".leaflet-tile-loaded").first()).toBeVisible();
+    const map = page.getByRole("region", { name: ALLER_MAP });
+    await settled(map, 14);
+    // Zoomed in: the map moves, and asks for the tiles of another zoom.
+    await map.getByRole("button", { name: "Zoom avant", exact: true }).click();
+    await settled(map, 15);
 
+    // Every request until the end of the test, not only those sent before the first tile.
     const origin = new URL(page.url()).origin;
     expect(requests.filter((url) => url.origin !== origin).length).toBe(0);
     // The page and its server actions, its build, its tiles, its icons: nothing else.
     const ours = [new RegExp(`^/e/${placed.id}$`), /^\/_next\//, /^\/tuiles\/\d+\/\d+\/\d+$/, /^\/(favicon\.ico|icon|apple-icon|manifest\.webmanifest)/];
     expect(requests.filter((url) => !ours.some((path) => path.test(url.pathname))).length).toBe(0);
-    expect(requests.filter((url) => url.pathname.startsWith("/tuiles/")).length).toBeGreaterThan(0);
+    expect(requests.filter((url) => url.pathname.startsWith("/tuiles/15/")).length).toBeGreaterThan(0);
   });
 });
 
