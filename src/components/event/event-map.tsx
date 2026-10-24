@@ -3,10 +3,13 @@
 import { ChevronDown, ChevronUp, LoaderCircle, Map as MapIcon } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { BoardCar } from "@/domain/board";
+import { mapOf } from "@/domain/event-map";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { PLAN_IGN_UPDATED } from "@/domain/tile";
-import type { EventMapHandle } from "./leaflet-map";
+import { showCar } from "./focus";
+import type { CarPoint, EventMapHandle } from "./leaflet-map";
 
 type LeafletMap = typeof import("./leaflet-map");
 
@@ -18,6 +21,9 @@ export interface LegMap {
   open: boolean;
   onToggle: () => void;
 }
+
+/** What the map reads of a car, and nothing more: the driver's first name, never their number. */
+type MapCar = Pick<BoardCar, "id" | "location" | "position" | "freeSeats" | "full"> & { driver: Pick<BoardCar["driver"], "firstName"> };
 
 /** A touch screen, where one finger scrolls the page and two move the map (CA1.11). */
 const TOUCH = "(pointer: coarse)";
@@ -45,18 +51,20 @@ function layerUpdated(): Date {
 }
 
 /**
- * A leg's map (epic #238, event-map v11): the « Carte » button, a fixed label whose chevron says
+ * A leg's map (epic #238, event-map v15): the « Carte » button, a fixed label whose chevron says
  * the state, hidden without JavaScript; then the container it folds, `hidden` while folded, with
  * the map's box, 240 px high, 280 px from a 448 px window. Leaflet is imported at the first
  * opening, and starts only once the map is open and its panel shown, a hidden tab having no
  * size (CA1.13). Until it has started, « Chargement de la carte… » in the box, `aria-busy`, and no
  * `status` region of its own: the leg's panel keeps its only one, the banner's.
- * Under the map, in this order (CA1.17): the tiles' notice, `notOnMap`, then, at touch only, the
- * two-finger sentence; for now, the sentence alone.
- * For now the map has the flag alone: its name says « … et aucune voiture » (the cars, #480).
+ * The map has the flag and a point per car of the leg with a position, `cars` in the order of
+ * the cards; its name counts them, and `notOnMap` the others. An activated point leads to its
+ * card (`showCar`). Under the map, in this order (CA1.17): the tiles' notice (#483), `notOnMap`,
+ * then, at touch only, the two-finger sentence.
  */
-export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
+export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: readonly MapCar[] }) {
   const t = useTranslations("EventMap");
+  const tCar = useTranslations("Board.car");
   const format = useFormatter();
   const box = useRef<HTMLDivElement>(null);
   const leaflet = useRef<HTMLDivElement>(null);
@@ -92,6 +100,23 @@ export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
     date: format.dateTime(layerUpdated(), { month: "long", year: "numeric", timeZone: "UTC" }),
   });
   const { lat, lng } = map.position;
+  const { onMap, notOnMap } = mapOf(map.position, cars);
+  // Each car its own point for now, even less than 25 m from another: the groups are #481's.
+  const points: CarPoint[] = cars.flatMap((car) =>
+    mapOf(map.position, [car]).points.map(({ position, atFlag }) => ({
+      id: car.id,
+      position,
+      atFlag,
+      label: car.driver.firstName,
+      name: t(`car.${leg}`, {
+        car: tCar("title", { driver: car.driver.firstName }),
+        location: car.location,
+        seats: car.full ? tCar("full") : t("freeSeats", { free: car.freeSeats }),
+      }),
+    })),
+  );
+  // Created again only when what it shows changes, not at each new state of the page (#482 updates it).
+  const pointsJson = JSON.stringify(points);
 
   useEffect(() => {
     if (library === null || !started || !leaflet.current) return;
@@ -102,13 +127,15 @@ export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
       zoomOut,
       attribution,
       touchQuery: TOUCH,
+      cars: JSON.parse(pointsJson) as CarPoint[],
+      onCar: (id) => showCar(leg, id),
     });
     handle.current = created;
     return () => {
       handle.current = null;
       created.destroy();
     };
-  }, [library, started, lat, lng, flagLabel, zoomIn, zoomOut, attribution]);
+  }, [library, started, lat, lng, flagLabel, zoomIn, zoomOut, attribution, pointsJson, leg]);
 
   const loading = library === null || !started;
 
@@ -133,7 +160,7 @@ export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
           className="relative h-60 overflow-hidden rounded-xl border border-border min-[448px]:h-70"
         >
           {/* Leaflet's own: React gives it its name and nothing inside. */}
-          <div ref={leaflet} role="region" aria-label={t(`label.${leg}`, { count: 0 })} className="size-full" />
+          <div ref={leaflet} role="region" aria-label={t(`label.${leg}`, { count: onMap })} className="size-full" />
           {loading && (
             <p className="absolute inset-0 flex items-center justify-center gap-2 bg-background text-[13px] text-muted-foreground">
               <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
@@ -141,6 +168,9 @@ export function EventMap({ leg, map }: { leg: Leg; map: LegMap }) {
             </p>
           )}
         </div>
+        {notOnMap > 0 && (
+          <p className="text-[13px] leading-[18px] text-muted-foreground">{t("notOnMap", { count: notOnMap })}</p>
+        )}
         {touch && <p className="text-[13px] leading-[18px] text-muted-foreground">{t("touchHint")}</p>}
       </div>
     </>

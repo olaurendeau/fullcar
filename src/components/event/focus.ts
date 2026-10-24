@@ -61,6 +61,19 @@ export function focusCarTitle(leg: Leg, rideId: string): boolean {
 }
 
 /**
+ * The card of car `rideId` on `leg`, from its point on the map (event-map v15, CA1.4): its title
+ * focused, the card scrolled into view above the bar, as for a free seat. False when it is not shown.
+ */
+export function showCar(leg: Leg, rideId: string): boolean {
+  const title = document.querySelector<HTMLElement>(`[data-car-title="${CSS.escape(rideId)}"][data-leg="${leg}"]`);
+  title?.focus({ preventScroll: true });
+  if (!title || document.activeElement !== title) return false;
+  title.closest("article")?.scrollIntoView({ block: "nearest" });
+  title.scrollIntoView({ block: "nearest" });
+  return true;
+}
+
+/**
  * The first free seat of car `rideId` on `leg` (« Trouver une place », C3.8): the car, then the
  * seat, scrolled into view above the bar (`scroll-margin-bottom`, C11.4). False when it is not shown.
  */
