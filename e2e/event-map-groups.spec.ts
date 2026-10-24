@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, overlap, points, seedCar, test } from "./event-map-points";
+import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, OSM_LINK, overlap, points, seedCar, test } from "./event-map-points";
 import { expect } from "./fixtures";
 
 /*
@@ -57,7 +57,7 @@ test("CA1.6, CA1.8: the bubble of two cars at the same position, its buttons, Es
   const marc = "Voiture de Marc, départ : Place de la mairie, 3 places libres";
   const name = "2 voitures : Nina, Paul";
   // The grouped point takes the place of its first car, Nina, in the Tab order.
-  expect(await focusableIn(map)).toEqual([zoe, name, marc, "Zoom avant", "Zoom arrière"]);
+  expect(await focusableIn(map)).toEqual([zoe, name, marc, "Zoom avant", "Zoom arrière", OSM_LINK]);
 
   const group = map.getByRole("button", { name, exact: true });
   const bubble = bubbleOf(map, name);
@@ -148,7 +148,7 @@ test("CA1.15: 20 m north and 20 m south of the flag, one point under it, « 2 vo
   const name = "2 voitures : Sophie, Nina";
   const claire = "Voiture de Claire, départ : 12 rue des Lilas, 3 places libres";
   await expect(points(map)).toHaveCount(2);
-  expect(await focusableIn(map)).toEqual([name, claire, "Zoom avant", "Zoom arrière"]);
+  expect(await focusableIn(map)).toEqual([name, claire, "Zoom avant", "Zoom arrière", OSM_LINK]);
   // Claire's line only.
   await expect(lines(map)).toHaveCount(1);
   const flag = map.getByRole("img", { name: FLAG, exact: true });

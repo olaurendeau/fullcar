@@ -640,12 +640,16 @@ tuiles qui ne sont pas au cache, jamais l'IP ni le navigateur du visiteur.
 - **Changer `TILE_STYLE`** impose de vider le cache du CDN de Vercel : l'URL de nos tuiles
   ne porte pas le style, et le CDN garde une tuile 30 jours (le navigateur, un jour). Sans
   cela, l'ancien style et le nouveau se mêlent sur une même carte.
-- **Attribution, provisoire jusqu'à #558** : dans le contrôle d'attribution de Leaflet,
-  après son préfixe « Leaflet », `EventMap.attribution` puis `EventMap.osmLink`, « Geoapify ·
-  © OpenMapTiles.org · © OpenStreetMap », en texte (échappé : Leaflet l'écrirait en HTML),
-  sans lien (`event-map.tsx`, `leaflet-map.ts`). #558 pose les crédits de la maquette, notre
-  propre élément dans la boîte de la carte, avec leur lien, et ce paragraphe changera avec
-  lui.
+- **Les crédits** (#558, décision du propriétaire du 24/10 sur #549) : une ligne posée sur la
+  carte, en bas à droite, `EventMap.attribution` puis le lien `EventMap.osmLink`, « Geoapify ·
+  © OpenMapTiles.org · © OpenStreetMap », vers https://www.openstreetmap.org/copyright, dans un
+  nouvel onglet que dit `Contact.newTab` en `sr-only`. C'est notre propre élément (`Credits`,
+  `event-map.tsx`), pas un `L.Control` : le contrôle d'attribution de Leaflet est coupé
+  (`attributionControl: false`), et son préfixe « Leaflet » n'est nulle part sur la carte. Sa
+  licence, BSD 2-Clause, demande sa notice avec le build : `public/licences.txt` la sert depuis
+  notre origine, copie du `LICENSE` du paquet, et `e2e/licences.spec.ts` la compare à celui de
+  la version installée. L'en-tête `@preserve` de Leaflet ne suffirait pas : il ne porte que le
+  copyright, sans les conditions ni l'avertissement.
 
 | variable | sans elle | effet |
 |---|---|---|
@@ -664,7 +668,13 @@ les voitures d'un leg dans l'ordre des fiches : une voiture sans position n'est 
 toute autre rejoint le premier point, dans l'ordre des fiches, hors du drapeau, à moins de
 25 m de la position de sa première voiture, ou en ouvre un. `onMap` compte les voitures sur
 la carte, le nombre que dit son nom. `framing` cadre le drapeau seul au zoom 14, ou
-l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
+l'emprise du drapeau et des points, au zoom 15 au plus, avec une marge par côté : 32 px, et en
+bas la hauteur des crédits `h` plus 32 px, ou plus 64 px quand le drapeau a un point sous lui
+(v22 : son bouton descend à 60 px sous le drapeau). `bubbleMaxHeight` donne à la bulle la
+hauteur de la carte moins `2 · BUBBLE_INSET` (10 px) moins `h` : elle s'arrête au-dessus des
+crédits. `h` est l'`offsetHeight` des crédits, lu par `leaflet-map.ts` à chaque cadrage et à
+chaque placement de la bulle (24 px sur une ligne, 48 sur deux). Les 64 px valent pour un rem
+de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cette marge.
 
 ### Dans le navigateur (#478 à #485)
 
@@ -682,11 +692,22 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
   280 px à partir d'une fenêtre de 448 px, d'un bord à l'autre du conteneur (`-mx-3`), un
   trait au-dessus, puis les avis et les phrases sous la carte ; et `OrganiserHint`. Dans la
   boîte, **la région de la carte** (`role="region"`, l'élément que Leaflet reçoit, sans rien
-  dedans de React), le texte de chargement, opaque, et **un seul élément d'anneau**
+  dedans de React que les crédits), le texte de chargement, opaque, et **un seul élément d'anneau**
   (`pointer-events-none absolute inset-0`, z-index 1002, `focus-ring -outline-offset-2`),
-  au-dessus des panneaux de Leaflet, de la bulle et du texte de chargement, affiché tant que
+  au-dessus des panneaux de Leaflet, des crédits, de la bulle et du texte de chargement, affiché tant que
   la région ou la boîte de chargement (`tabindex="-1"`) a le focus clavier : tracé sur l'une
-  ou l'autre, l'anneau passerait sous les panneaux ou sous le texte. D'une voiture, la carte
+  ou l'autre, l'anneau passerait sous les panneaux ou sous le texte. Jamais pour le lien des
+  crédits, qui a son propre anneau, à l'intérieur, sur fond blanc opaque.
+- **Les crédits dans la région** (#558) : React les y rend dès le départ, en bas à droite, à
+  z-index 1000, au-dessus du texte de chargement et des points ; cachés avec la boîte sous un
+  avis de Leaflet. `createEventMap` reçoit l'élément (`credits`) et le remet en dernier dans
+  la région, après les panneaux et les contrôles que Leaflet y ajoute : le lien vient en
+  dernier dans l'ordre de Tab, après « Zoom arrière ». React n'a pas d'autre enfant dans la
+  région, et le déplacement reste dans le même parent. Dans le conteneur de Leaflet, un
+  `touchstart` y remonte jusqu'au zoom à deux doigts : c'est ce qu'il faut pour qu'un
+  pincement dont un doigt se pose sur les crédits zoome. Leurs gestes sont ceux des points
+  (`holdPress`, voir « Au toucher ») ; un glisser à la souris qui commence sur eux ne déplace
+  pas la carte. `.leaflet-container a` colorerait le lien : sa couleur porte `!`. D'une voiture, la carte
   ne reçoit que son identifiant, son lieu, sa position, ses places libres et le prénom de qui
   conduit, jamais un numéro.
 - **L'état ouvert ou replié** est celui de la page : `EventView` le tient (`useState`), un
@@ -715,10 +736,10 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
   (`e2e/event-map-touch.spec.ts` teste les flèches, Maj, + et −).
 - **Au toucher** (CA1.11, #479, #484) : `dragging` suit `(pointer: coarse)`, même quand elle
   change, la carte restant la même : un doigt fait défiler la page, deux déplacent et zooment
-  la carte. Sur un point, un `touchstart` à un doigt s'arrête au bouton : ni un glisser ni le
-  `tapHold` de Leaflet (Safari sur iPhone), qui annulerait le clic d'un appui long, ne le
-  voient. À deux doigts, il passe : un pincement dont le second doigt se pose sur un point
-  zoome la carte.
+  la carte. Sur un point ou sur les crédits (`holdPress`), un `touchstart` à un doigt s'arrête
+  là : ni un glisser ni le `tapHold` de Leaflet (Safari sur iPhone), qui annulerait le clic
+  d'un appui long, ne le voient. À deux doigts, il passe : un pincement dont le second doigt
+  se pose sur un point ou sur les crédits zoome la carte.
 - **Les points, le drapeau, les lignes** (#480, #481) : chaque point est un vrai `<button>`
   dans un `divIcon`, son marqueur en `keyboard: false` ; seul, il mène à la fiche de sa
   voiture (`showCar`, `src/components/event/focus.ts`) ; groupé, il ouvre notre bulle
@@ -760,7 +781,8 @@ l'emprise du drapeau et des points, 32 px autour, au zoom 15 au plus.
   position, sinon au bouton de la phrase. Sur `/e/{id}`, sans position, ni carte ni phrase.
 
 Les tests de bout en bout de la carte sont `e2e/event-map*.spec.ts` (la mise en page à 360
-et à 1280 px dans `event-map-layout.spec.ts`, CA1.8 et CA1.9), ceux de la route
+et à 1280 px dans `event-map-layout.spec.ts`, CA1.8 et CA1.9 ; les crédits dans
+`event-map-credits.spec.ts`, CA3.7), ceux de la notice de Leaflet `e2e/licences.spec.ts`, ceux de la route
 `e2e/tiles.spec.ts`, ceux de la clé `e2e/tiles-key.spec.ts`, ceux du faux fournisseur
 `e2e/fake-tiles.spec.ts`, et les captures de la maquette `e2e/event-map.shot.ts`.
 

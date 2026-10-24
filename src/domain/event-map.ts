@@ -15,8 +15,15 @@ const EARTH_RADIUS_METRES = 6_371_008.8;
 const FLAG_ZOOM = 14;
 /** Fitting the points never zooms in further than this. */
 const MAX_FIT_ZOOM = 15;
-/** The margin around the points, in CSS pixels. */
+/** The margin around the points, in CSS pixels; at the bottom, above the credits. */
 const FIT_PADDING = 32;
+/**
+ * The bottom margin above the credits when the flag has a point: its button hangs from 16 px
+ * under the flag and is 44 px high, down to 60 px under the flag's place (v22).
+ */
+const FLAG_POINT_PADDING = 64;
+/** The bubble's distance from the map's top and right edges, and from the credits, in CSS pixels. */
+export const BUBBLE_INSET = 10;
 
 function radians(degrees: number): number {
   return (degrees * Math.PI) / 180;
@@ -82,23 +89,46 @@ export function mapOf<Car extends MapCar>(flag: Position, cars: readonly Car[]):
   return { flag, points, onMap: cars.length - notOnMap, notOnMap };
 }
 
+/** A margin of the view, side by side, in CSS pixels. */
+export interface Padding {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 /** The view on opening: the flag alone, or the box of the flag and every point. */
 export type Framing =
   | { kind: "flag"; center: Position; zoom: number }
-  | { kind: "bounds"; south: number; west: number; north: number; east: number; padding: number; maxZoom: number };
+  | { kind: "bounds"; south: number; west: number; north: number; east: number; padding: Padding; maxZoom: number };
 
-export function framing(flag: Position, points: readonly { position: Position }[]): Framing {
+/**
+ * The flag alone at zoom 14, or the box of the flag and every point, zoom 15 at most, 32 px
+ * around. At the bottom, the credits' measured height `credits` more (24 px on one line, 48 on
+ * two), and 32 px more again when the flag has a point under it (v22): after a framing, no
+ * point, label or point's button is under the credits (CA3.7).
+ */
+export function framing(flag: Position, points: readonly { position: Position; atFlag: boolean }[], credits: number): Framing {
   if (points.length === 0) return { kind: "flag", center: flag, zoom: FLAG_ZOOM };
   const all = [flag, ...points.map((point) => point.position)];
   const lats = all.map((each) => each.lat);
   const lngs = all.map((each) => each.lng);
+  const bottom = credits + (points.some((point) => point.atFlag) ? FLAG_POINT_PADDING : FIT_PADDING);
   return {
     kind: "bounds",
     south: Math.min(...lats),
     west: Math.min(...lngs),
     north: Math.max(...lats),
     east: Math.max(...lngs),
-    padding: FIT_PADDING,
+    padding: { top: FIT_PADDING, right: FIT_PADDING, bottom, left: FIT_PADDING },
     maxZoom: MAX_FIT_ZOOM,
   };
+}
+
+/**
+ * The bubble's highest, in a map `height` px high whose credits are `credits` px high: from
+ * `BUBBLE_INSET` under the top to `BUBBLE_INSET` above the credits (v22). It scrolls beyond.
+ */
+export function bubbleMaxHeight(height: number, credits: number): number {
+  return height - 2 * BUBBLE_INSET - credits;
 }

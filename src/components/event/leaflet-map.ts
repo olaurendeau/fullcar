@@ -6,7 +6,7 @@
  */
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { framing } from "@/domain/event-map";
+import { BUBBLE_INSET, bubbleMaxHeight, framing } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
 import { mapUpdate, pointKey, type MapFocus, type TilesEvent } from "./event-map-state";
 
@@ -51,8 +51,12 @@ export interface EventMapOptions {
   zoomOut: string;
   /** « Fermer », the bubble's last button. */
   close: string;
-  /** « Geoapify · © OpenMapTiles.org · © OpenStreetMap », after « Leaflet », as text (until #558). */
-  attribution: string;
+  /**
+   * Our credits, event-map.tsx's own element in `container`, no control of Leaflet's (v23): put
+   * last in it, after « Zoom arrière » in the Tab order, with the points' gestures (#484); their
+   * height, read at each framing and each resize, keeps the points and the bubble off them.
+   */
+  credits: HTMLElement;
   /** The media query of a touch screen, the one the two-finger sentence follows (CA1.11). */
   touchQuery: string;
   /** A car's point or a bubble's car button activated: to its card. */
@@ -85,8 +89,7 @@ const WORLD: L.LatLngBoundsExpression = [
 const ZOOM_TARGET = "44px";
 /** A line, as the design draws it: straight, 2 px, #171717 at 70 %, and nothing happens on it. */
 const LINE: L.PolylineOptions = { color: "#171717", opacity: 0.7, weight: 2, interactive: false };
-/** The bubble, as the design draws it: 10 px from the map's top right corner, 210 px wide at most. */
-const BUBBLE_INSET = 10;
+/** The bubble, as the design draws it: `BUBBLE_INSET` from the map's top right corner, 210 px wide at most. */
 const BUBBLE_WIDTH = 210;
 
 /** Leaflet 1.9.4's keyboard handler, `L.Map.Keyboard`, which @types/leaflet does not declare. */
@@ -118,9 +121,26 @@ const StillKeyboard = LeafletKeyboard.extend({
   },
 }) as typeof L.Handler;
 
-/** Leaflet writes the attribution as HTML: ours is text, and stays text. */
-function asText(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/**
+ * A press on `element` neither drags nor zooms the map. One finger on it stays there: neither
+ * a drag nor Leaflet's `tapHold` (Safari on a phone), which would cancel its click, sees it.
+ * A second one reaches the map: a pinch whose second finger lands on it zooms it (#484).
+ * The `off` removes the very listener `disableClickPropagation` adds for `touchstart` in
+ * Leaflet 1.9.4; e2e/event-map-touch.spec.ts guards it (« the second one on a car's point »),
+ * and e2e/event-map-credits.spec.ts on the credits. Gives back what undoes it.
+ */
+function holdPress(element: HTMLElement): () => void {
+  const oneFinger = (event: Event) => {
+    if ((event as TouchEvent).touches.length === 1) L.DomEvent.stopPropagation(event);
+  };
+  L.DomEvent.disableClickPropagation(element);
+  L.DomEvent.off(element, "touchstart", L.DomEvent.stopPropagation);
+  L.DomEvent.on(element, "touchstart", oneFinger);
+  return () => {
+    L.DomEvent.off(element, "mousedown dblclick contextmenu", L.DomEvent.stopPropagation);
+    L.DomEvent.off(element, "touchstart", oneFinger);
+    delete (element as unknown as Record<string, unknown>)._leaflet_disable_click;
+  };
 }
 
 /** Lucide's « flag », as the design draws it, white on a black square; its name is the state's. */
@@ -158,16 +178,8 @@ function pointButton(onPress: () => void): { button: HTMLButtonElement; text: HT
   text.className = "max-w-30 truncate";
   label.append(text);
   button.append(label);
-  // A press on a point neither drags nor zooms the map. One finger on it stays there: neither
-  // a drag nor Leaflet's `tapHold` (Safari on a phone), which would cancel its click, sees it.
-  // A second one reaches the map: a pinch whose second finger lands on a point zooms it (#484).
-  // The `off` removes the very listener `disableClickPropagation` adds for `touchstart` in
-  // Leaflet 1.9.4; e2e/event-map-touch.spec.ts guards it (« the second one on a car's point »).
-  L.DomEvent.disableClickPropagation(button);
-  L.DomEvent.off(button, "touchstart", L.DomEvent.stopPropagation);
-  L.DomEvent.on(button, "touchstart", (event) => {
-    if ((event as TouchEvent).touches.length === 1) L.DomEvent.stopPropagation(event);
-  });
+  // Gone with its marker: nothing to undo.
+  holdPress(button);
   button.addEventListener("click", onPress);
   return { button, text };
 }
@@ -223,9 +235,9 @@ function bubbleOf(): { bubble: HTMLDivElement; title: HTMLParagraphElement } {
 
 /**
  * The map of a leg in `container`: our tiles, the flag, the points of `mapOf` as they are, each
- * with its line to the flag (none at the flag), a grouped one with its bubble, the zoom and
- * the attribution. The view frames them all (`framing`):
- * the flag alone at zoom 14, else every point, 32 px around, zoom 15 at most. The container is a region, focusable (arrows, + and −);
+ * with its line to the flag (none at the flag), a grouped one with its bubble, the zoom, and
+ * our credits last. The view frames them all (`framing`): the flag alone at zoom 14, else every
+ * point, 32 px around, the credits' height more at the bottom, zoom 15 at most. The container is a region, focusable (arrows, + and −);
  * the flag is not a button and stays out of the Tab order.
  * Nothing moves by degrees (CA1.10, decision 24 of organizer-view): no zoom, fade or marker
  * animation, no inertia, every framing `{ animate: false }`, and the arrow keys' pans at once
@@ -267,12 +279,19 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     .on("tileerror", () => options.onTiles("tileerror"))
     .on("load", () => options.onTiles("load"))
     .addTo(map);
-  L.control.attribution({ prefix: "Leaflet" }).addAttribution(asText(options.attribution)).addTo(map);
   const zoom = L.control.zoom({ zoomInTitle: options.zoomIn, zoomOutTitle: options.zoomOut }).addTo(map);
   for (const button of Array.from(zoom.getContainer()?.querySelectorAll("a") ?? [])) {
     // Inline: Leaflet's style sheet is outside Tailwind's layers, and would win over a class.
     Object.assign(button.style, { width: ZOOM_TARGET, height: ZOOM_TARGET, lineHeight: ZOOM_TARGET });
   }
+  // No attribution control (`attributionControl: false`): our credits, there since the loading,
+  // after Leaflet's panes and controls, the last of the Tab order (CA3.7). React's only child
+  // here: moved within its own parent, among nodes React does not know.
+  const { credits } = options;
+  container.append(credits);
+  const releaseCredits = holdPress(credits);
+  /** `h`, measured now: 24 px on one line, 48 on two (at 320 px, or with a larger text). */
+  const creditsHeight = () => credits.offsetHeight;
 
   let state = options.state;
   const flagImage = document.createElement("span");
@@ -302,7 +321,8 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     const width = Math.min(BUBBLE_WIDTH, size.x - 2 * BUBBLE_INSET);
     Object.assign(open.bubble.style, {
       width: `${width}px`,
-      maxHeight: `${size.y - 2 * BUBBLE_INSET}px`,
+      // Never down into the credits' band (CA3.7).
+      maxHeight: `${bubbleMaxHeight(size.y, creditsHeight())}px`,
       left: `${size.x - BUBBLE_INSET - width - from.x}px`,
       top: `${BUBBLE_INSET - from.y}px`,
     });
@@ -429,7 +449,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   const frame = () => {
     if (!unframed || container.clientWidth === 0 || container.clientHeight === 0) return;
     unframed = false;
-    const view = framing(state.flag, state.points);
+    const view = framing(state.flag, state.points, creditsHeight());
     still(() => {
       if (view.kind === "flag") map.setView([view.center.lat, view.center.lng], view.zoom, { animate: false });
       else {
@@ -437,7 +457,8 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
           [view.south, view.west],
           [view.north, view.east],
         ];
-        map.fitBounds(box, { padding: [view.padding, view.padding], maxZoom: view.maxZoom, animate: false });
+        const { top, right, bottom, left } = view.padding;
+        map.fitBounds(box, { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom], maxZoom: view.maxZoom, animate: false });
       }
     });
   };
@@ -492,6 +513,8 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     destroy: () => {
       closeBubble();
       touch.removeEventListener("change", pointerChanged);
+      // The credits stay, React's: a map made again in the same container holds them anew.
+      releaseCredits();
       map.remove();
     },
   };

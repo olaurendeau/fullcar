@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { distanceMetres, framing, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "./event-map";
+import { BUBBLE_INSET, bubbleMaxHeight, distanceMetres, framing, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "./event-map";
 import type { Position } from "./place";
 import { browserUnsafe } from "./test-browser-safe";
 
@@ -210,46 +210,78 @@ describe("mapOf: counting the cars on the map and the others (CA2.2, CA2.3)", ()
 });
 
 describe("framing", () => {
+  /** One line of credits, 24 px high (CA3.7). */
+  const ONE_LINE = 24;
+  const away = (position: Position) => ({ position, atFlag: false });
+
   it("shows the flag alone at zoom 14 when there is no point", () => {
-    expect(framing(FLAG, [])).toEqual({ kind: "flag", center: FLAG, zoom: 14 });
+    expect(framing(FLAG, [], ONE_LINE)).toEqual({ kind: "flag", center: FLAG, zoom: 14 });
   });
 
-  it("fits the flag and every point, with a 32 px margin, zoom 15 at most", () => {
+  it("fits the flag and every point, 32 px around and the credits' height more at the bottom, zoom 15 at most", () => {
     // The flag is the farthest east; the points, the farthest south, north and west.
-    const points = [{ position: { lat: 45.8, lng: 4.7 } }, { position: { lat: 45.7, lng: 4.8 } }];
+    const points = [away({ lat: 45.8, lng: 4.7 }), away({ lat: 45.7, lng: 4.8 })];
 
-    expect(framing(FLAG, points)).toEqual({
+    expect(framing(FLAG, points, ONE_LINE)).toEqual({
       kind: "bounds",
       south: 45.7,
       west: 4.7,
       north: 45.8,
       east: FLAG.lng,
-      padding: 32,
+      padding: { top: 32, right: 32, bottom: 56, left: 32 },
       maxZoom: 15,
     });
   });
 
-  it("takes the flag as the edge it is, on any side", () => {
-    const points = [{ position: { lat: 45.8, lng: 4.9 } }];
+  it("keeps the credits' measured height clear at the bottom: two lines, 48 px, give 80 px (CA3.7)", () => {
+    expect(framing(FLAG, [away(BRINDAS)], 48)).toMatchObject({ padding: { top: 32, right: 32, bottom: 80, left: 32 } });
+  });
 
-    expect(framing(FLAG, points)).toMatchObject({ south: FLAG.lat, west: FLAG.lng, north: 45.8, east: 4.9 });
+  it("gives the flag's point room under the flag: h + 64 at the bottom (v22)", () => {
+    // Its button hangs from 16 px under the flag, 44 px high: down to 60 px under its place.
+    const points = [away(ECULLY), { position: north(FLAG, 10), atFlag: true }];
+
+    expect(framing(FLAG, points, ONE_LINE)).toMatchObject({ padding: { top: 32, right: 32, bottom: 88, left: 32 } });
+    expect(framing(FLAG, points, 48)).toMatchObject({ padding: { bottom: 112 } });
+  });
+
+  it("takes the flag as the edge it is, on any side", () => {
+    const points = [away({ lat: 45.8, lng: 4.9 })];
+
+    expect(framing(FLAG, points, ONE_LINE)).toMatchObject({ south: FLAG.lat, west: FLAG.lng, north: 45.8, east: 4.9 });
   });
 
   it("takes the flag as the north edge when it is the farthest north", () => {
-    const points = [{ position: { lat: 45.7, lng: 4.7 } }];
+    const points = [away({ lat: 45.7, lng: 4.7 })];
 
-    expect(framing(FLAG, points)).toMatchObject({ south: 45.7, west: 4.7, north: FLAG.lat, east: FLAG.lng });
+    expect(framing(FLAG, points, ONE_LINE)).toMatchObject({ south: 45.7, west: 4.7, north: FLAG.lat, east: FLAG.lng });
   });
 
   it("frames the points mapOf gives", () => {
     const map = mapOf(FLAG, [car("a", BRINDAS), car("b", null), car("c", ECULLY)]);
 
-    expect(framing(map.flag, map.points)).toMatchObject({
+    expect(framing(map.flag, map.points, ONE_LINE)).toMatchObject({
       south: BRINDAS.lat,
       west: BRINDAS.lng,
       north: ECULLY.lat,
       east: FLAG.lng,
+      padding: { bottom: 56 },
     });
+  });
+
+  it("reads mapOf's flag point as the one under the flag", () => {
+    const map = mapOf(FLAG, [car("a", BRINDAS), car("b", east(FLAG, 10))]);
+
+    expect(framing(map.flag, map.points, ONE_LINE)).toMatchObject({ padding: { bottom: 88 } });
+  });
+});
+
+describe("bubbleMaxHeight", () => {
+  it("stops the bubble 10 px above the credits: the map's height, less twice its inset, less theirs (v22)", () => {
+    expect(BUBBLE_INSET).toBe(10);
+    expect(bubbleMaxHeight(240, 24)).toBe(196);
+    expect(bubbleMaxHeight(280, 24)).toBe(236);
+    expect(bubbleMaxHeight(240, 48)).toBe(172);
   });
 });
 

@@ -84,12 +84,15 @@ export const overlap = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.
 export const inside = (inner: Box, outer: Box) =>
   inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
 
-/** The labels of what takes the focus inside `map`, its container excluded, in the DOM's order. */
+/** The credits' link, the last of the map in the Tab order (#558, CA3.7), by its text. */
+export const OSM_LINK = "© OpenStreetMap (s’ouvre dans un nouvel onglet)";
+
+/** The labels of what takes the focus inside `map`, its container excluded, in the DOM's order; a link without one, its text. */
 export function focusableIn(map: Locator): Promise<(string | null)[]> {
   return map.evaluate((container) =>
     Array.from(container.querySelectorAll<HTMLElement | SVGElement>("*"))
       .filter((element) => element.tabIndex >= 0)
-      .map((element) => element.getAttribute("aria-label")),
+      .map((element) => element.getAttribute("aria-label") ?? (element.tagName === "A" ? element.textContent : null)),
   );
 }
 

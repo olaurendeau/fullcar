@@ -84,14 +84,17 @@ async function leafletCount(requests: Request[]): Promise<number> {
   return texts.filter((text) => text.includes("leaflet-control-zoom")).length;
 }
 
-/** The names of what takes the focus inside `map`, its container excluded, in the DOM's order. */
+/** The names of what takes the focus inside `map`, its container excluded, in the DOM's order; a link without one, its text. */
 function focusableIn(map: Locator): Promise<(string | null)[]> {
   return map.evaluate((container) =>
     Array.from(container.querySelectorAll<HTMLElement | SVGElement>("*"))
       .filter((element) => element.tabIndex >= 0)
-      .map((element) => element.getAttribute("aria-label")),
+      .map((element) => element.getAttribute("aria-label") ?? (element.tagName === "A" ? element.textContent : null)),
   );
 }
+
+/** The credits' link (#558), the last of the map. */
+const OSM_LINK = "© OpenStreetMap (s’ouvre dans un nouvel onglet)";
 
 /** `map` at zoom `z`: its zoom ended (Leaflet's `zoomend`, `moveend`), then each of its tiles loaded. */
 async function settled(map: Locator, z: number) {
@@ -181,29 +184,30 @@ test.describe("the map, open", () => {
     await expect.poll(async () => (await requestsForTile(tileAt(placed.place, 14))).length).toBeGreaterThan(0);
   });
 
-  test("CA1.4: the flag is a named image out of the Tab order; the zoom is translated, 44 px; the attribution is text", async ({ page, placed }) => {
+  test("CA1.4: the flag is a named image out of the Tab order; the zoom is translated, 44 px; no attribution control of Leaflet's", async ({ page, placed }) => {
     await page.goto(`/e/${placed.id}`);
     await openMap(page.getByRole("tabpanel"));
     const map = page.getByRole("region", { name: ALLER_MAP });
     const flag = map.getByRole("img", { name: FLAG, exact: true });
     await expect(flag).toBeVisible();
-    // Inside the container, the zoom alone takes the focus: neither the flag nor its icon, nor a link.
-    expect(await focusableIn(map)).toEqual(["Zoom avant", "Zoom arrière"]);
+    // Inside the container, the zoom and then the credits' link take the focus: neither the flag nor its icon.
+    expect(await focusableIn(map)).toEqual(["Zoom avant", "Zoom arrière", OSM_LINK]);
 
     await map.focus();
     await page.keyboard.press("Tab");
     await expect(map.getByRole("button", { name: "Zoom avant", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(map.getByRole("button", { name: "Zoom arrière", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(map.getByRole("link", { name: OSM_LINK, exact: true })).toBeFocused();
     for (const name of ["Zoom avant", "Zoom arrière"]) {
       const box = (await map.getByRole("button", { name, exact: true }).boundingBox())!;
       expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
     }
 
-    const attribution = map.locator(".leaflet-control-attribution");
-    // Until #558: v27's words, as text, after Leaflet's prefix; never the IGN for Geoapify's tiles.
-    await expect(attribution).toHaveText("Leaflet | Geoapify · © OpenMapTiles.org · © OpenStreetMap");
-    await expect(attribution.locator("a")).toHaveCount(0);
+    // Our credits instead (#558, CA3.7): neither Leaflet's control nor its prefix.
+    await expect(map.locator(".leaflet-control-attribution")).toHaveCount(0);
+    await expect(map.getByText("Leaflet", { exact: false })).toHaveCount(0);
   });
 
   test("CA1.13: open on the aller, the retour's map starts only once its tab is shown", async ({ page, placed }) => {

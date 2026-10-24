@@ -4,7 +4,7 @@ import { seedPerson, seedPlacement } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { holdToken, newToken } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
-import { anchor, around, FLAG, focusableIn, inside, joins, lines, mapName, openMap, points, seedCar, test } from "./event-map-points";
+import { anchor, around, FLAG, focusableIn, inside, joins, lines, mapName, openMap, OSM_LINK, points, seedCar, test } from "./event-map-points";
 import { leaveNoToken } from "./fixtures";
 import { placeOf } from "./tiles";
 import { expect, isAction, organiserPath, test as organiser } from "./organiser";
@@ -94,6 +94,7 @@ test("CA1.7: a car added at an action's answer, then gone at the next: the map s
     "Voiture de Marc, départ : Place de la mairie, 2 places libres",
     "Zoom avant",
     "Zoom arrière",
+    OSM_LINK,
   ]);
   await expect(region(page).locator("[data-kept]")).toHaveAccessibleName("Voiture de Marc, départ : Place de la mairie, 2 places libres");
 
@@ -158,7 +159,7 @@ onAdmin("CA1.7: after « Actualiser », a point keeps the focus through its free
     await zoePoint("2 places libres").focus();
   });
   await expect(region(page)).toHaveAccessibleName(mapName("aller", "3 voitures"));
-  expect(await focusableIn(region(page))).toEqual(["Voiture de Zoé, départ : 12 rue des Lilas, 2 places libres", ines, marc, "Zoom avant", "Zoom arrière"]);
+  expect(await focusableIn(region(page))).toEqual(["Voiture de Zoé, départ : 12 rue des Lilas, 2 places libres", ines, marc, "Zoom avant", "Zoom arrière", OSM_LINK]);
   await expect(zoePoint("2 places libres")).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(region(page).getByRole("button", { name: ines, exact: true })).toBeFocused();
@@ -170,7 +171,7 @@ onAdmin("CA1.7: after « Actualiser », a point keeps the focus through its free
   });
   await expect(region(page)).toHaveAccessibleName(mapName("aller", "2 voitures"));
   await expect(region(page)).toBeFocused();
-  expect(await focusableIn(region(page))).toEqual([ines, marc, "Zoom avant", "Zoom arrière"]);
+  expect(await focusableIn(region(page))).toEqual([ines, marc, "Zoom avant", "Zoom arrière", OSM_LINK]);
   await tilesLoaded(page);
 });
 
