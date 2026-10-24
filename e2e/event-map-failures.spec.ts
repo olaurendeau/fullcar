@@ -71,6 +71,9 @@ function liveRegions(page: Page): Promise<(string | null)[]> {
 /** A request for the build's files: sent on, or answered 404, as an old build's chunk is after a deploy. */
 const answers = { pass: (route: Route) => route.continue(), refuse: (route: Route) => route.fulfill({ status: 404 }) };
 
+/** A file of no build, answered 404 at once and counted nowhere: `settled`'s request. */
+const BARRIER = "/_next/static/settled";
+
 /**
  * The build's files, from now on: held until `release` or `refuse`, which also answers those
  * that follow (Turbopack asks once more for a chunk that failed), until `hold` again.
@@ -81,7 +84,9 @@ async function holdBuild(page: Page) {
   const asked: string[] = [];
   let answer: ((route: Route) => Promise<void>) | null = null;
   await page.route("**/_next/static/**", (route) => {
-    asked.push(new URL(route.request().url()).pathname);
+    const path = new URL(route.request().url()).pathname;
+    if (path === BARRIER) return route.fulfill({ status: 404 });
+    asked.push(path);
     return answer ? answer(route) : void held.push(route);
   });
   const settle = async (next: (route: Route) => Promise<void>) => {
@@ -89,12 +94,26 @@ async function holdBuild(page: Page) {
     answer = next;
     await Promise.all(held.splice(0).map(next));
   };
+  /**
+   * Once what the page did so far has sent what it would: two frames for its effects, then a
+   * request of ours, routed after theirs. How many times each file was asked for, until then.
+   */
+  const settled = async () => {
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    await page.evaluate(async (url) => void (await fetch(url)), BARRIER);
+    const counts = new Map<string, number>();
+    for (const path of asked) counts.set(path, (counts.get(path) ?? 0) + 1);
+    return counts;
+  };
   return {
-    asked,
-    /** Waits for the build's files held, then gives the path of each request. */
-    held: async () => {
-      await expect.poll(() => held.length).toBeGreaterThan(0);
-      return held.map((route) => new URL(route.request().url()).pathname);
+    settled,
+    /**
+     * After the first attempt, refused: each file of the module asked for once, and once more,
+     * as Turbopack asks again for a chunk that failed, at times after the notice is drawn.
+     */
+    refusedOnce: async () => {
+      await expect.poll(async () => [...new Set((await settled()).values())]).toEqual([2]);
+      return settled();
     },
     hold: () => (answer = null),
     refuseAll: () => (answer = answers.refuse),
@@ -197,35 +216,56 @@ test.describe("Leaflet's code", () => {
     await quiet(page, placed.id);
     const build = await holdBuild(page);
 
-    // Both legs open, one state for the page: the module asked for once, then refused.
+    // Both legs open, one state for the page: one attempt, refused.
     await mapButton(page).click();
-    const first = await build.held();
-    expect(new Set(first).size).toBe(first.length);
     await build.refuse();
     await expect(notice(page, FAILED)).toBeVisible();
     await expect(container(page, "retour").getByText(FAILED, { exact: true })).toHaveCount(1);
+    const first = await build.refusedOnce();
 
     // The retour shown after the failure, before any attempt: the notice, no request, the focus on its tab.
-    const asked = build.asked.length;
     await selectTab(page, "Retour");
     await expect(notice(page, FAILED, "retour")).toBeVisible();
     await expect(tab(page, "Retour")).toBeFocused();
-    expect(build.asked.length).toBe(asked);
+    expect(await build.settled()).toEqual(first);
 
-    // « Réessayer » on the aller: the module asked for once again, for both legs.
+    // « Réessayer » on the aller: one attempt more, for both legs.
     await selectTab(page, "Aller");
     build.hold();
     await retry(page).click();
-    const second = await build.held();
-    expect(new Set(second).size).toBe(second.length);
     await build.release();
     await expect(page.getByRole("region", { name: ALLER_MAP }).locator(".leaflet-tile-loaded").first()).toBeVisible();
     await expect(mapButton(page)).toBeFocused();
+    // Loaded: each file once more, and no other.
+    const second = await build.settled();
+    expect(second).toEqual(new Map([...first].map(([path, count]) => [path, count + 1])));
 
     // The retour, once shown: its map, started now, and not the notice.
     await selectTab(page, "Retour");
     await expect(page.getByRole("region", { name: /^Carte du retour : / }).locator(".leaflet-tile-loaded").first()).toBeVisible();
     await expect(container(page, "retour").getByText(FAILED)).toHaveCount(0);
+  });
+
+  test("CA2.10: folded while it loads, the attempt ends all the same; opened again, its notice, no request, the focus on « Carte »", async ({ page, placed }) => {
+    await quiet(page, placed.id);
+    const build = await holdBuild(page);
+
+    await mapButton(page).click();
+    await expect(busyBox(page)).toHaveCount(1);
+    await mapButton(page).click();
+    await expect(mapButton(page)).toHaveAttribute("aria-expanded", "false");
+    await build.refuse();
+    // Ended folded: the notice is drawn, hidden.
+    await expect(container(page).getByText(FAILED, { exact: true })).toHaveCount(1);
+    await expect(container(page)).toBeHidden();
+    const asked = await build.refusedOnce();
+
+    await mapButton(page).click();
+    await expect(mapButton(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(notice(page, FAILED)).toBeVisible();
+    await expect(page.getByRole("region", { name: ALLER_MAP })).toHaveCount(0);
+    await expect(mapButton(page)).toBeFocused();
+    expect(await build.settled()).toEqual(asked);
   });
 });
 
