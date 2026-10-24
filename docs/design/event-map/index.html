@@ -8,8 +8,8 @@
     --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
     --app-border: #e5e5e5; --app-primary: #171717; --app-primary-fg: #fafafa;
     --app-destructive: #e7000b; --app-ring: #a1a1a1; --app-amber-bg: #fef3c7; --app-amber-fg: #461901;
-    /* The map mock: a stand-in for Plan IGN tiles, light only like the tiles themselves */
-    --m-land: #f3f0e8; --m-green: #dfe9cf; --m-water: #b9d3ee; --m-road: #ffffff; --m-case: #d6d0c4; --m-major: #f7d58b; --m-label: #6d675c;
+    /* The map mock: a stand-in for Geoapify’s positron tiles (light grey), light only like the tiles themselves */
+    --m-land: #f4f4f2; --m-green: #e6ebe2; --m-water: #d4dce2; --m-road: #ffffff; --m-case: #dcdcdc; --m-major: #ffffff; --m-label: #8c8c8c;
     --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444;
   }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -86,7 +86,11 @@
   .zoom { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; border: 1px solid var(--app-border); background: var(--app-bg); z-index: 3; }
   .zoom span { width: 44px; height: 44px; display: grid; place-items: center; font-size: 20px; font-weight: 500; }
   .zoom span + span { border-top: 1px solid var(--app-border); }
-  .attr { position: absolute; right: 0; bottom: 0; font-size: 10px; line-height: 14px; background: rgba(255,255,255,.85); color: #333; padding: 1px 6px; border-top-left-radius: 6px; z-index: 3; }
+  /* v21: the credits, one short line overlaid on the map, bottom-right, as Leaflet’s control: 24 px high */
+  .attr { position: absolute; right: 0; bottom: 0; z-index: 3; max-width: 100%; box-sizing: border-box; padding: 0 6px; font-size: 12px; line-height: 24px; text-align: right; color: #333; background: rgba(255,255,255,.8); border-top-left-radius: 4px; }
+  .attr .osm { color: #0a0a0a; text-decoration: underline; text-underline-offset: 2px; display: inline-flex; align-items: center; min-height: 24px; }
+  /* Its focus ring reads on any tile: an inset dark ring on an opaque white field, never clipped by the map’s edge */
+  .attr .osm.ringmap { background: #fff; outline: 2px solid #0a0a0a; outline-offset: -2px; border-radius: 3px; padding: 0 3px; }
   .attr u { text-underline-offset: 2px; }
   .mk { position: absolute; transform: translate(-50%, -50%); z-index: 2; display: flex; align-items: center; gap: 4px; min-height: 28px; box-sizing: border-box; padding: 0 8px 0 6px; border-radius: 999px; background: var(--app-bg); color: var(--app-fg); border: 1.5px solid var(--app-primary); font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
   .mk .ico { width: 14px; height: 14px; }
@@ -144,7 +148,7 @@
   <symbol id="chevdown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
   <symbol id="chevup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></symbol>
   <symbol id="loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
-  <!-- A stand-in for Plan IGN tiles: land, a river, woods, roads, place names -->
+  <!-- A stand-in for Geoapify positron tiles: land, a river, woods, roads, place names -->
   <symbol id="tiles" viewBox="0 0 328 240" preserveAspectRatio="xMidYMid slice">
     <rect width="328" height="240" fill="var(--m-land)"/>
     <path d="M0 150 C60 140 90 175 150 168 S250 120 328 132 L328 146 C250 136 210 180 150 182 S60 156 0 164Z" fill="var(--m-water)"/>
@@ -163,14 +167,13 @@
 
 <div class="wrap">
   <h1>Carte de l’événement</h1>
-  <p class="lead">Issue <a href="https://github.com/olaurendeau/fullcar/issues/238">#238</a>, <strong>version 18</strong>, après <a href="https://github.com/olaurendeau/fullcar/issues/237">#237</a> (maquette <code>place-autocomplete</code>, v5), qui donne leur <strong>position</strong> aux lieux. Dans chaque leg, une <strong>carte</strong> repliée montre le lieu de l’événement, le lieu de départ (aller) ou de dépose (retour) de chaque voiture qui a une position, et une ligne droite de chacune vers l’événement. Elle ne dit rien que la liste ne dise déjà, et chaque point de voiture mène à la <strong>fiche</strong> de sa voiture.</p>
+  <p class="lead">Issue <a href="https://github.com/olaurendeau/fullcar/issues/238">#238</a>, <strong>version 23</strong>, après <a href="https://github.com/olaurendeau/fullcar/issues/237">#237</a> (maquette <code>place-autocomplete</code>, v5), qui donne leur <strong>position</strong> aux lieux. Dans chaque leg, une <strong>carte</strong> repliée montre le lieu de l’événement, le lieu de départ (aller) ou de dépose (retour) de chaque voiture qui a une position, et une ligne droite de chacune vers l’événement. Elle ne dit rien que la liste ne dise déjà, et chaque point de voiture mène à la <strong>fiche</strong> de sa voiture.</p>
   <p class="lead">Décisions du propriétaire : la carte sort du hors-périmètre V1 (D1) ; le point exact (D5) ; de vraies tuiles par notre route en cache au CDN, avec Leaflet (D7) ; une ligne droite (D8) ; « Carte », « fiche » (D9) ; et, depuis la v3 de <code>place-autocomplete</code>, <strong>toute modification du texte d’un lieu de voiture retire sa position</strong> : une voiture sur la carte est donc exactement là où son texte le dit. Décision du coordinateur : la carte se met à jour quand la page applique un nouvel état (pas de rafraîchissement automatique sur main, #67).</p>
-  <p class="lead"><strong>La v8</strong> (décision du coordinateur sur #238, après le relevé de #473) : le vrai WMTS ne répond jamais 400 <code>TileOutOfRange</code> ; une tuile absente est un 404 <code>Not Found</code>, désormais en cache un jour, tout autre 404 en <code>no-store</code> ; grille <code>PM_0_19</code> ; attribution datée d’octobre 2026. Ce qu’on voit ne change pas : à l’étranger, toujours le drapeau sur un fond blanc. Les mentions de <code>TileOutOfRange</code> dans les notes des versions précédentes décrivent ces versions.</p>
-  <p class="lead"><strong>La v6</strong> (décision du propriétaire) : une section « <a href="#plus-tard">Plus tard : les Arrêts</a> » dit que les Arrêts ne sont pas dans cette maquette et sont attendus avec l’epic #68 ; rien d’autre ne change.</p>
-  <p class="lead"><strong>La v5</strong> (corrections de texte notées sur #238) : en-tête de cache navigateur d’une tuile <code>TileOutOfRange</code> ; « un autre 400 » dans la note des tests ; le faux IGN répond aussi 403, 429 et un autre 400 ; le coût Vercel des tuiles vides tirées d’un 404.</p>
-  <p class="lead"><strong>La v4</strong> (après l’approbation de la v3) : une tuile vide tirée d’un 404 n’est pas mise en cache (décision du coordinateur), celle d’un 400 <code>TileOutOfRange</code> l’est un jour ; la note des tests dit la même règle ; critères dans l’ordre ; dépend de <code>place-autocomplete</code> v5.</p>
-  <p class="lead"><strong>La v3</strong> (re-revue de la v2) : seules 404 et 400 <code>TileOutOfRange</code> sont des tuiles manquantes, tout autre 4xx est un échec ; le focus quand « Réessayer » disparaît ; le focus autour du bouton « Modifier l’événement » de l’organisateur ; un libellé fixe « Carte » ; des points qui sont de vrais boutons ; un regroupement à 25 m ; sans JavaScript, le bouton masqué.</p>
-  <p class="lead"><span class="legend"></span>Ce qui est nouveau est entouré de pointillés bleus. Le fond dessiné ici remplace les tuiles Plan IGN.</p>
+  <p class="lead"><strong>La v22</strong> (revue de la v21) : marge de cadrage du bas et hauteur de la bulle dérivées de la hauteur mesurée des crédits (le point sous le drapeau compris) ; la bulle garde sa place en haut à droite ; les gestes sur les crédits suivent le motif des points (#484) ; la notice de Leaflet devient une exigence pour #558.</p>
+  <p class="lead"><strong>La v21</strong> (décision du propriétaire du 24/10) : les crédits redeviennent une ligne courte posée sur la carte, en bas à droite : « Geoapify · © OpenMapTiles.org · © OpenStreetMap », le lien OpenStreetMap avec une cible de 24 px. Plus de ligne sous la carte.</p>
+  <p class="lead"><strong>La v20</strong> (revue de la v19) : l’avis de tuiles sous l’attribution ; la ligne d’attribution présente pendant le chargement et absente sous un avis de Leaflet ; le lien OpenStreetMap au motif du bas de page (nouvel onglet dit au lecteur d’écran, anneau de focus) ; CA3.5 observable ; disjoncteur sur 429 seulement, 10 s par défaut (décision du coordinateur).</p>
+  <p class="lead"><strong>La v19</strong> (epic <a href="https://github.com/olaurendeau/fullcar/issues/549">#549</a>, décisions du propriétaire du 24/10) : <strong>Geoapify remplace Plan IGN partout</strong>, pour avoir un fond de carte dans tous les pays (en Italie, Plan IGN ne montrait rien). Tuiles raster <code>positron</code> en @2x, toujours par notre route <code>/tuiles</code> mise en cache ; la clé reste sur le serveur. L’attribution passe sous la carte, avec un lien de 44 px vers la licence d’OpenStreetMap. Toute réponse de Geoapify autre qu’une tuile est un échec (502), avec un disjoncteur après un 429. Tout ce qui est propre à l’IGN est retiré. Suites de #238 : « Recharger la page » après un second échec de Leaflet, l’import de Leaflet partagé par les deux legs, CA1.9 mesuré. Le reste de la v18 ne change pas. Les notes des versions précédentes décrivent ces versions.</p>
+  <p class="lead"><span class="legend"></span>Ce qui est nouveau est entouré de pointillés bleus. Le fond dessiné ici imite les tuiles <code>positron</code> de Geoapify.</p>
   <nav class="toc" aria-label="Sections">
     <a href="#place">Où est la carte</a><a href="#etats">Les états</a><a href="#cas">Cas difficiles</a><a href="#vides">Vides et cassés</a><a href="#maj">Mises à jour et focus</a><a href="#anglais">En anglais</a><a href="#bureau">À 1280 px</a><a href="#tuiles">Les tuiles</a><a href="#anatomie">Anatomie</a><a href="#mots">Les mots</a><a href="#criteres">Critères</a><a href="#decisions">Décisions</a><a href="#hors">Hors périmètre</a><a href="#plus-tard">Plus tard : les Arrêts</a><a href="#proprietaire">Pour le propriétaire</a><a href="#revisions">Révisions</a>
   </nav>
@@ -179,7 +182,7 @@
   <h2 id="place">Où est la carte</h2>
   <p class="lead">Dans chaque leg, entre « Ajouter une personne » / « Proposer une voiture » et la première fiche. Repliée par défaut, à 360 px comme à 1280 px : rien n’est chargé, ni Leaflet ni tuile, tant que personne ne l’ouvre.</p>
   <div class="grid">
-    <div class="state"><h3>Repliée : un bouton de 44 px</h3><p>« Carte » : un <code>&lt;button aria-expanded="false" aria-controls&gt;</code> au libellé fixe, le chevron disant l’état, la carte dans un conteneur <code>hidden</code>, comme « Vos inscriptions » et « Espace organisateur ». Il ajoute 60 px (44 + l’écart de 16) : avec un titre et un lieu de 30 caractères, le haut de la première fiche passerait de 612 à 672 px (<strong>calculé</strong> à partir de la mesure d’event-board, pas mesuré), sous le pli de 780 px ; le bandeau ne bouge pas (C9.2 tient). <span class="crit">CA1.1, CA1.2, CA1.9</span></p>
+    <div class="state"><h3>Repliée : un bouton de 44 px</h3><p>« Carte » : un <code>&lt;button aria-expanded="false" aria-controls&gt;</code> au libellé fixe, le chevron disant l’état, la carte dans un conteneur <code>hidden</code>, comme « Vos inscriptions » et « Espace organisateur ». Il ajoute 60 px (44 + l’écart de 16) : avec un titre et un lieu de 30 caractères, le bandeau est entre 538 et 578 px et le haut de la première fiche à 714 px, au-dessus du pli de 780 px (<strong>mesuré</strong> à 360 × 780 par la relecture de #542, #484) ; C9.2 tient. <span class="crit">CA1.1, CA1.2, CA1.9</span></p>
       <div class="phone"><div class="urlbar">{hôte}/e/Kp7mQx3a</div><div class="screen">
         <div class="cut">… en-tête, « Vos inscriptions »</div>
         <div class="tabs"><span class="on">Aller<span class="pill">2 sans voiture</span></span><span>Retour</span></div>
@@ -190,20 +193,20 @@
         <div class="cut">… les autres fiches, puis « Sans voiture »</div>
       </div></div></div>
 
-    <div class="state"><h3>Ouverte : la carte de l’aller, au toucher</h3><p>Le lieu de l’événement (drapeau, carré noir), une étiquette par voiture avec le prénom de qui conduit, des lignes droites vers l’événement, deux voitures au même point en une seule étiquette « 2 ». La vue cadre tous les points, sans animation. Au toucher, un doigt fait défiler la page, pas la carte. Sous la carte, toujours dans cet ordre : l’avis de tuiles (s’il y en a un), le nombre de voitures qui n’y sont pas (s’il y en a), la phrase « deux doigts » (au toucher). <span class="crit">CA1.3 à CA1.6, CA1.10, CA1.11</span></p>
+    <div class="state"><h3>Ouverte : la carte de l’aller, au toucher</h3><p>Le lieu de l’événement (drapeau, carré noir), une étiquette par voiture avec le prénom de qui conduit, des lignes droites vers l’événement, deux voitures au même point en une seule étiquette « 2 ». La vue cadre tous les points, sans animation. Au toucher, un doigt fait défiler la page, pas la carte. Les crédits sont dans le coin en bas à droite de la carte, sur un fond blanc translucide (v21). Sous la carte, toujours dans cet ordre : l’avis de tuiles (s’il y en a un), le nombre de voitures qui n’y sont pas (s’il y en a), la phrase « deux doigts » (au toucher). <span class="crit">CA1.3 à CA1.6, CA1.10, CA1.11</span></p>
       <div class="phone"><div class="urlbar">{hôte}/e/Kp7mQx3a</div><div class="screen">
         <div class="cut">… onglets, bandeau, actions</div>
         <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
         <div class="map">
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 200 L214 128"/></g></svg>
+          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
           <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:88%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
         <p class="mapnote">1 voiture n’est pas sur la carte : son lieu n’a pas de position.</p>
         <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
@@ -225,7 +228,7 @@
           <span class="mk ev" style="left:81.7%;top:16.7%" role="img"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
         <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
         <div class="cut">… fiches</div>
@@ -239,14 +242,14 @@
       <div class="phone"><div class="screen">
         <div class="map">
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 200 L214 128"/></g></svg>
+          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk focusring" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
           <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:88%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
         <div class="cut">Entrée ↓ défile jusqu’à la fiche</div>
         <article class="car"><div class="car-h"><strong class="focusring">Voiture de Marc</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:00</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>Place de la mairie, 69290 Craponne</span></p><ul class="seats"><li class="pass"><svg class="ico"><use href="#user"/></svg><span>Hugo</span></li><li class="pass"><svg class="ico"><use href="#user"/></svg><span>Zoé</span></li><li class="free"><svg class="ico"><use href="#plus"/></svg>Place libre</li></ul></article>
@@ -256,13 +259,13 @@
       <div class="phone"><div class="screen">
         <div class="map">
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 200 L214 128"/></g></svg>
+          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <div class="popup" style="right:10px;top:10px;width:210px"><strong>2 voitures : Nina, Paul</strong><span class="btn outline focusring">Voiture de Nina</span><span class="btn outline">Voiture de Paul</span><span class="btn outline">Fermer</span></div>
-          <span class="mk group" style="left:82.3%;top:88%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
       </div></div></div>
 
@@ -273,21 +276,21 @@
         <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
         <div class="map">
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M110 210 L214 128"/></g></svg>
+          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M110 190 L214 128"/></g></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="mk" style="left:33.5%;top:87.5%"><svg class="ico"><use href="#car"/></svg>Inès</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="mk" style="left:33.5%;top:79%"><svg class="ico"><use href="#car"/></svg>Inès</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
         <p class="touchhint">Deux doigts pour déplacer ou zoomer la carte.</p>
         <div class="cut">… fiches du retour</div>
       </div></div></div>
 
-    <div class="state"><h3>Le chargement</h3><p>À la première ouverture : la boîte de la carte à sa hauteur finale (rien ne saute) et « Chargement de la carte… » dedans, en texte visible (#737373 sur blanc, 4,7:1), sans aucune région <code>status</code> de plus : le panneau du leg n’en a qu’une, celle du bandeau. La boîte de la carte porte <code>aria-busy="true"</code> pendant ce temps. <span class="crit">CA1.14</span></p>
+    <div class="state"><h3>Le chargement</h3><p>À la première ouverture : la boîte de la carte à sa hauteur finale, ses crédits déjà dans le coin en bas à droite (v21). Rien ne saute quand la carte arrive. « Chargement de la carte… » est dans la boîte, en texte visible (#737373 sur blanc, 4,7:1), sans aucune région <code>status</code> de plus : le panneau du leg n’en a qu’une, celle du bandeau. La boîte de la carte porte <code>aria-busy="true"</code> pendant ce temps. <span class="crit">CA1.14</span></p>
       <div class="phone"><div class="screen">
         <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
-        <div class="map"><div class="maploading"><span style="display:flex;gap:8px;align-items:center"><svg class="ico"><use href="#loader"/></svg>Chargement de la carte…</span></div></div>
+        <div class="map"><div class="maploading"><span style="display:flex;gap:8px;align-items:center"><svg class="ico"><use href="#loader"/></svg>Chargement de la carte…</span></div><span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span></div>
         <div class="cut">… fiches</div>
       </div></div></div>
   </div>
@@ -310,7 +313,7 @@
           <span class="mk near" style="left:41%;top:73%"><svg class="ico"><use href="#car"/></svg>Paul</span>
           <span class="mk near" style="left:63%;top:15%"><svg class="ico"><use href="#car"/></svg>Zoé</span>
           <span class="mk near" style="left:77%;top:75%"><svg class="ico"><use href="#car"/></svg>Lou</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
       </div></div></div>
 
@@ -323,7 +326,7 @@
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:65.2%;top:66%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
       </div></div></div>
 
@@ -336,7 +339,7 @@
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk group" style="left:65.2%;top:66%"><svg class="ico"><use href="#car"/></svg>2</span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
       </div></div></div>
 
@@ -350,7 +353,7 @@
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk" style="left:76%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk" style="left:34%;top:81.7%"><svg class="ico"><use href="#car"/></svg><span class="nm">Marie-Bérengère-Anne-Charlotte-Hortense</span></span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
       </div></div></div>
   </div>
@@ -366,7 +369,7 @@
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:50%;top:50%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
         <div class="empty"><div class="ibox"><svg class="ico"><use href="#car"/></svg></div><strong>Aucune voiture proposée pour l’aller</strong><span class="small-muted">Personne ne s’est encore inscrit.</span></div>
       </div></div></div>
@@ -378,7 +381,7 @@
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:50%;top:50%"><svg class="ico"><use href="#flag"/></svg></span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
         <p class="mapnote">3 voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.</p>
         <div class="cut">… fiches</div>
@@ -401,7 +404,7 @@
         <div class="cut">… fiches</div>
       </div></div></div>
 
-    <div class="state"><h3>Des tuiles en échec</h3><p>Une tuile manquante (hors couverture) arrive en image vide et ne compte pas. Une tuile en échec (réseau coupé, ou un 502 de notre route : un 400, un 403, un 429 ou un 5xx de l’IGN) déclenche <code>tileerror</code>. Quand la couche a fini de charger la vue (<code>load</code>) avec au moins une tuile en échec, l’avis apparaît sous la carte, en premier des lignes ; les points et les lignes restent. Il disparaît quand une vue suivante finit de charger sans échec (après « Réessayer », un déplacement ou un zoom) ; si « Réessayer » avait le focus, le focus va au conteneur de la carte. Rien n’est annoncé : les tuiles sont décoratives (<code>alt=""</code>), et tout ce qui compte est dans les points et la liste ; l’avis entre dans la description du conteneur de la carte. <span class="crit">CA2.4</span></p>
+    <div class="state"><h3>Des tuiles en échec</h3><p>Une tuile en échec (réseau coupé, ou un 502 de notre route : un 401, un 403, un 404, un 429 ou un 5xx de Geoapify, un délai dépassé, le disjoncteur ouvert) déclenche <code>tileerror</code>. Il n’y a plus de tuile « manquante » : Geoapify couvre le monde. Quand la couche a fini de charger la vue (<code>load</code>) avec au moins une tuile en échec, l’avis apparaît sous la carte, en premier des lignes (CA1.17 ; les crédits sont dans la carte) ; les points et les lignes restent. Il disparaît quand une vue suivante finit de charger sans échec (après « Réessayer », un déplacement ou un zoom) ; si « Réessayer » avait le focus, le focus va au conteneur de la carte. Rien n’est annoncé : les tuiles sont décoratives (<code>alt=""</code>), et tout ce qui compte est dans les points et la liste ; l’avis entre dans la description du conteneur de la carte. <span class="crit">CA2.4</span></p>
       <div class="phone"><div class="screen">
         <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
         <div class="map blank">
@@ -411,18 +414,27 @@
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
           <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
-        <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>Le fond de carte n’a pas pu se charger.</strong></p><p class="small-muted">Vérifiez la connexion, puis réessayez.</p><div class="act"><span class="btn outline">Réessayer</span></div></div>
+        <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>Le fond de carte n’a pas pu se charger.</strong></p><p class="small-muted">Vérifiez la connexion, ou réessayez dans un moment.</p><div class="act"><span class="btn outline">Réessayer</span></div></div>
       </div></div></div>
 
-    <div class="state"><h3>Leaflet ne se charge pas, à 360 px</h3><p>L’import de Leaflet échoue (hors ligne, déploiement en cours) : pas de boîte vide, l’avis seul à la place de la carte. « Réessayer » relance l’import : « Chargement de la carte… » remplace l’avis, dans la boîte (<code>tabindex="-1"</code>, <code>aria-busy="true"</code>), qui prend le focus. Réussi, la carte s’affiche et le focus va au bouton « Carte ». Un second échec remet l’avis, et le focus sur son « Réessayer ». Jamais sur <code>&lt;body&gt;</code>. <span class="crit">CA2.8</span></p>
+    <div class="state"><h3>Leaflet ne se charge pas, à 360 px</h3><p>L’import de Leaflet échoue (hors ligne, déploiement en cours) : pas de boîte vide, l’avis seul à la place de la carte, <strong>et pas de crédits</strong> : il n’y a pas de fond de carte à attribuer. Ils reviennent avec la boîte, dès « Chargement de la carte… ». « Réessayer » relance l’import : « Chargement de la carte… » remplace l’avis, dans la boîte (<code>tabindex="-1"</code>, <code>aria-busy="true"</code>), qui prend le focus. Réussi, la carte s’affiche et le focus va au bouton « Carte ». Un second échec remet l’avis, et le focus sur son « Réessayer ». Jamais sur <code>&lt;body&gt;</code>. <span class="crit">CA2.8</span></p>
       <div class="phone"><div class="screen">
         <div class="cut">… bandeau, actions</div>
         <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
         <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>La carte n’a pas pu se charger.</strong></p><p class="small-muted">Vérifiez la connexion, puis réessayez.</p><div class="act"><span class="btn outline">Réessayer</span></div></div>
         <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p></article>
       </div></div></div>
+
+    <div class="state"><h3>Leaflet échoue encore : « Recharger la page »</h3><p>Après un déploiement, l’ancienne adresse du morceau de code répond 404 pour toujours : « Réessayer » ne peut plus réussir, seul un rechargement aide (relecture de #540). Donc, à partir du <strong>second</strong> échec de suite, le navigateur en ligne (<code>navigator.onLine</code>), l’avis devient celui-ci : « Recharger la page » d’abord (<code>location.reload()</code> : l’adresse, son fragment compris, reste la même), puis « Réessayer ». Le focus va à « Recharger la page ». Hors ligne, c’est toujours le premier avis. Pas de crédits sous ces avis. <span class="crit">CA2.8</span></p>
+      <div class="phone"><div class="screen">
+        <div class="cut">… bandeau, actions</div>
+        <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
+        <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>La carte n’a toujours pas pu se charger.</strong></p><p class="small-muted">La page a peut-être été mise à jour depuis votre arrivée : rechargez-la.</p><div class="act" style="display:flex;flex-direction:column;gap:8px"><span class="btn focusring">Recharger la page</span><span class="btn outline">Réessayer</span></div></div>
+        <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p></article>
+      </div></div>
+      <p class="small-muted" style="margin-top:8px">Les deux legs : l’import de Leaflet est <strong>un seul</strong> pour la page. Un échec met l’avis dans la carte de chaque leg ouvert ; « Réessayer » ou « Recharger la page », d’un leg ou de l’autre, agit pour les deux ; une réussite démarre la carte du leg montré, et celle du leg caché quand il est montré, sans qu’il reste sur l’échec. Le compte des échecs (pour « Recharger la page ») est celui de la page. Le focus ne va que dans le leg montré : montrer l’autre onglet après un échec y montre l’avis sans redemander le module, et le focus reste sur l’onglet. <span class="crit">CA2.10</span></p></div>
 
     <div class="state"><h3>Sans JavaScript</h3><p>Le bouton « Carte » porte <code>noscript:hidden</code>, comme les onglets et la ligne de l’espace organisateur : sans JavaScript, il n’est pas affiché, et aucune phrase de plus. La phrase d’aujourd’hui (<code>Board.needsJavaScript</code>) reste la seule. <span class="crit">CA2.5</span></p>
       <div class="phone"><div class="screen">
@@ -431,15 +443,16 @@
         <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p></article>
       </div></div></div>
 
-    <div class="state"><h3>Un événement hors de France</h3><p>Plan IGN n’a pas de détail hors de France : notre route rend ces tuiles en image vide (200), sans avis. On voit un fond blanc, le drapeau, les étiquettes, les lignes, l’attribution et les boutons de zoom. Pas de message : la page ne sait pas distinguer « hors couverture » de « mer » ou de « campagne vide », et ne prétend pas le savoir. <span class="crit">CA2.6</span></p>
+    <div class="state"><h3>Un événement à l’étranger</h3><p>Depuis la v19, un cas ordinaire : Geoapify couvre le monde (#549). Un week-end à Courmayeur montre un fond de carte comme en France, le drapeau, les étiquettes, les lignes, les crédits dans le coin. Plus de fond blanc. <span class="crit">CA2.6</span></p>
       <div class="phone"><div class="screen">
-        <div class="map blank">
+        <div class="map">
+          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
           <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M80 80 L190 140"/><path d="M270 60 L190 140"/></g></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:58%;top:58%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:24%;top:33%"><svg class="ico"><use href="#car"/></svg>Anna</span>
           <span class="mk" style="left:82%;top:25%"><svg class="ico"><use href="#car"/></svg>Luca</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
       </div></div></div>
 
@@ -450,14 +463,14 @@
         <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
         <div class="map">
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 200 L214 128"/></g></svg>
+          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
           <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:88%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
       </div></div></div>
   </div>
@@ -481,7 +494,9 @@
       <tr><td>tuiles : l’avis disparaît après une vue chargée sans échec</td><td>l’avis part</td><td>si « Réessayer » l’avait : au conteneur de la carte</td></tr>
       <tr><td>Leaflet : « Réessayer », l’import relancé</td><td>« Chargement de la carte… » remplace l’avis</td><td>à la boîte de chargement (<code>tabindex="-1"</code>)</td></tr>
       <tr><td>Leaflet : l’import réussit</td><td>la carte s’affiche</td><td>au bouton « Carte »</td></tr>
-      <tr><td>Leaflet : second échec</td><td>l’avis revient</td><td>à son « Réessayer »</td></tr>
+      <tr><td>Leaflet : second échec de suite, en ligne</td><td>l’avis « toujours », avec « Recharger la page » puis « Réessayer »</td><td>à « Recharger la page »</td></tr>
+      <tr><td>Leaflet : second échec, hors ligne</td><td>le premier avis revient</td><td>à son « Réessayer »</td></tr>
+      <tr><td>Leaflet : une réussite depuis l’autre leg</td><td>l’avis du leg caché part ; sa carte démarre quand il est montré</td><td>— (le focus reste dans le leg montré)</td></tr>
       <tr><td>le retour est supprimé</td><td>les onglets et la carte du retour disparaissent ; celle de l’aller reste</td><td>au titre de l’événement (<code>focusTitle</code>)</td></tr>
     </tbody></table></div>
   <div class="note">Le focus ne reste jamais sur <code>&lt;body&gt;</code> (règle de <code>focus.ts</code>) : quand ni la cible de la table ni le conteneur de la carte n’existent plus, <code>focusLandmark</code>.</div>
@@ -498,21 +513,21 @@
         <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Map</span><svg class="chev"><use href="#chevup"/></svg></div>
         <div class="map">
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 200 L214 128"/></g></svg>
+          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
           <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:88%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr">Leaflet | Source: IGN – Plan IGN v2, October 2026</span>
+          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm">© OpenStreetMap</a></span>
         </div>
         <p class="mapnote">1 car is not on the map: its place has no position.</p>
         <p class="touchhint">Use two fingers to move or zoom the map.</p>
       </div></div></div>
     <div class="state"><h3>Failures, the organiser’s line</h3><p><span class="crit">CA2.1, CA2.3, CA2.4, CA2.8</span></p>
       <div class="phone"><div class="screen">
-        <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>The map background could not load.</strong></p><p class="small-muted">Check your connection, then try again.</p><div class="act"><span class="btn outline">Try again</span></div></div>
+        <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>The map background could not load.</strong></p><p class="small-muted">Check your connection, or try again in a moment.</p><div class="act"><span class="btn outline">Try again</span></div></div>
         <div class="notice new"><svg class="ico"><use href="#warn"/></svg><p><strong>The map could not load.</strong></p><p class="small-muted">Check your connection, then try again.</p><div class="act"><span class="btn outline">Try again</span></div></div>
         <div class="hintrow"><p class="small-muted">To show the map, pick the event’s place from the suggestions.</p><div class="btn outline full">Edit the event</div></div>
         <p class="mapnote" style="margin:0">3 cars are not on the map: their places have no position.</p>
@@ -521,7 +536,7 @@
 
   <!-- ============================================================ -->
   <h2 id="bureau">À 1280 px</h2>
-  <p class="lead">La colonne de 448 px ne change pas (<code>max-w-md</code>) : la carte en prend la largeur (416 px) et monte à 280 px. Repliée par défaut aussi. À la souris, un glisser déplace la carte ; pas de phrase « deux doigts ». Le cadre est à taille réelle et défile dans sa boîte.</p>
+  <p class="lead">La colonne de 448 px ne change pas (<code>max-w-md</code>) : la carte en prend la largeur (416 px) et monte à 280 px. Repliée par défaut aussi. À la souris, un glisser déplace la carte ; pas de phrase « deux doigts ». Ici, le lien « © OpenStreetMap » des crédits a le focus au clavier : un anneau sombre à l’intérieur du lien, sur un fond blanc opaque, lisible sur n’importe quelle tuile et jamais coupé par le bord de la carte (v21). Le cadre est à taille réelle et défile dans sa boîte.</p>
   <div class="desk-wrap"><div class="desk"><div class="urlbar">{hôte}/e/Kp7mQx3a</div><div class="col">
     <div class="cut">… en-tête, « Vos inscriptions »</div>
     <div class="tabs"><span class="on">Aller<span class="pill">2 sans voiture</span></span><span>Retour</span></div>
@@ -530,49 +545,67 @@
     <div class="maptoggle"><svg class="ico"><use href="#map"/></svg><span class="grow">Carte</span><svg class="chev"><use href="#chevup"/></svg></div>
     <div class="map tall">
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
-          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 200 L214 128"/></g></svg>
+          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/><path d="M268 40 L214 128"/><path d="M96 196 L214 128"/><path d="M270 185 L214 128"/></g></svg>
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="mk" style="left:81.7%;top:16.7%"><svg class="ico"><use href="#car"/></svg>Marc</span>
           <span class="mk" style="left:29.3%;top:81.7%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
-          <span class="mk group" style="left:82.3%;top:88%"><svg class="ico"><use href="#car"/></svg>2</span>
-          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+          <span class="mk group" style="left:82.3%;top:77%"><svg class="ico"><use href="#car"/></svg>2</span>
+          <span class="attr new">Geoapify · © OpenMapTiles.org · <a class="osm ringmap">© OpenStreetMap</a></span>
         </div>
     <p class="mapnote">1 voiture n’est pas sur la carte : son lieu n’a pas de position.</p>
     <article class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="when"><svg class="ico"><use href="#clock"/></svg>09:15</span></div><p class="line"><svg class="ico"><use href="#pin"/></svg><span>12 rue des Lilas, 69126 Brindas</span></p></article>
   </div></div></div>
 
   <!-- ============================================================ -->
-  <h2 id="tuiles">Les tuiles : Plan IGN, par notre route</h2>
+  <h2 id="tuiles">Les tuiles : Geoapify, par notre route</h2>
   <div class="anatomy">
-    <div class="card"><h3>La source : Plan IGN v2 (Géoplateforme de l’IGN)</h3><ul>
-      <li>WMTS public de la Géoplateforme, couche <code>GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2</code>, grille <code>PM_0_19</code> (celle que la couche déclare : Web Mercator, la grille de Leaflet, zooms 0 à 19 ; à partir du zoom 10, les lignes et colonnes du bord en sont exclues), style <code>normal</code> (le seul), PNG. URL amont dans <code>IGN_WMTS_URL</code>.</li>
-      <li><strong>Clé</strong> : aucune (points d’accès publics « dépourvus de contrôle d’accès », CGU de cartes.gouv.fr). <strong>Limite</strong> : « non soumis à limite d’usage » ; l’IGN peut bloquer un abus.</li>
-      <li><strong>Licence</strong> : Licence Ouverte / Etalab 2.0 par défaut (CGU) : reproduction et redistribution permises, usage commercial compris, avec la mention de la source <strong>et de la date de dernière mise à jour</strong>. C’est ce qui autorise un proxy avec cache.</li>
-      <li><strong>Attribution</strong> : « Source : IGN – Plan IGN v2, {mois année} », la date venant d’une constante (<code>PLAN_IGN_UPDATED</code>), aujourd’hui <code>"2026-10"</code> : la fiche de métadonnées <code>IGNF_PLAN-IGN</code> donne une révision du 2026-10-08, et la couche est mise à jour chaque mois. Un test Vitest échoue quand elle a plus de 12 mois : la CI force alors à relire les métadonnées de la couche et à mettre la date à jour. Texte, pas un lien : pas de cible sous 44 px. Leaflet en préfixe, en texte simple, sans son titre anglais.</li>
-      <li><strong>Coût</strong> : rien chez l’IGN ; chez Vercel, des appels de fonction et du transfert, quand le CDN n’a pas la tuile, et pour <strong>chaque</strong> tuile vide tirée d’un 404 sans rapport <code>Not Found</code>, jamais en cache. Une tuile absente (404 <code>Not Found</code>) ne coûte qu’un appel par jour au CDN.</li>
-      <li><strong>Sortie</strong> : tout le trafic vers l’IGN part des quelques IP de Vercel. Une limite par IP que l’IGN poserait toucherait tout le monde d’un coup ; le cache du CDN la rend peu probable.</li></ul></div>
-    <div class="card"><h3>Écartées, d’après leurs conditions</h3><ul>
-      <li><strong>tile.openstreetmap.org</strong> : proxy avec cache déconseillé, <code>Referer</code> exigé (notre <code>no-referrer</code> le retire).</li>
+    <div class="card"><h3>La source : Geoapify (décision du propriétaire, #549)</h3><ul>
+      <li>Tuiles <strong>raster</strong> de Geoapify, données OpenStreetMap (ODbL), style <code>positron</code> (gris clair : nos étiquettes noires ressortent), en <strong>@2x</strong> : un PNG de 512 × 512 affiché dans une case de 256 px, net sur un écran haute densité. Grille Web Mercator, celle de Leaflet ; zoom de 0 à 18 chez nous (Geoapify va jusqu’à 20).</li>
+      <li><strong>Le style est un seul réglage</strong> : <code>TILE_STYLE</code>, <code>positron</code> par défaut, que le propriétaire confirme d’un coup d’œil une fois la clé disponible.</li>
+      <li><strong>Pourquoi Geoapify</strong> : le seul fournisseur lu dont les conditions écrites permettent de mettre ses tuiles en cache : « Yes, with Geoapify’s open tile policy, you can cache, store, and redistribute the generated map tiles. » (FAQ de <a href="https://www.geoapify.com/map-tiles/">geoapify.com/map-tiles</a>). Il couvre le monde ; Plan IGN ne couvrait que la France (#549).</li>
+      <li><strong>Clé</strong> : <code>GEOAPIFY_API_KEY</code>, variable du serveur seulement (jamais <code>NEXT_PUBLIC_*</code>), créée par le propriétaire. Elle ne sert que dans l’appel du serveur à Geoapify.</li>
+      <li><strong>Coût</strong> : formule gratuite, usage commercial permis : 3 000 crédits par jour, une tuile coûte 0,25 crédit, soit environ 12 000 tuiles par jour ; au-delà, 59 € par mois (environ 40 000 tuiles par jour). Le CDN ne redemande une tuile qu’après 30 jours.</li>
+      <li><strong>Attribution</strong> (v21) : « Geoapify · © OpenMapTiles.org · © OpenStreetMap », la plus courte qui suive les conditions lues :
+        <ul>
+          <li><strong>OpenStreetMap</strong> : « The historical forms of attribution "© OpenStreetMap contributors" or "© OpenStreetMap" are acceptable », le texte « OpenStreetMap » pouvant être le lien vers la page de licence ; « the credit should typically appear in a corner of the map », sans interaction pour le voir, lisible (<a href="https://osmfoundation.org/wiki/Licence/Attribution_Guidelines">guide d’attribution de l’OSMF</a>).</li>
+          <li><strong>OpenMapTiles</strong> : « visibly credit "OpenMapTiles.org" or reference "OpenMapTiles" with a link to http://openmaptiles.org/ », dans le coin de la carte (<a href="https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md">licence d’OpenMapTiles</a>). « OpenMapTiles.org » en texte suffit : pas de second lien.</li>
+          <li><strong>Geoapify</strong> : « You also need to add Geoapify attribution for all Free plans » ; leur exemple écrit « Powered by Geoapify », mais aucune page lue n’exige ces mots exacts ni un lien. « Geoapify » seul est à confirmer dans la demande écrite au support ; s’il faut « Powered by Geoapify », la ligne passe sur deux à 360 px, et la hauteur mesurée garde la mise en page juste.</li>
+          <li><strong>Leaflet</strong> : BSD 2-Clause, rien sur la carte ; exigence : sa notice de licence part avec le build de production (en-tête <code>@preserve</code> gardé, ou fichier de notices), mise en œuvre et preuve dans #558.</li>
+        </ul></li>
+      <li><strong>Limites</strong> : 5 requêtes par seconde par compte, multipliées par 4 pour les tuiles ; tout le trafic part des IP de Vercel. Ce que Geoapify renvoie quand le quota est épuisé n’est pas documenté : la route traite tout ce qui n’est pas une tuile comme un échec.</li></ul></div>
+    <div class="card"><h3>Écartées, d’après leurs conditions (#549)</h3><ul>
+      <li><strong>Plan IGN</strong> : la France seulement ; ailleurs, un fond blanc (#549).</li>
+      <li><strong>MapTiler</strong> : §7.2 « It is prohibited to store, save, and/or redistribute any map content from a server-side cache or temporary storage » ; proxy seulement avec accord payant (§6.1).</li>
+      <li><strong>Stadia Maps</strong> : « server-side caching is prohibited » ; gratuit non commercial.</li>
       <li><strong>Thunderforest</strong> : « Caching proxies or other redistribution methods are not permitted. »</li>
-      <li><strong>Stadia Maps</strong> : « server-side caching is prohibited » ; gratuit non commercial seulement.</li>
-      <li><strong>MapTiler</strong> : pas de mise à disposition à des tiers ; compte et clé.</li>
-      <li><strong>OpenFreeMap</strong> : vectoriel seulement, collecte automatisée exclue.</li>
-      <li><strong>Geoapify, CARTO</strong> : conditions muettes sur un proxy ; accord écrit, compte et clé nécessaires.</li></ul></div>
+      <li><strong>CARTO</strong> : §9.c.iii, « proxying or caching the content on the server side » interdit.</li>
+      <li><strong>Jawg</strong> : rien sur le cache, §5.3 restrictif ; <strong>Mapbox</strong> : conditions des produits illisibles (PDF).</li>
+      <li><strong>tile.openstreetmap.org</strong> : proxy avec cache déconseillé, <code>Referer</code> exigé.</li>
+      <li><strong>Protomaps auto-hébergé</strong> : aucun tiers, mais vectoriel (nouvelle dépendance) et environ 120 Go à héberger : repli possible.</li></ul></div>
     <div class="card"><h3>La route <code>/tuiles/{z}/{x}/{y}</code></h3><ul>
-      <li><code>z</code>, <code>x</code>, <code>y</code> entiers, <code>z</code> de 0 à 18, <code>x</code> et <code>y</code> dans la grille ; sinon 404 sans appel. Aucune query string lue ni transmise.</li>
-      <li>Vers l’IGN : l’URL de la tuile et notre User-Agent (<code>fullcar/{version} (+https://github.com/olaurendeau/fullcar)</code>), rien d’autre.</li>
-      <li><strong>Une tuile</strong> (200 PNG de l’IGN) : rendue telle quelle, <code>Cache-Control: public, max-age=86400</code>, <code>CDN-Cache-Control: public, s-maxage=2592000</code>.</li>
-      <li><strong>Une tuile qui n’existe pas</strong>, et seulement elle : un <strong>404</strong> de l’IGN. Le vrai service répond ainsi à toute tuile absente : hors des limites de la couche, hors de la grille, au-delà du zoom 19, à l’étranger (Suisse, Italie), avec un rapport d’exception OWS en <code>text/xml</code> dont l’<code>Exception</code> porte <code>exceptionCode="Not Found"</code> (relevé de #473 sur #238, où figure le corps exact) ; la route lit l’attribut <code>exceptionCode</code> d’un élément <code>Exception</code> OWS (dans un <code>ExceptionReport</code> d’espace de noms <code>http://www.opengis.net/ows/1.1</code>) et le compare à <code>Not Found</code>, sans comparer le corps comme une chaîne. Réponse : <strong>200 avec un PNG transparent de 256 × 256</strong>. Pour Leaflet, ce n’est pas une erreur. Mise en cache selon le rapport (décision du coordinateur sur #238) : un 404 dont le rapport porte <code>exceptionCode="Not Found"</code>, <code>Cache-Control: public, max-age=86400</code> pour le navigateur et <code>CDN-Cache-Control: public, s-maxage=86400</code> pour le CDN, un jour ; tout autre 404 (sans ce rapport : une <code>IGN_WMTS_URL</code> fausse), <code>Cache-Control: no-store</code>, jamais en cache, pour qu’une mauvaise URL ne blanchisse pas la carte un jour.</li>
-      <li><strong>Un échec</strong> : tout autre 4xx (403 et 429 compris : l’IGN qui bloquerait les IP de Vercel ; et tout 400, dont <code>InvalidParameterValue</code>, la réponse à une couche inconnue ou retirée), un 5xx, une erreur réseau, 5 s sans réponse. Réponse : 502, <code>no-store</code>, jamais mise en cache. C’est la seule réponse qui déclenche <code>tileerror</code> dans la page (avec une coupure réseau du navigateur) : un blocage se voit tout de suite, il n’est pas caché un jour derrière un fond blanc.</li></ul></div>
+      <li><code>z</code>, <code>x</code>, <code>y</code> entiers, <code>z</code> de 0 à 18, <code>x</code> et <code>y</code> dans la grille ; sinon <strong>404</strong>, <code>no-store</code>, sans appel (comme avant). Aucune query string lue ni transmise.</li>
+      <li>Vers Geoapify : <code>{TILE_UPSTREAM_URL}/{TILE_STYLE}/{z}/{x}/{y}@2x.png?apiKey={clé}</code>, <code>TILE_UPSTREAM_URL</code> valant <code>https://maps.geoapify.com/v1/tile</code> par défaut ; notre User-Agent (<code>fullcar/{version} (+https://github.com/olaurendeau/fullcar)</code>), rien du visiteur. Redirection refusée ; 5 s au plus ; 2 Mio au plus.</li>
+      <li><strong>Une tuile</strong> (200, <code>image/png</code>, signature PNG) : rendue telle quelle, <code>Cache-Control: public, max-age=86400</code>, <code>CDN-Cache-Control: public, s-maxage=2592000</code>.</li>
+      <li><strong>Tout le reste est un échec</strong> : 401 ou 403 (clé refusée ou bloquée), 404, 429 (limite ou quota), 5xx, erreur réseau, 5 s sans réponse, autre chose qu’un PNG, plus de 2 Mio. Réponse : <strong>502</strong>, <code>Cache-Control: no-store</code>, corps vide. C’est la seule réponse qui déclenche <code>tileerror</code>. Plus de PNG transparent : Geoapify couvre le monde, un 404 est une erreur de réglage, qui doit se voir.</li>
+      <li><strong>Disjoncteur après un 429</strong>, et seulement un 429 (jamais un 5xx, à la différence de Photon), par instance : aucun appel pendant <code>TILES_BREAKER_MS</code> (<strong>10 000</strong> par défaut, décision du coordinateur ; lu seulement s’il n’est fait que de chiffres, sinon le défaut), ou la durée de <code>Retry-After</code> bornée entre <code>TILES_BREAKER_MS</code> et 1 h ; une valeur absente, invalide ou d’une forme obsolète donne <code>TILES_BREAKER_MS</code> ; 0 : jamais ouvert. Les bornes de Photon (#448). Pendant ce temps, 502 <code>no-store</code> aussitôt. Pas de mot nouveau : l’avis de tuiles le dit déjà.</li>
+      <li><strong>Sans clé configurée</strong> : 502 <code>no-store</code>, sans appel, et une ligne de journal fixe, « tiles: no key », sans la clé ni l’URL.</li>
+      <li><strong>Journal</strong> : un message fixe et le statut HTTP (« tiles: tile failed (HTTP 429) »), jamais l’URL, la tuile ni la clé.</li></ul></div>
+    <div class="card"><h3>La clé ne quitte jamais le serveur</h3><ul>
+      <li>Lue seulement dans le module du fournisseur, côté serveur (<code>server-only</code>) ; jamais dans une variable <code>NEXT_PUBLIC_*</code>.</li>
+      <li>Ni dans le HTML ni dans le JavaScript envoyés au navigateur, ni dans une URL ou une réponse de notre origine (un 502 a un corps vide), ni dans un journal, ni dans un rapport d’erreur.</li>
+      <li>Sentry : l’URL sortante porte <code>apiKey=</code> ; le hook de <code>scrub.ts</code> retire la query de toute URL sortante (fils d’Ariane, spans), comme pour Photon (place-autocomplete AL6.6), et l’erreur levée sur un échec ne porte pas l’URL.</li></ul></div>
     <div class="card"><h3>Qui voit quoi</h3><ul>
-      <li><strong>L’IGN</strong> : l’IP de Vercel, les tuiles demandées quand le CDN ne les a pas (à peu près les zones regardées), sans savoir par qui ni pour quel événement.</li>
+      <li><strong>Geoapify</strong> : l’IP de Vercel, notre clé, notre User-Agent, les tuiles demandées quand le CDN ne les a pas (à peu près les zones regardées), sans savoir par qui ni pour quel événement. Société allemande, sous le RGPD.</li>
       <li><strong>Vercel</strong> : comme pour toute page, l’IP du visiteur et le chemin <code>/tuiles/z/x/y</code> dans ses journaux.</li>
-      <li><strong>Personne d’autre</strong> : le navigateur ne parle qu’à notre origine.</li>
+      <li><strong>Personne d’autre</strong> : le navigateur ne parle qu’à notre origine ; le lien vers la licence d’OpenStreetMap n’est suivi que si on le touche.</li>
       <li>Leaflet et sa feuille de style viennent de notre build : aucun script ni style distant.</li></ul></div>
+    <div class="card"><h3>Changer de style</h3><ul>
+      <li>Le chemin <code>/tuiles/z/x/y</code> ne porte pas le style : après un changement de <code>TILE_STYLE</code>, le CDN de Vercel garde l’ancien rendu jusqu’à 30 jours, les navigateurs un jour.</li>
+      <li>Donc, après un changement de style, le propriétaire purge le cache du CDN dans le tableau de bord de Vercel.</li></ul></div>
   </div>
-  <div class="note"><strong>Tests.</strong> <code>IGN_WMTS_URL</code> pointe, dans le slot, vers un faux IGN ajouté à <code>compose.yaml</code> (PR mergée par l’humain), comme le faux Photon de #237 : il rend une petite tuile PNG par défaut, et un test le règle sur son port de contrôle : 404 avec le rapport <code>Not Found</code> du vrai service, octet pour octet, 404 sans ce rapport, 400 <code>InvalidParameterValue</code>, 403, 429, 500, lenteur. Le passage 404 <code>Not Found</code> → PNG vide en cache un jour, autre 404 → PNG vide en <code>no-store</code>, et tout 400, 403, 429 ou 5xx → 502, est aussi prouvé par Vitest sur le module de la route, avec un <code>fetch</code> injecté.</div>
+  <div class="note"><strong>Tests.</strong> Un faux fournisseur, <code>e2e/fake-tiles.mjs</code>, remplace le faux IGN dans <code>compose.yaml</code> (PR mergée par l’humain), sur les mêmes ports : 2324 pour les tuiles, 2325 pour le contrôle. Dans le slot : <code>TILE_UPSTREAM_URL: http://tiles:2324/v1/tile</code>, une <code>GEOAPIFY_API_KEY</code> de test, <code>TILES_BREAKER_MS: "0"</code> ; côté tests, <code>TILES_CONTROL_URL: http://tiles:2325</code>. Par défaut, il rend un petit PNG de 512 × 512 pour toute tuile ; un test règle une tuile sur 401, 403, 404, 429 (avec ou sans <code>Retry-After</code>), 500, lenteur, ou autre chose qu’un PNG. Il enregistre chaque requête reçue (chemin, query, en-têtes) : les tests vérifient que la clé n’arrive que là. Le même faux sert à <code>make up</code> : aucune clé sur un poste de développement. La traduction des réponses, le disjoncteur et les en-têtes sont aussi prouvés par Vitest, avec un <code>fetch</code> et une horloge injectés.</div>
 
   <!-- ============================================================ -->
   <h2 id="anatomie">Anatomie et accessibilité</h2>
@@ -583,13 +616,19 @@
       <li>La première ouverture charge Leaflet (import dynamique) ; une carte ne démarre que dans un panneau montré.</li>
       <li>Pendant le chargement, <code>aria-busy="true"</code> sur la boîte de la carte ; aucune région <code>status</code> de plus : le panneau du leg garde la seule, celle du bandeau.</li>
       <li>Hauteur : 240 px ; 280 px à partir d’une fenêtre de 448 px de large, où la colonne (<code>max-w-md</code>) est pleine et la carte fait 416 px.</li>
-      <li>Sous la carte, dans cet ordre : l’avis de tuiles, <code>notOnMap</code>, la phrase « deux doigts ».</li></ul></div>
+      <li>Sous la carte, dans cet ordre : l’avis de tuiles, <code>notOnMap</code>, la phrase « deux doigts » (les crédits sont dans la carte depuis la v21).</li>
+      <li>Les crédits (v21, décision du propriétaire du 24/10) : <strong>une ligne courte posée sur la carte, en bas à droite</strong>, sur un fond blanc translucide (<code>rgba(255,255,255,.8)</code>), à la manière du contrôle d’attribution de Leaflet : « Geoapify · © OpenMapTiles.org · » puis le lien « © OpenStreetMap » vers <code>https://www.openstreetmap.org/copyright</code>. Texte à 12 px, #333 sur ce fond (au moins 9:1 sur une tuile <code>positron</code>) ; le lien en #0a0a0a, souligné. La ligne fait 24 px de haut et tient sur une ligne à 360 px : environ 303 px dans une carte de 328 px, c’est-à-dire presque toute la bande du bas de la carte. Plus étroit (320 px), ou avec un texte agrandi, elle passe sur deux lignes, alignées à droite, et monte d’autant (48 px) : jamais coupée, jamais cachée. <strong>Sa hauteur est mesurée</strong> (<code>offsetHeight</code> de notre élément de crédits, à chaque cadrage et à chaque changement de taille de la carte) : la marge de cadrage et la hauteur de la bulle en dépendent (ci-dessous), si bien que deux lignes ne cachent rien de plus qu’une. Repli, si Geoapify exige « Powered by Geoapify » mot pour mot : « Powered by Geoapify · © OpenMapTiles.org · © OpenStreetMap » mesure environ 373 px et passe sur deux lignes à 360 px ; grâce à la hauteur mesurée, la mise en page reste juste ; la promesse « une ligne à 360 px » ne vaut alors que pour la forme courte.</li>
+      <li>Le lien « © OpenStreetMap » : cible de <strong>24 px</strong> de haut au moins (le minimum de WCAG 2.2 AA, 2.5.8) ; il s’ouvre dans un nouvel onglet (<code>target="_blank"</code>, <code>rel="noopener noreferrer"</code>) et le dit au lecteur d’écran par <code>&lt;span class="sr-only"&gt; {t("newTab")}&lt;/span&gt;</code> (<code>Contact.newTab</code>). Anneau de focus lisible sur la carte : un anneau sombre de 2 px à l’intérieur du lien (<code>outline-offset: -2px</code>) sur un fond blanc opaque, jamais coupé par le bord de la carte.</li>
+      <li>Les crédits sont <strong>notre propre élément</strong>, dans la boîte de la carte, à z-index 1000 (celui des coins de Leaflet), au-dessus des points, <strong>rendu dès le départ</strong> : il est là pendant le chargement (CA1.14), avant que Leaflet soit importé ; ce n’est donc ni un <code>L.Control</code> ni le contrôle d’attribution de Leaflet, et celui-ci est coupé (<code>attributionControl: false</code>). Son <code>offsetHeight</code> est ce que lisent la marge de cadrage et la hauteur maximale de la bulle. Gestes : le même motif que les points (#484, <code>pointButton</code> de <code>leaflet-map.ts</code>), ses écouteurs étant posés une fois Leaflet chargé : <code>L.DomEvent.disableClickPropagation</code> sur les crédits, puis le <code>touchstart</code> arrêté <strong>seulement à un doigt</strong>. Donc : un glisser à la souris qui commence sur les crédits ne déplace pas la carte ; un tap à un doigt ouvre le lien (et ni un glisser ni le <code>tapHold</code> de Safari ne le voient) ; un pincement dont un doigt est sur les crédits zoome comme partout ailleurs, le second toucher atteignant la carte. Dans l’ordre de Tab, le lien vient <strong>en dernier</strong> : le conteneur, les points, « Zoom avant », « Zoom arrière », puis « © OpenStreetMap ».</li>
+      <li>Points près des crédits : la marge de cadrage du bas est <strong>dérivée</strong> de la hauteur mesurée des crédits <code>h</code> : <code>h + 32</code> (56 px à une ligne, 80 px à deux) ; et <code>h + 64</code> quand le drapeau a un point sous lui (88 px à une ligne), car ce bouton est ancré 16 px sous le drapeau (<code>top-4</code>) et haut de 44 px, soit jusqu’à 60 px sous la position du drapeau, son étiquette de +24 à +52 px. Marges de 32 px en haut et sur les côtés, inchangées. Ainsi, après un cadrage, aucun point, aucune étiquette ni aucun bouton de point ne recoupe la boîte des crédits, drapeau le plus au sud compris. Après un déplacement à la main, un point peut passer dessous : les crédits restent au-dessus, le point reste atteignable au clavier et dans la liste, et un déplacement le dégage.</li>
+      <li>La bulle garde sa place de #238 : en haut à droite de la carte (<code>place()</code>, à <code>BUBBLE_INSET</code> = 10 px des bords). Sa hauteur maximale devient <code>size.y − 2·BUBBLE_INSET − h</code> (avant : <code>size.y − 2·BUBBLE_INSET</code>) : son bas s’arrête 10 px au-dessus des crédits, et elle défile en elle-même au-delà. Elle reste au-dessus des crédits dans l’ordre d’empilement (z-index 1001 contre 1000) ; comme elle ne descend plus dans leur bande, aucun ne cache l’autre.</li>
+      <li>Les crédits sont là dès que la boîte de la carte l’est, chargement compris (rien ne saute), et absents sous un avis de Leaflet. Le préfixe « Leaflet » n’est pas affiché : sa licence (BSD 2-Clause) ne demande rien sur la carte. <strong>Exigence</strong> : la notice de licence de Leaflet part avec le build de production, soit parce que le minificateur garde son en-tête <code>@preserve</code>, soit par un fichier de notices ; sa mise en œuvre et sa preuve reviennent à la tâche des crédits, #558.</li></ul></div>
     <div class="card"><h3>La carte</h3><ul>
       <li>Le conteneur Leaflet : <code>role="region"</code>, nommé « Carte de l’aller : … » ou « Carte du retour : … », focusable (flèches, + et −), décrit par l’avis de tuiles quand il est là.</li>
       <li>Ordre de Tab : le conteneur, puis les points de voiture dans l’ordre des fiches (un groupe à la place de sa première voiture), puis « Zoom avant », « Zoom arrière » (44 px chacun).</li>
-      <li>Textes de Leaflet remplacés : <code>zoomInTitle</code>, <code>zoomOutTitle</code> traduits ; attribution en texte sans lien ni titre anglais ; pas de popup Leaflet (pas de « Close popup ») : la bulle est la nôtre.</li>
+      <li>Textes de Leaflet remplacés : <code>zoomInTitle</code>, <code>zoomOutTitle</code> traduits ; crédits dans le coin en bas à droite, en ligne de texte à nous (voir ci-dessous) ; pas de popup Leaflet (pas de « Close popup ») : la bulle est la nôtre.</li>
       <li>Au toucher (<code>pointer: coarse</code>) : <code>dragging: false</code>, un doigt fait défiler la page ; deux doigts déplacent et zooment (<code>touchZoom</code>) ; la phrase « Deux doigts pour déplacer ou zoomer la carte. » sous la carte. À la souris : seuls le glisser et les boutons ; la molette fait défiler la page (<code>scrollWheelZoom: false</code>) ; ni double-clic ni glisser avec Maj ne zooment (<code>doubleClickZoom: false</code>, <code>boxZoom: false</code>).</li>
-      <li>Cadrage à l’ouverture sur tous les points (marge 32 px, zoom 15 au plus) ; drapeau seul : zoom 14. À une mise à jour, recadrage seulement si personne n’a déplacé ni zoomé la carte. Jamais animé.</li>
+      <li>Cadrage à l’ouverture sur tous les points (marge 32 px ; en bas, la hauteur mesurée des crédits plus 32 px, ou plus 64 px quand le drapeau a un point, depuis la v22 ; zoom 15 au plus) ; drapeau seul : zoom 14. À une mise à jour, recadrage seulement si personne n’a déplacé ni zoomé la carte. Jamais animé.</li>
       <li>Lignes : droites, 2 px, sans interaction ; aucune pour une voiture au lieu même de l’événement.</li></ul></div>
     <div class="card"><h3>Les points</h3><ul>
       <li>Le drapeau de l’événement : pas un bouton, hors de l’ordre de Tab, <code>role="img"</code> nommé « Lieu de l’événement : {lieu} ».</li>
@@ -624,10 +663,16 @@
       <tr><td><code>EventMap.loading</code></td><td>Chargement de la carte…</td><td>Loading the map…</td><td>dans la boîte de la carte, non annoncé</td></tr>
       <tr><td><code>EventMap.failed.title</code></td><td>La carte n’a pas pu se charger.</td><td>The map could not load.</td><td>Leaflet en échec</td></tr>
       <tr><td><code>EventMap.tilesFailed.title</code></td><td>Le fond de carte n’a pas pu se charger.</td><td>The map background could not load.</td><td>tuiles en échec</td></tr>
-      <tr><td><code>EventMap.failed.body</code></td><td>Vérifiez la connexion, puis réessayez.</td><td>Check your connection, then try again.</td><td>les deux avis</td></tr>
-      <tr><td><code>EventMap.retry</code></td><td>Réessayer</td><td>Try again</td><td>les deux avis</td></tr>
+      <tr><td><code>EventMap.failed.body</code></td><td>Vérifiez la connexion, puis réessayez.</td><td>Check your connection, then try again.</td><td>avis de Leaflet</td></tr>
+      <tr><td><code>EventMap.tilesFailed.body</code></td><td>Vérifiez la connexion, ou réessayez dans un moment.</td><td>Check your connection, or try again in a moment.</td><td>avis de tuiles (v19 : la panne ou le quota du fournisseur, pas seulement la connexion)</td></tr>
+      <tr><td><code>EventMap.failedAgain.title</code></td><td>La carte n’a toujours pas pu se charger.</td><td>The map still could not load.</td><td>second échec de Leaflet, en ligne</td></tr>
+      <tr><td><code>EventMap.failedAgain.body</code></td><td>La page a peut-être été mise à jour depuis votre arrivée : rechargez-la.</td><td>The page may have been updated since you opened it: reload it.</td><td>idem</td></tr>
+      <tr><td><code>EventMap.reload</code></td><td>Recharger la page</td><td>Reload the page</td><td>idem, avant « Réessayer »</td></tr>
+      <tr><td><code>EventMap.retry</code></td><td>Réessayer</td><td>Try again</td><td>les trois avis</td></tr>
       <tr><td><code>EventMap.zoomIn</code> / <code>zoomOut</code></td><td>Zoom avant / Zoom arrière</td><td>Zoom in / Zoom out</td><td>boutons de zoom</td></tr>
-      <tr><td><code>EventMap.attribution</code></td><td>Source : IGN – Plan IGN v2, {date}</td><td>Source: IGN – Plan IGN v2, {date}</td><td>bas à droite, après « Leaflet » ; <code>{date}</code> = mois et année, mis en forme par next-intl</td></tr>
+      <tr><td><code>EventMap.attribution</code></td><td>Geoapify · © OpenMapTiles.org ·</td><td>Geoapify · © OpenMapTiles.org ·</td><td>crédits, dans le coin en bas à droite de la carte, avant le lien</td></tr>
+      <tr><td><code>EventMap.osmLink</code></td><td>© OpenStreetMap</td><td>© OpenStreetMap</td><td>lien vers <code>https://www.openstreetmap.org/copyright</code>, 24 px ; suivi de <code>Contact.newTab</code> en <code>sr-only</code></td></tr>
+      <tr><td><code>Contact.newTab</code> (existante)</td><td>(s’ouvre dans un nouvel onglet)</td><td>(opens in a new tab)</td><td>texte pour lecteur d’écran du lien OpenStreetMap, comme dans le bas de page</td></tr>
     </tbody></table></div>
 
   <!-- ============================================================ -->
@@ -641,28 +686,32 @@
     <li><strong>CA1.6</strong> Deux voitures à moins de 25 m l’une de l’autre (à 10 m, par exemple) font un seul point ; à 40 m, deux points. Deux voitures à la même position font un seul point « 2 voitures : {prénoms} » ; l’activer ouvre une bulle avec un bouton par voiture puis « Fermer », le focus sur le premier ; Échap ou « Fermer » la ferment et rendent le focus au point ; un bouton de voiture mène à sa fiche ; Tab depuis « Fermer » va au point suivant et ferme la bulle. Aucun texte anglais de Leaflet (« Close popup », « A JavaScript library… ») dans la page en français.</li>
     <li><strong>CA1.7</strong> Carte ouverte, quand la page applique un nouvel état (réponse d’une action, ou « Actualiser » sur <code>/admin</code>) : une voiture ajoutée ou retirée apparaît ou disparaît, sans refermer la carte ; le focus suit la table « Mises à jour et focus » ; l’ordre de Tab des points reste celui des fiches.</li>
     <li><strong>CA1.8</strong> Aucun débordement horizontal à 360 ni à 1280 px ; la carte fait 240 px de haut sous une fenêtre de 448 px de large et 280 px à partir de 448 px ; aucun texte d’étiquette sous 12 px ; boutons de zoom, points et boutons de la bulle ont des cibles de 44 px au moins.</li>
-    <li><strong>CA1.9</strong> Avec un titre et un lieu de 30 caractères, à 360 × 780, carte repliée, le bandeau reste au-dessus du pli (C9.2) ; le haut de la première fiche est mesuré par le test et noté.</li>
+    <li><strong>CA1.9</strong> Avec un titre et un lieu de 30 caractères, à 360 × 780, carte repliée, le bandeau (538 à 578 px) et le haut de la première fiche (714 px) sont au-dessus du pli (C9.2) : valeurs mesurées par la relecture de #542 (#484), que le test retrouve.</li>
     <li><strong>CA1.10</strong> Rien n’anime dans la carte : à chaque image (<code>requestAnimationFrame</code>) d’un clic sur « Zoom avant », d’un cadrage et d’un déplacement au clavier (flèches), <code>getAnimations()</code> ne renvoie aucune animation sur aucun élément de la carte. Aucun élément n’a <code>leaflet-zoom-anim</code>, <code>leaflet-pan-anim</code> (que Leaflet pose sur le panneau de la carte pendant tout un déplacement animé) ni <code>leaflet-proxy</code>, et le conteneur n’a pas <code>leaflet-fade-anim</code>. <strong>Seuls</strong> les conteneurs de tuiles et le moteur SVG des lignes peuvent porter <code>leaflet-zoom-animated</code> : Leaflet 1.9.4 la leur pose toujours, quelles que soient les options (<code>GridLayer._updateLevels</code> pour les tuiles, <code>Renderer.onAdd</code> pour le SVG) ; elle n’y fixe qu’un <code>transform-origin</code>, et sa transition ne s’applique que sous <code>leaflet-zoom-anim</code>, qui n’apparaît jamais. Sur tout autre élément, <code>leaflet-zoom-animated</code> reste interdit. Cette classe ne peut donc pas signaler un <code>zoomAnimation: false</code> oublié : ce sont <code>getAnimations()</code> et la transformation atteinte en une image qui le détectent. Un zoom, un cadrage et un déplacement au clavier (flèches) ne passent par aucune position intermédiaire : la transformation du panneau de la carte atteint sa valeur finale en une image et n’en change plus ensuite.</li>
     <li><strong>CA1.11</strong> Au toucher (Playwright <code>hasTouch</code>, <code>isMobile</code>), un glisser d’un doigt sur la carte fait défiler la page et ne déplace pas la carte ; la phrase « Deux doigts pour déplacer ou zoomer la carte. » est visible ; à la souris, elle ne l’est pas. À la souris, un double-clic sur la carte et un glisser avec Maj laissent le zoom et la vue inchangés.</li>
     <li><strong>CA1.12</strong> Un événement sans retour (pas d’onglets) a le bouton et la carte dans sa section unique, nommée « Carte de l’aller : … ».</li>
     <li><strong>CA1.13</strong> Ouverte sur l’aller, la carte du retour n’a pas de <code>.leaflet-container</code> et ne demande aucune tuile tant que l’onglet Retour n’est pas montré.</li>
-    <li><strong>CA1.14</strong> Le chargement de Leaflet retenu par le test, « Chargement de la carte… » est visible dans la boîte de la carte, qui a <code>aria-busy="true"</code>, son texte contraste à 4,5:1 au moins avec son fond, et la page n’a aucune région <code>status</code> de plus qu’avant l’ouverture.</li>
+    <li><strong>CA1.14</strong> Le chargement de Leaflet retenu par le test, « Chargement de la carte… » est visible dans la boîte de la carte, qui a <code>aria-busy="true"</code>, les crédits sont déjà dans son coin en bas à droite, et le haut de la première fiche ne bouge pas quand la carte arrive ; son texte contraste à 4,5:1 au moins avec son fond, et la page n’a aucune région <code>status</code> de plus qu’avant l’ouverture.</li>
     <li><strong>CA1.15</strong> Une voiture à moins de 25 m de l’événement : pas de ligne pour elle, et son étiquette et le drapeau sont tous deux visibles (aucun ne recouvre l’autre). Deux voitures à moins de 25 m du drapeau mais à 25 m ou plus l’une de l’autre (par exemple à 20 m au nord et à 20 m au sud) : un seul point sous le drapeau, nommé « 2 voitures : {prénoms} » dans l’ordre des fiches, avec la bulle ; aucune étiquette n’en cache une autre. Le drapeau d’abord : la voiture A, à 30 m du drapeau et première dans l’ordre des fiches, et la voiture B, à 20 m du drapeau et à 10 m de A, donnent B sous le drapeau et A en point à part, avec sa ligne. À 100 m : une ligne, et le drapeau au-dessus de l’étiquette.</li>
     <li><strong>CA1.16</strong> Un prénom de 40 caractères : l’étiquette ne dépasse pas 120 px de texte et le nom accessible porte le prénom entier ; deux voitures de deux « Claire » donnent deux points aux noms distincts par leur lieu.</li>
     <li><strong>CA1.17</strong> Sous la carte, quand elles sont là : l’avis de tuiles, puis <code>notOnMap</code>, puis la phrase « deux doigts », dans cet ordre du DOM.</li>
     <li><strong>CA2.1</strong> Événement sans position : ni bouton ni carte sur <code>/e/{id}</code> ; sur <code>/e/{id}/admin</code>, le lien vérifié, la phrase et le bouton « Modifier l’événement », qui ouvre la feuille même quand l’espace organisateur est replié. Espace replié : « Annuler » rend le focus à ce bouton ; « Valider » sans position, « Événement modifié. » et le focus sur ce bouton ; « Valider » avec une position choisie, le focus sur « Carte » de ce leg. Jamais sur <code>&lt;body&gt;</code>.</li>
     <li><strong>CA2.2</strong> Leg vide : le drapeau seul, nommé « … et aucune voiture », et l’état vide « Aucune voiture proposée pour l’aller » / « Personne ne s’est encore inscrit. » reste.</li>
     <li><strong>CA2.3</strong> Des voitures sans position : <code>EventMap.notOnMap</code> donne leur nombre sous la carte, et <code>count</code> du nom de la carte ne les compte pas ; toutes les voitures ont une position : la phrase est absente.</li>
-    <li><strong>CA2.4</strong> Le faux IGN en 500 pour une partie des tuiles : quand la vue a fini de charger, l’avis « Le fond de carte n’a pas pu se charger. » est sous la carte, les points restent, et rien n’est annoncé (aucune région vivante ne change) ; « Réessayer » redemande les tuiles, et l’avis disparaît quand une vue finit de charger sans échec ; le focus, s’il était sur « Réessayer », est alors sur le conteneur de la carte, pas sur <code>&lt;body&gt;</code>.</li>
+    <li><strong>CA2.4</strong> Le faux fournisseur en 500 pour une partie des tuiles : quand la vue a fini de charger, l’avis « Le fond de carte n’a pas pu se charger. » est sous la carte, les points restent, et rien n’est annoncé (aucune région vivante ne change) ; « Réessayer » redemande les tuiles, et l’avis disparaît quand une vue finit de charger sans échec ; le focus, s’il était sur « Réessayer », est alors sur le conteneur de la carte, pas sur <code>&lt;body&gt;</code>.</li>
     <li><strong>CA2.5</strong> Sans JavaScript, le bouton « Carte » n’est pas affiché, et le panneau n’a pas d’autre phrase que <code>Board.needsJavaScript</code>.</li>
-    <li><strong>CA2.6</strong> Le faux IGN en 404 : <code>/tuiles/</code> répond 200 avec un PNG transparent, aucun avis ne s’affiche, et les points restent ; avec le rapport du vrai service (le faux IGN rend, octet pour octet, le corps relevé par #473 : un <code>ExceptionReport</code> OWS 1.1 dont l’<code>Exception</code> a l’attribut <code>exceptionCode</code> à <code>Not Found</code>), ce PNG porte <code>Cache-Control: public, max-age=86400</code> et <code>CDN-Cache-Control: public, s-maxage=86400</code> ; sans ce rapport, <code>Cache-Control: no-store</code>. En 400 (<code>InvalidParameterValue</code> compris), en 403 ou en 429 : 502 <code>no-store</code>, et l’avis de tuiles s’affiche.</li>
+    <li><strong>CA2.6</strong> Le faux fournisseur en 401, 403, 404, 429 ou 500 pour une tuile, ou plus lent que 5 s, ou rendant autre chose qu’un PNG : <code>/tuiles/</code> répond 502, <code>Cache-Control: no-store</code>, corps vide ; l’avis « Le fond de carte n’a pas pu se charger. » / « Vérifiez la connexion, ou réessayez dans un moment. » s’affiche, et les points restent. Aucune tuile n’est plus rendue en PNG transparent. Une coordonnée hors de France (Courmayeur) donne une tuile comme une autre : cela ne prouve que la route et la requête ; la couverture réelle du monde est le coup d’œil du propriétaire, une fois la clé là.</li>
     <li><strong>CA2.7</strong> Le retour supprimé, carte ouverte sur le retour avec le focus sur un point : les onglets disparaissent, la carte de l’aller est ouverte, le focus est sur le titre de l’événement.</li>
-    <li><strong>CA2.8</strong> L’import de Leaflet en échec : l’avis « La carte n’a pas pu se charger. » à la place de la carte, sans boîte vide ; pendant « Réessayer », « Chargement de la carte… » remplace l’avis et la boîte a le focus ; réussi, la carte s’affiche et le focus est sur « Carte » ; un second échec remet l’avis et le focus sur son « Réessayer ».</li>
+    <li><strong>CA2.8</strong> L’import de Leaflet en échec : l’avis « La carte n’a pas pu se charger. » à la place de la carte, sans boîte vide et sans crédits ; pendant « Réessayer », « Chargement de la carte… » remplace l’avis et la boîte a le focus ; réussi, la carte s’affiche et le focus est sur « Carte ». À partir du second échec de suite, en ligne (le troisième compris) : « La carte n’a toujours pas pu se charger. », « Recharger la page » puis « Réessayer », le focus sur « Recharger la page », qui recharge la même adresse ; hors ligne : le premier avis, le focus sur son « Réessayer ».</li>
     <li><strong>CA2.9</strong> Un retour ajouté plus tard (#271), carte ouverte sur l’aller : l’onglet Retour, une fois montré, a sa carte ouverte.</li>
+    <li><strong>CA2.10</strong> Les deux legs ouverts, l’import de Leaflet en échec : chacun montre l’avis ; « Réessayer » sur l’aller, réussi : la carte de l’aller s’affiche, et l’onglet Retour, une fois montré, montre sa carte et pas l’avis. Le module de Leaflet n’est demandé qu’une fois par essai, pour les deux legs. Montrer l’onglet Retour après l’échec, avant tout essai : il montre l’avis, aucune nouvelle demande du module ne part, et le focus reste sur l’onglet.</li>
     <li><strong>CA3.1</strong> Carte ouverte, toute requête du navigateur va à notre origine.</li>
-    <li><strong>CA3.2</strong> <code>/tuiles/{z}/{x}/{y}</code> répond 404 sans appeler l’IGN pour un <code>z</code> hors de 0 à 18, un <code>x</code> ou un <code>y</code> hors de la grille, ou une valeur non entière ; la requête que reçoit le faux IGN ne porte ni IP du visiteur, ni cookie, ni <code>Referer</code> ; une tuile porte <code>CDN-Cache-Control: public, s-maxage=2592000</code> ; un 404 dont le rapport a une <code>Exception</code> OWS d’attribut <code>exceptionCode</code> à <code>Not Found</code> (comparé sur l’attribut, pas sur le texte du corps ; le faux IGN rend le corps réel octet pour octet) donne 200, un PNG transparent et un jour de cache ; un 404 sans ce rapport donne 200, un PNG transparent et <code>no-store</code> ; un 400, un 403, un 429 ou un 5xx donnent 502 <code>no-store</code> ; la requête vers l’IGN porte <code>TILEMATRIXSET=PM_0_19</code> et <code>STYLE=normal</code> (Vitest et bout en bout).</li>
+    <li><strong>CA3.2</strong> <code>/tuiles/{z}/{x}/{y}</code> répond 404, <code>no-store</code>, sans appeler le fournisseur, pour un <code>z</code> hors de 0 à 18, un <code>x</code> ou un <code>y</code> hors de la grille, ou une valeur non entière. La requête que reçoit le faux fournisseur a le chemin <code>/v1/tile/positron/{z}/{x}/{y}@2x.png</code> (le style venant de <code>TILE_STYLE</code>), la seule query <code>apiKey</code> égale à la clé configurée, notre User-Agent, et ni IP du visiteur, ni cookie, ni <code>Referer</code>. Une tuile (200 <code>image/png</code>) porte <code>Cache-Control: public, max-age=86400</code> et <code>CDN-Cache-Control: public, s-maxage=2592000</code> ; tout le reste, 502 <code>no-store</code> au corps vide (Vitest et bout en bout).</li>
     <li><strong>CA3.3</strong> Aucune requête de calcul d’itinéraire, nulle part.</li>
-    <li><strong>CA3.4</strong> (Vitest) Le test de l’attribution échoue quand <code>PLAN_IGN_UPDATED</code> a plus de 12 mois.</li>
+    <li><strong>CA3.4</strong> <em>Retiré en v19</em> : plus de date d’attribution (<code>PLAN_IGN_UPDATED</code> part avec Plan IGN).</li>
+    <li><strong>CA3.5</strong> La clé ne quitte jamais le serveur. Dans le slot, <code>GEOAPIFY_API_KEY</code> vaut une valeur de test qu’on ne peut confondre avec rien d’autre (par exemple <code>fullcar-test-key-7f3a9c2e</code>), donnée par <code>compose.yaml</code> à <code>web</code>, où tourne aussi <code>next build</code> : (bout en bout) cette valeur n’apparaît dans aucun fichier de <code>.next/static</code>, ce qui ne vaut que parce que le build a cette clé dans son environnement ; ni dans un HTML, ni dans une réponse de notre origine (en-têtes et corps, 502 compris, relevés par Playwright), ni dans une URL demandée par le navigateur. (Vitest) Sur chaque chemin du module du fournisseur (tuile, 401, 403, 404, 429, 5xx, erreur réseau, délai, autre chose qu’un PNG, trop gros, disjoncteur ouvert, sans clé), aucun appel de <code>console</code> ne contient la clé, <code>apiKey</code>, l’URL amont ni la tuile ; un fil d’Ariane et un span de la requête sortante sortent de <code>scrub.ts</code> sans <code>apiKey</code> ni la clé ; l’erreur levée sur un échec ne contient pas l’URL. Sans clé configurée, <code>/tuiles/</code> répond 502 <code>no-store</code> sans appeler le fournisseur, et le module écrit la seule ligne « tiles: no key ».</li>
+    <li><strong>CA3.6</strong> (Vitest, horloge et <code>fetch</code> injectés) Après un <strong>429</strong> du fournisseur, aucun appel pendant la durée du disjoncteur, et la route répond aussitôt 502 <code>no-store</code> ; un 5xx (ou un 401, 403, 404) n’ouvre <strong>jamais</strong> le disjoncteur : l’appel suivant part. Durée : <code>TILES_BREAKER_MS</code>, 10 000 par défaut, lu seulement s’il n’est fait que de chiffres (sinon, le défaut) ; <code>Retry-After</code> borné entre <code>TILES_BREAKER_MS</code> et 1 h ; une valeur absente, invalide ou d’une forme obsolète donne <code>TILES_BREAKER_MS</code> ; 0 : jamais ouvert. Avec 10 000 : <code>Retry-After: 1</code>, 10 s ; <code>Retry-After: 120</code>, 120 s ; <code>Retry-After: 7200</code>, 1 h ; <code>TILES_BREAKER_MS=abc</code>, 10 s.</li>
+    <li><strong>CA3.7</strong> Les crédits sont <strong>dans</strong> la carte, posés dans son coin en bas à droite : « Geoapify · © OpenMapTiles.org · © OpenStreetMap », sur une seule ligne de 24 px de haut à 360 × 780 (pour cette forme courte) ; à 320 px de large, sur deux lignes alignées à droite, sans être coupés. « © OpenStreetMap » est un lien vers <code>https://www.openstreetmap.org/copyright</code>, de 24 × 24 px au moins, ouvert dans un nouvel onglet, dont le nom accessible finit par « (s’ouvre dans un nouvel onglet) » (« (opens in a new tab) »), texte <code>sr-only</code>. Au clavier, il vient en dernier dans la carte, après « Zoom arrière », et son anneau de focus reste entier (non coupé par le bord) ; le texte contraste à 4,5:1 au moins sur son fond. Trois gestes : un glisser à la souris qui commence sur les crédits ne déplace pas la carte ; un tap à un doigt sur le lien l’ouvre ; un pincement dont un doigt est sur les crédits zoome la carte. Après un cadrage, aucun point, aucune étiquette ni aucun bouton de point ne recoupe la boîte des crédits, y compris quand le drapeau, avec un point sous lui, est le plus au sud, et quand les crédits font deux lignes (320 px). Une bulle de trois voitures ou plus ne recoupe pas la boîte des crédits (sa hauteur maximale vaut la hauteur de la carte moins 20 px moins celle des crédits). Les crédits sont présents pendant le chargement et absents sous un avis de Leaflet.</li>
   </ol>
 
   <!-- ============================================================ -->
@@ -670,9 +719,20 @@
   <ol class="decisions">
     <li><strong>Propriétaire.</strong> D1 (la carte sort du hors-périmètre V1, <code>product.md</code> amendé dans la première PR de #238, mergée par l’humain), D5 (point exact), D7 (tuiles par notre route, Leaflet, dépendance à approuver), D8 (ligne droite), D9 (« Carte », « fiche ») ; et pour une voiture, toute modification du texte retire la position (#237 v3). Décision : les Arrêts (points de RDV) ne sont pas dans cette maquette ; ils viendront avec l’epic <a href="https://github.com/olaurendeau/fullcar/issues/68">#68</a>. — Raison : faire avancer la carte sans attendre <a href="https://github.com/olaurendeau/fullcar/issues/68">#68</a>.</li>
     <li><strong>Coordinateur.</strong> La carte se met à jour quand la page applique un nouvel état, pas « toutes les 15 s ».</li>
-    <li>Décision : Plan IGN v2 comme source des tuiles. — Raison : la seule source lue dont la licence permet un proxy avec cache, sans clé ni compte.</li>
-    <li>Décision : seul un 404 est une tuile manquante (PNG transparent, 200) ; tout le reste est un échec (502, <code>no-store</code>). — Raison : <code>tileerror</code> ne donne pas le statut, c’est la route qui tranche ; et un 403 ou un 429 (l’IGN qui bloque nos IP) doit se voir, pas devenir un fond blanc d’un jour (re-revue v2).</li>
-    <li><strong>Coordinateur (v8, sur #238).</strong> Décision : un 404 dont le rapport porte <code>exceptionCode="Not Found"</code> est une tuile absente, PNG transparent en cache un jour ; tout autre 404, PNG transparent en <code>no-store</code> ; la branche 400 <code>TileOutOfRange</code> disparaît ; la requête utilise <code>TILEMATRIXSET=PM_0_19</code>. — Raison : c’est ce que l’IGN répond vraiment (relevé de #473) ; sans cache, une carte vue à l’étranger coûterait un appel Vercel et un appel IGN par tuile à chaque affichage ; une <code>IGN_WMTS_URL</code> fausse, sans ce rapport, ne blanchit toujours pas la carte un jour. Remplace la décision du coordinateur de la v4.</li>
+    <li><strong>Propriétaire (v19, #549).</strong> Décision : Geoapify remplace Plan IGN partout, en tuiles raster <code>positron</code> @2x, par notre route en cache ; la clé reste sur le serveur ; l’attribution OpenStreetMap est un lien vers sa licence (44 px en v19, 24 px dans les crédits depuis la v21). — Raison : Plan IGN ne couvre que la France ; Geoapify est le seul fournisseur lu dont les conditions écrites permettent un cache côté serveur.</li>
+    <li>Décision (v19) : toute réponse du fournisseur autre qu’une tuile PNG 200 est un échec (502, <code>no-store</code>) ; plus de PNG transparent. — Raison : <code>tileerror</code> ne donne pas le statut, c’est la route qui tranche ; le fournisseur couvre le monde, un 404 est une erreur de réglage ; un 401, 403 ou 429 doit se voir, pas devenir un fond blanc.</li>
+    <li>Décision (v19) : un disjoncteur après un 429, et seulement un 429, <code>Retry-After</code> borné entre <code>TILES_BREAKER_MS</code> et 1 h, selon les bornes de Photon (#448). — Raison : ne pas user le quota ni insister pendant qu’on est limité ; les tuiles déjà vues restent servies par le CDN ; un 5xx n’est pas une limite.</li>
+    <li><strong>Coordinateur (v20).</strong> Décision : <code>TILES_BREAKER_MS</code> vaut 10 s par défaut. — Raison : la limite de Geoapify est par seconde ; un minimum de 60 s ferait d’un <code>Retry-After: 1</code> une minute sans fond de carte.</li>
+    <li>Décision (v20, v21) : les crédits sont là dès que la boîte de la carte l’est, chargement compris, et absents sous un avis de Leaflet. — Raison : rien ne saute à l’arrivée de la carte ; sans fond de carte, rien à attribuer.</li>
+    <li>Décision (v21) : le lien des crédits vient en dernier dans l’ordre de Tab ; plus de préfixe « Leaflet ». — Raison : le lien n’interrompt pas le parcours des points ; la licence de Leaflet ne demande rien sur la carte.</li>
+    <li>Décision (v22) : la marge de cadrage du bas est dérivée de la hauteur mesurée des crédits, plus 32 px, ou plus 64 px quand le drapeau a un point ; la hauteur maximale de la bulle aussi (<code>size.y − 2·BUBBLE_INSET − h</code>), la bulle gardant sa place en haut à droite. — Raison : revue de la v21 : le point sous le drapeau descend jusqu’à 60 px sous lui, et une bulle de trois voitures ou plus couvrait les crédits ; une hauteur fixe aurait faux dès deux lignes (320 px, texte agrandi, « Powered by Geoapify »).</li>
+    <li>Décision (v22) : les crédits suivent le motif des points pour les gestes (#484) : clic arrêté, <code>touchstart</code> arrêté à un doigt seulement. — Raison : un pincement doit zoomer partout, un doigt sur les crédits compris ; arrêter le seul toucher à un doigt suffit à tenir un glisser à la souris et le <code>tapHold</code> de Safari loin du lien.</li>
+    <li>Décision (v22) : la notice de licence de Leaflet part avec le build de production (<code>@preserve</code> ou fichier de notices), à mettre en œuvre et prouver dans #558. — Raison : c’est ce que demande la BSD 2-Clause, à la place d’un crédit sur la carte.</li>
+    <li>Décision (v21) : le lien « © OpenStreetMap » garde le texte <code>sr-only</code> « (s’ouvre dans un nouvel onglet) » de <code>Contact.newTab</code> ; son style et son anneau de focus sont ceux d’un lien posé sur la carte (sombre, souligné, anneau intérieur sur fond blanc), plus ceux du bas de page. — Raison : le nouvel onglet doit être dit ; un anneau extérieur serait coupé par le bord de la carte et illisible sur certaines tuiles.</li>
+    <li>Décision (v19) : tuiles @2x seulement, une seule entrée de cache par tuile. — Raison : net sur les téléphones, qui sont le cas principal ; un seul chemin, sans détection d’écran.</li>
+    <li><strong>Propriétaire (24/10, v21).</strong> Décision : les crédits redeviennent une ligne courte posée sur la carte, en bas à droite, sur un fond blanc translucide, comme le contrôle de Leaflet : « Geoapify · © OpenMapTiles.org · © OpenStreetMap », le lien « © OpenStreetMap » avec une cible de 24 px (minimum de WCAG 2.2 AA). Remplace le lien de 44 px sous la carte (v19, v20). — Raison : une ligne de 64 px sous chaque carte pesait trop pour des crédits ; dans le coin, ils ne prennent que 24 px.</li>
+    <li>Décision (v19) : « Recharger la page » au second échec de Leaflet, en ligne. — Raison : après un déploiement, l’ancien morceau de code répond 404 pour toujours, et « Réessayer » ne peut plus réussir (relecture de #540).</li>
+    <li>Décision (v19) : un seul import de Leaflet pour la page, partagé par les legs. — Raison : un essai réussi sur un leg ne doit pas laisser l’autre sur l’échec (relecture de #540).</li>
     <li>Décision : libellé fixe « Carte », l’état dit par <code>aria-expanded</code> et le chevron. — Raison : le motif des autres replis de l’écran.</li>
     <li>Décision : les points sont de vrais <code>&lt;button&gt;</code>. — Raison : Entrée et Espace sans code à nous.</li>
     <li>Décision : regroupement à 25 m. — Raison : en dessous, deux points se confondent même au zoom maximal ; au-dessus, deux départs sont vraiment distincts, sauf sous le drapeau, où ils forment un seul point.</li>
@@ -680,7 +740,7 @@
     <li>Décision du coordinateur (v17) : le drapeau d’abord. D’abord, les voitures à moins de 25 m du drapeau forment le point du drapeau ; ensuite, les autres se regroupent entre elles à 25 m, comme avant. — Raison : une seule règle pour une voiture proche à la fois du drapeau et d’une autre voiture ; sans ordre, son point dépendrait de l’ordre des fiches.</li>
     <li>Décision : sans JavaScript, le bouton est masqué (<code>noscript:hidden</code>), sans phrase de plus. — Raison : une seule phrase « JavaScript » par panneau, comme aujourd’hui.</li>
     <li>Décision : la feuille ouverte depuis la phrase de l’organisateur rend le focus à cette phrase, ou à « Carte » quand une position arrive. — Raison : le bouton de l’espace organisateur peut être caché (replié).</li>
-    <li>Décision : la date d’attribution est vérifiée par un test qui échoue après 12 mois. — Raison : une constante qu’on oublie n’est pas une mention à jour.</li>
+    <li>Décision (v19) : plus de date d’attribution ni de test de date. — Raison : elle venait de la Licence Ouverte de Plan IGN ; Geoapify et l’ODbL ne demandent pas de date.</li>
     <li>Décision : l’avis de tuiles apparaît quand une vue a fini de charger avec au moins un échec, part quand une vue finit sans échec, et n’est pas annoncé. — Raison : un avis à chaque tuile clignoterait ; les tuiles sont décoratives pour un lecteur d’écran.</li>
     <li>Décision : deux avis, « La carte… » (Leaflet) et « Le fond de carte… » (tuiles). — Raison : dans le second cas les points marchent ; dire « la carte » serait faux.</li>
     <li>Décision : le drapeau n’est pas un bouton. — Raison : il ne mène nulle part ; le lieu est dans l’en-tête.</li>
@@ -715,16 +775,24 @@
   <!-- ============================================================ -->
   <h2 id="proprietaire">Pour le propriétaire</h2>
   <div class="note"><ul style="margin:0;padding-left:20px">
-    <li><strong>Aucun compte, aucune clé</strong> à créer pour les tuiles ni pour Photon.</li>
-    <li><strong>Hors de France</strong> : <strong>répondu</strong> par le relevé de #473 (sur <a href="https://github.com/olaurendeau/fullcar/issues/238#issuecomment-6368674599">#238</a>) : en Suisse et en Italie, Plan IGN répond 404 <code>Not Found</code>, que la carte montre comme un fond blanc, sans avis. Si un fond blanc ne suffit pas, l’autre voie reste un hébergeur avec clé et accord écrit pour un proxy (Geoapify, CARTO), dont le compte et la clé seraient les vôtres.</li>
-    <li><strong>La licence</strong> : Licence Ouverte 2.0 par défaut selon les CGU ; à confirmer dans les métadonnées de Plan IGN v2, avec la mention et la date attendues.</li>
-    <li><strong>Vercel</strong> : transfert et appels de fonction à surveiller ; tout le trafic vers l’IGN part de ses IP. Hors de sa couverture, l’IGN répond 404 <code>Not Found</code> (relevé de #473) : ces tuiles vides sont en cache un jour, donc une zone à l’étranger coûte un appel de fonction et un appel à l’IGN par tuile et par jour au CDN, pas à chaque vue.</li>
-    <li><strong>PR mergées par l’humain</strong> : Leaflet (environ 40 Ko compressés) ; le faux IGN et <code>IGN_WMTS_URL</code> dans <code>compose.yaml</code> ; <code>product.md</code> (D1) ; le glossaire (D9).</li>
+    <li><strong>Avant la mise en production</strong> : créer le compte Geoapify ; mettre la clé dans Vercel, dans <code>GEOAPIFY_API_KEY</code>, variable du serveur (jamais <code>NEXT_PUBLIC_*</code>) ; obtenir du support de Geoapify une confirmation écrite qu’un proxy avec cache côté serveur est permis (#549).</li>
+    <li><strong>Le style</strong> : <code>positron</code> par défaut ; le regarder une fois la clé là, et changer <code>TILE_STYLE</code> au besoin (<code>osm-bright</code>, par exemple), puis purger le cache du CDN de Vercel.</li>
+    <li><strong>Questions pour la demande écrite à Geoapify</strong> : « Geoapify » seul suffit-il, ou faut-il « Powered by Geoapify » mot pour mot, et faut-il un lien vers geoapify.com ? Leur exemple écrit « Powered by Geoapify » en lien, mais aucune page lue ne l’exige. Pour OpenMapTiles, la licence se contente de « OpenMapTiles.org » en texte : pas de question.</li>
+    <li><strong>Le quota</strong> : environ 12 000 tuiles par jour gratuites ; le tableau de bord de Geoapify en dit l’usage. Le code HTTP renvoyé quand il est épuisé reste à vérifier avec la vraie clé : la route en fait un échec quel qu’il soit.</li>
+    <li><strong>Vercel</strong> : transfert et appels de fonction à surveiller ; les tuiles @2x pèsent plus que les tuiles IGN.</li>
+    <li><strong>PR mergées par l’humain</strong> : le faux fournisseur et ses variables dans <code>compose.yaml</code> (à la place du faux IGN) ; la documentation de l’architecture qui nomme Plan IGN.</li>
   </ul></div>
 
   <!-- ============================================================ -->
   <h2 id="revisions">Révisions</h2>
   <ul>
+    <li><strong>Notes d’en-tête des versions précédentes</strong>, déplacées ici en v20 (elles décrivent des règles depuis retirées, Plan IGN compris) :<ul>
+      <li><strong>La v8</strong> (décision du coordinateur sur #238, après le relevé de #473) : le vrai WMTS ne répond jamais 400 <code>TileOutOfRange</code> ; une tuile absente est un 404 <code>Not Found</code>, désormais en cache un jour, tout autre 404 en <code>no-store</code> ; grille <code>PM_0_19</code> ; attribution datée d’octobre 2026. Ce qu’on voit ne change pas : à l’étranger, toujours le drapeau sur un fond blanc. Les mentions de <code>TileOutOfRange</code> dans les notes des versions précédentes décrivent ces versions.</li>
+      <li><strong>La v6</strong> (décision du propriétaire) : une section « <a href="#plus-tard">Plus tard : les Arrêts</a> » dit que les Arrêts ne sont pas dans cette maquette et sont attendus avec l’epic #68 ; rien d’autre ne change.</li>
+      <li><strong>La v5</strong> (corrections de texte notées sur #238) : en-tête de cache navigateur d’une tuile <code>TileOutOfRange</code> ; « un autre 400 » dans la note des tests ; le faux IGN répond aussi 403, 429 et un autre 400 ; le coût Vercel des tuiles vides tirées d’un 404.</li>
+      <li><strong>La v4</strong> (après l’approbation de la v3) : une tuile vide tirée d’un 404 n’est pas mise en cache (décision du coordinateur), celle d’un 400 <code>TileOutOfRange</code> l’est un jour ; la note des tests dit la même règle ; critères dans l’ordre ; dépend de <code>place-autocomplete</code> v5.</li>
+      <li><strong>La v3</strong> (re-revue de la v2) : seules 404 et 400 <code>TileOutOfRange</code> sont des tuiles manquantes, tout autre 4xx est un échec ; le focus quand « Réessayer » disparaît ; le focus autour du bouton « Modifier l’événement » de l’organisateur ; un libellé fixe « Carte » ; des points qui sont de vrais boutons ; un regroupement à 25 m ; sans JavaScript, le bouton masqué.</li>
+    </ul></li>
     <li><strong>v1</strong> (2026-10-23) : première version, après les décisions D1 à D9 du propriétaire.</li>
     <li><strong>v2</strong> (2026-10-23) : revue de design de la v1, <strong>changements demandés</strong> (sept bloquants, vingt-et-une suggestions), tous appliqués ; et décision du propriétaire sur les lieux de voiture (#237 v3). Tuile manquante en PNG vide, échec en 502 (CA2.6) ; avis de tuiles : déclenchement, fin, silence (CA2.4) ; Leaflet en échec dessiné (CA2.8) ; événement sans retour (CA1.12), retour supprimé (CA2.7) et ajouté (CA2.9) ; table du focus aux mises à jour et ordre de Tab (CA1.7) ; mises à jour à l’application d’un nouvel état (coordinateur) ; aucune animation (CA1.10) ; drapeau non bouton (CA1.4) ; 672 px calculé ; <code>button[aria-expanded]</code> + <code>hidden</code> + <code>&lt;noscript&gt;</code> ; états vides d’aujourd’hui ; textes anglais de Leaflet remplacés, attribution sans lien ; beaucoup de voitures, voiture au lieu de l’événement, prénom de 40 caractères, deux « Claire » (CA1.15, CA1.16) ; <code>count</code> = voitures sur la carte ; <code>Board.car.full</code> ; ordre de Tab du groupe et du zoom ; deux doigts au toucher (CA1.11) ; carte d’un onglet caché démarrée à l’affichage (CA1.13) ; observables de CA1.2 ; pas de région <code>status</code> de plus (CA1.14) ; faux IGN et <code>IGN_WMTS_URL</code> ; attribution avec source et date ; IP de sortie de Vercel ; utilisateur à l’étranger ; phrase de l’organisateur avec son bouton.</li>
     <li><strong>v3</strong> (2026-10-23) : re-revue de la v2, <strong>changements demandés</strong> (trois bloquants, dix-sept suggestions), tous appliqués. Seuls 404 et 400 <code>TileOutOfRange</code> donnent une tuile vide, tout autre 4xx est un échec (CA2.6, CA3.2) ; focus quand « Réessayer » disparaît (CA2.4, CA2.8) ; focus autour du bouton « Modifier l’événement » de la phrase (CA2.1) ; classes d’animation de Leaflet 1.9.4 (CA1.10) ; libellé fixe « Carte » ; points en vrais boutons, Espace (CA1.4) ; <code>notOnMap</code> absent à 0 ; regroupement à 25 m et texte à 12 px au moins (CA1.6) ; CA1.2 en avant/après ; <code>aria-busy</code> sur la boîte, aucune région <code>status</code> de plus (CA1.14) ; ordre des lignes sous la carte (CA1.17) ; position d’événement qui change ; seuil de 25 m pour le drapeau (CA1.15) ; bulle (fiche, Tab) ; sans JavaScript masqué ; maquette sans retour (icône, référence) ; test de la date d’attribution (CA3.4) ; contraste du chargement ; 448 px pour la hauteur.</li>
@@ -743,5 +811,11 @@
     <li><strong>v16</strong> (2026-10-24) : trou trouvé par #481 : deux voitures à moins de 25 m du drapeau mais à 25 m ou plus l’une de l’autre faisaient deux points au même endroit, l’un caché (contre CA1.8). Règle du coordinateur : les voitures à moins de 25 m du drapeau forment un seul point sous lui, dans l’ordre des fiches, groupé à partir de deux. Anatomie, CA1.15 et une décision.</li>
     <li><strong>v17</strong> (2026-10-24) : revue de la v16, changements demandés. Décision du coordinateur : le drapeau d’abord (les voitures à moins de 25 m du drapeau forment son point, puis les autres se regroupent entre elles à 25 m) ; cas A/B dans CA1.15. « Sauf sous le drapeau » partout où l’on dit « pas de regroupement au-delà de 25 m », et dans la raison des 25 m ; table du focus : le point du drapeau qui gagne ou perd une voiture ; ordre de Tab du point du drapeau ; vignette « 2 » sous le drapeau.</li>
     <li><strong>v18</strong> (2026-10-24) : v17 approuvée. Correction de texte dans l’anatomie : « pas de regroupement (il faudrait un plugin), sauf sous le drapeau ».</li>
+    <li><strong>v19</strong> (2026-10-24) : epic #549, décisions du propriétaire : Geoapify remplace Plan IGN partout (raster <code>positron</code> @2x, <code>TILE_STYLE</code>, clé <code>GEOAPIFY_API_KEY</code> côté serveur) ; attribution sous la carte avec un lien de 44 px vers la licence d’OpenStreetMap ; tout ce qui n’est pas une tuile est un 502, disjoncteur après un 429 ; plus de « Not Found », de <code>PM_0_19</code>, de date d’attribution (CA3.4 retiré) ; faux fournisseur sur les ports 2324 et 2325 ; CA2.6, CA3.2 réécrits, CA3.5 à CA3.7 nouveaux. Suites de #238 : « Recharger la page » au second échec de Leaflet (CA2.8), import partagé par les legs (CA2.10), CA1.9 aux valeurs mesurées (714 px). Avis de tuiles : « ou réessayez dans un moment ». Le reste de la v18 ne change pas.</li>
+    <li><strong>v20</strong> (2026-10-24) : revue de la v19, changements demandés (quatre bloquants, dix suggestions), tous appliqués : l’avis de tuiles sous l’attribution (CA1.17) ; la ligne d’attribution présente pendant le chargement, absente sous un avis de Leaflet (CA1.14, CA2.8, CA3.7) ; le lien OpenStreetMap au motif <code>outLink</code> du bas de page, avec <code>Contact.newTab</code> en <code>sr-only</code> et l’anneau de focus (CA3.7, Les mots) ; CA3.5 en Vitest et en observations de bout en bout, clé de test distinctive présente au build ; disjoncteur sur 429 seulement, <code>TILES_BREAKER_MS</code> lu s’il n’est fait que de chiffres, 10 s par défaut (décision du coordinateur) ; « tiles: no key » ; CA2.8 « à partir du second échec » ; CA2.10 l’onglet montré après un échec ; CA2.6 la couverture réelle au coup d’œil du propriétaire ; notes d’en-tête v3 à v8 déplacées ici ; question des liens Geoapify et OpenMapTiles pour le support ; anneau de focus du lien dessiné.</li>
+    <li><strong>v21</strong> (2026-10-24) : décision du propriétaire du 24/10, qui revient sur le lien de 44 px : les crédits sont une ligne courte posée sur la carte, en bas à droite, sur fond blanc translucide, « Geoapify · © OpenMapTiles.org · © OpenStreetMap » (la forme la plus courte que permettent les conditions d’OSM, d’OpenMapTiles et de Geoapify ; « Leaflet » retiré, sa licence ne demande rien sur la carte) ; le lien « © OpenStreetMap » a une cible de 24 px, garde <code>Contact.newTab</code> en <code>sr-only</code> et un anneau de focus intérieur lisible sur la carte. Les crédits : au-dessus des points et de la bulle, cadrage avec 56 px en bas, pas une surface de déplacement, dernier dans l’ordre de Tab ; présents au chargement, absents sous un avis de Leaflet ; sur deux lignes sous 360 px. CA1.14, CA1.17, CA3.7 et l’anatomie mis à jour ; le style « bas de page » de la v20 abandonné.</li>
+    <li><strong>Verdict de la v21</strong> : changements demandés (trois bloquants : le point sous le drapeau caché par les crédits après un cadrage ; un pincement sur les crédits, contraire à #484 ; la bulle, qui couvrait les crédits et que « au-dessus de son point » aurait changée ; trois suggestions retenues par le coordinateur).</li>
+    <li><strong>v22</strong> (2026-10-24) : revue de la v21 appliquée, la décision du propriétaire sur les crédits inchangée. Marge de cadrage du bas = hauteur mesurée des crédits + 32 px, ou + 64 px quand le drapeau a un point (son bouton descend à 60 px sous lui) ; bulle en haut à droite comme en #238, hauteur maximale <code>size.y − 2·BUBBLE_INSET − h</code>, au-dessus des crédits dans l’empilement (1001 contre 1000) sans recouvrement ; gestes au motif des points : clic arrêté, <code>touchstart</code> arrêté à un doigt, un pincement avec un doigt sur les crédits zoome ; CA3.7 en trois gestes, sans « glisser à un doigt » ; repli « Powered by Geoapify » (373 px, deux lignes à 360 px, mise en page juste grâce à la hauteur mesurée) ; notice de Leaflet : exigence pour #558.</li>
+    <li><strong>v23</strong> (2026-10-24) : v22 approuvée. Correction de texte (suggestion de la revue, retenue par le coordinateur) : les crédits ne sont pas un contrôle de Leaflet mais notre propre élément dans la boîte de la carte, à z-index 1000, rendu dès le départ (il existe pendant le chargement, avant l’import de Leaflet) ; ses écouteurs (clic arrêté, <code>touchstart</code> arrêté à un doigt) sont posés une fois Leaflet chargé ; son <code>offsetHeight</code> donne la marge de cadrage et la hauteur maximale de la bulle ; ni <code>L.Control</code> ni contrôle d’attribution de Leaflet, coupé.</li>
   </ul>
 </div>
