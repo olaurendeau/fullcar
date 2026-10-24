@@ -421,10 +421,19 @@
       "retour": "{car}, dépose : {location}, {seats}"
     },
     "freeSeats": "{free, plural, one {# place libre} other {# places libres}}",
+    "group": "{count, plural, other {# voitures}} : {drivers}",
     "notOnMap": "{count, plural, one {# voiture n’est pas sur la carte : son lieu n’a pas de position.} other {# voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.}}",
     "touchHint": "Deux doigts pour déplacer ou zoomer la carte.",
     "organiserHint": "Pour afficher la carte, choisissez le lieu de l’événement parmi les propositions.",
     "loading": "Chargement de la carte…",
+    "failed": {
+      "title": "La carte n’a pas pu se charger.",
+      "body": "Vérifiez la connexion, puis réessayez."
+    },
+    "tilesFailed": {
+      "title": "Le fond de carte n’a pas pu se charger."
+    },
+    "retry": "Réessayer",
     "zoomIn": "Zoom avant",
     "zoomOut": "Zoom arrière",
     "attribution": "Source : IGN – Plan IGN v2, {date}"
