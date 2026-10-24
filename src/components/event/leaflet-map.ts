@@ -154,8 +154,16 @@ function pointIcon(point: CarPoint, onPress: (button: HTMLButtonElement) => void
   text.textContent = point.label;
   label.append(text);
   button.append(label);
-  // A press on a point neither drags nor zooms the map.
+  // A press on a point neither drags nor zooms the map. One finger on it stays there: neither
+  // a drag nor Leaflet's `tapHold` (Safari on a phone), which would cancel its click, sees it.
+  // A second one reaches the map: a pinch whose second finger lands on a point zooms it (#484).
+  // The `off` removes the very listener `disableClickPropagation` adds for `touchstart` in
+  // Leaflet 1.9.4; e2e/event-map-touch.spec.ts guards it (« the second one on a car's point »).
   L.DomEvent.disableClickPropagation(button);
+  L.DomEvent.off(button, "touchstart", L.DomEvent.stopPropagation);
+  L.DomEvent.on(button, "touchstart", (event) => {
+    if ((event as TouchEvent).touches.length === 1) L.DomEvent.stopPropagation(event);
+  });
   button.addEventListener("click", () => onPress(button));
   return L.divIcon({ html: button, className: "z-auto!", iconSize: [0, 0] });
 }
