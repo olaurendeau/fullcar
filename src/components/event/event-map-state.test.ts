@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { distanceMetres, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
-import { leafletStep, mapUpdate, pointKey, TILES_QUIET, tilesStep, type MapFocus, type MapView, type TilesView } from "./event-map-state";
+import {
+  LEAFLET_IDLE,
+  leafletFocus,
+  leafletStep,
+  mapUpdate,
+  pointKey,
+  TILES_QUIET,
+  tilesStep,
+  type LeafletEvent,
+  type LeafletState,
+  type MapFocus,
+  type MapView,
+  type TilesView,
+} from "./event-map-state";
 
 /** The event's place: the flag. */
 const FLAG: Position = { lat: 45.764, lng: 4.8357 };
@@ -438,35 +451,78 @@ describe("never <body>: the map's container, failing all else", () => {
   });
 });
 
-describe("Leaflet's import (CA2.8)", () => {
+describe("Leaflet's import (CA2.8, CA2.10)", () => {
+  const loading = (failures = 0): LeafletState => ({ phase: "loading", failures, again: false });
+  /** `state` after `event`, online unless said otherwise. */
+  const step = (state: LeafletState, event: LeafletEvent, online = true) => leafletStep(state, event, online);
+  /** Where the focus goes from `before` after `event`. */
+  const focus = (before: LeafletState, event: LeafletEvent, focusInBox: boolean, online = true) =>
+    leafletFocus(before, event, step(before, event, online), focusInBox);
+
+  it("nothing asked for until a map opens; opened, loading", () => {
+    expect(LEAFLET_IDLE).toEqual({ phase: "idle", failures: 0, again: false });
+    expect(step(LEAFLET_IDLE, "open")).toEqual(loading());
+    expect(focus(LEAFLET_IDLE, "open", true)).toBeNull();
+  });
+
   it("failed at the first opening: the notice, the focus where it was", () => {
-    expect(leafletStep("loading", "failed", false)).toEqual({ phase: "failed", focus: null });
+    expect(step(loading(), "failed")).toEqual({ phase: "failed", failures: 1, again: false });
+    expect(focus(loading(), "failed", false)).toBeNull();
   });
 
   it("loaded at the first opening: the map, the focus where it was", () => {
-    expect(leafletStep("loading", "loaded", false)).toEqual({ phase: "ready", focus: null });
+    expect(step(loading(), "loaded")).toEqual({ phase: "ready", failures: 0, again: false });
+    expect(focus(loading(), "loaded", false)).toBeNull();
   });
 
-  it("« Réessayer »: loading again, the focus to the box", () => {
-    expect(leafletStep("failed", "retry", false)).toEqual({ phase: "loading", focus: "box" });
-    expect(leafletStep("failed", "retry", true)).toEqual({ phase: "loading", focus: "box" });
+  it("« Réessayer »: loading again, the failures kept, the focus to the box", () => {
+    const failed: LeafletState = { phase: "failed", failures: 1, again: false };
+    expect(step(failed, "retry")).toEqual(loading(1));
+    expect(focus(failed, "retry", false)).toBe("box");
+    expect(focus(failed, "retry", true)).toBe("box");
   });
 
-  it("loaded while the box has the focus: to « Carte »", () => {
-    expect(leafletStep("loading", "loaded", true)).toEqual({ phase: "ready", focus: "toggle" });
+  it("loaded while the box has the focus: to « Carte », and no failure left", () => {
+    expect(step(loading(2), "loaded")).toEqual({ phase: "ready", failures: 0, again: false });
+    expect(focus(loading(2), "loaded", true)).toBe("toggle");
   });
 
-  it("failed again while the box has the focus: to its « Réessayer »", () => {
-    expect(leafletStep("loading", "failed", true)).toEqual({ phase: "failed", focus: "retry" });
+  it("failed the first time while the box has the focus: to its « Réessayer »", () => {
+    expect(focus(loading(), "failed", true)).toBe("retry");
   });
 
-  it("an import that ends when nothing waits for it changes nothing", () => {
-    for (const event of ["loaded", "failed"] as const) {
-      expect(leafletStep("ready", event, true)).toEqual({ phase: "ready", focus: null });
-      expect(leafletStep("failed", event, true)).toEqual({ phase: "failed", focus: null });
+  it("failed a second time in a row, online: « toujours », the focus to « Recharger la page »", () => {
+    expect(step(loading(1), "failed")).toEqual({ phase: "failed", failures: 2, again: true });
+    expect(focus(loading(1), "failed", true)).toBe("reload");
+    expect(focus(loading(1), "failed", false)).toBeNull();
+  });
+
+  it("failed a third time, online: « toujours » still, the focus to « Recharger la page »", () => {
+    expect(step(loading(2), "failed")).toEqual({ phase: "failed", failures: 3, again: true });
+    expect(focus(loading(2), "failed", true)).toBe("reload");
+  });
+
+  it("failed again offline: the first notice, the focus to its « Réessayer »", () => {
+    expect(step(loading(1), "failed", false)).toEqual({ phase: "failed", failures: 2, again: false });
+    expect(focus(loading(1), "failed", true, false)).toBe("retry");
+    // Online again at the next failure: still in a row.
+    expect(step(loading(2), "failed")).toEqual({ phase: "failed", failures: 3, again: true });
+  });
+
+  it("an event that nothing waits for changes nothing, and moves no focus", () => {
+    const ready: LeafletState = { phase: "ready", failures: 0, again: false };
+    const failed: LeafletState = { phase: "failed", failures: 2, again: true };
+    for (const state of [LEAFLET_IDLE, ready, failed]) {
+      for (const event of ["loaded", "failed"] as const) {
+        expect(step(state, event)).toBe(state);
+        expect(focus(state, event, true)).toBeNull();
+      }
     }
-    expect(leafletStep("loading", "retry", true)).toEqual({ phase: "loading", focus: null });
-    expect(leafletStep("ready", "retry", true)).toEqual({ phase: "ready", focus: null });
+    for (const state of [loading(1), ready, failed]) expect(step(state, "open")).toBe(state);
+    for (const state of [LEAFLET_IDLE, loading(1), ready]) {
+      expect(step(state, "retry")).toBe(state);
+      expect(focus(state, "retry", true)).toBeNull();
+    }
   });
 });
 
