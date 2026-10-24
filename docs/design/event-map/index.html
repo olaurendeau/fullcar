@@ -163,7 +163,7 @@
 
 <div class="wrap">
   <h1>Carte de l’événement</h1>
-  <p class="lead">Issue <a href="https://github.com/olaurendeau/fullcar/issues/238">#238</a>, <strong>version 16</strong>, après <a href="https://github.com/olaurendeau/fullcar/issues/237">#237</a> (maquette <code>place-autocomplete</code>, v5), qui donne leur <strong>position</strong> aux lieux. Dans chaque leg, une <strong>carte</strong> repliée montre le lieu de l’événement, le lieu de départ (aller) ou de dépose (retour) de chaque voiture qui a une position, et une ligne droite de chacune vers l’événement. Elle ne dit rien que la liste ne dise déjà, et chaque point de voiture mène à la <strong>fiche</strong> de sa voiture.</p>
+  <p class="lead">Issue <a href="https://github.com/olaurendeau/fullcar/issues/238">#238</a>, <strong>version 18</strong>, après <a href="https://github.com/olaurendeau/fullcar/issues/237">#237</a> (maquette <code>place-autocomplete</code>, v5), qui donne leur <strong>position</strong> aux lieux. Dans chaque leg, une <strong>carte</strong> repliée montre le lieu de l’événement, le lieu de départ (aller) ou de dépose (retour) de chaque voiture qui a une position, et une ligne droite de chacune vers l’événement. Elle ne dit rien que la liste ne dise déjà, et chaque point de voiture mène à la <strong>fiche</strong> de sa voiture.</p>
   <p class="lead">Décisions du propriétaire : la carte sort du hors-périmètre V1 (D1) ; le point exact (D5) ; de vraies tuiles par notre route en cache au CDN, avec Leaflet (D7) ; une ligne droite (D8) ; « Carte », « fiche » (D9) ; et, depuis la v3 de <code>place-autocomplete</code>, <strong>toute modification du texte d’un lieu de voiture retire sa position</strong> : une voiture sur la carte est donc exactement là où son texte le dit. Décision du coordinateur : la carte se met à jour quand la page applique un nouvel état (pas de rafraîchissement automatique sur main, #67).</p>
   <p class="lead"><strong>La v8</strong> (décision du coordinateur sur #238, après le relevé de #473) : le vrai WMTS ne répond jamais 400 <code>TileOutOfRange</code> ; une tuile absente est un 404 <code>Not Found</code>, désormais en cache un jour, tout autre 404 en <code>no-store</code> ; grille <code>PM_0_19</code> ; attribution datée d’octobre 2026. Ce qu’on voit ne change pas : à l’étranger, toujours le drapeau sur un fond blanc. Les mentions de <code>TileOutOfRange</code> dans les notes des versions précédentes décrivent ces versions.</p>
   <p class="lead"><strong>La v6</strong> (décision du propriétaire) : une section « <a href="#plus-tard">Plus tard : les Arrêts</a> » dit que les Arrêts ne sont pas dans cette maquette et sont attendus avec l’epic #68 ; rien d’autre ne change.</p>
@@ -295,7 +295,7 @@
   <!-- ============================================================ -->
   <h2 id="cas">Cas difficiles</h2>
   <div class="grid">
-    <div class="state"><h3>Beaucoup de voitures autour d’un village</h3><p>Huit voitures entre Brindas et Vaugneray. Les voitures à moins de <strong>25 m</strong> l’une de l’autre forment un seul point (un même parking, deux maisons voisines : à zoom 18, elles seraient à quelques pixels). Au-delà, les étiquettes peuvent se toucher ; la dernière dans l’ordre des fiches est dessus ; leur texte reste à 12 px, jamais moins, et zoomer les sépare. <span class="crit">CA1.6</span></p>
+    <div class="state"><h3>Beaucoup de voitures autour d’un village</h3><p>Huit voitures entre Brindas et Vaugneray. Les voitures à moins de <strong>25 m</strong> l’une de l’autre forment un seul point, une fois formé le point du drapeau (voir « Les points ») (un même parking, deux maisons voisines : à zoom 18, elles seraient à quelques pixels). Au-delà, les étiquettes peuvent se toucher ; la dernière dans l’ordre des fiches est dessus ; leur texte reste à 12 px, jamais moins, et zoomer les sépare. <span class="crit">CA1.6</span></p>
       <div class="phone"><div class="screen">
         <div class="map">
           <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
@@ -322,6 +322,19 @@
           <div class="zoom"><span>+</span><span>−</span></div>
           <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
           <span class="mk" style="left:65.2%;top:66%"><svg class="ico"><use href="#car"/></svg>Sophie</span>
+          <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
+          <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
+        </div>
+      </div></div></div>
+
+    <div class="state"><h3>Deux voitures au lieu de l’événement : le point « 2 »</h3><p>Sophie et Nina partent toutes deux à moins de 25 m du drapeau (à 20 m au nord, à 20 m au sud : 40 m l’une de l’autre). Un seul point sous le drapeau, « 2 », nommé « 2 voitures : Sophie, Nina » dans l’ordre des fiches, avec la bulle ; pas de ligne pour elles. Il prend dans l’ordre de Tab la place de Sophie, sa première voiture. <span class="crit">CA1.15</span></p>
+      <div class="phone"><div class="screen">
+        <div class="map">
+          <svg class="tiles" aria-hidden="true"><use href="#tiles"/></svg>
+          <svg class="tiles" viewBox="0 0 328 240" preserveAspectRatio="none" aria-hidden="true"><g stroke="#171717" stroke-opacity=".7" stroke-width="2" fill="none"><path d="M102 72 L214 128"/></g></svg>
+          <div class="zoom"><span>+</span><span>−</span></div>
+          <span class="mk ev" style="left:65.2%;top:53.3%"><svg class="ico"><use href="#flag"/></svg></span>
+          <span class="mk group" style="left:65.2%;top:66%"><svg class="ico"><use href="#car"/></svg>2</span>
           <span class="mk" style="left:31%;top:30%"><svg class="ico"><use href="#car"/></svg>Claire</span>
           <span class="attr">Leaflet | Source : IGN – Plan IGN v2, octobre 2026</span>
         </div>
@@ -463,7 +476,7 @@
       <tr><td>les places libres changent</td><td>le nom du point change ; rien ne bouge</td><td>reste</td></tr>
       <tr><td>la position de l’événement est retirée</td><td>la carte et son bouton disparaissent ; sur <code>/admin</code>, la phrase de l’organisateur arrive</td><td>à l’onglet actif, ou au titre de l’événement sans onglets (<code>focusLandmark</code>)</td></tr>
       <tr><td>la position de l’événement est ajoutée</td><td>le bouton apparaît, replié</td><td>sur <code>/admin</code>, après un « Valider » de la feuille ouverte depuis la phrase : au bouton « Carte » de ce leg</td></tr>
-      <tr><td>la position de l’événement change</td><td>le drapeau et les lignes se déplacent ; recadrage seulement si personne n’a touché la carte</td><td>reste (le drapeau n’est pas focusable)</td></tr>
+      <tr><td>la position de l’événement change</td><td>le drapeau et les lignes se déplacent ; recadrage seulement si personne n’a touché la carte</td><td>reste (le drapeau n’est pas focusable) ; si le point du drapeau gagne ou perd une voiture : comme « regroupement ou séparation »</td></tr>
       <tr><td>la feuille « Modifier l’événement » ouverte depuis la phrase de l’organisateur se ferme</td><td>—</td><td>au bouton « Modifier l’événement » de la phrase (s’il est encore là) ; « Événement modifié. » sans position : même cible ; avec une position : « Carte » de ce leg</td></tr>
       <tr><td>tuiles : l’avis disparaît après une vue chargée sans échec</td><td>l’avis part</td><td>si « Réessayer » l’avait : au conteneur de la carte</td></tr>
       <tr><td>Leaflet : « Réessayer », l’import relancé</td><td>« Chargement de la carte… » remplace l’avis</td><td>à la boîte de chargement (<code>tabindex="-1"</code>)</td></tr>
@@ -581,8 +594,8 @@
     <div class="card"><h3>Les points</h3><ul>
       <li>Le drapeau de l’événement : pas un bouton, hors de l’ordre de Tab, <code>role="img"</code> nommé « Lieu de l’événement : {lieu} ».</li>
       <li>Chaque point de voiture : un vrai <code>&lt;button type="button"&gt;</code> dans l’icône (<code>divIcon</code>), le marqueur ayant <code>keyboard: false</code> : Entrée et Espace marchent nativement ; nom complet ; cible de 44 × 44 px au moins ; étiquette au prénom, coupée à 120 px, texte à 12 px au moins.</li>
-      <li>« Même position » : à moins de 25 m (distance calculée dans le domaine). Des voitures à moins de 25 m font un seul point, avec leur nombre et la bulle ; une voiture à moins de 25 m du drapeau n’a pas de ligne et s’ancre sous lui. Les voitures à moins de 25 m du drapeau forment un seul point, sous le drapeau, dans l’ordre des fiches ; à partir de deux, c’est le point groupé habituel (mêmes mots, même bulle), même si elles sont à 25 m ou plus l’une de l’autre. Le drapeau est toujours au-dessus des étiquettes.</li>
-      <li>Au-delà de 25 m : pas de regroupement (il faudrait un plugin) ; le dernier dans l’ordre des fiches est dessus.</li>
+      <li>« Même position » : à moins de 25 m (distance calculée dans le domaine). <strong>D’abord, les voitures à moins de 25 m du drapeau forment le point du drapeau ; ensuite, les autres se regroupent entre elles à 25 m, comme avant.</strong> Des voitures à moins de 25 m font un seul point, avec leur nombre et la bulle ; une voiture à moins de 25 m du drapeau n’a pas de ligne et s’ancre sous lui. Les voitures à moins de 25 m du drapeau forment un seul point, sous le drapeau, dans l’ordre des fiches ; à partir de deux, c’est le point groupé habituel (mêmes mots, même bulle), même si elles sont à 25 m ou plus l’une de l’autre. Comme tout point groupé, le point du drapeau prend dans l’ordre de Tab la place de sa première voiture dans l’ordre des fiches. Le drapeau est toujours au-dessus des étiquettes.</li>
+      <li>Au-delà de 25 m : pas de regroupement (il faudrait un plugin), sauf sous le drapeau ; le dernier dans l’ordre des fiches est dessus.</li>
       <li>La bulle est insérée dans le DOM juste après son point, se ferme quand le focus la quitte, et chacun de ses boutons de voiture mène à la fiche.</li></ul></div>
     <div class="card"><h3>Rien de plus que la liste</h3><ul>
       <li>Le nom d’un point ne dit que ce que dit sa fiche : « Voiture de {prénom} », le texte de son lieu, ses places libres (ou « Complet », <code>Board.car.full</code>).</li>
@@ -634,7 +647,7 @@
     <li><strong>CA1.12</strong> Un événement sans retour (pas d’onglets) a le bouton et la carte dans sa section unique, nommée « Carte de l’aller : … ».</li>
     <li><strong>CA1.13</strong> Ouverte sur l’aller, la carte du retour n’a pas de <code>.leaflet-container</code> et ne demande aucune tuile tant que l’onglet Retour n’est pas montré.</li>
     <li><strong>CA1.14</strong> Le chargement de Leaflet retenu par le test, « Chargement de la carte… » est visible dans la boîte de la carte, qui a <code>aria-busy="true"</code>, son texte contraste à 4,5:1 au moins avec son fond, et la page n’a aucune région <code>status</code> de plus qu’avant l’ouverture.</li>
-    <li><strong>CA1.15</strong> Une voiture à moins de 25 m de l’événement : pas de ligne pour elle, et son étiquette et le drapeau sont tous deux visibles (aucun ne recouvre l’autre). Deux voitures à moins de 25 m du drapeau mais à 25 m ou plus l’une de l’autre (par exemple à 20 m au nord et à 20 m au sud) : un seul point sous le drapeau, nommé « 2 voitures : {prénoms} » dans l’ordre des fiches, avec la bulle ; aucune étiquette n’en cache une autre. À 100 m : une ligne, et le drapeau au-dessus de l’étiquette.</li>
+    <li><strong>CA1.15</strong> Une voiture à moins de 25 m de l’événement : pas de ligne pour elle, et son étiquette et le drapeau sont tous deux visibles (aucun ne recouvre l’autre). Deux voitures à moins de 25 m du drapeau mais à 25 m ou plus l’une de l’autre (par exemple à 20 m au nord et à 20 m au sud) : un seul point sous le drapeau, nommé « 2 voitures : {prénoms} » dans l’ordre des fiches, avec la bulle ; aucune étiquette n’en cache une autre. Le drapeau d’abord : la voiture A, à 30 m du drapeau et première dans l’ordre des fiches, et la voiture B, à 20 m du drapeau et à 10 m de A, donnent B sous le drapeau et A en point à part, avec sa ligne. À 100 m : une ligne, et le drapeau au-dessus de l’étiquette.</li>
     <li><strong>CA1.16</strong> Un prénom de 40 caractères : l’étiquette ne dépasse pas 120 px de texte et le nom accessible porte le prénom entier ; deux voitures de deux « Claire » donnent deux points aux noms distincts par leur lieu.</li>
     <li><strong>CA1.17</strong> Sous la carte, quand elles sont là : l’avis de tuiles, puis <code>notOnMap</code>, puis la phrase « deux doigts », dans cet ordre du DOM.</li>
     <li><strong>CA2.1</strong> Événement sans position : ni bouton ni carte sur <code>/e/{id}</code> ; sur <code>/e/{id}/admin</code>, le lien vérifié, la phrase et le bouton « Modifier l’événement », qui ouvre la feuille même quand l’espace organisateur est replié. Espace replié : « Annuler » rend le focus à ce bouton ; « Valider » sans position, « Événement modifié. » et le focus sur ce bouton ; « Valider » avec une position choisie, le focus sur « Carte » de ce leg. Jamais sur <code>&lt;body&gt;</code>.</li>
@@ -662,8 +675,9 @@
     <li><strong>Coordinateur (v8, sur #238).</strong> Décision : un 404 dont le rapport porte <code>exceptionCode="Not Found"</code> est une tuile absente, PNG transparent en cache un jour ; tout autre 404, PNG transparent en <code>no-store</code> ; la branche 400 <code>TileOutOfRange</code> disparaît ; la requête utilise <code>TILEMATRIXSET=PM_0_19</code>. — Raison : c’est ce que l’IGN répond vraiment (relevé de #473) ; sans cache, une carte vue à l’étranger coûterait un appel Vercel et un appel IGN par tuile à chaque affichage ; une <code>IGN_WMTS_URL</code> fausse, sans ce rapport, ne blanchit toujours pas la carte un jour. Remplace la décision du coordinateur de la v4.</li>
     <li>Décision : libellé fixe « Carte », l’état dit par <code>aria-expanded</code> et le chevron. — Raison : le motif des autres replis de l’écran.</li>
     <li>Décision : les points sont de vrais <code>&lt;button&gt;</code>. — Raison : Entrée et Espace sans code à nous.</li>
-    <li>Décision : regroupement à 25 m. — Raison : en dessous, deux points se confondent même au zoom maximal ; au-dessus, deux départs sont vraiment distincts.</li>
+    <li>Décision : regroupement à 25 m. — Raison : en dessous, deux points se confondent même au zoom maximal ; au-dessus, deux départs sont vraiment distincts, sauf sous le drapeau, où ils forment un seul point.</li>
     <li>Décision : les voitures à moins de 25 m du drapeau forment un seul point sous lui, groupé à partir de deux (mêmes mots, même bulle). — Raison : à moins de 25 m, c’est déjà « la même position » ; deux points au même endroit sous le drapeau en cacheraient un, qui n’aurait plus de cible.</li>
+    <li>Décision du coordinateur (v17) : le drapeau d’abord. D’abord, les voitures à moins de 25 m du drapeau forment le point du drapeau ; ensuite, les autres se regroupent entre elles à 25 m, comme avant. — Raison : une seule règle pour une voiture proche à la fois du drapeau et d’une autre voiture ; sans ordre, son point dépendrait de l’ordre des fiches.</li>
     <li>Décision : sans JavaScript, le bouton est masqué (<code>noscript:hidden</code>), sans phrase de plus. — Raison : une seule phrase « JavaScript » par panneau, comme aujourd’hui.</li>
     <li>Décision : la feuille ouverte depuis la phrase de l’organisateur rend le focus à cette phrase, ou à « Carte » quand une position arrive. — Raison : le bouton de l’espace organisateur peut être caché (replié).</li>
     <li>Décision : la date d’attribution est vérifiée par un test qui échoue après 12 mois. — Raison : une constante qu’on oublie n’est pas une mention à jour.</li>
@@ -678,7 +692,7 @@
     <li>Décision : la phrase de l’organisateur porte son propre bouton « Modifier l’événement ». — Raison : revue v1 ; l’espace organisateur peut être replié.</li>
     <li>Décision : une voiture au lieu de l’événement n’a pas de ligne, son étiquette sous le drapeau. — Raison : une ligne nulle ne dit rien, et les deux doivent rester visibles.</li>
     <li>Décision : étiquette coupée à 120 px ; deux prénoms identiques restent identiques sur la carte. — Raison : la place à 360 px ; la fiche fait de même.</li>
-    <li>Décision : pas de regroupement au-delà de 25 m, sans plugin ; le nom d’un point utilise le texte du lieu ; recadrage à une mise à jour seulement si la carte n’a pas été touchée ; sans position d’événement, pas de carte. — Raison : inchangées depuis la v1.</li>
+    <li>Décision : pas de regroupement au-delà de 25 m, sauf sous le drapeau, sans plugin ; le nom d’un point utilise le texte du lieu ; recadrage à une mise à jour seulement si la carte n’a pas été touchée ; sans position d’événement, pas de carte. — Raison : inchangées depuis la v1.</li>
       </ol>
 
   <!-- ============================================================ -->
@@ -727,5 +741,7 @@
     <li><strong>v14</strong> (2026-10-24) : CA1.10 amendé avant #480 : Leaflet 1.9.4 pose toujours <code>leaflet-zoom-animated</code> sur le moteur SVG des lignes (<code>Renderer.onAdd</code>, confirmé par la revue de #529) ; la classe est permise sur les conteneurs de tuiles et sur ce moteur, et sur rien d’autre ; elle ne peut plus signaler un <code>zoomAnimation: false</code> oublié, que <code>getAnimations()</code> et la transformation en une image détectent. Options : <code>boxZoom: false</code> et <code>doubleClickZoom: false</code> (décision du coordinateur sur #529).</li>
     <li><strong>v15</strong> (2026-10-24) : v14 approuvée. L’anatomie dit qu’à la souris seuls le glisser et les boutons comptent (la molette fait défiler la page, ni double-clic ni glisser avec Maj ne zooment) ; CA1.11 vérifie qu’un double-clic et un glisser avec Maj laissent le zoom et la vue inchangés ; une décision le justifie.</li>
     <li><strong>v16</strong> (2026-10-24) : trou trouvé par #481 : deux voitures à moins de 25 m du drapeau mais à 25 m ou plus l’une de l’autre faisaient deux points au même endroit, l’un caché (contre CA1.8). Règle du coordinateur : les voitures à moins de 25 m du drapeau forment un seul point sous lui, dans l’ordre des fiches, groupé à partir de deux. Anatomie, CA1.15 et une décision.</li>
+    <li><strong>v17</strong> (2026-10-24) : revue de la v16, changements demandés. Décision du coordinateur : le drapeau d’abord (les voitures à moins de 25 m du drapeau forment son point, puis les autres se regroupent entre elles à 25 m) ; cas A/B dans CA1.15. « Sauf sous le drapeau » partout où l’on dit « pas de regroupement au-delà de 25 m », et dans la raison des 25 m ; table du focus : le point du drapeau qui gagne ou perd une voiture ; ordre de Tab du point du drapeau ; vignette « 2 » sous le drapeau.</li>
+    <li><strong>v18</strong> (2026-10-24) : v17 approuvée. Correction de texte dans l’anatomie : « pas de regroupement (il faudrait un plugin), sauf sous le drapeau ».</li>
   </ul>
 </div>
