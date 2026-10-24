@@ -202,6 +202,18 @@ test.describe("the fake IGN", () => {
     expect(second.headers["x-second"]).toBe("yes");
   });
 
+  test("refuses a delay longer than a timer holds, which Node would cut to 1 ms", async ({ seededEvent }) => {
+    const tile = tileOf(seededEvent.id);
+    await expect(answerTiles([tile], { kind: "error", delayMs: 2 ** 31 })).rejects.toThrow("(400)");
+
+    // Nothing was set: the tile is answered at once, a PNG.
+    const started = Date.now();
+    await expectTile(await getTile(tile));
+    expect(Date.now() - started).toBeLessThan(1000);
+    // The longest a timer holds is still accepted.
+    await answerTiles([tileOf(seededEvent.id, 1)], { delayMs: 2 ** 31 - 1 });
+  });
+
   test("records a request that is still waiting for its delay", async ({ seededEvent }) => {
     const tile = tileOf(seededEvent.id);
     await answerTiles([tile], { delayMs: 1500 });
