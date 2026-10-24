@@ -29,7 +29,7 @@ function sides(targets: Locator): Promise<number[]> {
   );
 }
 
-/** The font size of every text shown in `map`, labels, bubble, zoom and attribution, in CSS pixels. */
+/** The font size of every text shown in `map`, labels, bubble, zoom and credits, in CSS pixels. */
 function textSizes(map: Locator): Promise<number[]> {
   return map.evaluate((root) => {
     const sizes: number[] = [];
@@ -87,7 +87,7 @@ for (const [where, device, height, width] of [
       for (const side of await sides(bubble.getByRole("button"))) expect(side).toBeGreaterThanOrEqual(44);
       expect(await sideways(page)).toBe(0);
 
-      // Every text of the map, the bubble open: the points' labels, its own, the zoom's and the attribution's.
+      // Every text of the map, the bubble open: the points' labels, its own, the zoom's and the credits'.
       const sizes = await textSizes(map);
       expect(sizes.length).toBeGreaterThanOrEqual(8);
       expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);

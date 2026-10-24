@@ -53,6 +53,27 @@ async function selectTab(page: Page, name: "Aller" | "Retour") {
 /** The box of the map while it loads: the one element of the container with `aria-busy`. */
 const busyBox = (page: Page) => container(page).locator('[aria-busy="true"]');
 
+const credits = (page: Page, leg: Leg = "aller") => container(page, leg).locator("[data-map-credits]");
+
+/**
+ * The credits against the map's box, in CSS pixels: how far from its right and bottom edges,
+ * their height, and whether the middle of their text is theirs on screen, above what loads.
+ */
+function creditsCorner(page: Page) {
+  return credits(page).evaluate((element) => {
+    // In the region, in the box.
+    const box = element.parentElement!.parentElement!;
+    const [inner, outer] = [element.getBoundingClientRect(), box.getBoundingClientRect()];
+    const on = document.elementFromPoint(inner.x + 20, inner.y + inner.height / 2);
+    return {
+      right: Math.round(outer.right - inner.right),
+      bottom: Math.round(outer.bottom - inner.bottom),
+      height: inner.height,
+      seen: !!on && element.contains(on),
+    };
+  });
+}
+
 /** The page hydrated and quiet: what it loads on its own is loaded, so that a route set now catches Leaflet's code alone. */
 async function quiet(page: Page, id: string, fragment = "") {
   await page.goto(`/e/${id}${fragment}`);
@@ -123,7 +144,7 @@ async function holdBuild(page: Page) {
 }
 
 test.describe("Leaflet's code", () => {
-  test("CA1.14: held, « Chargement de la carte… » in the box, aria-busy, 4.5:1, and no status region more", async ({ page, placed }) => {
+  test("CA1.14: held, « Chargement de la carte… » in the box, aria-busy, 4.5:1, the credits already in its corner, and no status region more", async ({ page, placed }) => {
     await quiet(page, placed.id);
     const before = await page.locator('[role="status"]').count();
     const build = await holdBuild(page);
@@ -134,11 +155,16 @@ test.describe("Leaflet's code", () => {
     await expect(busyBox(page)).toHaveCount(1);
     expect(await contrast(text, text)).toBeGreaterThanOrEqual(4.5);
     expect(await page.locator('[role="status"]').count()).toBe(before);
+    // Before Leaflet is there: the credits in the box's bottom right corner, above the loading text.
+    const loading = await creditsCorner(page);
+    expect(loading).toEqual({ right: 0, bottom: 0, height: 24, seen: true });
 
     await build.release();
     await expect(page.getByRole("region", { name: ALLER_MAP }).locator(".leaflet-tile-loaded").first()).toBeVisible();
     await expect(container(page).locator("[aria-busy]")).toHaveCount(0);
     await expect(container(page).getByText(LOADING)).toHaveCount(0);
+    // Nothing moves when the map comes.
+    expect(await creditsCorner(page)).toEqual(loading);
   });
 
   test("CA2.8: refused, the notice in place of the map; « Réessayer », the box focused; loaded, the focus on « Carte »", async ({ page, placed }) => {
@@ -150,9 +176,11 @@ test.describe("Leaflet's code", () => {
     await expect(notice(page, FAILED)).toBeVisible();
     await expect(notice(page, FAILED).getByText(BODY, { exact: true })).toBeVisible();
     await expect(notice(page, FAILED).getByRole("button")).toHaveText(["Réessayer"]);
-    // No empty box: neither the map nor its loading.
+    // No empty box: neither the map nor its loading, nor its credits: no map, nothing to credit.
     await expect(page.getByRole("region", { name: ALLER_MAP })).toHaveCount(0);
     await expect(container(page).getByText(LOADING)).toBeHidden();
+    await expect(credits(page)).toBeHidden();
+    await expect(container(page).getByRole("link", { name: /OpenStreetMap/ })).toHaveCount(0);
     await expect(mapButton(page)).toBeFocused();
 
     // « Réessayer »: the box, loading, in place of the notice, has the focus; loaded, the map, and the focus on « Carte ».
@@ -183,6 +211,7 @@ test.describe("Leaflet's code", () => {
       await expect(notice(page, FAILED_AGAIN).getByRole("button")).toHaveText(["Recharger la page", "Réessayer"]);
       await expect(container(page).getByText(FAILED, { exact: true })).toHaveCount(0);
       await expect(page.getByRole("region", { name: ALLER_MAP })).toHaveCount(0);
+      await expect(credits(page)).toBeHidden();
       await expect(reload(page), failure).toBeFocused();
     }
 
@@ -352,5 +381,8 @@ test.describe("the tiles", () => {
       ),
     );
     expect(lines).toEqual(["Carte", "map", `${TILES_FAILED}${TILES_BODY}Réessayer`, NOT_ON_MAP, TOUCH_HINT]);
+    // No attribution under the map any more: the credits are in it (#558).
+    await expect(page.getByRole("region", { name: ALLER_MAP }).locator("[data-map-credits]")).toBeVisible();
+    await expect(container(page).locator("[data-map-credits]")).toHaveCount(1);
   });
 });

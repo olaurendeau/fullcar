@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { holdToken, newToken } from "./device";
-import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, overlap, points, seedCar, test } from "./event-map-points";
+import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, OSM_LINK, overlap, points, seedCar, test } from "./event-map-points";
 import { expect, leaveNoToken } from "./fixtures";
 
 /*
@@ -85,7 +85,7 @@ test("CA1.4, CA1.5: points in the order of the cards, between the container and 
   await page.setViewportSize({ width: 412, height: 500 });
   await page.goto(`/e/${placed.id}`);
   const map = await openMap(page, mapName("aller", "3 voitures"));
-  expect(await focusableIn(map)).toEqual([...names, "Zoom avant", "Zoom arrière"]);
+  expect(await focusableIn(map)).toEqual([...names, "Zoom avant", "Zoom arrière", OSM_LINK]);
 
   // CA1.5: the first name, the place and the free seats (or « Complet ») of each name are on its card.
   const panel = page.getByRole("tabpanel");

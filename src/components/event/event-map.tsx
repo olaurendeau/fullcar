@@ -108,6 +108,42 @@ function MapNotice({
   );
 }
 
+/** OpenStreetMap's licence page, where « © OpenStreetMap » leads (v21). */
+const OSM_COPYRIGHT = "https://www.openstreetmap.org/copyright";
+
+/**
+ * The credits (v21, the owner's decision of 24/10): one short line on the map, at its bottom
+ * right, « Geoapify · © OpenMapTiles.org · » then the link « © OpenStreetMap », 24 × 24 px at
+ * least, to a new tab, which `Contact.newTab` says. Two lines, aligned right, never cut, when
+ * the box is narrower (320 px) or the text larger. Ours, not a control of Leaflet's: there from
+ * the loading on, above the opaque loading text and the points (z-index 1000), under the bubble
+ * and the ring element. Its focus ring is its own, inside it, on opaque white: one outside
+ * would be cut by the map's edge, and unreadable on some tiles.
+ * Inside Leaflet's container, `.leaflet-container a` would colour the link: hence `!`.
+ */
+function Credits({ ref }: { ref: Ref<HTMLParagraphElement> }) {
+  const t = useTranslations("EventMap");
+  const tContact = useTranslations("Contact");
+  return (
+    <p
+      ref={ref}
+      data-map-credits=""
+      className="absolute right-0 bottom-0 z-1000 max-w-full rounded-tl-[4px] bg-[rgba(255,255,255,.8)] px-1.5 text-right font-sans text-xs leading-6 text-[#333]"
+    >
+      {t("attribution")}{" "}
+      <a
+        href={OSM_COPYRIGHT}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-h-6 min-w-6 items-center rounded-[3px] px-[3px] align-top text-[#0a0a0a]! underline underline-offset-2 focus-visible:bg-white focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#0a0a0a]"
+      >
+        {t("osmLink")}
+        <span className="sr-only"> {tContact("newTab")}</span>
+      </a>
+    </p>
+  );
+}
+
 /**
  * A leg's map (epic #238, event-map v18), in le conteneur (#562, v27), a bordered block hidden
  * whole without JavaScript: the « Carte » button as its header, a fixed label whose chevron says
@@ -123,8 +159,9 @@ function MapNotice({
  * The map has the flag and a point per car of the leg with a position, `cars` in the order of
  * the cards, cars less than 25 m apart in one point, and those less than 25 m from the flag in
  * its one point (`mapOf`, v18); its name counts them, and `notOnMap` the others. An activated
- * point leads to its card (`showCar`), a grouped one opens its bubble, whose buttons do. Under
- * the map, in this order (CA1.17): the tiles' notice (CA2.4, `tilesStep`), part of the map's
+ * point leads to its card (`showCar`), a grouped one opens its bubble, whose buttons do. The
+ * credits are in the map, at its bottom right, loading too, and hidden with the box under
+ * Leaflet's notice (CA1.14, CA2.8, CA3.7). Under the map, in this order (CA1.17): the tiles' notice (CA2.4, `tilesStep`), part of the map's
  * description, `notOnMap`, then, at touch only, the two-finger sentence.
  * A new state of the page updates the map started (`update`, « Mises à jour et focus »), folded
  * or in a hidden tab too, where its framing waits for a size.
@@ -138,6 +175,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const folded = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const leaflet = useRef<HTMLDivElement>(null);
+  const credits = useRef<HTMLParagraphElement>(null);
   const retryImport = useRef<HTMLButtonElement>(null);
   const reload = useRef<HTMLButtonElement>(null);
   const retryTiles = useRef<HTMLButtonElement>(null);
@@ -207,8 +245,6 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const zoomIn = t("zoomIn");
   const zoomOut = t("zoomOut");
   const close = tActions("close");
-  // Until #558 puts our own credits in the map's box, with their link: v27's words, as text.
-  const attribution = `${t("attribution")} ${t("osmLink")}`;
   const { points: grouped, onMap, notOnMap } = mapOf(map.position, cars);
   const points: CarPoint[] = grouped.map(({ position, atFlag, cars: here }) => {
     const pointCars = here.map((car) => ({
@@ -242,13 +278,13 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const shown = useEffectEvent(() => JSON.parse(stateJson) as MapState);
 
   useEffect(() => {
-    if (library === null || !started || !leaflet.current) return;
+    if (library === null || !started || !leaflet.current || !credits.current) return;
     const created = library.createEventMap(leaflet.current, {
       state: shown(),
       zoomIn,
       zoomOut,
       close,
-      attribution,
+      credits: credits.current,
       touchQuery: TOUCH,
       onCar: (id) => showCar(leg, id),
       onTiles: (event) => onTiles(event),
@@ -258,7 +294,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       handle.current = null;
       created.destroy();
     };
-  }, [library, started, zoomIn, zoomOut, close, attribution, leg]);
+  }, [library, started, zoomIn, zoomOut, close, leg]);
 
   // Each new state, on the same map (CA1.7): never created again for it.
   useEffect(() => {
@@ -324,14 +360,16 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
           aria-busy={loading || undefined}
           className="group/box relative -mx-3 h-60 overflow-hidden border-t focus-visible:outline-hidden min-[448px]:h-70"
         >
-          {/* Leaflet's own: React gives it its name, its description, and nothing inside. */}
+          {/* Leaflet's own: React gives it its name, its description, and nothing inside but the credits. */}
           <div
             ref={leaflet}
             role="region"
             aria-label={t(`label.${leg}`, { count: onMap })}
             aria-describedby={tilesNotice ? `${tilesNoticeId}-title ${tilesNoticeId}-body` : undefined}
             className="peer size-full focus-visible:outline-hidden"
-          />
+          >
+            <Credits ref={credits} />
+          </div>
           {loading && (
             <p className="absolute inset-0 flex items-center justify-center gap-2 bg-background text-[13px] text-muted-foreground">
               <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />

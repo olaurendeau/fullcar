@@ -9,7 +9,8 @@ import { answerTiles, tileAt } from "./tiles";
  * with the map's box, the lines under it and Leaflet's notice; and the one ring element, above
  * Leaflet's panes and above the loading text, shown while the region of the map (Leaflet's
  * container) or the loading box has the keyboard focus. On both legs, at 360, 416 and 1280 px,
- * folded, under Leaflet's notice, loading, under a tiles' notice, and loaded. The fake tile
+ * folded, under Leaflet's notice, loading, under a tiles' notice, and loaded; #558: the ring
+ * above the credits, and hidden for a click of the mouse. The fake tile
  * provider is set for one tile only, the flag's at the view's zoom.
  */
 
@@ -108,12 +109,16 @@ async function expectEdgeToEdge(page: Page, box: Locator) {
   expect(own).toEqual({ borders: ["1px", "0px", "0px", "0px"], radii: ["0px", "0px", "0px", "0px"] });
 }
 
-/** The colour of the pixel 1 px inside the middle of the top edge of `surface`, in a screenshot. */
-async function topPixel(page: Page, surface: Locator) {
+/**
+ * The colour of a pixel of `surface` in a screenshot: 1 px inside the middle of its top edge, or
+ * 1 px inside its bottom right corner, where the credits are (#558).
+ */
+async function pixelOf(page: Page, surface: Locator, where: "top" | "bottomRight") {
   const shot = (await surface.screenshot()).toString("base64");
-  const { width } = (await surface.boundingBox())!;
+  const { width, height } = (await surface.boundingBox())!;
+  const [x, y] = where === "top" ? [width / 2, 1] : [width - 1, height - 1];
   return page.evaluate(
-    async ({ shot, width }) => {
+    async ({ shot, width, x, y }) => {
       const bytes = Uint8Array.from(atob(shot), (char) => char.charCodeAt(0));
       const image = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
       const canvas = document.createElement("canvas");
@@ -121,10 +126,10 @@ async function topPixel(page: Page, surface: Locator) {
       const context = canvas.getContext("2d", { willReadFrequently: true })!;
       context.drawImage(image, 0, 0);
       const scale = image.width / width;
-      const [r, g, b] = context.getImageData(Math.floor((width / 2) * scale), Math.floor(1 * scale), 1, 1).data;
+      const [r, g, b] = context.getImageData(Math.floor(x * scale), Math.floor(y * scale), 1, 1).data;
       return { r, g, b };
     },
-    { shot, width },
+    { shot, width, x, y },
   );
 }
 
@@ -144,16 +149,22 @@ async function expectRing(page: Page, focused: Locator, surface: Locator) {
       .filter((other) => other !== element)
       .map((other) => Number(getComputedStyle(other).zIndex))
       .filter(Number.isFinite);
+    const credits = element.parentElement!.querySelector("[data-map-credits]");
     return {
       above: Number(style.zIndex) > Math.max(1001, ...others),
+      // The credits are in the box, at 1000: under it (#558).
+      aboveCredits: !!credits && Number(style.zIndex) > Number(getComputedStyle(credits).zIndex),
       outline: `${style.outlineStyle} ${style.outlineWidth}`,
       inside: parseFloat(style.outlineOffset) < 0,
       pointerEvents: style.pointerEvents,
     };
   });
-  expect(ring).toEqual({ above: true, outline: "solid 2px", inside: true, pointerEvents: "none" });
-  const pixel = await topPixel(page, surface);
-  for (const channel of ["r", "g", "b"] as const) expect(Math.abs(pixel[channel] - RING[channel]), `${channel} of ${JSON.stringify(pixel)}`).toBeLessThanOrEqual(3);
+  expect(ring).toEqual({ above: true, aboveCredits: true, outline: "solid 2px", inside: true, pointerEvents: "none" });
+  // At the top, and at the bottom right, on the credits.
+  for (const where of ["top", "bottomRight"] as const) {
+    const pixel = await pixelOf(page, surface, where);
+    for (const channel of ["r", "g", "b"] as const) expect(Math.abs(pixel[channel] - RING[channel]), `${channel} of ${where} ${JSON.stringify(pixel)}`).toBeLessThanOrEqual(3);
+  }
 }
 
 for (const [where, device] of [
@@ -233,6 +244,18 @@ for (const [where, device] of [
         // Loaded, the box the last element at 1280 px: 12 px under it still.
         await expectContainer(page, true);
         await expectEdgeToEdge(page, box);
+
+        // The region clicked with the mouse, off its points and its zoom: it has the focus, not
+        // the keyboard's, and the ring stays hidden (#569's review, #558). The mouse first, on
+        // the event's title: Leaflet focuses the region from its own `mousedown`, before the
+        // browser counts the press, and right after a key the browser would take it for the keyboard's.
+        await page.getByRole("heading", { level: 1 }).click();
+        await expect(rings(page)).toBeHidden();
+        const { width } = (await map.boundingBox())!;
+        await map.click({ position: { x: width - 40, y: 40 } });
+        await expect(map).toBeFocused();
+        expect(await map.evaluate((element) => element.matches(":focus-visible"))).toBe(false);
+        await expect(rings(page)).toBeHidden();
       });
     });
   }
