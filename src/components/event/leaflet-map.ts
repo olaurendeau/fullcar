@@ -38,7 +38,7 @@ export interface EventMapOptions {
 }
 
 export interface EventMapHandle {
-  /** To call when the container's size changes, as when its panel is shown again. */
+  /** To call when the container's size changes, as when its panel is shown again: a map made without a size is framed then. */
   resize(): void;
   destroy(): void;
 }
@@ -190,18 +190,30 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     L.marker(at, { icon: carIcon(car, options.onCar), keyboard: false, interactive: false }).addTo(map);
   }
 
-  const view = framing(options.flag, options.cars);
-  if (view.kind === "flag") map.setView([view.center.lat, view.center.lng], view.zoom, { animate: false });
-  else {
-    const box: L.LatLngBoundsExpression = [
-      [view.south, view.west],
-      [view.north, view.east],
-    ];
-    map.fitBounds(box, { padding: [view.padding, view.padding], maxZoom: view.maxZoom, animate: false });
-  }
+  // Framed once the container has a size: created again while folded or in a hidden tab, a map
+  // would fit its points into 0 × 0 px, and showing it again only resizes it (CA1.3). Until
+  // then it has no view, and Leaflet holds its layers back.
+  let framed = false;
+  const frame = () => {
+    if (framed || container.clientWidth === 0 || container.clientHeight === 0) return;
+    framed = true;
+    const view = framing(options.flag, options.cars);
+    if (view.kind === "flag") map.setView([view.center.lat, view.center.lng], view.zoom, { animate: false });
+    else {
+      const box: L.LatLngBoundsExpression = [
+        [view.south, view.west],
+        [view.north, view.east],
+      ];
+      map.fitBounds(box, { padding: [view.padding, view.padding], maxZoom: view.maxZoom, animate: false });
+    }
+  };
+  frame();
 
   return {
-    resize: () => map.invalidateSize(),
+    resize: () => {
+      map.invalidateSize();
+      frame();
+    },
     destroy: () => {
       touch.removeEventListener("change", pointerChanged);
       map.remove();
