@@ -93,6 +93,34 @@ test("CA1.7: a car added at an action's answer, then gone at the next: the map s
   await expect(region(page).locator("[data-kept]")).toHaveAccessibleName("Voiture de Marc, départ : Place de la mairie, 3 places libres");
 });
 
+test("CA1.3: folded, the window resized, then a car added: never framed in 0 × 0 px, the map, opened again, holds every point", async ({ db, page, placed }) => {
+  const token = newToken();
+  const tom = await seedPerson(db, placed.id, { firstName: "Tom" }, token);
+  await seedPlacement(db, { personId: tom.id, eventId: placed.id, leg: "aller", rideId: null });
+  await seedCar(db, placed.id, "Marc", { position: around(placed.place, { east: 2200 }), location: "Place de la mairie" });
+  await holdToken(page, placed.id, token);
+
+  await page.goto(`/e/${placed.id}`);
+  await openMap(page, mapName("aller", "1 voiture"));
+  const panel = page.getByRole("tabpanel");
+  await toggle(panel).click();
+  await expect(toggle(panel)).toHaveAttribute("aria-expanded", "false");
+  // Folded, Leaflet reads its size again at the window's resize, in the next frame: 0 × 0 px.
+  const { width, height } = page.viewportSize()!;
+  await page.setViewportSize({ width: width - 20, height });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+  await seedCar(db, placed.id, "Sophie", { position: around(placed.place, { east: -2200 }), location: "Gare" });
+  await panel.getByRole("article", { name: "Voiture de Marc", exact: true }).getByRole("button", { name: /^Place libre/ }).first().click();
+  await expect(panel.getByRole("article", { name: "Voiture de Sophie", exact: true })).toBeVisible();
+
+  const map = await openMap(page, mapName("aller", "2 voitures"));
+  const view = (await map.boundingBox())!;
+  for (const marker of [map.getByRole("img", { name: FLAG, exact: true }), ...(await points(map).all())]) {
+    expect(inside((await marker.boundingBox())!, view)).toBe(true);
+  }
+});
+
 onAdmin("CA1.7: after « Actualiser », a point keeps the focus through its free seats and a car added; its car gone, the container has it", async ({ db, page, seededEvent, place }) => {
   const { id } = seededEvent;
   const zoe = await seedCar(db, id, "Zoé", { position: around(place, { north: 700 }), location: "12 rue des Lilas", departureTime: "08:00:00" });
