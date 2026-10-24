@@ -45,8 +45,14 @@ async function anchorIn(map: Locator, marker: Locator) {
 }
 
 /**
- * « Actualiser », its reads held while `meanwhile` writes another device's changes and puts
- * the focus where a test wants it; then let through, and the next ones too.
+ * Every tile of the maps in `scope` loaded, as e2e/event-map.spec.ts waits for them: a map
+ * removed, or the page left, while a tile loads cuts its answer, which `organiserTraffic` reads.
+ */
+const tilesLoaded = (scope: Page | Locator) => expect(scope.locator("img.leaflet-tile:not(.leaflet-tile-loaded)")).toHaveCount(0);
+
+/**
+ * « Actualiser », once every tile is loaded, its reads held while `meanwhile` writes another
+ * device's changes and puts the focus where a test wants it; then let through, and the next ones too.
  */
 async function refreshWhile(page: Page, { id }: SeededEvent, meanwhile: () => Promise<void>) {
   const held: Route[] = [];
@@ -55,6 +61,7 @@ async function refreshWhile(page: Page, { id }: SeededEvent, meanwhile: () => Pr
     (url) => url.pathname.endsWith("/admin"),
     (route) => (holding && isAction(route.request()) && (route.request().postData() ?? "").includes(id) ? held.push(route) : route.fallback()),
   );
+  await tilesLoaded(page);
   await page.getByRole("button", { name: "Actualiser", exact: true }).click();
   await expect.poll(() => held.length).toBeGreaterThan(0);
   await meanwhile();
@@ -164,6 +171,7 @@ onAdmin("CA1.7: after « Actualiser », a point keeps the focus through its free
   await expect(region(page)).toHaveAccessibleName(mapName("aller", "2 voitures"));
   await expect(region(page)).toBeFocused();
   expect(await focusableIn(region(page))).toEqual([ines, marc, "Zoom avant", "Zoom arrière"]);
+  await tilesLoaded(page);
 });
 
 onAdmin("CA1.7: the open bubble stays through its cars' free seats, the focus on its button; its list changed, it closes, and the focus goes to the point there", async ({ db, page, seededEvent, place }) => {
@@ -196,6 +204,7 @@ onAdmin("CA1.7: the open bubble stays through its cars' free seats, the focus on
   await expect(group("3 voitures : Nina, Paul, Léa")).toBeFocused();
   await expect(bubble).toHaveCount(0);
   await expect(group("3 voitures : Nina, Paul, Léa")).toHaveAttribute("aria-expanded", "false");
+  await tilesLoaded(page);
 });
 
 onAdmin("the event's position changes: the flag and its line move; framed again while nobody touched the map, not once zoomed", async ({ db, page, seededEvent, place }) => {
@@ -225,6 +234,7 @@ onAdmin("the event's position changes: the flag and its line move; framed again 
   await expect.poll(() => at(flag)).not.toEqual(flagZoomed);
   expect(await at(marc)).toEqual(marcZoomed);
   expect(await joins(map, await anchor(flag), await anchor(marc))).toBe(true);
+  await tilesLoaded(page);
 });
 
 onAdmin("a car's place changes on another device: its point moves, the same element, with the focus and its line; the view stays", async ({ db, page, seededEvent, place }) => {
@@ -260,6 +270,7 @@ onAdmin("a car's place changes on another device: its point moves, the same elem
   expect(inside((await point.boundingBox())!, (await map.boundingBox())!)).toBe(true);
   expect(await joins(map, await anchor(flag), await anchor(point))).toBe(true);
   expect(await anchorIn(map, flag)).toEqual(flagAt);
+  await tilesLoaded(page);
 });
 
 onAdmin("the event's position changes, a car at the flag: its point follows the flag, the same element, without a line", async ({ db, page, seededEvent, place }) => {
@@ -283,6 +294,7 @@ onAdmin("the event's position changes, a car at the flag: its point follows the 
   expect(Math.abs(pointAfter.x - flagAfter.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(pointAfter.y - flagAfter.y)).toBeLessThanOrEqual(1);
   await expect(lines(map)).toHaveCount(0);
+  await tilesLoaded(page);
 });
 
 onAdmin("the event's position removed, the focus on a point: the map and its button go, the focus to the active tab; back, the button is folded", async ({ db, page, seededEvent, place }) => {
@@ -324,6 +336,7 @@ onAdmin("CA2.7: the retour removed, its map open with the focus on a point: the 
   const aller = page.getByRole("region", { name: mapName("aller", "1 voiture"), exact: true });
   await expect(aller.locator(".leaflet-tile-loaded").first()).toBeVisible();
   await expect(points(aller)).toHaveCount(1);
+  await tilesLoaded(page);
 });
 
 onAdmin.describe("an event without a retour", () => {
@@ -337,6 +350,8 @@ onAdmin.describe("an event without a retour", () => {
     }).toPass();
     await expect(region(page).locator(".leaflet-tile-loaded").first()).toBeVisible();
 
+    // The aller's map mounts anew in its tab: none of its tiles still loading.
+    await tilesLoaded(page);
     await editEventInDb(db, seededEvent.id, { retourAt: "2026-12-12 18:00:00" });
     await page.getByRole("button", { name: "Actualiser", exact: true }).click();
     const retourTab = page.getByRole("tab", { name: "Retour" });
@@ -346,5 +361,6 @@ onAdmin.describe("an event without a retour", () => {
     }).toPass();
     await expect(toggle(page.getByRole("tabpanel"))).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByRole("region", { name: mapName("retour", "aucune voiture"), exact: true }).locator(".leaflet-tile-loaded").first()).toBeVisible();
+    await tilesLoaded(page);
   });
 });
