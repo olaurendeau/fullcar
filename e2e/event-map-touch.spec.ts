@@ -4,7 +4,7 @@ import { seedPerson, seedRide } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { generatePublicId } from "@/domain/public-id";
 import { expect, test as base } from "./fixtures";
-import { placeOf } from "./ign";
+import { placeOf } from "./tiles";
 
 /*
  * #479, event-map v15 (CA1.10 as amended after #479 and before #480): the map without animation (CA1.10), and at touch (CA1.11). The project

@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./fixtures";
 import { isPublicId, PUBLIC_ID_ALPHABET } from "@/domain/public-id-format";
-import { answerTiles, placeOf, PNG_SIGNATURE, requestsForTile, tileAt, tileOf, type IgnAnswer } from "./ign";
+import { answerTiles, requestsForTile, type IgnAnswer } from "./ign";
+import { placeOf, PNG_SIGNATURE, tileAt, tileOf } from "./tiles";
 
 // The fake IGN itself, as the app will reach it: `IGN_WMTS_URL` of `web` (compose.yaml).
 const IGN_WMTS_URL = "http://ign:2324/wmts";
