@@ -8,6 +8,7 @@ import type { BoardCar } from "@/domain/board";
 import { mapOf } from "@/domain/event-map";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
+import { cn } from "@/lib/utils";
 import { leafletFocus, TILES_QUIET, tilesStep, type LeafletFocus, type TilesEvent } from "./event-map-state";
 import { focusLandmark, showCar } from "./focus";
 import { leafletImport } from "./leaflet-import";
@@ -67,7 +68,9 @@ function MapNotice({
   retryRef,
   onRetry,
   reloadRef,
+  className,
 }: {
+  className?: string;
   id: string;
   title: string;
   body: string;
@@ -82,7 +85,7 @@ function MapNotice({
     </Button>
   );
   return (
-    <div className="grid grid-cols-[1rem_1fr] gap-x-2.5 gap-y-0.5 rounded-lg border border-destructive bg-background p-3 text-sm">
+    <div className={cn("grid grid-cols-[1rem_1fr] gap-x-2.5 gap-y-0.5 rounded-lg border border-destructive bg-background p-3 text-sm", className)}>
       <TriangleAlert aria-hidden className="row-span-2 mt-0.5 size-4 text-destructive" />
       <p id={`${id}-title`} className="font-semibold">
         {title}
@@ -106,9 +109,10 @@ function MapNotice({
 }
 
 /**
- * A leg's map (epic #238, event-map v18): the « Carte » button, a fixed label whose chevron says
- * the state, hidden without JavaScript; then the container it folds, `hidden` while folded, with
- * the map's box, 240 px high, 280 px from a 448 px window. Leaflet is imported at the first
+ * A leg's map (epic #238, event-map v18), in le conteneur (#562, v27), a bordered block hidden
+ * whole without JavaScript: the « Carte » button as its header, a fixed label whose chevron says
+ * the state; then the part it folds, `hidden` while folded, with the map's box, edge to edge,
+ * 240 px high, 280 px from a 448 px window. Leaflet is imported at the first
  * opening, once for the page and both legs (CA2.10, `leaflet-import`), and starts only once the
  * map is open and its panel shown, a hidden tab having no size (CA1.13). Until it has started,
  * « Chargement de la carte… » in the box, `aria-busy`, and no `status` region of its own: the
@@ -282,7 +286,9 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const loading = !failed && (library === null || !started);
 
   return (
-    <>
+    // Le conteneur (v24): « Vos inscriptions »'s pattern, its button as header; not a landmark,
+    // the region of the map being the only one; hidden whole without JavaScript.
+    <div className={cn("flex flex-col rounded-[14px] border px-3 pt-1 noscript:hidden", map.open ? "pb-3" : "pb-1")}>
       <button
         ref={toggle}
         type="button"
@@ -290,14 +296,14 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
         aria-expanded={map.open}
         aria-controls={containerId}
         onClick={map.onToggle}
-        className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-border bg-background px-3 text-left text-sm font-medium hover:bg-muted focus-visible:focus-ring noscript:hidden"
+        className="flex min-h-11 w-full items-center gap-2 rounded-lg px-0.5 text-left text-sm font-medium hover:bg-muted focus-visible:focus-ring"
       >
         <MapIcon aria-hidden className="size-4 shrink-0" />
         <span className="flex-1">{t("title")}</span>
         <Chevron aria-hidden className="size-4 shrink-0 text-muted-foreground" />
       </button>
       {/* Folded, `hidden` still wins over `flex`: Tailwind's preflight makes it `!important`. */}
-      <div ref={folded} id={containerId} hidden={!map.open} className="flex flex-col gap-2.5">
+      <div ref={folded} id={containerId} hidden={!map.open} className="flex flex-col gap-2.5 pt-1">
         {failed && (
           <MapNotice
             id={`${containerId}-failed`}
@@ -306,15 +312,17 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
             retryRef={retryImport}
             onRetry={onRetryImport}
             reloadRef={imported.again ? reload : undefined}
+            // In the box's place, 10 px further from the button than the box, as the lines under it.
+            className="mt-2.5"
           />
         )}
-        {/* Failed, no empty box: the notice alone, in its place. */}
+        {/* Failed, no empty box: the notice alone, in its place. Edge to edge, a rule above it. */}
         <div
           ref={box}
           hidden={failed}
           tabIndex={loading ? -1 : undefined}
           aria-busy={loading || undefined}
-          className="relative h-60 overflow-hidden rounded-xl border border-border focus-visible:focus-ring min-[448px]:h-70"
+          className="group/box relative -mx-3 h-60 overflow-hidden border-t focus-visible:outline-hidden min-[448px]:h-70"
         >
           {/* Leaflet's own: React gives it its name, its description, and nothing inside. */}
           <div
@@ -322,7 +330,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
             role="region"
             aria-label={t(`label.${leg}`, { count: onMap })}
             aria-describedby={tilesNotice ? `${tilesNoticeId}-title ${tilesNoticeId}-body` : undefined}
-            className="size-full"
+            className="peer size-full focus-visible:outline-hidden"
           />
           {loading && (
             <p className="absolute inset-0 flex items-center justify-center gap-2 bg-background text-[13px] text-muted-foreground">
@@ -330,6 +338,13 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
               {t("loading")}
             </p>
           )}
+          {/* The one ring of the box and of the region (v27): drawn on either, it would be under
+              Leaflet's panes or under the opaque loading text. Above both, and above the bubble. */}
+          <div
+            data-map-ring={leg}
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-1002 hidden focus-ring -outline-offset-2 peer-focus-visible:block group-focus-visible/box:block"
+          />
         </div>
         {tilesNotice && (
           <MapNotice
@@ -348,7 +363,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
         )}
         {touch && <p className="text-[13px] leading-[18px] text-muted-foreground">{t("touchHint")}</p>}
       </div>
-    </>
+    </div>
   );
 }
 

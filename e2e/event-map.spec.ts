@@ -100,13 +100,27 @@ async function settled(map: Locator, z: number) {
   await expect(map.locator("img.leaflet-tile:not(.leaflet-tile-loaded)")).toHaveCount(0);
 }
 
-/** CA1.1 on a leg: « Carte » between its actions and its first card, folded, then open under the same name. */
+/**
+ * Le conteneur of `button`, its parent: whether it has a border on each side and rounded
+ * corners, « Carte » as its first child, and the part it folds inside it.
+ */
+function bordered(button: Locator, id: string): Promise<boolean> {
+  return button.evaluate((element, id) => {
+    const container = element.parentElement!;
+    const style = getComputedStyle(container);
+    const sides = [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth];
+    return sides.every((width) => width === "1px") && parseFloat(style.borderTopLeftRadius) > 0 && container.firstElementChild === element && !!container.querySelector(`[id="${id}"]`);
+  }, id);
+}
+
+/** CA1.1 on a leg: « Carte » between its actions and its first card, the header of a bordered container, folded, then open under the same name. */
 async function expectButton(page: Page, panel: Locator, driver: string) {
   const button = mapButton(panel);
   await expect(button).toHaveAttribute("aria-expanded", "false");
   expect(await inDomOrder(panel.getByRole("button", { name: "Proposer une voiture" }), button, panel.getByRole("article", { name: `Voiture de ${driver}` }))).toBe(true);
   const container = await folded(page, button);
   await expect(container).toHaveAttribute("hidden", "");
+  expect(await bordered(button, (await button.getAttribute("aria-controls"))!)).toBe(true);
   expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
   await openMap(panel);
@@ -116,12 +130,13 @@ async function expectButton(page: Page, panel: Locator, driver: string) {
 
 for (const [where, device] of [
   ["360 px", {}],
+  ["416 px", { viewport: { width: 416, height: 780 } }],
   ["1280 px", { viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false }],
 ] as const) {
   test.describe(`the « Carte » button, at ${where}`, () => {
     test.use({ locale: "fr-FR", ...device });
 
-    test("CA1.1: each leg has « Carte » between its actions and its first card, folded, then open", async ({ db, page, placed }) => {
+    test("CA1.1: each leg has le conteneur, « Carte » as its header, between its actions and its first card, folded, then open", async ({ db, page, placed }) => {
       await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Marc" })).id);
       await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Zoé" })).id, { leg: "retour" });
 
@@ -257,11 +272,13 @@ test.describe("an event without a position", () => {
 test.describe("the map, JavaScript disabled", () => {
   test.use({ locale: "fr-FR", javaScriptEnabled: false });
 
-  test("CA2.5: no « Carte » button, and no sentence but Board.needsJavaScript", async ({ page, placed }) => {
+  test("CA2.5: le conteneur hidden whole, and no sentence but Board.needsJavaScript", async ({ page, placed }) => {
     await page.goto(`/e/${placed.id}`);
     const aller = page.getByRole("region", { name: "Aller", exact: true });
     await expect(aller.locator("noscript > p")).toHaveText(NEEDS_JAVASCRIPT);
     await expect(mapButton(page)).toHaveCount(0);
+    // The container of the part « Carte » folds, its border with it: not shown.
+    for (const leg of ["aller", "retour"]) await expect(page.locator(`[id="event-map-${leg}"]`).locator("xpath=..")).toBeHidden();
     const text = await aller.innerText();
     expect(["Carte", "Chargement de la carte…"].filter((words) => text.includes(words)).length).toBe(0);
   });

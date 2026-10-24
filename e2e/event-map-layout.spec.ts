@@ -6,7 +6,8 @@ import { expect } from "./fixtures";
 
 /*
  * #484, event-map v18, CA1.8 and CA1.9: the map's layout at 360 px (the project `e2e`, a
- * Pixel 7 at 360 × 780, at touch) and at 1280 px, with a mouse (« À 1280 px »). The fake tile provider
+ * Pixel 7 at 360 × 780, at touch), at 416 px and at 1280 px, with a mouse (« À 1280 px »);
+ * #562, v27: the box edge to edge in le conteneur. The fake tile provider
  * answers its default tile: no test here sets one.
  */
 
@@ -43,14 +44,18 @@ function textSizes(map: Locator): Promise<number[]> {
 
 const GROUP = "2 voitures : Nina, Paul";
 
-for (const [where, device, height] of [
-  ["360 px", {}, 240],
-  ["1280 px", { viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false }, 280],
+/** Le conteneur, whose header is « Carte ». */
+const containerOf = (page: Page) => page.getByRole("tabpanel").getByRole("button", { name: "Carte", exact: true }).locator("xpath=..");
+
+for (const [where, device, height, width] of [
+  ["360 px", {}, 240, 326],
+  ["416 px", { viewport: { width: 416, height: 780 } }, 240, 382],
+  ["1280 px", { viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false }, 280, 414],
 ] as const) {
   test.describe(`the map, at ${where}`, () => {
     test.use(device);
 
-    test(`CA1.8: no sideways scroll, folded, open or with its bubble; ${height} px high; no text under 12 px; targets of 44 px`, async ({
+    test(`CA1.8: no sideways scroll, folded, open or with its bubble; ${height} px high, ${width} px wide; no text under 12 px; targets of 44 px`, async ({
       db,
       page,
       placed,
@@ -66,9 +71,11 @@ for (const [where, device, height] of [
       expect(await sideways(page)).toBe(0);
       const box = (await boxOf(map).boundingBox())!;
       expect(box.height).toBe(height);
-      // The column's width (« À 1280 px » : 416 px, the column of 448 px less its padding).
-      expect(box.width).toBe((await panel.boundingBox())!.width);
-      if (where === "1280 px") expect(box.width).toBe(416);
+      // Edge to edge in le conteneur, which has the column's width: its width less its two borders (v24).
+      const container = (await containerOf(page).boundingBox())!;
+      expect(container.width).toBe((await panel.boundingBox())!.width);
+      expect(box.width).toBe(container.width - 2);
+      expect(box.width).toBe(width);
 
       const zoom = map.getByRole("button", { name: /^Zoom (avant|arrière)$/ });
       await expect(zoom).toHaveCount(2);
@@ -101,7 +108,7 @@ test("CA1.8: 240 px high under a window of 448 px, 280 px from 448 px", async ({
 test.describe("at 360 × 780, a title and a place of 30 characters", () => {
   test.use({ eventFields: { title: "W".repeat(30), location: "W".repeat(30) } });
 
-  test("CA1.9: the map folded, the banner stays above the fold, and the first card is 60 px under « Carte »", async ({ db, page, placed }) => {
+  test("CA1.9: the map folded, its container 54 px, the banner and the first card above the fold", async ({ db, page, placed }) => {
     // event-board's mixed case (« Page complète à 360 × 780 »), all three on the device:
     // Claire drives the aller and looks for a seat back, Léa rides with her and looks too, Tom only goes.
     const token = newToken();
@@ -121,10 +128,14 @@ test.describe("at 360 × 780, a title and a place of 30 characters", () => {
     const banner = panel.getByRole("status").filter({ hasText: /\S/ });
     await expect(banner).toBeInViewport({ ratio: 1 });
 
-    // Measured from the top of the page: folded, the map adds its button and one gap, 44 + 16 px.
+    // Measured from the top of the page: folded, the map adds its container and one gap, 54 + 16 px
+    // (#562: the banner at 538–578 px, the first card at 724 px, 10 px lower than before).
     expect(await page.evaluate(() => scrollY)).toBe(0);
     const card = (await panel.getByRole("article", { name: "Voiture de Claire" }).boundingBox())!;
-    expect(card.y - (await button.boundingBox())!.y).toBe(60);
+    const container = (await containerOf(page).boundingBox())!;
+    expect(container.height).toBe(54);
+    expect(card.y - container.y).toBe(70);
+    expect(card.y).toBeLessThan(780);
     const { y, height } = (await banner.boundingBox())!;
     test.info().annotations.push({ type: "CA1.9", description: `bandeau à ${y}–${y + height} px, haut de la première fiche à ${card.y} px` });
   });

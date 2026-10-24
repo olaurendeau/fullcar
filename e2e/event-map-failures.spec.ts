@@ -340,14 +340,17 @@ test.describe("the tiles", () => {
     });
   }
 
-  test("CA1.17: the tiles' notice, then notOnMap, then the two-finger sentence, in the DOM's order", async ({ db, page, placed }) => {
+  test("CA1.17: in le conteneur of « Carte », the tiles' notice, then notOnMap, then the two-finger sentence, in the DOM's order", async ({ db, page, placed }) => {
     await seedMarc(db, placed);
     await seedCar(db, placed.id, "Léa", { position: null });
     await openWithFlagTile(page, placed.place, placed.id, { kind: "error" });
     await expect(notice(page, TILES_FAILED)).toBeVisible();
-    const lines = await container(page).evaluate((element) =>
-      Array.from(element.children).map((child) => (child.querySelector(".leaflet-container") ? "map" : child.textContent)),
+    // The button, then the part it folds, in one container: the map's box, then its lines.
+    const lines = await mapButton(page).evaluate((button) =>
+      Array.from(button.parentElement!.children).flatMap((child) =>
+        child === button ? ["Carte"] : Array.from(child.children).map((line) => (line.querySelector(".leaflet-container") ? "map" : line.textContent)),
+      ),
     );
-    expect(lines).toEqual(["map", `${TILES_FAILED}${TILES_BODY}Réessayer`, NOT_ON_MAP, TOUCH_HINT]);
+    expect(lines).toEqual(["Carte", "map", `${TILES_FAILED}${TILES_BODY}Réessayer`, NOT_ON_MAP, TOUCH_HINT]);
   });
 });
