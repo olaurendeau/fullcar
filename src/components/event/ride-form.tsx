@@ -14,7 +14,7 @@ import { otherLegField, otherLegKind, type OtherLegChoice } from "@/domain/offer
 import { validatePerson } from "@/domain/person";
 import type { VisibleCar } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
-import { passengersFit, RIDE_FIELDS, RIDE_SEATS_DEFAULT, validateRide, validSeats, type RideField } from "@/domain/ride";
+import { passengersFit, RIDE_SEATS_DEFAULT, validateRide, validSeats } from "@/domain/ride";
 import { currentDriver, driverChoice, NEW_DRIVER, passengerCandidates } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,7 @@ import { personErrorMessage } from "./person-error";
 import { StorageNotice, type Registering, type Registration } from "./person-form";
 import { PlaceField } from "./place-field";
 import type { PlaceValue } from "./place-field-state";
+import { rideChange, type RideChange } from "./ride-change";
 import { rideErrorMessage } from "./ride-error";
 
 /**
@@ -65,13 +66,13 @@ export type OfferRide = (offering: Offering) => Promise<Offered | undefined>;
 
 /**
  * A change of one of the device's cars, as the form sends it (C8.2): only the fields changed
- * since it showed, so that it undoes no change made meanwhile (#208); the passengers it showed,
- * and who leaves among them (C8.4).
+ * since it showed, so that it undoes no change made meanwhile (#208), the place with its
+ * position (`rideChange`); the passengers it showed, and who leaves among them (C8.4).
  */
 export interface Changing extends FromSheet, Pick<Registering, "sending"> {
   rideId: string;
   leg: Leg;
-  ride: Partial<Record<RideField, string>>;
+  ride: RideChange;
   seenPassengerIds: string[];
   leaving: string[];
   /** What the bar says was not done: the changes to this car, named by its driver and its leg (C11.11). */
@@ -100,7 +101,7 @@ interface FormProps {
 /** What the form does: offer a car on a leg, or change one of the device's (C8.2). */
 type FormMode =
   | ({ kind: "offer" } & Pick<FormProps, "persons" | "other" | "offerRide" | "near">)
-  | { kind: "edit"; car: VisibleCar; updateRide: UpdateRide };
+  | ({ kind: "edit"; car: VisibleCar; updateRide: UpdateRide } & Pick<FormProps, "near">);
 
 type FieldName = Exclude<OfferField, "passengers">;
 type Values = Record<FieldName, string>;
@@ -198,7 +199,7 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
  * (C8.4). Each opening is a new form: the one that sent may be gone. Closed, after a success
  * too, the sheet gives the focus back to « Modifier » (Radix's default).
  */
-export function EditRideButton({ car, at, updateRide }: { car: VisibleCar; at: WallClock; updateRide: UpdateRide }) {
+export function EditRideButton({ car, at, updateRide, near }: { car: VisibleCar; at: WallClock; updateRide: UpdateRide } & Pick<FormProps, "near">) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(0);
@@ -226,7 +227,7 @@ export function EditRideButton({ car, at, updateRide }: { car: VisibleCar; at: W
         key={opened}
         leg={car.leg}
         at={at}
-        mode={{ kind: "edit", car, updateRide }}
+        mode={{ kind: "edit", car, updateRide, near }}
         open={() => isOpen.current}
         onDone={() => toggle(false)}
         onStep={setChoosing}
@@ -240,9 +241,9 @@ export function EditRideButton({ car, at, updateRide }: { car: VisibleCar; at: W
  * the other leg (#169), then « Qui monte avec vous ? » (#171). None of an option (C4.9). Errors, failures and creation ids as in
  * « Ajouter une personne » (C4.7, C4.10).
  *
- * In `offer` mode, each place proposes suggestions (#430). In `edit` mode (C8.2), the place,
- * the time, the seats and the note alone, filled with the car's, under the same rules; below
- * the passengers, « Valider » opens the step (C8.4).
+ * Each place proposes suggestions (#430, #431). In `edit` mode (C8.2), the place, the time, the
+ * seats and the note alone, filled with the car's, its position as « Position enregistrée »,
+ * under the same rules; below the passengers, « Valider » opens the step (C8.4).
  */
 function RideForm({
   leg,
@@ -273,10 +274,10 @@ function RideForm({
   const [problem, setProblem] = useState<"offline" | "failed" | "noRetour" | null>(null);
   const [gone, setGone] = useState(false);
   const { persons, other } = mode.kind === "offer" ? { ...mode, other: gone ? undefined : mode.other } : { persons: [], other: undefined };
-  // What the form showed, in `edit` mode: a field left as it was is not sent (#208).
+  // What the form showed, in `edit` mode, its place with its position: a field left as it was is not sent (#208).
   const [shown] = useState(() => {
     const car = editing?.car;
-    return car && { location: car.location, time: car.departureTime.slice(0, 5), seats: String(car.seats), note: car.note ?? "" };
+    return car && { location: car.location, position: car.position, time: car.departureTime.slice(0, 5), seats: String(car.seats), note: car.note ?? "" };
   });
   const { candidates, chosen } = driverChoice(persons);
   const [picked, setDriver] = useState(chosen);
@@ -285,13 +286,19 @@ function RideForm({
   const [typed, setValues] = useState<Values>(() => {
     const blank = { firstName: "", phone: "", location: "", note: "", otherLocation: "" };
     const times = { time: wallClockParts(at).time, otherTime: other ? wallClockParts(other.at).time : "" };
-    return { ...blank, ...times, seats: String(RIDE_SEATS_DEFAULT), ...shown };
+    return { ...blank, ...times, seats: String(RIDE_SEATS_DEFAULT), ...(shown && { location: shown.location, time: shown.time, seats: shown.seats, note: shown.note }) };
   });
   // The other car's place follows this one's until it is changed (v4-9), its position with it (AL4.2).
   const [follows, setFollows] = useState(true);
   const values = { ...typed, otherLocation: follows ? typed.location : typed.otherLocation };
-  const [marks, setMarks] = useState<Record<PlaceName, PlaceMark>>({ location: UNMARKED, otherLocation: UNMARKED });
+  // A car's saved position has no label: « Position enregistrée » (AL5.1).
+  const [marks, setMarks] = useState<Record<PlaceName, PlaceMark>>(() => ({
+    location: { ...UNMARKED, position: shown?.position ?? null },
+    otherLocation: UNMARKED,
+  }));
   const placeOf = (name: PlaceName): PlaceValue => ({ text: values[name], ...marks[name === "otherLocation" && follows ? "location" : name] });
+  // The car as the form holds it, in `edit` mode: what `rideChange` compares with `shown`.
+  const edited = () => ({ ...values, position: placeOf("location").position });
   // The other leg follows who drives, from her state there (v4-8).
   const there = driver === NEW_DRIVER ? undefined : other?.persons.find((person) => person.id === driver)?.state;
   const otherField = other && otherLegField(there ?? "new");
@@ -358,13 +365,13 @@ function RideForm({
     if (!editing || !shown) return;
     setProblem(null);
     setChanged(false);
-    const fields = RIDE_FIELDS.filter((name) => values[name] !== shown[name]);
+    const { fields, ride } = rideChange(shown, edited());
     // Withdraws a failure any form about this car left for the bar, if this send carries all its fields.
     const sheet = sends(fields);
     const answer = await editing.updateRide({
       rideId: editing.car.id,
       leg,
-      ride: Object.fromEntries(fields.map((name) => [name, values[name]])),
+      ride,
       seenPassengerIds: seen,
       leaving,
       sending: setSending,
@@ -388,10 +395,10 @@ function RideForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (mode.kind === "edit") {
-      // Nothing changed, character for character, since the form showed: the sheet closes, the
-      // focus back on « Modifier »; nothing is checked nor sent, the step does not open, and the
-      // bar keeps what it holds (v4.4.5, #313).
-      if (shown && RIDE_FIELDS.every((name) => values[name] === shown[name])) return onDone();
+      // Nothing changed since the form showed, character for character and the place as one
+      // value (AL5.2): the sheet closes, the focus back on « Modifier »; nothing is checked nor
+      // sent, the step does not open, and the bar keeps what it holds (v4.4.5, #313).
+      if (shown && rideChange(shown, edited()).fields.length === 0) return onDone();
       const ride = validateRide(values);
       if (!ride.ok) return showErrors(ride.errors, false, ride.first);
       showErrors({}, false, undefined);
@@ -505,7 +512,7 @@ function RideForm({
           setMarks((current) => ({ ...current, [name]: { position, label: chosen } }));
         }}
         rule="car"
-        near={mode.kind === "offer" ? mode.near : null}
+        near={mode.near}
         locked={sending}
         error={message && { id: idOf(`${name}-error`), message: tErrors(message.key, message.values) }}
         hint={t("locationHint")}
@@ -587,7 +594,7 @@ function RideForm({
           )}
         </div>
       )}
-      {editing ? field("location", t(`location.${leg}`), { type: "text" }) : place("location", t(`location.${leg}`))}
+      {place("location", t(`location.${leg}`))}
       {field("time", t("time"), { type: "time" }, t("timeHint", { date: format.dateTime(wallClockAsUtc(at), { dateStyle: "full" }) }))}
       {field("seats", t("seats"), { type: "text", inputMode: "numeric" }, t("seatsHint"))}
       {field("note", t("note"), "textarea", t("noteHint"))}

@@ -412,11 +412,11 @@ d'une voiture »).
   5 décimales (environ un mètre). Tout le reste est `invalid`, pas une exception. `undefined`
   n'est pas une valeur : chaque appelant le lit comme « pas envoyée ».
 - `samePlace` compare deux lieux : même texte et même position (`samePosition`, à
-  5 décimales) ; le même texte avec une autre position est un changement. Hors de
-  `place.ts`, aucun code de main n'appelle encore `samePlace` ni `samePosition`. **À
-  venir** (#428) : les formulaires, qui compareront un lieu par ce couple. Sur main, la seule
-  décision prise à partir d'un lieu, `ridePositionChange`, compare **le texte seul**, et
-  c'est voulu (voir « La position d'une voiture »).
+  5 décimales) ; le même texte avec une autre position est un changement. « Modifier la
+  voiture » compare ainsi son lieu (`rideChange`, `src/components/event/ride-change.ts`,
+  #431) : changé, il part `location` et `position` ensemble ; non changé, ni l'un ni l'autre.
+  Côté serveur, `ridePositionChange` compare **le texte seul**, et c'est voulu (voir « La
+  position d'une voiture »).
 - En base (migration `0003_positions`, #417) : `location_lat` et `location_lng`,
   `double precision` nullables, sur `event` et sur `ride`. La base vérifie la paire (les deux
   ou aucune) et les bornes, pas l'arrondi : c'est le domaine qui arrondit, parce que l'égalité
