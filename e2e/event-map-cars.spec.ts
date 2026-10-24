@@ -8,7 +8,7 @@ import { expect, leaveNoToken } from "./fixtures";
 /*
  * #480, event-map v15: the cars on the map, each far enough from the others to have its own
  * point (the groups and their bubble: event-map-groups.spec.ts). The event is seeded at `placeOf` its id, and its
- * cars around it, so that its tiles are its own; the fake IGN answers its default tile: no
+ * cars around it, so that its tiles are its own; the fake tile provider answers its default tile: no
  * test here sets one. The project `e2e` is a Pixel 7, touch-enabled.
  */
 

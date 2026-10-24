@@ -222,11 +222,20 @@ describe("without a key (CA3.5)", () => {
   it.each([
     ["unset", {}],
     ["empty", { GEOAPIFY_API_KEY: "" }],
+    ["blank: spaces, a tab, line breaks", { GEOAPIFY_API_KEY: " \t\r\n " }],
   ])("fails without a call when the key is %s, and logs only « tiles: no key »", async (_, env) => {
     const { tile, fetch } = setup([], { GEOAPIFY_API_KEY: undefined, ...env });
     expect(await tile()).toEqual(FAILED);
     expect(fetch).not.toHaveBeenCalled();
     expect(logs).toEqual([["tiles: no key"]]);
+  });
+});
+
+describe("a key pasted with spaces or a line break around it (#554)", () => {
+  it("is trimmed before it is sent: the only query is the key itself", async () => {
+    const { tile, fetch } = setup([], { GEOAPIFY_API_KEY: ` ${KEY}\r\n` });
+    expect(await tile()).toEqual(TILE);
+    expect(new URL(fetch.mock.calls[0][0]).search).toBe(`?apiKey=${KEY}`);
   });
 });
 
@@ -392,6 +401,14 @@ describe("geoapifySettings", () => {
   it("reads each variable", () => {
     const env = { TILE_UPSTREAM_URL: "http://tiles:2324/v1/tile", TILE_STYLE: "osm-bright", GEOAPIFY_API_KEY: KEY, TILES_BREAKER_MS: "0" };
     expect(geoapifySettings(env)).toEqual({ url: "http://tiles:2324/v1/tile", style: "osm-bright", key: KEY, breakerMs: 0 });
+  });
+
+  it.each([`${KEY}\n`, ` ${KEY}`, `\t${KEY}\r\n`])("reads GEOAPIFY_API_KEY=%j trimmed", (raw) => {
+    expect(geoapifySettings({ GEOAPIFY_API_KEY: raw }).key).toBe(KEY);
+  });
+
+  it("reads a blank GEOAPIFY_API_KEY as no key", () => {
+    expect(geoapifySettings({ GEOAPIFY_API_KEY: " \n " }).key).toBe("");
   });
 
   it.each(["abc", "10s", "1e4", "-1", " 5", "2.5"])("reads TILES_BREAKER_MS=%j as 10 s: digits only", (raw) => {

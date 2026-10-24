@@ -435,12 +435,14 @@
       "body": "The page may have been updated since you opened it: reload it."
     },
     "tilesFailed": {
-      "title": "The map background could not load."
+      "title": "The map background could not load.",
+      "body": "Check your connection, or try again in a moment."
     },
     "retry": "Try again",
     "reload": "Reload the page",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
-    "attribution": "Source: IGN – Plan IGN v2, {date}"
+    "attribution": "Geoapify · © OpenMapTiles.org ·",
+    "osmLink": "© OpenStreetMap"
   }
 }

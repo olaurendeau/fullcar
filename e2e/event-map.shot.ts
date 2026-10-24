@@ -1,14 +1,13 @@
 import type { Page, TestInfo } from "@playwright/test";
 import { mapName, openMap, points, seedParking, test } from "./event-map-points";
 import { expect } from "./fixtures";
-import { answerTiles } from "./ign";
-import { tileAt } from "./tiles";
+import { answerTiles, tileAt } from "./tiles";
 
 /*
  * #484, event-map v18: the design's states at WIDTH px, 360 by default, at touch; from 1024 px,
  * with a mouse, as « À 1280 px » draws it. Folded, open, the bubble, the tiles' notice and
  * Leaflet's. `make shot SLOT=… WIDTH=360`, then `WIDTH=1280`. Each capture waits for the state
- * it shows. The fake IGN is set for one tile only, the flag's, in the tiles' notice.
+ * it shows. The fake tile provider is set for one tile only, the flag's, in the tiles' notice.
  */
 
 const desk = Number(process.env.SHOT_WIDTH ?? 360) >= 1024;
