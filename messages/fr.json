@@ -416,6 +416,7 @@
       "retour": "Carte du retour : le lieu de l’événement et {count, plural, =0 {aucune voiture} one {# voiture} other {# voitures}}"
     },
     "event": "Lieu de l’événement : {location}",
+    "touchHint": "Deux doigts pour déplacer ou zoomer la carte.",
     "loading": "Chargement de la carte…",
     "zoomIn": "Zoom avant",
     "zoomOut": "Zoom arrière",
