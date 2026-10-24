@@ -27,6 +27,13 @@ const PHOTON_QUERY = "q=12%20rue%20des%20Lilas&limit=5&lang=fr";
 const PHOTON_SEARCH = `https://photon.komoot.io/api/?${PHOTON_QUERY}`;
 const typed = (value: unknown) => /Lilas|q=/.test(JSON.stringify(value));
 
+/** A tile the server asks Geoapify for (event-map, CA3.5): the key is in its query, the tile in its path. */
+const GEOAPIFY_KEY = "fullcar-test-key-7f3a9c2e";
+const GEOAPIFY_TILE = `https://maps.geoapify.com/v1/tile/positron/14/8299/5636@2x.png?apiKey=${GEOAPIFY_KEY}`;
+/** « geoapify » has the 8 letters of an event's id, which `scrubText` redacts on its own. */
+const GEOAPIFY_SCRUBBED = "https://maps.[redacted].com/[id]/[id]/[id]/[id]/[id]/[id]";
+const keyed = (value: unknown) => /apiKey|fullcar-test-key|8299|5636/.test(JSON.stringify(value));
+
 describe("scrubUrl", () => {
   it("keeps /api/lieux and Photon's path, and drops the text typed in their query or path (#449)", () => {
     same(scrubUrl(PHOTON_SEARCH), "https://photon.komoot.io/api/");
@@ -134,6 +141,22 @@ describe("scrubBreadcrumb", () => {
     same(sent, [
       { ...head, data: { method: "GET", url, status_code: 200 } },
       { type: "http", category: "http", data: { url, status_code: 429 } },
+    ]);
+  });
+
+  it("keeps of a request to Geoapify neither apiKey, nor the key, nor the tile (CA3.5)", () => {
+    const head = { type: "http", category: "fetch", level: "info", timestamp: 1792477108.148 } as const;
+    const fetch: Breadcrumb = { ...head, data: { method: "GET", url: GEOAPIFY_TILE, status_code: 429 } };
+    const http: Breadcrumb = {
+      type: "http",
+      category: "http",
+      data: { "http.method": "GET", url: GEOAPIFY_TILE.split("?", 1)[0], "http.query": `apiKey=${GEOAPIFY_KEY}`, status_code: 200 },
+    };
+    const sent = [scrubBreadcrumb(fetch), scrubBreadcrumb(http)];
+    expect(keyed(sent)).toBe(false);
+    same(sent, [
+      { ...head, data: { method: "GET", url: GEOAPIFY_SCRUBBED, status_code: 429 } },
+      { type: "http", category: "http", data: { url: GEOAPIFY_SCRUBBED, status_code: 200 } },
     ]);
   });
 
@@ -407,6 +430,30 @@ describe("scrubSpan", () => {
     );
     expect(typed(sent)).toBe(false);
     same(sent.name, "GET https://photon.komoot.io/api/");
+    same(sent.attributes, {
+      "sentry.op": "http.client",
+      "sentry.origin": "auto.http.otel.node_fetch",
+      "http.request.method": "GET",
+      "http.response.status_code": 200,
+    });
+  });
+
+  it("keeps of an http.client span to Geoapify neither apiKey, nor the key, nor the tile (CA3.5)", () => {
+    const sent = scrubSpan(
+      span(`GET ${GEOAPIFY_TILE}`, {
+        "sentry.op": "http.client",
+        "sentry.origin": "auto.http.otel.node_fetch",
+        "http.request.method": "GET",
+        "http.response.status_code": 200,
+        "url.full": GEOAPIFY_TILE,
+        "url.query": `?apiKey=${GEOAPIFY_KEY}`,
+        "http.query": `apiKey=${GEOAPIFY_KEY}`,
+        "url.path": "/v1/tile/positron/14/8299/5636@2x.png",
+        "server.address": "maps.geoapify.com",
+      }),
+    );
+    expect(keyed(sent)).toBe(false);
+    same(sent.name, `GET ${GEOAPIFY_SCRUBBED}`);
     same(sent.attributes, {
       "sentry.op": "http.client",
       "sentry.origin": "auto.http.otel.node_fetch",
