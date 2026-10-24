@@ -1,4 +1,4 @@
-import type { JSHandle, Locator, Page } from "@playwright/test";
+import { devices, type JSHandle, type Locator, type Page } from "@playwright/test";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
@@ -368,5 +368,31 @@ test.describe("the map, with a mouse", () => {
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(before.scroll);
     expect(await flagInMap(map)).toEqual(before.flag);
     expect(await map.evaluate((box, earlier) => box.querySelector(".leaflet-map-pane") === earlier, pane)).toBe(true);
+  });
+});
+
+test.describe("the map, on an iPhone", () => {
+  // Safari's user agent on a phone: Leaflet 1.9.4 turns its `tapHold` on, which listens to
+  // `touchstart` on the map and, after 600 ms held, cancels the `touchend` and its click.
+  test.use({ locale: "fr-FR", userAgent: devices["iPhone 13"].userAgent });
+
+  test("#542: a press of 700 ms on a car's point opens its card", async ({ db, page, placed }) => {
+    expect(await coarse(page)).toBe(true);
+    await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Lou" })).id, {
+      position: { lat: placed.place.lat + 0.002, lng: placed.place.lng },
+    });
+    // The page's clock, so that the press lasts 700 ms without the test waiting for them.
+    await page.clock.install();
+    await page.goto(`/e/${placed.id}`);
+    const map = await openMap(page, "Carte de l’aller : le lieu de l’événement et 1 voiture");
+    await map.scrollIntoViewIfNeeded();
+    const at = await middle(map.locator(".leaflet-marker-pane button"));
+
+    const finger = await page.context().newCDPSession(page);
+    await finger.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
+    await page.clock.runFor(700);
+    await finger.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await finger.detach();
+    await expect(page.locator("[data-car-title]:focus")).toHaveText("Voiture de Lou");
   });
 });
