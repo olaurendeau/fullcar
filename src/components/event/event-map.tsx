@@ -2,18 +2,17 @@
 
 import { ChevronDown, ChevronUp, LoaderCircle, Map as MapIcon, TriangleAlert } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import type { BoardCar } from "@/domain/board";
 import { mapOf } from "@/domain/event-map";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { PLAN_IGN_UPDATED } from "@/domain/tile";
-import { leafletStep, TILES_QUIET, tilesStep, type LeafletEvent, type LeafletFocus, type LeafletPhase, type TilesEvent } from "./event-map-state";
+import { leafletFocus, TILES_QUIET, tilesStep, type LeafletFocus, type TilesEvent } from "./event-map-state";
 import { focusLandmark, showCar } from "./focus";
+import { leafletImport } from "./leaflet-import";
 import type { CarPoint, EventMapHandle, MapState } from "./leaflet-map";
-
-type LeafletMap = typeof import("./leaflet-map");
 
 /** What a leg's map needs from the page: the event's place, and the page's open or folded state. */
 export interface LegMap {
@@ -63,12 +62,32 @@ function layerUpdated(): Date {
 }
 
 /**
- * A failure of the map (« Leaflet ne se charge pas », « Des tuiles en échec »): its title, what
- * to do, and « Réessayer ». Not announced, in no live region: the leg's panel keeps its only
- * `status` region, the banner's.
+ * A failure of the map (« Leaflet ne se charge pas », « Des tuiles en échec », « Leaflet échoue
+ * encore »): its title, what to do, then « Recharger la page » when `reloadRef` is given, and
+ * « Réessayer ». Not announced, in no live region: the leg's panel keeps its only `status`
+ * region, the banner's.
  */
-function MapNotice({ id, title, retryRef, onRetry }: { id: string; title: string; retryRef: Ref<HTMLButtonElement>; onRetry: () => void }) {
+function MapNotice({
+  id,
+  title,
+  body,
+  retryRef,
+  onRetry,
+  reloadRef,
+}: {
+  id: string;
+  title: string;
+  body: string;
+  retryRef: Ref<HTMLButtonElement>;
+  onRetry: () => void;
+  reloadRef?: RefObject<HTMLButtonElement | null>;
+}) {
   const t = useTranslations("EventMap");
+  const retry = (className: string) => (
+    <Button ref={retryRef} variant="outline" className={`h-11 ${className}`} onClick={onRetry}>
+      {t("retry")}
+    </Button>
+  );
   return (
     <div className="grid grid-cols-[1rem_1fr] gap-x-2.5 gap-y-0.5 rounded-lg border border-destructive bg-background p-3 text-sm">
       <TriangleAlert aria-hidden className="row-span-2 mt-0.5 size-4 text-destructive" />
@@ -76,11 +95,19 @@ function MapNotice({ id, title, retryRef, onRetry }: { id: string; title: string
         {title}
       </p>
       <p id={`${id}-body`} className="text-[13px] leading-[18px] text-muted-foreground">
-        {t("failed.body")}
+        {body}
       </p>
-      <Button ref={retryRef} variant="outline" className="col-start-2 mt-2 h-11 justify-self-start" onClick={onRetry}>
-        {t("retry")}
-      </Button>
+      {reloadRef ? (
+        <div className="col-start-2 mt-2 flex flex-col items-start gap-2">
+          {/* `reload()`: the same address, its fragment kept, where the organiser has their link. */}
+          <Button ref={reloadRef} className="h-11" onClick={() => window.location.reload()}>
+            {t("reload")}
+          </Button>
+          {retry("")}
+        </div>
+      ) : (
+        retry("col-start-2 mt-2 justify-self-start")
+      )}
     </div>
   );
 }
@@ -89,11 +116,13 @@ function MapNotice({ id, title, retryRef, onRetry }: { id: string; title: string
  * A leg's map (epic #238, event-map v18): the « Carte » button, a fixed label whose chevron says
  * the state, hidden without JavaScript; then the container it folds, `hidden` while folded, with
  * the map's box, 240 px high, 280 px from a 448 px window. Leaflet is imported at the first
- * opening, and starts only once the map is open and its panel shown, a hidden tab having no
- * size (CA1.13). Until it has started, « Chargement de la carte… » in the box, `aria-busy`, and no
- * `status` region of its own: the leg's panel keeps its only one, the banner's.
+ * opening, once for the page and both legs (CA2.10, `leaflet-import`), and starts only once the
+ * map is open and its panel shown, a hidden tab having no size (CA1.13). Until it has started,
+ * « Chargement de la carte… » in the box, `aria-busy`, and no `status` region of its own: the
+ * leg's panel keeps its only one, the banner's.
  * A failed import (offline, or an old build's chunk after a deploy) puts « La carte n’a pas pu se
- * charger. » in place of the box, whose « Réessayer » imports again (CA2.8, `leafletStep`).
+ * charger. » in place of the box, whose « Réessayer » imports again; from the second failure in
+ * a row, online, « … toujours … » with « Recharger la page » first (CA2.8, `leafletStep`).
  * The map has the flag and a point per car of the leg with a position, `cars` in the order of
  * the cards, cars less than 25 m apart in one point, and those less than 25 m from the flag in
  * its one point (`mapOf`, v18); its name counts them, and `notOnMap` the others. An activated
@@ -113,10 +142,11 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const box = useRef<HTMLDivElement>(null);
   const leaflet = useRef<HTMLDivElement>(null);
   const retryImport = useRef<HTMLButtonElement>(null);
+  const reload = useRef<HTMLButtonElement>(null);
   const retryTiles = useRef<HTMLButtonElement>(null);
   const handle = useRef<EventMapHandle | null>(null);
-  const [library, setLibrary] = useState<LeafletMap | null>(null);
-  const [phase, setPhase] = useState<LeafletPhase>("loading");
+  // One import for the page: both legs read it (CA2.10).
+  const { state: imported, library } = useSyncExternalStore(leafletImport.subscribe, leafletImport.snapshot, leafletImport.serverSnapshot);
   // Where the focus goes once the new phase is drawn: the box, say, is hidden while it fails.
   const focusNext = useRef<LeafletFocus>(null);
   const tiles = useRef(TILES_QUIET);
@@ -128,37 +158,33 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const tilesNoticeId = `${containerId}-tiles`;
   const Chevron = map.open ? ChevronUp : ChevronDown;
 
-  const leafletChanged = (from: LeafletPhase, event: LeafletEvent) => {
-    const step = leafletStep(from, event, !!box.current?.contains(document.activeElement));
-    focusNext.current = step.focus;
-    setPhase(step.phase);
-  };
-  const onImported = useEffectEvent(leafletChanged);
-
+  // The first opening imports, once for the page; folded before it ends, the import ends all the same.
   useEffect(() => {
-    if (!map.open || phase !== "loading" || library !== null) return;
-    // Folded before the import ends: it is imported again at the next opening, from the cache once loaded.
-    let waiting = true;
-    import("./leaflet-map").then(
-      (loaded) => {
-        if (!waiting) return;
-        setLibrary(loaded);
-        onImported("loading", "loaded");
-      },
-      () => {
-        if (waiting) onImported("loading", "failed");
-      },
-    );
-    return () => {
-      waiting = false;
-    };
-  }, [map.open, phase, library]);
+    if (map.open) leafletImport.open();
+  }, [map.open]);
+
+  // The import ended: read before React draws it, while the box still has the focus it had.
+  // « Réessayer » gives it from its own leg only, at its click.
+  useEffect(
+    () =>
+      leafletImport.subscribe(({ before, event, after }) => {
+        if (event === "retry") return;
+        focusNext.current = leafletFocus(before, event, after, !!box.current?.contains(document.activeElement));
+      }),
+    [],
+  );
+
+  const onRetryImport = () => {
+    const before = leafletImport.snapshot().state;
+    leafletImport.retry();
+    focusNext.current = leafletFocus(before, "retry", leafletImport.snapshot().state, false);
+  };
 
   useEffect(() => {
     const target = focusNext.current;
     if (target === null) return;
     focusNext.current = null;
-    ({ box, toggle, retry: retryImport })[target].current?.focus();
+    ({ box, toggle, retry: retryImport, reload })[target].current?.focus();
   });
 
   const onTiles = useEffectEvent((event: TilesEvent) => {
@@ -260,7 +286,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
     };
   }, []);
 
-  const failed = phase === "failed";
+  const failed = imported.phase === "failed";
   const loading = !failed && (library === null || !started);
 
   return (
@@ -283,9 +309,11 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
         {failed && (
           <MapNotice
             id={`${containerId}-failed`}
-            title={t("failed.title")}
+            title={t(imported.again ? "failedAgain.title" : "failed.title")}
+            body={t(imported.again ? "failedAgain.body" : "failed.body")}
             retryRef={retryImport}
-            onRetry={() => leafletChanged(phase, "retry")}
+            onRetry={onRetryImport}
+            reloadRef={imported.again ? reload : undefined}
           />
         )}
         {/* Failed, no empty box: the notice alone, in its place. */}
@@ -315,6 +343,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
           <MapNotice
             id={tilesNoticeId}
             title={t("tilesFailed.title")}
+            body={t("failed.body")}
             retryRef={retryTiles}
             onRetry={() => {
               tiles.current = tilesStep(tiles.current, "retry", false).view;

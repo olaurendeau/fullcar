@@ -3,8 +3,8 @@
  * rows of « Mises à jour et focus »; design « Conception technique », § 6): between two
  * outputs of `mapOf`, the points kept, moved, created and removed, whether to reframe, to
  * close the bubble, and where the focus goes. Then (#483) Leaflet's import and the tiles'
- * notice, the rows « Leaflet : … » and « tuiles : … ». Pure functions: the map draws what
- * they say.
+ * notice, the rows « Leaflet : … » and « tuiles : … », the import one for the page since
+ * #553. Pure functions: the map draws what they say.
  */
 import { distanceMetres, SAME_POSITION_METRES, type EventMapPoints, type MapCar, type MapPoint } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
@@ -132,26 +132,59 @@ export function mapUpdate<Car extends MapCar>(before: MapPoints<Car>, after: Map
   return { points, removed, reorder, reframe, closeBubble, focus: next };
 }
 
-/** Leaflet's import: « Chargement de la carte… », the notice « La carte n’a pas pu se charger. », or the map. */
-export type LeafletPhase = "loading" | "failed" | "ready";
+/**
+ * Leaflet's import, one for the page and both legs (CA2.10, `leaflet-import`): not asked for
+ * yet, « Chargement de la carte… », the notice, or the map.
+ */
+export type LeafletPhase = "idle" | "loading" | "failed" | "ready";
 
-/** « Réessayer » pressed, or the import ended. */
-export type LeafletEvent = "retry" | "loaded" | "failed";
+export interface LeafletState {
+  phase: LeafletPhase;
+  /** The failures in a row, for the page: none since the last success. */
+  failures: number;
+  /** Failed from the second time in a row, online: « La carte n’a toujours pas pu se charger. » and « Recharger la page ». */
+  again: boolean;
+}
 
-/** Where the focus goes: the loading box (`tabindex="-1"`), « Carte », the notice's « Réessayer »; `null`, it stays. */
-export type LeafletFocus = "box" | "toggle" | "retry" | null;
+export const LEAFLET_IDLE: LeafletState = { phase: "idle", failures: 0, again: false };
+
+/** A map opened, « Réessayer » pressed, or the import ended. */
+export type LeafletEvent = "open" | "retry" | "loaded" | "failed";
 
 /**
- * Leaflet's import after `event` (CA2.8): « Réessayer » loads again and gives the focus to the
- * box, which takes the place of the notice and its button; the import ended, the box goes, and
- * its focus with it (`focusInBox`): to « Carte » once loaded, to « Réessayer » once failed
- * again. An event that nothing waits for changes nothing.
+ * Where the focus goes: the loading box (`tabindex="-1"`), « Carte », the notice's « Réessayer »
+ * or its « Recharger la page »; `null`, it stays.
  */
-export function leafletStep(phase: LeafletPhase, event: LeafletEvent, focusInBox: boolean): { phase: LeafletPhase; focus: LeafletFocus } {
-  if (event === "retry") return phase === "failed" ? { phase: "loading", focus: "box" } : { phase, focus: null };
-  if (phase !== "loading") return { phase, focus: null };
-  if (event === "loaded") return { phase: "ready", focus: focusInBox ? "toggle" : null };
-  return { phase: "failed", focus: focusInBox ? "retry" : null };
+export type LeafletFocus = "box" | "toggle" | "retry" | "reload" | null;
+
+/**
+ * The page's import after `event` (CA2.8): the first opening of a map imports, and « Réessayer »
+ * imports again; the import ended, the map, or the notice, « toujours » from the second failure
+ * in a row while `online` (`navigator.onLine`), the first one offline. An event that nothing
+ * waits for changes nothing: the same state.
+ */
+export function leafletStep(state: LeafletState, event: LeafletEvent, online: boolean): LeafletState {
+  if (event === "open") return state.phase === "idle" ? { ...state, phase: "loading" } : state;
+  if (event === "retry") return state.phase === "failed" ? { ...state, phase: "loading" } : state;
+  if (state.phase !== "loading") return state;
+  if (event === "loaded") return { phase: "ready", failures: 0, again: false };
+  const failures = state.failures + 1;
+  return { phase: "failed", failures, again: online && failures >= 2 };
+}
+
+/**
+ * Where a leg's focus goes when the import goes from `before` to `after` (CA2.8): « Réessayer »
+ * gives it to the box, which takes the place of the notice and its buttons; the import ended,
+ * the box goes, and its focus with it (`focusInBox`): to « Carte » once loaded, to « Recharger
+ * la page » under the notice « toujours », to « Réessayer » under the first one. A leg whose box
+ * did not have it, the hidden one say, leaves it where it is.
+ */
+export function leafletFocus(before: LeafletState, event: LeafletEvent, after: LeafletState, focusInBox: boolean): LeafletFocus {
+  if (before.phase === after.phase || event === "open") return null;
+  if (event === "retry") return "box";
+  if (!focusInBox) return null;
+  if (after.phase === "ready") return "toggle";
+  return after.again ? "reload" : "retry";
 }
 
 /** A map's tiles: whether a tile of the view loading now failed, and whether the notice shows. */
