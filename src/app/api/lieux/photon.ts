@@ -7,6 +7,7 @@
  * `PlaceQuery`, never the visitor's request. No log carries the text, the URL or the answer,
  * and nothing is thrown: a failure is `unavailable`, a normal state (D2).
  */
+import { retryAfterMs } from "@/domain/retry-after";
 import { cacheKey, photonQuery, suggestionsOf, type PlaceQuery, type Suggestion } from "@/domain/suggestion";
 // Read at build time, never written: the User-Agent names the version deployed.
 import packageJson from "../../../../package.json";
@@ -142,22 +143,6 @@ export function createPhoton({ fetch, now, url, breakerMs }: PhotonOptions): Pho
       }
     },
   };
-}
-
-/**
- * `Retry-After` in milliseconds from `time`: an integer of seconds, or an HTTP date as RFC 9110
- * writes it (IMF-fixdate, `Fri, 23 Oct 2026 08:00:00 GMT`) that names a real day and time;
- * anything else, `undefined`. `Date.parse` alone is not enough: Node reads « -1 » or « next
- * tuesday 3 » as dates in 2001.
- */
-function retryAfterMs(raw: string | null, time: number): number | undefined {
-  if (raw === null) return undefined;
-  // HTTP allows whitespace around a field's value, and `fetch` may keep it.
-  const value = raw.trim();
-  if (/^\d+$/.test(value)) return Number(value) * 1000;
-  const date = Date.parse(value);
-  // `toUTCString` writes an IMF-fixdate: any other text, a 30 February or a wrong day of the week, differs.
-  return !Number.isNaN(date) && new Date(date).toUTCString() === value ? date - time : undefined;
 }
 
 /** The body as text, read up to `MAX_BYTES`, and no further. */
