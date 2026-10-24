@@ -1,4 +1,4 @@
-import type { Locator, Page, Route } from "@playwright/test";
+import type { Locator, Page, Request, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { messages } from "./device";
@@ -68,6 +68,13 @@ async function typeAndList(page: Page, text: string, count: number) {
   await expect(options(page)).toHaveCount(count);
 }
 
+/** The changes sent to the organiser's page from now on: its server actions, posted to `/admin`. */
+function changes(page: Page): Request[] {
+  const sent: Request[] = [];
+  page.on("request", (request) => isAction(request) && new URL(request.url()).pathname.endsWith("/admin") && sent.push(request));
+  return sent;
+}
+
 /** Holds the changes sent from now on until `fail` answers them 500; `stop` holds no more. */
 async function holdEdits(page: Page) {
   const held: Route[] = [];
@@ -94,6 +101,8 @@ test.describe("the place of « Modifier l’événement », the event with a pos
   }) => {
     const sent = searches(page);
     await openSheet(page, organiserPath(seededEvent));
+    // From the sheet open: the page's load (`loadOrganiserPanel`) is sent before « Modifier l’événement » shows.
+    const changed = changes(page);
     await expect(place(page)).toHaveValue(LOCATION);
     await expect(savedLine(page)).toBeVisible();
     await expect(place(page)).toHaveAccessibleDescription(FR.position);
@@ -103,6 +112,7 @@ test.describe("the place of « Modifier l’événement », the event with a pos
     await expect(sheet(page)).toHaveCount(0);
     await expect(messages(page)).toHaveCount(0);
     expect(sent.length).toBe(0);
+    expect(changed.length).toBe(0);
     expect(await stored(db, seededEvent.id)).toEqual({ title: "Tournoi de Rennes", location: LOCATION, location_lat: AT.lat, location_lng: AT.lng });
   });
 
@@ -294,6 +304,19 @@ test.describe("the place of « Modifier l’événement », the event without a 
 
     await save(page);
     expect(await stored(db, seededEvent.id)).toEqual({ title: "Tournoi de Rennes U13", location: "Salle Carrel", location_lat: AT.lat, location_lng: AT.lng });
+  });
+
+  test("#535: a search the app's server does not answer is abandoned by `organiserTraffic`, not left pending", async ({ page, seededEvent }) => {
+    // Sent on to a port nothing listens on: `route.fetch()`, in `organiserTraffic`, fails.
+    await page.route(
+      (url) => url.pathname === "/api/lieux",
+      (route) => route.fallback({ url: "http://127.0.0.1:1/api/lieux" }),
+    );
+    await openSheet(page, organiserPath(seededEvent));
+    const failed = page.waitForEvent("requestfailed", isSearch);
+    await place(page).fill(textOf("Gymnase"));
+    // Abandoned by the page once its wait is over (`TIMEOUT_MS`), it would fail as `net::ERR_ABORTED`.
+    expect((await failed).failure()?.errorText).toBe("net::ERR_FAILED");
   });
 });
 
