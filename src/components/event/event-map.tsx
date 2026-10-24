@@ -76,7 +76,7 @@ function MapNotice({ id, title, retryRef, onRetry }: { id: string; title: string
 }
 
 /**
- * A leg's map (epic #238, event-map v15): the « Carte » button, a fixed label whose chevron says
+ * A leg's map (epic #238, event-map v18): the « Carte » button, a fixed label whose chevron says
  * the state, hidden without JavaScript; then the container it folds, `hidden` while folded, with
  * the map's box, 240 px high, 280 px from a 448 px window. Leaflet is imported at the first
  * opening, and starts only once the map is open and its panel shown, a hidden tab having no
@@ -85,14 +85,16 @@ function MapNotice({ id, title, retryRef, onRetry }: { id: string; title: string
  * A failed import (offline, or an old build's chunk after a deploy) puts « La carte n’a pas pu se
  * charger. » in place of the box, whose « Réessayer » imports again (CA2.8, `leafletStep`).
  * The map has the flag and a point per car of the leg with a position, `cars` in the order of
- * the cards; its name counts them, and `notOnMap` the others. An activated point leads to its
- * card (`showCar`). Under the map, in this order (CA1.17): the tiles' notice (CA2.4,
- * `tilesStep`), part of the map's description, `notOnMap`, then, at touch only, the two-finger
- * sentence.
+ * the cards, cars less than 25 m apart in one point, and those less than 25 m from the flag in
+ * its one point (`mapOf`, v18); its name counts them, and `notOnMap` the others. An activated
+ * point leads to its card (`showCar`), a grouped one opens its bubble, whose buttons do. Under
+ * the map, in this order (CA1.17): the tiles' notice (CA2.4, `tilesStep`), part of the map's
+ * description, `notOnMap`, then, at touch only, the two-finger sentence.
  */
 export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: readonly MapCar[] }) {
   const t = useTranslations("EventMap");
   const tCar = useTranslations("Board.car");
+  const tActions = useTranslations("Actions");
   const format = useFormatter();
   const toggle = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -168,25 +170,38 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const flagLabel = t("event", { location: map.location });
   const zoomIn = t("zoomIn");
   const zoomOut = t("zoomOut");
+  const close = tActions("close");
   const attribution = t("attribution", {
     date: format.dateTime(layerUpdated(), { month: "long", year: "numeric", timeZone: "UTC" }),
   });
   const { lat, lng } = map.position;
-  const { onMap, notOnMap } = mapOf(map.position, cars);
-  // Each car its own point for now, even less than 25 m from another: the groups are #481's.
-  const points: CarPoint[] = cars.flatMap((car) =>
-    mapOf(map.position, [car]).points.map(({ position, atFlag }) => ({
+  const { points: grouped, onMap, notOnMap } = mapOf(map.position, cars);
+  const points: CarPoint[] = grouped.map(({ position, atFlag, cars: here }) => {
+    const pointCars = here.map((car) => ({
       id: car.id,
-      position,
-      atFlag,
-      label: car.driver.firstName,
+      title: tCar("title", { driver: car.driver.firstName }),
       name: t(`car.${leg}`, {
         car: tCar("title", { driver: car.driver.firstName }),
         location: car.location,
         seats: car.full ? tCar("full") : t("freeSeats", { free: car.freeSeats }),
       }),
-    })),
-  );
+    }));
+    if (here.length === 1) return { position, atFlag, label: here[0].driver.firstName, name: pointCars[0].name, cars: pointCars };
+    return {
+      position,
+      atFlag,
+      label: format.number(here.length),
+      // « Nina, Paul », as the design writes it: the narrow conjunction, without « et » or « and ».
+      name: t("group", {
+        count: here.length,
+        drivers: format.list(
+          here.map((car) => car.driver.firstName),
+          { type: "conjunction", style: "narrow" },
+        ),
+      }),
+      cars: pointCars,
+    };
+  });
   // Created again only when what it shows changes, not at each new state of the page (#482 updates it).
   const pointsJson = JSON.stringify(points);
 
@@ -197,9 +212,10 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       flagLabel,
       zoomIn,
       zoomOut,
+      close,
       attribution,
       touchQuery: TOUCH,
-      cars: JSON.parse(pointsJson) as CarPoint[],
+      points: JSON.parse(pointsJson) as CarPoint[],
       onCar: (id) => showCar(leg, id),
       onTiles: (event) => onTiles(event),
     });
@@ -208,7 +224,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       handle.current = null;
       created.destroy();
     };
-  }, [library, started, lat, lng, flagLabel, zoomIn, zoomOut, attribution, pointsJson, leg]);
+  }, [library, started, lat, lng, flagLabel, zoomIn, zoomOut, close, attribution, pointsJson, leg]);
 
   const failed = phase === "failed";
   const loading = !failed && (library === null || !started);

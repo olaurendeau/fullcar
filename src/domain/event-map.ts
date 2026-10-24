@@ -44,7 +44,7 @@ export interface MapCar {
 export interface MapPoint<Car extends MapCar> {
   position: Position;
   cars: Car[];
-  /** Less than 25 m from the flag: no line, and its label goes under the flag. */
+  /** The flag's point, its cars less than 25 m from it: no line, and its label goes under the flag. At most one. */
   atFlag: boolean;
 }
 
@@ -59,9 +59,11 @@ export interface EventMapPoints<Car extends MapCar> {
 }
 
 /**
- * The map of a leg, its cars in the order of the cards. A car with a position joins the
- * first point, in that order, whose position (its first car's) is less than 25 m from its
- * own; otherwise it opens a point. A car without a position has none.
+ * The map of a leg, its cars in the order of the cards. The flag first (event-map v18, CA1.15):
+ * every car less than 25 m from the flag is in its one point, even 25 m or more from another,
+ * whose two labels would otherwise be drawn in the same place. Any other car joins the first
+ * point, in that order, not at the flag, whose position (its first car's) is less than 25 m
+ * from its own; otherwise it opens a point. A car without a position has none.
  */
 export function mapOf<Car extends MapCar>(flag: Position, cars: readonly Car[]): EventMapPoints<Car> {
   const points: MapPoint<Car>[] = [];
@@ -72,9 +74,10 @@ export function mapOf<Car extends MapCar>(flag: Position, cars: readonly Car[]):
       notOnMap += 1;
       continue;
     }
-    const point = points.find((each) => samePoint(each.position, position));
+    const atFlag = samePoint(flag, position);
+    const point = points.find((each) => each.atFlag === atFlag && (atFlag || samePoint(each.position, position)));
     if (point) point.cars.push(car);
-    else points.push({ position, cars: [car], atFlag: samePoint(flag, position) });
+    else points.push({ position, cars: [car], atFlag });
   }
   return { flag, points, onMap: cars.length - notOnMap, notOnMap };
 }

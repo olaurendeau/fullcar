@@ -380,6 +380,44 @@ describe("the position of the event changes", () => {
   });
 });
 
+describe("the event moves, and the cars of the flag's point change (v16, « regroupement ou séparation »)", () => {
+  // 20 m north and 20 m south of the flag, 40 m apart: one point at the flag.
+  const nina = car("nina", north(FLAG, 20));
+  const paul = car("paul", north(FLAG, -20));
+  const before = map([nina, paul]);
+  // 40 m north: Nina 20 m from it, Paul 60 m.
+  const after = map([nina, paul], north(FLAG, 40));
+
+  it("splits the flag's point: Paul leaves it, Nina stays at the flag", () => {
+    expect(before.points.map(pointKey)).toEqual(["nina paul"]);
+    const update = mapUpdate(before, after, UNTOUCHED);
+    expect(changes(update)).toEqual([
+      ["nina", "created"],
+      ["paul", "created"],
+    ]);
+    expect(update.points.map(({ point }) => point.atFlag)).toEqual([true, false]);
+    expect(update.removed).toEqual(["nina paul"]);
+  });
+
+  it("sends the focus the flag's point had to the point that now holds its first car", () => {
+    expect(mapUpdate(before, after, focused({ kind: "point", key: "nina paul" })).focus).toEqual({ kind: "point", key: "nina" });
+  });
+
+  it("closes its open bubble, the focus to the point at its position", () => {
+    const update = mapUpdate(before, after, focused({ kind: "bubble", car: "paul" }, { bubble: "nina paul" }));
+    expect(update.closeBubble).toBe(true);
+    expect(update.focus).toEqual({ kind: "point", key: "nina" });
+  });
+
+  it("groups a car the moved flag reaches, the focus its point had with it", () => {
+    const lea = car("lea", north(FLAG, 60));
+    const update = mapUpdate(map([nina, lea]), map([nina, lea], north(FLAG, 40)), focused({ kind: "point", key: "lea" }));
+    expect(changes(update)).toEqual([["lea nina", "created"]]);
+    expect(update.points[0].point.atFlag).toBe(true);
+    expect(update.focus).toEqual({ kind: "point", key: "lea nina" });
+  });
+});
+
 describe("never <body>: the map's container, failing all else", () => {
   const before = map([car("nina", BRINDAS)]);
   const empty = map([]);

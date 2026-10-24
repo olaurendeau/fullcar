@@ -421,6 +421,7 @@
       "retour": "{car}, dépose : {location}, {seats}"
     },
     "freeSeats": "{free, plural, one {# place libre} other {# places libres}}",
+    "group": "{count, plural, other {# voitures}} : {drivers}",
     "notOnMap": "{count, plural, one {# voiture n’est pas sur la carte : son lieu n’a pas de position.} other {# voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.}}",
     "touchHint": "Deux doigts pour déplacer ou zoomer la carte.",
     "loading": "Chargement de la carte…",
