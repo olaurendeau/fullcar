@@ -3,6 +3,8 @@
  * maps read one state, nothing asked for, loading, failed or loaded, and the failures in a
  * row, through `useSyncExternalStore`. One attempt at a time: two legs opened ask once for the
  * module. An attempt starts only at a map's opening or on « Réessayer » (CA1.2 unchanged).
+ * The page's, not the document's: a page left by a client-side navigation leaves no failure
+ * behind (#567).
  */
 import { LEAFLET_IDLE, leafletStep, type LeafletEvent, type LeafletState } from "./event-map-state";
 
@@ -37,12 +39,22 @@ export function createLeafletImport<Library>(load: () => Promise<Library>, onlin
   let snapshot = idle;
   const listeners = new Set<(change: LeafletChange) => void>();
 
+  // The page's, not the document's (#567): read by no map once the commit is over, the page
+  // was left, and a failure is forgotten; back on a page, a map's opening is a first attempt.
+  // A map remounted on the page (a retour added) reads it again in the same commit: it stays.
+  // A loaded module stays: nothing to try again.
+  const forgetIfLeft = () =>
+    setTimeout(() => {
+      if (listeners.size === 0 && snapshot.state.phase === "failed") snapshot = idle;
+    });
+
   const apply = (event: LeafletEvent, library: Library | null = snapshot.library) => {
     const before = snapshot.state;
     const after = leafletStep(before, event, event === "failed" && online());
     if (after === before) return;
     snapshot = { state: after, library };
     for (const listener of [...listeners]) listener({ before, event, after });
+    if (listeners.size === 0) forgetIfLeft();
     if (after.phase === "loading") {
       load().then(
         (loaded) => apply("loaded", loaded),
@@ -54,7 +66,10 @@ export function createLeafletImport<Library>(load: () => Promise<Library>, onlin
   return {
     subscribe: (listener) => {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) forgetIfLeft();
+      };
     },
     snapshot: () => snapshot,
     serverSnapshot: () => idle,
