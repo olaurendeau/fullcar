@@ -26,7 +26,7 @@ export interface GeoapifyOptions {
   url: string;
   /** The map style, `TILE_STYLE`. */
   style: string;
-  /** `GEOAPIFY_API_KEY`; empty, there is no key and no call. */
+  /** `GEOAPIFY_API_KEY`, trimmed; empty, there is no key and no call. */
   key: string;
   /** How long the breaker stays open, `TILES_BREAKER_MS`; `0` never opens it, `Retry-After` included. */
   breakerMs: number;
@@ -51,7 +51,9 @@ const FAILED: TileAnswer = { state: "failed" };
 
 /**
  * `TILE_UPSTREAM_URL`, `TILE_STYLE`, `GEOAPIFY_API_KEY` and `TILES_BREAKER_MS` (an integer of
- * milliseconds, digits only), each with its default when unset, empty or unreadable.
+ * milliseconds, digits only), each with its default when unset, empty or unreadable. The key
+ * is trimmed: pasted into Vercel with a final line break, it would fail every tile with a 401;
+ * blank, it is no key.
  */
 export function geoapifySettings(env: Record<string, string | undefined>): Omit<GeoapifyOptions, "fetch" | "now"> {
   const style = env.TILE_STYLE ?? "";
@@ -59,7 +61,7 @@ export function geoapifySettings(env: Record<string, string | undefined>): Omit<
   return {
     url: env.TILE_UPSTREAM_URL || TILE_UPSTREAM_URL,
     style: STYLE.test(style) ? style : TILE_STYLE,
-    key: env.GEOAPIFY_API_KEY ?? "",
+    key: (env.GEOAPIFY_API_KEY ?? "").trim(),
     breakerMs: /^\d+$/.test(breaker) ? Number(breaker) : BREAKER_MS,
   };
 }

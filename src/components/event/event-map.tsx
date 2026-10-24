@@ -8,7 +8,6 @@ import type { BoardCar } from "@/domain/board";
 import { mapOf } from "@/domain/event-map";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
-import { PLAN_IGN_UPDATED } from "@/domain/tile";
 import { cn } from "@/lib/utils";
 import { leafletFocus, TILES_QUIET, tilesStep, type LeafletFocus, type TilesEvent } from "./event-map-state";
 import { focusLandmark, showCar } from "./focus";
@@ -54,12 +53,6 @@ function useTouch(): boolean {
     () => window.matchMedia(TOUCH).matches,
     () => false,
   );
-}
-
-/** The first day of the month of `PLAN_IGN_UPDATED` (`YYYY-MM`), in UTC, as the formatter reads it. */
-function layerUpdated(): Date {
-  const [year, month] = PLAN_IGN_UPDATED.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, 1));
 }
 
 /**
@@ -214,9 +207,8 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const zoomIn = t("zoomIn");
   const zoomOut = t("zoomOut");
   const close = tActions("close");
-  const attribution = t("attribution", {
-    date: format.dateTime(layerUpdated(), { month: "long", year: "numeric", timeZone: "UTC" }),
-  });
+  // Until #558 puts our own credits in the map's box, with their link: v27's words, as text.
+  const attribution = `${t("attribution")} ${t("osmLink")}`;
   const { points: grouped, onMap, notOnMap } = mapOf(map.position, cars);
   const points: CarPoint[] = grouped.map(({ position, atFlag, cars: here }) => {
     const pointCars = here.map((car) => ({
@@ -358,7 +350,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
           <MapNotice
             id={tilesNoticeId}
             title={t("tilesFailed.title")}
-            body={t("failed.body")}
+            body={t("tilesFailed.body")}
             retryRef={retryTiles}
             onRetry={() => {
               tiles.current = tilesStep(tiles.current, "retry", false).view;

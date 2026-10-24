@@ -7,7 +7,7 @@ import { expect } from "./fixtures";
 /*
  * #484, event-map v18, CA1.8 and CA1.9: the map's layout at 360 px (the project `e2e`, a
  * Pixel 7 at 360 × 780, at touch), at 416 px and at 1280 px, with a mouse (« À 1280 px »);
- * #562, v27: the box edge to edge in le conteneur. The fake IGN
+ * #562, v27: the box edge to edge in le conteneur. The fake tile provider
  * answers its default tile: no test here sets one.
  */
 

@@ -2,16 +2,15 @@ import type { Locator, Page, Route } from "@playwright/test";
 import type { Leg } from "@/domain/leg";
 import { around, points, seedCar, test } from "./event-map-points";
 import { expect } from "./fixtures";
-import { answerTiles } from "./ign";
-import { tileAt } from "./tiles";
+import { answerTiles, tileAt } from "./tiles";
 
 /*
  * #562, event-map v27, CA1.18: « le conteneur », the bordered block whose header is « Carte »,
  * with the map's box, the lines under it and Leaflet's notice; and the one ring element, above
  * Leaflet's panes and above the loading text, shown while the region of the map (Leaflet's
  * container) or the loading box has the keyboard focus. On both legs, at 360, 416 and 1280 px,
- * folded, under Leaflet's notice, loading, under a tiles' notice, and loaded. The fake IGN is
- * set for one tile only, the flag's at the view's zoom.
+ * folded, under Leaflet's notice, loading, under a tiles' notice, and loaded. The fake tile
+ * provider is set for one tile only, the flag's at the view's zoom.
  */
 
 test.use({ locale: "fr-FR" });
