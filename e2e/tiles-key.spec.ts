@@ -53,9 +53,9 @@ test("CA3.5: neither the HTML, nor a response of our origin (a 502 included), no
   expect(ours.some((response) => response.status() === 502)).toBe(true);
   for (const response of ours) {
     expect.soft(JSON.stringify(await response.allHeaders()).includes(KEY), response.url()).toBe(false);
-    // A redirect has no body to read.
-    const body = await response.body().catch(() => Buffer.alloc(0));
-    expect.soft(body.includes(KEY), response.url()).toBe(false);
+    // A redirect alone has no body to read: any other body that cannot be read fails the test.
+    if (response.status() >= 300 && response.status() < 400) continue;
+    expect.soft((await response.body()).includes(KEY), response.url()).toBe(false);
   }
 
   // The key searched for is the one `web` has: the fake received it, as the only query.
