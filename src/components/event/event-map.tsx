@@ -22,14 +22,17 @@ export interface LegMap {
 /** A touch screen, where one finger scrolls the page and two move the map (CA1.11). */
 const TOUCH = "(pointer: coarse)";
 
+/** Calls `changed` whenever the primary pointer changes; one function, so React subscribes once. */
+function watchTouch(changed: () => void): () => void {
+  const touch = window.matchMedia(TOUCH);
+  touch.addEventListener("change", changed);
+  return () => touch.removeEventListener("change", changed);
+}
+
 /** Whether the primary pointer is a finger, now: never on the server, nor before hydration. */
 function useTouch(): boolean {
   return useSyncExternalStore(
-    (changed) => {
-      const touch = window.matchMedia(TOUCH);
-      touch.addEventListener("change", changed);
-      return () => touch.removeEventListener("change", changed);
-    },
+    watchTouch,
     () => window.matchMedia(TOUCH).matches,
     () => false,
   );
