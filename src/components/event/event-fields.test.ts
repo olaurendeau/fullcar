@@ -77,7 +77,7 @@ describe("updates in one tick", () => {
 
 describe("loadedEventFields", () => {
   const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00" };
-  const values = { title: "Tournoi de Rennes", location: "Gymnase", allerDate: "2026-12-12", allerTime: "07:30" };
+  const values = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerDate: "2026-12-12", allerTime: "07:30" };
 
   // M1.5: the fields show what is saved, the box checked with a retour; M1.7: on one day, the end date follows.
   it("shows the saved values, and the end date follows on a one-day event", () => {
@@ -102,6 +102,14 @@ describe("loadedEventFields", () => {
       retourDateFollows: true,
     });
   });
+
+  // AL5.1, #432: the saved position is part of the place, with no label: « Position enregistrée ».
+  it("loads the saved position with the place's text, and no label", () => {
+    const position = { lat: 45.73791, lng: 4.65616 };
+    const loaded = loadedEventFields({ ...header, locationPosition: position, retourAt: null });
+    expect(loaded.values).toMatchObject({ location: "Gymnase", locationPosition: position });
+    expect(loaded.locationLabel ?? null).toBeNull();
+  });
 });
 
 describe("eventFieldsChanged", () => {
@@ -118,6 +126,28 @@ describe("eventFieldsChanged", () => {
 
   it("is true once the box Retour differs", () => {
     expect(eventFieldsChanged({ ...loaded, retour: false }, loaded)).toBe(true);
+  });
+
+  // AL5.2, « Un lieu, une valeur »: the place is its text and its position; « Retirer » alone is a change.
+  describe("the place, a couple", () => {
+    const position = { lat: 45.73791, lng: 4.65616 };
+    const placed = { ...loaded, locationPosition: position };
+
+    it("is true once the position alone is removed", () => {
+      expect(eventFieldsChanged({ ...placed, locationPosition: null }, placed)).toBe(true);
+    });
+
+    it("is true once a position is chosen under the same text", () => {
+      expect(eventFieldsChanged(placed, loaded)).toBe(true);
+    });
+
+    it("is true once another position is chosen", () => {
+      expect(eventFieldsChanged({ ...placed, locationPosition: { lat: 45.7, lng: 4.6 } }, placed)).toBe(true);
+    });
+
+    it("is false for the same position, compared at 5 decimals, in another object", () => {
+      expect(eventFieldsChanged({ ...placed, locationPosition: { lat: 45.737912, lng: 4.656163 } }, placed)).toBe(false);
+    });
   });
 
   // Unchecked, the end's fields are neither shown nor saved: what they hold changes nothing.
@@ -192,6 +222,53 @@ describe("withSavedFields", () => {
     const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13" });
     const next = queued(typed({}), withEventField("location", "Salle Carrel"), withSavedFields(loaded.values, saved));
     expect(next.values).toEqual({ ...saved.values, location: "Salle Carrel" });
+  });
+
+  // #432, review of #515 (M6.1): the place is one value, text and position, taken or kept whole.
+  describe("the place, a couple", () => {
+    const position = { lat: 45.73791, lng: 4.65616 };
+    const placed = loadedEventFields({ ...event, locationPosition: position });
+
+    // AL5.3, case 1: the position removed there, the place untouched here: it goes here too.
+    it("a place not touched takes the saved couple, its text and its position, with no label", () => {
+      const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13", location: "Salle Carrel" });
+      const next = withSavedFields(placed.values, saved)(typed({ title: "Tournoi" }, placed));
+      expect(next.values).toEqual({ ...saved.values, title: "Tournoi" });
+      expect(withSavedFields(loaded.values, placed)(typed({ title: "Tournoi" })).values.locationPosition).toEqual(position);
+      expect(next.locationLabel ?? null).toBeNull();
+    });
+
+    it("a place whose position alone was removed here keeps its text and no position", () => {
+      const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13" });
+      const next = withSavedFields(placed.values, { ...saved, values: { ...saved.values, locationPosition: position } })(
+        typed({ locationPosition: null }, placed),
+      );
+      expect(next.values).toEqual({ ...saved.values, locationPosition: null });
+    });
+
+    it("a place chosen here keeps its text, its position and its label, whatever the saved place", () => {
+      const chosen = { lat: 45.738, lng: 4.654 };
+      const here = { ...typed({ location: "École primaire, 69670 Vaugneray", locationPosition: chosen }), locationLabel: "École primaire, 69670 Vaugneray" };
+      const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13", location: "Salle Carrel", locationPosition: position });
+      const next = withSavedFields(loaded.values, saved)(here);
+      expect(next).toEqual({
+        values: { ...saved.values, location: "École primaire, 69670 Vaugneray", locationPosition: chosen },
+        retourDateFollows: here.retourDateFollows,
+        locationLabel: "École primaire, 69670 Vaugneray",
+      });
+    });
+
+    it("a position chosen under the loaded text is a place touched: kept, with its label", () => {
+      const here = { ...typed({ locationPosition: position }), locationLabel: "Gymnase" };
+      const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13" });
+      expect(withSavedFields(loaded.values, saved)(here)).toMatchObject({ values: { location: "Gymnase", locationPosition: position }, locationLabel: "Gymnase" });
+    });
+
+    it("a text changed here keeps the position loaded with it (D6), even when it was removed there", () => {
+      const saved = loadedEventFields({ ...event, title: "Tournoi de Rennes U13" });
+      const next = withSavedFields(placed.values, saved)(typed({ location: "Devant le gymnase" }, placed));
+      expect(next.values).toMatchObject({ title: "Tournoi de Rennes U13", location: "Devant le gymnase", locationPosition: position });
+    });
   });
 });
 
@@ -308,8 +385,7 @@ describe("withLocation", () => {
     const next = withLocation({ text: "Salle des fêtes, 69670 Vaugneray", position, label: "Salle des fêtes, 69670 Vaugneray" })(saved(true));
     expect(next).toEqual({
       ...saved(true),
-      values: { ...saved(true).values, location: "Salle des fêtes, 69670 Vaugneray" },
-      locationPosition: position,
+      values: { ...saved(true).values, location: "Salle des fêtes, 69670 Vaugneray", locationPosition: position },
       locationLabel: "Salle des fêtes, 69670 Vaugneray",
     });
   });
@@ -317,7 +393,7 @@ describe("withLocation", () => {
   it("is kept by a change of another field, and by the box", () => {
     const placed = withLocation({ text: "Devant la salle", position, label: "Salle des fêtes" })(saved(true));
     const next = queued(placed, withEventField("title", "Kermesse"), withEventField("allerDate", "2026-11-14"), withEventField("retourDate", "2026-11-15"), withRetour(false));
-    expect(next).toMatchObject({ locationPosition: position, locationLabel: "Salle des fêtes", values: { location: "Devant la salle" } });
+    expect(next).toMatchObject({ locationLabel: "Salle des fêtes", values: { location: "Devant la salle", locationPosition: position } });
   });
 });
 
@@ -330,7 +406,7 @@ describe("EventFormFields with suggestions", () => {
     return [element, ...elements(element.props?.children)];
   };
   const position = { lat: 45.73791, lng: 4.65616 };
-  const state: EventFieldsState = { ...BLANK_EVENT_FIELDS, values: { ...BLANK_EVENT_FIELDS.values, location: "Salle" }, locationPosition: position, locationLabel: "Salle des fêtes" };
+  const state: EventFieldsState = { ...BLANK_EVENT_FIELDS, values: { ...BLANK_EVENT_FIELDS.values, location: "Salle", locationPosition: position }, locationLabel: "Salle des fêtes" };
   const placeOf = (props: Partial<Parameters<typeof EventFormFields>[0]>) => {
     const updates: EventFieldsUpdate[] = [];
     const tree = EventFormFields({ idOf: (id) => `f-${id}`, state, errors: {}, onChange: (update) => updates.push(update), ...props });
@@ -363,7 +439,7 @@ describe("EventFormFields with suggestions", () => {
     const { props, updates } = placeOf({ suggestions: true });
     (props?.onChange as (value: unknown) => void)({ text: "Salle des f", position: null, label: null });
     expect(updates.length).toBe(1);
-    expect(updates[0](state)).toMatchObject({ values: { location: "Salle des f" }, locationPosition: null, locationLabel: null });
+    expect(updates[0](state)).toMatchObject({ values: { location: "Salle des f", locationPosition: null }, locationLabel: null });
   });
 
   // AL5.4: while the creation is sent, the place proposes nothing and « Retirer » does nothing.

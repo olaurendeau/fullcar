@@ -145,7 +145,10 @@ export function PlaceField({
   const hintId = `${id}-hint`;
 
   // The list open: the height left under it in what the window shows (above a virtual keyboard),
-  // 8 px kept, after the field is scrolled to the top if it does not fit there (AL1.11).
+  // 8 px kept, after the field is scrolled to the top if it does not fit there (AL1.11). The list
+  // is emptied before the scroll and measured after it: in a sheet too short to bring the field
+  // to the top, its height would lengthen the sheet's scroll, which the sheet would give back,
+  // the field lower, once the list is shorter (#432). A scroll that grows moves nothing.
   const suggestions = open ? list.suggestions : null;
   useLayoutEffect(() => {
     const box = popup.current;
@@ -154,7 +157,9 @@ export function PlaceField({
       const shown = window.visualViewport;
       const bottom = () => (shown ? shown.offsetTop + shown.height : window.innerHeight) - LIST_MARGIN;
       box.style.maxHeight = "";
-      if (scroll && box.getBoundingClientRect().bottom > bottom()) field.current?.scrollIntoView({ block: "start" });
+      const below = box.getBoundingClientRect().bottom > bottom();
+      box.style.maxHeight = "0px";
+      if (scroll && below) field.current?.scrollIntoView({ block: "start" });
       box.style.maxHeight = `${Math.max(bottom() - box.getBoundingClientRect().top, LIST_MIN_HEIGHT)}px`;
     };
     fit(true);

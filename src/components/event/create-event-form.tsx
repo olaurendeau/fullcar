@@ -44,8 +44,8 @@ export function CreateEventForm() {
   // Set at once, unlike `sending`: a second tap before the next render sends nothing (C1.11).
   const inFlight = useRef(false);
 
-  // The place and its position go together, `null` without one (« Un lieu, une valeur »).
-  const fields: EventFields = { ...eventFields.values, locationPosition: eventFields.locationPosition ?? null, ...options };
+  // The place and its position go together, both among the values, `null` without one (« Un lieu, une valeur »).
+  const fields: EventFields = { ...eventFields.values, ...options };
 
   function showErrors(found: EventErrors) {
     setErrors(found);

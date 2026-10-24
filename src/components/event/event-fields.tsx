@@ -8,15 +8,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EVENT_FIELDS, type EventErrors, type EventField, type EventFields as SentFields, type EventHeader } from "@/domain/event";
 import { LEGS, type Leg } from "@/domain/leg";
-import type { Position } from "@/domain/place";
+import { samePlace, type Position } from "@/domain/place";
 import { wallClockParts } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { eventErrorMessage } from "./event-error";
 import { PlaceField } from "./place-field";
 import type { PlaceValue } from "./place-field-state";
 
-/** The values of the fields, as they show: the retour date is the one displayed. */
-export type EventFieldValues = Pick<Required<SentFields>, EventField | "retour">;
+/**
+ * The values of the fields, as they show: the retour date is the one displayed. The place is
+ * its text, `location`, and its position, `locationPosition`, `null` without one: one value.
+ * Decision: the position is among the values, its label outside them (#432). Reason: the change
+ * sends its values whole, so the place and its position always leave together (« Un lieu, une
+ * valeur »); and a merge (M6.1) or a comparison (M2.5) that reads the values sees the couple, where
+ * a position beside them was dropped (review of #515). The label never leaves the browser.
+ */
+export type EventFieldValues = Pick<Required<SentFields>, EventField | "retour"> & { locationPosition: Position | null };
 
 /**
  * The fields' state. `retourDateFollows`: the retour date follows the aller date until it is
@@ -26,19 +33,15 @@ export interface EventFieldsState {
   values: EventFieldValues;
   retourDateFollows: boolean;
   /**
-   * Where the place proposes suggestions (`suggestions`): the position of `values.location`,
-   * absent or `null` without one, and the label of the suggestion it came from, which never
-   * leaves the browser.
-   * Decision: outside `values` until « Modifier l’événement » proposes places (#432). Reason:
-   * that form sends its `values` whole, and would send a position it cannot compare yet.
+   * The label of the suggestion the place's position came from, absent or `null` for a saved
+   * one (« Position enregistrée »): shown, never sent.
    */
-  locationPosition?: Position | null;
   locationLabel?: string | null;
 }
 
 /** The creation's start: every text empty, Retour checked (C1.1). */
 export const BLANK_EVENT_FIELDS: EventFieldsState = {
-  values: { title: "", location: "", allerDate: "", allerTime: "", retourDate: "", retourTime: "", retour: true },
+  values: { title: "", location: "", locationPosition: null, allerDate: "", allerTime: "", retourDate: "", retourTime: "", retour: true },
   retourDateFollows: true,
 };
 
@@ -48,13 +51,14 @@ export const BLANK_EVENT_FIELDS: EventFieldsState = {
  * were on the same day (decision 43), or when there is no end yet: checking the box shows the
  * start's date, then the end's time empty (M1.6).
  */
-export function loadedEventFields({ title, location, allerAt, retourAt }: EventHeader): EventFieldsState {
+export function loadedEventFields({ title, location, locationPosition, allerAt, retourAt }: EventHeader): EventFieldsState {
   const aller = wallClockParts(allerAt);
   const retour = retourAt === null ? undefined : wallClockParts(retourAt);
   return {
     values: {
       title,
       location,
+      locationPosition,
       allerDate: aller.date,
       allerTime: aller.time,
       retour: retour !== undefined,
@@ -65,14 +69,22 @@ export function loadedEventFields({ title, location, allerAt, retourAt }: EventH
   };
 }
 
+/** The place of `values`, its text and its position: the couple a place is compared by. */
+const placeOf = (values: EventFieldValues) => ({ text: values.location, position: values.locationPosition });
+
 /**
  * Whether a field differs from its loaded value: one put back as it was is not changed (M2.5).
- * The end's fields count only while the box is checked: unchecked, they are neither shown nor saved.
+ * The place differs by its text or its position: « Retirer » alone is a change (AL5.2). The end's
+ * fields count only while the box is checked: unchecked, they are neither shown nor saved.
  */
 export function eventFieldsChanged(values: EventFieldValues, loaded: EventFieldValues): boolean {
   const shown = (each: EventFieldValues) =>
     EVENT_FIELDS.filter((name) => each.retour || (name !== "retourDate" && name !== "retourTime")).map((name) => each[name]);
-  return values.retour !== loaded.retour || shown(values).some((value, n) => value !== shown(loaded)[n]);
+  return (
+    values.retour !== loaded.retour ||
+    !samePlace(placeOf(values), placeOf(loaded)) ||
+    shown(values).some((value, n) => value !== shown(loaded)[n])
+  );
 }
 
 /**
@@ -106,7 +118,7 @@ export function withEventField(name: EventField, value: string): EventFieldsUpda
 
 /** The place changes, with suggestions: its text, its position and its label together. */
 export function withLocation({ text, position, label }: PlaceValue): EventFieldsUpdate {
-  return (state) => ({ ...state, values: { ...state.values, location: text }, locationPosition: position, locationLabel: label });
+  return (state) => ({ ...state, values: { ...state.values, location: text, locationPosition: position }, locationLabel: label });
 }
 
 /** The box Retour changes. */
@@ -118,15 +130,20 @@ export function withRetour(retour: boolean): EventFieldsUpdate {
  * The saved values arrive, the event changed on another device (organizer-view v3.3.6,
  * « Modifications simultanées »): each field not changed, its value still `loaded`'s, takes the
  * saved value, and each field changed keeps what was typed; the box Retour too (M6.1, M6.2).
- * The end date then follows as the saved values have it, unless it was typed.
+ * The place is one field, its text and its position (« Un lieu, une valeur »): not changed, it
+ * takes the saved couple, « Position enregistrée » if it has one (AL5.3); changed, it keeps its
+ * couple and its label. The end date then follows as the saved values have it, unless it was typed.
  */
 export function withSavedFields(loaded: EventFieldValues, saved: EventFieldsState): EventFieldsUpdate {
   return (state) => {
     const kept = <K extends keyof EventFieldValues>(name: K) =>
       state.values[name] === loaded[name] ? saved.values[name] : state.values[name];
+    const placeChanged = !samePlace(placeOf(state.values), placeOf(loaded));
+    const place = placeChanged ? state.values : saved.values;
     const values: EventFieldValues = {
       title: kept("title"),
-      location: kept("location"),
+      location: place.location,
+      locationPosition: place.locationPosition,
       allerDate: kept("allerDate"),
       allerTime: kept("allerTime"),
       retour: kept("retour"),
@@ -134,7 +151,8 @@ export function withSavedFields(loaded: EventFieldValues, saved: EventFieldsStat
       retourTime: kept("retourTime"),
     };
     const typed = state.values.retourDate !== loaded.retourDate;
-    return { values, retourDateFollows: typed ? state.retourDateFollows : saved.retourDateFollows };
+    const retourDateFollows = typed ? state.retourDateFollows : saved.retourDateFollows;
+    return placeChanged ? { values, retourDateFollows, locationLabel: state.locationLabel } : { values, retourDateFollows };
   };
 }
 
@@ -223,7 +241,7 @@ export function EventFormFields({
         <PlaceField
           id={idOf("location")}
           label={t("location")}
-          value={{ text: values.location, position: state.locationPosition ?? null, label: state.locationLabel ?? null }}
+          value={{ text: values.location, position: values.locationPosition, label: state.locationLabel ?? null }}
           onChange={(value) => !locked && onChange(withLocation(value))}
           rule="event"
           locked={locked || sending}
