@@ -249,6 +249,11 @@ function isRouterRead(request: Request): boolean {
   return new URL(request.url()).searchParams.has("_rsc");
 }
 
+/** A request for suggestions of a place field (#432): `POST /api/lieux`. */
+function isSearch(request: Request): boolean {
+  return new URL(request.url()).pathname === "/api/lieux";
+}
+
 /** The app's icons, as a page links them (`<link rel="icon">`) or a browser asks for them. */
 const ICONS = new Set(["/icon.svg", "/favicon.ico"]);
 
@@ -280,7 +285,9 @@ interface Sent {
  * request, routed by the test itself ahead of this route, is read by `response.text()`, and
  * fails if it cannot be: a test that only lets it through uses `route.fallback()`. A redirect
  * is not followed here but given to the browser, which follows it through this route again: its
- * `Location` and the next request stay searched.
+ * `Location` and the next request stay searched. A place field's search (`/api/lieux`) is read the
+ * same way: the page aborts it once answered, at a keystroke or as its form sends, and Chromium
+ * may then drop its body too (#432).
  *
  * The favicon, which Chromium fetches once the page has loaded, is often still loading when the
  * test leaves the page (`leaveNoToken()`): its body, asked of the browser, was then refused, or
@@ -300,6 +307,15 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     () => state.on,
     async (route: Route) => {
       const request = route.request();
+      if (isSearch(request)) {
+        // Abandoned by the page, answered or not (a keystroke, the form sending), it is given to
+        // a page that may no longer take it; its body, read here, is not marked unhandled meanwhile.
+        const answer = route.fetch();
+        const body = answer.then((response) => response.text());
+        body.catch(() => {});
+        fetched.set(request, body);
+        return answer.then((response) => route.fulfill({ response })).catch(() => {});
+      }
       if (!isAction(request) && !isRouterRead(request)) return route.fallback();
       const answer = route.fetch({ maxRedirects: 0 });
       fetched.set(
