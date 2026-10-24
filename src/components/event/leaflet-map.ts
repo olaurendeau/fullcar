@@ -47,6 +47,8 @@ type KeyboardHandler = L.Handler & { _map: L.Map; _onKeyDown(event: KeyboardEven
  * Leaflet 1.9.4 has no option for it: its `_onKeyDown` calls `map.panBy(offset)`, animated for
  * 250 ms. Ours runs that same `_onKeyDown`, so Shift (three times the distance), the `maxBounds`
  * limit and + / − for zoom stay Leaflet's, with `panBy` made still for the time of the key.
+ * Its `worldCopyJump` branch calls `panTo`, not `panBy`, and would stay animated: this map
+ * does not set `worldCopyJump`.
  * This overrides an internal of Leaflet, and is safe only because package.json pins `leaflet`
  * to exactly 1.9.4: an upgrade reads this again, and e2e/event-map-touch.spec.ts tests the
  * arrows, Shift, + and −.
@@ -59,7 +61,8 @@ const StillKeyboard = LeafletKeyboard.extend({
     try {
       (LeafletKeyboard.prototype as KeyboardHandler)._onKeyDown.call(this, event);
     } finally {
-      map.panBy = panBy;
+      // Back to the prototype's, no own property left on the map.
+      delete (map as Partial<Pick<L.Map, "panBy">>).panBy;
     }
   },
 }) as typeof L.Handler;
@@ -86,7 +89,9 @@ function flagIcon(label: string): L.DivIcon {
  * the flag is not a button and stays out of the Tab order.
  * Nothing moves by degrees (CA1.10, decision 24 of organizer-view): no zoom, fade or marker
  * animation, no inertia, every framing `{ animate: false }`, and the arrow keys' pans at once
- * (`StillKeyboard`). The wheel scrolls the page.
+ * (`StillKeyboard`). Neither Shift and a dragged box nor a double click zooms: both end in a
+ * `setView` that pans by degrees when the zoom stays. With a mouse, the design has the drag and
+ * the buttons alone. The wheel scrolls the page.
  * At touch, one finger scrolls the page too, and two move and zoom the map (CA1.11): dragging
  * follows `touchQuery`, also when it changes, the map staying as it is.
  */
@@ -101,6 +106,8 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     markerZoomAnimation: false,
     inertia: false,
     scrollWheelZoom: false,
+    boxZoom: false,
+    doubleClickZoom: false,
     // Ours instead, below: `StillKeyboard`.
     keyboard: false,
     dragging: !touch.matches,

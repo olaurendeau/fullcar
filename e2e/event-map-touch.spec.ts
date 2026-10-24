@@ -130,6 +130,15 @@ function still(map: Locator): Promise<boolean> {
   });
 }
 
+/**
+ * Turns the browser's touch emulation on or off, which `(pointer: coarse)` follows. The session
+ * stays attached for the rest of the test: detached, its emulation would go with it.
+ */
+async function emulateTouch(page: Page, enabled: boolean) {
+  const browser = await page.context().newCDPSession(page);
+  await browser.send("Emulation.setTouchEmulationEnabled", enabled ? { enabled, maxTouchPoints: 1 } : { enabled });
+}
+
 /** A mouse drag from the middle of `map`, by 60 px right and 40 down: fast, then let go at once, what inertia would throw on. */
 async function drag(page: Page, map: Locator) {
   const { x, y } = await middle(map);
@@ -178,6 +187,8 @@ test.describe("the map, at touch", () => {
     await page.goto(`/e/${placed.id}`);
     const map = await openMap(page);
     await expect(page.getByRole("tabpanel").getByText(TOUCH_HINT, { exact: true })).toBeVisible();
+    // CA1.17: the last of the lines under the map.
+    await expect(page.locator('[id="event-map-aller"] > :last-child')).toHaveText(TOUCH_HINT);
     await map.scrollIntoViewIfNeeded();
     const before = { scroll: await page.evaluate(() => scrollY), flag: await flagInMap(map) };
 
@@ -188,6 +199,7 @@ test.describe("the map, at touch", () => {
   });
 
   test("CA1.11: two fingers spread apart zoom the map in", async ({ page, placed }) => {
+    expect(await coarse(page)).toBe(true);
     await page.goto(`/e/${placed.id}`);
     const map = await openMap(page);
     await map.scrollIntoViewIfNeeded();
@@ -198,6 +210,7 @@ test.describe("the map, at touch", () => {
   });
 
   test("CA1.10: the keyboard pans and zooms at once: an arrow, Shift and an arrow, + and −", async ({ page, placed }) => {
+    expect(await coarse(page)).toBe(true);
     await page.goto(`/e/${placed.id}`);
     await expect(page.getByRole("tabpanel")).toBeVisible();
     const seen = await watchAnimations(page);
@@ -231,20 +244,22 @@ test.describe("the map, at touch", () => {
     expect(await seen.evaluate((names) => [...new Set(names)])).toEqual([]);
   });
 
-  test("CA1.11: the pointer becomes a mouse, the map open: the sentence goes, and a drag moves the map", async ({ page, placed }) => {
+  test("CA1.11: the pointer becomes a mouse, the map open: the sentence goes, and a drag moves the same map", async ({ page, placed }) => {
+    expect(await coarse(page)).toBe(true);
     await page.goto(`/e/${placed.id}`);
     const map = await openMap(page);
     await expect(page.getByRole("tabpanel").getByText(TOUCH_HINT, { exact: true })).toBeVisible();
     await map.scrollIntoViewIfNeeded();
     const flag = await flagInMap(map);
+    const pane = await map.evaluateHandle((box) => box.querySelector(".leaflet-map-pane")!);
 
-    const browser = await page.context().newCDPSession(page);
-    await browser.send("Emulation.setTouchEmulationEnabled", { enabled: false });
-    await browser.detach();
+    await emulateTouch(page, false);
     await expect.poll(() => coarse(page)).toBe(false);
     await expect(page.getByRole("tabpanel").getByText(TOUCH_HINT, { exact: true })).toHaveCount(0);
     await drag(page, map);
     await expect.poll(() => flagInMap(map)).toEqual({ x: flag.x + 60, y: flag.y + 40 });
+    // Not created again: the same Leaflet map, its pane the same node.
+    expect(await map.evaluate((box, before) => box.querySelector(".leaflet-map-pane") === before, pane)).toBe(true);
   });
 });
 
@@ -270,5 +285,54 @@ test.describe("the map, with a mouse", () => {
     const scroll = await page.evaluate(() => scrollY);
     await page.mouse.wheel(0, 120);
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(scroll);
+  });
+
+  test("CA1.10: Shift and a dragged box, then a double click: neither zooms nor moves the map", async ({ page, placed }) => {
+    expect(await coarse(page)).toBe(false);
+    await page.goto(`/e/${placed.id}`);
+    await expect(page.getByRole("tabpanel")).toBeVisible();
+    const seen = await watchAnimations(page);
+    const map = await openMap(page);
+    await map.scrollIntoViewIfNeeded();
+    const flag = await flagInMap(map);
+    // Any tile of another zoom than 14, read without waiting: a zoom at once asks for its tiles within the gesture.
+    const otherZoom = map.locator('img[src^="/tuiles/"]:not([src^="/tuiles/14/"])');
+
+    // A box over three quarters of the map: Leaflet's box zoom would frame it at the same zoom, by an animated pan.
+    const box = (await map.boundingBox())!;
+    await page.keyboard.down("Shift");
+    await page.mouse.move(box.x + 10, box.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.75, box.y + box.height * 0.75, { steps: 10 });
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+    expect(await still(map)).toBe(true);
+    expect(await flagInMap(map)).toEqual(flag);
+    expect(await otherZoom.count()).toBe(0);
+
+    const { x, y } = await middle(map);
+    await page.mouse.dblclick(x, y);
+    expect(await otherZoom.count()).toBe(0);
+    expect(await still(map)).toBe(true);
+    expect(await flagInMap(map)).toEqual(flag);
+    expect(await seen.evaluate((names) => [...new Set(names)])).toEqual([]);
+  });
+
+  test("CA1.11: the pointer becomes a finger, the map open: the sentence comes, and one finger scrolls the page past the same map", async ({ page, placed }) => {
+    expect(await coarse(page)).toBe(false);
+    await page.goto(`/e/${placed.id}`);
+    const map = await openMap(page);
+    await map.scrollIntoViewIfNeeded();
+    const pane = await map.evaluateHandle((box) => box.querySelector(".leaflet-map-pane")!);
+
+    await emulateTouch(page, true);
+    await expect.poll(() => coarse(page)).toBe(true);
+    await expect(page.getByRole("tabpanel").getByText(TOUCH_HINT, { exact: true })).toBeVisible();
+    const before = { scroll: await page.evaluate(() => scrollY), flag: await flagInMap(map) };
+    const { x, y } = await middle(map);
+    await swipe(page, [{ x, y }], { x: 0, y: -100 });
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(before.scroll);
+    expect(await flagInMap(map)).toEqual(before.flag);
+    expect(await map.evaluate((box, earlier) => box.querySelector(".leaflet-map-pane") === earlier, pane)).toBe(true);
   });
 });
