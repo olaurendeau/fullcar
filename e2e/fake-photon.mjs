@@ -1,7 +1,8 @@
 // The slot's fake Photon (compose.yaml, service `photon`), Node alone, no dependency.
 // Port 2322: Photon's search API (https://photon.komoot.io), in its GeoJSON, empty by default.
 // Port 2323: its control, for the end-to-end tests (e2e/photon.ts):
-//   POST /answers {"text", "answer": {"features", "status", "delayMs"}}  sets the answer to `q` = text, exactly;
+//   POST /answers {"text", "answer": {"features", "status", "delayMs"}}  sets the answer to `q` = text, exactly
+//     (`delayMs` from 0 to 2³¹ − 1);
 //   GET /requests?q=text  the requests received for that text, oldest first: path, query as sent, headers;
 //   GET /health  for the healthcheck.
 // Nothing is ever forgotten while it runs: each test picks texts of its own.
@@ -11,6 +12,8 @@ const API_PORT = 2322;
 const CONTROL_PORT = 2323;
 /** A control request larger than this is refused: a test sets a handful of features. */
 const MAX_CONTROL_BODY = 1_000_000;
+/** The longest a timer holds: past it, Node waits 1 ms, and « never answers » would answer at once. */
+const MAX_DELAY_MS = 2 ** 31 - 1;
 
 /** @type {Map<string, {features: unknown[], status: number, delayMs: number}>} */
 const answers = new Map();
@@ -30,7 +33,7 @@ function answerOf(body) {
   const { features = [], status = 200, delayMs = 0 } = answer;
   if (!Array.isArray(features)) return null;
   if (!Number.isInteger(status) || status < 200 || status > 599) return null;
-  if (typeof delayMs !== "number" || !Number.isFinite(delayMs) || delayMs < 0) return null;
+  if (typeof delayMs !== "number" || !Number.isFinite(delayMs) || delayMs < 0 || delayMs > MAX_DELAY_MS) return null;
   return { text, answer: { features, status, delayMs } };
 }
 

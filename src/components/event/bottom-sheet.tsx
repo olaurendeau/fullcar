@@ -39,12 +39,22 @@ function focusFirstIn(sheet: HTMLElement) {
 }
 
 /**
+ * Escape from a place field whose list is open closes that list, not the sheet (AL1.5): Radix
+ * hears it on the document before the field does. The same rule for every sheet.
+ */
+function keepOpenForList(event: KeyboardEvent) {
+  const from = event.target;
+  const listOpen = from instanceof Element && from.getAttribute("role") === "combobox" && from.getAttribute("aria-expanded") === "true";
+  if (listOpen) event.preventDefault();
+}
+
+/**
  * The page's sheet, opened from the bottom of the screen: its title, its content, then
- * « Fermer », translated, in place of the sheet's own cross. Escape closes it too. Every
- * sheet of the event's page goes through here, so that they all look and close alike.
- * Given a `trigger`, the button that opens it, Radix gives that button the focus back once
- * it is closed. While its content is mounted, closing included, the page counts as hidden
- * (`whenPageShown`).
+ * « Fermer », translated, in place of the sheet's own cross. Escape closes it too, unless it
+ * comes from an open list of suggestions, which it closes alone. Every sheet of the event's
+ * page goes through here, so that they all look and close alike. Given a `trigger`, the
+ * button that opens it, Radix gives that button the focus back once it is closed. While its
+ * content is mounted, closing included, the page counts as hidden (`whenPageShown`).
  */
 export function BottomSheet({
   open,
@@ -92,6 +102,7 @@ export function BottomSheet({
         // Without a description, Radix would warn of a missing one; with it, Radix links it.
         {...(description ? {} : { "aria-describedby": undefined })}
         onCloseAutoFocus={onCloseAutoFocus}
+        onEscapeKeyDown={keepOpenForList}
         // Taller than the screen (« Proposer une voiture » with a new driver), it scrolls inside it.
         className="mx-auto max-h-dvh max-w-md gap-0 overflow-y-auto rounded-t-xl pb-[env(safe-area-inset-bottom)]"
       >
