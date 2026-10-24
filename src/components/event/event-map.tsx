@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronUp, LoaderCircle, Map as MapIcon, TriangleAlert } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type Ref } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import { Button } from "@/components/ui/button";
 import type { BoardCar } from "@/domain/board";
 import { mapOf } from "@/domain/event-map";
@@ -10,8 +10,8 @@ import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { PLAN_IGN_UPDATED } from "@/domain/tile";
 import { leafletStep, TILES_QUIET, tilesStep, type LeafletEvent, type LeafletFocus, type LeafletPhase, type TilesEvent } from "./event-map-state";
-import { showCar } from "./focus";
-import type { CarPoint, EventMapHandle } from "./leaflet-map";
+import { focusLandmark, showCar } from "./focus";
+import type { CarPoint, EventMapHandle, MapState } from "./leaflet-map";
 
 type LeafletMap = typeof import("./leaflet-map");
 
@@ -100,6 +100,8 @@ function MapNotice({ id, title, retryRef, onRetry }: { id: string; title: string
  * point leads to its card (`showCar`), a grouped one opens its bubble, whose buttons do. Under
  * the map, in this order (CA1.17): the tiles' notice (CA2.4, `tilesStep`), part of the map's
  * description, `notOnMap`, then, at touch only, the two-finger sentence.
+ * A new state of the page updates the map started (`update`, « Mises à jour et focus »), folded
+ * or in a hidden tab too, where its framing waits for a size.
  */
 export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: readonly MapCar[] }) {
   const t = useTranslations("EventMap");
@@ -107,6 +109,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const tActions = useTranslations("Actions");
   const format = useFormatter();
   const toggle = useRef<HTMLButtonElement>(null);
+  const folded = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const leaflet = useRef<HTMLDivElement>(null);
   const retryImport = useRef<HTMLButtonElement>(null);
@@ -184,11 +187,11 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const attribution = t("attribution", {
     date: format.dateTime(layerUpdated(), { month: "long", year: "numeric", timeZone: "UTC" }),
   });
-  const { lat, lng } = map.position;
   const { points: grouped, onMap, notOnMap } = mapOf(map.position, cars);
   const points: CarPoint[] = grouped.map(({ position, atFlag, cars: here }) => {
     const pointCars = here.map((car) => ({
       id: car.id,
+      position: car.position,
       title: tCar("title", { driver: car.driver.firstName }),
       name: t(`car.${leg}`, {
         car: tCar("title", { driver: car.driver.firstName }),
@@ -212,20 +215,19 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       cars: pointCars,
     };
   });
-  // Created again only when what it shows changes, not at each new state of the page (#482 updates it).
-  const pointsJson = JSON.stringify(points);
+  // What the map shows, compared as text: a new state of the page that changes none of it changes nothing.
+  const stateJson = JSON.stringify({ flag: map.position, flagLabel, points } satisfies MapState);
+  const shown = useEffectEvent(() => JSON.parse(stateJson) as MapState);
 
   useEffect(() => {
     if (library === null || !started || !leaflet.current) return;
     const created = library.createEventMap(leaflet.current, {
-      flag: { lat, lng },
-      flagLabel,
+      state: shown(),
       zoomIn,
       zoomOut,
       close,
       attribution,
       touchQuery: TOUCH,
-      points: JSON.parse(pointsJson) as CarPoint[],
       onCar: (id) => showCar(leg, id),
       onTiles: (event) => onTiles(event),
     });
@@ -234,7 +236,29 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       handle.current = null;
       created.destroy();
     };
-  }, [library, started, lat, lng, flagLabel, zoomIn, zoomOut, close, attribution, pointsJson, leg]);
+  }, [library, started, zoomIn, zoomOut, close, attribution, leg]);
+
+  // Each new state, on the same map (CA1.7): never created again for it.
+  useEffect(() => {
+    handle.current?.update(JSON.parse(stateJson) as MapState);
+  }, [stateJson]);
+
+  // Gone with the event's position, or with its leg: the focus it had goes to a landmark, never
+  // <body>. Seen before React removes the map, given once it has, unless something took it.
+  const heldFocus = useRef(false);
+  useLayoutEffect(() => {
+    const mine = [toggle.current, folded.current];
+    const held = heldFocus;
+    return () => {
+      held.current = mine.some((element) => element?.contains(document.activeElement));
+    };
+  }, []);
+  useEffect(() => {
+    const held = heldFocus;
+    return () => {
+      if (held.current && (document.activeElement === null || document.activeElement === document.body)) focusLandmark();
+    };
+  }, []);
 
   const failed = phase === "failed";
   const loading = !failed && (library === null || !started);
@@ -255,7 +279,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
         <Chevron aria-hidden className="size-4 shrink-0 text-muted-foreground" />
       </button>
       {/* Folded, `hidden` still wins over `flex`: Tailwind's preflight makes it `!important`. */}
-      <div id={containerId} hidden={!map.open} className="flex flex-col gap-2.5">
+      <div ref={folded} id={containerId} hidden={!map.open} className="flex flex-col gap-2.5">
         {failed && (
           <MapNotice
             id={`${containerId}-failed`}

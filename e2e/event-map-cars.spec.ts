@@ -249,7 +249,7 @@ test("CA2.3: one car without a position, in the singular", async ({ db, page, pl
 });
 
 test.describe("the map, folded while the page takes a new state", () => {
-  test("CA1.3: created again while folded, the map, opened, holds all its points", async ({ db, page, placed }) => {
+  test("CA1.3: updated while folded, the map, opened, holds all its points", async ({ db, page, placed }) => {
     // The device holds Tom, without a car: a tap on a free seat boards him, and the page applies the answer's state.
     const token = newToken();
     const tom = await seedPerson(db, placed.id, { firstName: "Tom" }, token);

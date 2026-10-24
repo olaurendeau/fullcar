@@ -37,13 +37,16 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
  * and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
  * When the place has a position, each leg has its map, folded on each load: one open or folded
- * state for the page, in memory only, which outlives the remount of a leg's panel (#478). Without
- * a position, each leg has the organiser's sentence instead, when `hint` is given (#485).
+ * state for the page, in memory only, which outlives the remount of a leg's panel (#478), and
+ * folds when the position goes (#482). Without a position, each leg has the organiser's
+ * sentence instead, when `hint` is given (#485).
  */
 export function EventView({ title, location, locationPosition, allerAt, retourAt, board, device, messageBar, tab, onTab, hint }: EventViewProps) {
   const t = useTranslations("Event.legs");
   const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
   const [mapOpen, setMapOpen] = useState(false);
+  // The position gone, the map is folded: one that comes back is a button, folded (« Mises à jour et focus »).
+  if (!locationPosition && mapOpen) setMapOpen(false);
   const map: LegMap | undefined = locationPosition
     ? { location, position: locationPosition, open: mapOpen, onToggle: () => setMapOpen((open) => !open) }
     : undefined;
