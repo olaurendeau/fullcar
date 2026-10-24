@@ -8,6 +8,8 @@ import { photonFeature, type PhotonFeature } from "./photon";
 /*
  * The place field of « Créer un événement » (#428, place-autocomplete), for the tests that
  * drive it against the slot's fake Photon: its words, its parts, and what the page sends.
+ * `textOf`, `namedPlace`, `isSearch`, `searches` and `recordStatus` serve the cars' place
+ * fields too (#430, #431).
  */
 
 export const FR = {
@@ -35,10 +37,10 @@ export function textOf(label: string) {
 }
 
 /** A named place in France, which the page writes « {name}, {postcode} {city} ». */
-export function namedPlace(name: string, lat: number, lon: number): { feature: PhotonFeature; label: string } {
+export function namedPlace(name: string, lat: number, lon: number, postcode = "69670", city = "Vaugneray"): { feature: PhotonFeature; label: string } {
   return {
-    feature: photonFeature({ lat, lon, name, postcode: "69670", city: "Vaugneray", countrycode: "FR", country: "France" }),
-    label: `${name}, 69670 Vaugneray`,
+    feature: photonFeature({ lat, lon, name, postcode, city, countrycode: "FR", country: "France" }),
+    label: `${name}, ${postcode} ${city}`,
   };
 }
 
@@ -117,18 +119,22 @@ export async function holdCreation(page: Page) {
   };
 }
 
-/** Each text the field's `status` region is given, from now on, in order. */
-export async function recordStatus(page: Page) {
-  await status(page).evaluate((region) => {
+/**
+ * Each text the `status` region `region` is given, from now on, in order: kept in the page
+ * under a name of its own, so two regions of one form are recorded apart.
+ */
+export async function recordStatus(region: Locator) {
+  const key = `said-${randomUUID()}`;
+  await region.evaluate((element, name) => {
     const said: string[] = [];
-    (window as unknown as { said: string[] }).said = said;
-    new MutationObserver(() => region.textContent && said.push(region.textContent)).observe(region, {
+    (window as unknown as Record<string, string[]>)[name] = said;
+    new MutationObserver(() => element.textContent && said.push(element.textContent)).observe(element, {
       childList: true,
       subtree: true,
       characterData: true,
     });
-  });
-  return () => page.evaluate(() => (window as unknown as { said: string[] }).said);
+  }, key);
+  return () => region.page().evaluate((name) => (window as unknown as Record<string, string[]>)[name], key);
 }
 
 /** The event just created, as stored: its place's text and position. */

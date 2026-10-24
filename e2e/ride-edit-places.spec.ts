@@ -1,12 +1,12 @@
-import { randomUUID } from "node:crypto";
-import type { Page, Request, Route } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import type { Position } from "@/domain/place";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { answerFor, photonFeature, requestsFor, type PhotonFeature } from "./photon";
+import { answerFor, requestsFor, type PhotonFeature } from "./photon";
+import { namedPlace, recordStatus, searches, textOf } from "./place-field";
 
 leaveNoToken();
 
@@ -32,17 +32,6 @@ const FR = {
 /** The event's position, which Photon receives rounded to 1 decimal (AL4.1). */
 const EVENT_AT = { lat: 45.7581, lng: 4.6894 };
 
-/** A text of this test's own: the fake keeps its answers an hour, and the app its cache. */
-const textOf = (label: string) => `${label} ${randomUUID()}`;
-
-/** A named place in France, which the page writes « {name}, {postcode} {city} ». */
-function namedPlace(name: string, lat: number, lon: number, postcode: string, city: string): { feature: PhotonFeature; label: string } {
-  return {
-    feature: photonFeature({ lat, lon, name, postcode, city, countrycode: "FR", country: "France" }),
-    label: `${name}, ${postcode} ${city}`,
-  };
-}
-
 const LILAS = namedPlace("12 rue des Lilas", 45.721234, 4.698762, "69126", "Brindas");
 const MAIRIE = namedPlace("Mairie", 45.737011, 4.659876, "69670", "Vaugneray");
 const AT_LILAS = { location_lat: 45.72123, location_lng: 4.69876 };
@@ -58,24 +47,16 @@ const positionLine = (page: Page) => form(page).getByText(/^Position (enregistr�
 const removeButton = (page: Page) => form(page).getByRole("button", { name: FR.remove, exact: true });
 const submit = (page: Page) => form(page).getByRole("button", { name: "Valider", exact: true });
 
-const isSearch = (request: Request) => new URL(request.url()).pathname === "/api/lieux";
-
-/** The page's requests to `/api/lieux`, from now on. */
-function searches(page: Page): Request[] {
-  const sent: Request[] = [];
-  page.on("request", (request) => isSearch(request) && sent.push(request));
-  return sent;
-}
-
 /**
- * The fields of each change of the car the page sends, from now on: the last argument of the
- * server action, which never holds the device's token (it is an argument of its own).
+ * The fields of each change of the car the page sends, from now on: `fields`, the last argument
+ * of the server action `updateRide`, which never holds the device's token (it is an argument of
+ * its own).
  */
 function changes(page: Page, rideId: string): Record<string, unknown>[] {
   const sent: Record<string, unknown>[] = [];
   page.on("request", (request) => {
     const body = request.headers()["next-action"] && request.postData();
-    if (body && body.includes(rideId)) sent.push((JSON.parse(body) as unknown[])[4] as Record<string, unknown>);
+    if (body && body.includes(rideId)) sent.push((JSON.parse(body) as unknown[]).at(-1) as Record<string, unknown>);
   });
   return sent;
 }
@@ -104,20 +85,6 @@ async function choose(page: Page, places: { feature: PhotonFeature }[], chosen =
   await expect(options(page)).toHaveCount(places.length);
   await options(page).nth(chosen).click();
   return text;
-}
-
-/** Each text the field's `status` region is given, from now on, in order. */
-async function recordStatus(page: Page) {
-  await status(page).evaluate((region) => {
-    const said: string[] = [];
-    (window as unknown as { said: string[] }).said = said;
-    new MutationObserver(() => region.textContent && said.push(region.textContent)).observe(region, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-  });
-  return () => page.evaluate(() => (window as unknown as { said: string[] }).said);
 }
 
 /** The car as stored, once the sheet has closed: its place's text and position. */
@@ -183,7 +150,7 @@ test.describe("the place of « Modifier la voiture »", () => {
   }) => {
     const rideId = await seedCar(db, page, seededEvent.id, LILAS.label, { lat: 45.72123, lng: 4.69876 });
     await openForm(page, seededEvent.id, LILAS.label);
-    const said = await recordStatus(page);
+    const said = await recordStatus(status(page));
 
     await place(page).press("End");
     await place(page).press("Backspace");
