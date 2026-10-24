@@ -1,7 +1,7 @@
 import type { Locator, Page, Route } from "@playwright/test";
 import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { placeOf } from "./ign";
+import { placeOf } from "./tiles";
 import { expect, holdActionsWith, isAction, oneCharOff, organiserPath, test } from "./organiser";
 import { answerFor } from "./photon";
 import { namedPlace, textOf } from "./place-field";

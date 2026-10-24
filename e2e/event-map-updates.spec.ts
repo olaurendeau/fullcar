@@ -6,7 +6,7 @@ import { holdToken, newToken } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { anchor, around, FLAG, focusableIn, inside, joins, lines, mapName, openMap, points, seedCar, test } from "./event-map-points";
 import { leaveNoToken } from "./fixtures";
-import { placeOf } from "./ign";
+import { placeOf } from "./tiles";
 import { expect, isAction, organiserPath, test as organiser } from "./organiser";
 
 /*
