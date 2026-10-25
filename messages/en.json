@@ -444,5 +444,39 @@
     "zoomOut": "Zoom out",
     "attribution": "Geoapify · © OpenMapTiles.org ·",
     "osmLink": "© OpenStreetMap"
+  },
+  "Emails": {
+    "hello": "Hello,",
+    "fallback": "If the button does not work, copy this link into your browser:",
+    "footer": "Fullcar · Privacy: {url}",
+    "confirmation": {
+      "subject": "Confirm your email address for Fullcar",
+      "intro": "An event has just been created on Fullcar with this address. Confirm it to find the event in My events, on any device:",
+      "button": "Confirm my address",
+      "validity": "This link is valid for 7 days and works once. Do not forward it: it opens the organiser area, which shows phone numbers.",
+      "notYou": "Wasn’t you? Ignore this email: without a click, this event is linked to no account, and it is deleted, with the address it holds, 30 days after its date."
+    },
+    "signIn": {
+      "subject": "Your Fullcar sign-in link",
+      "intro": "Here is your link to sign in to Fullcar:",
+      "button": "Sign in",
+      "validity": "It is valid for 1 hour and works once. Do not forward it: it gives access to your events.",
+      "notYou": "Didn’t ask for anything? Ignore this email: without a click, nobody is signed in."
+    },
+    "noAccount": {
+      "subject": "Signing in to Fullcar",
+      "intro": "Someone asked to sign in to Fullcar with this address, but no account is linked to it. An account is created with a first event:",
+      "button": "Create an event",
+      "notYou": "Didn’t ask for anything? Ignore this email: no account was created.",
+      "leadsTo": "The button leads to {url}"
+    },
+    "inactivityWarning": {
+      "subject": "Your Fullcar account will be deleted on {date}",
+      "intro": "Your Fullcar account has not been used for almost 3 years. Without a visit by {date}, it will be deleted, along with the history of your events.",
+      "keep": "To keep it, sign in:",
+      "button": "Sign in",
+      "nothingToDo": "To have it deleted, there is nothing to do.",
+      "leadsTo": "The button leads to {url}: it signs nobody in by itself."
+    }
   }
 }
