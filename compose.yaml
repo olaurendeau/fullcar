@@ -37,6 +37,10 @@ services:
       TILE_UPSTREAM_URL: http://tiles:2324/v1/tile
       GEOAPIFY_API_KEY: fullcar-test-key-7f3a9c2e
       TILES_BREAKER_MS: "0"
+      # The slot's fake Brevo, never Brevo, with a test key that cannot be taken for anything else.
+      BREVO_URL: http://brevo:2326/v3/smtp/email
+      BREVO_API_KEY: fullcar-test-brevo-key-4d8e1b6a
+      EMAIL_FROM: Fullcar <bonjour@fullcar.test>
     ports:
       # Loopback only: the slot's app and data are not offered to the local network.
       - "127.0.0.1:30${SLOT:-0}0:3000"
@@ -46,6 +50,8 @@ services:
       photon:
         condition: service_healthy
       tiles:
+        condition: service_healthy
+      brevo:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
@@ -75,6 +81,19 @@ services:
     environment: {}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:2325/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  # A fake of Brevo's transactional e-mail API (e2e/fake-brevo.mjs): it records each message,
+  # and answers a 201 unless a test sets another answer for an address on its control port.
+  # Reached only by name inside the slot: no port is published on the host.
+  brevo:
+    <<: *node
+    command: node e2e/fake-brevo.mjs
+    environment: {}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:2327/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 1s
       timeout: 3s
       retries: 30
@@ -110,14 +129,18 @@ services:
       PHOTON_CONTROL_URL: http://photon:2323
       # The fake tile provider's control port (e2e/tiles.ts).
       TILES_CONTROL_URL: http://tiles:2325
+      # The fake Brevo's control port (e2e/mailbox.ts).
+      BREVO_CONTROL_URL: http://brevo:2327
       HOME: /tmp
       CI: ${CI:-}
-    # `make e2e` serves `web` with --no-deps: running `e2e` is what starts the fakes, Photon's
-    # and the tile provider's.
+    # `make e2e` serves `web` with --no-deps: running `e2e` is what starts the fakes, Photon's,
+    # the tile provider's and Brevo's.
     depends_on:
       photon:
         condition: service_healthy
       tiles:
+        condition: service_healthy
+      brevo:
         condition: service_healthy
     ipc: host
     profiles: [tools]
