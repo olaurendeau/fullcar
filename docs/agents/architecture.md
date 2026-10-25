@@ -340,7 +340,12 @@ comptage se fait donc sous verrou, et l'ordre devient **Event, puis adresse** :
   (`lockEvent`), puis l'adresse, puis compte la limite de l'événement et celle de l'adresse.
 - Une demande de connexion, qui n'a pas d'événement, ne verrouille que l'adresse.
 - Le plafond global se compte dans la même transaction. S'il prend un verrou, ce verrou
-  vient après celui de l'adresse.
+  vient après celui de l'adresse. Deux décisions de la relecture de #623 :
+  - les avertissements d'inactivité (#616) ne comptent pas dans le plafond global ; la
+    tâche quotidienne en envoie 20 au plus par passage (voir « La purge ») ;
+  - une création que le plafond global bloque (#599) s'inscrit
+    `send_status = address_limit`, et son avis dit « L'e-mail n'est pas parti », comme à la
+    limite par adresse.
 - Une adresse n'est jamais verrouillée avant l'Event. Le verrou d'adresse ne dure que la
   transaction, et il est pris sur l'adresse telle que `src/domain/email-address.ts` la lit,
   pas sur une ligne de compte : une adresse sans compte se limite aussi (OA3.5).
@@ -446,9 +451,10 @@ ci-dessus valent pour chacun.
   `location.hash` et ne l'envoie qu'à l'appui sur le bouton, jamais au chargement : un
   scanner d'e-mails qui suit le lien ne l'use pas (OA5.1). Elle retire ensuite le fragment
   de la barre d'adresse et de l'historique (OA5.2). « Corriger l'adresse » supprime les
-  liens de l'événement envoyés à l'ancienne adresse (OA2.5). Le jeton d'un lien passe par
-  Brevo et par la boîte de l'organisateur : hors de notre serveur et du navigateur, c'est
-  le seul endroit où un jeton existe en clair.
+  liens de l'événement envoyés à l'ancienne adresse (OA2.5). Le jeton d'un lien de
+  connexion ou de confirmation passe aussi par Brevo et par la boîte de l'organisateur, où
+  il est en clair. Le lien perso, et le lien admin jusqu'à #597, sont en clair partout où
+  la personne les copie.
 - **Une seule règle d'accès** à l'espace organisateur : `src/domain/organiser-access.ts`
   (#596). Elle donne l'accès à la session du compte de l'événement, ou au jeton d'admin du
   navigateur de création. `withOrganiserPhones` n'accepte qu'une autorisation produite par
@@ -940,7 +946,9 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
 - **Les comptes inactifs** (#616, `src/app/api/purge/inactive-accounts.ts`) : l'avertissement
   part 30 jours avant les 3 ans sans visite, une seule fois, et le compte n'est supprimé
   qu'après l'envoi effectif de cet avertissement (`warned_at` ; décision 5 du coordinateur
-  sur #581). Le supprimer suit le même chemin que « Supprimer mon compte ».
+  sur #581). Le supprimer suit le même chemin que « Supprimer mon compte ». Les
+  avertissements ne comptent pas dans le plafond global d'envois, et un passage en envoie 20
+  au plus (décision de la relecture de #623).
 - **Supprimer un compte** (`deleteAccount`, `src/db/accounts.ts`, #610) efface l'adresse de
   toutes les tables, y compris l'adresse en attente d'un événement créé ailleurs avec elle
   (décision 4 du coordinateur sur #581), ferme toutes ses sessions et révoque les jetons
@@ -1025,7 +1033,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | jeton d'admin dans le navigateur | `src/app/e/[id]/admin/admin-token-store.ts`, à partir de #597 | seul code navigateur qui touche au jeton d'admin, rangé sous `fullcar:admin-token:{id}` (voir « Session, liens et jeton d'admin ») |
 | jeton de session dans le navigateur | `src/app/session-token.ts` ; `src/components/account/session-visit.tsx`, à partir de #595 | seul code navigateur qui touche au jeton de session, rangé sous `fullcar:session` ; `session-visit.tsx`, monté par le layout racine, envoie la visite à chaque chargement de page |
 | jetons tirés par le serveur | `src/domain/server-token.ts`, à partir de #593 | seul tirage des jetons d'admin, de session et de lien, 128 bits de `randomBytes` ; `newAdminToken` s'en sert |
-| règles du compte | `src/domain/email-address.ts`, `account-rules.ts` et `send-limits.ts`, à partir de #593 | la lecture d'une adresse, les durées (lien de connexion 1 h, de confirmation 7 jours, session 90 jours, inactivité 3 ans) et le résultat d'un lien, les trois limites d'envoi et le plafond global |
+| règles du compte | `src/domain/email-address.ts`, `account-rules.ts` et `send-limits.ts`, à partir de #593 | la lecture d'une adresse, les durées (lien de connexion 1 h, de confirmation 7 jours, session 90 jours, inactivité 3 ans) et le résultat d'un lien ; la limite par événement, la limite par adresse et le plafond global horaire, à partir de #623 ; la limite des demandes de connexion par adresse (OA4.5), à partir de #603 |
 | accès à l'espace organisateur | `src/domain/organiser-access.ts`, à partir de #596 | la seule règle d'accès : session du compte de l'événement, ou jeton d'admin du navigateur de création ; seule à produire l'autorisation que `withOrganiserPhones` accepte |
 | compte dans la base | `src/db/accounts.ts`, `sessions.ts`, `email-links.ts`, `email-sends.ts`, à partir de #594 ; `src/db/my-events.ts`, à partir de #606 | les comptes, les sessions, les liens (un seul usage, même en concurrence) et les envois (limites sous verrou, Event puis adresse) ; Mes événements en agrégats, sans aucun téléphone |
 | connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/`, à partir de #607 | les pages et actions de connexion et des liens ; la page Mes événements |
