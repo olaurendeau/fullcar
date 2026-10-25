@@ -23,8 +23,12 @@ express in them.
 - **i18n from the start**: French and English.
 - **No ads, no tracking.**
 - **Erased at day 30**: 30 days after the last trip (Paris time), everything about the
-  participants is erased; the title, place and dates stay in the organiser's history, and an
-  event without an account is deleted entirely.
+  participants is erased; the title, place and dates stay in the organiser's history until
+  the account is deleted, by the organiser or after 3 years without a visit, and an event
+  without an account is deleted entirely.
+
+The organiser account, sign-in, "My events" and the day-30 erasure are being built
+(epic [#581](https://github.com/olaurendeau/fullcar/issues/581)).
 
 ## Stack
 
