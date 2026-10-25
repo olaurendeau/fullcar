@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql, type Insertable, type Selectable, type Transaction } from "kysely";
+import { sql, type Insertable, type Selectable, type Transaction, type Updateable } from "kysely";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { emailAddress } from "@/domain/email-address";
 import type { AccountTable, Database, EmailLinkTable, EmailSendTable, EventTable, SessionTable } from "./schema";
@@ -133,6 +133,7 @@ describe("account tables", () => {
         { name: "event_id", type: "text", nullable: "YES", default: null },
         { name: "created_at", type: TIMESTAMP, nullable: "NO", default: "now()" },
         { name: "used_at", type: TIMESTAMP, nullable: "YES", default: null },
+        { name: "return_event_id", type: "text", nullable: "YES", default: null },
       ],
     ],
     [
@@ -158,6 +159,9 @@ describe("account tables", () => {
       "sending" | "sent" | "failed" | "address_limit" | null
     >();
     expectTypeOf<Selectable<EventTable>["admin_token_hash"]>().toEqualTypeOf<Buffer | null>();
+    // A new event always has a token: only a revocation writes null.
+    expectTypeOf<Insertable<EventTable>["admin_token_hash"]>().toEqualTypeOf<Buffer>();
+    expectTypeOf<Updateable<EventTable>["admin_token_hash"]>().toEqualTypeOf<Buffer | null | undefined>();
     expectTypeOf<Insertable<AccountTable>>().not.toHaveProperty("created_at");
   });
 
@@ -289,10 +293,43 @@ describe("account tables", () => {
         };
       });
       expect(rows.links).toMatchObject([
-        { kind: "login", account_id: rows.accountId, event_id: null, used_at: null },
-        { kind: "confirmation", account_id: null, event_id: rows.eventId, used_at: null },
+        { kind: "login", account_id: rows.accountId, event_id: null, used_at: null, return_event_id: null },
+        { kind: "confirmation", account_id: null, event_id: rows.eventId, used_at: null, return_event_id: null },
       ]);
       expect(rows.links[0]?.created_at).toBeInstanceOf(Date);
+    });
+
+    // OA4.4: the email's link is always /connexion/lien, so the page that asked for it is
+    // kept with the link: /e/{id}/admin when it has an event, /mes-evenements otherwise.
+    it("keeps the event a sign-in link returns to", async () => {
+      const rows = await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        await addLink(trx, { token_hash: hash(1), kind: "login", account_id: await addAccount(trx), return_event_id: eventId });
+        return {
+          eventId,
+          link: await trx.selectFrom("email_link").selectAll().where("token_hash", "=", hash(1)).executeTakeFirst(),
+        };
+      });
+      expect(rows.link).toMatchObject({ kind: "login", event_id: null, return_event_id: rows.eventId });
+    });
+
+    it("returns to an existing event, when it has one", async () => {
+      await expectRefusedBy(
+        async (trx) =>
+          addLink(trx, { token_hash: hash(1), kind: "login", account_id: await addAccount(trx), return_event_id: "Zz9zZz9z" }),
+        "email_link_return_event_fk",
+      );
+    });
+
+    // The link still signs in; it returns to /mes-evenements instead.
+    it("outlives the event it returns to, without it", async () => {
+      const link = await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        await addLink(trx, { token_hash: hash(1), kind: "login", account_id: await addAccount(trx), return_event_id: eventId });
+        await trx.deleteFrom("event").where("id", "=", eventId).execute();
+        return trx.selectFrom("email_link").selectAll().where("token_hash", "=", hash(1)).executeTakeFirst();
+      });
+      expect(link).toMatchObject({ kind: "login", return_event_id: null });
     });
 
     it("is keyed by its token hash", async () => {
@@ -322,21 +359,22 @@ describe("account tables", () => {
 
     // A sign-in link confirms nothing, and a confirmation link attaches only its own event.
     it.each([
-      ["a sign-in link without an account", "login", { account: false, event: false }],
-      ["a sign-in link with an event", "login", { account: true, event: true }],
-      ["a confirmation link without an event", "confirmation", { account: false, event: false }],
-      ["a confirmation link with an account", "confirmation", { account: true, event: true }],
+      ["a sign-in link without an account", "login", { account: false, event: false, back: false }],
+      ["a sign-in link with an event", "login", { account: true, event: true, back: false }],
+      ["a confirmation link without an event", "confirmation", { account: false, event: false, back: false }],
+      ["a confirmation link with an account", "confirmation", { account: true, event: true, back: false }],
+      ["a confirmation link with an event to return to", "confirmation", { account: false, event: true, back: true }],
     ] as const)("refuses %s", async (_, kind, has) => {
-      await expectRefusedBy(
-        async (trx) =>
-          addLink(trx, {
-            token_hash: hash(1),
-            kind,
-            account_id: has.account ? await addAccount(trx) : null,
-            event_id: has.event ? (await seedEvent(trx)).id : null,
-          }),
-        "email_link_target",
-      );
+      await expectRefusedBy(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        await addLink(trx, {
+          token_hash: hash(1),
+          kind,
+          account_id: has.account ? await addAccount(trx) : null,
+          event_id: has.event ? eventId : null,
+          return_event_id: has.back ? eventId : null,
+        });
+      }, "email_link_target");
     });
 
     it("belongs to an existing account or event", async () => {

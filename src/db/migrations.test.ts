@@ -1,6 +1,7 @@
 import { sql, type Kysely } from "kysely";
 import { NO_MIGRATIONS, type MigrationResultSet } from "kysely/migration";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { adminTokenMatches } from "@/domain/admin-token";
 import { createDb } from "./client";
 import { createMigrator } from "./migrator";
 import type { Database } from "./schema";
@@ -79,12 +80,13 @@ describe("migrations", () => {
     expectSuccess(await migrator.migrateToLatest());
   });
 
-  // 0003 has no room for an event without a token: going down gives it a hash that no
-  // token matches, rather than failing or deleting the event.
-  it("0004 goes down with an event whose token was revoked, still unusable", async () => {
+  // 0003 has no room for an event without a token: going down gives each one a hash of its
+  // own, which no token matches, rather than failing or deleting the event.
+  it("0004 goes down with events whose token was revoked, still unusable", async () => {
     const migrator = createMigrator(db);
     expectSuccess(await migrator.migrateTo("0004_accounts"));
-    const { id } = await seedEvent(db);
+    const events = [await seedEvent(db), await seedEvent(db)];
+    const ids = events.map((event) => event.id);
     try {
       const { id: accountId } = await db
         .insertInto("account")
@@ -94,15 +96,20 @@ describe("migrations", () => {
       await db
         .updateTable("event")
         .set({ admin_token_hash: null, account_id: accountId, confirmed_at: new Date() })
-        .where("id", "=", id)
+        .where("id", "in", ids)
         .execute();
       expectSuccess(await migrator.migrateTo("0003_positions"));
       const { rows } = await sql<{ hash: Buffer }>`
-        select admin_token_hash as hash from event where id = ${id}`.execute(db);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.hash).toHaveLength(32);
+        select admin_token_hash as hash from event where id in (${sql.join(ids)})`.execute(db);
+      const hashes = rows.map((row) => row.hash.toString("hex"));
+      expect(hashes).toHaveLength(2);
+      for (const hash of hashes) expect(hash).toMatch(/^[0-9a-f]{64}$/);
+      expect(new Set(hashes).size).toBe(2);
+      for (const hash of hashes) {
+        for (const { token } of events) expect(adminTokenMatches(token, hash)).toBe(false);
+      }
     } finally {
-      await db.deleteFrom("event").where("id", "=", id).execute();
+      await db.deleteFrom("event").where("id", "in", ids).execute();
       expectSuccess(await migrator.migrateToLatest());
     }
   });

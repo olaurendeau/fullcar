@@ -1140,6 +1140,7 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   | `event.account_id` | `SET NULL` | un événement survit à son compte : il reste ouvert aux participants, sans organisateur, jusqu'à son jour 30 (OA9.5) ; il garde `confirmed_at` (#586) |
   | `session.account_id` | `CASCADE` | une session appartient à son compte : le supprimer ferme toutes ses sessions (#586) |
   | `email_link.account_id` | `CASCADE` | un lien de connexion appartient à son compte ; un lien de confirmation, lui, appartient à son Event (`email_link.event_id`, en `CASCADE` comme toute table qui tient à un événement) (#586) |
+  | `email_link.return_event_id` | `SET NULL` | la page d'arrivée d'un lien de connexion, `/e/{id}/admin` de cet Event (OA4.4) ; l'Event supprimé, le lien sert encore et mène à `/mes-evenements`, l'arrivée par défaut. Un lien de confirmation n'en a pas : il mène à son propre Event (OA5.3) (#586) |
   | `email_send.event_id` | `SET NULL` | un envoi ne tient pas à son événement : supprimé, l'Event laisse l'envoi compté dans la limite de son adresse et dans le plafond global, jusqu'à son nettoyage par âge (#586) |
 
   Les clés de `ride` et de `placement`, hors `stop_id`, arrivent avec #66. Les clés

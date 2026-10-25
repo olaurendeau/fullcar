@@ -22,7 +22,8 @@ export type SendStatusColumn = "sending" | "sent" | "failed" | "address_limit";
  * `aller_at` and `retour_at` are wall-clock times at the event's place, without time
  * zone: written and read as `YYYY-MM-DD HH:MM:SS` strings, never as a Date.
  * `admin_token_hash` is the 32-byte SHA-256 of the admin token, never the token itself;
- * null once the token is revoked (#586), and then no token matches it.
+ * null once the token is revoked (#586), and then no token matches it. A new event always
+ * has one: only an update writes null.
  * `location_lat` and `location_lng` are the position of `location`: both or neither.
  * From #586 (epic #581): `account_id` is the confirmed organiser's account, null while
  * the event is pending or once its account is deleted; `pending_email` is the address
@@ -39,7 +40,7 @@ export interface EventTable {
   boosters_enabled: Generated<boolean>;
   participation_enabled: Generated<boolean>;
   stops_enabled: Generated<boolean>;
-  admin_token_hash: Buffer | null;
+  admin_token_hash: ColumnType<Buffer | null, Buffer, Buffer | null>;
   created_at: ColumnType<Date, never, never>;
   location_lat: number | null;
   location_lng: number | null;
@@ -137,6 +138,15 @@ export interface SessionTable {
  * A link sent by email, keyed by the 32-byte SHA-256 of its token. A sign-in link has an
  * account, a confirmation link an event, never both. `used_at` is written once: a link
  * serves once. A seeded test may write `created_at` in the past, to expire it.
+ *
+ * A confirmation link keeps no address: it confirms its event's `pending_email`. So
+ * OA2.5 holds only because « Corriger l'adresse » deletes the event's confirmation links
+ * in the same transaction as it writes the new address: a link left behind would
+ * confirm the new address with a link sent to the old one.
+ *
+ * `return_event_id` is where a sign-in link lands (OA4.4): `/e/{id}/admin` of that
+ * event, or `/mes-evenements` when null, the event deleted since included. A confirmation
+ * link has none: it lands on its own event (OA5.3).
  */
 export interface EmailLinkTable {
   token_hash: Buffer;
@@ -145,6 +155,7 @@ export interface EmailLinkTable {
   event_id: string | null;
   created_at: ColumnType<Date, Date | undefined, never>;
   used_at: Date | null;
+  return_event_id: string | null;
 }
 
 /**

@@ -68,24 +68,37 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("event_id", "text")
     .addColumn("created_at", "timestamptz", (col) => col.notNull().defaultTo(sql`now()`))
     .addColumn("used_at", "timestamptz")
+    .addColumn("return_event_id", "text")
     .addForeignKeyConstraint("email_link_account_fk", ["account_id"], "account", ["id"], (fk) =>
       fk.onDelete("cascade"),
     )
     .addForeignKeyConstraint("email_link_event_fk", ["event_id"], "event", ["id"], (fk) =>
       fk.onDelete("cascade"),
     )
+    // OA4.4: the page a sign-in was asked from, /e/{id}/admin; without it, /mes-evenements.
+    // An event gone leaves the link working, back to /mes-evenements.
+    .addForeignKeyConstraint("email_link_return_event_fk", ["return_event_id"], "event", ["id"], (fk) =>
+      fk.onDelete("set null"),
+    )
     .addCheckConstraint("email_link_kind", sql`kind in ('login', 'confirmation')`)
-    // A sign-in link opens a session on its account; a confirmation link attaches only its
-    // own event, to the account of the event's pending address.
+    // A sign-in link opens a session on its account, and may return to an event; a
+    // confirmation link attaches only its own event, to the account of the event's
+    // pending address, and lands on that event.
     .addCheckConstraint(
       "email_link_target",
       sql`(kind = 'login' and account_id is not null and event_id is null)
-       or (kind = 'confirmation' and event_id is not null and account_id is null)`,
+       or (kind = 'confirmation' and event_id is not null and account_id is null
+           and return_event_id is null)`,
     )
     .addCheckConstraint("email_link_token_hash_length", sql`octet_length(token_hash) = 32`)
     .execute();
   await db.schema.createIndex("email_link_account_idx").on("email_link").column("account_id").execute();
   await db.schema.createIndex("email_link_event_idx").on("email_link").column("event_id").execute();
+  await db.schema
+    .createIndex("email_link_return_event_idx")
+    .on("email_link")
+    .column("return_event_id")
+    .execute();
 
   await db.schema
     .createTable("email_send")
