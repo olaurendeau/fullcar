@@ -20,7 +20,8 @@ est lu par trente personnes pendant trois jours, puis purgé.
 | i18n | next-intl, **sans préfixe de langue** dans l'URL |
 | tests | Vitest (domaine, données), Playwright (bout en bout, capture à 360 px) |
 | PWA | manifeste et service worker minimal, pas de mode hors ligne en V1 |
-| purge | Vercel Cron quotidienne vers une route protégée par `CRON_SECRET` |
+| purge | Vercel Cron quotidienne vers une route protégée par `CRON_SECRET` (voir « La purge ») |
+| e-mail | Brevo, son API d'e-mails transactionnels, appelée par notre serveur seulement, en `fetch` simple (voir « Les e-mails ») |
 | lieux | Photon (instance publique de komoot, OpenStreetMap), appelé par notre serveur seulement, derrière `POST /api/lieux` (voir « Auto-complétion des lieux ») |
 | carte | Leaflet 1.9.4, version exacte, chargé par `import()` à la première ouverture d'une carte ; tuiles raster de Geoapify (OpenStreetMap, style `positron` en @2x), demandées par notre serveur seulement, avec notre clé, derrière `GET /tuiles/{z}/{x}/{y}`, en cache au CDN de Vercel (voir « La carte de l'événement ») |
 
@@ -37,7 +38,9 @@ propre au projet). Les propositions de lieux (#425) passent par notre origine el
 navigateur du visiteur. Les tuiles de la carte (#474) aussi, `GET /tuiles/{z}/{x}/{y}` : c'est
 notre serveur qui appelle Geoapify, qui voit l'IP de Vercel, notre clé et les tuiles qui ne
 sont pas au cache, jamais l'IP ni le navigateur du visiteur. Leaflet et
-sa feuille de style viennent de notre build, servis par notre origine.
+sa feuille de style viennent de notre build, servis par notre origine. Les e-mails du compte
+organisateur (#581) partent de notre serveur vers Brevo, qui voit notre clé, l'expéditeur,
+l'adresse du destinataire et l'e-mail, jamais l'IP ni le navigateur du visiteur.
 
 ## Environnements et base de données
 
@@ -323,10 +326,34 @@ ordres, pour une prise de place, « sans voiture », une voiture proposée et un
 ajoutée « Aller et retour ». `src/app/e/[id]/edit-event.test.ts` refait la preuve au travers
 d'`editEvent`, pour une prise de place et une voiture proposée.
 
+### L'adresse après l'Event (#581)
+
+Les limites d'envoi (3 e-mails de confirmation par heure et par événement, 5 par heure vers
+une même adresse, 5 demandes de connexion par heure et par adresse, et un plafond global
+horaire, inférieur au quota de Brevo) se comptent sur `email_send`, et l'envoi s'y inscrit
+dans la même transaction que le comptage. Compter puis écrire sans verrou laisserait passer
+deux envois simultanés au-delà de la limite, comme deux taps sur la dernière place. Le
+comptage se fait donc sous verrou, et l'ordre devient **Event, puis adresse** :
+
+- Un envoi pour un événement (création, « Renvoyer l'e-mail », « Corriger l'adresse »,
+  nouveau lien après un lien de confirmation expiré) verrouille d'abord l'Event
+  (`lockEvent`), puis l'adresse, puis compte la limite de l'événement et celle de l'adresse.
+- Une demande de connexion, qui n'a pas d'événement, ne verrouille que l'adresse.
+- Le plafond global se compte dans la même transaction. S'il prend un verrou, ce verrou
+  vient après celui de l'adresse.
+- Une adresse n'est jamais verrouillée avant l'Event. Le verrou d'adresse ne dure que la
+  transaction, et il est pris sur l'adresse telle que `src/domain/email-address.ts` la lit,
+  pas sur une ligne de compte : une adresse sans compte se limite aussi (OA3.5).
+
+La preuve est un test de concurrence (#594), sur données validées, comme ceux des Rides.
+Un lien de connexion ou de confirmation ne sert qu'une fois, même quand deux requêtes le
+présentent ensemble : un test de concurrence le prouve aussi.
+
 ## Jetons, et pourquoi ils sont la pièce critique
 
-Il n'y a pas de compte : **un jeton est la seule identité**. Donc un jeton qui fuit est une
-prise de contrôle, et un jeton deviné l'est aussi.
+Un participant n'a pas de compte, et l'organisateur n'a pas de mot de passe (#581) : **un
+jeton est la seule identité**. Donc un jeton qui fuit est une prise de contrôle, et un jeton
+deviné l'est aussi.
 
 - 128 bits au minimum, tirés d'un générateur cryptographique.
 - **Hashés en base**, jamais stockés en clair : une copie de la base ne donne pas les accès.
@@ -338,8 +365,11 @@ prise de contrôle, et un jeton deviné l'est aussi.
   panneau, et rien d'autre (amendement de #3 C4.9). Le panneau n'est jamais dans le HTML.
   À partir de #263, c'est aussi celui d'`updateEvent`, la modification de l'événement : un
   jeton refusé répond `invalid` sans rien écrire, et aucune réponse ne porte le jeton.
-  - lien admin : `/e/{id}/admin#{token}`
+  - lien admin : `/e/{id}/admin#{token}`, jusqu'à #597 ; ensuite il n'y a plus de lien
+    d'organisateur, et un fragment sur `/e/{id}/admin` est ignoré (OA7.5)
   - lien perso : `/e/{id}/moi#{token}`
+  - lien de connexion : `/connexion/lien#{token}`, et lien de confirmation :
+    `/connexion/confirmer#{token}`, à partir de #605 et #608
 - **Jamais journalisés**, ni en clair ni tronqués, ni côté serveur ni dans un rapport
   d'erreur. À partir de #234, un rapport part vers Sentry seulement si un DSN est configuré,
   et il est reconstruit par les hooks de `src/observability/scrub.ts` (voir « Emplacement du
@@ -348,11 +378,12 @@ prise de contrôle, et un jeton deviné l'est aussi.
 - `Referrer-Policy: no-referrer` sur toutes les pages : le fragment n'est pas transmis dans le
   `Referer`, mais l'identifiant de l'événement l'est.
 
-Les deux jetons ne naissent pas au même endroit :
+Les jetons ne naissent pas tous au même endroit :
 
 - Le **jeton d'organisateur** est tiré par le **serveur** (`newAdminToken`,
   `src/domain/admin-token.ts`) quand l'événement est créé, et revient une fois dans le corps
-  de la réponse.
+  de la réponse. Les jetons de **session** et de **lien** (#581) sont tirés par le serveur
+  eux aussi (voir « Session, liens et jeton d'admin »).
 - Le **jeton personnel** est tiré par le **navigateur**, à partir de #66 (D1, D4) : une
   réponse perdue après l'écriture ne doit pas emporter le seul jeton qui permet de modifier
   la personne créée.
@@ -374,6 +405,56 @@ ne s'y exécute (#64).
 
 Toute PR qui touche la génération, le stockage, la comparaison, le transport ou la
 journalisation d'un jeton est une zone sensible : elle est mergée par l'humain.
+
+### Session, liens et jeton d'admin (#581)
+
+À partir de l'épique #581 (maquette `docs/design/organizer-account/`, critères OA1 à OA11),
+l'organisateur a un compte, et trois jetons de plus servent à l'organisateur. Les règles
+ci-dessus valent pour chacun.
+
+- **Tirés par le serveur**, 128 bits d'un générateur cryptographique, par
+  `src/domain/server-token.ts` (#593), que `newAdminToken` partage. Ils sont stockés en
+  empreinte SHA-256 (`hashToken`, `src/domain/token-hash.ts`), comme les autres : `session` pour le jeton de session, `email_link` pour le jeton d'un lien,
+  `event.admin_token_hash` pour le jeton d'admin. À partir de #586, `admin_token_hash` peut
+  être nul, et un hash nul se lit « pas de jeton » : aucun jeton ne lui correspond.
+- **Dans le corps seulement.** Le jeton de session et le jeton d'admin voyagent dans le corps
+  de la server action qui en a besoin (la visite, Mes événements, l'espace organisateur, la
+  création, « Se déconnecter », « Supprimer mon compte »), jamais dans un chemin, une query
+  string, un en-tête ou un cookie. Le jeton de session ne revient dans une réponse qu'une
+  fois, dans le corps de l'action qui ouvre la session. Le HTML d'une page ne dépend
+  d'aucune session : ce qu'un jeton ouvre est lu après le chargement, comme le panneau.
+- **Pas de cookie, pas de middleware.** Aucun cookie ne porte une session ni un jeton : le
+  seul cookie reste celui de la langue. Aucun `middleware.ts` ni `src/proxy.ts` ne lit une
+  session. Une session terminée entre l'affichage d'une page et son envoi se voit donc en
+  base, par l'action qui reçoit le jeton (OA1.5, décision 3 du coordinateur sur #581).
+- **La session dans le navigateur** : dans `localStorage`, sous la clé `fullcar:session`,
+  au travers de `src/app/session-token.ts` seulement (#595). Une session dure 90 jours après
+  la dernière **visite**. La visite s'enregistre à chaque chargement de page :
+  `src/components/account/session-visit.tsx`, monté par `src/app/layout.tsx`, envoie le
+  jeton à l'action `visit`, qui prolonge la session et note la date et la langue de la
+  visite sur le compte (`last_visit_at`, `locale`). C'est cette date, jamais l'ouverture de
+  la session, qui mesure l'inactivité du compte (OA9.7).
+- **Le jeton d'admin dans le navigateur de création** : à partir de #597, il est rangé dans
+  `localStorage` sous la clé `fullcar:admin-token:{id}`, au travers de
+  `src/app/e/[id]/admin/admin-token-store.ts` seulement, qui remplace `admin-link.ts`. La
+  création mène à `/e/{id}/admin`, sans fragment. Le jeton est révoqué (son hash passe à
+  nul) par « Se déconnecter » dans ce navigateur, qui envoie les jetons d'admin qu'il garde
+  et les efface, par l'anonymisation, et par la suppression du compte.
+- **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et
+  celui-ci ne rattache que son propre événement. Chacun ne sert qu'une fois, et plusieurs
+  liens non utilisés restent valables ensemble. La page du lien lit le jeton dans
+  `location.hash` et ne l'envoie qu'à l'appui sur le bouton, jamais au chargement : un
+  scanner d'e-mails qui suit le lien ne l'use pas (OA5.1). Elle retire ensuite le fragment
+  de la barre d'adresse et de l'historique (OA5.2). « Corriger l'adresse » supprime les
+  liens de l'événement envoyés à l'ancienne adresse (OA2.5). Le jeton d'un lien passe par
+  Brevo et par la boîte de l'organisateur : hors de notre serveur et du navigateur, c'est
+  le seul endroit où un jeton existe en clair.
+- **Une seule règle d'accès** à l'espace organisateur : `src/domain/organiser-access.ts`
+  (#596). Elle donne l'accès à la session du compte de l'événement, ou au jeton d'admin du
+  navigateur de création. `withOrganiserPhones` n'accepte qu'une autorisation produite par
+  cette règle (voir « Visibilité du téléphone »).
+- **Jamais journalisés**, ni les jetons ni les adresses e-mail (OA11.1) : un journal ne
+  porte que des mots fixes et des nombres.
 
 ## Identifiant public
 
@@ -424,7 +505,9 @@ sera invisible dans l'UI de celui qui l'a écrit. À partir de #66, cet endroit 
 (`phonesById`), et seuls `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`)
 les reçoivent et les posent : un `row.phone` recopié ailleurs, dans le board par exemple,
 re-dériverait la règle. `withOrganiserPhones` vérifie lui-même le jeton d'admin
-(`adminTokenMatches`) et ne rend rien s'il ne correspond pas. Une liste de colonnes qui
+(`adminTokenMatches`) et ne rend rien s'il ne correspond pas. À partir de #596, il ne reçoit
+plus le jeton mais une autorisation, d'un type que seule `src/domain/organiser-access.ts`
+produit : la session de l'organisateur ou le jeton d'admin du navigateur de création (OA7.6). Une liste de colonnes qui
 contient `phone` reste privée à `event-rows.ts` (non exportée) : un `.select(cette liste)`
 ailleurs serait une nouvelle lecture.
 
@@ -786,6 +869,89 @@ et à 1280 px dans `event-map-layout.spec.ts`, CA1.8 et CA1.9 ; les crédits dan
 `e2e/tiles.spec.ts`, ceux de la clé `e2e/tiles-key.spec.ts`, ceux du faux fournisseur
 `e2e/fake-tiles.spec.ts`, et les captures de la maquette `e2e/event-map.shot.ts`.
 
+## Les e-mails (#581)
+
+Quatre e-mails, et aucun autre : la confirmation d'une adresse, le lien de connexion, la
+réponse à une demande de connexion pour une adresse sans compte, et l'avertissement avant la
+suppression d'un compte inactif. Leurs textes sont dans `src/email/messages.ts` (#592), dans
+la langue de la page qui les demande, l'avertissement dans celle du compte. Leur type
+d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu, ni prénom.
+
+- **L'appel à Brevo** : `src/email/brevo.ts` (#591), sur le modèle de `photon.ts` et de
+  `geoapify.ts`. Un e-mail, un destinataire, `POST {BREVO_URL}` avec la clé dans l'en-tête
+  `api-key`. `cache: "no-store"`, `redirect: "error"` (une redirection porterait la clé et
+  l'adresse à un autre hôte), et chaque envoi borné à 10 s par son propre
+  `AbortSignal.timeout(10_000)` (OA3.6). Le corps de la réponse n'est pas lu. Rien n'est
+  levé : le client rend `{ state: "sent" }` (201 ou 202) ou `{ state: "failed" }` (tout le
+  reste, le délai compris). Un envoi abandonné à 10 s peut encore être accepté par Brevo :
+  c'est pourquoi l'interface dit « n'a peut-être pas été envoyé ».
+- **Aucun suivi** (OA3.3) : la requête ne demande aucun suivi des ouvertures ni des clics,
+  et le suivi est coupé dans le compte Brevo, un réglage du propriétaire, qui vérifie le
+  premier e-mail de production à la main (décision 1 du coordinateur sur #581).
+- **La création n'attend pas l'envoi** : l'envoi de la confirmation passe par `after()` de
+  Next (#599), et son résultat s'écrit dans `event.send_status` (en cours, envoyé, échec,
+  limite par adresse). L'avis le relit à chaque chargement ; un envoi « en cours » depuis
+  plus de 30 s se lit comme un échec (OA1.7).
+- **Les limites** se comptent sous verrou, Event puis adresse (voir « L'adresse après
+  l'Event »).
+- **Journal** : en mots fixes seulement, `email: no key`, `email: no sender`,
+  `email: send failed (timeout | no answer | HTTP {statut})`. Jamais l'adresse, la clé,
+  l'URL ni l'e-mail, qui porte le jeton d'un lien. L'erreur de `fetch` n'est pas lue : son
+  message ou sa cause peut porter l'URL, l'adresse ou la clé.
+- **Le faux Brevo du slot** (#591) : le service `brevo` lance `e2e/fake-brevo.mjs`, l'API
+  sur le port 2326 et son contrôle sur le port 2327, joignables seulement par le nom `brevo`
+  dans le réseau du slot. `web` y est branché dans tous les slots, avec une clé de test : un
+  slot n'envoie jamais un vrai e-mail. Un test lit et règle la boîte d'une adresse qui
+  n'est qu'à lui (`e2e/mailbox.ts`, `BREVO_CONTROL_URL`).
+
+| variable | sans elle | effet |
+|---|---|---|
+| `BREVO_URL` | `https://api.brevo.com/v3/smtp/email` (aussi quand elle est vide) | l'adresse d'envoi de Brevo ; chaque slot pointe vers son faux Brevo |
+| `BREVO_API_KEY` | aucune clé : aucun appel, chaque envoi `failed`, `email: no key` (aussi quand elle est vide ou blanche) | la clé de Brevo, réservée au serveur, rognée ; les slots ont une clé de test |
+| `EMAIL_FROM` | aucun expéditeur : aucun appel, chaque envoi `failed`, `email: no sender` (aussi quand elle n'a pas la forme `Nom <adresse>`, `<adresse>` ou `adresse`) | l'expéditeur des quatre e-mails |
+
+## La purge (#581)
+
+La purge est une tâche quotidienne : Vercel Cron appelle `GET /api/purge`
+(`src/app/api/purge/route.ts`, `handle.ts`, #589 ; `crons` dans `vercel.json`). La route
+n'exporte que `GET`. Vercel Cron envoie `Authorization: Bearer {CRON_SECRET}`, que la route
+compare à temps constant ; un en-tête absent ou faux, ou un `CRON_SECRET` non configuré, est
+refusé sans rien purger. Le journal de la purge ne porte que des nombres.
+
+- **Le jour 30** (#588, `src/app/api/purge/day-thirty.ts` et `src/db/day-thirty.ts`) :
+  chaque événement dont le jour 30 a commencé à Paris (`purgeCutoff`, voir « Heures sans
+  fuseau ») est traité dans **sa propre transaction**, sous `lockEvent(trx, id,
+  "noKeyUpdate")`. Avec un compte, il est **anonymisé** : ses Persons, Rides, Placements,
+  Arrêts et liens de confirmation sont supprimés, sa position et le hash de son jeton d'admin
+  passent à nul, et `anonymised_at` est écrit. Sans compte, en attente ou laissé par un
+  compte supprimé, il est **supprimé**, et la cascade emporte le reste. Une exécution
+  interrompue laisse chaque événement intact ou traité en entier, et une deuxième exécution
+  ne change rien (OA8.2). Aucune transaction ne couvre toute la purge.
+- **Après l'anonymisation**, les écritures sont refusées : une écriture qui a attendu le
+  verrou de l'Event voit `anonymised_at` (`retour.ts`, `edit-event.ts`). `/e/{id}` répond
+  200 avec « Événement terminé » et `noindex` (#590), un statut qui ne demande pas de
+  middleware (décision du coordinateur sur #581).
+- **Les sessions, les envois et les liens** (`session`, `email_send`, `email_link`) sont
+  nettoyés par âge, par la même tâche (#589) : une ligne part quand
+  aucune règle ne la lit plus. Une session, 90 jours après sa dernière visite ; un envoi,
+  quand il est sorti de la fenêtre des limites ; un lien, quand il est expiré depuis assez
+  longtemps pour que sa page n'ait plus à dire « Ce lien a expiré » (OA5.5, OA5.6). Une
+  ligne effacée plus tôt changerait la réponse d'une règle.
+- **Les comptes inactifs** (#616, `src/app/api/purge/inactive-accounts.ts`) : l'avertissement
+  part 30 jours avant les 3 ans sans visite, une seule fois, et le compte n'est supprimé
+  qu'après l'envoi effectif de cet avertissement (`warned_at` ; décision 5 du coordinateur
+  sur #581). Le supprimer suit le même chemin que « Supprimer mon compte ».
+- **Supprimer un compte** (`deleteAccount`, `src/db/accounts.ts`, #610) efface l'adresse de
+  toutes les tables, y compris l'adresse en attente d'un événement créé ailleurs avec elle
+  (décision 4 du coordinateur sur #581), ferme toutes ses sessions et révoque les jetons
+  d'admin de ses événements. Ses événements anonymisés sont supprimés ; les autres restent
+  ouverts aux participants, sans organisateur, jusqu'à leur jour 30 (`event.account_id` en
+  `SET NULL`).
+
+| variable | sans elle | effet |
+|---|---|---|
+| `CRON_SECRET` | tout appel refusé : rien n'est purgé | le secret que Vercel Cron envoie à `/api/purge` ; jamais écrit en dur ni journalisé |
+
 ## i18n
 
 next-intl, sans préfixe de langue : `/e/{id}` est le même lien pour tout le monde. La langue
@@ -855,7 +1021,18 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | migrations | `src/db/migrations/`, listées dans `src/db/migrations/index.ts` | seul endroit où `sql.raw` est permis, mais pas dans leurs tests |
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
 | cas d'usage de l'événement | `src/app/e/[id]/*.ts` (précédent : `src/app/e/[id]/event.ts`) | reçoivent `db` en paramètre, composent le domaine et l'accès aux données ; testés avec `withRollback`, comme une fonction d'accès aux données |
-| jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur |
+| jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur, que remplace `admin-token-store.ts` à partir de #597 |
+| jeton d'admin dans le navigateur | `src/app/e/[id]/admin/admin-token-store.ts`, à partir de #597 | seul code navigateur qui touche au jeton d'admin, rangé sous `fullcar:admin-token:{id}` (voir « Session, liens et jeton d'admin ») |
+| jeton de session dans le navigateur | `src/app/session-token.ts` ; `src/components/account/session-visit.tsx`, à partir de #595 | seul code navigateur qui touche au jeton de session, rangé sous `fullcar:session` ; `session-visit.tsx`, monté par le layout racine, envoie la visite à chaque chargement de page |
+| jetons tirés par le serveur | `src/domain/server-token.ts`, à partir de #593 | seul tirage des jetons d'admin, de session et de lien, 128 bits de `randomBytes` ; `newAdminToken` s'en sert |
+| règles du compte | `src/domain/email-address.ts`, `account-rules.ts` et `send-limits.ts`, à partir de #593 | la lecture d'une adresse, les durées (lien de connexion 1 h, de confirmation 7 jours, session 90 jours, inactivité 3 ans) et le résultat d'un lien, les trois limites d'envoi et le plafond global |
+| accès à l'espace organisateur | `src/domain/organiser-access.ts`, à partir de #596 | la seule règle d'accès : session du compte de l'événement, ou jeton d'admin du navigateur de création ; seule à produire l'autorisation que `withOrganiserPhones` accepte |
+| compte dans la base | `src/db/accounts.ts`, `sessions.ts`, `email-links.ts`, `email-sends.ts`, à partir de #594 ; `src/db/my-events.ts`, à partir de #606 | les comptes, les sessions, les liens (un seul usage, même en concurrence) et les envois (limites sous verrou, Event puis adresse) ; Mes événements en agrégats, sans aucun téléphone |
+| connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/`, à partir de #607 | les pages et actions de connexion et des liens ; la page Mes événements |
+| création | `src/app/create-event.ts`, à partir de #599 | le cas d'usage de la création, avec une adresse ou une session ; l'envoi de la confirmation par `after()` |
+| e-mails | `src/email/brevo.ts`, à partir de #591 ; `src/email/messages.ts`, à partir de #592 | seul `brevo.ts` lit `BREVO_URL`, `BREVO_API_KEY` et `EMAIL_FROM` et appelle Brevo ; `messages.ts` écrit les quatre e-mails, sans aucun texte saisi (voir « Les e-mails ») |
+| jour 30 et « passé » | `src/domain/day-thirty.ts`, à partir de #587 | le seul calcul de « aujourd'hui », « passé » et du jour 30, à l'heure de Paris (voir « Heures sans fuseau ») |
+| purge | `src/app/api/purge/` (`route.ts`, `handle.ts`, `day-thirty.ts`, `inactive-accounts.ts`), à partir de #589 ; `src/db/day-thirty.ts`, à partir de #588 | la route n'exporte que `GET` et vérifie `CRON_SECRET` ; l'anonymisation et la suppression au jour 30, le nettoyage par âge, les comptes inactifs (voir « La purge ») |
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones |
 | lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position ; `samePlace` compare deux lieux (texte et position) |
 | propositions de lieux | `src/domain/suggestion.ts` ; `src/app/api/lieux/` (`route.ts`, `handle.ts`, `photon.ts`), à partir de #425 | le domaine lit la requête, écrit l'URL de Photon et les libellés ; la route n'exporte que `POST` ; seul `photon.ts` appelle Photon, avec son cache, son plafond et son disjoncteur (voir « Auto-complétion des lieux ») |
@@ -906,6 +1083,19 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   next-intl est configuré avec `timeZone: "UTC"`, et 07:30 s'affiche 07:30 à Paris comme à
   New York. `timeZone: "UTC"` arrive dans `src/i18n/request.ts` avec #21.
 
+  **Le fuseau de référence, `Europe/Paris` (#581).** Pour comparer une heure d'événement à
+  maintenant, c'est maintenant qu'on lit en heure de Paris, jamais l'heure de l'événement
+  qu'on convertit : « aujourd'hui », « passé » (Mes événements) et le jour 30 (la purge)
+  se calculent à l'heure de Paris, quel que soit le fuseau du serveur ou du navigateur
+  (décision du coordinateur sur #581 : sur 30 jours, l'écart pour un événement à l'étranger
+  est sans effet). Le seul endroit est `src/domain/day-thirty.ts` (#587) : `REFERENCE_ZONE`,
+  `parisNow` et `parisToday` lisent maintenant à Paris ; `isPast` compare l'heure du dernier
+  leg (`lastLegAt` : le retour s'il y en a un, sinon l'aller) ; `dayThirty` est la date du
+  dernier leg plus 30 jours, `isDayThirtyReached` vaut vrai dès son minuit à Paris, et
+  `purgeCutoff` donne la dernière date de dernier leg que la purge prend, quelle que soit
+  son heure. Les résultats restent des chaînes, comparées comme celles de l'événement. Ses
+  tests tournent aussi sous `Pacific/Kiritimati`, le fuseau des tests de bout en bout.
+
 ## Contraintes permanentes
 
 - **Aller et retour indépendants** : toute donnée liée à un déplacement porte son `leg`. Une
@@ -921,9 +1111,14 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   serveur, et la clé de Geoapify ne quitte pas le serveur ; Leaflet et sa feuille de style viennent de notre build.
 - **Options** : désactivée, une option est **absente** de l'UI, pas grisée. Le code ne doit
   pas supposer qu'une option est active.
-- **Purge** : chaque table a une clé étrangère vers l'Event en `ON DELETE CASCADE`. C'est
-  ce qui fait marcher la purge : supprimer l'Event emporte tout le reste, et une table sans
-  cette clé survivrait à la purge.
+- **Purge** : chaque table qui tient à un événement a une clé étrangère vers l'Event en
+  `ON DELETE CASCADE`. C'est ce qui fait marcher la suppression : supprimer l'Event emporte
+  tout le reste, et une table sans cette clé y survivrait. Amendement de #581 : une table qui
+  ne tient à aucun événement, comme `account`, `session` ou `email_send`, n'a pas cette clé ;
+  la tâche quotidienne la nettoie par âge, et le compte par inactivité (voir « La purge »).
+  Une nouvelle table sans clé vers l'Event arrive avec son nettoyage, dans la même PR.
+  L'anonymisation, elle, supprime les lignes des participants table par table : une nouvelle
+  table de données de participants s'y ajoute dans la même PR.
 - **Autres clés étrangères** : chacune est choisie selon la relation, et écrite ici. Une
   nouvelle clé s'ajoute à ce tableau dans la même PR.
 

@@ -80,9 +80,17 @@ celui qui écrit le code.
 
 ## Vie privée et purge
 
-- Aucune donnée nouvelle sans nécessité : prénom et téléphone optionnel suffisent à la V1.
-- Chaque table a une clé étrangère vers l'Event en `ON DELETE CASCADE`, sinon elle échappe
-  à la purge.
+- Aucune donnée nouvelle sans nécessité : prénom et téléphone optionnel suffisent à un
+  participant. À partir de #581, l'organisateur donne une adresse e-mail, et rien d'autre ;
+  un champ e-mail sur une page de participant (`/e/{id}`, ses feuilles, `/e/{id}/moi`) est
+  bloquant (OA1.1).
+- Chaque table qui tient à un événement a une clé étrangère vers l'Event en
+  `ON DELETE CASCADE`, sinon elle échappe à la suppression. Amendement de #581 : une table
+  qui ne tient à aucun événement (`account`, `session`, `email_send`) n'a pas cette clé, et
+  la tâche quotidienne la nettoie par âge. Une nouvelle table sans clé vers l'Event et sans
+  nettoyage dans la même PR est bloquante : elle garderait ses lignes pour toujours. Une
+  ligne nettoyée avant qu'une règle ait fini de la lire (un lien expiré qui doit encore dire
+  « Ce lien a expiré ») est bloquante aussi.
 - Les autres clés étrangères suivent le tableau d'`architecture.md` : `stop.ride_id`,
   `placement (person_id, event_id)` et `ride (driver_id, event_id)` en `CASCADE`,
   `placement (ride_id, event_id, leg)` en `SET NULL (ride_id)`, `placement.stop_id` en
@@ -92,14 +100,37 @@ celui qui écrit le code.
   d'un autre événement ou d'un autre leg. Une nouvelle clé absente du tableau est bloquante
   tant que la PR ne l'y ajoute pas.
 - La purge est testée : une donnée créée pour un événement passé disparaît 30 jours après
-  son dernier leg, avec et sans retour.
+  son dernier leg, avec et sans retour. À partir de #588, au jour 30 à l'heure de Paris, un
+  événement avec compte est anonymisé (un prénom et un numéro amorcés ne sont plus dans
+  aucune table, OA8.1) et un événement sans compte est supprimé en entier (OA2.7). Le jour
+  29 n'est pas touché, une deuxième exécution ne change rien, et chaque événement est traité
+  dans sa propre transaction, sous `lockEvent(trx, id, "noKeyUpdate")` (OA8.2). Une écriture
+  acceptée sur un événement anonymisé est bloquante.
+- Une nouvelle table de données de participants que l'anonymisation ne vide pas est
+  bloquante : elle garderait des prénoms ou des numéros après le jour 30.
+- « Aujourd'hui », « passé » et le jour 30 ne se calculent que par `src/domain/day-thirty.ts`,
+  à l'heure de Paris. Un deuxième calcul, ou un « maintenant » lu dans le fuseau du serveur
+  ou du navigateur pour le comparer à une heure d'événement, est bloquant.
+- À partir de #610, supprimer un compte efface son adresse de toutes les tables, y compris
+  l'adresse en attente d'un événement créé ailleurs avec elle (OA9.5, décision 4 du
+  coordinateur sur #581), ferme toutes ses sessions et révoque les jetons d'admin de ses
+  événements. Une adresse qui reste quelque part est bloquante.
+- À partir de #616, un compte inactif n'est supprimé qu'après l'envoi effectif de son
+  avertissement (`warned_at`). L'inactivité se mesure à la dernière visite, jamais à
+  l'ouverture de la session (OA9.7).
+- Aucune adresse e-mail ni aucun jeton dans un journal ou un événement Sentry (OA11.1), et
+  le journal de la purge ne porte que des nombres.
+- Les e-mails ne portent aucun texte saisi par quelqu'un (ni titre, ni lieu, ni prénom),
+  aucune image, et la requête à Brevo ne demande aucun suivi (OA3.3). Un cinquième e-mail est
+  bloquant.
 - Aucune requête du navigateur vers un tiers, aucun script distant, aucune police web : la
   pile de polices système suffit. Speed Insights reste désactivé.
 - À partir de #346, Vercel Web Analytics n'est monté qu'en production
   (`NEXT_PUBLIC_VERCEL_ENV`), avec `analyticsBeforeSend`. Une page vue qui part avec un
   identifiant d'événement, une query ou un fragment, un `beforeSend` retiré, un `mode`
   forcé ou un événement personnalisé (`track`) sont bloquants.
-- La route de purge refuse tout appel sans le bon `CRON_SECRET`.
+- La route de purge refuse tout appel sans le bon `CRON_SECRET`, comparé à temps constant,
+  et refuse tout appel quand `CRON_SECRET` n'est pas configuré.
 
 ## Sentry (à partir de #234)
 
