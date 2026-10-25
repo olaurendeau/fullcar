@@ -10,6 +10,9 @@ Le cas le plus fréquent, et celui qui doit être le plus simple : **des parents
 des enfants, à l'aller seulement, ou au retour seulement.** Un outil qui force à créer deux
 événements pour ça a déjà perdu.
 
+L'organisateur a un compte : une adresse e-mail, sans mot de passe. Les participants n'en
+ont jamais.
+
 ## Ce qui est pénible ailleurs
 
 Les concurrents (Covievent, Covoitribu) demandent un **login par e-mail à chaque
@@ -19,15 +22,27 @@ reproduire, dans cet ordre.
 
 ## Promesses
 
-- **Zéro compte.** Aucune adresse e-mail obligatoire, à aucun moment. L'identité, c'est un
-  lien et un jeton dans le navigateur.
+- **Zéro compte pour les participants.** Un participant ne donne jamais d'adresse e-mail et
+  n'a jamais de compte : son identité, c'est un lien et un jeton dans le navigateur.
+- **Un compte léger pour l'organisateur.** Une adresse e-mail, pas de mot de passe : un lien
+  de connexion par e-mail, puis une session qui dure. Il retrouve ses événements dans
+  « Mes événements », sur n'importe quel appareil, sans repasser par sa boîte mail pour
+  modifier un événement. Créer un événement n'attend ni la confirmation de l'adresse, ni
+  l'envoi de l'e-mail.
 - **Un seul écran.** Tout l'événement tient sur une page : voitures, places libres,
   personnes sans voiture. Pas de navigation à apprendre.
 - **Un geste.** Après la première inscription, rejoindre une voiture est un seul tap quand
   l'appareil a exactement une personne « sans voiture » sur ce leg ; sinon le tap ouvre la
   feuille pour choisir qui monte.
 - **Aller et retour indépendants**, dans le même événement, sous deux onglets.
-- **Rien à nettoyer.** Les données disparaissent 30 jours après l'événement.
+- **Effacé à 30 jours.** 30 jours après le dernier leg (heure de Paris), tout ce qui concerne
+  les participants est effacé : prénoms, téléphones, voitures, lieux de départ, notes,
+  inscriptions. Restent le titre, le lieu et les dates, dans l'historique de l'organisateur,
+  jusqu'à la suppression de son compte, par lui ou après 3 ans sans visite. Un événement
+  sans compte est supprimé en entier.
+- **Des e-mails, pas de courrier.** Quatre e-mails seulement : confirmer l'adresse, se
+  connecter, la réponse à une demande de connexion sans compte, et l'avertissement avant la
+  suppression d'un compte inactif. Aucun texte saisi par quelqu'un, aucune image, aucun suivi.
 
 ## Règles d'interaction
 
@@ -60,7 +75,7 @@ Un critère n'est tenu que s'il est **prouvé par un test**, pas constaté à l'
 
 | critère | preuve attendue |
 |---|---|
-| créer un événement en moins de 30 s | test de bout en bout, chemin le plus court compté |
+| créer un événement en moins de 30 s | test de bout en bout depuis `/` : 8 actions pour un nouvel organisateur (l'adresse comprise), 7 avec une session ; aucun e-mail ni aucune réponse du fournisseur attendus sur ce chemin |
 | rejoindre une voiture en 1 tap après la 1re inscription, quand l'appareil a exactement une personne « sans voiture » sur ce leg | test de bout en bout, un seul clic sur la place libre ; avec deux personnes « sans voiture », le clic ouvre la feuille |
 | un appareil gère plusieurs personnes | test : deux personnes créées avec le même jeton, les deux modifiables |
 | aller et retour indépendants | test : placer quelqu'un à l'aller ne le place pas au retour |
@@ -75,7 +90,15 @@ Ils sont la moitié du produit, et chacun doit avoir une UI pensée :
 - voiture complète ;
 - quelqu'un qui conduit à l'aller et cherche une place au retour ;
 - jeton perdu (appareil changé) — le « lien perso » et son QR code sont la réponse ;
-- lien d'admin perdu : rien à faire, et il faut le dire honnêtement avant.
+- organisateur sur un autre appareil : il se connecte, et « Mes événements » le ramène à
+  l'espace organisateur ;
+- adresse pas encore confirmée : l'événement marche, l'espace organisateur ne s'ouvre que
+  dans le navigateur de création (le lien à partager y ramène), et ailleurs l'écran renvoie
+  à l'e-mail de confirmation ;
+- e-mail qui ne part pas : l'événement existe quand même, et l'avis le dit ;
+- lien de connexion expiré ou déjà utilisé : la page le dit, et en redemande un en un tap ;
+- événement anonymisé, ouvert par le lien à partager ;
+- événement dont le compte a été supprimé : ouvert aux participants, sans organisateur.
 
 ## La carte
 
@@ -89,5 +112,7 @@ l'itinéraire, la distance, la durée, et les Arrêts sur la carte (#68).
 
 ## Hors périmètre V1
 
-Notifications, appariement automatique, paiement, messagerie, comptes. Proposer l'un
-de ces sujets est une décision produit : remonter à l'humain, ne pas le glisser dans une PR.
+Notifications, appariement automatique, paiement, messagerie, comptes pour les
+participants, co-organisateurs. Les quatre e-mails du compte ne sont pas des
+notifications. Proposer l'un de ces sujets est une décision produit : remonter à l'humain,
+ne pas le glisser dans une PR.
