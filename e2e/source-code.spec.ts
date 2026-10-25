@@ -1,5 +1,4 @@
 import type { Locator, Page, Request } from "@playwright/test";
-import type { SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test as base } from "./fixtures";
 import { expectRing, press, pressUntil, rgba } from "./focus-ring";
 import { hideToken } from "./organiser";
@@ -10,12 +9,10 @@ leaveNoToken();
  * #489, design github-link v1.2: a link to the public repository, in the footer of every
  * page, on its second line, before « Nous contacter ». No assertion here may show the token:
  * a path is named with it hidden, what GitHub receives is searched for it as a boolean.
+ * On each page, the link and the footer's row (G1 to G4, G8) are in footer.spec.ts (#640).
  */
 
 const REPOSITORY = "https://github.com/olaurendeau/fullcar";
-const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
-const UNKNOWN_ID = "Zz9yXw8v";
-const WRONG_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZa";
 
 const FR = {
   source: "Code source sur GitHub (s’ouvre dans un nouvel onglet)",
@@ -32,17 +29,6 @@ const EN: Words = {
   switch: "Français",
   panel: "Organiser area",
 };
-
-/** G1: the pages of `e2e/contact.spec.ts`, and the title that tells each is shown. */
-const PAGES: [string, (event: SeededEvent) => string, string][] = [
-  ["the home page", () => "/", "Fullcar"],
-  ["the creation form", () => "/nouveau", "Créer un événement"],
-  ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
-  ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
-  ["the organiser's page", ({ id, token }) => `/e/${id}/admin#${token}`, "Tournoi de Rennes"],
-  ["the organiser's page, wrong token", ({ id }) => `/e/${id}/admin#${WRONG_TOKEN}`, "Tournoi de Rennes"],
-  ["the organiser's page, no token", ({ id }) => `/e/${id}/admin`, "Tournoi de Rennes"],
-];
 
 /** G8: GitHub's hosts, the ones a badge, a logo or a script of GitHub would come from. */
 const isGitHub = (url: URL) => /(^|\.)github\.com$|\.githubusercontent\.com$|\.githubassets\.com$/.test(url.hostname);
@@ -91,15 +77,6 @@ const sourceLink = (page: Page, words: Words) => page.getByRole("link", { name: 
 const contactLink = (page: Page, words: Words) => page.getByRole("link", { name: words.contact, exact: true });
 const homeLink = (page: Page, words: Words) => page.getByRole("link", { name: words.home, exact: true });
 const languageSwitch = (page: Page, words: Words) => page.getByRole("button", { name: words.switch, exact: true });
-
-/** The footer's links and buttons, in the order of the document, by their text. */
-function footerRow(page: Page) {
-  return page
-    .locator("footer")
-    .evaluate((footer) =>
-      [...footer.querySelectorAll("a, button")].map((element) => element.textContent?.replace(/\s+/g, " ").trim()),
-    );
-}
 
 /** G1, G2: exactly one link of that name, in the footer, to the repository, in a new tab, without opener or referrer. */
 async function expectSourceLink(page: Page, words: Words) {
@@ -157,47 +134,6 @@ async function outlineOf(element: Locator) {
 
 test.describe("the source code link, in a browser set to French", () => {
   test.use({ locale: "fr-FR" });
-
-  for (const [where, path, heading] of PAGES) {
-    test(`G1, G2, G3, G4, G8: on ${where}, one link to the repository, before « Nous contacter », as discreet, and nothing from GitHub`, async ({
-      page,
-      github,
-      seededEvent,
-    }) => {
-      const at = path(seededEvent);
-      await open(page, at, heading, seededEvent.token);
-      await expectSourceLink(page, FR);
-      await expect(page.getByRole("region", { name: FR.panel }).getByRole("link", { name: FR.source })).toHaveCount(0);
-
-      // G3: « Accueil » (not on /), the language, the source code, « Nous contacter », still the page's last link.
-      const home = at === "/" ? [] : [FR.home];
-      expect(await footerRow(page)).toEqual([...home, FR.switch, FR.source, FR.contact]);
-      expect(await page.locator("a").last().getAttribute("href")).toBe(CRISP_CHAT);
-
-      // G4: the size and colour of « Nous contacter », smaller than the text, underlined, the hand.
-      const [link, contact] = await Promise.all(
-        [sourceLink(page, FR), contactLink(page, FR)].map((each) =>
-          each.evaluate((node) => {
-            const style = getComputedStyle(node);
-            return {
-              fontSize: parseFloat(style.fontSize),
-              color: style.color,
-              underlined: style.textDecorationLine.includes("underline"),
-              cursor: style.cursor,
-              textSize: parseFloat(getComputedStyle(document.body).fontSize),
-            };
-          }),
-        ),
-      );
-      expect(link).toEqual(contact);
-      expect(link.fontSize).toBeLessThan(link.textSize);
-      expect(link.underlined).toBe(true);
-      expect(link.cursor).toBe("pointer");
-
-      // G8: the page asked nothing of GitHub.
-      expect(github.length, "requests to GitHub").toBe(0);
-    });
-  }
 
   test("G3, G10: the keyboard goes « English », the source code, « Nous contacter », and the link shows the ring of « Nous contacter »", async ({
     page,

@@ -1,5 +1,4 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
-import type { SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { expectRing, press, pressUntil, rgba } from "./focus-ring";
 import { hideToken } from "./organiser";
@@ -11,11 +10,11 @@ leaveNoToken();
  * the home page itself. From the organiser's page, it takes nothing of the organiser's link
  * along. No assertion here may show the token: a URL is compared with it hidden, a request
  * is searched for it and named by its path, the token hidden.
+ * On each page in French, the link and the footer's row (A3.1, A3.3, A3.4, A3.6) are in footer.spec.ts (#640).
  */
 
 const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
 const UNKNOWN_ID = "Zz9yXw8v";
-const WRONG_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZa";
 
 const FR = {
   home: "Accueil",
@@ -34,16 +33,6 @@ const EN: Words = {
   panel: "Organiser area",
   tagline: "Group carpooling, there and back, no account needed.",
 };
-
-/** A3.1: the pages that have the link, and the title that tells each is shown. */
-const PAGES: [string, (event: SeededEvent) => string, string][] = [
-  ["the creation form", () => "/nouveau", "Créer un événement"],
-  ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
-  ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
-  ["the organiser's page", ({ id, token }) => `/e/${id}/admin#${token}`, "Tournoi de Rennes"],
-  ["the organiser's page, wrong token", ({ id }) => `/e/${id}/admin#${WRONG_TOKEN}`, "Tournoi de Rennes"],
-  ["the organiser's page, no token", ({ id }) => `/e/${id}/admin`, "Tournoi de Rennes"],
-];
 
 /**
  * The page once it has settled: on the organiser's page, once the token has been checked.
@@ -146,23 +135,6 @@ function windowMarked(page: Page) {
 
 test.describe("the home link, in a browser set to French", () => {
   test.use({ locale: "fr-FR" });
-
-  for (const [where, path, heading] of PAGES) {
-    test(`A3.1, A3.3, A3.4, A3.6: on ${where}, one link « Accueil » to /, first of the footer's row`, async ({
-      page,
-      seededEvent,
-    }) => {
-      await open(page, path(seededEvent), heading, seededEvent.token);
-      await expectHomeLink(page, FR);
-
-      // A3.3: « Accueil », the language switch, the source code (#489), « Nous contacter », still the last link.
-      expect(await footerRow(page)).toEqual([FR.home, FR.switch, FR.source, FR.contact]);
-      expect(await page.locator("a").last().getAttribute("href")).toBe(CRISP_CHAT);
-
-      await expectDiscreetFirstLine(page, FR);
-      await expectNoNavigation(page);
-    });
-  }
 
   test("A3.2, A3.6: on /, no link « Accueil »: line 1 is the language, line 2 the source code, then « Nous contacter »", async ({
     page,
