@@ -261,6 +261,11 @@ celui qui écrit le code.
   événement qui n'appartient qu'à lui et qui est supprimé à la fin (`withCommittedEvent`).
   Un verrou « prouvé » par la présence de `FOR UPDATE` dans le SQL, ou par un test sous
   `withRollback`, est bloquant : il ne montre aucune écriture simultanée.
+- Les combinaisons de cas (types d'erreur, variantes de jeton, valeurs invalides) se testent
+  dans Vitest. Le bout en bout garde un seul test par branchement. Les preuves de bout en
+  bout qu'exige `product.md` restent de bout en bout : « créer un événement en moins de
+  30 s » et « rejoindre une voiture en 1 tap ». Raison : le bout en bout fait 87 % du temps
+  de la CI.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.
 - À partir de #365, aucune vérification de bout en bout n'affiche un jeton, un lien
