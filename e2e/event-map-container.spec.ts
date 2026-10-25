@@ -245,17 +245,23 @@ for (const [where, device] of [
         await expectContainer(page, true);
         await expectEdgeToEdge(page, box);
 
-        // The region clicked with the mouse, off its points and its zoom: it has the focus, not
-        // the keyboard's, and the ring stays hidden (#569's review, #558). The mouse first, on
-        // the event's title: Leaflet focuses the region from its own `mousedown`, before the
-        // browser counts the press, and right after a key the browser would take it for the keyboard's.
-        await page.getByRole("heading", { level: 1 }).click();
+        // The car's point from the keyboard, then the region clicked with the mouse, off its points
+        // and its zoom: it has the focus, not the keyboard's, and the ring stays hidden (#569's
+        // review, #558, #577). Leaflet focuses the region by script, from its own `mousedown`,
+        // and Chrome gives a focus by script `:focus-visible` when the element it leaves has it.
+        await page.keyboard.press("Tab");
+        await expect(points(map).first()).toBeFocused();
         await expect(rings(page)).toBeHidden();
         const { width } = (await map.boundingBox())!;
         await map.click({ position: { x: width - 40, y: 40 } });
         await expect(map).toBeFocused();
         expect(await map.evaluate((element) => element.matches(":focus-visible"))).toBe(false);
         await expect(rings(page)).toBeHidden();
+        // The keyboard again, after the mouse: the ring is back on the region.
+        await page.keyboard.press("Tab");
+        await expect(points(map).first()).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
+        await expectRing(page, map, map);
       });
     });
   }
