@@ -7,6 +7,11 @@ import { answerMail, mailTo, newAddress, releaseMail, type MailAnswer } from "./
 const BREVO_URL = "http://brevo:2326/v3/smtp/email";
 const API_KEY = "fullcar-test-brevo-key-4d8e1b6a";
 const EMAIL_FROM = "Fullcar <bonjour@fullcar.test>";
+/**
+ * How early a timer may end, as `Date.now` measures it: Node's timers keep their own clock, in
+ * whole milliseconds, and a bound of 10 s can end at 9 999 ms. A lower bound allows for it.
+ */
+const EARLY_MS = 10;
 
 /** A message as Brevo's API takes it, to `to`. */
 function messageTo(to: string, fields: Record<string, unknown> = {}) {
@@ -145,7 +150,7 @@ test.describe("the fake Brevo", () => {
     await expect.poll(async () => (await mailTo(address)).length, { timeout: 1000 }).toBe(1);
     expect(await releaseMail([address])).toBe(0);
     await expect(pending).rejects.toThrow();
-    expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(2_000 - EARLY_MS);
   });
 
   test("answers 401 to a message without api-key, whatever the address is set to, and records it", async () => {
@@ -235,7 +240,7 @@ test.describe("the client of src/email/brevo.ts against the fake Brevo", () => {
     const started = Date.now();
     expect(await brevo.send(address)).toEqual({ state: "failed" });
     const elapsed = Date.now() - started;
-    expect(elapsed).toBeGreaterThanOrEqual(10_000);
+    expect(elapsed).toBeGreaterThanOrEqual(10_000 - EARLY_MS);
     expect(elapsed).toBeLessThan(11_000);
     expect((await mailTo(address)).length).toBe(1);
     expect(brevo.logs).toEqual([["email: send failed (timeout)"]]);
