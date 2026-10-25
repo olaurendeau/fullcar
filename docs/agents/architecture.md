@@ -1155,9 +1155,11 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
 
 Une dépendance nouvelle. Un changement de ce qui est **stocké**. Un changement de **qui voit
 un téléphone**. Tout ce qui touche aux jetons. L'hébergement, le plan Vercel ou Neon, et le
-domaine. Et toute proposition qui introduirait un compte, une adresse e-mail obligatoire, de
-la publicité ou du tracking : ce sont les principes du produit, pas des arbitrages
-techniques.
+domaine. Et toute proposition qui introduirait un compte ou une demande d'adresse e-mail
+pour les participants, de la publicité ou du tracking : ce sont les principes du produit, pas
+des arbitrages techniques. Un participant n'a pas de compte, et on ne lui demande jamais
+d'adresse. Le compte de l'organisateur et son adresse e-mail obligatoire sont décidés
+(#581) : ils ne sont plus à remonter, mais ce qu'ils stockent et qui le voit l'est toujours.
 
 Le plan gratuit de Vercel est réservé à un usage non commercial : un revenu, quel qu'il soit,
 impose de changer de plan.

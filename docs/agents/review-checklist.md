@@ -56,7 +56,10 @@ celui qui écrit le code.
   placé ni de personne pas concernée. Du numéro de son conducteur, une voiture ne dit que
   s'il existe. Pour un jeton d'admin faux, absent ou mal formé, elle ne porte ni numéro ni
   donnée du panneau : `withOrganiserPhones` ne rend rien. Un booléen « vérifié » passé à la
-  règle au lieu du jeton est bloquant : la règle vérifie elle-même.
+  règle est bloquant. Jusqu'à #596, elle reçoit le jeton et le vérifie elle-même ; à partir
+  de #596, elle ne reçoit qu'une autorisation, d'un type que seul
+  `src/domain/organiser-access.ts` produit, et une autorisation fabriquée ailleurs est
+  bloquante.
 - Vérifier les réponses d'API, pas seulement les écrans : un champ `phone` dans un JSON est
   une fuite même si aucune vue ne l'affiche.
 
