@@ -1,75 +1,85 @@
 # Fullcar
 
-Covoiturage de groupe pour un événement. Sans compte, sans pub, sans tracking.
+Group carpooling for an event. No account for participants, no ads, no tracking.
 
-Un organisateur crée un événement, partage un lien, et chacun déclare en un geste qu'il
-conduit ou qu'il cherche une place — à l'aller, au retour, ou les deux.
+An organiser creates an event, shares a link, and everyone says in a single gesture that
+they are driving or looking for a seat — on the way there, on the way back, or both.
 
-## Pourquoi
+## Why
 
-Les outils existants (Covievent, Covoitribu) demandent un login par e-mail à chaque
-modification, affichent une interface chargée, et ne gèrent pas le retour : il faut créer
-un second événement. Le cas le plus fréquent — des parents qui conduisent des enfants à
-l'aller mais pas au retour — y est pénible à exprimer.
+Existing tools (Covievent, Covoitribu) ask for an e-mail login on every change, show a
+cluttered interface, and do not handle the return trip: you have to create a second event.
+The most common case — parents who drive children there but not back — is a pain to
+express in them.
 
-## Principes
+## Principles
 
-- **Zéro compte**, aucune adresse e-mail obligatoire.
-- **Un seul écran**, mobile d'abord, utilisable sur 360 px de large.
-- **Aller et retour** natifs et indépendants dans le même événement.
-- **i18n dès le départ** : français et anglais.
-- **Sans pub ni tracking**, purge automatique des données 30 jours après l'événement.
+- **No account for participants**: a participant never gives an e-mail address and never
+  has an account; their identity is a link and a token in the browser.
+- **A light account for the organiser**: an e-mail address, no password — a sign-in link by
+  e-mail, then a lasting session. They find their events under "My events", on any device.
+- **A single screen**, mobile first, usable at 360 px wide.
+- **Outbound and return trips**, native and independent within the same event.
+- **i18n from the start**: French and English.
+- **No ads, no tracking.**
+- **Erased at day 30**: 30 days after the last trip (Paris time), everything about the
+  participants is erased; the title, place and dates stay in the organiser's history, and an
+  event without an account is deleted entirely.
 
 ## Stack
 
-Next.js (App Router) en TypeScript, shadcn/ui, Postgres via Kysely, next-intl. Neon en
-production, hébergement sur Vercel. En local, **tout passe par Docker** : il suffit de Docker
-et de `make`, rien d'autre à installer. Le détail et les
-raisons sont dans [`docs/agents/architecture.md`](docs/agents/architecture.md).
+Next.js (App Router) in TypeScript, shadcn/ui, Postgres via Kysely, next-intl. Neon in
+production, hosted on Vercel. Locally, **everything runs through Docker**: all you need is
+Docker and `make`, nothing else to install. The details and the
+reasons are in [`docs/agents/architecture.md`](docs/agents/architecture.md).
 
-## Démarrer
+## Getting started
 
-Il suffit de Docker et de `make` :
+All you need is Docker and `make`:
 
 ```bash
-make up      # serveur de dev sur http://localhost:3000, avec sa base Postgres
-make check   # lint, typecheck, clés i18n, tests, build
-make e2e     # tests de bout en bout (Playwright, 360 px) contre le build de production
-make ci      # make check, puis les tests de bout en bout sur son build (un seul build) : ce que la CI exécute
-make down    # arrête tout et efface les données locales
-make help    # le reste
+make up      # dev server on http://localhost:3000, with its Postgres database
+make check   # lint, typecheck, i18n keys, tests, build
+make e2e     # end-to-end tests (Playwright, 360 px) against the production build
+make ci      # make check, then the end-to-end tests on its build (a single build): what CI runs
+make down    # stops everything and wipes the local data
+make help    # the rest
 ```
 
-Le développement suit le plugin [ola-workflow](https://github.com/olaurendeau/ola-workflow) :
-les documents que lisent les agents sont dans [`docs/agents/`](docs/agents/), et le profil
-du projet dans [`.claude/workflow.json`](.claude/workflow.json).
+Development follows the [ola-workflow](https://github.com/olaurendeau/ola-workflow) plugin:
+the documents the agents read are in [`docs/agents/`](docs/agents/) (in French), and the
+project profile in [`.claude/workflow.json`](.claude/workflow.json).
 
-## Variables d'environnement de Sentry
+## Sentry environment variables
 
-Toutes facultatives. Sans `NEXT_PUBLIC_SENTRY_DSN`, Sentry n'est ni chargé ni configuré, et
-rien ne part. Les variables en `NEXT_PUBLIC_` sont lues au build : redéployer après un
-changement.
+All optional. Without `NEXT_PUBLIC_SENTRY_DSN`, Sentry is neither loaded nor configured, and
+nothing is sent. The `NEXT_PUBLIC_` variables are read at build time: redeploy after a
+change.
 
-| variable | rôle |
+| variable | role |
 |---|---|
-| `NEXT_PUBLIC_SENTRY_DSN` | le DSN du projet Sentry (organisation en région EU) ; active Sentry côté serveur et navigateur |
-| `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | la part des traces envoyées, entre `0` et `1` (par exemple `0.1`) ; absente ou invalide, aucune trace |
-| `SENTRY_AUTH_TOKEN` | build seulement : envoie les source maps à Sentry, puis les supprime du build ; sans lui, aucune n'est produite |
-| `SENTRY_ORG`, `SENTRY_PROJECT` | build seulement, avec `SENTRY_AUTH_TOKEN` : où envoyer les source maps |
+| `NEXT_PUBLIC_SENTRY_DSN` | the Sentry project DSN (organisation in the EU region); enables Sentry on the server and in the browser |
+| `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | the share of traces sent, between `0` and `1` (for example `0.1`); missing or invalid, no traces |
+| `SENTRY_AUTH_TOKEN` | build only: uploads the source maps to Sentry, then removes them from the build; without it, none are produced |
+| `SENTRY_ORG`, `SENTRY_PROJECT` | build only, with `SENTRY_AUTH_TOKEN`: where to upload the source maps |
 
-La release et l'environnement viennent de Vercel (`VERCEL_GIT_COMMIT_SHA`, `VERCEL_ENV`, et
-leurs versions `NEXT_PUBLIC_` dans le navigateur) : « Automatically expose System Environment
-Variables » doit rester activé.
+The release and the environment come from Vercel (`VERCEL_GIT_COMMIT_SHA`, `VERCEL_ENV`, and
+their `NEXT_PUBLIC_` versions in the browser): "Automatically expose System Environment
+Variables" must stay enabled.
 
 ## Vercel Web Analytics
 
-La mesure d'audience de Vercel n'est chargée que sur le déploiement de production
-(`NEXT_PUBLIC_VERCEL_ENV` vaut `production`) : rien en local, en CI ni sur une preview. Elle
-ne pose aucun cookie. Une page vue part réduite à son origine et à sa route (`/`, `/nouveau`,
-`/e/[id]`, `/e/[id]/admin`) : ni identifiant d'événement, ni query, ni fragment, donc aucun
-jeton. Une autre page ne part pas.
+Vercel's audience measurement is only loaded on the production deployment
+(`NEXT_PUBLIC_VERCEL_ENV` is `production`): nothing locally, in CI or on a preview. It sets
+no cookie. A page view is sent reduced to its origin and its route (`/`, `/nouveau`,
+`/e/[id]`, `/e/[id]/admin`): no event identifier, no query, no fragment, hence no token.
+Any other page is not sent.
 
-**À faire par le propriétaire** : dans le tableau de bord Vercel, ouvrir **Analytics**, choisir
-le projet, cliquer sur **Enable**, puis redéployer. Sans cette activation, le script n'existe
-pas sur le domaine et rien n'est envoyé. « Automatically expose System Environment Variables »
-doit rester activé : sans `NEXT_PUBLIC_VERCEL_ENV`, le composant n'est pas monté.
+**For the owner to do**: in the Vercel dashboard, open **Analytics**, choose the project,
+click **Enable**, then redeploy. Without this activation, the script does not exist on the
+domain and nothing is sent. "Automatically expose System Environment Variables" must stay
+enabled: without `NEXT_PUBLIC_VERCEL_ENV`, the component is not mounted.
+
+## License
+
+[MIT](LICENSE) © 2026 Olivier Laurendeau
