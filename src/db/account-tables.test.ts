@@ -281,16 +281,8 @@ describe("account tables", () => {
         const { id: eventId } = await seedEvent(trx);
         await addLink(trx, { token_hash: hash(1), kind: "login", account_id: accountId });
         await addLink(trx, { token_hash: hash(2), kind: "confirmation", event_id: eventId });
-        return {
-          accountId,
-          eventId,
-          links: await trx
-            .selectFrom("email_link")
-            .selectAll()
-            .where("token_hash", "in", [hash(1), hash(2)])
-            .orderBy("kind", "desc")
-            .execute(),
-        };
+        const query = trx.selectFrom("email_link").selectAll().where("token_hash", "in", [hash(1), hash(2)]);
+        return { accountId, eventId, links: await query.orderBy("kind", "desc").execute() };
       });
       expect(rows.links).toMatchObject([
         { kind: "login", account_id: rows.accountId, event_id: null, used_at: null, return_event_id: null },
@@ -300,36 +292,19 @@ describe("account tables", () => {
     });
 
     // OA4.4: the email's link is always /connexion/lien, so the page that asked for it is
-    // kept with the link: /e/{id}/admin when it has an event, /mes-evenements otherwise.
-    it("keeps the event a sign-in link returns to", async () => {
-      const rows = await withRollback(async (trx) => {
+    // kept with the link: /e/{id}/admin of its event. The event gone, the link still signs
+    // in, and lands on /mes-evenements.
+    it("keeps the event a sign-in link returns to, and outlives it", async () => {
+      const [kept, gone] = await withRollback(async (trx) => {
         const { id: eventId } = await seedEvent(trx);
         await addLink(trx, { token_hash: hash(1), kind: "login", account_id: await addAccount(trx), return_event_id: eventId });
-        return {
-          eventId,
-          link: await trx.selectFrom("email_link").selectAll().where("token_hash", "=", hash(1)).executeTakeFirst(),
-        };
-      });
-      expect(rows.link).toMatchObject({ kind: "login", event_id: null, return_event_id: rows.eventId });
-    });
-
-    it("returns to an existing event, when it has one", async () => {
-      await expectRefusedBy(
-        async (trx) =>
-          addLink(trx, { token_hash: hash(1), kind: "login", account_id: await addAccount(trx), return_event_id: "Zz9zZz9z" }),
-        "email_link_return_event_fk",
-      );
-    });
-
-    // The link still signs in; it returns to /mes-evenements instead.
-    it("outlives the event it returns to, without it", async () => {
-      const link = await withRollback(async (trx) => {
-        const { id: eventId } = await seedEvent(trx);
-        await addLink(trx, { token_hash: hash(1), kind: "login", account_id: await addAccount(trx), return_event_id: eventId });
+        const link = () => trx.selectFrom("email_link").selectAll().where("token_hash", "=", hash(1)).executeTakeFirst();
+        const before = await link();
         await trx.deleteFrom("event").where("id", "=", eventId).execute();
-        return trx.selectFrom("email_link").selectAll().where("token_hash", "=", hash(1)).executeTakeFirst();
+        return [{ ...before, eventId }, await link()];
       });
-      expect(link).toMatchObject({ kind: "login", return_event_id: null });
+      expect(kept).toMatchObject({ kind: "login", event_id: null, return_event_id: kept?.eventId });
+      expect(gone).toMatchObject({ kind: "login", return_event_id: null });
     });
 
     it("is keyed by its token hash", async () => {
@@ -386,6 +361,11 @@ describe("account tables", () => {
         (trx) => addLink(trx, { token_hash: hash(1), kind: "confirmation", event_id: "Zz9zZz9z" }),
         "email_link_event_fk",
       );
+      await expectRefusedBy(
+        async (trx) =>
+          addLink(trx, { token_hash: hash(1), kind: "login", account_id: await addAccount(trx), return_event_id: "Zz9zZz9z" }),
+        "email_link_return_event_fk",
+      );
     });
 
     it("goes with its account, or with its event", async () => {
@@ -411,15 +391,13 @@ describe("account tables", () => {
   describe("email_send", () => {
     it("draws its id and its time, and keeps a time seeded in the past", async () => {
       const sentAt = new Date("2026-10-25T07:00:00Z");
-      const rows = await withRollback(async (trx) => {
-        const { id: eventId } = await seedEvent(trx);
-        const drawn = await addSend(trx, { kind: "confirmation", event_id: eventId });
-        const seeded = await addSend(trx, { sent_at: sentAt });
-        return trx.selectFrom("email_send").selectAll().where("id", "in", [drawn, seeded]).execute();
+      const [drawn, seeded] = await withRollback(async (trx) => {
+        const [first, second] = [await addSend(trx), await addSend(trx, { sent_at: sentAt })];
+        const read = (id: string) => trx.selectFrom("email_send").selectAll().where("id", "=", id).executeTakeFirst();
+        return [await read(first), await read(second)];
       });
-      expect(rows).toHaveLength(2);
-      expect(rows.map((row) => row.sent_at)).toContainEqual(sentAt);
-      for (const row of rows) expect(row.sent_at).toBeInstanceOf(Date);
+      expect(drawn?.sent_at).toBeInstanceOf(Date);
+      expect(seeded?.sent_at).toEqual(sentAt);
     });
 
     it("refuses a kind that is neither confirmation nor login", async () => {
@@ -478,33 +456,19 @@ describe("account tables", () => {
       });
     });
 
-    it("holds a pending event, its address and the result of its email", async () => {
-      const email = anAddress();
-      const at = new Date("2026-10-25T08:00:00Z");
-      const row = await withRollback(async (trx) => {
-        const { id } = await seedEvent(trx);
-        await trx
-          .updateTable("event")
-          .set({ pending_email: email, send_status: "address_limit", send_status_at: at })
-          .where("id", "=", id)
-          .execute();
-        return eventRow(trx, id);
-      });
-      expect(row).toMatchObject({ pending_email: email, send_status: "address_limit", send_status_at: at });
-    });
-
-    it.each(["sending", "sent", "failed", "address_limit"] as const)("accepts the send status %s", async (status) => {
-      const row = await withRollback(async (trx) => {
-        const { id } = await seedEvent(trx);
-        await trx
-          .updateTable("event")
-          .set({ send_status: status, send_status_at: new Date() })
-          .where("id", "=", id)
-          .execute();
-        return eventRow(trx, id);
-      });
-      expect(row?.send_status).toBe(status);
-    });
+    it.each(["sending", "sent", "failed", "address_limit"] as const)(
+      "holds a pending event, its address and the send status %s",
+      async (status) => {
+        const [email, at] = [anAddress(), new Date("2026-10-25T08:00:00Z")];
+        const row = await withRollback(async (trx) => {
+          const { id } = await seedEvent(trx);
+          const fields = { pending_email: email, send_status: status, send_status_at: at };
+          await trx.updateTable("event").set(fields).where("id", "=", id).execute();
+          return eventRow(trx, id);
+        });
+        expect(row).toMatchObject({ pending_email: email, send_status: status, send_status_at: at });
+      },
+    );
 
     it("refuses another send status", async () => {
       await expectRefusedBy(async (trx) => {
