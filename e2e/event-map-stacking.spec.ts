@@ -48,13 +48,19 @@ function topAt(page: Page, at: { x: number; y: number }) {
   }, at);
 }
 
-/** The points where both boxes are, `columns` × `rows` of them, 2 px inside their common edges. */
-function across(one: Box, other: Box, columns = 5, rows = 3): { x: number; y: number }[] {
-  const left = Math.max(one.x, other.x) + 2;
-  const top = Math.max(one.y, other.y) + 2;
-  const right = Math.min(one.x + one.width, other.x + other.width) - 2;
-  const bottom = Math.min(one.y + one.height, other.y + other.height) - 2;
-  expect(right > left && bottom > top, `${JSON.stringify(one)} meets ${JSON.stringify(other)}`).toBe(true);
+/** How far from a `rounded-xl` box's sides (12 px corners) its straight band starts. */
+const CLEAR_OF_CORNERS = 16;
+
+/**
+ * The points where both boxes are, `columns` × `rows` of them, 2 px inside their common edges,
+ * and only on `rounded`'s straight band, `CLEAR_OF_CORNERS` from its sides: none on a corner it cuts.
+ */
+function across(rounded: Box, other: Box, columns = 5, rows = 3): { x: number; y: number }[] {
+  const left = Math.max(rounded.x + CLEAR_OF_CORNERS, other.x + 2);
+  const top = Math.max(rounded.y, other.y) + 2;
+  const right = Math.min(rounded.x + rounded.width - CLEAR_OF_CORNERS, other.x + other.width - 2);
+  const bottom = Math.min(rounded.y + rounded.height, other.y + other.height) - 2;
+  expect(right > left && bottom > top, `${JSON.stringify(rounded)} meets ${JSON.stringify(other)}`).toBe(true);
   const spots: { x: number; y: number }[] = [];
   for (let column = 0; column < columns; column++) {
     for (let row = 0; row < rows; row++) {
@@ -111,6 +117,7 @@ test.describe("the map under the rest of the page", () => {
     await map.scrollIntoViewIfNeeded();
 
     // Read before the sheet: under it, Radix hides the page from the accessibility tree.
+    const before = (await boxOf(map).boundingBox())!;
     const spots = [
       middleOf((await map.boundingBox())!),
       middleOf((await points(map).first().boundingBox())!),
@@ -119,12 +126,16 @@ test.describe("the map under the rest of the page", () => {
     ];
     for (const at of spots) expect(await topAt(page, at), `at (${at.x}, ${at.y})`).toEqual({ map: true, sheet: false, bar: false });
 
-    // Opened where it is, without scrolling the page: the map stays where it was, under the sheet.
+    // Opened where it is, without scrolling the page: the map under the sheet.
     const add = panel(page).getByRole("button", { name: "Ajouter une personne", exact: true });
     await expect(add).toBeEnabled();
     await add.dispatchEvent("click");
     await expect(page.getByRole("dialog", { name: "Ajouter une personne" })).toBeVisible();
-    for (const at of spots) {
+    // The box read again, by its ring, out of the accessibility tree: the spots where the map is now.
+    const after = (await ring(page).locator("xpath=..").boundingBox())!;
+    const [dx, dy] = [after.x - before.x, after.y - before.y];
+    for (const { x, y } of spots) {
+      const at = { x: Math.round(x + dx), y: Math.round(y + dy) };
       expect(await topAt(page, at), `at (${at.x}, ${at.y})`).toEqual({ map: false, sheet: true, bar: false });
     }
   });

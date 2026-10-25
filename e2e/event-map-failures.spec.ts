@@ -179,6 +179,8 @@ test.describe("Leaflet's code", () => {
     // No empty box: neither the map nor its loading, nor its credits: no map, nothing to credit.
     await expect(page.getByRole("region", { name: ALLER_MAP })).toHaveCount(0);
     await expect(container(page).getByText(LOADING)).toBeHidden();
+    // Rendered and hidden with the box: not merely absent, which `toBeHidden()` would pass too.
+    await expect(credits(page)).toHaveCount(1);
     await expect(credits(page)).toBeHidden();
     await expect(container(page).getByRole("link", { name: /OpenStreetMap/ })).toHaveCount(0);
     await expect(mapButton(page)).toBeFocused();
@@ -211,6 +213,7 @@ test.describe("Leaflet's code", () => {
       await expect(notice(page, FAILED_AGAIN).getByRole("button")).toHaveText(["Recharger la page", "Réessayer"]);
       await expect(container(page).getByText(FAILED, { exact: true })).toHaveCount(0);
       await expect(page.getByRole("region", { name: ALLER_MAP })).toHaveCount(0);
+      await expect(credits(page)).toHaveCount(1);
       await expect(credits(page)).toBeHidden();
       await expect(reload(page), failure).toBeFocused();
     }
