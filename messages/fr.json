@@ -444,5 +444,39 @@
     "zoomOut": "Zoom arrière",
     "attribution": "Geoapify · © OpenMapTiles.org ·",
     "osmLink": "© OpenStreetMap"
+  },
+  "Emails": {
+    "hello": "Bonjour,",
+    "fallback": "Si le bouton ne marche pas, copiez ce lien dans votre navigateur :",
+    "footer": "Fullcar · Confidentialité : {url}",
+    "confirmation": {
+      "subject": "Confirmez votre adresse pour Fullcar",
+      "intro": "Un événement vient d’être créé sur Fullcar avec cette adresse. Confirmez-la pour le retrouver dans Mes événements, sur n’importe quel appareil :",
+      "button": "Confirmer mon adresse",
+      "validity": "Ce lien est valable 7 jours et ne sert qu’une fois. Ne le transférez pas : il ouvre l’espace organisateur, qui montre des numéros de téléphone.",
+      "notYou": "Ce n’était pas vous ? Ignorez cet e-mail : sans clic, cet événement n’est rattaché à aucun compte, et il est supprimé, avec l’adresse qu’il porte, 30 jours après sa date."
+    },
+    "signIn": {
+      "subject": "Votre lien de connexion à Fullcar",
+      "intro": "Voici votre lien pour vous connecter à Fullcar :",
+      "button": "Se connecter",
+      "validity": "Il est valable 1 heure et ne sert qu’une fois. Ne le transférez pas : il donne accès à vos événements.",
+      "notYou": "Vous n’avez rien demandé ? Ignorez cet e-mail : sans clic, aucune session ne s’ouvre."
+    },
+    "noAccount": {
+      "subject": "Connexion à Fullcar",
+      "intro": "Quelqu’un a demandé à se connecter à Fullcar avec cette adresse, mais aucun compte n’y est rattaché. Un compte se crée avec un premier événement :",
+      "button": "Créer un événement",
+      "notYou": "Vous n’avez rien demandé ? Ignorez cet e-mail : aucun compte n’a été créé.",
+      "leadsTo": "Le bouton mène à {url}"
+    },
+    "inactivityWarning": {
+      "subject": "Votre compte Fullcar sera supprimé le {date}",
+      "intro": "Votre compte Fullcar n’a pas servi depuis bientôt 3 ans. Sans visite d’ici le {date}, il sera supprimé, avec l’historique de vos événements.",
+      "keep": "Pour le garder, connectez-vous :",
+      "button": "Se connecter",
+      "nothingToDo": "Pour qu’il soit supprimé, il n’y a rien à faire.",
+      "leadsTo": "Le bouton mène à {url} : il n’ouvre aucune session tout seul."
+    }
   }
 }
