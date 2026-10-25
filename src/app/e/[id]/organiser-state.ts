@@ -29,7 +29,8 @@ export async function readOrganiserState(
   return onOneSnapshot(db, async (trx): Promise<OrganiserPanelAnswer> => {
     const event = await findPublicEvent(trx, eventId);
     if (event === undefined) return { state: "invalid" };
-    const storedHash = await readAdminTokenHash(trx, eventId);
+    // A revoked token (#586) is no stored hash: no token matches it.
+    const storedHash = (await readAdminTokenHash(trx, eventId)) ?? undefined;
     const { phonesById, ...rows } = await readEventRows(trx, eventId);
     const board = buildBoard(rows, eventLegs(event.retour_at), new Set());
     const legs = withOrganiserPhones(board, phonesById, { token, storedHash });

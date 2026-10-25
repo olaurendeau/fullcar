@@ -49,10 +49,16 @@ describe("event table", () => {
       { name: "boosters_enabled", type: "boolean", nullable: "NO", default: "false" },
       { name: "participation_enabled", type: "boolean", nullable: "NO", default: "false" },
       { name: "stops_enabled", type: "boolean", nullable: "NO", default: "false" },
-      { name: "admin_token_hash", type: "bytea", nullable: "NO", default: null },
+      { name: "admin_token_hash", type: "bytea", nullable: "YES", default: null },
       { name: "created_at", type: "timestamp with time zone", nullable: "NO", default: "now()" },
       { name: "location_lat", type: "double precision", nullable: "YES", default: null },
       { name: "location_lng", type: "double precision", nullable: "YES", default: null },
+      { name: "account_id", type: "uuid", nullable: "YES", default: null },
+      { name: "confirmed_at", type: "timestamp with time zone", nullable: "YES", default: null },
+      { name: "pending_email", type: "text", nullable: "YES", default: null },
+      { name: "send_status", type: "text", nullable: "YES", default: null },
+      { name: "send_status_at", type: "timestamp with time zone", nullable: "YES", default: null },
+      { name: "anonymised_at", type: "timestamp with time zone", nullable: "YES", default: null },
     ]);
   });
 

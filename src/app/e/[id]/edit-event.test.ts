@@ -466,6 +466,19 @@ describe("editEvent", () => {
       });
     });
 
+    // #586: a revoked token is a null hash. The event exists: invalid, not eventNotFound.
+    it("answers invalid for its own token once revoked, and writes nothing", async () => {
+      await onSeeded(async (trx, eventId, token) => {
+        await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", eventId).execute();
+        const rows = await rowsOf(trx, eventId);
+        expect(await editEvent(trx, eventId, token, { ...FORM, title: "U13" }, BEFORE)).toEqual({
+          ok: false,
+          error: "invalid",
+        });
+        expect(await rowsOf(trx, eventId)).toEqual(rows);
+      });
+    });
+
     it("answers invalid for the token of another event, and writes nothing", async () => {
       await withRollback(async (trx) => {
         const first = await seedEvent(trx);

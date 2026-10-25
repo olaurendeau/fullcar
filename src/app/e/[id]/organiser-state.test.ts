@@ -203,6 +203,17 @@ describe("readOrganiserState", () => {
     });
   });
 
+  // #586: a revoked token is a null hash, which no token matches.
+  it("answers invalid for the event's own token once revoked, and nothing else", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", scene.eventId).execute();
+      const answer = await readOrganiserState(trx, scene.eventId, scene.token);
+      expect(answer).toStrictEqual({ state: "invalid" });
+      expect(sentNumbers(answer)).toEqual([]);
+    });
+  });
+
   it("answers invalid for a well-formed id that is not stored, even with another event's token", async () => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
