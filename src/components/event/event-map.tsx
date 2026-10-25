@@ -352,13 +352,15 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
             className="mt-2.5"
           />
         )}
-        {/* Failed, no empty box: the notice alone, in its place. Edge to edge, a rule above it. */}
+        {/* Failed, no empty box: the notice alone, in its place. Edge to edge, a rule above it.
+            Isolated (#579): Leaflet's panes, the credits and the ring compare their z-indexes in
+            the box only, and nothing of the map paints above the page, its bar or its sheets. */}
         <div
           ref={box}
           hidden={failed}
           tabIndex={loading ? -1 : undefined}
           aria-busy={loading || undefined}
-          className="group/box relative -mx-3 h-60 overflow-hidden border-t focus-visible:outline-hidden min-[448px]:h-70"
+          className="group/box relative isolate -mx-3 h-60 overflow-hidden border-t focus-visible:outline-hidden min-[448px]:h-70"
         >
           {/* Leaflet's own: React gives it its name, its description, and nothing inside but the credits. */}
           <div
