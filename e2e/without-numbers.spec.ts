@@ -23,7 +23,7 @@ test.describe("withoutNumbers", () => {
 
   test("lets a short number be: a count, an hour, a ring's width", () => {
     for (const text of ["Placer 1 personne", "Départ à 07:00", "2px solid", "Places : 3 sur 4"]) {
-      expect(withoutNumbers(text) === text, text).toBe(false); // Deliberate e2e failure for #636, to be reverted.
+      expect(withoutNumbers(text) === text, text).toBe(true);
     }
   });
 });
