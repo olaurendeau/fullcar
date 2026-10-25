@@ -1,6 +1,7 @@
 import { createTranslator } from "next-intl";
 import en from "../../messages/en.json";
 import fr from "../../messages/fr.json";
+import { formatDate } from "@/i18n/format-date";
 import type { Locale } from "@/i18n/locales";
 
 /*
@@ -38,7 +39,7 @@ export interface RenderedEmail {
 
 const MESSAGES = { fr, en } as const;
 
-/** How the warning writes its date: « 12 mars 2029 », « 12 March 2029 ». */
+/** How the warning writes its date: « 12 mars 2029 », « 12 March 2029 », « 1er mai 2029 ». */
 const DATE_LOCALES: Record<Locale, string> = { fr: "fr-FR", en: "en-GB" };
 
 /** The reference time zone of the epic: « passé » and the day 30 are Paris's too. */
@@ -92,12 +93,12 @@ export function renderEmail(input: EmailInput): RenderedEmail {
     }
     case "inactivityWarning": {
       const url = `${origin}/connexion`;
-      const date = new Intl.DateTimeFormat(DATE_LOCALES[input.locale], {
+      const date = formatDate(DATE_LOCALES[input.locale], input.deletesAt, {
         day: "numeric",
         month: "long",
         year: "numeric",
         timeZone: TIME_ZONE,
-      }).format(input.deletesAt);
+      });
       subject = t("inactivityWarning.subject", { date });
       blocks = [
         hello,
