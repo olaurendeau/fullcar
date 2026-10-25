@@ -94,10 +94,11 @@ const BUBBLE_WIDTH = 210;
 
 /** Leaflet 1.9.4's keyboard handler, `L.Map.Keyboard`, which @types/leaflet does not declare. */
 const LeafletKeyboard = (L.Map as unknown as { Keyboard: typeof L.Handler }).Keyboard;
-type KeyboardHandler = L.Handler & { _map: L.Map; _onKeyDown(event: KeyboardEvent): void };
+type KeyboardHandler = L.Handler & { _map: L.Map; _focused: boolean; _onKeyDown(event: KeyboardEvent): void };
 
 /**
- * Leaflet's keyboard, but its arrow keys pan at once (CA1.10, decision 24 of organizer-view).
+ * Leaflet's keyboard, but its arrow keys pan at once (CA1.10, decision 24 of organizer-view),
+ * and a press of the mouse gives the region the mouse's focus, without its ring (v27, #577).
  * Leaflet 1.9.4 has no option for it: its `_onKeyDown` calls `map.panBy(offset)`, animated for
  * 250 ms. Ours runs that same `_onKeyDown`, so Shift (three times the distance), the `maxBounds`
  * limit and + / − for zoom stay Leaflet's, with `panBy` made still for the time of the key.
@@ -106,8 +107,16 @@ type KeyboardHandler = L.Handler & { _map: L.Map; _onKeyDown(event: KeyboardEven
  * This overrides an internal of Leaflet, and is safe only because package.json pins `leaflet`
  * to exactly 1.9.4: an upgrade reads this again, and e2e/event-map-touch.spec.ts tests the
  * arrows, Shift, + and −.
+ * Leaflet's `_onMouseDown` focuses the region by script, and Chrome makes a focus by script
+ * `:focus-visible` when the element it leaves is: after Tab to a point, a click lit the ring.
+ * Ours asks `focusVisible: false`, which a browser without it ignores, and `preventScroll` in
+ * place of Leaflet's `window.scrollTo` back; e2e/event-map-container.spec.ts tests it.
  */
 const StillKeyboard = LeafletKeyboard.extend({
+  _onMouseDown(this: KeyboardHandler) {
+    if (this._focused) return;
+    this._map.getContainer().focus({ preventScroll: true, focusVisible: false });
+  },
   _onKeyDown(this: KeyboardHandler, event: KeyboardEvent) {
     const map = this._map;
     const panBy = map.panBy;
