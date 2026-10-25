@@ -824,10 +824,17 @@ de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cet
   un `setView` animé ; la molette fait défiler la page (`scrollWheelZoom: false`). Leaflet n'a
   pas d'option pour les flèches : `StillKeyboard` étend `L.Map.Keyboard` et le remplace ; il
   appelle son `_onKeyDown` avec un `panBy` immédiat le temps de la touche, et garde ainsi Maj
-  (trois fois la distance), `maxBounds` et + / −. Il surcharge un interne de Leaflet, et ne
-  tient que grâce à la version exacte de `leaflet` dans `package.json`, 1.9.4, épinglée par
-  #471 avant lui, comme toute dépendance du projet : une montée de version le relit
-  (`e2e/event-map-touch.spec.ts` teste les flèches, Maj, + et −).
+  (trois fois la distance), `maxBounds` et + / −. Il remplace aussi son `_onMouseDown` (#577) :
+  Leaflet y donne le focus à la région par script, et Chrome rend ce focus `:focus-visible`
+  quand l'élément quitté l'était ; après Tab vers un point, un clic sur le fond allumait
+  l'anneau. Le nôtre garde la garde `_focused` et appelle
+  `focus({ preventScroll: true, focusVisible: false })` : `focusVisible`, qu'un navigateur
+  sans l'option ignore, pour l'anneau ; `preventScroll` à la place du `window.scrollTo` de
+  Leaflet, pour que la page ne saute pas vers une carte coupée par le bord de la fenêtre. Il
+  surcharge des internes de Leaflet, et ne tient que grâce à la version exacte de `leaflet`
+  dans `package.json`, 1.9.4, épinglée par #471 avant lui, comme toute dépendance du projet :
+  une montée de version le relit (`e2e/event-map-touch.spec.ts` teste les flèches, Maj, + et
+  −, `e2e/event-map-container.spec.ts` l'anneau et le défilement au clic).
 - **Au toucher** (CA1.11, #479, #484) : `dragging` suit `(pointer: coarse)`, même quand elle
   change, la carte restant la même : un doigt fait défiler la page, deux déplacent et zooment
   la carte. Sur un point ou sur les crédits (`holdPress`), un `touchstart` à un doigt s'arrête

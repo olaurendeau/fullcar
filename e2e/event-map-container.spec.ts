@@ -245,18 +245,58 @@ for (const [where, device] of [
         await expectContainer(page, true);
         await expectEdgeToEdge(page, box);
 
-        // The region clicked with the mouse, off its points and its zoom: it has the focus, not
-        // the keyboard's, and the ring stays hidden (#569's review, #558). The mouse first, on
-        // the event's title: Leaflet focuses the region from its own `mousedown`, before the
-        // browser counts the press, and right after a key the browser would take it for the keyboard's.
-        await page.getByRole("heading", { level: 1 }).click();
+        // The car's point from the keyboard, then the region clicked with the mouse, off its points
+        // and its zoom: it has the focus, not the keyboard's, and the ring stays hidden (#569's
+        // review, #558, #577). Leaflet focuses the region by script, from its own `mousedown`,
+        // and Chrome gives a focus by script `:focus-visible` when the element it leaves has it.
+        await page.keyboard.press("Tab");
+        await expect(points(map).first()).toBeFocused();
         await expect(rings(page)).toBeHidden();
         const { width } = (await map.boundingBox())!;
         await map.click({ position: { x: width - 40, y: 40 } });
         await expect(map).toBeFocused();
         expect(await map.evaluate((element) => element.matches(":focus-visible"))).toBe(false);
         await expect(rings(page)).toBeHidden();
+        // The keyboard again, after the mouse: the ring is back on the region.
+        await page.keyboard.press("Tab");
+        await expect(points(map).first()).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
+        await expectRing(page, map, map);
       });
     });
   }
 }
+
+test.describe("the region clicked with the mouse, cut off by the window, at 360 × 420 px", () => {
+  test.use({ viewport: { width: 360, height: 420 } });
+
+  test("#577: the page does not scroll, the map cut off at the top, then at the bottom", async ({ db, page, placed }) => {
+    await seedCar(db, placed.id, "Marc", { position: around(placed.place, { north: 100 }) });
+    await answerTiles([tileAt(placed.place, FRAMED_ZOOM)], { kind: "tile" });
+    await page.goto(`/e/${placed.id}`);
+    await expect(panel(page)).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await mapButton(page).click();
+    const map = region(page, "aller");
+    await expect(points(map)).toHaveCount(1);
+
+    // Its top 100 px above the window, then its top 100 px from the window's bottom; clicked
+    // off its point, its zoom and its credits, without the focus before.
+    for (const [cut, top, y] of [
+      ["top", -100, 180],
+      ["bottom", 420 - 100, 40],
+    ] as const) {
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const { y: now } = (await map.boundingBox())!;
+      await page.evaluate((by) => window.scrollBy(0, by), now - top);
+      const box = (await map.boundingBox())!;
+      expect(Math.round(box.y), `the map cut off at the ${cut}`).toBe(top);
+      const before = await page.evaluate(() => window.scrollY);
+
+      await map.click({ position: { x: box.width - 40, y } });
+      await expect(map).toBeFocused();
+      await expect(rings(page)).toBeHidden();
+      expect(await page.evaluate(() => window.scrollY), `scrolled, the map cut off at the ${cut}`).toBe(before);
+    }
+  });
+});
