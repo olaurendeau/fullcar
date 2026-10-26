@@ -9,7 +9,7 @@ import { sheetCandidates, sheetSubmit, tapOutcome } from "@/domain/tap";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./create-event-form";
-import { nameList, whyOf, wordsOf, type Why } from "./failure-words";
+import { nameList, personGone, whyOf, wordsOf, type Why } from "./failure-words";
 import { focusCar, focusCarTitle, focusFirstShown } from "./focus";
 import { aboutOf, sendAbout, useSends, type FromSheet } from "./hidden-page";
 import type { BoardDevice } from "./leg-panel";
@@ -28,23 +28,35 @@ export type SeatsTaken =
   | { kind: "refused"; refusal: SeatRefusal; why: Why }
   | { kind: "problem"; problem: BarProblem; why: Why }
   /** The car's retour is gone: the sheet closes, and the bar says why (rule 9). */
-  | { kind: "noRetour"; why: Why };
+  | { kind: "noRetour"; why: Why }
+  /** Someone sent was removed from the event meanwhile: the sheet closes, and the bar names her (RP5.4). */
+  | { kind: "personGone"; why: Why };
 
 /** What the server answers `takeSeats`, an unknown event included. */
 type SeatsAnswer =
   | { ok: true }
   | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "noRetour" }
-  | { ok: false; error: "notEnoughSeats"; freeSeats: number };
+  | { ok: false; error: "notEnoughSeats"; freeSeats: number }
+  | { ok: false; error: "personGone"; goneIds: string[] };
 
 /**
- * `takeSeats`'s answer as the page says it, for the persons sent, `names`. The sheet has no words
- * of its own for `forbidden`, `eventNotFound` and `invalid`: `failed` there (§ 2.6).
+ * `takeSeats`'s answer as the page says it, for the persons sent, `names`, whose ids are `personIds`
+ * in the same order. The sheet has no words of its own for `forbidden`, `eventNotFound` and
+ * `invalid`: `failed` there (§ 2.6).
  */
-export function seatsTaken(sent: { ok: true; value: SeatsAnswer } | { ok: false; problem: BarProblem }, names: readonly string[]): SeatsTaken {
+export function seatsTaken(
+  sent: { ok: true; value: SeatsAnswer } | { ok: false; problem: BarProblem },
+  names: readonly string[],
+  personIds: readonly string[] = [],
+): SeatsTaken {
   if (!sent.ok) return { kind: "problem", problem: sent.problem, why: whyOf(sent.problem) };
   const answer = sent.value;
   if (answer.ok) return { kind: "done" };
   switch (answer.error) {
+    case "personGone": {
+      const persons = personIds.map((id, index) => ({ id, firstName: names[index] ?? "" }));
+      return { kind: "personGone", why: personGone(persons, answer.goneIds) };
+    }
     case "rideGone":
       return { kind: "refused", refusal: "rideGone", why: whyOf("rideGone") };
     case "alreadyInCar":
@@ -299,7 +311,7 @@ function SeatSheet({
   });
 
   // What the sheet says of a refusal or a problem: the bar names who could not get in instead.
-  const said = (taken: Exclude<SeatsTaken, { kind: "done" | "noRetour" }>, count: number): string => {
+  const said = (taken: Exclude<SeatsTaken, { kind: "done" | "noRetour" | "personGone" }>, count: number): string => {
     if (taken.kind === "problem") return t(`Actions.${taken.problem}`);
     const { refusal } = taken;
     return refusal === "notEnoughSeats" ? t("Sheet.notEnoughSeats") : t(`Actions.${refusal}`, { count });
@@ -324,8 +336,9 @@ function SeatSheet({
       onOpenChange(false);
       return;
     }
-    // Its leg is gone (rule 9): it closes, the focus back on the seat, which shows until then.
-    if (taken.kind === "noRetour") return onOpenChange(false);
+    // Its leg is gone (rule 9), or someone ticked is gone from the event (RP5.4): it closes, the
+    // focus back on the seat, which shows until then, and the bar says why.
+    if (taken.kind === "noRetour" || taken.kind === "personGone") return onOpenChange(false);
     setRefused(said(taken, names.length));
     if (taken.kind === "refused" && taken.refusal === "rideGone") {
       focusNext.current = () => body.current?.closest('[role="dialog"]')?.querySelector<HTMLElement>("[data-slot=sheet-footer] button");

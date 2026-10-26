@@ -136,11 +136,13 @@ export async function offerRide(id: unknown, token: unknown, offer: unknown): Pr
   try {
     const result = await storeRideOffer(getDb(), id, token, offer);
     if ("errors" in result) return result;
-    const refusal = result.ok ? undefined : result.error;
-    if (refusal === "eventNotFound") return { ok: false, error: refusal };
+    if (!result.ok && result.error === "eventNotFound") return { ok: false, error: "eventNotFound" };
     const state = await readEventState(getDb(), id, token);
     if (state === undefined) return { ok: false, error: "eventNotFound" };
-    return refusal === undefined ? { ok: true, state } : { ok: false, error: refusal, state };
+    if (result.ok) return { ok: true, state };
+    // `personGone` says who, for the page to name her (RP5.4).
+    if (result.error === "personGone") return { ...result, state };
+    return { ok: false, error: result.error, state };
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("offerRide: the car could not be stored", error);

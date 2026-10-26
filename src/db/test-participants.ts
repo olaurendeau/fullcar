@@ -67,3 +67,11 @@ export async function seedRide(
 export async function seedPlacement(db: Kysely<Database>, placement: NewPlacement): Promise<void> {
   await setPlacement(db, placement);
 }
+
+/**
+ * Deletes a person of the event, her Rides and Placements going with her by cascade: a person
+ * removed from the event (#645) as another device would, for Vitest and the Playwright fixtures.
+ */
+export async function deleteSeededPerson(db: Kysely<Database>, eventId: string, personId: string): Promise<void> {
+  await db.deleteFrom("person").where("id", "=", personId).where("event_id", "=", eventId).execute();
+}
