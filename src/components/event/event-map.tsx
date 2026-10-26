@@ -116,8 +116,8 @@ const OSM_COPYRIGHT = "https://www.openstreetmap.org/copyright";
  * right, « Geoapify · © OpenMapTiles.org · » then the link « © OpenStreetMap », 24 × 24 px at
  * least, to a new tab, which `Contact.newTab` says. Two lines, aligned right, never cut, when
  * the box is narrower (320 px) or the text larger. Ours, not a control of Leaflet's: there from
- * the loading on, above the opaque loading text and the points (z-index 1000), under the bubble
- * and the ring element. Its focus ring is its own, inside it, on opaque white: one outside
+ * the loading on, above the opaque loading text and Leaflet's panes, the points and the bubble
+ * with them (z-index 1000; the bubble's 1001 counts in its pane only, #578), under the ring element. Its focus ring is its own, inside it, on opaque white: one outside
  * would be cut by the map's edge, and unreadable on some tiles.
  * Inside Leaflet's container, `.leaflet-container a` would colour the link: hence `!`.
  */
