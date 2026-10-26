@@ -4,10 +4,11 @@
  * outputs of `mapOf`, the points kept, moved, created and removed, whether to reframe, to
  * close the bubble, and where the focus goes. Then (#483) Leaflet's import and the tiles'
  * notice, the rows « Leaflet : … » and « tuiles : … », the import one for the page since
- * #553. Pure functions: the map draws what they say.
+ * #553; and (#653) when the page is settled. Pure functions: the map draws what they say.
  */
 import { distanceMetres, SAME_POSITION_METRES, type EventMapPoints, type MapCar, type MapPoint } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
+import type { DeviceStatus } from "@/domain/tap";
 
 /**
  * What has the focus in the map: its container, a point, a car's button of the open bubble,
@@ -148,7 +149,7 @@ export interface LeafletState {
 
 export const LEAFLET_IDLE: LeafletState = { phase: "idle", failures: 0, again: false };
 
-/** A map opened, « Réessayer » pressed, or the import ended. */
+/** A map started, « Réessayer » pressed, or the import ended. */
 export type LeafletEvent = "open" | "retry" | "loaded" | "failed";
 
 /**
@@ -158,7 +159,7 @@ export type LeafletEvent = "open" | "retry" | "loaded" | "failed";
 export type LeafletFocus = "box" | "toggle" | "retry" | "reload" | null;
 
 /**
- * The page's import after `event` (CA2.8): the first opening of a map imports, and « Réessayer »
+ * The page's import after `event` (CA2.8): the first start of a map imports, and « Réessayer »
  * imports again; the import ended, the map, or the notice, « toujours » from the second failure
  * in a row while `online` (`navigator.onLine`), the first one offline. An event that nothing
  * waits for changes nothing: the same state.
@@ -211,4 +212,14 @@ export function tilesStep(view: TilesView, event: TilesEvent, retryFocused: bool
   if (event === "tileerror") return { view: { ...view, failing: true }, focus: null };
   const gone = view.notice && !view.failing;
   return { view: { ...view, notice: view.failing }, focus: gone && retryFocused ? "container" : null };
+}
+
+/**
+ * Whether the page is settled (event-map v29, « la page posée », CA1.2, CA1.20): the device's
+ * persons read, or none to read, or their read failed; and on `/e/{id}/admin`, the first check of
+ * the link over (`linkChecking` false). Until then, « Vos inscriptions » and the organiser area are
+ * still to come above the map, and would push its box under the fold: no map starts.
+ */
+export function pageSettled(device: DeviceStatus, linkChecking: boolean): boolean {
+  return !linkChecking && (device === "none" || device === "ready" || device === "failed");
 }
