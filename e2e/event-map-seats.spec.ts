@@ -38,12 +38,21 @@ async function seedSeated(
   return id;
 }
 
-/** What a badge is drawn with: its number's colour, weight and size, its background, its rule's, its icon's. */
+/**
+ * What a badge is drawn with: its number's colour, weight and size, its background, its rule's,
+ * its icon's; and `--border` as a border colour computes there, for the rule (as CA1.18 reads it).
+ */
 function styleOf(badge: Locator) {
   return badge.evaluate((element) => {
     const style = getComputedStyle(element);
     const icon = getComputedStyle(element.querySelector("svg")!);
+    const probe = document.createElement("span");
+    probe.style.borderColor = "var(--border)";
+    element.append(probe);
+    const border = getComputedStyle(probe).borderTopColor;
+    probe.remove();
     return {
+      border,
       color: style.color,
       fontWeight: style.fontWeight,
       fontSize: style.fontSize,
@@ -115,10 +124,13 @@ test("CA1.21, CA1.22, CA1.5, CA1.8: each point shows its free seats, « 0 » whe
   await expect(labelOf(point(claire))).toHaveClass(/(^| )border-primary( |$)/);
   await expect(labelOf(point(claire))).toHaveClass(/(^| )bg-background( |$)/);
 
-  // The same style for « 0 » and « 2 », never amber: every colour a grey.
+  // The same style for « 0 » and « 2 », never amber: the number, its background and its icon
+  // greys, and its rule 1 px of `--border` exactly, compared as CA1.18 compares the container's.
   const [full, free] = [await styleOf(seatsOf(point(ines))), await styleOf(seatsOf(point(claire)))];
   expect(full).toEqual(free);
-  expect(await neutral(page, [free.color, free.backgroundColor, free.ruleColor, free.iconColor])).toEqual([true, true, true, true]);
+  expect(free.rule).toBe("1px solid");
+  expect(free.ruleColor).toBe(free.border);
+  expect(await neutral(page, [free.color, free.backgroundColor, free.iconColor])).toEqual([true, true, true]);
   const icon = seatsOf(point(claire)).locator("svg");
   // Its number at 4.5:1 at least on the label's background, its icon at 3:1.
   expect(await contrast(seatsOf(point(claire)), labelOf(point(claire)))).toBeGreaterThanOrEqual(4.5);
