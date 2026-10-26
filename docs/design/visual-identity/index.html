@@ -1,0 +1,617 @@
+<title>Identité visuelle de Fullcar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1f; --muted: #66666b; --line: #dcdcd8; --card: #ffffff;
+    --link: #2457c5; --soft: #ececea; --note: #fff7e0; --note-line: #e2c66f; --frame: #2b2b2e;
+    --urlbar: #efefef; --urlbar-fg: #444; --fold: #2457c5; --ok: #1d7a3a; --ko: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161618; --fg: #ececee; --muted: #a3a3aa; --line: #34343a; --card: #1f1f23;
+    --link: #8fb0ff; --soft: #2a2a30; --note: #2f2818; --note-line: #6b5a26; --frame: #4a4a50;
+    --urlbar: #2a2a2e; --urlbar-fg: #c8c8cc; --fold: #8fb0ff; --ok: #6fd08c; --ko: #ff8a80; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --muted: #a3a3aa; --line: #34343a; --card: #1f1f23;
+    --link: #8fb0ff; --soft: #2a2a30; --note: #2f2818; --note-line: #6b5a26; --frame: #4a4a50;
+    --urlbar: #2a2a2e; --urlbar-fg: #c8c8cc; --fold: #8fb0ff; --ok: #6fd08c; --ko: #ff8a80; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1620px; margin: 0 auto; padding-block: 32px 72px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.9rem; margin: 0 0 6px; line-height: 1.2; }
+  h2 { font-size: 1.35rem; margin: 56px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 22px 0 6px; }
+  p, li { max-width: 82ch; }
+  .lead { color: var(--muted); margin: 0 0 10px; }
+  a { color: var(--link); }
+  code { font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 0.9rem; }
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; max-width: 82ch; }
+  .note p { margin: 4px 0; }
+  .tablewrap { overflow-x: auto; margin: 10px 0 4px; }
+  table.t { border-collapse: collapse; font-size: 0.9rem; min-width: 640px; }
+  table.t th, table.t td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  table.t th { font-weight: 600; background: var(--soft); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ok { color: var(--ok); font-weight: 600; } .ko { color: var(--ko); font-weight: 600; }
+  .sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; border: 1px solid rgba(0,0,0,.18); margin-right: 6px; }
+  .dirs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 18px; margin-top: 14px; }
+  .dir { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; }
+  .dir h3 { margin-top: 0; display: flex; align-items: center; gap: 10px; }
+  .dir ul { padding-left: 18px; margin: 6px 0; } .dir li { margin: 3px 0; }
+  .tag { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
+  .tag.reco { background: var(--note); color: var(--fg); border: 1px solid var(--note-line); }
+  .tokens { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 0.85rem; margin: 8px 0; }
+  .tokens code { background: none; padding: 0; }
+
+  /* Rows of phones, side by side: a row scrolls on its own, never the page. */
+  .row { overflow-x: auto; padding-bottom: 10px; margin-top: 12px; }
+  .row-in { display: flex; gap: 22px; align-items: flex-start; width: max-content; }
+  .col { width: 372px; flex: none; }
+  .col > .cap { font-size: 0.88rem; margin: 0 0 8px; color: var(--muted); }
+  .col > .cap b { color: var(--fg); }
+
+  /* The phone: a 360 px viewport in a 6 px frame. Inside, the app's own look, light only. */
+  .phone { box-sizing: content-box; width: 360px; border: 6px solid var(--frame); border-radius: 22px; overflow: hidden; position: relative;
+    background: var(--a-bg); color: var(--a-fg); font: 14px/1.43 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color-scheme: light; }
+  .urlbar { background: #efefef; color: #444; font: 12px ui-monospace, Menlo, monospace; padding: 7px 10px; overflow-wrap: anywhere; }
+  .phone h1, .phone h2, .phone h3, .phone h4 { border: 0; padding: 0; margin: 0; }
+  .phone table { font-size: 14px; }
+  .screen { padding: 16px; display: flex; flex-direction: column; gap: 16px; position: relative; }
+  .h780 { height: 780px; overflow: hidden; position: relative; }
+  .fold { position: absolute; left: 0; right: 0; border-top: 2px dashed #2457c5; z-index: 5; pointer-events: none; }
+  .fold span { position: absolute; right: 6px; top: -19px; font: 11px ui-sans-serif, system-ui, sans-serif; color: #2457c5; background: #fff; padding: 0 4px; border-radius: 3px; }
+  .ruler { position: absolute; left: 0; width: 6px; background: #2457c5; z-index: 5; opacity: .85; }
+
+  /* Directions: the app's tokens per phone. */
+  .phone[data-d="0"] { --a-bg:#ffffff; --a-card:#ffffff; --a-fg:#0a0a0a; --a-muted:#f5f5f5; --a-mfg:#737373; --a-border:#e5e5e5; --a-primary:#171717; --a-pfg:#fafafa; --a-inverse:#171717; --a-step-bg:#f5f5f5; --a-step-fg:#0a0a0a; --a-tile-bg:#f5f5f5; --a-tile-fg:#737373; --a-tab-fg:#0a0a0a; --a-r:10px; --a-rxl:14px; --a-shadow:none; }
+  .phone[data-d="A"] { --a-bg:#ffffff; --a-card:#ffffff; --a-fg:#0a0a0a; --a-muted:#f5f5f5; --a-mfg:#737373; --a-border:#e5e5e5; --a-primary:#0f244d; --a-pfg:#fafafa; --a-inverse:#0f244d; --a-step-bg:#f5f5f5; --a-step-fg:#0a0a0a; --a-tile-bg:#f5f5f5; --a-tile-fg:#737373; --a-tab-fg:#0a0a0a; --a-r:10px; --a-rxl:14px; --a-shadow:none; }
+  .phone[data-d="B"] { --a-bg:#ffffff; --a-card:#ffffff; --a-fg:#0a0a0a; --a-muted:#f5f5f5; --a-mfg:#737373; --a-border:#e5e5e5; --a-primary:#005a5b; --a-pfg:#fafafa; --a-inverse:#171717; --a-step-bg:#e5f8f8; --a-step-fg:#005a5b; --a-tile-bg:#e5f8f8; --a-tile-fg:#005a5b; --a-tab-fg:#005a5b; --a-r:10px; --a-rxl:14px; --a-shadow:none; }
+  .phone[data-d="C"] { --a-bg:#f9fafd; --a-card:#ffffff; --a-fg:#0a0a0a; --a-muted:#f2f3f8; --a-mfg:#656875; --a-border:#e1e2ea; --a-primary:#3f46ac; --a-pfg:#fafafa; --a-inverse:#171717; --a-step-bg:#e9eeff; --a-step-fg:#353b91; --a-tile-bg:#e9eeff; --a-tile-fg:#3f46ac; --a-tab-fg:#0a0a0a; --a-r:12px; --a-rxl:17px; --a-shadow:0 1px 2px rgb(16 24 40 / .06); }
+
+  .ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .m { color: var(--a-mfg); }
+  .a-h1 { font-size: 30px; font-weight: 700; line-height: 36px; margin: 0; }
+  .ev-h1 { font-size: 24px; font-weight: 700; line-height: 32px; margin: 0; }
+  .a-h2 { font-size: 18px; font-weight: 600; line-height: 28px; margin: 0; }
+  .a-p { margin: 0; font-size: 16px; line-height: 24px; }
+  .small { font-size: 13px; line-height: 18px; }
+  .s14 { font-size: 14px; line-height: 20px; }
+  .flex { display: flex; } .col-f { display: flex; flex-direction: column; } .ai-s { align-items: flex-start; } .ai-c { align-items: center; }
+  .g1 { gap: 4px; } .g2 { gap: 8px; } .g3 { gap: 12px; } .g4 { gap: 16px; } .g6 { gap: 24px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: var(--a-r); border: 1px solid transparent; font-size: 14px; font-weight: 500; height: 32px; padding: 0 10px; box-sizing: border-box; white-space: nowrap; text-decoration: none; }
+  .btn.h11 { height: 44px; } .btn.w { width: 100%; }
+  .btn.primary { background: var(--a-primary); color: var(--a-pfg); }
+  .btn.outline { background: var(--a-card); border-color: var(--a-border); color: var(--a-fg); }
+  .btn.ghost { background: transparent; color: inherit; }
+  .btn.focus { outline: 2px solid #737373; outline-offset: 2px; }
+  .btn.dis { opacity: .5; }
+  .footer { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 24px; }
+  .footer .line { display: flex; flex-wrap: wrap; justify-content: center; }
+  .footer a, .footer span.fl { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; font-size: 14px; color: var(--a-mfg); text-decoration: underline; text-underline-offset: 4px; }
+  .footer span.fl { text-decoration: none; }
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+  .steps li { display: grid; grid-template-columns: 28px 1fr; column-gap: 12px; row-gap: 2px; }
+  .stepn { grid-row: span 2; width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: var(--a-step-bg); color: var(--a-step-fg); font-size: 14px; font-weight: 600; }
+  .steps h3 { margin: 0; font-size: 16px; font-weight: 600; line-height: 28px; }
+  .steps p { margin: 0; font-size: 16px; line-height: 24px; color: var(--a-mfg); }
+  .h1row { display: flex; align-items: center; gap: 10px; }
+  .mark { flex: none; display: block; }
+  .dl { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 4px; align-items: baseline; margin: 0; }
+  .dl dt { font-size: 14px; color: var(--a-mfg); } .dl dd { margin: 0; font-size: 16px; line-height: 24px; }
+  .box { border: 1px solid var(--a-border); background: var(--a-card); box-shadow: var(--a-shadow); }
+  .dp { border-radius: 14px; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .dp-h { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  table.mx { color: var(--a-fg); width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0 4px; margin-top: -4px; font-size: 14px; }
+  table.mx th.c { text-align: left; font-size: 12px; font-weight: 500; color: var(--a-mfg); height: 18px; padding: 0 0 0 6px; }
+  table.mx th.c:first-child { padding-left: 2px; width: 26%; }
+  table.mx th.r { text-align: left; font-weight: 600; padding: 0 2px; }
+  table.mx td { padding: 0 0 0 4px; }
+  .cell { min-height: 44px; box-sizing: border-box; display: flex; align-items: center; border-radius: var(--a-r); border: 1px solid transparent; padding: 4px 8px; font-size: 13px; line-height: 16px; font-weight: 500; }
+  .cell.amber { background: #fef3c6; border-color: #fee685; color: #461901; }
+  .cell.grey { background: var(--a-muted); }
+  .cell.out { background: var(--a-card); border-color: var(--a-border); color: var(--a-mfg); font-weight: 400; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--a-muted); border-radius: var(--a-r); padding: 3px; }
+  .tab { height: 48px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 3px 0; border-radius: calc(var(--a-r) * .8); font-size: 14px; font-weight: 500; color: rgb(10 10 10 / .6); border: 1px solid transparent; }
+  .tab.on { background: var(--a-card); color: var(--a-tab-fg); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+  .pill { border-radius: 999px; background: #fef3c6; color: #461901; font-size: 12px; line-height: 18px; padding: 0 8px; font-weight: 500; white-space: nowrap; }
+  .banner { display: flex; align-items: flex-start; gap: 8px; border-radius: var(--a-r); padding: 10px 12px; font-size: 14px; font-weight: 500; line-height: 20px; }
+  .banner.amber { background: #fef3c6; color: #461901; } .banner.grey { background: var(--a-muted); }
+  .banner .ic { margin-top: 2px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ride { border-radius: var(--a-rxl); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .seat { min-height: 44px; display: flex; align-items: center; gap: 8px; border-radius: var(--a-r); padding: 0 12px; font-size: 14px; box-sizing: border-box; }
+  .seat.taken { background: var(--a-muted); }
+  .seat.free { border: 1px dashed rgb(10 10 10 / .25); background: var(--a-card); font-weight: 500; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--a-border); border-radius: 999px; padding: 4px 12px; font-size: 14px; background: var(--a-card); }
+  .overlay { position: absolute; inset: 0; background: rgb(0 0 0 / .10); backdrop-filter: blur(2px); z-index: 3; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; background: #fff; border-radius: var(--a-rxl) var(--a-rxl) 0 0; box-shadow: 0 -8px 24px rgb(0 0 0 / .12); }
+  .sheet-h { padding: 16px 16px 0; font-size: 16px; font-weight: 600; }
+  .sheet-b { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .sheet-f { padding: 0 16px 16px; }
+  .panel { border-radius: var(--a-rxl); padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .tile { border: 1px solid var(--a-border); background: var(--a-card); border-radius: var(--a-r); padding: 8px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: 13px; line-height: 18px; min-height: 44px; }
+  .linkbox { background: var(--a-muted); border-radius: var(--a-r); padding: 10px 12px; font: 13px/20px ui-monospace, Menlo, monospace; overflow-wrap: anywhere; margin: 0; }
+  .orow { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; min-height: 44px; border-top: 1px solid var(--a-border); }
+  .tel { text-decoration: underline; text-underline-offset: 4px; white-space: nowrap; color: var(--a-fg); }
+  hr.a { border: 0; border-top: 1px solid var(--a-border); margin: 0; width: 100%; }
+  .bar { display: flex; align-items: flex-start; gap: 12px; border-radius: var(--a-rxl); padding: 4px 4px 4px 16px; font-size: 14px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / .1); }
+  .bar.bar-ok { background: var(--a-inverse); color: #fafafa; font-weight: 500; }
+  .bar.bar-ko { background: var(--a-card); border: 1px solid #e7000b; }
+  .bar .ln { flex: 1; display: flex; align-items: center; gap: 10px; padding: 10px 0; min-width: 0; }
+  .bar .x { width: 44px; height: 44px; display: grid; place-items: center; flex: none; border-radius: var(--a-r); }
+  .bar .undo { border: 1px solid rgb(250 250 250 / .45); border-radius: var(--a-r); height: 32px; padding: 0 10px; display: inline-flex; align-items: center; font-size: 14px; }
+  .bar .x.focus { outline: 2px solid #737373; outline-offset: 0; }
+  .empty { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 1px dashed var(--a-border); border-radius: var(--a-rxl); padding: 28px 16px; text-align: center; background: var(--a-card); box-shadow: var(--a-shadow); }
+  .etile { width: 44px; height: 44px; border-radius: var(--a-rxl); display: grid; place-items: center; background: var(--a-tile-bg); color: var(--a-tile-fg); margin-bottom: 6px; }
+  .etile .ic { width: 20px; height: 20px; }
+  .ahead { height: 48px; box-sizing: border-box; border-bottom: 1px solid var(--a-border); display: flex; align-items: center; gap: 8px; padding: 0 16px; background: var(--a-bg); font-size: 16px; font-weight: 600; }
+  .ahead .r { margin-left: auto; font-size: 14px; font-weight: 400; color: var(--a-mfg); text-decoration: underline; text-underline-offset: 4px; min-height: 44px; display: flex; align-items: center; padding: 0 4px; }
+  .marks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 18px; margin-top: 12px; }
+  .mk { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; min-width: 0; }
+  .mk .sizes { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin: 10px 0; }
+  .mk .on-white { background: #fff; border-radius: 10px; padding: 12px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; border: 1px solid #e5e5e5; color: #0a0a0a; }
+  ol.q > li { margin: 10px 0; }
+  pre.diff { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 8px 0; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; width: max-content; min-width: 100%; box-sizing: border-box; }
+  pre.diff code { background: none; padding: 0; font: inherit; }
+  pre.diff ins { text-decoration: none; color: var(--ok); }
+  pre.diff del { text-decoration: none; color: var(--ko); }
+  ul.crit li { margin: 6px 0; }
+  .desk { width: 576px; height: 360px; overflow: hidden; border: 6px solid var(--frame); border-radius: 12px; flex: none; }
+  .phone.desk-in { width: 1280px; height: 800px; border: 0; border-radius: 0; transform: scale(.45); transform-origin: 0 0; }
+  .desk-col { width: 448px; margin: 0 auto; }
+  .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .fld label { font-size: 14px; font-weight: 500; line-height: 20px; }
+  .inp { height: 40px; box-sizing: border-box; border: 1px solid var(--a-border); border-radius: var(--a-r); padding: 0 10px; display: flex; align-items: center; font-size: 16px; background: var(--a-card); }
+  .cbx { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding: 4px 0; box-sizing: border-box; }
+  .box16 { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--a-border); flex: none; margin-top: 2px; box-sizing: border-box; display: grid; place-items: center; }
+  .box16.on { background: var(--a-primary); border-color: var(--a-primary); color: var(--a-pfg); }
+</style>
+
+<div class="wrap">
+  <h1>Identité visuelle de Fullcar</h1>
+  <p class="lead">Spécification, v3 · épique <a href="https://github.com/olaurendeau/fullcar/issues/651">#651</a> · direction B « Pétrole », choisie par le propriétaire.</p>
+  <div class="note">
+    <p><b>Choix du propriétaire (#651)</b> : la direction <b>B « Pétrole »</b> ; <b>pas d’en-tête</b>, la marque <b>M1</b> (la voiture d’aujourd’hui, recolorée) sur l’accueil et sur la page introuvable seulement, favicon et icône Apple recolorés ; le bandeau « Tout le monde a une place » <b>reste gris</b>.</p>
+  </div>
+  <p>Ce que la testeuse trouvait triste : tout est gris, et le bouton principal presque noir. Après ce changement, chaque action principale, l’onglet où l’on est, les étapes de l’accueil et les états vides portent un bleu-vert profond. La page reste blanche, l’ambre et le rouge gardent seuls leur sens, et aucun mot ne change.</p>
+  <p class="meta">Pas de mode sombre : le bloc <code>.dark</code> de <code>globals.css</code> n’est appliqué nulle part ; il n’est pas modifié.</p>
+
+  <h2>Avant, après, à 360 px</h2>
+  <p>Mêmes données dans chaque colonne, textes de <code>messages/fr.json</code> sans changement.</p>
+  <h3>L’accueil, <code>/</code></h3>
+  <div class="row"><div class="row-in" data-screen="home"></div></div>
+  <h3>Créer un événement, <code>/nouveau</code></h3>
+  <p class="meta">« Créer » et la case « Retour », cochée par défaut, passent au pétrole ; les cases des options, décochées, ne changent pas.</p>
+  <div class="row"><div class="row-in" data-screen="nouveau"></div></div>
+  <h3>Le tableau, <code>/e/{id}</code></h3>
+  <div class="row"><div class="row-in" data-screen="board"></div></div>
+  <h3>Une feuille ouverte</h3>
+  <div class="row"><div class="row-in" data-screen="sheet"></div></div>
+  <h3>L’espace organisateur, <code>/e/{id}/admin</code></h3>
+  <p class="meta">« Partager » (<code>ShareButton</code>, <code>copyable-link.tsx</code>) est un bouton <code>default</code> : il passe au pétrole, comme le dessine <code>organizer-view</code>. Il n’existe que si le navigateur sait partager (<code>navigator.share</code>). « Copier », « Actualiser » et « Modifier l’événement » restent <code>outline</code> ; les vignettes restent blanches, sans icône (O1.3) ; le drapeau de la carte passe au pétrole.</p>
+  <div class="row"><div class="row-in" data-screen="admin"></div></div>
+  <h3>Les détails : état vide, barres de message, focus, inactif</h3>
+  <div class="row"><div class="row-in" data-screen="details"></div></div>
+  <h3>La page introuvable, <code>/e/{id}</code> ou <code>/e/{id}/admin</code> inconnu</h3>
+  <p class="meta">Comme le code : <code>p-6</code>, centrée en hauteur ; la marque en <code>items-start</code>, <code>gap-2.5</code>, <code>mt-0.5</code>.</p>
+  <div class="row"><div class="row-in" data-screen="notfound"></div></div>
+  <h3>À 1280 px : l’accueil et la page introuvable</h3>
+  <p class="meta">Navigateurs de 1280 × 800 montrés à 45 %. La colonne reste <code>max-w-md</code> ; la marque ne change pas de taille.</p>
+  <div class="row"><div class="row-in" data-screen="desk"></div></div>
+
+  <h2>Les jetons : <code>src/app/globals.css</code></h2>
+  <p>Un jeton change, trois s’ajoutent, chacun avec son <code>--color-*</code> pour que Tailwind en fasse des classes (<code>bg-inverse</code>, <code>text-inverse-foreground</code>, <code>bg-brand-soft</code>). Le bloc <code>.dark</code>, <code>--ring</code>, <code>--destructive</code>, <code>--background</code>, <code>--muted</code> et <code>--border</code> ne changent pas.</p>
+  <div class="tablewrap"><pre class="diff"><code>@@ @theme inline @@
+     --color-primary-foreground: var(--primary-foreground);
+     --color-primary: var(--primary);
+<ins>+    --color-inverse-foreground: var(--inverse-foreground);</ins>
+<ins>+    --color-inverse: var(--inverse);</ins>
+<ins>+    --color-brand-soft: var(--brand-soft);</ins>
+
+@@ :root @@
+<del>-    --primary: oklch(0.205 0 0);</del>
+<ins>+    --primary: oklch(0.42 0.08 195);</ins>
+     --primary-foreground: oklch(0.985 0 0);
+<ins>+    /* The success bar's own dark (#651): the ring #737373 at 0 px keeps 3,78:1 on it,
++       which no colour as light as --primary allows. */</ins>
+<ins>+    --inverse: oklch(0.205 0 0);</ins>
+<ins>+    --inverse-foreground: oklch(0.985 0 0);</ins>
+<ins>+    /* The light tint of --primary (#651): home steps, empty-state and not-found tiles. */</ins>
+<ins>+    --brand-soft: oklch(0.965 0.02 195);</ins>
+
+@@ the focus ring's comment @@
+<del>-   touches the background around the element, 3:1 at least on white, `muted` and `primary`.</del>
+<ins>+   touches the background around the element, 3:1 at least on white, `muted` and `inverse`.</ins></code></pre></div>
+  <div class="tablewrap"><table class="t">
+    <tr><th>Jeton</th><th>Valeur</th><th>sRGB lu par un test</th></tr>
+    <tr><td><code>--primary</code></td><td><code>oklch(0.42 0.08 195)</code></td><td><span class="sw" style="background:#005a5b"></span><code>rgb(0, 90, 91)</code> (#005a5b)</td></tr>
+    <tr><td><code>--primary-foreground</code> (inchangé)</td><td><code>oklch(0.985 0 0)</code></td><td><span class="sw" style="background:#fafafa"></span><code>rgb(250, 250, 250)</code></td></tr>
+    <tr><td><code>--inverse</code> (nouveau)</td><td><code>oklch(0.205 0 0)</code></td><td><span class="sw" style="background:#171717"></span><code>rgb(23, 23, 23)</code>, l’ancien <code>--primary</code></td></tr>
+    <tr><td><code>--inverse-foreground</code> (nouveau)</td><td><code>oklch(0.985 0 0)</code></td><td><code>rgb(250, 250, 250)</code></td></tr>
+    <tr><td><code>--brand-soft</code> (nouveau)</td><td><code>oklch(0.965 0.02 195)</code></td><td><span class="sw" style="background:#e5f8f8"></span><code>rgb(229, 248, 248)</code> (#e5f8f8)</td></tr>
+  </table></div>
+  <p class="meta">Teinte 195, loin de l’ambre (45 à 96) et du rouge (27). Les valeurs sRGB sont calculées depuis l’oklch ; un navigateur peut arrondir d’une unité : les tests tolèrent ±1 par canal.</p>
+  <p class="meta"><b>Écrans P3.</b> <code>oklch(0.42 0.08 195)</code> sort d’un cheveu de sRGB (rouge linéaire −0,008). Un écran large gamme (iPhone, Mac) affiche la vraie couleur, un rien plus saturée ; Chromium la ramène à <code>rgb(0, 90, 91)</code> partout où un test la lit (canevas sRGB). Le rouge négatif baisse la luminance : sur P3, « Créer » passe de 7,70:1 à 7,80:1, et le pétrole sur blanc monte aussi. Le contraste n’y est jamais plus faible que mesuré ici.</p>
+
+  <h2>Les composants</h2>
+  <p>Tout le reste suit le jeton sans changer de classe : boutons <code>default</code> (« Créer un événement », « Créer » de <code>/nouveau</code>, « Proposer une voiture » quand il manque des places, « Trouver une place », « Valider », « Placer… », « Partager »), cases et boutons radio cochés (« Retour » de <code>/nouveau</code>, « Aller et retour »), drapeau et contour des points de la carte (<code>leaflet-map.ts</code>).</p>
+  <div class="tablewrap"><table class="t">
+    <tr><th>Fichier</th><th>Élément</th><th>Avant</th><th>Après</th></tr>
+    <tr><td><code>src/components/event/message-bar.tsx</code>, l. 295</td><td>la barre réussie</td><td><code>bg-primary font-medium text-primary-foreground</code></td><td><code>bg-inverse font-medium text-inverse-foreground</code></td></tr>
+    <tr><td>idem, l. 144</td><td>« Annuler » dans la barre réussie</td><td><code>border-primary-foreground/45 bg-transparent text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground</code></td><td><code>border-inverse-foreground/45 bg-transparent text-inverse-foreground hover:bg-inverse-foreground/15 hover:text-inverse-foreground</code></td></tr>
+    <tr><td>idem, l. 303</td><td>« Fermer » dans la barre réussie</td><td><code>hover:bg-primary-foreground/15 hover:text-primary-foreground</code></td><td><code>hover:bg-inverse-foreground/15 hover:text-inverse-foreground</code></td></tr>
+    <tr><td><code>src/components/event/leg-tabs.tsx</code>, <code>LegTrigger</code></td><td>le nom de l’onglet sélectionné</td><td><code>&lt;span&gt;{t(`Event.legs.${leg}`)}&lt;/span&gt;</code>, qui hérite la couleur du déclencheur</td><td><code>LegTrigger</code> reçoit <code>selected={props.tab === leg}</code> ; le nom devient <code>&lt;span className={cn(selected &amp;&amp; "text-primary")}&gt;</code>. La couleur est posée sur le <code>span</code> lui-même : rien de ce que le déclencheur hérite ou reçoit au survol (<code>hover:text-foreground</code> de <code>tabs.tsx</code>) ne l’emporte. Pas de <code>data-active:text-primary</code> sur le déclencheur : shadcn écrit <code>data-active</code> en <code>:where()</code> (spécificité 0,1,0), sous <code>hover:text-foreground</code> (0,2,0), et le nom virerait au noir sous la souris. La pastille garde son <code>text-amber-950</code>. <code>tabs.tsx</code> ne change pas.</td></tr>
+    <tr><td><code>src/app/page.tsx</code></td><td>les chiffres 1, 2, 3 de « Comment ça marche »</td><td><code>… rounded-full bg-muted text-sm font-semibold</code></td><td><code>… rounded-full bg-brand-soft text-sm font-semibold text-primary</code></td></tr>
+    <tr><td>idem</td><td>le titre</td><td><code>&lt;h1 className="text-3xl font-bold"&gt;</code></td><td>enveloppé : <code>&lt;div className="flex items-start gap-2.5"&gt;&lt;BrandMark className="size-9" /&gt;&lt;h1 …&gt;&lt;/div&gt;</code> (voir « La marque »)</td></tr>
+    <tr><td><code>src/components/event/copyable-link.tsx</code>, <code>ShareButton</code></td><td>« Partager »</td><td>bouton <code>default</code>, #171717</td><td>aucune classe ne change : il suit <code>--primary</code> et passe au pétrole</td></tr>
+    <tr><td><code>src/components/event/leaflet-map.ts</code>, l. 155</td><td>commentaire du drapeau</td><td><code>white on a black square</code></td><td><code>white on a --primary square</code> (les classes l. 159 et l. 184 ne changent pas)</td></tr>
+    <tr><td><code>src/components/event/empty-leg.tsx</code></td><td>la tuile de l’icône « voiture »</td><td><code>… rounded-xl bg-muted text-muted-foreground</code></td><td><code>… rounded-xl bg-brand-soft text-primary</code></td></tr>
+    <tr><td><code>src/app/e/[id]/not-found.tsx</code></td><td>la tuile de <code>SearchX</code></td><td><code>… rounded-xl bg-muted text-muted-foreground</code></td><td><code>… rounded-xl bg-brand-soft text-primary</code></td></tr>
+    <tr><td>idem</td><td>le titre</td><td><code>&lt;h1 className="text-2xl font-bold"&gt;</code></td><td>enveloppé : <code>&lt;div className="flex items-start gap-2.5"&gt;&lt;BrandMark className="mt-0.5 size-7" /&gt;&lt;h1 className="min-w-0 …"&gt;&lt;/div&gt;</code></td></tr>
+    <tr><td><code>src/components/brand/brand-mark.tsx</code> (nouveau)</td><td>la marque</td><td>—</td><td>voir « La marque »</td></tr>
+    <tr><td><code>src/app/icon.svg</code>, <code>apple-icon.png</code>, <code>favicon.ico</code></td><td>les icônes</td><td>fond #171717</td><td>fond #005a5b (voir « Les icônes »)</td></tr>
+  </table></div>
+  <p>Nulle part ailleurs. En particulier : <code>coverage-banner.tsx</code> (« Tout le monde a une place » reste <code>bg-muted</code>), <code>persons-matrix.tsx</code>, <code>no-car-pill.tsx</code>, <code>cell-sheet.tsx</code>, <code>ride-card.tsx</code>, <code>organiser-tiles.tsx</code>, <code>contact-footer.tsx</code> et les e-mails ne changent pas.</p>
+
+  <h2>La marque</h2>
+  <div class="tablewrap"><table class="t">
+    <tr><th></th><th>Accueil, <code>/</code></th><th>Page introuvable, <code>/e/{id}</code> inconnu</th></tr>
+    <tr><td>Place</td><td>à gauche du h1 « Fullcar », sur la même ligne, hors du h1</td><td>à gauche du h1 « Événement introuvable », sous la tuile <code>SearchX</code>, hors du h1</td></tr>
+    <tr><td>Taille, à 360 et à 1280 px</td><td>36 × 36 px (<code>size-9</code>), la hauteur de ligne du h1 (<code>text-3xl</code>, 36 px)</td><td>28 × 28 px (<code>size-7</code>), 2 px sous le haut de la ligne (<code>mt-0.5</code>), centrée sur la première ligne de 32 px du h1</td></tr>
+    <tr><td>Écart</td><td colspan="2">10 px (<code>gap-2.5</code>). La colonne fait <code>max-w-md</code> aux deux largeurs : rien ne change à 1280 px.</td></tr>
+    <tr><td>Retour à la ligne</td><td>« Fullcar » tient toujours sur une ligne</td><td>le h1 (<code>min-w-0</code>) peut passer à la ligne à côté de la marque, qui reste en haut ; jamais de défilement de côté</td></tr>
+    <tr><td>Texte de remplacement</td><td colspan="2"><b>Aucun</b> : la marque est décorative. <code>aria-hidden="true"</code>, <code>focusable="false"</code>, pas de <code>&lt;title&gt;</code>, pas de lien. Le h1 voisin dit déjà « Fullcar », et le nom accessible des deux h1 ne change pas.</td></tr>
+    <tr><td>Ailleurs</td><td colspan="2">Nulle part : ni <code>/nouveau</code>, ni <code>/e/{id}</code>, ni <code>/e/{id}/admin</code>, ni l’état vide d’un leg (qui garde l’icône <code>Car</code> de lucide), ni les e-mails.</td></tr>
+  </table></div>
+  <p>Le composant, les tracés de <code>icon.svg</code> sans changement, dans un carré aux coins arrondis (<code>rx="280"</code> sur 1254, soit 22 %), ses couleurs par les jetons :</p>
+  <div class="tablewrap"><pre class="diff"><code>// src/components/brand/brand-mark.tsx
+import { cn } from "@/lib/utils";
+
+/** Fullcar's mark (#651): icon.svg's car, in the tokens' colours. Decorative: the heading next to it names the page. */
+export function BrandMark({ className }: { className?: string }) {
+  return (
+    &lt;svg data-brand-mark viewBox="0 0 1254 1254" aria-hidden="true" focusable="false" className={cn("shrink-0", className)}&gt;
+      &lt;rect width="1254" height="1254" rx="280" className="fill-primary" /&gt;
+      &lt;path className="fill-primary-foreground" d="M285 790C230 790 199 768 199 712V675C199 635 212 607 236 588C262 478 335 408 470 408H640C740 408 790 430 840 490L895 555C905 566 915 570 930 572C1010 580 1053 630 1053 705C1053 760 1025 790 975 790Z" /&gt;
+      &lt;g className="fill-primary"&gt;
+        &lt;circle cx="390.5" cy="767" r="102" /&gt;
+        &lt;circle cx="861.5" cy="767" r="102" /&gt;
+        &lt;path d="M318 575H425Q437 575 439 563L455 476Q457 461 442 462C360 466 320 510 303 555Q299 575 318 575Z" /&gt;
+        &lt;path d="M505 457H617Q630 457 632 470L645 560Q647 575 632 575H492Q477 575 479 560L491 470Q493 457 505 457Z" /&gt;
+        &lt;path d="M684 458C736 461 771 480 801 515L832 553Q843 575 822 575H697Q685 575 683 562L670 474Q668 458 684 458Z" /&gt;
+      &lt;/g&gt;
+      &lt;g className="fill-primary-foreground"&gt;
+        &lt;circle cx="390.5" cy="771" r="72" /&gt;
+        &lt;circle cx="861.5" cy="771" r="72" /&gt;
+      &lt;/g&gt;
+    &lt;/svg&gt;
+  );
+}</code></pre></div>
+
+  <h3>Les icônes</h3>
+  <p><code>src/app/icon.svg</code> : les deux <code>#171717</code> deviennent <code>#005a5b</code>, rien d’autre. Le carré reste plein, sans coins arrondis : le système arrondit lui-même les icônes d’écran d’accueil.</p>
+  <div class="tablewrap"><pre class="diff"><code>&lt;svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254"&gt;
+<del>-  &lt;rect width="1254" height="1254" fill="#171717"/&gt;</del>
+<ins>+  &lt;rect width="1254" height="1254" fill="#005a5b"/&gt;</ins>
+   &lt;path fill="#fafafa" d="M285 790C230 790 …Z"/&gt;
+<del>-  &lt;g fill="#171717"&gt;</del>
+<ins>+  &lt;g fill="#005a5b"&gt;</ins>
+     …</code></pre></div>
+  <div class="tablewrap"><table class="t">
+    <tr><th>Fichier</th><th>Aujourd’hui (#103)</th><th>Après</th></tr>
+    <tr><td><code>src/app/favicon.ico</code>, entrée 16 px</td><td>dessinée à la main (#103 : réduire le SVG donnait une tache grise) ; PNG RVBA, 9 niveaux de gris de #171717 à #fafafa</td><td>la même image, recolorée : chaque niveau de gris <i>g</i> devient <code>#005a5b + (g − 23) / 227 × (#fafafa − #005a5b)</code>, canal par canal, arrondi ; l’alpha ne change pas. #171717 donne #005a5b, #fafafa reste #fafafa. On ne la rend pas depuis le SVG.</td></tr>
+    <tr><td><code>favicon.ico</code>, entrées 32 et 48 px</td><td>PNG RVBA rendus depuis <code>icon.svg</code></td><td>rendues depuis le nouveau <code>icon.svg</code>, PNG RVBA (type de couleur 6, 32 bits). Next refuse une entrée RVB.</td></tr>
+    <tr><td><code>src/app/apple-icon.png</code></td><td>180 × 180, RVB opaque</td><td>rendu depuis le nouveau <code>icon.svg</code>, 180 × 180, RVB opaque</td></tr>
+  </table></div>
+  <p>Les dix valeurs de la gamme (l’entrée d’aujourd’hui en utilise neuf ; 74 n’y apparaît pas) :</p>
+  <div class="tablewrap"><table class="t" style="min-width:0"><tr><th>gris g</th><th>après</th></tr><tr><td class="num"><span class="sw" style="background:rgb(23,23,23)"></span>23</td><td class="num"><span class="sw" style="background:rgb(0, 90, 91)"></span>rgb(0, 90, 91)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(48,48,48)"></span>48</td><td class="num"><span class="sw" style="background:rgb(28, 108, 109)"></span>rgb(28, 108, 109)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(74,74,74)"></span>74</td><td class="num"><span class="sw" style="background:rgb(56, 126, 127)"></span>rgb(56, 126, 127)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(99,99,99)"></span>99</td><td class="num"><span class="sw" style="background:rgb(84, 144, 144)"></span>rgb(84, 144, 144)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(124,124,124)"></span>124</td><td class="num"><span class="sw" style="background:rgb(111, 161, 162)"></span>rgb(111, 161, 162)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(149,149,149)"></span>149</td><td class="num"><span class="sw" style="background:rgb(139, 179, 179)"></span>rgb(139, 179, 179)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(174,174,174)"></span>174</td><td class="num"><span class="sw" style="background:rgb(166, 196, 197)"></span>rgb(166, 196, 197)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(200,200,200)"></span>200</td><td class="num"><span class="sw" style="background:rgb(195, 215, 215)"></span>rgb(195, 215, 215)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(225,225,225)"></span>225</td><td class="num"><span class="sw" style="background:rgb(222, 232, 232)"></span>rgb(222, 232, 232)</td></tr><tr><td class="num"><span class="sw" style="background:rgb(250,250,250)"></span>250</td><td class="num"><span class="sw" style="background:rgb(250, 250, 250)"></span>rgb(250, 250, 250)</td></tr></table></div>
+  <p><b>Comment les produire</b>, une fois, sans dépendance nouvelle ; les fichiers sont versionnés, le script ne l’est pas :</p>
+  <ul>
+    <li><b>sharp</b>, déjà dans <code>node_modules</code> par Next : dans le conteneur du slot, <code>sharp("src/app/icon.svg", { density: 1440 }).resize(n, n).ensureAlpha().png()</code> pour 32 et 48 ; <code>.resize(180, 180).flatten({ background: "#005a5b" }).removeAlpha().png()</code> pour l’icône Apple. L’entrée 16 se recolore pixel par pixel (<code>sharp(png16).raw()</code>, la formule ci-dessus, puis <code>.png()</code>).</li>
+    <li><b>ou qlmanage</b> (macOS) : <code>qlmanage -t -s 1440 -o out src/app/icon.svg</code>, puis une réduction par moyenne de blocs (1440 = 32 × 45 = 48 × 30 = 180 × 8), en Python sans bibliothèque (<code>zlib</code>, <code>struct</code>).</li>
+    <li>Le conteneur ICO s’écrit à la main : l’en-tête de 6 octets, une entrée de 16 octets par taille (16, 32, 48 ; 32 bits par pixel), puis les trois PNG, dans cet ordre.</li>
+  </ul>
+
+  <h2>Les critères</h2>
+  <p>Lecture des couleurs : comme <code>e2e/contrast.ts</code> et <code>rgb()</code> de <code>e2e/ride-remove.spec.ts</code>, une couleur calculée (<code>getComputedStyle</code>, écrite en oklch) est peinte sur un canevas de 1 px et relue en sRGB. Une couleur avec transparence est d’abord composée sur le blanc : peindre <code>#ffffff</code>, puis la couleur, puis lire le pixel. Tolérance : ±1 par canal ; ±0,05 sur un ratio, qui doit aussi rester au-dessus de son seuil.</p>
+
+  <h3>VI1 · Les jetons</h3>
+  <ul class="crit">
+    <li><b>VI1.1</b> Sur <code>/</code>, le fond de « Créer un événement » est <code>rgb(0, 90, 91)</code> et son texte <code>rgb(250, 250, 250)</code>.</li>
+    <li><b>VI1.2</b> La barre réussie (« Tom est dans la voiture de Marc ») a le fond <code>rgb(23, 23, 23)</code> et le texte <code>rgb(250, 250, 250)</code> ; « Annuler » y a le texte <code>rgb(250, 250, 250)</code>. F1.6 de <code>e2e/bar-overflow.spec.ts</code> passe sans modification (fond <code>rgb(23, 23, 23)</code>, anneau ≥ 3,7:1).</li>
+    <li><b>VI1.3</b> Aucune attente de couleur des tests existants n’est modifiée : F1.13 (<code>--ring</code> #737373), <code>focus-ring*.spec.ts</code> (blanc, <code>rgb(245, 245, 245)</code>), <code>ride-remove.spec.ts</code> et <code>sheet.spec.ts</code> (rouge <code>rgb(231, 0, 11)</code>), C9.3 de <code>board.spec.ts</code> et O1.3, O8.3 (ambre, vignettes blanches) passent tels quels. Prouvé par la PR : aucune ligne de ces fichiers ne change.</li>
+    <li><b>VI1.4</b> <code>getComputedStyle(document.documentElement).getPropertyValue("--brand-soft")</code>, peint et relu, donne <code>rgb(229, 248, 248)</code> ; <code>--inverse</code> donne <code>rgb(23, 23, 23)</code>.</li>
+  </ul>
+  <h3>VI2 · Où la couleur apparaît</h3>
+  <ul class="crit">
+    <li><b>VI2.1</b> Sur <code>/</code>, chacun des trois chiffres de « Comment ça marche » a le fond <code>rgb(229, 248, 248)</code> et le texte <code>rgb(0, 90, 91)</code>.</li>
+    <li><b>VI2.2</b> Sur <code>/e/{id}</code> avec un retour (projet Pixel 7), le nom de l’onglet sélectionné (son premier <code>span</code>) a la couleur <code>rgb(0, 90, 91)</code> ; celui de l’autre onglet ne l’a pas. Après un tap sur l’autre onglet, les deux s’échangent.</li>
+    <li><b>VI2.2b</b> La même chose à la souris : <code>test.use({ locale: "fr-FR", viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false })</code>. Un clic sur « Retour », le pointeur laissé dessus : le nom de « Retour » est <code>rgb(0, 90, 91)</code> (relu par <code>expect.poll</code> jusqu’à la fin de la transition). Le pointeur posé ensuite sur « Aller » : le nom de « Retour » reste <code>rgb(0, 90, 91)</code>, celui d’« Aller » ne l’est pas.</li>
+    <li><b>VI2.3</b> La pastille « 2 sans voiture » sous l’onglet sélectionné garde le fond et le texte du bandeau qui manque de places (C9.3), pas <code>rgb(0, 90, 91)</code>.</li>
+    <li><b>VI2.4</b> Un leg sans voiture ni personne : la tuile de l’état vide a le fond <code>rgb(229, 248, 248)</code> et la couleur <code>rgb(0, 90, 91)</code> (le <code>stroke</code> de l’icône, <code>currentColor</code>, vaut la même).</li>
+    <li><b>VI2.5</b> Sur un <code>/e/{id}</code> inconnu, la tuile de <code>SearchX</code> a le fond <code>rgb(229, 248, 248)</code> et la couleur <code>rgb(0, 90, 91)</code>.</li>
+    <li><b>VI2.6</b> Quand il manque des places sur le leg affiché, « Proposer une voiture » a le fond <code>rgb(0, 90, 91)</code> ; dans la feuille d’une cellule « Sans voiture », « Trouver une place » aussi.</li>
+    <li><b>VI2.7</b> Sur un événement avec retour, dans la feuille « Ajouter une personne », la case « Aller et retour », cochée par défaut, a le fond <code>rgb(0, 90, 91)</code>.</li>
+    <li><b>VI2.8</b> Sur la carte ouverte, le drapeau de l’événement a le fond <code>rgb(0, 90, 91)</code>, et l’étiquette d’un point de voiture la bordure <code>rgb(0, 90, 91)</code>.</li>
+    <li><b>VI2.9</b> Sur <code>/nouveau</code>, « Créer » a le fond <code>rgb(0, 90, 91)</code> une fois la page hydratée.</li>
+    <li><b>VI2.10</b> Sur <code>/nouveau</code>, la case « Retour », cochée par défaut, a le fond <code>rgb(0, 90, 91)</code> ; décochée, son fond n’est plus <code>rgb(0, 90, 91)</code>. Les cases des options, décochées, non plus.</li>
+    <li><b>VI2.11</b> Sur <code>/e/{id}/admin</code>, avec <code>navigator.share</code> fourni par <code>page.addInitScript</code>, « Partager » a le fond <code>rgb(0, 90, 91)</code> et « Copier » le fond <code>rgb(255, 255, 255)</code>.</li>
+  </ul>
+  <h3>VI3 · Où elle n’apparaît pas</h3>
+  <ul class="crit">
+    <li><b>VI3.1</b> Le bandeau « Tout le monde a une place » a le fond <code>rgb(245, 245, 245)</code> ; celui de « 1 sans voiture · 2 places libres » aussi.</li>
+    <li><b>VI3.2</b> Le fond du <code>body</code> est <code>rgb(255, 255, 255)</code> sur <code>/</code>, <code>/nouveau</code>, <code>/e/{id}</code> et <code>/e/{id}/admin</code>.</li>
+    <li><b>VI3.3</b> Une cellule « Avec Marc » de « Vos inscriptions » et la ligne d’un passager sur une fiche ont le fond <code>rgb(245, 245, 245)</code>.</li>
+    <li><b>VI3.4</b> Les liens du bas de page (« Accueil », « Code source sur GitHub », « Nous contacter ») et le bouton « English » ont la couleur <code>rgb(115, 115, 115)</code>.</li>
+    <li><b>VI3.5</b> La barre en échec garde le fond <code>rgb(255, 255, 255)</code> et la bordure <code>rgb(231, 0, 11)</code>.</li>
+  </ul>
+  <h3>VI4 · La marque</h3>
+  <ul class="crit">
+    <li><b>VI4.1</b> Sur <code>/</code>, à 360 × 780 et à 1280 × 800 : exactement un <code>[data-brand-mark]</code> ; sa boîte fait 36 × 36 px ; son bord droit est à 10 px (±1) du bord gauche du h1 « Fullcar » ; le haut des deux boîtes est au même pixel (±1).</li>
+    <li><b>VI4.2</b> Sur un <code>/e/{id}</code> inconnu et sur un <code>/e/{id}/admin</code> inconnu (la même page, C6.4), aux deux largeurs : exactement un <code>[data-brand-mark]</code>, 28 × 28 px, à 10 px (±1) du h1 « Événement introuvable », son haut 2 px (±1) sous celui du h1 ; aucun défilement de côté à 360 px (<code>scrollWidth − clientWidth = 0</code>).</li>
+    <li><b>VI4.3</b> La marque a <code>aria-hidden="true"</code>, aucun <code>&lt;title&gt;</code>, n’est dans aucun lien et ne reçoit jamais le focus : la marche au clavier de <code>/</code> (<code>focus-ring.spec.ts</code>) est inchangée. Les noms accessibles des h1 restent « Fullcar » et « Événement introuvable », en anglais « Fullcar » et « Event not found ».</li>
+    <li><b>VI4.4</b> Aucun <code>[data-brand-mark]</code> sur <code>/nouveau</code>, <code>/e/{id}</code> (vide ou non) et <code>/e/{id}/admin</code>.</li>
+    <li><b>VI4.5</b> Le <code>fill</code> calculé du <code>rect</code> de la marque, relu en sRGB, est <code>rgb(0, 90, 91)</code> ; celui du premier <code>path</code>, <code>rgb(250, 250, 250)</code>.</li>
+    <li><b>VI4.6</b> La réponse de <code>/icon.svg</code> contient <code>fill="#005a5b"</code> deux fois et ne contient plus <code>#171717</code>.</li>
+    <li><b>VI4.7</b> <code>/apple-icon.png</code>, chargée dans une <code>&lt;img&gt;</code> et peinte sur un canevas à sa taille : 180 × 180 ; le pixel (2, 2) est <code>rgb(0, 90, 91)</code> à ±2 près, et le pixel (89, 98), dans la carrosserie, <code>rgb(250, 250, 250)</code> à ±2 près.</li>
+    <li><b>VI4.8</b> <code>/favicon.ico</code>, lu en octets (<code>page.request.get</code>) : 3 entrées, de 16, 32 et 48 px, chacune un PNG de type de couleur 6 (RVBA, octet 25) et de 32 bits par pixel dans le répertoire. Chaque PNG, passé à une <code>&lt;img&gt;</code> en <code>data:</code> et peint sur un canevas : le pixel (1, 1) est <code>rgba(0, 90, 91, 255)</code> à ±2 près, et le pixel du centre (<i>n</i>/2, <i>n</i>/2) <code>rgba(250, 250, 250, 255)</code> à ±2 près. L’entrée 16 n’a que des couleurs de la gamme recolorée (les 10 valeurs de la formule, ±1) : aucun gris ne reste. Les tests de <code>icons.spec.ts</code> passent sans changement.</li>
+  </ul>
+  <h3>VI5 · Le contraste</h3>
+  <p>Chaque paire que la direction introduit. « contrast(a, b) » est la fonction de <code>e2e/contrast.ts</code> (couleur de <code>a</code>, fond de <code>b</code>) ; « fill » lit la propriété <code>fill</code> de la même façon ; « sur blanc » compose d’abord sur <code>#ffffff</code>.</p>
+  <div class="tablewrap"><table class="t">
+    <tr><th>Id</th><th>Paire</th><th>Avant-plan</th><th>Fond</th><th>Attendu</th><th>Seuil</th><th>Comment le test lit</th></tr>
+    <tr><td>VI5.1</td><td>texte de « Créer un événement »</td><td>#fafafa</td><td>#005a5b</td><td class="num">7,70:1</td><td class="num">4,5:1</td><td><code>contrast(lien, lien)</code></td></tr>
+    <tr><td>VI5.2</td><td>le même, survolé (projet ordinateur, souris)</td><td>#fafafa</td><td><code>primary/80</code> sur blanc = #337b7c</td><td class="num">4,72:1</td><td class="num">4,5:1</td><td><code>test.use({ locale: "fr-FR", viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false })</code>, comme <code>home.spec.ts</code> ; survoler, attendre la fin de la transition (<code>expect.poll</code>), lire <code>backgroundColor</code>, le composer sur blanc, puis le ratio</td></tr>
+    <tr><td>VI5.3</td><td>nom de l’onglet sélectionné</td><td>#005a5b</td><td>#ffffff (l’onglet)</td><td class="num">8,04:1</td><td class="num">4,5:1</td><td><code>contrast(span du nom, onglet)</code></td></tr>
+    <tr><td>VI5.4</td><td>chiffre d’une étape de l’accueil</td><td>#005a5b</td><td>#e5f8f8</td><td class="num">7,31:1</td><td class="num">4,5:1</td><td><code>contrast(chiffre, chiffre)</code></td></tr>
+    <tr><td>VI5.5</td><td>icône de l’état vide</td><td>#005a5b</td><td>#e5f8f8</td><td class="num">7,31:1</td><td class="num">3:1 (graphique)</td><td><code>contrast(tuile, tuile)</code> : l’icône dessine en <code>currentColor</code></td></tr>
+    <tr><td>VI5.6</td><td>icône de la page introuvable</td><td>#005a5b</td><td>#e5f8f8</td><td class="num">7,31:1</td><td class="num">3:1 (graphique)</td><td><code>contrast(tuile, tuile)</code></td></tr>
+    <tr><td>VI5.7</td><td>voiture de la marque sur son carré</td><td>#fafafa</td><td>#005a5b</td><td class="num">7,70:1</td><td class="num">3:1 (graphique)</td><td>« fill » du premier <code>path</code> et du <code>rect</code></td></tr>
+    <tr><td>VI5.8</td><td>case cochée contre la feuille</td><td>#005a5b</td><td>#ffffff</td><td class="num">8,04:1</td><td class="num">3:1 (élément)</td><td><code>backgroundColor</code> de la case et de la feuille</td></tr>
+    <tr><td>VI5.9</td><td>drapeau de la carte</td><td>#fafafa</td><td>#005a5b</td><td class="num">7,70:1</td><td class="num">3:1 (graphique)</td><td><code>contrast(drapeau, drapeau)</code></td></tr>
+    <tr><td>VI5.12</td><td>bordure de l’étiquette d’un point de voiture (<code>leaflet-map.ts</code> l. 184)</td><td>#005a5b</td><td>#ffffff (l’étiquette)</td><td class="num">8,04:1</td><td class="num">3:1 (élément)</td><td><code>borderTopColor</code> et <code>backgroundColor</code> de l’étiquette, relus en sRGB</td></tr>
+    <tr><td>VI5.13</td><td>texte de « Partager » et de « Créer »</td><td>#fafafa</td><td>#005a5b</td><td class="num">7,70:1</td><td class="num">4,5:1</td><td><code>contrast(bouton, bouton)</code></td></tr>
+    <tr><td>VI5.10</td><td>anneau de focus autour d’un bouton principal</td><td>#737373</td><td>#ffffff</td><td class="num">4,74:1</td><td class="num">3:1</td><td>inchangé : les marches de <code>e2e/focus-ring.ts</code> passent telles quelles</td></tr>
+    <tr><td>VI5.11</td><td>texte et anneau de la barre réussie</td><td>#fafafa, #737373</td><td>#171717</td><td class="num">17,18:1, 3,78:1</td><td class="num">4,5:1, 3:1</td><td>inchangé : F1.6</td></tr>
+  </table></div>
+
+  <h2>Les états</h2>
+  <div class="tablewrap"><table class="t">
+    <tr><th>État</th><th>Ce qui se passe</th></tr>
+    <tr><td>Sans JavaScript</td><td>Les mêmes couleurs : tout est en CSS. La marque est rendue par le serveur.</td></tr>
+    <tr><td>En anglais</td><td>Les mêmes couleurs et la même marque ; aucun texte ne change, dans aucune langue.</td></tr>
+    <tr><td>Bouton principal inactif (<code>disabled</code>, <code>opacity-50</code>)</td><td>Le pétrole à moitié transparent (montré dans « Les détails »). Un élément inactif n’a pas de seuil de contraste (WCAG 1.4.3).</td></tr>
+    <tr><td>Barre en échec</td><td>Inchangée : blanche, bord rouge.</td></tr>
+    <tr><td>Couleurs forcées (Windows)</td><td>Le texte et les bords prennent les couleurs du système, comme aujourd’hui ; la marque, décorative, peut garder les siennes.</td></tr>
+    <tr><td>Hors ligne, chargement, échec d’une action</td><td>Rien de nouveau : leurs couleurs sont le rouge, le gris et l’ambre d’aujourd’hui.</td></tr>
+  </table></div>
+
+  <h2>Les maquettes existantes de <code>docs/design/</code></h2>
+  <p>Elles ne sont pas republiées : chacune garde son URL et son contenu, qui dessine les couleurs d’avant. Ce qu’elles montreront de dépassé :</p>
+  <div class="tablewrap"><table class="t">
+    <tr><th>Maquette</th><th>Dessine encore</th><th>Ligne d’amendement</th></tr>
+    <tr><td><code>home</code></td><td>bouton principal #171717, chiffres des étapes gris, pas de marque, page introuvable sans marque ni tuile teintée</td><td>oui</td></tr>
+    <tr><td><code>event-board</code></td><td>boutons principaux et barre réussie #171717, onglet actif en noir, état vide gris</td><td>oui</td></tr>
+    <tr><td><code>organizer-view</code></td><td>boutons principaux, « Partager » compris, #171717 ; état vide gris</td><td>oui</td></tr>
+    <tr><td><code>organizer-account</code></td><td>boutons principaux #171717 (connexion, Mes événements, création)</td><td>oui</td></tr>
+    <tr><td><code>event-map</code></td><td>drapeau et contour des étiquettes en <code>--app-primary</code> #171717 ; ses autres #171717 sont les routes des tuiles dessinées, qui ne changent pas</td><td>oui, sa propre ligne</td></tr>
+    <tr><td><code>language-switch</code>, <code>place-autocomplete</code></td><td>boutons principaux #171717 dans leurs formulaires</td><td>oui</td></tr>
+    <tr><td><code>github-link</code></td><td>rien qui change</td><td>non</td></tr>
+  </table></div>
+  <p>La ligne, sous l’en-tête du README, la même pour <code>home</code>, <code>event-board</code>, <code>organizer-view</code>, <code>organizer-account</code>, <code>language-switch</code> et <code>place-autocomplete</code> :</p>
+  <div class="tablewrap"><pre class="diff"><code>- Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.</code></pre></div>
+  <p>Pour <code>event-map</code> :</p>
+  <div class="tablewrap"><pre class="diff"><code>- Couleurs : remplacées par `visual-identity` v3 (#651). Le drapeau et le contour des étiquettes, en `--app-primary` (#171717) dans cette page, sont désormais #005a5b. Les autres #171717 de la page, les routes des tuiles dessinées, ne changent pas.</code></pre></div>
+
+  <h2>Hors périmètre</h2>
+  <ul>
+    <li>Mode sombre ; le bloc <code>.dark</code> n’est pas touché.</li>
+    <li>Les couleurs des quatre e-mails (<code>src/email/messages.ts</code>, écrites en dur) : ils restent noirs.</li>
+    <li>Un en-tête, sur aucune page.</li>
+    <li>Une couleur pour « Tout le monde a une place ».</li>
+    <li>Police, coins, ombres, mouvement, émojis, illustrations.</li>
+    <li>Les tuiles de la carte.</li>
+    <li>Tout mot nouveau ou changé.</li>
+  </ul>
+
+  <h2>Écarté</h2>
+  <div class="tablewrap"><table class="t">
+    <tr><th>Option</th><th>Pourquoi écartée</th></tr>
+    <tr><td>A · Bleu nuit (<code>--primary</code> #0f244d, jetons seuls)</td><td>Pour garder l’anneau #737373 à 3:1 sur la barre réussie, le bleu devait rester à L ≤ 0,27 : sur un téléphone, il se lit comme du noir, et ne répond pas au retour de la testeuse.</td></tr>
+    <tr><td>C · Indigo sur papier (fond teinté, cartes blanches)</td><td>Tout l’écran change, une vingtaine d’attentes de tests lisent le blanc ou #f5f5f5 en dur, et le rouge tombe à 4,57:1 sur le fond.</td></tr>
+    <tr><td>H1 · En-tête fin de 48 px</td><td>Il repousse la première fiche de 48 px (la « Place libre » touche le bas de l’écran à 360 × 780), ajoute un arrêt de focus à chaque page, et ne pourrait porter ni « Mes événements » (décision 23 de #581) ni la langue.</td></tr>
+    <tr><td>M2 · Les places, M3 · Aller et retour</td><td>M2 se lit mal à 16 px ; M3 est générique. M1 est déjà l’icône que les gens voient.</td></tr>
+    <tr><td>« Tout le monde a une place » en teinte claire</td><td>Un sens nouveau (« c’est bon ») pour une couleur qui, ailleurs, veut dire « agir ». Décision du propriétaire : il reste gris.</td></tr>
+  </table></div>
+
+  <h2>Décisions</h2>
+  <ol>
+    <li>Decision : direction B, pas d’en-tête, marque M1 sur l’accueil et la page introuvable, icônes recolorées, bandeau gris. — Reason : choix du propriétaire sur #651.</li>
+    <li>Decision : la barre réussie garde #171717 par <code>--inverse</code>. — Reason : l’anneau #737373 à 0 px y garde 3,78:1 ; sur le pétrole, il tomberait sous 3:1.</li>
+    <li>Decision : <code>--primary</code> à L = 0,42. — Reason : à 0,44, le survol (<code>bg-primary/80</code>) donnait 4,43:1 ; à 0,42, 4,72:1.</li>
+    <li>Decision : la marque est décorative, sans texte de remplacement. — Reason : le h1 voisin nomme déjà la page ; un nom en plus serait lu deux fois.</li>
+    <li>Decision : 36 px sur l’accueil, 28 px sur la page introuvable. — Reason : la hauteur de ligne du h1 (36 px) ; et 28 px centré sur la ligne de 32 px du h1 de 24 px.</li>
+    <li>Decision : l’état vide d’un leg garde l’icône <code>Car</code> de lucide, teintée, pas la marque. — Reason : il parle d’une voiture absente, pas de Fullcar.</li>
+    <li>Decision : le bloc <code>.dark</code> n’est pas modifié. — Reason : il n’est appliqué nulle part.</li>
+    <li>Decision : une ligne d’amendement dans les README des maquettes dépassées, sans republier leurs pages. — Reason : une maquette, un artifact ; la ligne suffit à dire qu’une couleur a changé.</li>
+    <li>Decision : la couleur de l’onglet sélectionné est posée sur le <code>span</code> du nom, d’après <code>props.tab</code>, et non par <code>data-active:</code> sur le déclencheur. — Reason : revue de la v2 ; <code>data-active</code> est en <code>:where()</code> et perd contre <code>hover:text-foreground</code> de <code>tabs.tsx</code>. Une couleur propre au <code>span</code> l’emporte sur tout héritage, sans dépendre de l’ordre des variantes ni modifier <code>tabs.tsx</code>.</li>
+    <li>Decision : l’entrée 16 px du favicon est recolorée, pas rendue depuis le SVG. — Reason : décision de #103, le 16 px est dessiné à la main pour rester lisible.</li>
+    <li>Decision : « Partager » passe au pétrole. — Reason : décision du relecteur de la v2 ; c’est ce que fait le code (bouton <code>default</code>) et ce que dessine <code>organizer-view</code>.</li>
+    <li>Decision : aucun script de production des icônes n’est versionné. — Reason : elles se font une fois ; une étape de build de plus serait à maintenir pour rien.</li>
+  </ol>
+
+  <h2>Révisions</h2>
+  <ul>
+    <li>v1 (25/10/2026) : exploration, trois directions, l’en-tête, trois marques, contraste mesuré.</li>
+    <li>v2 (25/10/2026) : spécification de la direction B après le choix du propriétaire ; A, C, l’en-tête, M2, M3 et le bandeau teinté passent dans « Écarté ».</li>
+    <li>v3 (26/10/2026) : revue de design de la v2, changements demandés. L’onglet sélectionné colore son nom sur le <code>span</code> (le survol le rendait noir) et VI2.2b le prouve à la souris ; le favicon garde ses trois entrées RVBA, le 16 px recoloré et non rendu (#103), VI4.8 lit chaque entrée ; « Partager » passe au pétrole, dessiné. Suggestions appliquées : <code>/nouveau</code> dessiné et couvert (VI2.9, VI2.10) ; page introuvable dessinée comme le code, <code>/e/{id}/admin</code> inconnu couvert ; VI5.12 (bordure des étiquettes de la carte) ; <code>test.use</code> de VI5.2 ; « Aller et retour » ; note P3 ; commentaire de <code>leaflet-map.ts</code> ; production des icônes ; ligne d’amendement propre à <code>event-map</code>. Écart à la revue : sur <code>/nouveau</code>, la case cochée par défaut s’appelle « Retour » ; « Aller et retour » est celle de la feuille « Ajouter une personne » (VI2.7).</li>
+  </ul>
+</div>
+
+<script>
+const I = {
+  pin: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  up: '<path d="m18 15-6-6-6 6"/>', down: '<path d="m6 9 6 6 6-6"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+  car: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+  check: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  searchx: '<path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+};
+const ic = (n, extra = '') => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" ${extra}>${I[n]}</svg>`;
+
+/* The marks. M1: src/app/icon.svg, its paths as they are, in a rounded tile. */
+const M1 = (c, s) => `<svg class="mark" width="${s}" height="${s}" viewBox="0 0 1254 1254" aria-hidden="true"><rect width="1254" height="1254" rx="280" fill="${c}"/><path fill="#fafafa" d="M285 790C230 790 199 768 199 712V675C199 635 212 607 236 588C262 478 335 408 470 408H640C740 408 790 430 840 490L895 555C905 566 915 570 930 572C1010 580 1053 630 1053 705C1053 760 1025 790 975 790Z"/><g fill="${c}"><circle cx="390.5" cy="767" r="102"/><circle cx="861.5" cy="767" r="102"/><path d="M318 575H425Q437 575 439 563L455 476Q457 461 442 462C360 466 320 510 303 555Q299 575 318 575Z"/><path d="M505 457H617Q630 457 632 470L645 560Q647 575 632 575H492Q477 575 479 560L491 470Q493 457 505 457Z"/><path d="M684 458C736 461 771 480 801 515L832 553Q843 575 822 575H697Q685 575 683 562L670 474Q668 458 684 458Z"/></g><g fill="#fafafa"><circle cx="390.5" cy="771" r="72"/><circle cx="861.5" cy="771" r="72"/></g></svg>`;
+/* M2, « les places »: four seats, three taken, one free. */
+const M2 = (c, s) => `<svg class="mark" width="${s}" height="${s}" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="${c}"/><rect x="7" y="7" width="7.5" height="7.5" rx="2.2" fill="#fafafa"/><rect x="17.5" y="7" width="7.5" height="7.5" rx="2.2" fill="#fafafa"/><rect x="7" y="17.5" width="7.5" height="7.5" rx="2.2" fill="#fafafa"/><rect x="18.3" y="18.3" width="5.9" height="5.9" rx="1.6" fill="none" stroke="#fafafa" stroke-width="1.6"/></svg>`;
+/* M3, « aller-retour »: two arrows, one each way. */
+const M3 = (c, s) => `<svg class="mark" width="${s}" height="${s}" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="${c}"/><g fill="none" stroke="#fafafa" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h15"/><path d="m19 8 4 4-4 4"/><path d="M24 20H9"/><path d="m13 16-4 4 4 4"/></g></svg>`;
+
+const phone = (d, url, body, cls = '') => `<div class="phone" data-d="${d}">${url ? `<div class="urlbar">${url}</div>` : ''}<div class="${cls}">${body}</div></div>`;
+const footer = (home = true) => `<footer class="footer"><div class="line">${home ? '<a>Accueil</a>' : ''}<span class="fl">${ic('globe', 'style="width:15px;height:15px"')}English</span></div><div class="line"><a>Code source sur GitHub</a><a>Nous contacter</a></div></footer>`;
+
+function home(dir) {
+  const mark = dir.d === '0' ? '' : M1(dir.c, 36);
+  return phone(dir.d, '{hôte}/', `<div class="screen" style="gap:24px">
+    <div class="col-f g1"><div class="h1row">${mark}<h1 class="a-h1">Fullcar</h1></div><p class="a-p m">Le covoiturage de groupe, aller et retour, sans compte.</p></div>
+    <p class="a-p">Un match, un mariage, un week-end au ski : partagez un seul lien, et chacun voit qui conduit, où il reste des places et qui n’a pas encore de voiture.</p>
+    <a class="btn primary h11 w">Créer un événement</a>
+    <div class="col-f g3"><h2 class="a-h2">Comment ça marche</h2><ol class="steps">
+      <li><span class="stepn">1</span><h3>Créez l’événement</h3><p>Un titre, un lieu, l’heure de début et, s’il y a un retour, l’heure de fin. Sans compte ni adresse e-mail.</p></li>
+      <li><span class="stepn">2</span><h3>Partagez le lien</h3><p>Par SMS ou dans le groupe. Chacun s’inscrit, propose une voiture ou prend une place libre.</p></li>
+      <li><span class="stepn">3</span><h3>Suivez qui reste sans voiture</h3><p>Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places.</p></li>
+    </ol></div>
+    <p class="a-p m">Les événements sont supprimés 30 jours après leur date.</p>
+    ${footer(false)}</div>`);
+}
+
+function eventHeader() {
+  return `<header class="col-f g4"><div class="col-f g2"><h1 class="ev-h1">Tournoi de handball</h1><p class="flex ai-s g2 a-p" style="margin:0">${ic('pin', 'style="margin-top:4px;color:var(--a-mfg)"')}<span>Gymnase des Fins, Annecy</span></p></div>
+    <dl class="dl"><dt>Début</dt><dd>samedi 14 novembre 2026 à 09:00</dd><dt>Fin</dt><dd>18:00</dd></dl></header>`;
+}
+function devicePersons() {
+  return `<section class="box dp"><div class="dp-h"><span class="col-f"><strong style="font-size:16px;line-height:24px">Vos inscriptions</strong><span class="small m">2 personnes · 1 sans voiture</span></span><span class="m">${ic('up')}</span></div>
+    <table class="mx"><thead><tr><th class="c">Prénom</th><th class="c">Aller</th><th class="c">Retour</th></tr></thead><tbody>
+    <tr><th class="r">Nina <span class="m" style="font-size:11px">▾</span></th><td><div class="cell amber">Sans voiture</div></td><td><div class="cell grey">Avec Claire</div></td></tr>
+    <tr><th class="r">Tom <span class="m" style="font-size:11px">▾</span></th><td><div class="cell grey">Avec Marc</div></td><td><div class="cell out">Ne fait pas le retour</div></td></tr>
+    </tbody></table></section>`;
+}
+function tabs() {
+  return `<div class="tabs"><div class="tab on"><span>Aller</span><span class="pill">2 sans voiture</span></div><div class="tab"><span>Retour</span><span class="pill">1 sans voiture</span></div></div>`;
+}
+function rideCard() {
+  return `<article class="box ride" data-ride><div class="flex ai-s g2" style="justify-content:space-between"><h3 style="margin:0;font-size:16px;font-weight:600">Voiture de Marc</h3><span class="flex ai-c g2">${ic('clock', 'style="color:var(--a-mfg)"')}08:30</span></div>
+    <p class="flex ai-s g2 s14" style="margin:0">${ic('pin', 'style="margin-top:2px;color:var(--a-mfg)"')}Place de la Gare, Chambéry</p>
+    <ul class="col-f g2" style="list-style:none;margin:0;padding:0"><li class="seat taken">${ic('user', 'style="color:var(--a-mfg)"')}<span style="flex:1">Tom</span></li><li class="seat free" data-free>${ic('plus', 'style="color:var(--a-mfg)"')}Place libre</li></ul></article>`;
+}
+function board(dir, withHeader = false) {
+  const head = withHeader ? `<div class="ahead">${M1(dir.c, 24)}<span>Fullcar</span></div>` : '';
+  return `${head}<div class="screen">${eventHeader()}${devicePersons()}${tabs()}
+    <p class="banner amber" style="margin:0">${ic('users')}<span>2 sans voiture · il manque 1 place</span></p>
+    <div class="grid2"><a class="btn outline h11">Ajouter une personne</a><a class="btn primary h11">Proposer une voiture</a></div>
+    ${rideCard()}
+    <section class="col-f g2"><h3 style="margin:0;font-size:16px;font-weight:600">Sans voiture</h3><ul class="chips" style="list-style:none;margin:0;padding:0"><li class="chip">Nina</li><li class="chip">Léo</li></ul></section></div>`;
+}
+function boardPhone(dir) { return phone(dir.d, '{hôte}/e/Kp7mQx3a', board(dir), 'h780'); }
+function sheetPhone(dir) {
+  return phone(dir.d, '{hôte}/e/Kp7mQx3a', `${board(dir)}<div class="overlay"></div>
+    <div class="sheet"><div class="sheet-h">Nina · Aller</div><div class="sheet-b">
+      <p class="banner amber" style="margin:0;font-weight:400">${ic('users')}<span>Sans voiture</span></p>
+      <a class="btn primary h11 w">Trouver une place</a><a class="btn outline h11 w">Ne fait pas l’aller</a></div>
+      <div class="sheet-f"><a class="btn outline h11 w">Fermer</a></div></div>`, 'h780');
+}
+function adminPhone(dir) {
+  return phone(dir.d, '{hôte}/e/Kp7mQx3a/admin', `<div class="screen">
+    <section class="box panel"><div class="flex ai-c" style="justify-content:space-between"><span class="flex ai-c g1" style="font-weight:600;font-size:16px">Espace organisateur <span class="m">${ic('up')}</span></span><a class="btn outline h11">${ic('refresh')}Actualiser</a></div>
+      <div class="grid2"><div class="tile"><span class="s14" style="font-weight:600">Aller</span><span class="pill">2 sans voiture</span><span style="font-weight:600">Il manque 1 place</span></div>
+        <div class="tile"><span class="s14" style="font-weight:600">Retour</span><span class="pill">1 sans voiture</span><span>2 places libres</span></div></div>
+      <div class="col-f g2"><div class="col-f g1"><span class="s14" style="font-weight:500">Lien à partager</span><span class="small m">À envoyer au groupe.</span></div>
+        <p class="linkbox">https://{hôte}/e/Kp7mQx3a</p><div class="grid2"><a class="btn outline h11">Copier</a><a class="btn primary h11">Partager</a></div></div>
+      <a class="btn outline h11 w">${ic('pencil')}Modifier l’événement</a>
+      <section class="col-f g3" style="border-top:1px solid var(--a-border);padding-top:16px"><div class="col-f g1"><h3 style="margin:0;font-size:16px;font-weight:600">Aller</h3><p class="flex ai-s g2 small m" style="margin:0">${ic('clock')}samedi 14 novembre 2026 à 09:00</p></div>
+        <p class="banner amber" style="margin:0">${ic('users')}<span>2 sans voiture · il manque 1 place</span></p>
+        <div class="col-f g1"><h4 style="margin:0;font-size:14px;font-weight:600">Sans voiture (2)</h4><span class="small m">Ces numéros vous sont montrés pour organiser les voitures : ne les diffusez pas.</span></div>
+        <div><div class="orow"><span style="font-weight:500">Nina</span><a class="tel">06 12 34 56 78</a></div><div class="orow"><span style="font-weight:500">Léo</span><span class="small m">Pas de numéro</span></div></div>
+      </section></section></div>`, 'h780');
+}
+function detailsPhone(dir) {
+  const mark = dir.d === '0' ? '' : M1(dir.c, 28);
+  return phone(dir.d, '', `<div class="screen" style="gap:20px">
+    <div class="empty"><div class="etile">${ic('car')}</div><p style="margin:0;font-weight:600;font-size:16px">Aucune voiture proposée pour l’aller</p><p class="s14 m" style="margin:0">Personne ne s’est encore inscrit.</p></div>
+    <div class="bar bar-ok"><div class="ln">${ic('check')}<span>Tom est dans la voiture de Marc</span></div><span class="x focus">${ic('x')}</span></div>
+    <p class="small m" style="margin:-12px 0 0">« Fermer » au clavier : l’anneau #737373 à 0 px sur la barre.</p>
+    <div class="bar bar-ko"><div class="ln" style="align-items:flex-start">${ic('alert', 'style="color:#e7000b;margin-top:2px"')}<span>Action impossible, vérifiez la connexion</span></div><span class="x">${ic('x')}</span></div>
+    <div class="grid2"><a class="btn primary h11 focus">Valider</a><a class="btn primary h11 dis">Valider</a></div>
+    <p class="small m" style="margin:-12px 0 0">À gauche, au clavier ; à droite, inactif.</p>
+    <div class="col-f" style="padding:8px 0"><div class="etile" style="width:48px;height:48px;margin-bottom:16px">${ic('searchx', 'style="width:24px;height:24px"')}</div>
+      <div class="flex ai-c g2">${mark}<h1 class="ev-h1">Événement introuvable</h1></div>
+      <p class="a-p m" style="margin-top:12px">Vérifiez le lien : il a peut-être été mal recopié. Les majuscules et les minuscules comptent.</p></div>
+    </div>`);
+}
+
+
+const DIRS = [
+  { d: '0', name: 'Aujourd’hui', c: '#171717' },
+  { d: 'B', name: 'v3 · Pétrole', c: '#005a5b' },
+];
+const tick = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" style="fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6 9 17l-5-5"/></svg>';
+function cbx(on, label, hint) {
+  return `<div class="cbx"><span class="box16 ${on ? 'on' : ''}">${on ? tick : ''}</span><span class="col-f g1"><span class="s14" style="font-weight:500">${label}</span><span class="small m">${hint}</span></span></div>`;
+}
+function fld(label, value) { return `<div class="fld"><label>${label}</label><div class="inp">${value}</div></div>`; }
+function nouveauPhone(dir) {
+  return phone(dir.d, '{hôte}/nouveau', `<div class="screen" style="gap:24px"><h1 class="ev-h1">Créer un événement</h1>
+    <div class="col-f g4">${fld('Titre', 'Tournoi de handball')}${fld('Lieu', 'Gymnase des Fins, Annecy')}
+      <div class="grid2" style="gap:12px">${fld('Date de début', '14/11/2026')}${fld('Heure de début', '09:00')}</div>
+      ${cbx(true, 'Retour', 'Décochez s’il n’y a pas de retour organisé.')}
+      <div class="grid2" style="gap:12px">${fld('Date de fin', '14/11/2026')}${fld('Heure de fin', '18:00')}</div>
+      <div class="col-f g1" style="border:1px solid var(--a-border);border-radius:var(--a-rxl);padding:8px 14px"><span class="s14" style="font-weight:600;padding-top:6px">Options</span>
+        ${cbx(false, 'Rehausseurs', 'Pour les enfants qui en ont besoin.')}${cbx(false, 'Participation aux frais', 'Un montant par passager, facultatif.')}${cbx(false, 'Points de RDV', 'Des arrêts sur la route des voitures.')}</div>
+      <a class="btn primary h11 w">Créer</a></div></div>`, 'h780');
+}
+function notFoundBody(dir, h) {
+  const mark = dir.d === '0' ? '' : M1(dir.c, 28).replace('class="mark"', 'class="mark" style="margin-top:2px"');
+  return `<div style="height:${h}px;box-sizing:border-box;padding:24px;display:flex;flex-direction:column;justify-content:center">
+    <div class="etile" style="width:48px;height:48px;margin-bottom:16px">${ic('searchx', 'style="width:24px;height:24px"')}</div>
+    <div class="flex ai-s" style="gap:10px">${mark}<h1 class="ev-h1" style="min-width:0">Événement introuvable</h1></div>
+    <p class="a-p m" style="margin-top:12px">Vérifiez le lien : il a peut-être été mal recopié. Les majuscules et les minuscules comptent.</p>
+    <p class="a-p m" style="margin-top:12px">Les événements sont supprimés 30 jours après leur date.</p>
+    <a class="btn primary h11 w" style="margin-top:24px">Créer un événement</a>${footer(true)}</div>`;
+}
+function notFoundPhone(dir) { return phone(dir.d, '{hôte}/e/xxxxxxxx', notFoundBody(dir, 780)); }
+function detailsPhone(dir) {
+  return phone(dir.d, '', `<div class="screen" style="gap:20px">
+    <div class="empty"><div class="etile">${ic('car')}</div><p style="margin:0;font-weight:600;font-size:16px">Aucune voiture proposée pour l’aller</p><p class="s14 m" style="margin:0">Personne ne s’est encore inscrit.</p></div>
+    <div class="bar bar-ok"><div class="ln">${ic('check')}<span>Tom est dans la voiture de Marc</span></div><span class="x focus">${ic('x')}</span></div>
+    <p class="small m" style="margin:-12px 0 0">« Fermer » au clavier : l’anneau #737373 à 0 px sur la barre.</p>
+    <div class="bar bar-ko"><div class="ln" style="align-items:flex-start">${ic('alert', 'style="color:#e7000b;margin-top:2px"')}<span>Action impossible, vérifiez la connexion</span></div><span class="x">${ic('x')}</span></div>
+    <div class="grid2"><a class="btn primary h11 focus">Valider</a><a class="btn primary h11 dis">Valider</a></div>
+    <p class="small m" style="margin:-12px 0 0">À gauche, au clavier ; à droite, inactif.</p></div>`);
+}
+function deskHome() {
+  return `<div class="desk"><div class="phone desk-in" data-d="B"><div class="desk-col">${home(DIRS[1]).replace(/^<div class="phone"[^>]*>(<div class="urlbar">[^<]*<\/div>)?<div class="">/, '').replace(/<\/div><\/div>$/, '')}</div></div></div>`;
+}
+function deskNotFound() {
+  return `<div class="desk"><div class="phone desk-in" data-d="B"><div class="desk-col">${notFoundBody(DIRS[1], 800)}</div></div></div>`;
+}
+const cols = (f, cap = '') => DIRS.map((d) => `<div class="col"><p class="cap"><b>${d.name}</b>${cap}</p>${f(d)}</div>`).join('');
+const render = {
+  home: () => cols(home),
+  nouveau: () => cols(nouveauPhone, ' · les 780 premiers pixels'),
+  board: () => cols(boardPhone, ' · les 780 premiers pixels'),
+  sheet: () => cols(sheetPhone),
+  admin: () => cols(adminPhone, ' · les 780 premiers pixels'),
+  details: () => cols(detailsPhone),
+  notfound: () => cols(notFoundPhone, ' · 360 × 780'),
+  desk: () => `<div style="flex:none"><p class="meta" style="margin:0 0 8px"><b>Accueil</b>, 1280 × 800 : marque de 36 px</p>${deskHome()}</div><div style="flex:none"><p class="meta" style="margin:0 0 8px"><b>Page introuvable</b>, 1280 × 800 : marque de 28 px</p>${deskNotFound()}</div>`,
+};
+document.querySelectorAll('[data-screen]').forEach((el) => { el.innerHTML = render[el.dataset.screen](); });
+</script>
