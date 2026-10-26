@@ -429,6 +429,7 @@
     },
     "freeSeats": "{free, plural, one {# place libre} other {# places libres}}",
     "group": "{count, plural, other {# voitures}} : {drivers}, {seats}",
+    "groupTitle": "{count, plural, other {# voitures}}, {seats}",
     "notOnMap": "{count, plural, one {# voiture n’est pas sur la carte : son lieu n’a pas de position.} other {# voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.}}",
     "touchHint": "Deux doigts pour déplacer ou zoomer la carte.",
     "organiserHint": "Pour afficher la carte, choisissez le lieu de l’événement parmi les propositions.",

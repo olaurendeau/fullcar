@@ -26,7 +26,7 @@ export interface PointCar {
 /**
  * A point of `mapOf`: where it is, its label, its name and its free seats; one car, the driver's
  * first name and the car's name; more, their number and « N voitures : {prénoms}, {places} »,
- * and a bubble (CA1.6).
+ * and a bubble titled « N voitures, {places} » (CA1.6).
  */
 export interface CarPoint {
   position: Position;
@@ -34,6 +34,8 @@ export interface CarPoint {
   atFlag: boolean;
   label: string;
   name: string;
+  /** Its bubble's title, which names it, « 2 voitures, 3 places libres » (v30, CA1.22); one car's, its name, with no bubble. */
+  title: string;
   /** Its car's free seats, or the sum of its cars', formatted (`format.number`): the label's badge (#655). */
   seats: string;
   /** In the order of the cards. */
@@ -258,27 +260,38 @@ function bubbleButton(text: string, car?: { name: string; seats: string }): HTML
 /** Bubbles opened so far, for each its own title's id: two maps, the aller's and the retour's, may each have one. */
 let bubbles = 0;
 
+/** What `bubbleOf` makes: the bubble, its title, the list of its cars' buttons, and the foot that holds « Fermer ». */
+type BubbleElements = { bubble: HTMLDivElement; title: HTMLParagraphElement; list: HTMLDivElement; foot: HTMLDivElement };
+
 /**
- * Our bubble (no popup of Leaflet's, whose « Close popup » is English): its title, the point's
- * name, which names it, a button per car in the order of the cards, then « Fermer » (`fill`
- * in `createEventMap`, again at each state while it stays). Focusable itself, so that a press
- * on its title keeps the focus in it.
+ * Our bubble (no popup of Leaflet's, whose « Close popup » is English): its title, short, which
+ * names it, the list of its cars' buttons in the order of the cards, then « Fermer » (`fill` in
+ * `createEventMap`, again at each state while it stays). Taller than its room (three cars, or a
+ * title on two lines), the list alone scrolls between the title and « Fermer », which stay whole,
+ * with a rule above « Fermer » (`place`, v29, CA1.6). Focusable itself, so that a press on its
+ * title keeps the focus in it.
  */
-function bubbleOf(): { bubble: HTMLDivElement; title: HTMLParagraphElement } {
+function bubbleOf(): BubbleElements {
   const bubble = document.createElement("div");
   const title = document.createElement("p");
   title.id = `event-map-bubble-${++bubbles}`;
-  title.className = "font-semibold";
+  title.className = "shrink-0 font-semibold";
+  // 4 px of room inside the list, given back outside it: its edges do not cut a button's focus ring.
+  const list = document.createElement("div");
+  list.className = "-m-1 flex min-h-0 flex-col gap-1.5 overflow-y-auto p-1";
+  const foot = document.createElement("div");
+  foot.className = "shrink-0";
   bubble.setAttribute("role", "group");
   // Named by its title, not again by an `aria-label` that a reader would say twice.
   bubble.setAttribute("aria-labelledby", title.id);
   bubble.tabIndex = -1;
   bubble.className =
-    "pointer-events-auto absolute z-1001 flex flex-col gap-1.5 overflow-y-auto rounded-xl bg-background p-2.5 text-[13px] text-foreground shadow-[0_6px_20px_rgba(0,0,0,0.25)] outline-hidden";
+    "pointer-events-auto absolute z-1001 flex flex-col gap-1.5 overflow-hidden rounded-xl bg-background p-2.5 text-[13px] text-foreground shadow-[0_6px_20px_rgba(0,0,0,0.25)] outline-hidden";
+  bubble.append(title, list, foot);
   // Neither a press nor the wheel in it reaches the map.
   L.DomEvent.disableClickPropagation(bubble);
   L.DomEvent.disableScrollPropagation(bubble);
-  return { bubble, title };
+  return { bubble, title, list, foot };
 }
 
 /**
@@ -353,7 +366,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   /** A point on the map, named by its key (`pointKey`): its marker, its button, its line to the flag (none at the flag). */
   type Drawn = PointElements & { key: string; point: CarPoint; marker: L.Marker; line: L.Polyline | null; hovered: boolean };
   /** The open bubble, of `entry`'s point: its buttons by car, then « Fermer ». */
-  type Open = { entry: Drawn; bubble: HTMLDivElement; title: HTMLParagraphElement; cars: Map<string, HTMLButtonElement>; close: HTMLButtonElement };
+  type Open = BubbleElements & { entry: Drawn; cars: Map<string, HTMLButtonElement>; close: HTMLButtonElement };
 
   /**
    * The open bubble, in the DOM just after its point (CA1.6): Tab from « Fermer » goes on to the
@@ -374,6 +387,11 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
       left: `${size.x - BUBBLE_INSET - width - from.x}px`,
       top: `${BUBBLE_INSET - from.y}px`,
     });
+    // A rule above « Fermer », once the list scrolls: measured without it, which only takes room
+    // from a list that scrolls already (190 px for two cars at 360 px, under the 196 allowed).
+    const rule = ["border-t", "pt-1.5"];
+    open.foot.classList.remove(...rule);
+    if (open.list.scrollHeight > open.list.clientHeight) open.foot.classList.add(...rule);
   };
   map.on("move zoom resize", place);
 
@@ -416,7 +434,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   /** The bubble's title and buttons, for its point as it is now. */
   const fill = (shown: Open) => {
     const { point } = shown.entry;
-    shown.title.textContent = point.name;
+    shown.title.textContent = point.title;
     shown.cars = new Map(
       point.cars.map((car) => {
         const button = bubbleButton(car.title, car);
@@ -430,12 +448,14 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     );
     shown.close = bubbleButton(options.close);
     shown.close.addEventListener("click", back);
-    shown.bubble.replaceChildren(shown.title, ...shown.cars.values(), shown.close);
+    shown.list.replaceChildren(...shown.cars.values());
+    shown.foot.replaceChildren(shown.close);
   };
   const openBubble = (entry: Drawn) => {
     closeBubble();
-    const { bubble, title } = bubbleOf();
-    const shown: Open = { entry, bubble, title, cars: new Map(), close: bubbleButton(options.close) };
+    const elements = bubbleOf();
+    const { bubble } = elements;
+    const shown: Open = { ...elements, entry, cars: new Map(), close: bubbleButton(options.close) };
     fill(shown);
     bubble.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;

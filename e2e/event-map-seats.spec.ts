@@ -141,7 +141,8 @@ test("CA1.21, CA1.22, CA1.5, CA1.8: each point shows its free seats, « 0 » whe
 
   // The bubble: each car's button with its car's badge, its name saying the same number.
   await point(group).click();
-  const bubble = map.getByRole("group", { name: group, exact: true });
+  // CA1.22: named by its title, « 2 voitures, 3 places libres ».
+  const bubble = map.getByRole("group", { name: "2 voitures, 3 places libres", exact: true });
   const nina = bubble.getByRole("button", { name: "Voiture de Nina, départ : Parking du marché, 1 place libre", exact: true });
   const paul = bubble.getByRole("button", { name: "Voiture de Paul, départ : Parking du marché, 2 places libres", exact: true });
   await expect(bubble.getByRole("button")).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
@@ -156,7 +157,7 @@ test("CA1.21, CA1.22, CA1.5, CA1.8: each point shows its free seats, « 0 » whe
   }
 });
 
-test("CA1.21, CA1.22: a group whose cars are all full, « 0 » and « 0 place libre », on the point and on its bubble's buttons", async ({ db, page, placed }) => {
+test("CA1.21, CA1.22: a group whose cars are all full, « 0 » and « 0 place libre », on the point, its bubble's title and its buttons", async ({ db, page, placed }) => {
   const parking = around(placed.place, { east: 700 });
   await seedSeated(db, placed.id, "Nina", { position: parking, location: "Parking du marché", seats: 1, passengers: 1, departureTime: "08:00:00" });
   await seedSeated(db, placed.id, "Paul", { position: { ...parking }, location: "Parking du marché", seats: 2, passengers: 2, departureTime: "09:00:00" });
@@ -168,7 +169,7 @@ test("CA1.21, CA1.22: a group whose cars are all full, « 0 » and « 0 place li
   await expect(group).toHaveText("20");
   await expect(seatsOf(group)).toHaveText("0");
   await group.click();
-  const bubble = map.getByRole("group", { name, exact: true });
+  const bubble = map.getByRole("group", { name: "2 voitures, 0 place libre", exact: true });
   for (const driver of ["Nina", "Paul"]) {
     await expect(seatsOf(bubble.getByRole("button", { name: `Voiture de ${driver}, départ : Parking du marché, 0 place libre`, exact: true }))).toHaveText("0");
   }
@@ -213,7 +214,7 @@ test("CA1.16: next to a first name of 40 characters cut at 120 px, the badge who
 test.describe("in English", () => {
   test.use({ locale: "en-US" });
 
-  test("CA1.22: “2 cars: Nina, Paul, 3 free seats”, and “…, 0 free seats” for a full car; the number is the same", async ({ db, page, placed }) => {
+  test("CA1.22: “2 cars: Nina, Paul, 3 free seats”, its bubble “2 cars, 3 free seats”, and “…, 0 free seats” for a full car; the number is the same", async ({ db, page, placed }) => {
     const parking = around(placed.place, { east: 700 });
     await seedSeated(db, placed.id, "Nina", { position: parking, location: "Market car park", seats: 2, passengers: 1, departureTime: "08:00:00" });
     await seedSeated(db, placed.id, "Paul", { position: { ...parking }, location: "Market car park", seats: 2, departureTime: "09:00:00" });
@@ -229,5 +230,9 @@ test.describe("in English", () => {
     await expect(map.locator(".leaflet-tile-loaded").first()).toBeVisible();
     await expect(seatsOf(map.getByRole("button", { name: "2 cars: Nina, Paul, 3 free seats", exact: true }))).toHaveText("3");
     await expect(seatsOf(map.getByRole("button", { name: "Inès’s car, departs from Station, 0 free seats", exact: true }))).toHaveText("0");
+    // Its bubble's title, which names it: “2 cars, 3 free seats”.
+    await map.getByRole("button", { name: "2 cars: Nina, Paul, 3 free seats", exact: true }).click();
+    const bubble = map.getByRole("group", { name: "2 cars, 3 free seats", exact: true });
+    await expect(bubble.getByText("2 cars, 3 free seats", { exact: true })).toBeVisible();
   });
 });
