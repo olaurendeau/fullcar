@@ -235,6 +235,7 @@ describe("OA8.2, DS4.2", () => {
         description: null,
         location_lat: null,
         location_lng: null,
+        admin_token_hash: null,
       });
       expect(firstAfter).toMatchObject({ persons: [], rides: [], placements: [], links: [] });
       expect(await everythingOf(db, second!)).toEqual(before.second);
