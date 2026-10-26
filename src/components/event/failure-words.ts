@@ -19,6 +19,8 @@ export type NotDone =
   | { kind: "editPerson"; firstName: string; fields: "firstName" | "phone" | "both" }
   | { kind: "offerRide"; driver: string; legs: Leg | "both" }
   | { kind: "removeRide"; driver: string; leg: Leg }
+  /** « Retirer de l’événement » (remove-person v2): the person, as her sheet showed her. */
+  | { kind: "removePerson"; firstName: string }
   | { kind: "editRide"; driver: string; leg: Leg }
   | { kind: "readDevice" }
   | { kind: "editEvent" }

@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { deviceMatrix, matrixSummary, startsExpanded } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
+import { removalConfirmation } from "@/domain/person-removal";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { findSeat } from "@/domain/tap";
 import { cn } from "@/lib/utils";
 import { CellSheet } from "./cell-sheet";
+import { focusAfterRemoval, focusName } from "./focus";
 import type { BoardDevice } from "./leg-panel";
 import { PersonSheet } from "./person-sheet";
 import { PersonsMatrix } from "./persons-matrix";
@@ -27,8 +29,9 @@ function personOf(board: readonly VisibleLegBoard[], id: string) {
  * without JavaScript. Its title is the button that folds it, with its summary. Unfolded when
  * it first has rows if a cell is « Sans voiture », folded otherwise; then only that button
  * changes it, and nothing keeps it (v4-3): an action of a cell's sheet that empties the last
- * cell « Sans voiture » does not fold it. A first name opens the person's sheet, a cell the
- * sheet of that person on that leg (#89), whose « Trouver une place » goes to the first car of
+ * cell « Sans voiture » does not fold it. A first name opens the person's sheet, from which she
+ * may be removed from the event (RP1); a cell, the sheet of that person on that leg (#89), whose
+ * « Trouver une place » goes to the first car of
  * that leg with a free seat (#172). While the persons are read, a line in its place
  * (C5.9); if the read fails, an alert with « Réessayer ».
  *
@@ -39,7 +42,7 @@ function personOf(board: readonly VisibleLegBoard[], id: string) {
  */
 export function DevicePersons({
   board,
-  device: { status, retry, refocus, setPersonLeg, updatePerson, inform },
+  device: { status, retry, refocus, setPersonLeg, updatePerson, removePerson, inform },
   showLeg,
 }: {
   board: readonly VisibleLegBoard[];
@@ -56,6 +59,8 @@ export function DevicePersons({
   const retried = useRef(false);
   const focusTarget = useRef<HTMLElement>(null);
   const focused = useRef<HTMLElement>(null);
+  // The rows as they were when a removal was confirmed: the focus goes to the next one (RP1.5).
+  const removedFrom = useRef<string[]>([]);
   // On whichever of the loading line, « Réessayer » or the section's button is shown.
   const target = (element: HTMLElement | null) => {
     focusTarget.current = element;
@@ -167,6 +172,12 @@ export function DevicePersons({
             setSheet((current) => (current?.opened === sheet.opened ? { ...current, open: isOpen } : current))
           }
           updatePerson={updatePerson}
+          removal={removalConfirmation(board, person.id)}
+          removePerson={(removal, confirmation) => {
+            removedFrom.current = rows.map((row) => row.id);
+            return removePerson(removal, confirmation);
+          }}
+          refocus={() => focusName(person.id) || focusAfterRemoval(removedFrom.current, person.id)}
         />
       )}
       {cellSheet && cellRow && cell && (
