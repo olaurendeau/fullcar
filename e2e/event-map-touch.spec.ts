@@ -3,14 +3,16 @@ import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { generatePublicId } from "@/domain/public-id";
+import { serverPage } from "./event-map-points";
 import { expect, test as base } from "./fixtures";
 import { placeOf } from "./tiles";
 
 /*
  * #479, event-map v15 (CA1.10 as amended after #479 and before #480): the map without animation (CA1.10), and at touch (CA1.11). The project
  * `e2e` is a Pixel 7, touch-enabled (`hasTouch`, `isMobile`): each test checks it first, and the
- * mouse half runs in a context of its own, without touch. The fake tile provider answers its default
- * tile: no test here sets one.
+ * mouse half runs in a context of its own, without touch. #720 (v32): the two-finger sentence is
+ * in the server's HTML, always, and `(pointer: coarse)` shows it: hidden, not absent, with a mouse.
+ * The fake tile provider answers its default tile: no test here sets one.
  */
 
 /** An event of the test's own, at `placeOf` its id, with three cars to make the page scroll. */
@@ -52,6 +54,25 @@ async function openMap(page: Page, name = ALLER_MAP): Promise<Locator> {
 
 /** Whether the page's primary pointer is a finger, as the map reads it. */
 const coarse = (page: Page) => page.evaluate(() => matchMedia("(pointer: coarse)").matches);
+
+/**
+ * CA1.11 (v29): the two-finger sentence is in the server's HTML, under the aller's map, and
+ * `(pointer: coarse)` alone shows it: in the server's page, then in the page hydrated, its map
+ * started.
+ */
+async function expectServerSentence(page: Page, id: string, shown: boolean) {
+  const hint = page.locator('[id="event-map-aller"]').getByText(TOUCH_HINT, { exact: true });
+  await serverPage(page, `/e/${id}`);
+  await expect(hint).toHaveCount(1);
+  if (shown) await expect(hint).toBeVisible();
+  else await expect(hint).toBeHidden();
+  await page.reload();
+  await expect(page.getByRole("tabpanel")).toBeVisible();
+  await expect(page.locator(".leaflet-container")).toHaveCount(1);
+  await expect(hint).toHaveCount(1);
+  if (shown) await expect(hint).toBeVisible();
+  else await expect(hint).toBeHidden();
+}
 
 /**
  * Where the flag is in the map's box: a pan of the page leaves it, a pan of the map moves it.
@@ -205,6 +226,11 @@ test.describe("the map, at touch", () => {
     expect(await flagInMap(map)).toEqual(before.flag);
   });
 
+  test("CA1.11: the sentence is in the server's page, shown at touch before and after hydration", async ({ page, placed }) => {
+    expect(await coarse(page)).toBe(true);
+    await expectServerSentence(page, placed.id, true);
+  });
+
   test("CA1.11: two fingers spread apart zoom the map in", async ({ page, placed }) => {
     expect(await coarse(page)).toBe(true);
     await page.goto(`/e/${placed.id}`);
@@ -289,7 +315,7 @@ test.describe("the map, at touch", () => {
 
     await emulateTouch(page, false);
     await expect.poll(() => coarse(page)).toBe(false);
-    await expect(page.getByRole("tabpanel").getByText(TOUCH_HINT, { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("tabpanel").getByText(TOUCH_HINT, { exact: true })).toBeHidden();
     await drag(page, map);
     await expect.poll(() => flagInMap(map)).toEqual({ x: flag.x + 60, y: flag.y + 40 });
     // Not created again: the same Leaflet map, its pane the same node.
@@ -306,7 +332,7 @@ test.describe("the map, with a mouse", () => {
     await expect(page.getByRole("tabpanel")).toBeVisible();
     const seen = await watchAnimations(page);
     const map = await openMap(page);
-    await expect(page.getByRole("tabpanel").getByText(TOUCH_HINT, { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("tabpanel").getByText(TOUCH_HINT, { exact: true })).toBeHidden();
     await map.scrollIntoViewIfNeeded();
 
     const flag = await flagInMap(map);
@@ -319,6 +345,11 @@ test.describe("the map, with a mouse", () => {
     const scroll = await page.evaluate(() => scrollY);
     await page.mouse.wheel(0, 120);
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(scroll);
+  });
+
+  test("CA1.11: the sentence is in the server's page, hidden with a mouse before and after hydration", async ({ page, placed }) => {
+    expect(await coarse(page)).toBe(false);
+    await expectServerSentence(page, placed.id, false);
   });
 
   test("CA1.10: Shift and a dragged box, then a double click: neither zooms nor moves the map", async ({ page, placed }) => {
