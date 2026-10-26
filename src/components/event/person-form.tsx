@@ -122,6 +122,8 @@ export function AddPersonButton({
       }
       title={t("PersonForm.title.add")}
       description={kept ? t("PersonForm.remember") : undefined}
+      // It has fields: on a phone, it fills the screen (v4.6, rule 2).
+      fullHeight
     >
       {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
       <PersonForm

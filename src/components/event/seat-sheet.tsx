@@ -232,6 +232,8 @@ function RegisterSheet({
           {kept && <span className="block">{t("PersonForm.remember")}</span>}
         </>
       }
+      // It has fields: on a phone, it fills the screen (v4.6, rule 2).
+      fullHeight
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         afterClose.current();
