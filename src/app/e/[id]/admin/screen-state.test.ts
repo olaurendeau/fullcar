@@ -41,6 +41,7 @@ const ready = (fields: Partial<Extract<ScreenState, { state: "ready" }>> = {}): 
   refreshed: false,
   expanded: new Set(),
   folded: false,
+  unfolded: new Set(),
   ...fields,
 });
 /** A panel withdrawn after an action whose read failed (O1.10): the links stay. */
@@ -234,6 +235,63 @@ describe("screenReducer, the unfolded lists", () => {
     expect(gone.state === "ready" && gone.expanded).toStrictEqual(both);
     const failed = screenReducer(screenReducer(gone, { type: "refreshStarted", read: 2 }), { type: "refreshEnded", read: 2 });
     expect(failed.state === "ready" && failed.expanded).toStrictEqual(both);
+  });
+});
+
+// O9.5: which legs are unfolded, in memory alone: none as the panel appears, then kept but for a leg gone.
+describe("screenReducer, the unfolded legs", () => {
+  const legOf = (of: "aller" | "retour"): OrganiserLeg => ({ ...leg(1), leg: of });
+  const two = [legOf("aller"), legOf("retour")];
+  const retour = new Set(["retour" as const]);
+  const open = (fields: Partial<Extract<ScreenState, { state: "ready" }>> = {}) =>
+    ready({ panel: { ...links, legs: two }, unfolded: retour, ...fields });
+  const unfolded = (state: ScreenState) => (state.state === "ready" ? state.unfolded : undefined);
+  const through = (state: ScreenState, ...events: ScreenEvent[]) => events.reduce(screenReducer, state);
+
+  it("unfolds a leg, then folds it again; nothing else changes", () => {
+    const state = ready({ panel: { ...links, legs: two }, expanded: new Set([listKey("aller", "withoutCar")]), folded: true });
+    const once = screenReducer(state, { type: "legToggled", leg: "retour" });
+    expect(once).toStrictEqual({ ...state, unfolded: retour });
+    expect(screenReducer(once, { type: "legToggled", leg: "retour" })).toStrictEqual(state);
+    expect(unfolded(through(state, { type: "legToggled", leg: "aller" }, { type: "legToggled", leg: "retour" }))).toStrictEqual(
+      new Set(["aller", "retour"]),
+    );
+  });
+
+  it.each<[string, ScreenEvent[]]>([
+    ["« Actualiser », a success", [{ type: "refreshStarted", read: 1 }, { type: "refreshEnded", read: 1, legs: two }]],
+    ["« Actualiser », a failure", [{ type: "refreshStarted", read: 1 }, { type: "refreshEnded", read: 1 }]],
+    ["the read after an action of the board", [{ type: "reread", legs: two }]],
+    ["the panel withdrawn (O1.10)", [{ type: "reread" }]],
+    ["the panel withdrawn, then the read that gives it back", [{ type: "reread" }, { type: "reread", legs: two }]],
+    [
+      "the panel withdrawn, a refresh that fails, then one that succeeds",
+      [{ type: "reread" }, { type: "refreshStarted", read: 2 }, { type: "refreshEnded", read: 2 }, { type: "refreshStarted", read: 3 }, { type: "refreshEnded", read: 3, legs: two }],
+    ],
+    ["the card folded, then unfolded (O8)", [{ type: "toggleFolded" }, { type: "toggleFolded" }]],
+    ["a list unfolded", [{ type: "listToggled", key: listKey("retour", "withoutCar") }]],
+  ])("keeps an unfolded leg through %s", (_, events) => {
+    expect(unfolded(through(open(), ...events))).toStrictEqual(retour);
+  });
+
+  it.each<[string, ScreenState, AdminLinkCheck]>([
+    ["the first read", { state: "loading" }, valid],
+    ["« Réessayer » that succeeds", { state: "failed", retrying: true }, valid],
+    ["the link checked again, the panel shown", open(), valid],
+  ])("arrives with every leg folded at %s, whatever the card", (_, state, check) => {
+    for (const folded of [true, false]) expect(unfolded(screenReducer(state, { type: "checked", check, folded }))).toStrictEqual(new Set());
+  });
+
+  it("forgets a retour gone: added back, it comes folded (M3, M4)", () => {
+    const gone = through(open(), { type: "reread", legs: [legOf("aller")] });
+    expect(unfolded(gone)).toStrictEqual(new Set());
+    expect(unfolded(through(gone, { type: "refreshStarted", read: 1 }, { type: "refreshEnded", read: 1, legs: two }))).toStrictEqual(new Set());
+    const both = open({ unfolded: new Set(["aller", "retour"]) });
+    expect(unfolded(through(both, { type: "reread", legs: [legOf("aller")] }))).toStrictEqual(new Set(["aller"]));
+  });
+
+  it("does nothing without the panel", () => {
+    expect(screenReducer({ state: "loading" }, { type: "legToggled", leg: "aller" })).toStrictEqual({ state: "loading" });
   });
 });
 

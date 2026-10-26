@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { leaveNoToken } from "./fixtures";
 import { expectRing, press, pressUntil } from "./focus-ring";
-import { digitsOf, expect, organiserPath, type ScenePhones, seedOrganiserScene, test } from "./organiser";
+import { digitsOf, expect, organiserPath, type ScenePhones, seedOrganiserScene, test, unfoldLegs } from "./organiser";
 
 /*
  * #179, epic #154: the organiser area's sections, one per leg, under the warning. Each test
@@ -69,6 +69,7 @@ test.describe("the scene of O2.5", () => {
     seededEvent,
   }) => {
     await page.goto(organiserPath(seededEvent));
+    await unfoldLegs(page);
     await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
 
     for (const [leg, time, banner] of [
@@ -95,6 +96,7 @@ test.describe("the scene of O2.5", () => {
     seededEvent,
   }) => {
     await page.goto(organiserPath(seededEvent));
+    await unfoldLegs(page);
     const retour = section(page, "Retour");
     const banner = retour.getByText("1 sans voiture · il manque 1 place", { exact: true });
     const noCar = retour.getByText(FR.noCarRetour, { exact: true });
@@ -110,6 +112,7 @@ test.describe("the scene of O2.5", () => {
     seededEvent,
   }) => {
     await page.goto(organiserPath(seededEvent));
+    await unfoldLegs(page);
     const aller = section(page, "Aller");
     const title = aller.getByRole("heading", { level: 4, name: "Sans voiture (2)", exact: true });
     const persons = list(aller, "Sans voiture (2)");
@@ -169,6 +172,7 @@ test("O2.3: a person without a car on both legs is in both sections, with her nu
   const phone = "06 44 21 87 30";
   await withoutCar(db, seededEvent.id, "Tom", phone, ["aller", "retour"]);
   await page.goto(organiserPath(seededEvent));
+  await unfoldLegs(page);
   for (const leg of ["Aller", "Retour"] as const) {
     const persons = list(section(page, leg), "Sans voiture (1)");
     await expect(rows(persons)).toContainText("Tom");
@@ -178,6 +182,7 @@ test("O2.3: a person without a car on both legs is in both sections, with her nu
 
 test("O1.5: an empty leg shows the board's empty state, without banner or list", async ({ page, seededEvent }) => {
   await page.goto(organiserPath(seededEvent));
+  await unfoldLegs(page);
   for (const [leg, noCar] of [
     ["Aller", "Aucune voiture proposée pour l’aller"],
     ["Retour", FR.noCarRetour],
@@ -198,6 +203,7 @@ test.describe("without a retour", () => {
   test("O1.7: a single section, and no « Retour » anywhere in the panel", async ({ db, page, seededEvent }) => {
     await withoutCar(db, seededEvent.id, "Tom", null, ["aller"]);
     await page.goto(organiserPath(seededEvent));
+    await unfoldLegs(page);
     await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller"]);
     await expect(section(page, "Aller")).toContainText("Sans voiture (1)");
     await expect(panel(page)).not.toContainText("Retour");
@@ -226,6 +232,7 @@ test("O3.1, O3.2, O3.3, O2.4: the cars whose driver has no number, by departure 
   await seedPlacement(db, { personId: leo, eventId, leg: "aller", rideId: full });
 
   await page.goto(organiserPath(seededEvent));
+  await unfoldLegs(page);
   const aller = section(page, "Aller");
   const cars = list(aller, "Voitures sans numéro (2)");
   await expect(rows(cars)).toHaveCount(2);
@@ -270,6 +277,7 @@ test("O5.6, O5.8, O7.4: five lines, then « Afficher… »; each list and each l
   }
 
   await page.goto(organiserPath(seededEvent));
+  await unfoldLegs(page);
   const aller = section(page, "Aller");
   const retour = section(page, "Retour");
   const persons = list(aller, "Sans voiture (7)");
@@ -324,6 +332,7 @@ test("O7.3: a first name of 40 and a place of 120 characters do not overflow at 
   await seedRide(db, seededEvent.id, id, { location: "L".repeat(120) });
 
   await page.goto(organiserPath(seededEvent));
+  await unfoldLegs(page);
   const aller = section(page, "Aller");
   const row = rows(list(aller, "Sans voiture (1)")).first();
   await expect(row).toBeVisible();
