@@ -2,7 +2,7 @@
  * What the map's end-to-end tests share (event-map v18): an event of the test's own at
  * `placeOf` its id, its cars around it, the map opened, and where its points, lines and flag are.
  */
-import type { Locator, Page, Request } from "@playwright/test";
+import type { Locator, Page, Request, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
@@ -121,6 +121,26 @@ export async function arriveWaiting(page: Page, id: string, path = `/e/${id}`): 
   await read;
   await expect(page.locator(".leaflet-container")).toHaveCount(0);
   return settle;
+}
+
+/**
+ * Next's JavaScript chunks, and them only: with Next 16 and Turbopack, the style sheet is under
+ * the same path, and must load (event-map v30, CA1.19).
+ */
+export const NEXT_SCRIPTS = /\/_next\/static\/chunks\/.*\.js(\?|$)/;
+
+/**
+ * Arrives at `path` as the server's HTML draws it: Next's scripts dropped, its style sheet
+ * loaded, JavaScript still on, so `noscript:hidden` does not apply. Nothing hydrates: no leg's
+ * panel is a tab panel yet. The scripts go through again from the next arrival on.
+ */
+export async function serverPage(page: Page, path: string) {
+  const drop = (route: Route) => route.abort();
+  await page.route(NEXT_SCRIPTS, drop);
+  await page.goto(path);
+  await page.unroute(NEXT_SCRIPTS, drop);
+  await expect(page.locator("[data-map-toggle]").first()).toBeVisible();
+  await expect(page.getByRole("tabpanel")).toHaveCount(0);
 }
 
 /** The car points of `map`, in the DOM's order: an open bubble's buttons are not points. */

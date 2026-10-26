@@ -1,13 +1,17 @@
 import type { Locator, Page } from "@playwright/test";
+import type { Kysely } from "kysely";
+import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
-import { mapName, openMap, points, seedParking, test } from "./event-map-points";
+import { around, mapName, openMap, points, seedParking, test } from "./event-map-points";
 import { expect } from "./fixtures";
+import { placeOf } from "./tiles";
 
 /*
  * #484, event-map v18, CA1.8 and CA1.9: the map's layout at 360 px (the project `e2e`, a
  * Pixel 7 at 360 × 780, at touch), at 416 px and at 1280 px, with a mouse (« À 1280 px »);
- * #562, v27: the box edge to edge in le conteneur. The fake tile provider
+ * #562, v27: the box edge to edge in le conteneur; #720, v32: open at the arrival, folded by the
+ * person, and without a person on the device (CA1.9). The fake tile provider
  * answers its default tile: no test here sets one.
  */
 
@@ -108,37 +112,76 @@ test("CA1.8: 240 px high under a window of 448 px, 280 px from 448 px", async ({
 test.describe("at 360 × 780, a title and a place of 30 characters", () => {
   test.use({ eventFields: { title: "W".repeat(30), location: "W".repeat(30) } });
 
-  test("CA1.9: the map folded by the person, its container 54 px, the banner and the first card above the fold", async ({ db, page, placed }) => {
-    // event-board's mixed case (« Page complète à 360 × 780 »), all three on the device:
-    // Claire drives the aller and looks for a seat back, Léa rides with her and looks too, Tom only goes.
+  /**
+   * event-board's mixed case (« Page complète à 360 × 780 »): Claire drives the aller and looks
+   * for a seat back, Léa rides with her and looks too, Tom only goes. All three on a device of
+   * their own, whose token the page holds only when `onTheDevice`.
+   */
+  async function seedMixedCase(db: Kysely<Database>, page: Page, eventId: string, onTheDevice: boolean) {
     const token = newToken();
-    const mine = async (firstName: string) => (await seedPerson(db, placed.id, { firstName }, token)).id;
+    const mine = async (firstName: string) => (await seedPerson(db, eventId, { firstName }, token)).id;
     const [claire, lea, tom] = [await mine("Claire"), await mine("Léa"), await mine("Tom")];
-    const clairesCar = await seedRide(db, placed.id, claire);
-    await seedPlacement(db, { personId: lea, eventId: placed.id, leg: "aller", rideId: clairesCar });
-    await seedPlacement(db, { personId: tom, eventId: placed.id, leg: "aller", rideId: null });
-    for (const personId of [claire, lea]) await seedPlacement(db, { personId, eventId: placed.id, leg: "retour", rideId: null });
-    await holdToken(page, placed.id, token);
+    // At a place with a position: no `notOnMap` line under the map.
+    const clairesCar = await seedRide(db, eventId, claire, { position: around(placeOf(eventId), { north: 250 }) });
+    await seedPlacement(db, { personId: lea, eventId, leg: "aller", rideId: clairesCar });
+    await seedPlacement(db, { personId: tom, eventId, leg: "aller", rideId: null });
+    for (const personId of [claire, lea]) await seedPlacement(db, { personId, eventId, leg: "retour", rideId: null });
+    if (onTheDevice) await holdToken(page, eventId, token);
+  }
 
+  test("CA1.9: the banner above the fold; open at the arrival, the container 334 px; folded by the person, 54 px and the first card at 724 px", async ({
+    db,
+    page,
+    placed,
+  }) => {
+    await seedMixedCase(db, page, placed.id, true);
     await page.goto(`/e/${placed.id}`);
     await expect(page.getByRole("button", { name: /^Vos inscriptions/ })).toHaveAttribute("aria-expanded", "true");
     const panel = page.getByRole("tabpanel");
     const button = panel.getByRole("button", { name: "Carte", exact: true });
-    // Open at the arrival (#653): folded by a tap.
-    await button.click();
-    await expect(button).toHaveAttribute("aria-expanded", "false");
     const banner = panel.getByRole("status").filter({ hasText: /\S/ });
+    const firstCard = panel.getByRole("article", { name: "Voiture de Claire" });
     await expect(banner).toBeInViewport({ ratio: 1 });
 
-    // Measured from the top of the page: folded, the map adds its container and one gap, 54 + 16 px
-    // (#562: the banner at 538–578 px, the first card at 724 px, 10 px lower than before).
+    // Open at the arrival (#653), its map started: 1 + 4 + 44 + 4 + 240 + 10 + 18 + 12 + 1 px, the
+    // two-finger sentence included, then the first card 16 px under it. Measured from the top of the page.
+    await expect(panel.locator(".leaflet-container")).toHaveCount(1);
     expect(await page.evaluate(() => scrollY)).toBe(0);
-    const card = (await panel.getByRole("article", { name: "Voiture de Claire" }).boundingBox())!;
+    await expect(button).toBeInViewport({ ratio: 1 });
+    const open = (await containerOf(page).boundingBox())!;
+    const openCard = (await firstCard.boundingBox())!;
+    expect(open.height).toBe(334);
+    expect(openCard.y - (open.y + open.height)).toBe(16);
+    const { y, height } = (await banner.boundingBox())!;
+
+    // Folded by a tap: the container and one gap, 54 + 16 px (#562: the first card at 724 px).
+    await button.click();
+    await expect(button).toHaveAttribute("aria-expanded", "false");
+    await expect(banner).toBeInViewport({ ratio: 1 });
+    expect(await page.evaluate(() => scrollY)).toBe(0);
     const container = (await containerOf(page).boundingBox())!;
+    const card = (await firstCard.boundingBox())!;
     expect(container.height).toBe(54);
     expect(card.y - container.y).toBe(70);
-    expect(card.y).toBeLessThan(780);
-    const { y, height } = (await banner.boundingBox())!;
-    test.info().annotations.push({ type: "CA1.9", description: `bandeau à ${y}–${y + height} px, haut de la première fiche à ${card.y} px` });
+    expect(card.y).toBe(724);
+    test.info().annotations.push({
+      type: "CA1.9",
+      description: `bandeau à ${y}–${y + height} px ; conteneur à ${open.y} px ; dépliée, conteneur de ${open.height} px et première fiche à ${openCard.y} px ; repliée, conteneur de ${container.height} px et première fiche à ${card.y} px`,
+    });
+  });
+
+  test("CA1.9: no person on the device: the top of the map's box and of the first card, measured and noted", async ({ db, page, placed }) => {
+    await seedMixedCase(db, page, placed.id, false);
+    await page.goto(`/e/${placed.id}`);
+    const panel = page.getByRole("tabpanel");
+    const map = panel.getByRole("region", { name: mapName("aller", "1 voiture"), exact: true });
+    await expect(map).toHaveClass(/\bleaflet-container\b/);
+    await expect(page.getByRole("button", { name: /^Vos inscriptions/ })).toHaveCount(0);
+    expect(await page.evaluate(() => scrollY)).toBe(0);
+    const box = (await boxOf(map).boundingBox())!;
+    const card = (await panel.getByRole("article", { name: "Voiture de Claire" }).boundingBox())!;
+    // The box, then 10 + 18 + 12 + 1 px of le conteneur under it, then 16 px.
+    expect(card.y - box.y).toBe(240 + 41 + 16);
+    test.info().annotations.push({ type: "CA1.9", description: `sans personne sur l’appareil : boîte de la carte à ${box.y} px, première fiche à ${card.y} px` });
   });
 });

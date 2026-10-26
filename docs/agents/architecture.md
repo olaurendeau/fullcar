@@ -952,7 +952,14 @@ elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les d
   la carte. Sur un point ou sur les crédits (`holdPress`), un `touchstart` à un doigt s'arrête
   là : ni un glisser ni le `tapHold` de Leaflet (Safari sur iPhone), qui annulerait le clic
   d'un appui long, ne le voient. À deux doigts, il passe : un pincement dont le second doigt
-  se pose sur un point ou sur les crédits zoome la carte.
+  se pose sur un point ou sur les crédits zoome la carte. La phrase « deux doigts » est dans le
+  HTML du serveur, toujours, et seule la requête média la montre (`hidden
+  pointer-coarse:block`, #720, v29) : pas de hook qui vaudrait `false` sur le serveur et la
+  ferait arriver à l'hydratation, 28 px plus bas pour la première fiche (CA1.19). Elle suit
+  le pointeur quand il change, comme `dragging`, que `touchQuery` donne à Leaflet. Les tests
+  lisent la page du serveur en n'abandonnant que les `.js` de `/_next/static/chunks/`
+  (`serverPage`, `e2e/event-map-points.ts`) : avec Turbopack, la feuille de style est sous le
+  même chemin et doit charger.
 - **Les points, le drapeau, les lignes** (#480, #481) : chaque point est un vrai `<button>`
   dans un `divIcon`, son marqueur en `keyboard: false` ; seul, il mène à la fiche de sa
   voiture (`showCar`, `src/components/event/focus.ts`) ; groupé, il ouvre notre bulle

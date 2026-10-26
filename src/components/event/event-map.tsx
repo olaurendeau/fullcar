@@ -38,24 +38,11 @@ export interface MapHint {
 /** What the map reads of a car, and nothing more: the driver's first name, never their number. */
 type MapCar = Pick<BoardCar, "id" | "location" | "position" | "freeSeats"> & { driver: Pick<BoardCar["driver"], "firstName"> };
 
-/** A touch screen, where one finger scrolls the page and two move the map (CA1.11). */
+/**
+ * A touch screen, where one finger scrolls the page and two move the map (CA1.11): Leaflet's
+ * dragging follows it. The two-finger sentence follows its CSS twin, `pointer-coarse:`.
+ */
 const TOUCH = "(pointer: coarse)";
-
-/** Calls `changed` whenever the primary pointer changes; one function, so React subscribes once. */
-function watchTouch(changed: () => void): () => void {
-  const touch = window.matchMedia(TOUCH);
-  touch.addEventListener("change", changed);
-  return () => touch.removeEventListener("change", changed);
-}
-
-/** Whether the primary pointer is a finger, now: never on the server, nor before hydration. */
-function useTouch(): boolean {
-  return useSyncExternalStore(
-    watchTouch,
-    () => window.matchMedia(TOUCH).matches,
-    () => false,
-  );
-}
 
 /**
  * A failure of the map (« Leaflet ne se charge pas », « Des tuiles en échec », « Leaflet échoue
@@ -166,7 +153,7 @@ function Credits({ ref }: { ref: Ref<HTMLParagraphElement> }) {
  * point leads to its card (`showCar`), a grouped one opens its bubble, whose buttons do. The
  * credits are in the map, at its bottom right, loading too, and hidden with the box under
  * Leaflet's notice (CA1.14, CA2.8, CA3.7). Under the map, in this order (CA1.17): the tiles' notice (CA2.4, `tilesStep`), part of the map's
- * description, `notOnMap`, then, at touch only, the two-finger sentence.
+ * description, `notOnMap`, then the two-finger sentence, shown at touch only (`pointer-coarse:`).
  * A new state of the page updates the map started (`update`, « Mises à jour et focus »), folded
  * or in a hidden tab too, where its framing waits for a size.
  */
@@ -192,7 +179,6 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const [tilesNotice, setTilesNotice] = useState(false);
   // Once started, a map stays: shown again, it only takes its new size; scrolled away, it stays.
   const [started, setStarted] = useState(false);
-  const touch = useTouch();
   const containerId = `event-map-${leg}`;
   const tilesNoticeId = `${containerId}-tiles`;
   const Chevron = map.open ? ChevronUp : ChevronDown;
@@ -431,7 +417,9 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
         {notOnMap > 0 && (
           <p className="text-[13px] leading-[18px] text-muted-foreground">{t("notOnMap", { count: notOnMap })}</p>
         )}
-        {touch && <p className="text-[13px] leading-[18px] text-muted-foreground">{t("touchHint")}</p>}
+        {/* In the server's HTML, always, shown by `(pointer: coarse)` alone: nothing jumps at the
+            hydration (v29, CA1.19), and it follows the pointer when it changes (CA1.11). */}
+        <p className="hidden text-[13px] leading-[18px] text-muted-foreground pointer-coarse:block">{t("touchHint")}</p>
       </div>
     </div>
   );
