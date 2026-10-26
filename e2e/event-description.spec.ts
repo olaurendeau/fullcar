@@ -93,7 +93,11 @@ test.describe("with a description and a link", () => {
     expect(await description(page).evaluate((element) => element.textContent)).toBe(text.replace(PLAN, `${PLAN} ${NEW_TAB}`));
     await expect(description(page).locator("b, strong, em")).toHaveCount(0);
     // Four lines of 24 px: the first, the empty one, « **gras** <b>x</b> », and the link.
-    const { height } = (await description(page).boundingBox())!;
+    // Without the padding that leaves the links' rings room (#712).
+    const height = await description(page).evaluate((element) => {
+      const { paddingTop, paddingBottom } = getComputedStyle(element);
+      return element.getBoundingClientRect().height - parseFloat(paddingTop) - parseFloat(paddingBottom);
+    });
     expect(Math.round(height)).toBe(4 * 24);
   });
 

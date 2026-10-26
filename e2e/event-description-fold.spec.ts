@@ -49,8 +49,27 @@ async function open(page: Page, path: string) {
   return response!;
 }
 
-/** The text's shown height and its whole height. */
-const heights = (locator: Locator) => locator.evaluate((element) => ({ shown: element.clientHeight, whole: element.scrollHeight }));
+/** The text's shown height and its whole height, without the padding that leaves its links' rings room. */
+const heights = (locator: Locator) =>
+  locator.evaluate((element) => {
+    const { paddingTop, paddingBottom } = getComputedStyle(element);
+    const padding = parseFloat(paddingTop) + parseFloat(paddingBottom);
+    return { shown: element.clientHeight - padding, whole: element.scrollHeight - padding };
+  });
+
+/** The text's content box, without that padding. */
+const contentBox = (locator: Locator) =>
+  locator.evaluate((element) => {
+    const { top, left, width, height } = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const [paddingTop, paddingRight, paddingBottom, paddingLeft] = [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(parseFloat);
+    return {
+      x: left + paddingLeft,
+      y: top + paddingTop,
+      width: width - paddingLeft - paddingRight,
+      height: height - paddingTop - paddingBottom,
+    };
+  });
 
 async function expectFolded(page: Page) {
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
@@ -113,7 +132,7 @@ test.describe("six short lines", () => {
       const button = toggle(page);
       await expect(button).toHaveText(FR.more);
       await expect(button).toHaveAttribute("aria-controls", "event-description");
-      const text = (await description(page).boundingBox())!;
+      const text = await contentBox(description(page));
       const box = (await button.boundingBox())!;
       expect(Math.round(box.y - (text.y + text.height))).toBe(8);
       expect(Math.round(box.width)).toBe(Math.round(text.width));
@@ -265,7 +284,7 @@ test.describe("DS2.10: at 1280 px", () => {
 
   test("the text is at most 416 px wide and folds to 4 lines", async ({ page, seededEvent }) => {
     await open(page, `/e/${seededEvent.id}`);
-    expect((await description(page).boundingBox())!.width).toBeLessThanOrEqual(416);
+    expect((await contentBox(description(page))).width).toBeLessThanOrEqual(416);
     await expectFolded(page);
   });
 });
@@ -354,4 +373,66 @@ test.describe("DS3.7: a link beyond the 4 lines shown", () => {
     await expect(toggle(page)).toHaveText(FR.less);
     await expect(link).toBeInViewport({ ratio: 1 });
   });
+});
+
+/*
+ * DS3.6 with the fold: the text not unfolded is `overflow: hidden`, and the ring is drawn 4 px
+ * outside the link. `expectRing` reads the computed style, not what is painted: here, the pixels
+ * around the focused link are those painted with nothing clipped. A side of the ring cut is a
+ * channel off by more than 64 over the ring's 2 px; the clip's own layer, and an antialiased edge
+ * at a clip that falls between two device pixels, change a channel by 27 at most.
+ */
+
+/** How many pixels of two screenshots of the same size differ by more than 64 on a channel. */
+async function pixelsApart(page: Page, one: Buffer, two: Buffer): Promise<number> {
+  return page.evaluate(
+    async (images) => {
+      const [first, second] = await Promise.all(
+        images.map(async (data) => {
+          const image = new Image();
+          image.src = `data:image/png;base64,${data}`;
+          await image.decode();
+          const canvas = Object.assign(document.createElement("canvas"), { width: image.width, height: image.height });
+          const context = canvas.getContext("2d")!;
+          context.drawImage(image, 0, 0);
+          return context.getImageData(0, 0, image.width, image.height).data;
+        }),
+      );
+      let apart = 0;
+      for (let i = 0; i < first.length; i += 4) {
+        if ([0, 1, 2, 3].some((k) => Math.abs(first[i + k] - second[i + k]) > 64)) apart += 1;
+      }
+      return apart;
+    },
+    [one.toString("base64"), two.toString("base64")],
+  );
+}
+
+test.describe("DS3.6: the ring of a link in a text not unfolded, painted whole", () => {
+  for (const [where, text, folds] of [
+    ["a short text that starts with a link", `${PLAN} pour le plan\nDeuxième ligne`, false],
+    ["a short text that ends with a link", `Le plan :\n${PLAN}`, false],
+    ["a long text that starts with a link", `${PLAN} pour le plan\n${SIX}`, true],
+    ["a long text with a link on its 4th line", `${lines(3)}\n${PLAN}\n${lines(3)}`, true],
+  ] as const) {
+    test.describe(where, () => {
+      test.use({ locale: "fr-FR", eventFields: { description: text } });
+
+      test("no pixel of the ring cut", async ({ page, seededEvent }) => {
+        await open(page, `/e/${seededEvent.id}`);
+        const link = description(page).getByRole("link");
+        await page.locator("#event-title").focus();
+        await pressUntil(page, "Tab", link);
+        if (folds) await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
+        else await expect(toggle(page)).toHaveCount(0);
+        // The link's box, the ring's 4 px, and 1 px more.
+        const box = (await link.boundingBox())!;
+        const clip = { x: box.x - 5, y: box.y - 5, width: box.width + 10, height: box.height + 10 };
+        const painted = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+        await description(page).evaluate((element) => element.style.setProperty("overflow", "visible"));
+        const unclipped = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+        expect(await pixelsApart(page, painted, unclipped), "pixels of the ring cut by the fold").toBe(0);
+      });
+    });
+  }
 });
