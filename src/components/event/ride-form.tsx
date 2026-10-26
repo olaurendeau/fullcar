@@ -19,7 +19,7 @@ import { currentDriver, driverChoice, NEW_DRIVER, passengerCandidates } from "@/
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { useFormatDate } from "@/i18n/format-date";
 import { cn } from "@/lib/utils";
-import { BottomSheet } from "./bottom-sheet";
+import { BottomSheet, SheetBar } from "./bottom-sheet";
 import { Box } from "./event-fields";
 import type { NotDone } from "./failure-words";
 import { focusCar, focusFirstShown, focusOffer } from "./focus";
@@ -182,6 +182,8 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
         </Button>
       }
       title={t("RideForm.title.offer")}
+      // Its fields: on a phone, it fills the screen (v4.6, rule 2).
+      fullHeight
       onCloseAutoFocus={(event) => {
         const land = landing.current;
         landing.current = undefined;
@@ -234,6 +236,8 @@ export function EditRideButton({ car, at, updateRide, near }: { car: VisibleCar;
         </Button>
       }
       title={t(choosing ? "RideChanges.leaving.title" : "RideForm.title.edit")}
+      // Its fields, and its step while they wait to be sent: on a phone, it fills the screen (v4.6, rule 2).
+      fullHeight
     >
       <RideForm
         key={opened}
@@ -559,7 +563,7 @@ function RideForm({
   }
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
+    <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       {!editing && (
         <div
           {...(candidates.length === 0 && { role: "group", "aria-labelledby": idOf("driver") })}
@@ -688,14 +692,20 @@ function RideForm({
           )}
         </div>
       )}
-      {alert && (
-        <p role="alert" className="text-sm text-destructive">
-          {alert}
-        </p>
-      )}
-      <Button ref={submitButton} type="submit" className="h-11 w-full" disabled={sending}>
-        {tActions("submit")}
-      </Button>
+      {/* In the sheet's bar, out of the form: « Valider » is its submit button by `form` (v4.6, rule 1). */}
+      <SheetBar
+        messages={
+          alert && (
+            <p role="alert" className="text-sm text-destructive">
+              {alert}
+            </p>
+          )
+        }
+      >
+        <Button ref={submitButton} type="submit" form={idOf("form")} className="h-11 w-full" disabled={sending}>
+          {tActions("submit")}
+        </Button>
+      </SheetBar>
     </form>
   );
 }

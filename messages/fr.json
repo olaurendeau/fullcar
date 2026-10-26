@@ -398,7 +398,12 @@
   "EventNotFound": {
     "title": "Événement introuvable",
     "checkLink": "Vérifiez le lien : il a peut-être été mal recopié. Les majuscules et les minuscules comptent.",
-    "deleted": "Les événements sont supprimés 30 jours après leur date.",
+    "deleted": "Il a peut-être été supprimé.",
+    "create": "Créer un événement"
+  },
+  "EventEnded": {
+    "title": "Événement terminé",
+    "body": "Les inscriptions ont été effacées 30 jours après l’événement.",
     "create": "Créer un événement"
   },
   "LanguageSwitch": {

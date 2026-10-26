@@ -1,6 +1,7 @@
 import { sql, TableNode, type Kysely, type KyselyPlugin, type QueryId } from "kysely";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb } from "@/db/client";
+import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
 import { withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
@@ -12,8 +13,8 @@ import type { NewEvent } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import { withVisiblePhones } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
-import { readEventState, type EventState } from "./event-state";
-import { eventMetadata, loadPublicState } from "./load-event";
+import { readEventPage, readEventState, type EventState } from "./event-state";
+import { eventMetadata, loadEventPage } from "./load-event";
 
 // Passed through, and watched: the board and the numbers must follow the same device.
 vi.mock("@/domain/board", async (importOriginal) => {
@@ -238,7 +239,8 @@ describe("readEventState", () => {
         await db.updateTable("event").set({ description }).where("id", "=", eventId).execute();
         // The read of an action, then the page's: its state, and its document's title (DS5.2, DS5.3).
         expect((await readEventState(db, eventId))?.event.description).toBe(description);
-        expect((await loadPublicState(eventId))?.event.description).toBe(description);
+        const page = await loadEventPage(eventId);
+        expect(page?.ended === false && page.state.event.description).toBe(description);
         expect(await eventMetadata(eventId)).toStrictEqual({ title: "Tournoi de Rennes" });
       });
       expect(network).not.toHaveBeenCalled();
@@ -332,6 +334,48 @@ describe("readEventState", () => {
       expect(changed).toBe(true);
       expect(state?.event).toMatchObject({ title: "Tournoi de Rennes", retourAt: "2026-12-12 18:00:00" });
       expect(state?.legs.map((leg) => leg.leg)).toEqual(["aller", "retour"]);
+    });
+  });
+});
+
+describe("readEventPage", () => {
+  it("OA8.3: an anonymised event gives its title and its start, and neither its place nor a first name", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      await anonymiseEvent(trx, scene.eventId);
+      const page = await readEventPage(trx, scene.eventId);
+      expect(page).toStrictEqual({ ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" });
+      expect(strings(page).join(" ")).not.toMatch(/Gymnase|Marc|Léa|Zoé|Tom/);
+    });
+  });
+
+  it("gives the board of an event not anonymised, as readEventState reads it without a device", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      expect(await readEventPage(trx, scene.eventId)).toStrictEqual({
+        ended: false,
+        state: await readEventState(trx, scene.eventId),
+      });
+    });
+  });
+
+  it("gives nothing for a well-formed id that is not stored", async () => {
+    await withRollback(async (trx) => {
+      await seedScene(trx);
+      expect(await readEventPage(trx, "Zz9yXw8v")).toBeUndefined();
+    });
+  });
+
+  it("gives nothing for a malformed id, without reading the database", async () => {
+    await expect(readEventPage(untouchable, "Ab3dEf70")).resolves.toBeUndefined();
+  });
+
+  it("is plain data, unchanged by serialization", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      await anonymiseEvent(trx, scene.eventId);
+      const page = await readEventPage(trx, scene.eventId);
+      expect(JSON.parse(JSON.stringify(page))).toStrictEqual(page);
     });
   });
 });

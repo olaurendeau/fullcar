@@ -47,6 +47,10 @@ celui qui écrit le code.
   lire `phone`, même si le mot n'apparaît pas : `selectAll()` sur `person`, `returningAll()`
   après `insertInto("person")` ou une mise à jour de `person`, une fonction JSON qui prend
   toute la ligne (`to_json(person)`, `row_to_json`, `jsonObjectFrom` sur `selectAll()`).
+  Un test de présence de `phone` sous le verrou est permis (`phone IS NOT NULL`, un
+  booléen, jamais la valeur) ; lire sa valeur hors de la requête unique reste bloquant.
+- Un Ride créé a un conducteur avec un numéro ; vider le numéro de qui conduit est refusé,
+  sous le verrou de sa Person.
 - `event-rows.ts` renvoie les téléphones à part (`phonesById`), et seuls
   `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`) les reçoivent. Un
   `row.phone` recopié ailleurs (dans le board, par exemple) est bloquant, comme une liste de

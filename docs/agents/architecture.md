@@ -1101,11 +1101,33 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   200 avec « Événement terminé » et `noindex` (#590), un statut qui ne demande pas de
   middleware (décision du coordinateur sur #581).
 - **Les sessions, les envois et les liens** (`session`, `email_send`, `email_link`) sont
-  nettoyés par âge, par la même tâche (#589) : une ligne part quand
-  aucune règle ne la lit plus. Une session, 90 jours après sa dernière visite ; un envoi,
-  quand il est sorti de la fenêtre des limites ; un lien, quand il est expiré depuis assez
-  longtemps pour que sa page n'ait plus à dire « Ce lien a expiré » (OA5.5, OA5.6). Une
-  ligne effacée plus tôt changerait la réponse d'une règle.
+  nettoyés par âge, par la même tâche (#589, `src/db/expired-rows.ts`) : une ligne part quand
+  aucune règle ne la lit plus. Une ligne effacée plus tôt changerait la réponse d'une règle.
+  Chaque passage supprime :
+  - une **session** terminée, 90 jours après sa dernière visite (`sessionIsAlive`) ;
+  - un **envoi** (adresse, sorte, heure), sorti de l'heure des limites (`inSendWindow`) :
+    gardé 1 heure, il part au passage suivant, en temps normal moins de 26 heures après
+    l'envoi (le cron passe une fois par jour ; sur le plan Hobby, à n'importe quelle minute
+    de l'heure prévue) ;
+  - un **lien de connexion**, utilisé ou non, **30 jours après son expiration**
+    (`linkDeletedAt`), soit 30 jours et 1 heure après l'envoi. D'ici là, sa page dit encore
+    « Ce lien a expiré » ou « Ce lien a déjà servi » (OA5.4, OA5.5) à un e-mail ouvert en
+    retard ;
+  - un **lien de confirmation** : **tant que son événement est en attente, jamais** par âge.
+    Expiré, il sert encore à recevoir un nouveau lien (OA5.6, `AdminPending.expired` d'OA7.7),
+    et il part avec son événement au jour 30, par la cascade ou par `anonymiseEvent`. Une fois
+    l'événement confirmé, la règle des liens de connexion s'applique : 30 jours après son
+    expiration, soit 37 jours après l'envoi, ou au jour 30 de l'événement si celui-ci vient
+    avant. Le nettoyage lit `event` sans verrou : l'ordre Event, puis lien, reste entier.
+
+  Un lien ne garde aucune adresse.
+- **La route** (`handle.ts`) : un en-tête faux ou absent, ou un `CRON_SECRET` vide ou non
+  configuré, donne 401 et rien ne tourne. Le secret n'est lu que dans l'en-tête, jamais
+  dans l'URL, et `Bearer {secret}` est comparé par `tokenMatches`, haché des deux côtés. Le
+  nettoyage tourne **d'abord**, puis le jour 30, au même instant : le nettoyage est court
+  (trois instructions), et un passage coupé par la durée maximale de la fonction a ainsi
+  déjà effacé les adresses des envois. L'échec de l'un n'empêche pas l'autre, et donne 500.
+  Le cron est `0 3 * * *` (UTC), dans `vercel.json`.
 - **Les comptes inactifs** (#616, `src/app/api/purge/inactive-accounts.ts`) : l'avertissement
   part 30 jours avant les 3 ans sans visite, une seule fois, et le compte n'est supprimé
   qu'après l'envoi effectif de cet avertissement (`warned_at` ; décision 5 du coordinateur
@@ -1204,7 +1226,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | création | `src/app/create-event.ts`, à partir de #599 | le cas d'usage de la création, avec une adresse ou une session ; l'envoi de la confirmation par `after()` |
 | e-mails | `src/email/brevo.ts`, à partir de #591 ; `src/email/messages.ts`, à partir de #592 | seul `brevo.ts` lit `BREVO_URL`, `BREVO_API_KEY` et `EMAIL_FROM` et appelle Brevo ; `messages.ts` écrit les quatre e-mails, sans aucun texte saisi (voir « Les e-mails ») |
 | jour 30 et « passé » | `src/domain/day-thirty.ts`, à partir de #587 | le seul calcul de « aujourd'hui », « passé » et du jour 30, à l'heure de Paris (voir « Heures sans fuseau ») |
-| purge | `src/app/api/purge/` (`route.ts`, `handle.ts`, `day-thirty.ts`, `inactive-accounts.ts`), à partir de #589 ; `src/db/day-thirty.ts`, à partir de #588 | la route n'exporte que `GET` et vérifie `CRON_SECRET` ; l'anonymisation et la suppression au jour 30, le nettoyage par âge, les comptes inactifs (voir « La purge ») |
+| purge | `src/app/api/purge/` (`route.ts`, `handle.ts`, `day-thirty.ts`, `inactive-accounts.ts`), à partir de #589 ; `src/db/day-thirty.ts`, à partir de #588 ; `src/db/expired-rows.ts`, à partir de #589 | la route n'exporte que `GET` et vérifie `CRON_SECRET` ; l'anonymisation et la suppression au jour 30, le nettoyage par âge, les comptes inactifs (voir « La purge ») |
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones |
 | lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position ; `samePlace` compare deux lieux (texte et position) |
 | description | `src/domain/description.ts`, à partir de #707 | `DESCRIPTION_MAX` (1000 points de code) ; `normalizeDescription`, la seule normalisation, partagée par le serveur (`description`, les règles de `text()`) et le compteur (`descriptionCount`) ; `guessFolds`, la devinette du pli que rend le serveur |

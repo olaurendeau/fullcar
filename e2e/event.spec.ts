@@ -325,7 +325,8 @@ test.describe("event not found", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Événement introuvable");
     await expect(page.getByText(/Vérifiez le lien/)).toBeVisible();
     await expect(page.getByText(/Les majuscules et les minuscules comptent\./)).toBeVisible();
-    await expect(page.getByText(/supprimés 30\sjours après leur date/)).toBeVisible();
+    // OA8.5: the second sentence, amended by organizer-account.
+    await expect(page.getByText("Il a peut-être été supprimé.", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Créer un événement" })).toHaveAttribute("href", "/nouveau");
     // Next adds its own `noindex` to a 404; ours is there as well.
     await expect(page.locator('meta[name="robots"][content="noindex, nofollow"]')).toHaveCount(1);
@@ -408,7 +409,7 @@ test.describe("event not found, with JavaScript", () => {
       expect(response?.status()).toBe(404);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Événement introuvable");
       await expect(page.getByText(/Vérifiez le lien/)).toBeVisible();
-      await expect(page.getByText(/supprimés 30\sjours après leur date/)).toBeVisible();
+      await expect(page.getByText("Il a peut-être été supprimé.", { exact: true })).toBeVisible();
       // Inside <main>, the footer has no `contentinfo` role: reached by its element.
       await expect(page.locator("footer").getByRole("link", { name: /^Nous contacter/ })).toBeVisible();
     });
@@ -423,7 +424,7 @@ test.describe("event not found, in a browser set to English", () => {
     expect(response?.status()).toBe(404);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Event not found");
     await expect(page.getByText(/Upper and lower case matter\./)).toBeVisible();
-    await expect(page.getByText(/deleted 30\sdays after their date/)).toBeVisible();
+    await expect(page.getByText("It may have been deleted.", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Create an event" })).toHaveAttribute("href", "/nouveau");
   });
 });

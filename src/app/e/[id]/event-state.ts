@@ -1,5 +1,6 @@
 import type { Kysely } from "kysely";
 import { readEventRows } from "@/db/event-rows";
+import type { PublicEvent } from "@/db/events";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
 import { onOneSnapshot } from "@/db/transaction";
@@ -10,6 +11,7 @@ import { eventLegs } from "@/domain/leg";
 import { isPersonalToken } from "@/domain/personal-token";
 import { withVisiblePhones, type VisibleBoard } from "@/domain/phone-visibility";
 import { isPublicId } from "@/domain/public-id";
+import type { WallClock } from "@/domain/wall-clock";
 import { findPublicEvent, headerFrom } from "./event";
 
 /**
@@ -41,13 +43,40 @@ export async function readEventState(
   return onOneSnapshot(db, async (trx) => {
     const event = await findPublicEvent(trx, eventId);
     if (event === undefined) return undefined;
-    const { phonesById, ...rows } = await readEventRows(trx, eventId);
-    const holders = isPersonalToken(token) ? await readTokenHolders(trx, eventId) : [];
-    // One set for the board and the numbers: the device section and the cards follow one device.
-    const deviceIds: ReadonlySet<string> = new Set(devicePersonIds(token, holders));
-    return {
-      event: headerFrom(event),
-      legs: withVisiblePhones(buildBoard(rows, eventLegs(event.retour_at), deviceIds), phonesById, deviceIds),
-    };
+    return stateOf(trx, event, token);
+  });
+}
+
+/** The state of `event`, read in the snapshot `trx` holds, for the device of `token`. */
+async function stateOf(trx: Kysely<Database>, event: PublicEvent, token: unknown): Promise<EventState> {
+  const { phonesById, ...rows } = await readEventRows(trx, event.id);
+  const holders = isPersonalToken(token) ? await readTokenHolders(trx, event.id) : [];
+  // One set for the board and the numbers: the device section and the cards follow one device.
+  const deviceIds: ReadonlySet<string> = new Set(devicePersonIds(token, holders));
+  return {
+    event: headerFrom(event),
+    legs: withVisiblePhones(buildBoard(rows, eventLegs(event.retour_at), deviceIds), phonesById, deviceIds),
+  };
+}
+
+/**
+ * What `/e/{id}` shows: the event as anyone holding the link sees it, or, once it is
+ * anonymised, « Événement terminé » with its title and its start only (OA8.3, #590). Neither
+ * its place nor its legs: the place may be someone's address, and nobody is left on them.
+ */
+export type EventPage = { ended: false; state: EventState } | { ended: true; title: string; allerAt: WallClock };
+
+/**
+ * The page's read, without a device: the server never has one (C10.2). The event and its
+ * legs on one snapshot, so that an event anonymised meanwhile never shows its place with an
+ * empty board. Nothing for an unknown event; a malformed id is never looked up.
+ */
+export async function readEventPage(db: Kysely<Database>, eventId: string): Promise<EventPage | undefined> {
+  if (!isPublicId(eventId)) return undefined;
+  return onOneSnapshot(db, async (trx): Promise<EventPage | undefined> => {
+    const event = await findPublicEvent(trx, eventId);
+    if (event === undefined) return undefined;
+    if (event.anonymised_at !== null) return { ended: true, title: event.title, allerAt: event.aller_at };
+    return { ended: false, state: await stateOf(trx, event, undefined) };
   });
 }
