@@ -18,13 +18,13 @@ const WITHOUT_SCRIPT =
 /**
  * Room for a link's focus ring, drawn 4 px outside it, which the fold's `overflow: hidden` would
  * cut (DS3.6): padding, cancelled by as much negative margin, so that the text does not move.
- * 6 px on the sides and at the top, where nothing overflows. At the bottom, 4 px when the text
- * holds in 4 lines; only 2 px when it folds, as more would show the top of the 5th line. The ring
- * is drawn around the link's glyphs, not its line: the 2 px of half-leading of a 24 px line of
+ * 6 px on the sides and at the top, where nothing overflows. At the bottom, only 2 px, whether
+ * the text folds or not: more would show the top of the 5th line, and the server's guess, which
+ * the browser corrects once its scripts run, may take a long text for a short one. The ring is
+ * drawn around the link's glyphs, not its line: the 2 px of half-leading of a 24 px line of
  * 16 px text leave it 2 px past the line, which those 2 px hold, its antialiased edge aside.
  */
-const RING_ROOM = "-mx-1.5 px-1.5 -mt-1.5 pt-1.5";
-const RING_ROOM_BOTTOM = { holds: "-mb-1 pb-1", folds: "-mb-0.5 pb-0.5" };
+const RING_ROOM = "-mx-1.5 px-1.5 -mt-1.5 pt-1.5 -mb-0.5 pb-0.5";
 
 /**
  * Whether the text takes more than 4 lines: folded, its whole height beyond the one shown;
@@ -121,7 +121,7 @@ function FoldedDescription({ description }: { description: string }) {
         id="event-description"
         data-folded={folded}
         onFocus={unfoldForHidden}
-        className={`${RING_ROOM} ${RING_ROOM_BOTTOM[folds ? "folds" : "holds"]} whitespace-pre-wrap wrap-anywhere [tab-size:4]${folded ? " line-clamp-4" : ""}`}
+        className={`${RING_ROOM} whitespace-pre-wrap wrap-anywhere [tab-size:4]${folded ? " line-clamp-4" : ""}`}
       >
         {descriptionPieces(description).map((piece, index) =>
           piece.kind === "text" ? (

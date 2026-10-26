@@ -30,6 +30,8 @@ const FITS_AT_768 = `${lines(3)}\nRendez-vous au parking du gymnase à 7 h 15, l
 const GUESSED_LONG = ["Covoiturage depuis la place centrale", "Retour prévu vers dix-huit heures au plus tard", "Prenez de quoi pique-niquer le midi au stade", "Les enfants ont besoin d’un siège adapté"].join("\n");
 /** Four lines, 124 code points: the server guesses no button, the browser adds it. */
 const GUESSED_SHORT = `${lines(3)}\n${"Rendez-vous au parking du gymnase avec les sacs, les gourdes et la bonne humeur de chacun ce matin-là".slice(0, 100)}`;
+/** Four lines, 89 code points: the server guesses no button; the 4th wraps, its 5th line starts with an accented capital. */
+const ACCENTS_ON_FIFTH = `${lines(3)}\n${"ÉÀÊÎÔ Élodie Ångström ".repeat(3).trim()}`;
 
 const FR = { more: "Afficher toute la description", less: "Réduire la description", add: "Ajouter une personne" };
 
@@ -378,15 +380,16 @@ test.describe("DS3.7: a link beyond the 4 lines shown", () => {
 /*
  * DS3.6 with the fold: the text not unfolded is `overflow: hidden`, and the ring is drawn 4 px
  * outside the link. `expectRing` reads the computed style, not what is painted: here, the pixels
- * around the focused link are those painted with nothing clipped. A side of the ring cut is a
- * channel off by more than 64 over the ring's 2 px; the clip's own layer, and an antialiased edge
- * at a clip that falls between two device pixels, change a channel by 27 at most.
+ * around the focused link differ from those around it unfocused, and are those painted with
+ * nothing clipped. A side of the ring cut is a channel off by more than 64 over the ring's 2 px;
+ * the clip's own layer, and an antialiased edge at a clip that falls between two device pixels,
+ * change a channel by 27 at most.
  */
 
-/** How many pixels of two screenshots of the same size differ by more than 64 on a channel. */
-async function pixelsApart(page: Page, one: Buffer, two: Buffer): Promise<number> {
+/** How many pixels of two screenshots of the same size differ by more than `by` on a channel. */
+async function pixelsApart(page: Page, one: Buffer, two: Buffer, by = 64): Promise<number> {
   return page.evaluate(
-    async (images) => {
+    async ({ by, images }) => {
       const [first, second] = await Promise.all(
         images.map(async (data) => {
           const image = new Image();
@@ -400,11 +403,11 @@ async function pixelsApart(page: Page, one: Buffer, two: Buffer): Promise<number
       );
       let apart = 0;
       for (let i = 0; i < first.length; i += 4) {
-        if ([0, 1, 2, 3].some((k) => Math.abs(first[i + k] - second[i + k]) > 64)) apart += 1;
+        if ([0, 1, 2, 3].some((k) => Math.abs(first[i + k] - second[i + k]) > by)) apart += 1;
       }
       return apart;
     },
-    [one.toString("base64"), two.toString("base64")],
+    { by, images: [one.toString("base64"), two.toString("base64")] },
   );
 }
 
@@ -422,17 +425,44 @@ test.describe("DS3.6: the ring of a link in a text not unfolded, painted whole",
         await open(page, `/e/${seededEvent.id}`);
         const link = description(page).getByRole("link");
         await page.locator("#event-title").focus();
+        // The link's box, the ring's 4 px, and 1 px more; unfocused, before the keyboard moves.
+        const box = (await link.boundingBox())!;
+        const clip = { x: box.x - 5, y: box.y - 5, width: box.width + 10, height: box.height + 10 };
+        const unfocused = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
         await pressUntil(page, "Tab", link);
         if (folds) await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
         else await expect(toggle(page)).toHaveCount(0);
-        // The link's box, the ring's 4 px, and 1 px more.
-        const box = (await link.boundingBox())!;
-        const clip = { x: box.x - 5, y: box.y - 5, width: box.width + 10, height: box.height + 10 };
+        expect(await link.boundingBox(), "the link unmoved by its focus").toEqual(box);
         const painted = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+        expect(await pixelsApart(page, painted, unfocused), "pixels of the ring painted").toBeGreaterThan(0);
         await description(page).evaluate((element) => element.style.setProperty("overflow", "visible"));
         const unclipped = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
         expect(await pixelsApart(page, painted, unclipped), "pixels of the ring cut by the fold").toBe(0);
       });
     });
   }
+});
+
+test.describe("DS3.6: the room left for the ring, under a long text the server guesses short", () => {
+  test.use({ locale: "fr-FR", eventFields: { description: ACCENTS_ON_FIFTH } });
+
+  test("before the page's scripts, the strip under the 4 lines paints nothing of the 5th", async ({ page, seededEvent }) => {
+    await page.route("**/_next/static/**/*.js", (route) => route.abort());
+    const response = await page.goto(`/e/${seededEvent.id}`);
+    expect(rendersButton(await response!.text())).toBe(false);
+    const text = description(page);
+    const { shown, whole } = await heights(text);
+    expect(shown).toBe(4 * LINE);
+    expect(whole).toBeGreaterThan(4 * LINE);
+    // The padding under the content box, across the whole text: the room left for the ring.
+    const clip = await text.evaluate((element) => {
+      const { left, width, bottom } = element.getBoundingClientRect();
+      const paddingBottom = parseFloat(getComputedStyle(element).paddingBottom);
+      return { x: left, y: bottom - paddingBottom, width, height: paddingBottom };
+    });
+    const painted = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+    await text.evaluate((element) => element.style.setProperty("color", "transparent"));
+    const withoutText = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+    expect(await pixelsApart(page, painted, withoutText, 0), "pixels of the 5th line in the strip").toBe(0);
+  });
 });
