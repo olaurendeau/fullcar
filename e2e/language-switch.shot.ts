@@ -24,7 +24,7 @@ type Words = typeof FR;
 type Arrival = "panel" | "alert" | null;
 
 /**
- * The pages of language-switch.spec.ts: which, the capture's name, where, the title that
+ * The pages of the footer (footer.spec.ts): which, the capture's name, where, the title that
  * tells it is shown, and what is waited for on the organiser's page.
  * The name is fixed here: the fragment never reaches a file name.
  */

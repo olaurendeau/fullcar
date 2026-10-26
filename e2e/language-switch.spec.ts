@@ -1,5 +1,4 @@
 import { devices, type Locator, type Page } from "@playwright/test";
-import type { SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -7,6 +6,7 @@ leaveNoToken();
 /*
  * #113, #128: a button in the shared footer, before "contact us", that names the other
  * language in that language, and turns the page into it without reloading the document.
+ * On each page in French, the button in the footer (L1.1) is in footer.spec.ts (#640).
  */
 
 const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
@@ -35,17 +35,6 @@ const EN = {
   boosters: "Booster seats",
 };
 
-/** The pages of the contact link (contact.spec.ts): which, where, and the title that tells it is shown. */
-const PAGES: [string, (event: SeededEvent) => string, string][] = [
-  ["the home page", () => "/", "Fullcar"],
-  ["the creation form", () => "/nouveau", "Créer un événement"],
-  ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
-  ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
-  ["the organiser's page", ({ id, token }) => `/e/${id}/admin#${token}`, "Tournoi de Rennes"],
-  ["the organiser's page, wrong token", ({ id }) => `/e/${id}/admin#${WRONG_TOKEN}`, "Tournoi de Rennes"],
-  ["the organiser's page, no token", ({ id }) => `/e/${id}/admin`, "Tournoi de Rennes"],
-];
-
 /** The page once it has settled: on the organiser's page, once the token has been checked. */
 async function open(page: Page, path: string, heading: string) {
   await page.goto(path, { waitUntil: "networkidle" });
@@ -70,16 +59,6 @@ async function switchTo(page: Page, from: typeof FR, to: typeof EN, lang: "fr" |
 
 test.describe("the language switch, in a browser set to French", () => {
   test.use({ locale: "fr-FR" });
-
-  for (const [where, path, heading] of PAGES) {
-    test(`L1.1: on ${where}, one button named English, in the footer, before the contact link`, async ({
-      page,
-      seededEvent,
-    }) => {
-      await open(page, path(seededEvent), heading);
-      await expectSwitch(languageSwitch(page, FR.switch), "en");
-    });
-  }
 
   test("L1.3: on /, a tap turns the page into English", async ({ page }) => {
     await open(page, "/", "Fullcar");
