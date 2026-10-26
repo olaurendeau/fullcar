@@ -30,7 +30,8 @@ export type SendStatusColumn = "sending" | "sent" | "failed" | "address_limit";
  * awaiting confirmation, null once confirmed; `send_status` and `send_status_at` are the
  * last result of the confirmation email, both or neither; `anonymised_at` is the day 30
  * of an event with an account, after which it has no token and no position.
- * From #706 (epic #654): `description` is 1 to 1000 code points, null when there is none.
+ * From #706 (epic #654): `description` is 1 to 1000 code points, null when there is none,
+ * and null once anonymised.
  */
 export interface EventTable {
   id: string;
