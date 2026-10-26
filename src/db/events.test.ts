@@ -223,6 +223,7 @@ describe("writeEventFields", () => {
         boosters_enabled: true,
         participation_enabled: false,
         stops_enabled: false,
+        anonymised_at: null,
       });
       expect(await readAdminTokenHash(trx, id)).toBe(hash);
     });

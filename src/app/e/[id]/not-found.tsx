@@ -6,8 +6,8 @@ import { ContactFooter } from "@/components/contact/contact-footer";
 import { Button } from "@/components/ui/button";
 
 /**
- * One page for an unknown, a malformed id, or (later) an event deleted 30 days after its date: nothing tells them apart
- * (#3, C6.1 to C6.3).
+ * One page for an unknown, a malformed id, or an event deleted at day 30: nothing tells them apart
+ * (#3, C6.1 to C6.3, OA8.5).
  */
 export default function EventNotFound() {
   const t = useTranslations("EventNotFound");
