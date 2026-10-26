@@ -2,11 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   CONFIRMATION_LINK_LIFETIME_MS,
+  LINK_KEPT_AFTER_EXPIRY_MS,
   LOGIN_LINK_LIFETIME_MS,
   SESSION_LIFETIME_MS,
   accountDeletionDueAt,
   accountIsInactive,
   inactivityWarningDueAt,
+  linkDeletedAt,
   linkExpiresAt,
   linkOutcome,
   sessionExpiresAt,
@@ -78,6 +80,22 @@ describe("linkOutcome", () => {
     expect(linkOutcome(link("login", MINUTE), "confirmation", now)).toBe("invalid");
     expect(linkOutcome(link("confirmation", MINUTE), "login", now)).toBe("invalid");
     expect(linkOutcome(link("confirmation", MINUTE, ago(1)), "login", now)).toBe("invalid");
+  });
+});
+
+describe("an expired or used link", () => {
+  // #589: the link page still says « Ce lien a expiré » or « Ce lien a déjà servi » for 30 days.
+  it("is kept 30 days after its expiry, used or not, then the daily task deletes it", () => {
+    expect(LINK_KEPT_AFTER_EXPIRY_MS).toBe(30 * DAY);
+    const createdAt = new Date("2026-10-25T10:00:00.000Z");
+    expect(linkDeletedAt("login", createdAt)).toEqual(new Date("2026-11-24T11:00:00.000Z"));
+    expect(linkDeletedAt("confirmation", createdAt)).toEqual(new Date("2026-12-01T10:00:00.000Z"));
+  });
+
+  it("still says expired the millisecond before it may be deleted", () => {
+    const createdAt = new Date("2026-10-25T10:00:00.000Z");
+    const lastKept = new Date(linkDeletedAt("login", createdAt).getTime() - 1);
+    expect(linkOutcome({ kind: "login", createdAt, usedAt: null }, "login", lastKept)).toBe("expired");
   });
 });
 

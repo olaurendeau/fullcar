@@ -55,6 +55,18 @@ export function linkOutcome(link: StoredLink | null, expected: LinkKind, now: Da
   return "valid";
 }
 
+/**
+ * How long a link stays in the database after its expiry, used or not (#589): the link
+ * page still says « Ce lien a expiré » or « Ce lien a déjà servi » to an email opened
+ * late, instead of « Ce lien n'est pas valide ». The row keeps no address.
+ */
+export const LINK_KEPT_AFTER_EXPIRY_MS = 30 * DAY;
+
+/** The first instant the daily task may delete the link: 30 days after its expiry. */
+export function linkDeletedAt(kind: LinkKind, createdAt: Date): Date {
+  return new Date(linkExpiresAt(kind, createdAt).getTime() + LINK_KEPT_AFTER_EXPIRY_MS);
+}
+
 /** The first instant the session no longer works, unless a visit comes before. */
 export function sessionExpiresAt(lastVisitAt: Date): Date {
   return new Date(lastVisitAt.getTime() + SESSION_LIFETIME_MS);
