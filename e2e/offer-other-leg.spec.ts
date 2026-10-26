@@ -4,6 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { holdToken, newToken } from "./device";
+import { DRIVER_PHONE, fillDriver, numbersHidden } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -52,11 +53,11 @@ async function openForm(page: Page) {
   await expect(form(page)).toBeVisible();
 }
 
-/** The device holds `names`, with their token in the page's `localStorage`. */
+/** The device holds `names`, each with a number to drive, with their token in the page's `localStorage`. */
 async function device(db: Db, page: Page, eventId: string, names: string[]) {
   const token = newToken();
   const ids: Record<string, string> = {};
-  for (const firstName of names) ids[firstName] = (await seedPerson(db, eventId, { firstName }, token)).id;
+  for (const firstName of names) ids[firstName] = (await seedPerson(db, eventId, { firstName, phone: DRIVER_PHONE }, token)).id;
   await holdToken(page, eventId, token);
   return ids;
 }
@@ -92,7 +93,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     expect(await radios(group)).toEqual({ names: [FR.drive.retour, FR.withoutCar, FR.notConcerned.retour], checked: [FR.notConcerned.retour] });
     await expect(field(page, FR.location.retour)).toHaveCount(0);
 
-    await field(page, FR.firstName).fill("Marc");
+    await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
     await field(page, FR.location.aller).fill("Mairie");
     await radio(group, FR.drive.retour).check();
     await expect(field(page, FR.location.retour)).toHaveValue("Mairie");
@@ -253,7 +254,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     await expect(form(page)).toHaveCount(0);
     await selectTab(page, "Retour");
     await expect(freeSeats(car(page, "Marc"))).toHaveCount(2);
-    await expect(car(page, "Tom")).toContainText("Église");
+    await numbersHidden(() => expect(car(page, "Tom")).toContainText("Église"));
   });
 
   test("C4.10: a response lost, then sent again with « Je ramène aussi des personnes »: exactly two cars", async ({ db, page, seededEvent }) => {
@@ -270,7 +271,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     });
     await page.goto(`/e/${id}`);
     await openForm(page);
-    await field(page, FR.firstName).fill("Marc");
+    await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
     await field(page, FR.location.aller).fill("Mairie de Vitré");
     await radio(otherLeg(page, FR.title.retour), FR.drive.retour).check();
     await submit(page).click();
@@ -289,7 +290,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     });
     await page.goto(`/e/${id}`);
     await openForm(page);
-    await field(page, FR.firstName).fill("Marc");
+    await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
     await field(page, FR.location.aller).fill("Mairie");
     await radio(otherLeg(page, FR.title.retour), FR.drive.retour).check();
     await field(page, FR.location.retour).fill("");
@@ -415,7 +416,7 @@ test.describe("the other leg read from the event (v4.5)", () => {
     const { id } = seededEvent;
     await openFrom(page, id);
     const group = otherLeg(page, FR.title.retour);
-    await field(page, FR.firstName).fill("Marc");
+    await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
     await field(page, FR.location.aller).fill("Mairie");
     await radio(group, FR.drive.retour).check();
     await expect(field(page, FR.location.retour)).toBeVisible();

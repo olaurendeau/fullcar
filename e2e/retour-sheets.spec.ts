@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { DRIVER_PHONE, fillDriver } from "./driver";
 import { removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -212,7 +213,7 @@ test.describe("a sheet of the Retour on a new device, the retour removed meanwhi
     await openRetour(page, `/e/${seededEvent.id}`);
     await panel(page).getByRole("button", { name: "Proposer une voiture", exact: true }).click();
     const form = dialog(page, "Proposer une voiture");
-    await form.getByLabel("Prénom").fill("Marc");
+    await fillDriver(form, { firstName: "Marc", phone: DRIVER_PHONE });
     await form.getByLabel("Lieu de dépose").fill("Gare de Rennes");
     await removeRetourInDb(db, seededEvent.id);
     await form.getByRole("button", { name: "Valider" }).click();
