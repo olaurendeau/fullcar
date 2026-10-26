@@ -7,8 +7,8 @@ import { organiserPath } from "./organiser";
 /*
  * #711, epic #654, event-description v3 (« Lire », « Les liens », « Où elle ne va jamais »):
  * the description in the event's header, after the dates, its `http(s)` URLs as links, and
- * nowhere in the `<head>`. Without its fold, which #712 adds. The organiser's page is opened
- * by its token: nothing here prints it.
+ * nowhere in the `<head>`. Its fold is in event-description-fold.spec.ts (#712). The organiser's
+ * page is opened by its token: nothing here prints it.
  */
 
 leaveNoToken();
@@ -74,8 +74,13 @@ test.describe("with a description and a link", () => {
     test(`DS2.2: on ${where}, the text is in the header, after the dates, and nowhere else`, async ({ page, seededEvent }) => {
       await open(page, path(seededEvent));
       await expect(description(page)).toBeVisible();
-      // The header's last child, after the dates: the bar of messages and « Vos inscriptions » come after the header.
-      expect(await description(page).evaluate((element) => [element.parentElement?.tagName, element.previousElementSibling?.tagName, element.nextElementSibling])).toEqual(["HEADER", "DL", null]);
+      // With its fold, the header's last child, after the dates: the bar of messages and « Vos inscriptions » come after the header.
+      expect(
+        await description(page).evaluate((element) => {
+          const fold = element.parentElement!;
+          return [fold.parentElement?.tagName, fold.previousElementSibling?.tagName, fold.nextElementSibling];
+        }),
+      ).toEqual(["HEADER", "DL", null]);
       await expect(description(page)).toContainText(MARKER);
       // Not in a tab, the map or the organiser's area: once in the page.
       expect(await occurrences(page, MARKER)).toBe(1);
@@ -88,7 +93,11 @@ test.describe("with a description and a link", () => {
     expect(await description(page).evaluate((element) => element.textContent)).toBe(text.replace(PLAN, `${PLAN} ${NEW_TAB}`));
     await expect(description(page).locator("b, strong, em")).toHaveCount(0);
     // Four lines of 24 px: the first, the empty one, « **gras** <b>x</b> », and the link.
-    const { height } = (await description(page).boundingBox())!;
+    // Without the padding that leaves the links' rings room (#712).
+    const height = await description(page).evaluate((element) => {
+      const { paddingTop, paddingBottom } = getComputedStyle(element);
+      return element.getBoundingClientRect().height - parseFloat(paddingTop) - parseFloat(paddingBottom);
+    });
     expect(Math.round(height)).toBe(4 * 24);
   });
 
