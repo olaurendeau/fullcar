@@ -63,8 +63,13 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 Le dépôt est monté dans le conteneur, `node_modules` compris : installés par le conteneur
 Linux, ils restent lisibles par l'éditeur de l'hôte pour les types.
 
-La CI exécute le même `make ci`, avec un slot explicite (`make ci SLOT=0`) : ce qui passe
-en local passe en CI. La variable `CI` est transmise aux conteneurs : en CI, Vitest et
+La CI exécute les mêmes commandes que `make ci`, avec un slot explicite, réparties sur
+plusieurs machines (#636) : un job `static` lance `make check SLOT=0`, et quatre jobs `e2e`
+lancent chacun `make e2e SLOT=0 ARGS="--shard=i/4"`, qui construit son propre build de
+production puis joue un quart des tests de bout en bout. Ce qui passe en local avec
+`make ci` passe en CI. Un dernier job, `checks`, tourne dans tous les cas et échoue si l'un
+des autres n'a pas réussi : c'est lui que lit la fusion, parce qu'un job requis sauté
+compte comme réussi sur GitHub. La variable `CI` est transmise aux conteneurs : en CI, Vitest et
 Playwright refusent un `.only`, que le lint refuse déjà partout.
 
 Le service Node s'appelle `web`, pas `app` : Chromium précharge HSTS pour tout le TLD `.app`
