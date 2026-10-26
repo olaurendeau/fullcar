@@ -262,10 +262,13 @@ celui qui écrit le code.
   Un verrou « prouvé » par la présence de `FOR UPDATE` dans le SQL, ou par un test sous
   `withRollback`, est bloquant : il ne montre aucune écriture simultanée.
 - Les combinaisons de cas (types d'erreur, variantes de jeton, valeurs invalides) se testent
-  dans Vitest. Le bout en bout garde un seul test par branchement. Les preuves de bout en
-  bout qu'exige `product.md` restent de bout en bout : « créer un événement en moins de
-  30 s » et « rejoindre une voiture en 1 tap ». Raison : le bout en bout fait 87 % du temps
-  de la CI.
+  dans Vitest, et le bout en bout garde un seul test par branchement. À relever comme
+  suggestion, pas comme bloquant. Les preuves de bout en bout du tableau « Ce qui compte
+  comme fait » de `product.md` restent de bout en bout, chaque cas compris : « créer un
+  événement en moins de 30 s » (8 actions pour un nouvel organisateur, 7 avec une session)
+  et « rejoindre une voiture en 1 tap » (un seul clic sur la place libre ; avec deux
+  personnes « sans voiture », le clic ouvre la feuille). Raison : le bout en bout faisait
+  87 % du temps de la CI, mesuré avant #652.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.
 - À partir de #365, aucune vérification de bout en bout n'affiche un jeton, un lien
