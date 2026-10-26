@@ -45,10 +45,14 @@ export async function insertEvent(
   throw new Error(`insertEvent: no free id after ${INSERT_ATTEMPTS} attempts`);
 }
 
-/** The stored hash of the event's admin token, in lowercase hex; nothing for an unknown id. */
-export async function readAdminTokenHash(db: Kysely<Database>, id: string): Promise<string | undefined> {
+/**
+ * The stored hash of the event's admin token, in lowercase hex; `null` for an event without
+ * a token (revoked, #586), which no token matches; nothing for an unknown id.
+ */
+export async function readAdminTokenHash(db: Kysely<Database>, id: string): Promise<string | null | undefined> {
   const row = await db.selectFrom("event").select("admin_token_hash").where("id", "=", id).executeTakeFirst();
-  return row?.admin_token_hash.toString("hex");
+  if (row === undefined) return undefined;
+  return row.admin_token_hash?.toString("hex") ?? null;
 }
 
 /**

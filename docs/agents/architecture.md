@@ -1147,6 +1147,11 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   | `placement (ride_id, event_id, leg)` → `ride (id, event_id, leg)` | `SET NULL (ride_id)` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » ; seule `ride_id` est remise à `null`, `event_id` et `leg` restent |
   | `placement.stop_id` | `SET NULL` | quand un Arrêt est supprimé, le passager monte (ou descend) au lieu du Ride |
   | `ride (driver_id, event_id)` → `person (id, event_id)` | `CASCADE` | supprimer le conducteur retire sa voiture, et ses passagers repassent « sans voiture » par la clé `placement → ride` ; rien ne supprime de personne dans #66 |
+  | `event.account_id` | `SET NULL` | un événement survit à son compte : il reste ouvert aux participants, sans organisateur, jusqu'à son jour 30 (OA9.5) ; il garde `confirmed_at` (#586) |
+  | `session.account_id` | `CASCADE` | une session appartient à son compte : le supprimer ferme toutes ses sessions (#586) |
+  | `email_link.account_id` | `CASCADE` | un lien de connexion appartient à son compte ; un lien de confirmation, lui, appartient à son Event (`email_link.event_id`, en `CASCADE` comme toute table qui tient à un événement) (#586) |
+  | `email_link.return_event_id` | `SET NULL` | la page d'arrivée d'un lien de connexion, `/e/{id}/admin` de cet Event (OA4.4) ; l'Event supprimé, le lien sert encore et mène à `/mes-evenements`, l'arrivée par défaut. Un lien de confirmation n'en a pas : il mène à son propre Event (OA5.3) (#586) |
+  | `email_send.event_id` | `SET NULL` | un envoi ne tient pas à son événement : supprimé, l'Event laisse l'envoi compté dans la limite de son adresse et dans le plafond global, jusqu'à son nettoyage par âge (#586) |
 
   Les clés de `ride` et de `placement`, hors `stop_id`, arrivent avec #66. Les clés
   composites empêchent un Placement de pointer vers un Ride d'un autre événement ou d'un
@@ -1156,6 +1161,12 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   que si toutes ses colonnes sont renseignées (`MATCH SIMPLE`) : un Placement « sans
   voiture » (`ride_id` à `null`) ne l'est pas. `SET NULL (ride_id)`, limité à une colonne,
   exige Postgres 15 ou plus : 18 en local, 17 ou plus chez Neon.
+
+  Une adresse e-mail (`account.email`, `event.pending_email`, `email_send.email`) n'est
+  acceptée en base que telle que `src/domain/email-address.ts` l'écrit : rognée, en
+  minuscules, en NFC, 254 points de code au plus (#586). Une adresse, un compte :
+  `account.email` est unique. Les minuscules se vérifient avec la collation `pg_c_utf8`,
+  quelle que soit la locale de la base, ce qui exige Postgres 17 ou plus.
 
   Deux déclencheurs garantissent en base qu'une conductrice n'a pas de Placement sur le leg
   où elle conduit (#66, C12.8) : `placement_driver_on_leg` sur `placement` (insertion, ou
