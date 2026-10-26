@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { BoardPerson } from "./board";
+import type { BoardPerson, BoardRows, PlacementRow, RideRow } from "./board";
 import type { Leg } from "./leg";
-import { legIsEmpty, organiserPanel, type OrganiserLeg } from "./organiser-panel";
+import { legIsEmpty, organiserPanel, organiserPersons, type OrganiserLeg } from "./organiser-panel";
 import type { OrganiserCar, OrganiserLegBoard } from "./phone-visibility";
 import { browserUnsafe } from "./test-browser-safe";
 import type { WallTime } from "./wall-clock";
@@ -147,5 +147,100 @@ describe("legIsEmpty (O1.5)", () => {
     ["a car, nobody without one", legOf([car("r1")]), false],
   ])("%s: %s", (_, leg, empty) => {
     expect(legIsEmpty(organiserPanel([leg])[0])).toBe(empty);
+  });
+});
+
+describe("organiserPersons (RP4.2)", () => {
+  const placement = (personId: string, leg: Leg, rideId: string | null, second: number): PlacementRow => ({
+    personId,
+    leg,
+    rideId,
+    placedAt: new Date(Date.UTC(2026, 9, 26, 8, 0, second)),
+  });
+  const ride = (id: string, leg: Leg, driverId: string): RideRow => ({
+    id,
+    leg,
+    driverId,
+    location: "Mairie",
+    departureTime: "07:30:00",
+    seats: 3,
+    note: "Siège enfant",
+    position: null,
+  });
+
+  /**
+   * In the event's order: Léa drives at the aller; Hugo rides with her there and is without
+   * a car at the retour; Inès is without a car at the aller; Tom does no leg.
+   */
+  const rows: BoardRows = {
+    persons: [
+      { id: "lea", firstName: "Léa" },
+      { id: "hugo", firstName: "Hugo" },
+      { id: "ines", firstName: "Inès" },
+      { id: "tom", firstName: "Tom" },
+    ],
+    rides: [ride("r1", "aller", "lea")],
+    placements: [placement("ines", "aller", null, 1), placement("hugo", "aller", "r1", 2), placement("hugo", "retour", null, 3)],
+  };
+
+  it("lists every person in the event's order, a cell per leg, those who do no leg included", () => {
+    // toStrictEqual: an id, a first name and the cells, nothing else.
+    expect(organiserPersons(rows, ["aller", "retour"])).toStrictEqual([
+      {
+        id: "lea",
+        firstName: "Léa",
+        cells: [
+          { leg: "aller", state: { kind: "driver", rideId: "r1" } },
+          { leg: "retour", state: { kind: "notConcerned" } },
+        ],
+      },
+      {
+        id: "hugo",
+        firstName: "Hugo",
+        cells: [
+          { leg: "aller", state: { kind: "passenger", rideId: "r1", driver: { id: "lea", firstName: "Léa" } } },
+          { leg: "retour", state: { kind: "withoutCar" } },
+        ],
+      },
+      {
+        id: "ines",
+        firstName: "Inès",
+        cells: [
+          { leg: "aller", state: { kind: "withoutCar" } },
+          { leg: "retour", state: { kind: "notConcerned" } },
+        ],
+      },
+      {
+        id: "tom",
+        firstName: "Tom",
+        cells: [
+          { leg: "aller", state: { kind: "notConcerned" } },
+          { leg: "retour", state: { kind: "notConcerned" } },
+        ],
+      },
+    ]);
+  });
+
+  it("gives each person one cell in an event without a retour", () => {
+    const legs = organiserPersons(rows, ["aller"]).map((person) => person.cells.map((cell) => cell.leg));
+    expect(legs).toEqual([["aller"], ["aller"], ["aller"], ["aller"]]);
+  });
+
+  it("is empty when nobody has signed up", () => {
+    expect(organiserPersons({ persons: [], rides: [], placements: [] }, ["aller", "retour"])).toStrictEqual([]);
+  });
+
+  it("carries no number, even from rows that hold one (Q2 = a)", () => {
+    const phones: Record<string, string> = {
+      lea: "06 11 11 11 11",
+      hugo: "06 22 22 22 22",
+      ines: "06 33 33 33 33",
+      tom: "06 44 44 44 44",
+    };
+    const sneaky = { ...rows, persons: rows.persons.map((person) => ({ ...person, phone: phones[person.id] })) };
+    const sent = JSON.stringify(organiserPersons(sneaky, ["aller", "retour"]));
+    expect(sent).not.toContain("phone");
+    const digits = (text: string) => text.replace(/\D/g, "");
+    expect(Object.values(phones).filter((phone) => digits(sent).includes(digits(phone)))).toEqual([]);
   });
 });

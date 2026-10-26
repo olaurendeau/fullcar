@@ -338,11 +338,11 @@ d'`editEvent`, pour une prise de place et une voiture proposée.
 dans une seule transaction d'`atomically`, en `READ COMMITTED`. Le retrait suit l'ordre
 Event, puis Ride, puis Person, en quatre temps :
 
-1. L'Event en partage, par `lockLegs(trx, id, [])` (`src/app/e/[id]/retour.ts`). Un retrait
-   et une suppression du retour se suivent donc dans l'ordre où ils prennent l'Event, et
-   deux retraits ne s'attendent pas sur lui.
-2. Les Rides que la personne conduit, sur les deux legs, lus puis verrouillés par
-   identifiant croissant (`lockRides`, `src/db/rides.ts`).
+1. L'Event en partage, par `lockEvent(trx, id, "share")` (`src/db/events.ts`), comme
+   `lockLegs` sans leg. Un retrait et une suppression du retour se suivent donc dans l'ordre
+   où ils prennent l'Event, et deux retraits ne s'attendent pas sur lui.
+2. Les Rides que la personne conduit, sur les deux legs, lus (`findDrivenRides`) puis
+   verrouillés par identifiant croissant (`lockRides`, `src/db/rides.ts`).
 3. Sa Person (`lockPersons`, `src/db/persons.ts`).
 4. Ensuite seulement, la suppression : ses Rides, dont les passagers repassent « sans
    voiture » par la clé `placement → ride`, ses Placements, puis la Person.
@@ -371,6 +371,18 @@ relit donc sous ses verrous ce qu'il a lu avant eux :
   `DriverMoved` dans `offerRide`, au lieu de verrouiller ce Ride après la Person. Decision :
   reprendre la transaction plutôt que verrouiller tard. — Reason : c'est le précédent
   d'`offerRide`, et l'ordre Ride, puis Person, reste vrai sans exception.
+- **La borne de la reprise (#665).** Une seule reprise. La première tentative tient l'Event
+  en partage. La reprise le tient en `FOR NO KEY UPDATE` (`lockEvent(trx, id,
+  "noKeyUpdate")`), comme une modification de l'événement : toute écriture sur ses legs, dont
+  `offerRide`, prend l'Event en partage dès sa première instruction, donc aucune ne tourne
+  pendant la reprise, et aucune voiture de la personne ne peut plus y apparaître. Il n'y a
+  rien au-delà de la borne, donc jamais de `failed` (RP2.8). Decision : une reprise, sous le
+  verrou exclusif de l'Event, plutôt que trois essais en partage comme `offerRide`. —
+  Reason : trois essais en partage finissent en `failed` si la voiture apparaît à chaque
+  fois, ce que RP2.8 exclut ; sous le verrou exclusif, la reprise ne peut pas échouer pour
+  cette raison. Elle ne coûte qu'une attente des écritures en cours sur l'événement, pour un
+  cas rare : une voiture proposée par cette personne au moment même où on la retire. Avec
+  une transaction passée par un test, il n'y a pas de reprise, comme dans `offerRide`.
 
 Les autres écritures voient un retrait de la même façon. Avec une requête et un jeton bien
 formés, une personne absente de l'événement donne `personGone`, avec l'état, et non plus

@@ -15,14 +15,28 @@ import { NoCarPill } from "./no-car-pill";
  * A tab's label, then, under it, an amber pill with its persons without a car when there are
  * any (C9.3): shown as it is read, part of the tab's name, nothing hidden. 48 px high when
  * either tab has a pill, both the same; 44 px otherwise.
+ *
+ * The selected tab's name is petrol (#685, VI2.2), on its own `span`: `data-active` on the
+ * trigger is written in `:where()` and loses to its `hover:text-foreground`, which would turn the
+ * name black under the mouse. The pill keeps its amber.
  */
-function LegTrigger({ leg, withoutCar, tall }: { leg: Leg; withoutCar: number; tall: boolean }) {
+function LegTrigger({
+  leg,
+  withoutCar,
+  tall,
+  selected,
+}: {
+  leg: Leg;
+  withoutCar: number;
+  tall: boolean;
+  selected: boolean;
+}) {
   const t = useTranslations();
 
   return (
     // 48 px: a 1 px border, 3 px of padding, the name's 20 px, 2 px, then the pill's 18 px.
     <TabsTrigger value={leg} className={cn("flex-col gap-0.5 py-[3px]", tall ? "h-12" : "h-11")}>
-      <span>{t(`Event.legs.${leg}`)}</span>
+      <span className={cn(selected && "text-primary")}>{t(`Event.legs.${leg}`)}</span>
       {withoutCar > 0 && (
         <>
           {" "}
@@ -75,7 +89,7 @@ export function LegTabs(props: {
     >
       <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto noscript:hidden">
         {legs.map(({ leg }, index) => (
-          <LegTrigger key={leg} leg={leg} withoutCar={counts[index]} tall={tall} />
+          <LegTrigger key={leg} leg={leg} withoutCar={counts[index]} tall={tall} selected={props.tab === leg} />
         ))}
       </TabsList>
       {legs.map(({ leg, at, board }, index) => (

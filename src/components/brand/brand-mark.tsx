@@ -1,0 +1,22 @@
+import { cn } from "@/lib/utils";
+
+/** Fullcar's mark (#651): icon.svg's car, in the tokens' colours. Decorative: the heading next to it names the page. */
+export function BrandMark({ className }: { className?: string }) {
+  return (
+    <svg data-brand-mark viewBox="0 0 1254 1254" aria-hidden="true" focusable="false" className={cn("shrink-0", className)}>
+      <rect width="1254" height="1254" rx="280" className="fill-primary" />
+      <path className="fill-primary-foreground" d="M285 790C230 790 199 768 199 712V675C199 635 212 607 236 588C262 478 335 408 470 408H640C740 408 790 430 840 490L895 555C905 566 915 570 930 572C1010 580 1053 630 1053 705C1053 760 1025 790 975 790Z" />
+      <g className="fill-primary">
+        <circle cx="390.5" cy="767" r="102" />
+        <circle cx="861.5" cy="767" r="102" />
+        <path d="M318 575H425Q437 575 439 563L455 476Q457 461 442 462C360 466 320 510 303 555Q299 575 318 575Z" />
+        <path d="M505 457H617Q630 457 632 470L645 560Q647 575 632 575H492Q477 575 479 560L491 470Q493 457 505 457Z" />
+        <path d="M684 458C736 461 771 480 801 515L832 553Q843 575 822 575H697Q685 575 683 562L670 474Q668 458 684 458Z" />
+      </g>
+      <g className="fill-primary-foreground">
+        <circle cx="390.5" cy="771" r="72" />
+        <circle cx="861.5" cy="771" r="72" />
+      </g>
+    </svg>
+  );
+}
