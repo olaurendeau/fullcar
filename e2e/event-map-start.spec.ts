@@ -141,6 +141,35 @@ test.describe("CA1.20 (2): on /e/{id}/admin", () => {
     await expectStartedByScroll(page, watch);
   });
 
+  // #769: the box seen in the screen while the link is checked, pushed under the fold as it ends,
+  // then scrolled back at the next frame, before the observer looks again: it saw the box in the
+  // screen before, and sees it there still. The test's scroll did this, at a slow frame in CI.
+  test("the organiser area unfolded, the box scrolled back into the screen at the frame after the check: it starts", async ({ page, placed }) => {
+    const check = await holdActionsWith(page, placed.token);
+    const watch = watchMap(page);
+    await page.goto(organiserPath(placed));
+    await expect.poll(check.held).toBeGreaterThan(0);
+    await expect(region(page)).toBeInViewport();
+    await expectWaiting(page);
+
+    // At the commit that puts the area above the box, a frame later, before the observer's step.
+    await page.evaluate(() => {
+      const box = document.querySelector('[id="event-map-aller"] [role="region"]')!;
+      const pushed = new MutationObserver(() => {
+        if (box.getBoundingClientRect().top < window.innerHeight) return;
+        pushed.disconnect();
+        requestAnimationFrame(() => box.scrollIntoView({ block: "center" }));
+      });
+      pushed.observe(document.body, { childList: true, subtree: true });
+    });
+    await check.release();
+    await expect(area(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(region(page)).toBeInViewport();
+    await expect.poll(() => watch.tiles()).toBeGreaterThan(0);
+    await expect(region(page).locator(".leaflet-tile-loaded").first()).toBeVisible();
+    await tilesLoaded(page);
+  });
+
   for (const end of ["invalid", "failed"] as const) {
     test(`the check ${end}, the message in place of the area: nothing while checked, nor after, the box under the fold; a scroll starts it`, async ({
       db,

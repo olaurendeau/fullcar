@@ -241,14 +241,16 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
     return () => observer.disconnect();
   }, []);
 
-  // Into the screen, or out of it, until it starts.
+  // Into the screen, or out of it, until it starts. Observed anew once open and settled: the
+  // observer tells only a change from what it saw last, and the box may have left the screen and
+  // come back between two of its looks, while the start measured it out (#769).
   useEffect(() => {
     const element = box.current;
     if (started || !element) return;
     const observer = new IntersectionObserver(() => start());
     observer.observe(element);
     return () => observer.disconnect();
-  }, [started]);
+  }, [started, map.open, map.settled]);
 
   const flagLabel = t("event", { location: map.location });
   const zoomIn = t("zoomIn");

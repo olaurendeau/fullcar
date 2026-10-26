@@ -347,6 +347,12 @@ interface Sent {
  * never came and held the teardown until the test's timeout (#436). It is a file of the app,
  * the same at every request: its body is read by asking the app for it again
  * (`context.request`), and the browser's own request is left as it is.
+ *
+ * A read the page leaves in flight, as a test ends on what its answer has already shown, gets no
+ * `response`: its body is read all the same, by nobody. Read once the context closes, which first
+ * disposes of every body fetched, it failed as « Response has been disposed », unhandled, and
+ * failed the test (#764). `stop()` waits for every body still being read, and a body nobody reads
+ * is not left unhandled; one the page did receive and that cannot be read still fails the check.
  */
 async function record(context: BrowserContext, hide: (text: string) => string) {
   const state = { on: true };
@@ -354,6 +360,17 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
   const sent: Sent[] = [];
   const exchanges: Promise<Exchange>[] = [];
   const consoleLines: string[] = [];
+  // Every body of this route not yet read or refused: `stop()` waits for them.
+  const reading = new Set<Promise<void>>();
+  const read = (body: Promise<string>) => {
+    const done = body.then(
+      () => {},
+      () => {},
+    );
+    reading.add(done);
+    void done.then(() => reading.delete(done));
+    return body;
+  };
   const askedAgain = (request: Request) => context.request.get(request.url()).then((again) => again.text());
 
   await context.route(
@@ -364,9 +381,7 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
         // Abandoned by the page, answered or not (a keystroke, the form sending), it is given to
         // a page that may no longer take it; its body, read here, is not marked unhandled meanwhile.
         const answer = route.fetch();
-        const body = answer.then((response) => response.text());
-        body.catch(() => {});
-        fetched.set(request, body);
+        fetched.set(request, read(answer.then((response) => response.text())));
         // Not fetched (the app's server down), it is abandoned here rather than left pending (#535).
         return answer.then(
           (response) => route.fulfill({ response }).catch(() => {}),
@@ -377,7 +392,7 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
       const answer = route.fetch({ maxRedirects: 0 });
       fetched.set(
         request,
-        answer.then((response) => response.text()),
+        read(answer.then((response) => response.text())),
       );
       await route.fulfill({ response: await answer });
     },
@@ -433,6 +448,7 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     /** Ends the recording: no list above grows after it. */
     async stop() {
       state.on = false;
+      await Promise.all(reading);
       await context.unrouteAll({ behavior: "ignoreErrors" });
     },
   };

@@ -38,6 +38,8 @@ export function PersonSheet({
       open={open}
       onOpenChange={onOpenChange}
       title={editing === null ? person.firstName : t("PersonForm.title.edit", { firstName: editing })}
+      // « Modifier {prénom} » has fields: on a phone, it fills the screen (v4.6, rule 2).
+      fullHeight={editing !== null}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         focusName(person.id);

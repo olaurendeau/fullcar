@@ -931,7 +931,10 @@ elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les d
   `LegMap.settled`. `event-map.tsx` observe la boîte (`ResizeObserver`,
   `IntersectionObserver`) et la mesure de nouveau (`getBoundingClientRect` contre
   `innerHeight`) dans l'effet qui suit le passage à posée, jamais d'après une entrée d'observateur
-  d'avant. Le démarrage appelle `leafletImport.open()` ; « Réessayer » démarre aussi le leg qui
+  d'avant. L'`IntersectionObserver` est recréé à ce passage, et à l'ouverture : il ne dit qu'un
+  changement depuis ce qu'il a vu, et la boîte, vue dans l'écran avant, peut en sortir et y
+  revenir entre deux de ses regards ; l'effet l'aurait mesurée dehors, et rien ne l'aurait
+  démarrée (#769). Le démarrage appelle `leafletImport.open()` ; « Réessayer » démarre aussi le leg qui
   ne l'était pas. Avant, la boîte attend, sans « Chargement de la carte… », sans `aria-busy` ni
   `tabindex` (CA1.14) ; rien ne prend le focus ni ne fait défiler à l'arrivée (CA2.11). Repliée
   par la personne avant d'entrer dans l'écran, elle ne demande rien. Une carte démarrée

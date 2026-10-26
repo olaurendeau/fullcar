@@ -14,6 +14,7 @@ import { readEventState, type EventState } from "./event-state";
 import { lockLegs } from "./retour";
 
 /**
+ * - `eventEnded`: the event is anonymised (#588), before any other refusal.
  * - `noRetour`: the car is on the retour, and the event no longer has one (decision 40).
  * - `invalid`: a request no page sends (nobody asked, an id or a leg malformed).
  * - `forbidden`: someone asked is not a person of the device (C2.4).
@@ -26,7 +27,7 @@ import { lockLegs } from "./retour";
  */
 export type SeatsOutcome =
   | { ok: true }
-  | { ok: false; error: "noRetour" | "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" }
+  | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
@@ -132,8 +133,11 @@ type Before = (typeof BEFORE)[number];
  *   longer in the car is (C7.4, RP5.4); nobody left to give back, `undoneIds` is empty.
  * - `noRetour`: the car was on the retour, and the event no longer has one: nobody is
  *   left to give back, and the page says so (decision 45).
+ * - `eventEnded`: the event is anonymised (#588): nobody is left to give back either.
  */
-export type UndoOutcome = { ok: true; undoneIds: string[] } | { ok: false; error: "noRetour" | "invalid" | "forbidden" };
+export type UndoOutcome =
+  | { ok: true; undoneIds: string[] }
+  | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" };
 
 /** The outcome, and the event's state as the device now sees it, refusal or not. */
 export type UndoSeatsResult = UndoOutcome & { state: EventState };

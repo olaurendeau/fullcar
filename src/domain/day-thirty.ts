@@ -74,3 +74,23 @@ export function isDayThirtyReached(event: EventTimes, now: Date): boolean {
 export function purgeCutoff(now: Date): WallDate {
   return addDays(parisToday(now), -DAY_THIRTY_DAYS);
 }
+
+/** What the purge reads of an event under its lock: its times, whether it has an account, and whether it is anonymised. */
+export interface PurgedEvent extends EventTimes {
+  hasAccount: boolean;
+  anonymised: boolean;
+}
+
+/** What the purge does with an event: anonymise it, delete it, or leave it as it is. */
+export type DayThirtyFate = "anonymise" | "delete" | "keep";
+
+/**
+ * From day 30 on, an event with an account is anonymised (OA8.1), and one without, pending
+ * or left by a deleted account, is deleted (OA2.7). Before day 30, and once anonymised with
+ * its account, it is kept: a second run changes nothing (OA8.2).
+ */
+export function dayThirtyFate(event: PurgedEvent, now: Date): DayThirtyFate {
+  if (!isDayThirtyReached(event, now)) return "keep";
+  if (!event.hasAccount) return "delete";
+  return event.anonymised ? "keep" : "anonymise";
+}
