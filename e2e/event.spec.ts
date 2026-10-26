@@ -217,6 +217,21 @@ for (const { retourAt, end } of [
   });
 }
 
+// #625: the first of a month is « 1er » in French, « 1 » in English, wherever a date shows.
+for (const { locale, dates } of [
+  { locale: "fr-FR", dates: [/^samedi 1er mai 2027 à 08:00$/, /^dimanche 2 mai 2027 à 18:00$/] },
+  { locale: "en-US", dates: [/^Saturday, May 1, 2027 at 8:00\sAM$/, /^Sunday, May 2, 2027 at 6:00\sPM$/] },
+]) {
+  test.describe(`event page on 1 May, in ${locale}`, () => {
+    test.use({ locale, eventFields: { allerAt: "2027-05-01 08:00:00", retourAt: "2027-05-02 18:00:00" } });
+
+    test("#625: the first of the month is written as the language writes it", async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await expect(page.locator("header dd")).toHaveText(dates);
+    });
+  });
+}
+
 // D1.7: « the same day » is the event's place's, whatever the browser's zone, on both sides of midnight.
 for (const { retourAt, end } of [
   { retourAt: "2026-12-12 23:30:00", end: /^23:30$/ },

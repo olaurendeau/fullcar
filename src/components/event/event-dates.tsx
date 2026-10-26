@@ -1,14 +1,15 @@
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { sameWallDate, wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
+import { useFormatDate } from "@/i18n/format-date";
 
 const FULL = { dateStyle: "full", timeStyle: "short" } as const;
 const TIME_ONLY = { timeStyle: "short" } as const;
 
 /** A wall-clock time, formatted in UTC (its digits), its `dateTime` always complete. */
 function EventTime({ at, format }: { at: WallClock; format: typeof FULL | typeof TIME_ONLY }) {
-  const formatter = useFormatter();
+  const formatDate = useFormatDate();
   const { date, time } = wallClockParts(at);
-  return <time dateTime={`${date}T${time}`}>{formatter.dateTime(wallClockAsUtc(at), format)}</time>;
+  return <time dateTime={`${date}T${time}`}>{formatDate(wallClockAsUtc(at), format)}</time>;
 }
 
 /**
