@@ -17,5 +17,12 @@ export async function findPublicEvent(db: Kysely<Database>, id: string): Promise
 export function headerFrom(row: PublicEvent): EventHeader {
   const { location_lat: lat, location_lng: lng } = row;
   const locationPosition = lat === null || lng === null ? null : { lat, lng };
-  return { title: row.title, location: row.location, locationPosition, allerAt: row.aller_at, retourAt: row.retour_at };
+  return {
+    title: row.title,
+    location: row.location,
+    locationPosition,
+    allerAt: row.aller_at,
+    retourAt: row.retour_at,
+    description: row.description,
+  };
 }

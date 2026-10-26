@@ -191,16 +191,20 @@ export type EditAnswer =
   | { kind: "refused"; reason: "invalid" | "eventNotFound" }
   | { kind: "problem"; problem: ActionProblem };
 
-/** A header with its position, `null` or one: the server always sends it. */
+/**
+ * A header with its position, `null` or one: the server always sends it. Its description is a
+ * text, `null`, or absent, from a server before the description: the form then loads none.
+ */
 function isHeader(value: unknown): value is EventHeader {
   if (typeof value !== "object" || value === null) return false;
-  const { title, location, locationPosition, allerAt, retourAt } = value as Record<string, unknown>;
+  const { title, location, locationPosition, allerAt, retourAt, description } = value as Record<string, unknown>;
   return (
     typeof title === "string" &&
     typeof location === "string" &&
     !("error" in positionOf(locationPosition)) &&
     isWallClock(allerAt) &&
-    (retourAt === null || isWallClock(retourAt))
+    (retourAt === null || isWallClock(retourAt)) &&
+    (description === undefined || description === null || typeof description === "string")
   );
 }
 
