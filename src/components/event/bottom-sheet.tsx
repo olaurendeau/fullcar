@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { HidesPage } from "./hidden-page";
 import { keepPagePlace } from "./page-scroll";
-import { MARGIN, sheetFrame, type SheetFrame, type SheetFrameInput } from "./sheet-frame";
+import { MARGIN, revealBy, sheetFrame, type SheetFrame, type SheetFrameInput } from "./sheet-frame";
 
 /**
  * What Radix's FocusScope does when a sheet's content mounts: the first element the Tab key
@@ -50,6 +50,25 @@ function keepOpenForList(event: KeyboardEvent) {
   const from = event.target;
   const listOpen = from instanceof Element && from.getAttribute("role") === "combobox" && from.getAttribute("aria-expanded") === "true";
   if (listOpen) event.preventDefault();
+}
+
+/**
+ * Scrolls the sheet just enough for what has the focus in its body to be whole between the
+ * header and the bar, by their `scroll-padding` (rule 5). The browser does it as the focus
+ * moves, but not as the sheet shrinks or moves around it: a keyboard that opens, a window that
+ * gets shorter, a bar that grows.
+ */
+function revealFocus(sheet: HTMLElement) {
+  const focused = document.activeElement;
+  if (!(focused instanceof HTMLElement) || focused === sheet || !sheet.contains(focused)) return;
+  if (focused.closest('[data-slot="sheet-footer"]')) return;
+  const style = getComputedStyle(sheet);
+  // `auto` before the sheet's frame is read: none.
+  const padding = (value: string) => parseFloat(value) || 0;
+  const top = sheet.getBoundingClientRect().top + sheet.clientTop;
+  const space = { top: top + padding(style.scrollPaddingTop), bottom: top + sheet.clientHeight - padding(style.scrollPaddingBottom) };
+  const by = revealBy(focused.getBoundingClientRect(), space);
+  if (by !== 0) sheet.scrollTop += by;
 }
 
 /** Where `SheetBar` puts what it is given: the bar's messages, and its buttons above « Fermer ». */
@@ -201,6 +220,11 @@ export function BottomSheet({
   const area = useVisibleArea(open);
   const frame = area && sheetFrame({ ...area, fullHeight });
   const fixed = useFixedHeights(header, bar);
+  // The sheet moved or shrank, or its header or bar grew: what has the focus stays in view (rule 5).
+  const space = frame && [frame.top, frame.height, frame.low, fixed.header, fixed.bar].join();
+  useLayoutEffect(() => {
+    if (open && space && content.current) revealFocus(content.current);
+  }, [open, space]);
   // Where the page was as the sheet opened, moved by what the page scrolls itself since: Safari
   // may scroll it to show a field (rule 7, v4.6-15), /admin to keep its board in place (O1.11).
   const pageAt = useRef<ReturnType<typeof keepPagePlace> | null>(null);

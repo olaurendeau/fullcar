@@ -61,3 +61,20 @@ export function sheetFrame({ viewport, innerHeight, width, fullHeight }: SheetFr
     low: height < LOW_HEIGHT,
   };
 }
+
+/** A box's top and bottom, from the top of the window, px. */
+export interface Span {
+  top: number;
+  bottom: number;
+}
+
+/**
+ * How far the sheet scrolls, px, for `box`, what has the focus, to be whole in `space`, what the
+ * header and the bar leave of it with their margins (rule 5): 0 when it is, negative upwards.
+ * Taller than the space, its top shows.
+ */
+export function revealBy(box: Span, space: Span): number {
+  if (box.top < space.top) return box.top - space.top;
+  if (box.bottom > space.bottom) return Math.min(box.bottom - space.bottom, box.top - space.top);
+  return 0;
+}
