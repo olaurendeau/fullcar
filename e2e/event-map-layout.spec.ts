@@ -42,7 +42,7 @@ function textSizes(map: Locator): Promise<number[]> {
   });
 }
 
-const GROUP = "2 voitures : Nina, Paul";
+const GROUP = "2 voitures : Nina, Paul, 3 places libres";
 
 /** Le conteneur, whose header is « Carte ». */
 const containerOf = (page: Page) => page.getByRole("tabpanel").getByRole("button", { name: "Carte", exact: true }).locator("xpath=..");
@@ -83,7 +83,7 @@ for (const [where, device, height, width] of [
 
       await map.getByRole("button", { name: GROUP, exact: true }).click();
       const bubble = map.getByRole("group", { name: GROUP, exact: true });
-      await expect(bubble.getByRole("button")).toHaveText(["Voiture de Nina", "Voiture de Paul", "Fermer"]);
+      await expect(bubble.getByRole("button")).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
       for (const side of await sides(bubble.getByRole("button"))) expect(side).toBeGreaterThanOrEqual(44);
       expect(await sideways(page)).toBe(0);
 

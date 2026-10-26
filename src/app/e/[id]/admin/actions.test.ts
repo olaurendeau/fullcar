@@ -45,6 +45,7 @@ function loadSeeded(token: (seeded: string) => unknown, id: (seeded: string) => 
 const EMPTY_PANEL = {
   state: "panel",
   legs: [{ leg: "aller", coverage: { withoutCar: 0, freeSeats: 0 }, carCount: 0, withoutCar: [], carsWithoutPhone: [] }],
+  persons: [],
 };
 
 /** A database whose every use fails, with what a Postgres error carries: `values` among it. */
@@ -83,6 +84,17 @@ describe("loadOrganiserPanel", () => {
             carsWithoutPhone: [],
           },
           { leg: "retour", coverage: { withoutCar: 0, freeSeats: 0 }, carCount: 0, withoutCar: [], carsWithoutPhone: [] },
+        ],
+        // RP4.2: C again, without the number.
+        persons: [
+          {
+            id: c,
+            firstName: "C",
+            cells: [
+              { leg: "aller", state: { kind: "withoutCar" } },
+              { leg: "retour", state: { kind: "notConcerned" } },
+            ],
+          },
         ],
       });
     });

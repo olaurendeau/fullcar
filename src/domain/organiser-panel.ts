@@ -2,16 +2,27 @@
  * The organiser area's panel (epic #154): per leg, its coverage, its persons without a
  * car with the numbers DO1 lets the organiser see, and its cars whose driver has no
  * number. Built from what `withOrganiserPhones` gives, the only place that sets `phone`;
- * a car whose driver has a number is only counted (O3.4). Plain data, for the browser:
+ * a car whose driver has a number is only counted (O3.4). Then every person of the event,
+ * without any number (epic #645, RP4.2). Plain data, for the browser:
  * types only from `phone-visibility.ts`, which the browser cannot import.
  */
+import { buildBoard, type BoardRows } from "./board";
 import { coverage, type Coverage } from "./coverage";
+import { deviceMatrix, type MatrixRow } from "./device-matrix";
 import type { Leg } from "./leg";
 import type { OrganiserLegBoard } from "./phone-visibility";
 import type { WallTime } from "./wall-clock";
 
 /** What the server answers to the organiser area: « invalid » and nothing else, or the panel (#3 C4.9, amended). */
-export type OrganiserPanelAnswer = { state: "invalid" } | { state: "panel"; legs: OrganiserLeg[] };
+export type OrganiserPanelAnswer =
+  | { state: "invalid" }
+  | { state: "panel"; legs: OrganiserLeg[]; persons: OrganiserPerson[] };
+
+/**
+ * A person of the event, for « Personnes inscrites » (epic #645, RP4.2): an id, a first name
+ * and a cell per leg, those of the device's matrix. Never a number (Q2 = a).
+ */
+export type OrganiserPerson = MatrixRow;
 
 export interface OrganiserLeg {
   leg: Leg;
@@ -52,6 +63,16 @@ export function organiserPanel(legs: OrganiserLegBoard[]): OrganiserLeg[] {
         free: car.freeSeats,
       })),
   }));
+}
+
+/**
+ * Every person of `rows`, in the event's order, those who do no leg included, with a cell
+ * per leg of `legs`: the matrix of a device that would hold them all. `deviceMatrix` copies
+ * each field by name, so that a number a row might carry stays behind.
+ */
+export function organiserPersons(rows: BoardRows, legs: readonly Leg[]): OrganiserPerson[] {
+  const everybody = new Set(rows.persons.map((person) => person.id));
+  return deviceMatrix(buildBoard(rows, legs, everybody));
 }
 
 /** No car and nobody without one: the leg shows the board's empty state (O1.5). */

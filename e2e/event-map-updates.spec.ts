@@ -97,6 +97,8 @@ test("CA1.7: a car added at an action's answer, then gone at the next: the map s
     OSM_LINK,
   ]);
   await expect(region(page).locator("[data-kept]")).toHaveAccessibleName("Voiture de Marc, départ : Place de la mairie, 2 places libres");
+  // #655: its badge on the same element.
+  await expect(region(page).locator("[data-kept] [data-map-seats]")).toHaveText("2");
 
   // Sophie's car gone, the answer of « Annuler » says so.
   await db.deleteFrom("ride").where("id", "=", sophie).execute();
@@ -105,6 +107,7 @@ test("CA1.7: a car added at an action's answer, then gone at the next: the map s
   await expect(points(region(page))).toHaveCount(1);
   await expect(toggle(panel)).toHaveAttribute("aria-expanded", "true");
   await expect(region(page).locator("[data-kept]")).toHaveAccessibleName("Voiture de Marc, départ : Place de la mairie, 3 places libres");
+  await expect(region(page).locator("[data-kept] [data-map-seats]")).toHaveText("3");
 });
 
 test("CA1.3: folded, the window resized, then a car added: never framed in 0 × 0 px, the map, opened again, holds every point", async ({ db, page, placed }) => {
@@ -152,6 +155,7 @@ onAdmin("CA1.7: after « Actualiser », a point keeps the focus through its free
     await zoePoint("3 places libres").focus();
   });
   await expect(zoePoint("2 places libres")).toBeFocused();
+  await expect(zoePoint("2 places libres").locator("[data-map-seats]")).toHaveText("2");
 
   // A car added between the two in the cards' order: its point in its place, the focus stays, Tab goes on to it.
   await refreshWhile(page, seededEvent, async () => {
@@ -189,22 +193,25 @@ onAdmin("CA1.7: the open bubble stays through its cars' free seats, the focus on
   // Opened again during the read, Paul's button focused.
   await refreshWhile(page, seededEvent, async () => {
     await seedPlacement(db, { personId: (await seedPerson(db, id, { firstName: "Léo" })).id, eventId: id, leg: "aller", rideId: paul });
-    await group("2 voitures : Nina, Paul").click();
+    await group("2 voitures : Nina, Paul, 6 places libres").click();
     await page.keyboard.press("Tab");
     await expect(bubble.getByRole("button", { name: "Voiture de Paul, départ : Église, 3 places libres", exact: true })).toBeFocused();
   });
   await expect(bubble.getByRole("button", { name: "Voiture de Paul, départ : Église, 2 places libres", exact: true })).toBeFocused();
-  await expect(group("2 voitures : Nina, Paul")).toHaveAttribute("aria-expanded", "true");
+  await expect(group("2 voitures : Nina, Paul, 5 places libres")).toHaveAttribute("aria-expanded", "true");
+  // #655: the badges say it too, the group's the sum, 3 + 2.
+  await expect(group("2 voitures : Nina, Paul, 5 places libres").locator("[data-map-seats]")).toHaveText("5");
+  await expect(bubble.getByRole("button", { name: /^Voiture de Paul/ }).locator("[data-map-seats]")).toHaveText("2");
 
   // Léa, 10 m from Nina: the bubble's list changes, it closes, and the point of the three has the focus.
   await refreshWhile(page, seededEvent, async () => {
     await seedCar(db, id, "Léa", { position: around(nina, { north: 10 }), location: "Église", departureTime: "09:00:00" });
-    await group("2 voitures : Nina, Paul").click();
+    await group("2 voitures : Nina, Paul, 5 places libres").click();
     await expect(bubble).toBeVisible();
   });
-  await expect(group("3 voitures : Nina, Paul, Léa")).toBeFocused();
+  await expect(group("3 voitures : Nina, Paul, Léa, 8 places libres")).toBeFocused();
   await expect(bubble).toHaveCount(0);
-  await expect(group("3 voitures : Nina, Paul, Léa")).toHaveAttribute("aria-expanded", "false");
+  await expect(group("3 voitures : Nina, Paul, Léa, 8 places libres")).toHaveAttribute("aria-expanded", "false");
   await tilesLoaded(page);
 });
 
