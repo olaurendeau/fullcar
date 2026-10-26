@@ -23,13 +23,15 @@ export interface CellSending extends FromSheet {
  * Declares one of the device's persons without a car, or not concerned, on a leg
  * (`setPersonLeg`). `null` once done; `noRetour` when the leg is gone, which closes the sheet
  * as the bar says why (rule 9), or, out of a car or not doing the retour, that the retour is
- * gone, an information (decision 45); the problem to show otherwise; `undefined` when a change from
- * this sheet is already on its way (#167). A problem the sheet no longer shows goes to the bar.
+ * gone, an information (decision 45); `personGone` when the person was removed from the event
+ * meanwhile, which closes it too, the bar naming her (RP5.4); the problem to show otherwise;
+ * `undefined` when a change from this sheet is already on its way (#167). A problem the sheet
+ * no longer shows goes to the bar.
  */
 export type SetPersonLeg = (
   change: { personId: string; leg: Leg; kind: "withoutCar" | "notConcerned" },
   sheet: CellSending,
-) => Promise<BarProblem | "noRetour" | null | undefined>;
+) => Promise<BarProblem | "noRetour" | "personGone" | null | undefined>;
 
 /**
  * The sheet of a cell of « Vos inscriptions » (#89, « Les cellules »): « {prénom} · {leg} »,
@@ -95,9 +97,12 @@ export function CellSheet({
     const sheet = { ...sends(), cell, notDone: cellNotDone(action, cell) };
     const outcome = await setPersonLeg(change, sheet);
     if (outcome === undefined) return;
-    if (sheet.inSheet()) setProblem(outcome === "noRetour" ? null : outcome);
-    // Done, or its leg gone (rule 9): it closes, the focus back on the cell, shown until then.
-    if (outcome === null || outcome === "noRetour") onOpenChange(false);
+    const closes = outcome === null || outcome === "noRetour" || outcome === "personGone";
+    if (sheet.inSheet()) setProblem(closes ? null : outcome);
+    // Her row gone with her (RP5.4): the focus falls back as the bar's rule 8 says, never on <body>.
+    if (outcome === "personGone") afterClose.current = () => focusFirstShown([() => focusCell(person.id, leg)]);
+    // Done, its leg gone (rule 9), or the person gone: it closes, the focus back on the cell, shown until then.
+    if (closes) onOpenChange(false);
   }
 
   function seeCar(rideId: string) {

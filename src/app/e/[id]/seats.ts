@@ -5,7 +5,7 @@ import { lockRide, ridePassengers } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
-import { devicePersonIds } from "@/domain/device";
+import { deviceAccess } from "@/domain/device";
 import { LEGS, type Leg } from "@/domain/leg";
 import { isPublicId } from "@/domain/public-id";
 import { seatsDecision } from "@/domain/ride";
@@ -17,6 +17,8 @@ import { lockLegs } from "./retour";
  * - `noRetour`: the car is on the retour, and the event no longer has one (decision 40).
  * - `invalid`: a request no page sends (nobody asked, an id or a leg malformed).
  * - `forbidden`: someone asked is not a person of the device (C2.4).
+ * - `personGone`: with a well-formed token, someone asked, `goneIds`, is no longer a person of
+ *   the event: removed since the page showed her (RP5.4). Nobody is placed.
  * - `rideGone`: the car is no longer offered on that leg (C6.8).
  * - `alreadyInCar`: someone asked is in another car on the leg, or drives on it (C5.6).
  * - `seatTaken`: one person asked, and the last seat was just taken (C5.7).
@@ -25,7 +27,8 @@ import { lockLegs } from "./retour";
 export type SeatsOutcome =
   | { ok: true }
   | { ok: false; error: "noRetour" | "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" }
-  | { ok: false; error: "notEnoughSeats"; freeSeats: number };
+  | { ok: false; error: "notEnoughSeats"; freeSeats: number }
+  | { ok: false; error: "personGone"; goneIds: string[] };
 
 /** The outcome, and the event's state as the device now sees it, refusal or not. */
 export type TakeSeatsResult = SeatsOutcome & { state: EventState };
@@ -60,12 +63,17 @@ async function placeInRide(
 ): Promise<Written<SeatsOutcome>> {
   const legs = await lockLegs(trx, eventId, [leg]);
   if (!legs.ok) return legs;
-  const device = new Set(devicePersonIds(token, await readTokenHolders(trx, eventId)));
-  if (!personIds.every((id) => device.has(id))) return { ok: false, error: "forbidden" };
+  const access = deviceAccess(token, await readTokenHolders(trx, eventId), personIds);
+  if (access.kind === "forbidden") return { ok: false, error: "forbidden" };
+  if (access.kind === "personGone") return { ok: false, error: "personGone", goneIds: access.goneIds };
   const ride = { id: rideId, eventId, leg };
   const locked = await lockRide(trx, ride);
   if (locked === undefined) return { ok: false, error: "rideGone" };
-  await lockPersons(trx, eventId, personIds);
+  // Removed after the read, while this waited for her Person: no Placement to a person who is
+  // no longer there, and nobody else is placed either (all or nothing, RP5.4).
+  const present = new Set(await lockPersons(trx, eventId, personIds));
+  const goneIds = personIds.filter((id) => !present.has(id));
+  if (goneIds.length > 0) return { ok: false, error: "personGone", goneIds };
   const passengers = await ridePassengers(trx, ride);
   const decision = seatsDecision({
     seats: locked.seats,
@@ -119,7 +127,9 @@ type Before = (typeof BEFORE)[number];
  * - `undoneIds`: the persons given back their state before; nobody when the car is gone.
  * - `invalid`: a request no page sends (nobody asked, someone twice, an id, a leg or a state
  *   before malformed).
- * - `forbidden`: someone asked is not a person of the device (C7.3).
+ * - `forbidden`: someone asked is a person of another device, or the token is not one (C7.3).
+ *   Someone no longer a person of the event, removed since, is left out instead, as someone no
+ *   longer in the car is (C7.4, RP5.4); nobody left to give back, `undoneIds` is empty.
  * - `noRetour`: the car was on the retour, and the event no longer has one: nobody is
  *   left to give back, and the page says so (decision 45).
  */
@@ -168,8 +178,9 @@ async function giveBackSeats(
   const legs = await lockLegs(trx, eventId, [leg]);
   if (!legs.ok) return legs;
   const personIds = persons.map(({ personId }) => personId);
-  const device = new Set(devicePersonIds(token, await readTokenHolders(trx, eventId)));
-  if (!personIds.every((id) => device.has(id))) return { ok: false, error: "forbidden" };
+  // Those removed since are in no car any more: the writes' filter on `ride_id` leaves them out.
+  const access = deviceAccess(token, await readTokenHolders(trx, eventId), personIds);
+  if (access.kind === "forbidden") return { ok: false, error: "forbidden" };
   const ride = { id: rideId, eventId, leg };
   // Gone, its passengers are already without a car (`SET NULL`): nobody to give back.
   if ((await lockRide(trx, ride)) === undefined) return { ok: true, undoneIds: [] };

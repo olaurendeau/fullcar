@@ -81,6 +81,17 @@ describe("offerRide (action)", () => {
     });
   });
 
+  it("RP5.4: personGone carries who is gone and the state, and nothing is written", async () => {
+    await inTransaction(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const lea = await seedPerson(trx, eventId, { firstName: "Léa" });
+      const gone = randomUUID();
+      const result = await offerRide(eventId, lea.token, anOffer({ driver: { kind: "device", personId: lea.id }, passengerIds: [gone] }));
+      expect(result).toEqual({ ok: false, error: "personGone", goneIds: [gone], state: await readEventState(trx, eventId, lea.token) });
+      expect(await countsOf(trx, eventId)).toEqual({ rides: 0, persons: 1 });
+    });
+  });
+
   // C11.6, as takeSeats: the page shows the state after a refusal, but keeps its form on a field error.
   it("a refusal carries the state read after the commit, a field error does not", async () => {
     await withCommittedEvent(async (db, eventId) => {
