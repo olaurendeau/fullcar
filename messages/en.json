@@ -249,6 +249,7 @@
       "passengersChanged": "Someone took or left a seat in the meantime: edit the car again.",
       "forbidden": "This device cannot make this change: reload the page.",
       "eventNotFound": "This event can no longer be found: it may have been deleted.",
+      "eventEnded": "This event is over: its sign-ups have been erased.",
       "noRetour": "This event no longer has a return trip.",
       "editErrors": "A field was not accepted: use “Edit the event” again.",
       "eventChanged": "It had just been changed from another device: the page shows the saved version.",

@@ -12,7 +12,7 @@ import { eventLegs, type Leg } from "@/domain/leg";
  */
 
 /** Why a write on a leg was not even tried. */
-export type LegRefusal = "eventNotFound" | "noRetour";
+export type LegRefusal = "eventNotFound" | "eventEnded" | "noRetour";
 
 export type LockedLegs = { ok: true; legs: Leg[] } | { ok: false; error: LegRefusal };
 
@@ -22,11 +22,14 @@ export type LockedLegs = { ok: true; legs: Leg[] } | { ok: false; error: LegRefu
  * `rideGone` and `forbidden` included (decision 40): the cause is the retour, not the car.
  * Only a malformed request (`invalid`) comes before it, wherever it is read: before the
  * transaction, or in it after this lock, as `addPerson` and `setPersonLeg` do; and the
- * field errors, read before the transaction. Gives the event's legs.
+ * field errors, read before the transaction. Before `noRetour`, an anonymised event gives
+ * `eventEnded` (#588, `Actions.why.eventEnded`): a write that waited for the purge sees
+ * `anonymised_at`. Gives the event's legs.
  */
 export async function lockLegs(trx: Kysely<Database>, eventId: string, touched: readonly Leg[]): Promise<LockedLegs> {
   const event = await lockEvent(trx, eventId, "share");
   if (event === undefined) return { ok: false, error: "eventNotFound" };
+  if (event.anonymised_at !== null) return { ok: false, error: "eventEnded" };
   const legs = eventLegs(event.retour_at);
   return touched.every((leg) => legs.includes(leg)) ? { ok: true, legs } : { ok: false, error: "noRetour" };
 }

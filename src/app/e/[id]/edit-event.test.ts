@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findEventById, writeEventFields } from "@/db/events";
+import { anonymiseEvent } from "@/db/day-thirty";
+import { findEventById, lockEvent, writeEventFields } from "@/db/events";
 import { countLegRows, type LegCounts } from "@/db/legs";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
@@ -624,6 +625,38 @@ describe("editEvent", () => {
           () => editEvent(db, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
         );
         expect(answer).toEqual({ ok: false, error: "eventNotFound" });
+      });
+    });
+  });
+
+  describe("#588: an anonymised event", () => {
+    it("answers eventEnded, whatever the token, and writes nothing", async () => {
+      await withRollback(async (trx) => {
+        const { id, token } = await seedEvent(trx);
+        await anonymiseEvent(trx, id);
+        const before = await rowsOf(trx, id);
+        for (const sent of [token, newAdminToken(), undefined]) {
+          expect(await editEvent(trx, id, sent, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE)).toEqual({
+            ok: false,
+            error: "eventEnded",
+          });
+        }
+        expect(await rowsOf(trx, id)).toEqual(before);
+      });
+    });
+
+    it("answers eventEnded for an event anonymised while the change waited for its lock (committed data)", async () => {
+      await withCommittedEvent(async (db, eventId, token) => {
+        const answer = await whileHeld(
+          db,
+          async (trx) => {
+            await lockEvent(trx, eventId, "noKeyUpdate");
+            await anonymiseEvent(trx, eventId);
+          },
+          () => editEvent(db, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
+        );
+        expect(answer).toEqual({ ok: false, error: "eventEnded" });
+        expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
       });
     });
   });

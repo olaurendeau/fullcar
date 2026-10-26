@@ -415,6 +415,36 @@ describe("personGone: a person removed from the event meanwhile", () => {
   });
 });
 
+// #588 (remove-person v2, decision 13): any write on an anonymised event, `Actions.why.eventEnded`.
+describe("eventEnded: a write on an anonymised event", () => {
+  const readme = readFileSync(new URL("../../../docs/design/remove-person/README.md", import.meta.url), "utf8").split("\n");
+  const row = readme.find((line) => line.startsWith("| `Actions.why.eventEnded` |"))?.split(" | ");
+  const [fr, en] = [row?.[1] ?? "", row?.[2] ?? ""];
+
+  it("reads its words in the design's table", () => {
+    expect(fr).toBe("Cet événement est terminé : ses inscriptions ont été effacées.");
+    expect(en).toBe("This event is over: its sign-ups have been erased.");
+  });
+
+  it("says them after what was not done, whatever the write", () => {
+    const cell = { firstName: "Tom", leg: "aller" as const, state: { kind: "withoutCar" as const } };
+    const cases: [NotDone, Why][] = [
+      [{ kind: "seats", names: ["Tom"], driver: "Claire" }, whyOf("eventEnded")],
+      [cellNotDone("notConcerned", cell), cellWhy("eventEnded", cell)],
+      [{ kind: "editPerson", firstName: "Tom", fields: "phone" }, personWhy("eventEnded", "Tom")],
+      [{ kind: "offerRide", driver: "Tom", legs: "aller" }, offerWhy("eventEnded", "Tom", [])],
+      [{ kind: "leave", names: ["Tom"], driver: "Claire" }, undoWhy("eventEnded")],
+      [{ kind: "editEvent" }, whyOf("eventEnded")],
+    ];
+    for (const [notDone, why] of cases) {
+      expect(why).toEqual({ kind: "eventEnded" });
+      for (const [locale, text] of [["fr", fr], ["en", en]] as const) {
+        expect(failureText(words(locale), notDone, why).endsWith(` ${text}`)).toBe(true);
+      }
+    }
+  });
+});
+
 describe("whyOf", () => {
   it("gives `invalid` and `idTaken` the generic reason, and keeps the others", () => {
     for (const error of ["invalid", "idTaken", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });

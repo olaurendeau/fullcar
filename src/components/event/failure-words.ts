@@ -33,6 +33,7 @@ type Plain =
   | "passengersChanged"
   | "forbidden"
   | "eventNotFound"
+  | "eventEnded"
   | "noRetour"
   | "editErrors"
   | "eventChanged"
@@ -56,7 +57,8 @@ export type Why =
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
  * only a forged request or a collision of ids gives, take the generic one. `noRetour`, the
- * retour removed meanwhile, says so (`Actions.why.noRetour`, decision 40).
+ * retour removed meanwhile, says so (`Actions.why.noRetour`, decision 40). `eventEnded`, an
+ * anonymised event, too, for any write (`Actions.why.eventEnded`, #588).
  */
 export function whyOf(error: Plain | "invalid" | "idTaken"): Why {
   return { kind: error === "invalid" || error === "idTaken" ? "failed" : error };
@@ -75,7 +77,7 @@ export function personGone(sent: readonly { id: string; firstName: string }[], g
  * Why « Annuler » was not done (C5.10): offline or on an error, `invalid` included, the reason
  * names the button to use again (`retryUndo`); a refusal, as `whyOf` gives it.
  */
-export function undoWhy(error: "offline" | "failed" | "invalid" | "forbidden" | "eventNotFound" | "noRetour"): Why {
+export function undoWhy(error: "offline" | "failed" | "invalid" | "forbidden" | "eventNotFound" | "eventEnded" | "noRetour"): Why {
   if (error === "offline" || error === "failed" || error === "invalid") return { kind: "retryUndo", problem: error === "offline" ? "offline" : "failed" };
   return whyOf(error);
 }
