@@ -1,11 +1,11 @@
 # Vue organisateur
 
 - Artifact : https://claude.ai/artifact/6WQ2cPNX5cxh4UAA8hqtJF
-- Epic : https://github.com/olaurendeau/fullcar/issues/154
+- Epic : https://github.com/olaurendeau/fullcar/issues/154 ; v3.4 et v3.5 (replier les legs) : https://github.com/olaurendeau/fullcar/issues/648
 - Origine : revue de design de l'humain sur #66 (section « Administrateur (vue globale) »), décision https://github.com/olaurendeau/fullcar/issues/66#issuecomment-6250124984
 - Tableau des participants dessiné dessous : #66 v4.1 (`event-board`, approuvée)
 - Page : `index.html` (autonome ; maquettes à 360 px de large, et des navigateurs de 1280 px montrés à 75 % et à 55 %)
-- Version : v3.3.9 (approuvée en revue de design ; v3.3.9 : M2.8 reformulé, [#442](https://github.com/olaurendeau/fullcar/issues/442) ; v3.3.8 : sept suggestions de la revue de la v3.3.7 appliquées, tri du coordinateur sur #372 ; v3.3.7 : la décision 44 dit l'exception du propriétaire sur #267, et M1.1 et M1.3 sont reformulés après la relecture de PR #376, [#372](https://github.com/olaurendeau/fullcar/issues/372) ; v3.3.6 : approuvée en v3.3.5 ; la ligne « Envoi en cours… » et cinq précisions de test, tri du coordinateur sur #250 ; v3.3.5 : revue de la v3.3.4 appliquée ; v3.3.4 : approuvée en v3.3.3, dix suggestions de la revue appliquées ; v3.3.3 : revue de la v3.3.2 ; v3.3.2 : revue de la v3.3.1 ; v3.3.1 : DE1 et DE2 décidées par le propriétaire le 2026-10-20 ; v3.3 : modifier l'événement ; v3.2.2 : la carte se replie)
+- Version : v3.5 (à relire ; les legs se replient, [#648](https://github.com/olaurendeau/fullcar/issues/648) ; v3.4 : modifications demandées en revue, réponses du propriétaire Q1 à Q3 = a ; v3.3.9 approuvée en revue de design ; v3.3.9 : M2.8 reformulé, [#442](https://github.com/olaurendeau/fullcar/issues/442) ; v3.3.8 : sept suggestions de la revue de la v3.3.7 appliquées, tri du coordinateur sur #372 ; v3.3.7 : la décision 44 dit l'exception du propriétaire sur #267, et M1.1 et M1.3 sont reformulés après la relecture de PR #376, [#372](https://github.com/olaurendeau/fullcar/issues/372) ; v3.3.6 : approuvée en v3.3.5 ; la ligne « Envoi en cours… » et cinq précisions de test, tri du coordinateur sur #250 ; v3.3.5 : revue de la v3.3.4 appliquée ; v3.3.4 : approuvée en v3.3.3, dix suggestions de la revue appliquées ; v3.3.3 : revue de la v3.3.2 ; v3.3.2 : revue de la v3.3.1 ; v3.3.1 : DE1 et DE2 décidées par le propriétaire le 2026-10-20 ; v3.3 : modifier l'événement ; v3.2.2 : la carte se replie)
 - Epic de la v3.3 (modifier l'événement) : https://github.com/olaurendeau/fullcar/issues/250
 
 ## Décisions de l'humain (2026-10-18)
@@ -18,6 +18,291 @@
 - **DE1 = (b) : supprimer un retour qui a des voitures ou des personnes.** C'est permis, après une confirmation qui donne les nombres comptés par le serveur et dit que personne n'est prévenu. Les Rides et les Placements du retour sont supprimés ; les personnes restent.
 - **DE2 = (a) : ajouter un retour.** Personne n'y est placé ; chacun déclare lui-même s'il fait le retour.
 
+## Replier les legs (v3.4, revue en v3.5)
+
+Demande du propriétaire (2026-10-25, [#648](https://github.com/olaurendeau/fullcar/issues/648)) : « L'espace organisateur est trop chargé au premier affichage, je pense qu'on devrait replier les résumés "aller" / "retour". » Les « résumés » sont les **sections par leg** (aller, retour) : leur bandeau et leurs deux listes.
+
+**Réponses du propriétaire (25/10/2026, #648), toutes conformes à la recommandation :** Q1 = (a), les vignettes sont retirées ; Q2 = (a), le repli de tout l'espace organisateur (O8) reste ; Q3 = (a), l'état des legs est gardé en mémoire seulement.
+
+**Décision du coordinateur (#648) :** la section « Personnes inscrites » de #645 est elle aussi repliée par défaut, avec un bouton de titre sur toute la largeur, pour ne pas reperdre le gain de #648. Elle vient après les sections des legs (RP4.1). Ses mots, son contenu, son repli et ses critères sont ceux de `remove-person` ; cette page la dessine seulement repliée, à sa place, pour les mesures et l'ordre au clavier.
+
+**Dessiné contre la cible de #581**, et non contre le panneau d'aujourd'hui : la maquette `organizer-account` v4 retire le lien d'organisateur et « Gardez ce lien », met le lien « Mes événements » au-dessus du panneau quand une session est ouverte, et ajoute l'avis « Confirmez votre adresse » pour un événement en attente (OA2.1, OA7.3, OA7.8). Les maquettes des sections plus anciennes de la page montrent encore le lien d'organisateur et les vignettes : pour l'ordre du panneau, cette section et `organizer-account` v4 font foi.
+
+**Un mot.** Le glossaire réserve « Carte » à la carte d'un leg. Cette section dit donc « l'espace organisateur replié (O8) », jamais « la carte », pour le repli de la v3.2.
+
+### Le problème, mesuré
+
+L'organisateur est souvent un parent qui vient d'abord au tableau. À chaque visite, à 360 px, il fait défiler les deux sections, chaque prénom et chaque voiture sans numéro, avant d'atteindre l'en-tête de l'événement et les onglets du tableau. Au premier écran, il ne voit que le lien à partager et le haut de l'aller : avec une session, la section Retour commence à 973 px, sous le pli. Les sections font 68 % de la hauteur du panneau sur l'exemple (474 et 444 px sur 1 349), et 79 % sur l'événement de O5.9 (1 041 et 539 px sur 2 011).
+
+| 360 × 780, premier affichage, espace organisateur déplié | inscrits | panneau | haut des onglets du tableau | écrans de 780 px jusqu'au bas des onglets |
+|---|---|---|---|---|
+| aujourd'hui (v3.3.9 : lien d'organisateur, « Gardez ce lien ») | exemple | 1 708 px | 1 894 px | 2,5 |
+| cible v4, avec une session | exemple | 1 349 px | 1 603 px | 2,1 |
+| cible v4, en attente (« Nous avons envoyé un lien… ») | exemple | 1 659 px | 1 845 px | 2,4 |
+| cible v4, avec une session | 60 personnes (O5.9) | 2 011 px | 2 265 px | 3,0 |
+| cible v4, en attente | 60 personnes (O5.9) | 2 321 px | 2 507 px | 3,3 |
+| cible v4, avec une session | événement vide | 773 px | 1 027 px | 1,4 |
+| **v3.5, avec une session** | tous | **458 px** | **712 px** | **0,98** |
+| **v3.5, en attente** | tous | **768 px** | **954 px** | **1,3** |
+| **v3.5 + « Personnes inscrites » repliée (#645), avec une session** | tous | **523 px** | **777 px** | **1,07** |
+| **v3.5 + « Personnes inscrites » repliée, en attente** | tous | **833 px** | **1 019 px** | **1,4** |
+| avec les vignettes (Q1 = b, écartée), avec une session | exemple, 60 personnes (événement vide : pas de vignettes, 458 px) | 574 px | 828 px | 1,1 |
+| espace organisateur replié (v3.2, inchangé), avec une session | tous | 128 px | 382 px | 0,56 |
+
+« Personnes inscrites » repliée ajoute 65 px à 360 px : la bordure, 16 px, la ligne de son bouton (32 px), et les 16 px entre deux sections. Dépliée, elle mesure 546 px (#648).
+
+À 1280 × 800, avec une session : panneau de 756 px et onglets à 994 px sur l'exemple, 1 323 et 1 561 px avec 60 personnes. En v3.5 : 371 et 609 px (411 et 581 px en attente, l'avis prenant la colonne de droite). Avec « Personnes inscrites » repliée, dans la colonne de gauche sous Aller (RP4.1) : 419 et 657 px (459 et 629 px en attente).
+
+**Comment c'est mesuré.** Chrome sans interface, sur les classes de la maquette, qui reprennent celles d'`admin-panel.tsx`, avec la police système de macOS. La page a l'espacement de `page.tsx` (`p-4 gap-6`). Avec une session, le lien « Mes événements » (44 px) est au-dessus du panneau. Entre le panneau et les onglets, il y a l'en-tête de l'événement : titre, lieu, deux dates. L'exemple est celui de la page : à l'aller, 2 sans voiture et une voiture sans numéro ; au retour, 4 sans voiture, et il manque 2 places. « 60 personnes » est l'événement de O5.9, listes arrêtées à 5 lignes. « Personnes inscrites » repliée est dessinée comme une section de leg repliée, sans ligne de résumé, d'après la décision du coordinateur. La police de l'image e2e Linux est plus large : ces nombres donnent un ordre de grandeur, ce ne sont pas des critères. Les critères (O9) disent ce qui ne dépend pas d'une police.
+
+### La proposition
+
+1. **Chaque section de leg est repliée au premier affichage.** Son titre est le bouton qui la déplie.
+2. **Repliée, elle montre le nom du leg, puis une ligne : la pastille ambre et les places**, c'est-à-dire les textes de l'ancienne vignette, et ceux du résumé de l'espace organisateur replié (O8.3). Ni date, ni bandeau, ni listes. Sa hauteur ne dépend plus du nombre d'inscrits : 71 px à 360 px.
+3. **Dépliée, c'est la section de la v3.1, inchangée** : date, bandeau, « Sans voiture », « Voitures sans numéro », 5 lignes puis « Afficher les {n} autres ».
+4. **Les vignettes sont retirées** (Q1 = a) : les sections repliées disent la même chose, à leur place, et elles s'ouvrent. **Ce que ça déplace** : sous 1024 px, la couverture n'est plus en tête du panneau. Elle vient après le lien à partager, l'avis « Confirmez votre adresse » s'il y a lieu, et « Modifier l'événement » : à 360 px, la section Aller commence à 367 px avec une session et à 609 px en attente, là où les vignettes commençaient à 149 et 81 px. Les deux résumés restent dans le premier écran dans les deux cas, et tout le panneau est plus court que les seules sections d'avant.
+5. **L'état n'est pas gardé** (Q3 = a) : les legs sont repliés à chaque affichage, et l'écran se souvient seulement, en mémoire, de ceux qu'on a dépliés, à travers les lectures, comme pour les listes (O5.7).
+6. **L'espace organisateur entier se replie toujours** (Q2 = a, O8), indépendamment des legs. Une fois les liens envoyés, le replier fait encore remonter les onglets de 712 à 382 px.
+7. **Après les legs vient « Personnes inscrites » (#645), repliée elle aussi** (décision du coordinateur). Elle n'est pas un leg : rien de cette section ne la règle, sauf l'ordre au clavier et les mots partagés du focus (O9.2, O9.9).
+
+### Le bouton du leg
+
+- Le h3 de la section contient un `<button type="button">` : le nom du leg (`Event.legs.*`, 16 px, `font-semibold`), puis le chevron, à 4 px du texte. C'est **le même motif que le bouton du titre de l'espace organisateur** (v3.2), dans le même panneau : chevron collé au texte, `ChevronDown` replié, `ChevronUp` déplié (lucide, `size-4`, `text-muted-foreground`, `aria-hidden`), remplacé, jamais tourné.
+- Il prend **toute la largeur de la section** (`w-full`) et fait 44 px de haut, avec les marges du bouton du titre de l'espace organisateur : `-my-1.5`, `-ml-2` sur le h3 et `pl-2` sur le bouton. Le même anneau de focus intérieur. Le nom reste aligné sur le reste de la section.
+- **Nom accessible** : exactement le nom du leg, « Aller » ou « Retour », dans les deux états. L'état est dit par `aria-expanded`. `aria-controls` désigne le conteneur du contenu de la section (date, bandeau, listes, ou l'état vide du tableau), présent dans le DOM dans les deux états et caché par `hidden` quand la section est repliée.
+- **Replié, le bouton est décrit par le résumé** (`aria-describedby`) : un lecteur d'écran qui passe d'un bouton à l'autre entend la couverture sans déplier. Déplié, le bouton n'a pas de description : le bandeau dit la même chose, juste dessous.
+- Le h3 perd son `tabIndex={-1}` : c'est le bouton qui reçoit le focus.
+- Le résumé n'est **pas dans le bouton**, comme pour l'espace organisateur replié : le nom du bouton ne change pas avec les données, et le résumé disparaît au dépli.
+
+### Replié
+
+- Sous le bouton, à 4 px (le `gap-1` du bloc du titre, où était la date), une ligne `flex flex-wrap items-center gap-x-2 gap-y-0.5`, 13 px, interligne 18 px :
+  - si N > 0, la pastille ambre (`Board.tabCount`, `no-car-pill.tsx`) ;
+  - les places : `Board.banner.everyoneSeated` (N = 0), `Admin.tile.free` (N > 0 et M ≥ N), ou `Admin.tile.missing` en `font-semibold` (M < N).
+  - leg vide : `Event.nobody` en `text-muted-foreground`, sans pastille.
+- C'est `LegGlance` sans le nom du leg. Le `textContent` du bouton suivi de celui du résumé est donc exactement celui de la ligne du même leg dans le résumé de l'espace organisateur replié : « Retour4 sans voitureIl manque 2 places ».
+- Pas de bouton, pas de lien, pas de région vivante, pas de fond ambre dans le résumé.
+- Tout le reste de la section est dans le conteneur `hidden` : ni vu, ni lu, ni atteint au clavier. Il **reste monté** : une liste dépliée par « Afficher les {n} autres » l'est encore quand la section est dépliée de nouveau.
+- Une section repliée mesure 71 px à 360 px : la bordure, 16 px, la ligne du bouton (32 px), 4 px, la ligne du résumé (18 px). Le pire cas à deux chiffres (20 sans voiture, il manque 12 places) tient sur une ligne dans la maquette. Avec une police plus large, ou à 125 %, la ligne passe à la ligne, et ce n'est pas un défaut.
+
+### Déplié
+
+- Le résumé disparaît. La date (`LegTime`), le bandeau (`CoverageBanner`, `live={false}`), puis les listes apparaissent, tels que la v3.1 les dessine (O1.1, O1.5, O1.6, O2, O3, O5.6).
+- Déplier une section ne change pas l'autre. À partir de 1024 px, déplier Aller ne déplace pas le bouton Retour, qui reste en haut de sa colonne (`items-start`).
+
+### L'état
+
+- Il vit dans l'écran (`screen-state.ts`), comme les listes dépliées (`expanded`, O5.7) : un ensemble de legs dépliés, **vide chaque fois que le panneau apparaît** (première lecture, « Réessayer » qui aboutit, rechargement).
+- Il survit à :
+  - toutes les lectures : « Actualiser », réussie ou non, et la relecture après une action du tableau ;
+  - le retrait du panneau (O1.10) : à la lecture qui le rend, chaque leg revient dans son état ;
+  - le repli puis le dépli de l'espace organisateur (O8) ;
+  - l'ouverture et la fermeture de « Modifier l'événement ».
+- Il est perdu au rechargement, en quittant la page et en fermant l'onglet. Un navigateur qui décharge un onglet resté en arrière-plan (Safari sur iOS) le recharge : les legs sont alors repliés. C'est accepté.
+- **Rien n'est écrit** dans `localStorage`, `sessionStorage` ou un cookie. La seule clé du panneau reste `fullcar:organiser-folded:{id}` (O8.5). O2.10 tient sans nouvel amendement.
+- Un retour ajouté (M4) arrive replié. Un retour supprimé (M3) emporte son état ; ajouté de nouveau, il arrive replié.
+- **La fraîcheur automatique**, quand elle viendra (« la page se recharge quand elle revient au premier plan », #67), devra être une lecture de l'écran, pas un rechargement du document. Sinon, l'organisateur qui revient d'un appel retrouverait le leg qu'il lisait replié.
+
+### Avec l'espace organisateur replié (O8)
+
+- **Les deux replis sont indépendants.** Espace organisateur replié : les sections sont cachées avec le reste (O8.2), et son résumé ne change pas (O8.3). Déplié : chaque section est dans son état.
+- Replier ou déplier l'espace organisateur ne change l'état d'aucun leg. Replier ou déplier un leg ne change pas l'état de l'espace organisateur, ni sa clé.
+- Un événement qu'on vient de créer arrive avec l'espace organisateur déplié (O8.5) et les legs repliés. Le lien à partager et l'avis « Confirmez votre adresse » sont visibles sans défilement (O4.2, OA2.1).
+- **Le repli de l'espace organisateur reste** (Q2 = a) : il cache aussi le lien à partager, l'avis et « Modifier l'événement ». À 360 px avec une session, il fait encore remonter les onglets de 330 px, de 712 à 382 px (395 px avec « Personnes inscrites » repliée, de 777 à 382 px). Le repli des legs s'occupe des listes, celui de l'espace organisateur des liens : un organisateur qui a envoyé ses liens le replie une fois, et l'appareil s'en souvient.
+
+### Avec les autres états
+
+- **Avant le panneau** (chargement, accès refusé, échec et « Réessayer », sans JavaScript) : aucun bouton de leg, aucun résumé. Rien ne change.
+- **« Actualiser »** : les legs gardent leur état ; un résumé replié prend les nombres de la nouvelle lecture. Pendant la lecture, rien ne bouge (O1.8).
+- **Actualisation impossible** : l'alerte sous la ligne du titre (O5.4) ; les legs gardent leur état et les nombres de la dernière lecture.
+- **Panneau retiré** (O1.10) : les sections partent, résumés compris, comme en v3.1 ; la phrase de retrait prend leur place. La lecture qui réussit ensuite les rend dans leur état.
+- **Événement vide** : deux sections repliées, « Personne ne s'est encore inscrit. », sans pastille. Dépliée, une section montre l'état vide du tableau (O1.5).
+- **Personnes sans voiture, aucune voiture** : la pastille, puis « Il manque N places » en gras ; dépliée, la section de O1.6.
+- **Sans retour** : une seule section, et « Retour » n'apparaît nulle part dans le panneau (O1.7).
+- **Hors ligne** : déplier et replier ne demandent rien au serveur, et marchent.
+- **Texte agrandi à 125 %** : le nom du leg tient sur une ligne ; le résumé peut passer à la ligne.
+- **En anglais** : « Outbound », « Return » ; la pastille et les places par l'i18n.
+
+### À partir de 1024 px
+
+- Les sections restent côte à côte (`lg:grid-cols-2`, `items-start`, `gap-6`), sans bordure haute. Repliées, les hauts de leurs boutons sont alignés. Sans retour, la section unique est dans la colonne de gauche.
+- Il n'y avait déjà pas de vignettes : seul le repli change.
+- « Personnes inscrites » vient sous la rangée Aller | Retour, dans la colonne de gauche (RP4.1).
+- La largeur du panneau ne change pas (O7.5).
+
+### Mouvement
+
+Aucune animation, avec ou sans `prefers-reduced-motion` : le contenu apparaît et disparaît d'un coup (`hidden`), le chevron est remplacé, rien ne défile. Comme l'espace organisateur replié, et comme « Vos inscriptions ».
+
+### Sans JavaScript
+
+O5.5 ne change pas. Le HTML de `/admin` ne contient ni bouton de leg, ni résumé.
+
+### Le voisin : « Personnes inscrites » (#645)
+
+`remove-person` v1 met la seule entrée de l'organisateur pour retirer une personne dans une section à part, « Personnes inscrites », après les sections des legs, dans le contenu qui se replie avec l'espace organisateur (décision 2, RP4.1). Elle refuse une seconde entrée dans le panneau. Cette page s'y tient :
+
+- **Les lignes des legs ne changent pas.** « Sans voiture » et « Voitures sans numéro » n'ont aucune action par personne, ni dépliées ni repliées. La v3.4 en laissait une place au bout des lignes ; la v3.5 la retire, avec son cadre pointillé.
+- « Personnes inscrites » est **repliée par défaut**, avec un bouton de titre sur toute la largeur (décision du coordinateur). Ses mots, son contenu dépliés, son repli et ses critères sont ceux de `remove-person`, qui les reprend. Cette page la dessine repliée, à sa place, avec son titre de v1, et sans ligne de résumé.
+- Ce qui la touche ici :
+  - l'ordre au clavier : son bouton suit celui de Retour (O9.2) ;
+  - les mots du focus : quand une liste disparaît, le focus va au titre de sa section, c'est-à-dire au bouton de ce titre pour toute section dont le titre est un bouton, legs et « Personnes inscrites » compris (amendement de O5.8) ;
+  - les mesures ci-dessus.
+- Déplier ou replier un leg ne change pas l'état de « Personnes inscrites », et l'inverse.
+
+### Le focus (v3.5)
+
+| action | focus après | annonce |
+|---|---|---|
+| le bouton d'un leg (déplier, replier) | reste sur le bouton | `aria-expanded` change ; rien d'autre |
+| replier un leg dont le contenu avait le focus (WebKit : un clic ne donne pas le focus au bouton) | le bouton du leg, jamais `<body>` | — |
+| une lecture retire la ligne ou le bouton qui a le focus | le titre de la liste ; si la liste a disparu, le titre de sa section, c'est-à-dire **le bouton de ce titre** pour une section dont le titre est un bouton (amendement de O5.8) | — |
+| une lecture retire la section Retour, alors que le focus est sur son bouton ou dans son contenu | le bouton d'Aller | — |
+| le bouton du titre de l'espace organisateur | inchangé (v3.2) | — |
+| « Réessayer » réussi | inchangé : le bouton du titre de l'espace organisateur | — |
+| une vignette | retiré (Q1 = a) | — |
+
+Ordre au clavier, espace organisateur déplié : le bouton de son titre, « Actualiser », le lien à partager et ses boutons, l'avis et ses boutons s'il y a lieu, « Modifier l'événement », le bouton d'Aller, le contenu d'Aller s'il est déplié, le bouton de Retour, son contenu, **puis ce qui suit les sections des legs** : le bouton de « Personnes inscrites » une fois #645 livrée, sinon le premier élément après le panneau.
+
+### Les mots (v3.5)
+
+**Aucune clé nouvelle, aucune clé retirée.** Les clés `Admin.tile.*` gardent leur nom sans vignette : elles disent les places du résumé, dans l'espace organisateur replié comme dans un leg replié.
+
+| ce qu'on lit | clé | fr | en | critère |
+|---|---|---|---|---|
+| le bouton d'un leg | `Event.legs.aller`, `Event.legs.retour` | Aller · Retour | Outbound · Return | O9.1 |
+| la pastille (N > 0) | `Board.tabCount` | {count, plural, other {# sans voiture}} | {count, plural, other {# without a car}} | O9.3 |
+| les places, N = 0 | `Board.banner.everyoneSeated` | Tout le monde a une place | Everyone has a seat | O9.3 |
+| les places, M ≥ N | `Admin.tile.free` | {free, plural, one {# place libre} other {# places libres}} | {free, plural, one {# free seat} other {# free seats}} | O9.3 |
+| les places, M < N, en gras | `Admin.tile.missing` | Il manque {missing, plural, one {# place} other {# places}} | {missing, plural, one {# seat missing} other {# seats missing}} | O9.3 |
+| leg vide | `Event.nobody` | Personne ne s’est encore inscrit. | Nobody has signed up yet. | O9.3 |
+
+Exemples, mot pour mot :
+
+- « Aller » puis « 2 sans voiture » et « 3 places libres » ; « Retour » puis « 4 sans voiture » et « Il manque 2 places » ; « Return » puis « 4 without a car » et « 2 seats missing ».
+- Au singulier : « 1 sans voiture » et « 1 place libre » ; « 1 sans voiture » et « Il manque 1 place » ; « 1 without a car », « 1 free seat », « 1 seat missing ».
+
+Le dépli montre les mots de la v3.1, inchangés. « Personnes inscrites ({count}) » est le titre de #645 (`Admin.persons.title`), défini par `remove-person`.
+
+### Critères v3.5, à reporter dans l'epic
+
+**O9 — Les legs repliés au premier affichage**
+
+*En tant qu'organisateur, j'ouvre l'espace organisateur et je vois d'un coup d'œil, pour chaque leg, si quelqu'un est sans voiture et s'il manque des places, sans faire défiler les prénoms ; je déplie un leg quand je veux appeler quelqu'un.*
+
+Chaque critère est prouvé par un test Playwright à 360 × 780 et à 1280 × 800, ou Vitest, sauf mention contraire. « Le panneau » est celui de la cible de #581 (session de l'organisateur, ou navigateur de création d'un événement en attente).
+
+- **O9.1** Le h3 de chaque section de leg contient un `<button type="button">` dont le nom accessible est exactement le nom du leg (« Aller », « Retour » ; « Outbound », « Return »), dans les deux états.
+  - Il porte `aria-expanded` (`false` replié, `true` déplié) et `aria-controls`, qui désigne un élément présent dans les deux états et qui contient la date, le bandeau et les listes, ou l'état vide du tableau.
+  - Il contient le texte, puis l'icône `ChevronDown` replié ou `ChevronUp` déplié (`aria-hidden`).
+  - Il fait au moins 44 px de haut, et son bord droit est celui du contenu de la section (±1 px).
+  - Son anneau de focus est celui du bouton du titre de l'espace organisateur, prouvé de la même façon (O8.1).
+  - Le h3 n'a pas de `tabIndex`.
+  - Test, sans mesure liée à une police : à 360 × 780, en français et en anglais, puis avec `font-size: 125%` sur la racine, le nom du leg tient sur une ligne (`Range.getClientRects()` de son nœud texte rend un seul rectangle), le bouton ne coupe pas son texte (`scrollWidth ≤ clientWidth`), et la page n'a pas de débordement horizontal.
+- **O9.2** Chaque fois que le panneau apparaît (première lecture, « Réessayer » qui aboutit, rechargement), **toutes les sections de leg sont repliées** (`aria-expanded="false"`), quel que soit l'état gardé de l'espace organisateur replié (O8.5), y compris à l'arrivée après la création.
+  - Repliée, la section n'affiche que son bouton et son résumé. La date, le bandeau, la phrase « Aucune voiture proposée… », les listes, leurs lignes et leurs boutons sont `toBeHidden()` et absents de l'arbre d'accessibilité. Aucun lien `tel:` du panneau n'est visible.
+  - Au clavier, Tab depuis le bouton d'Aller va au bouton de Retour, puis au premier élément focusable qui suit les sections des legs.
+  - La hauteur d'une section repliée ne dépend pas du nombre de lignes de ses listes : à 360 px, à forme de résumé égale, elle est la même (±1 px) avec 2 et avec 14 personnes sans voiture, et avec 1 et 6 voitures sans numéro.
+- **O9.3** Repliée, une section de leg montre sous son bouton une ligne, le **résumé** : la pastille ambre `Board.tabCount` si N > 0, puis les places (`Board.banner.everyoneSeated` si N = 0, `Admin.tile.free` si M ≥ N, `Admin.tile.missing` en gras si M < N). Leg vide : « Personne ne s'est encore inscrit. », en `text-muted-foreground`, sans pastille.
+  - Test : pour chaque leg, le `textContent` du bouton suivi de celui du résumé est égal au `textContent` de la ligne du même leg dans le résumé de l'espace organisateur replié (O8.3).
+  - Mot pour mot, en français puis en anglais : N = 1 et M = 1 : « 1 sans voiture », « 1 place libre » (« 1 without a car », « 1 free seat ») ; N = 1 et M = 0 : « 1 sans voiture », « Il manque 1 place » (« 1 seat missing ») ; N = 2 et M = 3 : « 2 sans voiture », « 3 places libres » ; N = 4 et M = 2 : « 4 sans voiture », « Il manque 2 places » (« 2 seats missing ») ; N = 0 : « Tout le monde a une place », sans pastille.
+  - Repliée, le bouton a pour description accessible le texte du résumé (`aria-describedby`) : elle contient le texte de la pastille, puis celui des places. Dépliée, il n'a pas de description.
+  - Le fond calculé de la pastille est celui de la pastille de l'onglet du tableau. Aucun élément du résumé n'a de fond ambre. Le résumé n'a ni bouton, ni lien, ni `role="status"`.
+  - Dépliée, le résumé n'est plus visible ; la date et le bandeau le sont, et le bandeau a exactement le texte du bandeau du même leg dans le tableau (O1.1).
+  - Test, sans mesure liée à une police : avec 20 sans voiture et 12 places manquantes, à 360 px, puis avec `font-size: 125%` sur la racine, les boîtes de la pastille et des places ne se chevauchent pas, aucune ne coupe son texte, aucune ne dépasse le bord droit de la section, et la page n'a pas de débordement horizontal. La ligne peut passer à la ligne.
+- **O9.4** Un clic, Entrée ou Espace sur le bouton d'un leg déplie ou replie **sa** section, sans requête réseau, et le focus reste sur le bouton.
+  - La `boundingBox` du bouton est identique avant et après (±1 px), page en haut comme défilée, à 360 et à 1280 px.
+  - L'autre section de leg ne change pas d'état, ni « Personnes inscrites » quand elle existe. À 1280 px, déplier Aller ne déplace pas le bouton de Retour (±1 px).
+  - Juste après le clic, `getAnimations({ subtree: true })` de la section est vide, et `window.scrollY` n'a pas changé, avec `reducedMotion` émulé à `reduce` comme à `no-preference`.
+  - `page.url()` ne change pas, et un écouteur `hashchange` injecté ne se déclenche pas (O6.3).
+  - Une liste dépliée par « Afficher les {n} autres » l'est encore après un repli puis un dépli de sa section.
+  - Basculer pendant une lecture n'envoie ni n'annule aucune requête. Hors ligne (`setOffline`), déplier et replier marchent.
+- **O9.5** L'état des legs est gardé **en mémoire seulement** (Q3 = a).
+  - Un leg déplié le reste après : « Actualiser », réussi ou impossible ; la relecture après une action du tableau ; le retrait du panneau (O1.10) puis la lecture qui le rend ; le repli puis le dépli de l'espace organisateur (O8) ; l'ouverture puis la fermeture de « Modifier l'événement ». Test à deux contextes : l'organisateur déplie Retour, le contexte 2 déclare une personne sans voiture au retour, l'organisateur touche « Actualiser » : Retour est toujours déplié, et le prénom est dans sa liste.
+  - Après un rechargement, toutes les sections de leg sont repliées.
+  - Les clés de `localStorage` et de `sessionStorage`, et les cookies de l'origine, sont les mêmes avant et après avoir déplié et replié les deux legs.
+  - Un retour ajouté par « Modifier l'événement » (M4) arrive replié ; supprimé (M3), puis ajouté de nouveau, aussi.
+- **O9.6** Avec l'espace organisateur replié (O8).
+  - Espace organisateur replié : les sections sont cachées avec le reste du contenu (O8.2), et son résumé est celui de O8.3.
+  - Replier puis déplier l'espace organisateur rend chaque section de leg dans l'état qu'elle avait. Le replier ou le déplier ne change aucun `aria-expanded` de leg ; replier ou déplier un leg ne change ni l'`aria-expanded` du bouton du titre de l'espace organisateur, ni `fullcar:organiser-folded:{id}`.
+  - Un événement qu'on vient de créer arrive espace organisateur déplié et legs repliés. À 360 × 780, le lien à partager et, en attente, l'avis « Confirmez votre adresse » sont visibles sans défilement (O4.2, OA2.1).
+- **O9.7** Le panneau n'a plus de vignettes (Q1 = a). Sous 1024 px, il montre dans l'ordre : la ligne du titre, la région `alert` (O5.4), le lien à partager, l'avis « Confirmez votre adresse » s'il y a lieu (OA2.1), « Modifier l'événement », puis les sections des legs, Aller d'abord. Ce qui suit les sections des legs (« Personnes inscrites », #645, RP4.1) n'est pas réglé ici. Test : dans le panneau, un seul bouton a un nom qui commence par « Aller », celui du titre de la section (une vignette s'appelait « Aller 2 sans voiture 3 places libres »).
+
+  Ce que la maquette mesure, sans que ce soit un critère : onglets du tableau à 712 px avec une session, 954 px en attente (777 et 1 019 px avec « Personnes inscrites » repliée), au lieu de 1 603 et 1 845 px.
+- **O9.8** À 1280 × 800, les sections de leg sont côte à côte, Aller à gauche. Repliées, les hauts de leurs boutons sont alignés (±1 px). Sans retour, la section est dans la colonne de gauche. La largeur du panneau est la même, legs repliés ou dépliés.
+- **O9.9** Le focus, prouvé au clavier ligne par ligne :
+  - une lecture retire la ligne ou le bouton « Afficher… » qui avait le focus, dans une section de leg, et la liste a disparu : le focus va sur le bouton du titre de cette section ;
+  - une lecture retire la section Retour alors que le focus était sur son bouton ou dans son contenu : le focus va sur le bouton d'Aller ;
+  - replier une section dont le contenu avait le focus le met sur le bouton du leg, jamais sur `<body>`. Test dans WebKit, lancé depuis le test comme dans `e2e/create-event.spec.ts` (`playwright.webkit.launch`, où un clic ne donne pas le focus à un bouton) : focus sur un lien `tel:` de Retour, clic sur le bouton de Retour, `document.activeElement` est ce bouton.
+- **O9.10** Sans JavaScript, O5.5 tient, et le HTML de `/admin` ne contient ni bouton de leg, ni résumé.
+
+**Amendements (Q1 = a)**
+
+- **O1.3** : « Une rangée de vignettes… placée en tête du panneau… », et la phrase sur leur absence, sont retirées. « Sous 1024 px, les sections sont l'une sous l'autre, Aller d'abord, repliées au premier affichage (O9) ». La phrase sur l'ambre reste : elle vaut pour le résumé.
+- **O1.4** : retiré, remplacé par O9.1 et O9.4.
+- **O1.5** : « la vignette de ce leg affiche… » devient « sa section repliée affiche, après son nom, « Personne ne s'est encore inscrit. », en `text-muted-foreground`, sans pastille (O9.3) ». L'état vide du tableau se lit une fois la section dépliée.
+- **O1.7** : « une seule vignette sur toute la largeur » est retiré.
+- **O1.10** : « le panneau **retire** ses vignettes et ses sections » devient « le panneau **retire** ses sections ».
+- **O4.1** : « Sous 1024 px, les vignettes (O1.3) les précèdent » est retiré.
+- **O4.2** : « vignettes comprises » est retiré.
+- **O5.8** : la ligne « une vignette » est retirée.
+- **O6.3** : « Les vignettes (O1.4) font défiler par script » devient « Les boutons des legs (O9.4) ne touchent pas à l'URL ».
+- **O7.2** : captures en plus, à 360 et à 1280 px : legs repliés (exemple, événement vide, sans retour, en attente) ; Aller déplié ; 60 personnes, Retour déplié ; et, à 360 px avec `font-size: 125%`, le pire cas du résumé (O9.3).
+- **O7.4** : « Vignettes » devient « boutons des legs ».
+- **O8.1** : `aria-controls` « désigne un élément… qui contient les vignettes, les deux liens, l'avertissement et les sections » devient « … qui contient le lien à partager, l'avis « Confirmez votre adresse » s'il y a lieu, « Modifier l'événement » et les sections » (avec #581).
+- **O8.2** : « Les vignettes » est retiré de la liste de ce qui est caché.
+- **O8.3** : « Chaque ligne a les textes de la vignette de ce leg » devient « … de la section repliée de ce leg (O9.3) ». Le test compare la ligne au bouton et au résumé de la section.
+- **#154, « États à concevoir »** :
+  - « relecture du panneau impossible après une action » : « vignettes et sections retirées » devient « sections retirées » ;
+  - « événement vide (arrivée après la création) » : « pas de vignettes, sections vides » devient « sections repliées, « Personne ne s'est encore inscrit. » » ;
+  - « un leg vide à côté d'un leg rempli » : « vignette neutre » devient « résumé replié neutre » ;
+  - « sans retour » : « une section, une vignette, aucun « Retour » » devient « une section, aucun « Retour » ».
+
+**Amendements (tous)**
+
+- **O1.1, O1.6, O2.2 à O2.5, O3.1 à O3.3, O5.6, O5.7, O5.9, O7.3** : ce qu'ils décrivent se lit une fois la section dépliée. Leurs tests déplient d'abord la section du leg. Les tests de O1.8 (« la personne apparaît dans le panneau ») et de O1.10 (« son prénom apparaît dans la liste « Sans voiture » des deux sections ») déplient d'abord les sections dont ils lisent les listes.
+- **O5.8** : dans la ligne « une lecture retire le bouton ou la ligne qui a le focus », « si la liste a disparu, le titre de la section du leg » devient « si la liste a disparu, le titre de sa section : le bouton de ce titre, pour une section dont le titre est un bouton (les legs, O9.1 ; « Personnes inscrites », #645) ».
+
+### Effet sur les tâches
+
+- **Une tâche** pour le repli des legs : `organiser-leg.tsx` (le bouton, le résumé, le conteneur `hidden`), `screen-state.ts` (l'ensemble des legs dépliés, en mémoire, comme `expanded`), `admin-panel.tsx` (le retrait d'`OrganiserTiles`), `organiser-tiles.tsx` (`LegGlance` reste, et le résumé du leg l'utilise sans le nom), un spec e2e O9, et les specs existants du panneau, qui déplient d'abord le leg qu'ils lisent.
+- **Ni base, ni serveur, ni stockage, ni clé de traduction.** Pas de chemin sensible attendu.
+- **Ordre** : après la tâche de #581 qui retire le lien d'organisateur et « Gardez ce lien » du panneau, pour ne pas modifier `admin-panel.tsx` en même temps qu'elle. Le repli ne dépend d'aucune autre tâche de #581.
+- **Avec #645** : « Personnes inscrites » vient après les sections des legs. Si sa tâche passe avant celle-ci, O9.2 s'arrête quand même aux sections des legs ; si elle passe après, elle reprend le motif du bouton de leg pour son titre.
+
+### Réponses du propriétaire (v3.4)
+
+Toutes conformes à la recommandation, le 25/10/2026 sur #648.
+
+1. **Q1 — Les vignettes, sous 1024 px : (a) retirées.** Les legs repliés disent la même chose, à leur place. Le panneau perd 116 px, et le résumé n'apparaît qu'une fois. La couverture passe du haut du panneau à après le lien, l'avis et « Modifier l'événement » (voir « La proposition », point 4). Option écartée : (b), les garder, un tap dépliant le leg.
+2. **Q2 — Le repli de tout l'espace organisateur : (a) gardé tel quel** (v3.2, O8). Option écartée : (b), le retirer.
+3. **Q3 — Garder l'état des legs d'une visite à l'autre : (a) non**, en mémoire seulement. Option écartée : (b), une clé `localStorage` par événement.
+
+### Décisions (v3.4, v3.5)
+
+Ajoutées à la liste « Décisions », à la suite de la 52.
+
+53. (v3.4) Decision : le résumé d'un leg replié est la pastille et les places, sans date et sans le nombre de voitures sans numéro. — Reason : la couverture est « la seule métrique que l'organisateur regarde » (glossaire). La date est dans l'en-tête de l'événement. Une ligne de plus par leg ramènerait ce que la demande retire.
+54. (v3.4) Decision : le bouton d'un leg suit le motif du bouton du titre de l'espace organisateur (bouton dans le titre, chevron collé, toute la largeur, anneau intérieur), et le résumé, hors du bouton, le décrit par `aria-describedby` tant qu'il est replié. — Reason : même panneau, même geste. Un nom qui ne change pas avec les données, et un lecteur d'écran qui entend la couverture sans déplier.
+55. (v3.4) Decision : les legs sont toujours repliés au premier affichage, même celui où il manque des places. — Reason : un affichage qui dépend des données changerait de forme d'une visite à l'autre. Le résumé replié dit déjà le manque, en gras, avec la pastille.
+56. (v3.4) Decision : aucune clé nouvelle ; les clés `Admin.tile.*` gardent leur nom. — Reason : renommer une clé change les deux fichiers de traduction sans changer un mot.
+57. (v3.4) Decision : si la section Retour disparaît alors qu'elle avait le focus, le focus va sur le bouton d'Aller. — Reason : c'est l'élément le plus proche de là où était l'organisateur. Le h1 de l'événement, que la v3.3 donne au participant, est sous le panneau.
+58. (v3.4) Decision : après le retrait du panneau (O1.10), chaque leg revient dans l'état où il était. — Reason : l'état appartient à l'écran, comme celui des listes (O5.7), et non aux sections, qui sont retirées puis rendues.
+59. (v3.5) Decision : aucune action par personne dans les lignes des legs ; l'entrée pour retirer une personne est la section « Personnes inscrites » de #645. — Reason : `remove-person` v1 (décision 2, RP4.1) n'en veut qu'une dans le panneau ; la place dessinée en v3.4, en pointillé, se lisait comme une chose à construire.
+60. (v3.5) Decision : la règle de focus « le titre de sa section » se lit « le bouton de ce titre » pour toute section dont le titre est un bouton, legs et « Personnes inscrites ». — Reason : une seule règle pour les sections repliables du panneau, quelle que soit l'épique qui les ajoute.
+
+### Hors périmètre (v3.4, v3.5)
+
+- La suppression d'un participant, et le contenu, les mots et le repli de « Personnes inscrites » (#645, `remove-person`).
+- Une action par personne dans les lignes des legs.
+- Replier séparément le lien à partager, l'avis « Confirmez votre adresse » ou « Modifier l'événement ».
+- Replier les legs du tableau des participants, ou « Vos inscriptions ».
+- Un bouton « Tout déplier ».
+- Déplier d'office un leg selon ses données.
+- Garder l'état des legs d'une visite à l'autre, ou le synchroniser entre onglets ou appareils.
+- Le nombre de voitures sans numéro dans le résumé replié.
+- Changer les listes de 5 lignes.
+
 ## Ce que la page montre
 
 L'espace organisateur de `/e/{id}/admin#{jeton}`, au-dessus de l'en-tête de l'événement et du tableau des participants (#66 v4.1, inchangé, C11.7).
@@ -25,10 +310,10 @@ L'espace organisateur de `/e/{id}/admin#{jeton}`, au-dessus de l'en-tête de l'�
 ### Ordre sous 1024 px
 
 1. « Espace organisateur » (h2) et « Actualiser » (`outline`, 44 px), sur une même ligne. **v3.2** : le h2 contient le bouton qui replie la carte (voir « Replier la carte »), et c'est ce bouton qui reçoit le focus après « Réessayer » ; le h2 n'a plus `tabIndex={-1}`.
-2. **Vignettes**, une par leg, en grille de deux colonnes même à 360 px. Absentes tant qu'aucun leg n'a ni voiture ni personne ; sans retour, une seule, sur toute la largeur. Voir « Les vignettes ».
+2. **Vignettes** (retirées en v3.4, Q1 = a, voir « Replier les legs »), une par leg, en grille de deux colonnes même à 360 px. Absentes tant qu'aucun leg n'a ni voiture ni personne ; sans retour, une seule, sur toute la largeur. Voir « Les vignettes ».
 3. **Lien à partager** : libellé, phrase, le lien, puis « Copier » et « Partager » (inchangés).
 4. Lien d'organisateur, puis « Gardez ce lien » (inchangés). La phrase du lien d'organisateur change (`Admin.adminLink.hint`, DO1).
-5. **Une section par leg** (h3), séparée par une bordure haute :
+5. **Une section par leg** (h3), séparée par une bordure haute, repliée au premier affichage depuis la v3.4 (O9) :
    - date et heure (`LegTime`) ;
    - bandeau : `CoverageBanner` réutilisé, avec une nouvelle prop `live={false}` qui retire `role="status"` (le tableau annonce déjà le sien) ;
    - « Sans voiture ({count}) » (h4) avec la phrase de confidentialité, puis une ligne par personne ;
@@ -916,6 +1201,14 @@ Dans la barre, `Actions.failure` = « {notDone} {why} » (v4.2). L’icône est 
 | v3.3.4 : confirmation fermée, puis les nombres ont changé : alerte dans la feuille, sans nouvelle confirmation | Modifier l'événement | M3.7 |
 | v3.3.4 : « Ne fait pas le retour » sur un retour supprimé : l'information `Actions.info.noRetourLeg` (dessinée avec `Actions.info.noRetour`, même style) | Modifier l'événement | M7.3 |
 | v3.3.5 : champs verrouillés pendant l'envoi (non dessiné : même rendu, attribut `readonly`) | — | M2.6, M3.7 |
+| v3.5 : avant et après, 360 × 780, avec une session et en attente, pli et onglets mesurés, « Personnes inscrites » repliée | Replier les legs | O9.2, O9.7 |
+| v3.5 : legs repliés avec une session ; arrivée après la création, en attente, événement vide | Replier les legs | O9.1–O9.3, O9.6 |
+| v3.5 : Aller déplié, Retour replié (focus, `aria-expanded`) | Replier les legs | O9.1, O9.4 |
+| v3.5 : les huit formes du résumé replié, singuliers et pire cas compris | Replier les legs | O9.3 |
+| v3.5 : texte agrandi à 125 % ; sans retour ; 60 personnes, Retour déplié | Replier les legs | O9.1, O9.2, O9.3 |
+| v3.5 : actualisation impossible ; panneau retiré ; espace organisateur replié | Replier les legs | O9.5, O9.6 |
+| v3.5 : en anglais | Replier les legs | O9.1, O9.3 |
+| v3.5 : 1280 px, legs repliés, Aller déplié, en attente, « Personnes inscrites » dans la colonne de gauche | Replier les legs | O9.4, O9.8 |
 
 Non dessinés, faute d'UI propre :
 
@@ -1011,6 +1304,8 @@ Les mots français sont épicènes. Le mot « Modifier » est celui de « Gardez
 
 ## Décisions
 
+Les décisions 53 à 60 (v3.4, v3.5) sont dans « Replier les legs », sous « Décisions (v3.4, v3.5) ».
+
 1. La vue d'ensemble est dans l'espace organisateur existant, au-dessus de l'événement et du tableau. — Un seul écran ; c'est la place que #3 donne au panneau.
 2. Une liste « Sans voiture » par leg, dans l'ordre du tableau. — La couverture se lit par leg.
 3. Une voiture sans numéro est un Ride dont le conducteur n'a pas de numéro. — C'est le numéro que les personnes à bord appellent.
@@ -1100,6 +1395,7 @@ Les mots français sont épicènes. Le mot « Modifier » est celui de « Gardez
 - (v3.3) Prévenir les participants (notifications, hors V1).
 - (v3.3) Une fin sans retour (#235, nouvelle colonne).
 - (v3.3) Modifier depuis `/e/{id}`, ou changer le jeton d'organisateur.
+- (v3.4, v3.5) Voir « Hors périmètre (v3.4, v3.5) », dans « Replier les legs ».
 
 ## Révisions
 
@@ -1331,3 +1627,5 @@ Les mots français sont épicènes. Le mot « Modifier » est celui de « Gardez
   La décision du propriétaire ne change pas. Republiée à la même URL.
 - v3.3.8 (suite) : relecture : **approuvée**. Corrections de texte, sans nouvelle revue : critères d'event-board renommés N1.1 à N1.6 (voir ci-dessus), et l'en-tête dit la v3.3.8 approuvée. Republiée à la même URL.
 - v3.3.9 (2026-10-23) : v3.3.8 approuvée. Correction de texte, sans nouvelle décision (#442) : dans M2.8, « date de début mise à hier par une requête forgée » ne pouvait pas se produire, `serverBounds` acceptant un jour de plus que l’appareil ; le cas devient une date « avant la borne du serveur (plus d’un jour avant la date UTC du jour ; par exemple, une semaine avant aujourd’hui) », comme l’avait proposé la revue de #414. Republiée à la même URL.
+- v3.4 (2026-10-25) : les legs se replient, [#648](https://github.com/olaurendeau/fullcar/issues/648). Chaque section de leg est repliée au premier affichage ; repliée, elle garde son nom, qui est son bouton, la pastille ambre et les places. L'état est gardé en mémoire seulement. Trois questions au propriétaire (vignettes, repli de tout l'espace organisateur, mémoire de l'état). Dessinée contre `organizer-account` v4 (#581). Critères O9.1 à O9.10 ; décisions 53 à 58 ; aucune clé de traduction nouvelle. Mesures : à 360 × 780 avec une session, les onglets du tableau passent de 1 603 px (2 265 px avec 60 personnes) à 712 px. Revue de design : modifications demandées, 2 points bloquants (l'action par personne laissée dans les lignes contredit `remove-person` v1 ; O9.2, O9.7 et l'amendement du focus deviennent faux avec « Personnes inscrites »), et des suggestions.
+- v3.5 (2026-10-25) : revue de la v3.4 appliquée, et réponses du propriétaire. **Réponses** : Q1, Q2 et Q3 = (a), comme recommandé ; la variante à vignettes et le critère « si Q1 = b » sont retirés. **Décision du coordinateur** : « Personnes inscrites » (#645) est repliée par défaut, avec un bouton de titre sur toute la largeur ; elle est dessinée repliée après les legs, en gris et sans cadre pointillé, comme une voisine. **Bloquants.** (1) La place d'une action par personne dans les lignes des legs, son cadre pointillé et ses règles sont retirés ; « Le voisin : « Personnes inscrites » (#645) » renvoie à RP4.1 et à la décision 2 de `remove-person` (décision 59). (2) O9.2 et l'ordre au clavier finissent « au premier élément qui suit les sections des legs » ; O9.7 s'arrête aux sections des legs et dit que la suite est réglée par #645 ; l'amendement du focus porte sur O5.8, et dit « le bouton de ce titre » pour toute section dont le titre est un bouton, legs et « Personnes inscrites » (décision 60). **Suggestions.** Q1 dit que la couverture passe du haut du panneau à après le lien, l'avis et « Modifier l'événement » (sections à 367 et 609 px, vignettes à 149 et 81 px) ; la ligne des vignettes du tableau des mesures dit « exemple, 60 personnes » partout ; amendements ajoutés de O1.10, O8.1 et des lignes à vignettes des « États à concevoir » de #154 ; la citation rangée sous O5.7 passe sous O5.8 ; O9.9 lance WebKit depuis le test, comme `e2e/create-event.spec.ts` ; « l'espace organisateur replié (O8) » partout au lieu de « carte », que le glossaire réserve à la carte d'un leg ; `Board.tabCount` avec sa forme plurielle réelle ; O9.3 et la maquette des formes ont les cas au singulier ; mesures avec « Personnes inscrites » repliée (+65 px à 360 px : onglets à 777 px avec une session, 1 019 px en attente ; à 1280 px, 657 et 629 px). Rendu vérifié dans Chrome sans interface. Republiée à la même URL.

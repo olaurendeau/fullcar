@@ -1,0 +1,1065 @@
+<title>Retirer une personne</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8; --card: #ffffff;
+    --accent: #2457c5; --accent-soft: #e6edfb; --note: #fff7e0; --note-line: #ecd48a;
+    /* The app's own look, light only, from src/app/globals.css (oklch converted) */
+    --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
+    --app-border: #e5e5e5; --app-primary: #171717; --app-primary-fg: #fafafa;
+    --app-destructive: #e7000b; --app-amber-bg: #fef3c7; --app-amber-fg: #461901; --app-amber-line: #f2d58a;
+    --app-ring: #a1a1a1; --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444; --scrim: rgba(0,0,0,.32);
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; line-height: 1.2; }
+  h2 { font-size: 1.3rem; margin: 48px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 22px 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 80ch; }
+  .prose { max-width: 82ch; }
+  .prose li { margin-bottom: 4px; }
+  a { color: var(--accent); }
+  code { font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 0; font-size: .92rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 32px 24px; margin-top: 20px; align-items: start; }
+  .state { min-width: 0; }
+  .state > h3 { margin-top: 0; }
+  .state > p { color: var(--muted); font-size: 0.9rem; margin: 0 0 10px; }
+  .crit { font-size: 0.8rem; color: var(--accent); font-weight: 600; }
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 80ch; }
+  .table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  .table-wrap table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.9rem; }
+  .table-wrap th, .table-wrap td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .table-wrap th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  .table-wrap tr:last-child td { border-bottom: 0; }
+  table.words td:nth-child(2), table.words td:nth-child(3) { min-width: 220px; }
+  ol.decisions, ul.crits { padding-left: 20px; max-width: 86ch; }
+  ol.decisions li, ul.crits li { margin-bottom: 10px; }
+  .q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 14px; max-width: 86ch; }
+  .q h3 { margin-top: 0; }
+  .q ul { margin: 6px 0; padding-left: 20px; }
+  .rec { font-weight: 600; }
+
+  /* Phone: a 360 px wide viewport inside a 6 px frame */
+  .phone { position: relative; box-sizing: content-box; width: 360px; max-width: calc(100% - 12px); border: 6px solid var(--frame); border-radius: 22px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); }
+  .urlbar { background: var(--urlbar); color: var(--urlbar-fg); font: 12px ui-monospace, Menlo, monospace; padding: 7px 10px; overflow-wrap: anywhere; }
+  .screen { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 16px; font-size: 14px; line-height: 1.43; min-height: 300px; }
+  .screen.tall { min-height: 560px; }
+  .cut { color: var(--app-muted); font-size: 11px; text-align: center; letter-spacing: .04em; }
+  .ico { width: 16px; height: 16px; flex: none; }
+  .ico.s { width: 14px; height: 14px; }
+  .muted { color: var(--app-muted); }
+  .small-muted { color: var(--app-muted); font-size: 13px; line-height: 18px; margin: 0; }
+  .ev-h1 { font-size: 22px; font-weight: 700; margin: 0; line-height: 1.25; overflow-wrap: anywhere; }
+
+  .btn { min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid transparent; background: var(--app-primary); color: var(--app-primary-fg); display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 500; padding: 0 12px; text-align: center; white-space: nowrap; font-size: 14px; }
+  .btn.outline { background: var(--app-bg); color: var(--app-fg); border-color: var(--app-border); }
+  /* variant="outline" + text-destructive: #e7000b on white, 4.77:1 */
+  .btn.danger { background: var(--app-bg); color: var(--app-destructive); border-color: var(--app-border); }
+  .btn.solid-danger { background: var(--app-destructive); color: #fff; }
+  .btn.off { opacity: .5; }
+  .btn.full { width: 100%; }
+  .btn.sm { padding: 0 10px; }
+  .new { outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 10px; }
+  .focusring { outline: 2px solid var(--app-ring) !important; outline-offset: 3px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-ring) 35%, transparent); }
+  .role { position: absolute; right: 8px; top: -9px; background: var(--accent); color: #fff; font: 600 10px/16px ui-monospace, Menlo, monospace; padding: 0 5px; border-radius: 4px; }
+
+  .banner { display: flex; gap: 8px; align-items: flex-start; border-radius: 10px; padding: 10px 12px; background: var(--app-muted-bg); font-weight: 500; margin: 0; }
+  .banner .ico { margin-top: 2px; }
+  .banner.warn { background: var(--app-amber-bg); color: var(--app-amber-fg); }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--app-muted-bg); border-radius: 10px; padding: 3px; }
+  .tabs > span { min-height: 44px; box-sizing: border-box; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 8px; font-weight: 500; color: var(--app-muted); }
+  .tabs > span.on { background: var(--app-bg); color: var(--app-fg); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .pill { background: var(--app-amber-bg); color: var(--app-amber-fg); font-size: 12px; line-height: 18px; padding: 0 8px; border-radius: 999px; font-weight: 500; white-space: nowrap; }
+
+  /* « Vos inscriptions » (v4 of event-board) */
+  .reg { border: 1px solid var(--app-border); border-radius: 14px; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .reg-toggle { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-radius: 8px; }
+  .reg-toggle > span:first-child { display: flex; flex-direction: column; min-width: 0; }
+  .reg-toggle .sum { font-size: 13px; color: var(--app-muted); line-height: 18px; }
+  .chev { width: 16px; height: 16px; color: var(--app-muted); flex: none; }
+  table.mx { width: 100%; border-collapse: separate; border-spacing: 0 4px; table-layout: fixed; margin-top: -4px; color: var(--app-fg); font-size: 14px; }
+  table.mx th, table.mx td { padding: 0; border: 0; vertical-align: middle; text-align: left; }
+  table.mx thead th { font-size: 12px; font-weight: 500; color: var(--app-muted); padding: 0 0 0 2px; height: 18px; }
+  table.mx col.c-name { width: 26%; }
+  table.mx thead th + th { padding-left: 6px; }
+  table.mx td { padding-left: 4px; }
+  .namebtn { min-height: 44px; display: flex; align-items: center; gap: 4px; font-weight: 600; min-width: 0; padding: 0 2px; border-radius: 8px; }
+  .namebtn > span { min-width: 0; overflow-wrap: break-word; }
+  .namebtn .chev { width: 14px; height: 14px; }
+  .cell { min-height: 44px; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--app-border); padding: 4px 8px; font-size: 13px; line-height: 16px; display: flex; align-items: center; overflow-wrap: break-word; background: var(--app-bg); font-weight: 500; }
+  .cell.wait { background: var(--app-amber-bg); color: var(--app-amber-fg); border-color: var(--app-amber-line); }
+  .cell.in, .cell.drive { background: var(--app-muted-bg); border-color: transparent; }
+  .cell.out { color: var(--app-muted); font-weight: 400; }
+
+  /* Car card */
+  .car { border: 1px solid var(--app-border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .car-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .car-h strong { min-width: 0; overflow-wrap: anywhere; }
+  .seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .pass { min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; border-radius: 8px; background: var(--app-muted-bg); padding: 6px 12px; }
+  .free { min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; border-radius: 8px; border: 1px dashed #c9c9c9; padding: 0 12px; font-weight: 500; background: var(--app-bg); }
+  .free .ico, .pass .ico { color: var(--app-muted); }
+  .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips li { border: 1px solid var(--app-border); border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+
+  /* Sheet and dialog over the dimmed page */
+  .behind { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .behind::after, .scrim::after { content: ""; position: absolute; inset: 0; background: var(--scrim); }
+  .scrim { position: relative; }
+  .sheet { border-top: 1px solid var(--app-border); background: var(--app-bg); display: flex; flex-direction: column; box-shadow: 0 -8px 24px rgba(0,0,0,.12); position: relative; z-index: 1; border-radius: 14px 14px 0 0; }
+  .sheet .sh-h { padding: 16px 16px 0; display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .sheet .sh-h strong { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+  .sheet .sh-b { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .tel { color: var(--app-fg); text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; white-space: nowrap; align-self: flex-start; }
+  .tel .ico { color: var(--app-muted); }
+  .dialog-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; z-index: 5; }
+  .dialog { background: var(--app-bg); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); width: 100%; box-sizing: border-box; }
+  .dialog > strong { font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+  .dialog p { margin: 0; color: var(--app-muted); overflow-wrap: anywhere; }
+  .dialog .acts { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .alert { margin: 0; color: var(--app-destructive) !important; font-size: 14px; line-height: 20px; }
+
+  /* The message bar (v4.2) */
+  .mbar { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 6; display: flex; gap: 12px; align-items: flex-start; box-sizing: border-box; border-radius: 12px; padding: 4px 4px 4px 16px; background: var(--app-primary); color: var(--app-primary-fg); font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.2); border: 1px solid transparent; }
+  .mbar.err { background: var(--app-bg); color: var(--app-fg); border-color: var(--app-destructive); font-weight: 400; }
+  .mbar .msgs { flex: 1; min-width: 0; }
+  .mrow { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 10px 0; line-height: 20px; }
+  .mrow .t { flex: 1; min-width: 0; overflow-wrap: anywhere; margin: 0; }
+  .mrow .ico { margin-top: 2px; }
+  .mbar.err .mrow .ico { color: var(--app-destructive); }
+  .mbar .x { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; }
+  .barspace { height: 76px; flex: none; }
+
+  /* The organiser's panel */
+  .panel { border: 1px solid var(--app-border); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .ptitle { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .ptitle > strong { font-size: 16px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+  .tile b { font-size: 14px; }
+  .tile span { font-size: 13px; }
+  .legsec { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding-top: 16px; border-top: 1px solid var(--app-border); }
+  .legsec .lh { font-size: 16px; font-weight: 600; margin: 0; }
+  .olist { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .olist > strong { font-weight: 600; }
+  .olist ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; }
+  .pline { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; border-top: 1px solid var(--app-border); padding: 6px 0; align-items: start; }
+  .pline:first-child { border-top: 0; }
+  .pline .who { display: flex; flex-direction: column; min-width: 0; padding-top: 6px; }
+  .pline .who b { font-weight: 500; overflow-wrap: anywhere; align-self: flex-start; border-radius: 4px; }
+  .pline .who span { font-size: 13px; line-height: 18px; color: var(--app-muted); overflow-wrap: anywhere; }
+  .pline .btn { align-self: start; }
+  .gone { opacity: .35; text-decoration: line-through; }
+
+  /* Desktop: 1280 px browser at 55 % */
+  .deskwrap { overflow-x: auto; margin-top: 20px; }
+  .deskscale { width: 704px; height: 600px; position: relative; }
+  .desk { width: 1280px; transform: scale(.55); transform-origin: top left; position: absolute; top: 0; left: 0; border: 6px solid var(--frame); border-radius: 12px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); font-size: 14px; line-height: 1.43; }
+  .desk .inner { padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .desk .panel { width: 1024px; box-sizing: border-box; }
+  .desk .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .desk .legsec { border-top: 0; padding-top: 0; }
+  .legtable { width: 100%; border-collapse: collapse; }
+
+  /* v2: folded sections of the panel (organizer-view v3.4) */
+  .fsec { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-top: 16px; border-top: 1px solid var(--app-border); }
+  .lbtn { box-sizing: border-box; width: calc(100% + 8px); min-height: 44px; margin: -6px 0 -6px -8px; padding-left: 8px; display: flex; align-items: center; gap: 4px; font-size: 16px; font-weight: 600; border-radius: 8px; }
+  .lbtn .chev { width: 16px; height: 16px; }
+  .sumline { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 13px; line-height: 18px; margin: 0; }
+  .sumline b { font-weight: 600; }
+  .fsec .body { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; min-width: 0; }
+  .statebox { border-radius: 10px; background: var(--app-muted-bg); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; color: var(--app-fg) !important; font-size: 14px; }
+  .statebox span { overflow-wrap: anywhere; }
+  .myev { color: var(--app-fg); text-decoration: underline; text-underline-offset: 3px; min-height: 44px; display: inline-flex; align-items: center; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-err" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+<h1>Retirer une personne</h1>
+<p class="lead">Maquette v2 de l’épique <a href="https://github.com/olaurendeau/fullcar/issues/645">#645</a>. Une personne se retire elle-même depuis l’appareil qui l’a inscrite, et l’organisateur retire n’importe qui depuis l’espace organisateur. Tout ce qui la concerne est effacé. Maquettes à 360 px, et un navigateur de 1280 px à 55 %.</p>
+<p class="lead">Voisines, non republiées :</p>
+<ul class="lead">
+  <li><code>event-board</code> v4.4.6 : « Vos inscriptions » et la barre de messages ;</li>
+  <li><code>organizer-view</code> v3.4 : le panneau sans vignettes, avec des sections de leg repliées (#648) ;</li>
+  <li><code>organizer-account</code> v4 : l’accès par la règle unique <code>organiser-access.ts</code>.</li>
+</ul>
+<p class="lead">Les ajouts de cette maquette sont entourés de <span style="outline:2px dashed var(--accent);outline-offset:2px;border-radius:4px;padding:0 4px">tirets bleus</span>. Réponses du propriétaire, toutes conformes à la recommandation (#645) : Q1 (a), pas d’« Annuler » ; Q2 (a), pas de numéro dans la liste de l’organisateur ; Q3 (a), l’appareil garde son jeton.</p>
+<nav class="toc" aria-label="Sommaire">
+  <a href="#probleme">Le problème</a><a href="#histoires">Histoires</a><a href="#exemple">L’exemple</a><a href="#legs">Chaque leg</a><a href="#participant">Le participant</a><a href="#organisateur">L’organisateur</a><a href="#autres">Les autres appareils</a><a href="#refus">Refus et échecs</a><a href="#vie-privee">Confidentialité</a><a href="#mots">Les mots</a><a href="#focus">Focus et barre</a><a href="#criteres">Critères</a><a href="#architecte">Pour l’architecte</a><a href="#decisions">Décisions</a><a href="#reponses">Réponses</a><a href="#hors">Hors périmètre</a><a href="#doc">Documentation</a><a href="#revisions">Révisions</a>
+</nav>
+
+<h2 id="probleme">Le problème</h2>
+<div class="prose">
+<p><strong>Aujourd’hui, une Person ne disparaît qu’au jour 30.</strong> Plusieurs cas se présentent :</p>
+<ul>
+  <li>un parent a inscrit son enfant deux fois, une fois sur le téléphone et une fois sur la tablette ;</li>
+  <li>un prénom a été tapé dans le mauvais événement ;</li>
+  <li>un enfant tombe malade.</li>
+</ul>
+<p>Dans ces cas, l’appareil peut seulement la passer « Ne fait pas l’aller » et « Ne fait pas le retour ». Elle reste alors en base, numéro compris, et on ne la voit plus nulle part, même pas dans l’espace organisateur.</p>
+<p>Un conducteur qui ne vient plus doit retirer ses voitures une par une, et son prénom reste. L’organisateur ne peut rien retirer. Il voit un doublon, ou un faux prénom (un abus), qui fausse la couverture. Il demande au groupe « qui a inscrit deux Léa ? », puis il attend.</p>
+<p><strong>Ce qui existe (lu sur <code>origin/main</code>).</strong></p>
+<ul>
+  <li>La base prévoit déjà l’effacement d’une Person, mais aucune action ne l’appelle :
+    <ul>
+      <li><code>ride_driver_fk</code> emporte ses Rides (<code>on delete cascade</code>) ;</li>
+      <li><code>placement_ride_fk</code> rend leurs passagers sans voiture (<code>set null (ride_id)</code>) ;</li>
+      <li><code>placement_person_fk</code> emporte ses Placements.</li>
+    </ul>
+  </li>
+  <li>Les droits d’une Person passent par <code>devicePersonIds</code> (<code>src/domain/device.ts</code>).</li>
+  <li>Ceux de l’organisateur passeront par <code>src/domain/organiser-access.ts</code> (#596).</li>
+  <li>L’appareil ne garde que son jeton personnel (<code>fullcar:personal-token:{id}</code>) : aucun prénom, aucun numéro.</li>
+</ul>
+<p><strong>Le mot.</strong> « Retirer », comme dans « Retirer la voiture ». Jamais « supprimer » : dans le glossaire, la Suppression est celle d’un événement entier.</p>
+</div>
+
+<h2 id="histoires">Histoires</h2>
+<ol class="decisions">
+  <li><strong>H1 : un parent retire son enfant.</strong> J’ai inscrit Léa depuis ce téléphone, et je la retire de l’événement depuis sa feuille dans « Vos inscriptions ». Avant de confirmer, je vois ce que ça change : sa place libérée, ou sa voiture retirée avec le nombre de personnes qui redeviennent sans voiture. Après, Léa n’existe plus nulle part. <span class="crit">RP1, RP2</span></li>
+  <li><strong>H2 : un conducteur ne vient plus.</strong> Je suis Marc, je conduis trois enfants à l’aller, et je me retire en une fois. Mes voitures partent avec moi, et mes passagers redeviennent sans voiture. La confirmation me rappelle que personne n’est prévenu. <span class="crit">RP1.2, RP2.1</span></li>
+  <li><strong>H3 : l’organisateur fait le ménage.</strong> Dans l’espace organisateur, je vois la liste de toutes les personnes inscrites, y compris celles qui ne font aucun leg. Je repère un doublon grâce à l’état de chaque Léa, et je le retire sans passer par l’appareil qui l’a inscrit. <span class="crit">RP3, RP4</span></li>
+  <li><strong>H4 : les autres suivent.</strong> Mon enfant était dans la voiture de Marc : je vois à la relecture suivante qu’il est « Sans voiture », sans rien recharger. Je suis Marc, l’organisateur me retire pendant que ma page est ouverte : je comprends pourquoi ma ligne a disparu. <span class="crit">RP5</span></li>
+  <li><strong>H5 : rien ne reste.</strong> Je suis la personne retirée : mon prénom, mon numéro, mes voitures, mes places et l’empreinte de mon jeton ne sont plus dans la base, ni dans aucun journal. <span class="crit">RP6</span></li>
+</ol>
+
+<h2 id="exemple">L’exemple, et ses nombres</h2>
+<p class="lead">Toutes les maquettes partent de ce même événement, le Tournoi de Rennes, et chaque nombre affiché en découle. L’appareil des Martin a trois personnes : Marc, Léa et Tom. La seconde Léa est le doublon, inscrit depuis la tablette.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>personne</th><th>Aller</th><th>Retour</th></tr></thead>
+<tbody>
+<tr><td>Claire</td><td>Conduit (2 places) : Sophie</td><td>Conduit (2 places) : personne</td></tr>
+<tr><td>Hugo</td><td>Avec Marc</td><td>Ne fait pas le retour</td></tr>
+<tr><td>Inès</td><td>Avec Marc</td><td>Sans voiture</td></tr>
+<tr><td>Léa (Martin)</td><td>Avec Marc</td><td>Sans voiture</td></tr>
+<tr><td>Léa (le doublon)</td><td>Sans voiture</td><td>Sans voiture</td></tr>
+<tr><td>Marc (Martin)</td><td>Conduit (3 places) : Léa, Inès, Hugo</td><td>Avec Sophie</td></tr>
+<tr><td>Sophie</td><td>Avec Claire</td><td>Conduit (3 places) : Marc</td></tr>
+<tr><td>Tom (Martin)</td><td>Sans voiture</td><td>Ne fait pas le retour</td></tr>
+<tr><td><strong>Couverture</strong></td><td><strong>2 sans voiture, 1 place libre</strong> : il manque 1 place</td><td><strong>3 sans voiture, 4 places libres</strong></td></tr>
+</tbody></table></div>
+<p class="lead" style="margin-top:10px">Ce que deviennent ces nombres :</p>
+<ul class="lead">
+  <li><strong>Après le retrait du doublon</strong> (sans voiture sur les deux legs), seul le nombre de personnes sans voiture baisse, jamais les places. L’aller passe à 1 sans voiture et 1 place libre, le retour à 2 sans voiture et 4 places libres.</li>
+  <li><strong>Après le retrait de Marc</strong>, l’aller passe à 5 sans voiture (ses trois passagers, plus le doublon et Tom) pour 1 place libre. Le retour passe à 3 sans voiture pour 5 places libres : la sienne se libère dans la voiture de Sophie.</li>
+</ul>
+
+<h2 id="legs">Ce que devient chaque leg</h2>
+<p class="lead">La même règle vaut pour les deux chemins (l’appareil et l’organisateur), leg par leg et indépendamment. C’est la règle existante « Le conducteur retire sa voiture », appliquée à toutes ses voitures.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>sur ce leg, la personne…</th><th>ce qui est effacé</th><th>sans voiture</th><th>places libres</th><th>ce que dit la confirmation</th><th>qui est prévenu</th></tr></thead>
+  <tbody>
+  <tr><td>conduit, avec P passagers</td><td>son Ride (et plus tard ses Arrêts, #68)</td><td>+ P</td><td>− les places libres de sa voiture</td><td><code>PersonRemoval.drives</code>, avec P</td><td>personne : ni e-mail, ni SMS (V1). Les appareils des passagers voient « Sans voiture » à leur relecture suivante, sans message (RP5.1)</td></tr>
+  <tr><td>conduit, sans passager</td><td>son Ride</td><td>0</td><td>− les places de sa voiture</td><td><code>PersonRemoval.drives</code>, sans nombre</td><td>—</td></tr>
+  <tr><td>est passagère</td><td>son Placement</td><td>0</td><td>+ 1</td><td><code>PersonRemoval.passenger</code>, avec le conducteur</td><td>personne ; le conducteur non plus</td></tr>
+  <tr><td>est sans voiture</td><td>son Placement</td><td>− 1</td><td>0</td><td>rien</td><td>—</td></tr>
+  <tr><td>ne fait pas ce leg</td><td>rien</td><td>0</td><td>0</td><td>rien</td><td>—</td></tr>
+  </tbody>
+</table></div>
+<p class="lead" style="margin-top:10px">Pour une personne qui ne fait qu’un leg, seul ce leg change : les lignes de l’autre leg sont identiques avant et après (RP2.2). Un événement sans retour n’a qu’une ligne de leg, au plus.</p>
+
+<h2 id="participant">Le participant : se retirer depuis son appareil</h2>
+<p class="lead">La seule entrée est la feuille de la personne, qu’on ouvre depuis son prénom. Les cellules et les fiches n’ont pas de bouton de retrait : une feuille de cellule porte sur un leg, pas sur la personne.</p>
+
+<div class="grid">
+  <section class="state" aria-label="La feuille de Léa">
+    <h3>1. La feuille de la personne</h3>
+    <p>Elle s’ouvre depuis le prénom dans « Vos inscriptions ». Le nouveau bouton est sous « Modifier », en <code>outline</code> rouge comme « Retirer la voiture ». <span class="crit">RP1.1</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="behind"><p class="ev-h1">Tournoi de Rennes</p><div class="reg"><div class="reg-toggle"><span><b>Vos inscriptions</b><span class="sum">3 personnes · 2 sans voiture</span></span><svg class="chev"><use href="#i-up"/></svg></div></div><div class="cut">…</div></div>
+      <div class="sheet">
+        <div class="sh-h"><strong>Léa</strong><svg class="ico"><use href="#i-x"/></svg></div>
+        <div class="sh-b">
+          <a class="tel"><svg class="ico"><use href="#i-phone"/></svg>06 12 34 56 78</a>
+          <span class="btn outline full"><svg class="ico"><use href="#i-pencil"/></svg>Modifier</span>
+          <span class="btn danger full new"><svg class="ico"><use href="#i-trash"/></svg>Retirer de l’événement</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Confirmation pour une passagère">
+    <h3>2. Confirmer : une passagère</h3>
+    <p>Léa est passagère de Marc à l’aller, et sans voiture au retour. La voiture de Marc change, donc la ligne « Personne n’est prévenu » apparaît. Le focus est sur « Annuler ». <span class="crit">RP1.2, RP1.3</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen scrim tall"><p class="ev-h1">Tournoi de Rennes</p><div class="cut">…</div></div>
+      <div class="dialog-wrap"><div class="dialog new" role="alertdialog">
+        <strong>Retirer Léa de l’événement ?</strong>
+        <p>Sa place dans la voiture de Marc à l’aller sera libérée.</p>
+        <p>Personne n’est prévenu : pensez à le dire aux personnes de cette voiture.</p>
+        <p>Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</p>
+        <p>C’est définitif.</p>
+        <div class="acts"><span class="btn solid-danger full">Retirer de l’événement</span><span class="btn outline full focusring">Annuler</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Confirmation pour un conducteur">
+    <h3>3. Confirmer : un conducteur avec passagers</h3>
+    <p>Marc conduit à l’aller avec 3 passagers, et il est passager de Sophie au retour. Deux voitures changent. <span class="crit">RP1.2</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen scrim tall"><p class="ev-h1">Tournoi de Rennes</p><div class="cut">…</div></div>
+      <div class="dialog-wrap"><div class="dialog new" role="alertdialog">
+        <strong>Retirer Marc de l’événement ?</strong>
+        <p>Sa voiture pour l’aller sera retirée. 3 personnes redeviendront sans voiture.</p>
+        <p>Sa place dans la voiture de Sophie au retour sera libérée.</p>
+        <p>Personne n’est prévenu : pensez à le dire aux personnes de ces voitures.</p>
+        <p>Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</p>
+        <p>C’est définitif.</p>
+        <div class="acts"><span class="btn solid-danger full">Retirer de l’événement</span><span class="btn outline full focusring">Annuler</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Confirmation sans voiture">
+    <h3>4. Confirmer : sans voiture, sur un seul leg</h3>
+    <p>Tom est sans voiture à l’aller, et ne fait pas le retour. Aucune voiture ne change : pas de ligne de leg, et pas de ligne « Personne n’est prévenu ». <span class="crit">RP1.2</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen scrim" style="min-height:420px"><p class="ev-h1">Tournoi de Rennes</p><div class="cut">…</div></div>
+      <div class="dialog-wrap"><div class="dialog new" role="alertdialog">
+        <strong>Retirer Tom de l’événement ?</strong>
+        <p>Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</p>
+        <p>C’est définitif.</p>
+        <div class="acts"><span class="btn solid-danger full">Retirer de l’événement</span><span class="btn outline full focusring">Annuler</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Hors ligne">
+    <h3>5. Hors ligne, confirmation ouverte</h3>
+    <p>Pendant l’envoi, le bouton rouge est inactif, et son libellé ne change pas. Hors ligne, la phrase s’affiche dans la confirmation, qui reste ouverte. Le bouton redevient actif et reprend le focus. Rien n’a changé. <span class="crit">RP1.4, RP1.7</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen scrim tall"><p class="ev-h1">Tournoi de Rennes</p><div class="cut">…</div></div>
+      <div class="dialog-wrap"><div class="dialog" role="alertdialog">
+        <strong>Retirer Léa de l’événement ?</strong>
+        <p>Sa place dans la voiture de Marc à l’aller sera libérée.</p>
+        <p>Personne n’est prévenu : pensez à le dire aux personnes de cette voiture.</p>
+        <p>Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</p>
+        <p>C’est définitif.</p>
+        <p class="alert new" role="alert">Action impossible, vérifiez la connexion</p>
+        <div class="acts"><span class="btn solid-danger full focusring">Retirer de l’événement</span><span class="btn outline full">Annuler</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Refus dans la confirmation">
+    <h3>6. Refusé, confirmation ouverte</h3>
+    <p>L’événement a été anonymisé pendant que la confirmation était ouverte. Réessayer ne servirait à rien : le bouton rouge disparaît, « Annuler » devient « Fermer » et prend le focus. Les autres refus suivent le même modèle (voir « Refus et échecs »). <span class="crit">RP1.7, RP2.9</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen scrim" style="min-height:420px"><p class="ev-h1">Tournoi de Rennes</p><div class="cut">…</div></div>
+      <div class="dialog-wrap"><div class="dialog" role="alertdialog">
+        <strong>Retirer Tom de l’événement ?</strong>
+        <p>Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</p>
+        <p>C’est définitif.</p>
+        <p class="alert new" role="alert">Cet événement est terminé : ses inscriptions ont été effacées.</p>
+        <div class="acts"><span class="btn outline full focusring new">Fermer</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Réussite">
+    <h3>7. Réussite</h3>
+    <p>La confirmation et la feuille se ferment. La ligne de Léa disparaît et le résumé suit. La voiture de Marc a une place libre ; au retour, il reste 2 personnes sans voiture. Pas d’« Annuler ». Le focus va sur le prénom suivant, Tom. <span class="crit">RP1.5</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen tall">
+        <p class="ev-h1">Tournoi de Rennes</p>
+        <div class="reg"><div class="reg-toggle"><span><b>Vos inscriptions</b><span class="sum">2 personnes · 1 sans voiture</span></span><svg class="chev"><use href="#i-up"/></svg></div>
+          <table class="mx"><colgroup><col class="c-name"><col><col></colgroup>
+            <thead><tr><th scope="col">Prénom</th><th scope="col">Aller</th><th scope="col">Retour</th></tr></thead>
+            <tbody>
+              <tr><th scope="row"><span class="namebtn"><span>Marc</span><svg class="chev"><use href="#i-right"/></svg></span></th><td><span class="cell drive">Conduit</span></td><td><span class="cell in">Avec Sophie</span></td></tr>
+              <tr><th scope="row"><span class="namebtn focusring"><span>Tom</span><svg class="chev"><use href="#i-right"/></svg></span></th><td><span class="cell wait">Sans voiture</span></td><td><span class="cell out">Ne fait pas le retour</span></td></tr>
+            </tbody></table></div>
+        <div class="tabs"><span class="on">Aller<span class="pill">2 sans voiture</span></span><span>Retour<span class="pill">2 sans voiture</span></span></div>
+        <div class="car"><div class="car-h"><strong>Voiture de Marc</strong><span class="muted">08:00</span></div>
+          <ul class="seats"><li class="pass"><svg class="ico"><use href="#i-user"/></svg>Inès</li><li class="pass"><svg class="ico"><use href="#i-user"/></svg>Hugo</li><li class="free"><svg class="ico"><use href="#i-plus"/></svg>Place libre</li></ul></div>
+        <div class="barspace"></div>
+        <div class="mbar new" role="status"><div class="msgs"><p class="mrow"><svg class="ico"><use href="#i-ok"/></svg><span class="t">Léa ne fait plus partie de l’événement</span></p></div><span class="x"><svg class="ico"><use href="#i-x"/></svg></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Dernière personne">
+    <h3>8. La dernière personne de l’appareil</h3>
+    <p>Marc et Léa ont été retirés plus tôt, et Tom est la dernière personne de l’appareil. « Vos inscriptions » disparaît : la page devient celle d’un appareil sans personne. Le focus va sur « Ajouter une personne » de l’onglet actif. L’appareil garde son jeton (Q3). <span class="crit">RP1.6</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen tall">
+        <p class="ev-h1">Tournoi de Rennes</p>
+        <div class="tabs"><span class="on">Aller<span class="pill">3 sans voiture</span></span><span>Retour<span class="pill">2 sans voiture</span></span></div>
+        <p class="banner warn"><svg class="ico"><use href="#i-users"/></svg>3 sans voiture · il manque 2 places</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><span class="btn outline focusring">Ajouter une personne</span><span class="btn">Proposer une voiture</span></div>
+        <div class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="muted">08:15</span></div><ul class="seats"><li class="pass"><svg class="ico"><use href="#i-user"/></svg>Sophie</li><li class="free"><svg class="ico"><use href="#i-plus"/></svg>Place libre</li></ul></div>
+        <div class="barspace"></div>
+        <div class="mbar" role="status"><div class="msgs"><p class="mrow"><svg class="ico"><use href="#i-ok"/></svg><span class="t">Tom ne fait plus partie de l’événement</span></p></div><span class="x"><svg class="ico"><use href="#i-x"/></svg></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Échec dans la barre">
+    <h3>9. Échec, confirmation déjà fermée</h3>
+    <p>La personne a fermé la confirmation avant la réponse, donc l’échec s’affiche dans la barre et nomme ce qui n’a pas été fait. Son repère est le prénom dans la matrice. <span class="crit">RP1.7</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen" style="min-height:360px">
+        <p class="ev-h1">Tournoi de Rennes</p>
+        <div class="reg"><div class="reg-toggle"><span><b>Vos inscriptions</b><span class="sum">3 personnes · 2 sans voiture</span></span><svg class="chev"><use href="#i-down"/></svg></div></div>
+        <div class="barspace" style="height:110px"></div>
+        <div class="mbar err new" role="alert"><div class="msgs"><p class="mrow"><svg class="ico"><use href="#i-err"/></svg><span class="t">Léa fait toujours partie de l’événement. Vérifiez la connexion, puis réessayez.</span></p></div><span class="x"><svg class="ico"><use href="#i-x"/></svg></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Déjà retirée">
+    <h3>10. Déjà retirée</h3>
+    <p>La demande est partie deux fois (réponse perdue, puis renvoi), ou l’organisateur a retiré la personne entre-temps. Ce n’est pas un échec : rien n’est écrit, et la barre le dit. <span class="crit">RP1.8, RP2.6</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen" style="min-height:300px">
+        <p class="ev-h1">Tournoi de Rennes</p>
+        <div class="reg"><div class="reg-toggle"><span><b>Vos inscriptions</b><span class="sum">2 personnes · 1 sans voiture</span></span><svg class="chev"><use href="#i-down"/></svg></div></div>
+        <div class="barspace"></div>
+        <div class="mbar new" role="status"><div class="msgs"><p class="mrow"><svg class="ico"><use href="#i-ok"/></svg><span class="t">Léa ne faisait déjà plus partie de l’événement</span></p></div><span class="x"><svg class="ico"><use href="#i-x"/></svg></span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<h2 id="organisateur">L’organisateur : retirer n’importe qui</h2>
+<p class="lead">Les sections du panneau sont organisées par leg. Une personne placée dans une voiture n’apparaît dans aucune de leurs listes (DO1), et une personne qui ne fait aucun leg non plus. Le panneau gagne donc une section qui liste <strong>toutes</strong> les personnes. Elle se place après Aller et Retour et se replie comme elles (organizer-view v3.4), pour ne pas rendre au panneau la hauteur que #648 lui a retirée.</p>
+<p class="lead">Elle s’ouvre à qui l’espace organisateur s’ouvre, ni plus ni moins. C’est la règle unique de <code>organiser-access.ts</code> (#596, OA7), que cette maquette ne redit pas.</p>
+
+<div class="grid">
+  <section class="state" aria-label="Le panneau au premier affichage">
+    <h3>11. Au premier affichage</h3>
+    <p>Les trois sections sont repliées. Aller et Retour montrent leur résumé (v3.4). « Personnes inscrites » n’a pas de résumé : son nombre est dans le nom de son bouton, un bouton de 44 px sur toute la largeur, avec un chevron. Repliée, la section ajoute 49 px au panneau à 360 px. <span class="crit">RP4.1</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+      <div class="screen">
+        <a class="myev">Mes événements</a>
+        <div class="panel">
+          <div class="ptitle"><strong>Espace organisateur <svg class="ico s"><use href="#i-up"/></svg></strong><span class="btn outline sm"><svg class="ico"><use href="#i-refresh"/></svg>Actualiser</span></div>
+          <div class="cut">… lien à partager, Modifier l’événement …</div>
+          <div class="fsec"><span class="lbtn">Aller<svg class="chev"><use href="#i-down"/></svg></span><p class="sumline"><span class="pill">2 sans voiture</span><b>Il manque 1 place</b></p></div>
+          <div class="fsec"><span class="lbtn">Retour<svg class="chev"><use href="#i-down"/></svg></span><p class="sumline"><span class="pill">3 sans voiture</span><span>4 places libres</span></p></div>
+          <div class="fsec new"><span class="lbtn">Personnes inscrites (8)<svg class="chev"><use href="#i-down"/></svg></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="La liste des personnes">
+    <h3>12. « Personnes inscrites », dépliée</h3>
+    <p>La liste est triée par prénom, ce qui met les deux Léa côte à côte, puis par ordre d’inscription. Sous chaque prénom, un état par leg, avec les mots exacts des cellules de la matrice. Aucun numéro (Q2). Cinq lignes, puis « Afficher les 3 autres ». <span class="crit">RP4.1–RP4.3</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+      <div class="screen">
+        <div class="panel">
+          <div class="cut">… Aller, Retour (repliés) …</div>
+          <div class="fsec new"><span class="lbtn">Personnes inscrites (8)<svg class="chev"><use href="#i-up"/></svg></span>
+            <div class="body">
+              <p class="small-muted">Retirer une personne l’efface de l’événement, avec ses voitures et ses places. Personne n’est prévenu.</p>
+              <div class="olist"><ul>
+                <li class="pline"><span class="who"><b>Claire</b><span>Aller : Conduit</span><span>Retour : Conduit</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b>Hugo</b><span>Aller : Avec Marc</span><span>Retour : Ne fait pas le retour</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b>Inès</b><span>Aller : Avec Marc</span><span>Retour : Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b>Léa</b><span>Aller : Avec Marc</span><span>Retour : Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b>Léa</b><span>Aller : Sans voiture</span><span>Retour : Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+              </ul></div>
+              <span class="btn outline full">Afficher les 3 autres</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Confirmation organisateur, doublon">
+    <h3>13. Confirmer depuis le panneau : le doublon</h3>
+    <p>Sous le titre, l’état de la personne sur chaque leg, tel que la liste le montre : l’organisateur sait quelle Léa il retire. Sans voiture sur les deux legs, elle n’a pas de ligne de conséquence. Le focus est sur « Annuler ». <span class="crit">RP4.5</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+      <div class="screen scrim" style="min-height:460px"><div class="panel"><div class="ptitle"><strong>Espace organisateur</strong></div><div class="cut">…</div></div></div>
+      <div class="dialog-wrap"><div class="dialog new" role="alertdialog">
+        <strong>Retirer Léa de l’événement ?</strong>
+        <div class="statebox"><span>Aller : Sans voiture</span><span>Retour : Sans voiture</span></div>
+        <p>Personne n’est prévenu, pas même Léa.</p>
+        <p>Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</p>
+        <p>C’est définitif.</p>
+        <div class="acts"><span class="btn solid-danger full">Retirer de l’événement</span><span class="btn outline full focusring">Annuler</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Confirmation organisateur, conducteur">
+    <h3>14. Confirmer depuis le panneau : un conducteur</h3>
+    <p>L’état, puis les mêmes lignes de leg que sur l’appareil. Elles sont comptées sur l’état que le panneau et le tableau affichent. <span class="crit">RP4.5</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+      <div class="screen scrim tall"><div class="panel"><div class="ptitle"><strong>Espace organisateur</strong></div><div class="cut">…</div></div></div>
+      <div class="dialog-wrap"><div class="dialog new" role="alertdialog">
+        <strong>Retirer Marc de l’événement ?</strong>
+        <div class="statebox"><span>Aller : Conduit</span><span>Retour : Avec Sophie</span></div>
+        <p>Sa voiture pour l’aller sera retirée. 3 personnes redeviendront sans voiture.</p>
+        <p>Sa place dans la voiture de Sophie au retour sera libérée.</p>
+        <p>Personne n’est prévenu, pas même Marc.</p>
+        <p>Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</p>
+        <p>C’est définitif.</p>
+        <div class="acts"><span class="btn solid-danger full">Retirer de l’événement</span><span class="btn outline full focusring">Annuler</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Réussite organisateur">
+    <h3>15. Réussite : le doublon est retiré</h3>
+    <p>L’état du tableau revient de l’action, puis le panneau est relu. Les résumés repliés suivent l’exemple : l’aller passe à 1 sans voiture et 1 place libre, le retour à 2 sans voiture et 4 places libres. Les places ne changent pas. Le bouton passe à « Personnes inscrites (7) », et le focus va sur le prénom de la ligne suivante, Marc. <span class="crit">RP4.6</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+      <div class="screen tall">
+        <div class="panel">
+          <div class="ptitle"><strong>Espace organisateur</strong><span class="btn outline sm"><svg class="ico"><use href="#i-refresh"/></svg>Actualiser</span></div>
+          <div class="cut">…</div>
+          <div class="fsec"><span class="lbtn">Aller<svg class="chev"><use href="#i-down"/></svg></span><p class="sumline"><span class="pill new">1 sans voiture</span><span class="new">1 place libre</span></p></div>
+          <div class="fsec"><span class="lbtn">Retour<svg class="chev"><use href="#i-down"/></svg></span><p class="sumline"><span class="pill new">2 sans voiture</span><span>4 places libres</span></p></div>
+          <div class="fsec"><span class="lbtn">Personnes inscrites (7)<svg class="chev"><use href="#i-up"/></svg></span>
+            <div class="body">
+              <p class="small-muted">Retirer une personne l’efface de l’événement, avec ses voitures et ses places. Personne n’est prévenu.</p>
+              <div class="olist"><ul>
+                <li class="pline"><span class="who"><b>Claire</b><span>Aller : Conduit</span><span>Retour : Conduit</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b>Hugo</b><span>Aller : Avec Marc</span><span>Retour : Ne fait pas le retour</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b>Inès</b><span>Aller : Avec Marc</span><span>Retour : Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b>Léa</b><span>Aller : Avec Marc</span><span>Retour : Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b class="focusring">Marc</b><span>Aller : Conduit</span><span>Retour : Avec Sophie</span></span><span class="btn danger sm">Retirer</span></li>
+              </ul></div>
+              <span class="btn outline full">Afficher les 2 autres</span>
+            </div>
+          </div>
+        </div>
+        <div class="barspace"></div>
+        <div class="mbar" role="status"><div class="msgs"><p class="mrow"><svg class="ico"><use href="#i-ok"/></svg><span class="t">Léa ne fait plus partie de l’événement</span></p></div><span class="x"><svg class="ico"><use href="#i-x"/></svg></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Accès perdu, confirmation ouverte">
+    <h3>16. Refusé, confirmation ouverte : plus d’accès</h3>
+    <p>La session a pris fin entre l’affichage et l’envoi (« Se déconnecter » dans ce navigateur, compte supprimé), ou l’événement n’a plus d’organisateur. Rien n’est effacé. Comme en 6, il ne reste que « Fermer ». Si la confirmation est fermée, la même raison s’affiche dans la barre. <span class="crit">RP3.2, RP4.7</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+      <div class="screen scrim" style="min-height:460px"><div class="panel"><div class="ptitle"><strong>Espace organisateur</strong></div><div class="cut">…</div></div></div>
+      <div class="dialog-wrap"><div class="dialog" role="alertdialog">
+        <strong>Retirer Léa de l’événement ?</strong>
+        <div class="statebox"><span>Aller : Sans voiture</span><span>Retour : Sans voiture</span></div>
+        <p>Personne n’est prévenu, pas même Léa.</p>
+        <p>Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</p>
+        <p>C’est définitif.</p>
+        <p class="alert new" role="alert">L’espace organisateur ne vous est plus ouvert : rechargez la page.</p>
+        <div class="acts"><span class="btn outline full focusring">Fermer</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Liste vide">
+    <h3>17. Personne d’inscrit (dépliée)</h3>
+    <p>Le bouton est là même à 0, replié à chaque affichage. Une fois déplié, il montre la phrase de l’événement vide, sans phrase d’aide. Il reste aussi le point de chute du focus quand la dernière ligne part. <span class="crit">RP4.4</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+      <div class="screen" style="min-height:200px">
+        <div class="panel"><div class="cut">…</div>
+          <div class="fsec"><span class="lbtn">Aller<svg class="chev"><use href="#i-down"/></svg></span><p class="sumline muted">Personne ne s’est encore inscrit.</p></div>
+          <div class="fsec new"><span class="lbtn">Personnes inscrites (0)<svg class="chev"><use href="#i-up"/></svg></span><div class="body"><p class="sumline muted" style="font-size:14px">Personne ne s’est encore inscrit.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Sans retour et prénom long">
+    <h3>18. Sans retour ; un prénom de 40 caractères</h3>
+    <p>Sans retour, la ligne montre l’état seul, sans nom de leg. Un prénom de 40 caractères sans espace ni trait d’union passe à la ligne dans sa colonne, et « Retirer » garde sa largeur. <span class="crit">RP4.2, RP7.1</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/q3Lp9vTe/admin</div>
+      <div class="screen" style="min-height:260px">
+        <div class="panel"><div class="cut">…</div>
+          <div class="fsec"><span class="lbtn">Personnes inscrites (2)<svg class="chev"><use href="#i-up"/></svg></span>
+            <div class="body">
+              <p class="small-muted">Retirer une personne l’efface de l’événement, avec ses voitures et ses places. Personne n’est prévenu.</p>
+              <div class="olist"><ul>
+                <li class="pline"><span class="who"><b>Anastasiamaximiliennebernadettecharlotte</b><span>Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+                <li class="pline"><span class="who"><b>Paul</b><span>Conduit</span></span><span class="btn danger sm">Retirer</span></li>
+              </ul></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<h3 style="margin-top:32px">19. À partir de 1024 px</h3>
+<p class="lead">Aller et Retour sont côte à côte et repliés (v3.4). « Personnes inscrites » vient dessous, dans la colonne de gauche ; celle de droite reste vide. La section est montrée dépliée, sur l’exemple avant tout retrait. <span class="crit">RP4.1</span></p>
+<div class="deskwrap"><div class="deskscale"><div class="desk"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div><div class="inner">
+  <div class="panel">
+    <div class="ptitle"><strong>Espace organisateur</strong><span class="btn outline sm"><svg class="ico"><use href="#i-refresh"/></svg>Actualiser</span></div>
+    <div class="cut">… lien à partager · Modifier l’événement …</div>
+    <div class="row2">
+      <div class="fsec" style="border-top:0;padding-top:0"><span class="lbtn">Aller<svg class="chev"><use href="#i-down"/></svg></span><p class="sumline"><span class="pill">2 sans voiture</span><b>Il manque 1 place</b></p></div>
+      <div class="fsec" style="border-top:0;padding-top:0"><span class="lbtn">Retour<svg class="chev"><use href="#i-down"/></svg></span><p class="sumline"><span class="pill">3 sans voiture</span><span>4 places libres</span></p></div>
+    </div>
+    <div class="row2">
+      <div class="fsec new"><span class="lbtn">Personnes inscrites (8)<svg class="chev"><use href="#i-up"/></svg></span>
+        <div class="body"><p class="small-muted">Retirer une personne l’efface de l’événement, avec ses voitures et ses places. Personne n’est prévenu.</p>
+        <div class="olist"><ul>
+          <li class="pline"><span class="who"><b>Claire</b><span>Aller : Conduit</span><span>Retour : Conduit</span></span><span class="btn danger sm">Retirer</span></li>
+          <li class="pline"><span class="who"><b>Hugo</b><span>Aller : Avec Marc</span><span>Retour : Ne fait pas le retour</span></span><span class="btn danger sm">Retirer</span></li>
+          <li class="pline"><span class="who"><b>Inès</b><span>Aller : Avec Marc</span><span>Retour : Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+          <li class="pline"><span class="who"><b>Léa</b><span>Aller : Avec Marc</span><span>Retour : Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+          <li class="pline"><span class="who"><b>Léa</b><span>Aller : Sans voiture</span><span>Retour : Sans voiture</span></span><span class="btn danger sm">Retirer</span></li>
+        </ul></div><span class="btn outline full">Afficher les 3 autres</span></div></div>
+      <div></div>
+    </div>
+  </div>
+</div></div></div></div>
+
+<h2 id="autres">Les autres appareils, à la relecture</h2>
+<p class="lead">Personne n’est prévenu hors de l’application. Dans l’application, chaque appareil voit le nouvel état à sa relecture suivante, quel qu’en soit le déclencheur :</p>
+<ul class="lead">
+  <li>la relecture automatique, au plus 15 s tant que la page est visible ;</li>
+  <li>le retour de la page au premier plan ;</li>
+  <li>sa prochaine action (C11.6).</li>
+</ul>
+<div class="grid">
+  <section class="state" aria-label="Appareil d'un passager">
+    <h3>20. L’appareil d’Inès, passagère de Marc</h3>
+    <p>Marc a été retiré. La cellule d’aller d’Inès devient « Sans voiture » ; les pastilles et le bandeau suivent l’exemple (5 sans voiture à l’aller, 3 au retour). La voiture de Marc disparaît. <strong>Aucun message</strong> : c’est déjà le cas quand un conducteur retire sa voiture. <span class="crit">RP5.1, RP5.2</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen tall">
+        <p class="ev-h1">Tournoi de Rennes</p>
+        <div class="reg"><div class="reg-toggle"><span><b>Vos inscriptions</b><span class="sum">1 personne · 1 sans voiture</span></span><svg class="chev"><use href="#i-up"/></svg></div>
+          <table class="mx"><colgroup><col class="c-name"><col><col></colgroup><thead><tr><th scope="col">Prénom</th><th scope="col">Aller</th><th scope="col">Retour</th></tr></thead>
+          <tbody><tr><th scope="row"><span class="namebtn"><span>Inès</span><svg class="chev"><use href="#i-right"/></svg></span></th><td><span class="cell wait new">Sans voiture</span></td><td><span class="cell wait">Sans voiture</span></td></tr></tbody></table></div>
+        <div class="tabs"><span class="on">Aller<span class="pill">5 sans voiture</span></span><span>Retour<span class="pill">3 sans voiture</span></span></div>
+        <p class="banner warn"><svg class="ico"><use href="#i-users"/></svg>5 sans voiture · il manque 4 places</p>
+        <div class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="muted">08:15</span></div><ul class="seats"><li class="pass"><svg class="ico"><use href="#i-user"/></svg>Sophie</li><li class="free"><svg class="ico"><use href="#i-plus"/></svg>Place libre</li></ul></div>
+        <div><b>Sans voiture</b><ul class="chips" style="margin-top:8px"><li>Léa</li><li>Tom</li><li>Léa</li><li>Inès</li><li>Hugo</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Appareil de la personne retirée">
+    <h3>21. L’appareil de Marc, retiré par l’organisateur</h3>
+    <p>La page était ouverte. À la relecture qui ne rend plus Marc, sa ligne disparaît, une feuille de Marc ouverte se ferme, et la barre le dit une fois. Ce message ne paraît jamais sur une page qui a elle-même envoyé ce retrait, ni dans un autre onglet du même appareil. Au chargement suivant, rien n’est dit : l’appareil ne se souvient d’aucun prénom. <span class="crit">RP5.3</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen" style="min-height:420px">
+        <p class="ev-h1">Tournoi de Rennes</p>
+        <div class="reg"><div class="reg-toggle"><span><b>Vos inscriptions</b><span class="sum">2 personnes · 2 sans voiture</span></span><svg class="chev"><use href="#i-up"/></svg></div>
+          <table class="mx"><colgroup><col class="c-name"><col><col></colgroup><thead><tr><th scope="col">Prénom</th><th scope="col">Aller</th><th scope="col">Retour</th></tr></thead>
+          <tbody><tr><th scope="row"><span class="namebtn"><span>Léa</span><svg class="chev"><use href="#i-right"/></svg></span></th><td><span class="cell wait">Sans voiture</span></td><td><span class="cell wait">Sans voiture</span></td></tr>
+          <tr><th scope="row"><span class="namebtn"><span>Tom</span><svg class="chev"><use href="#i-right"/></svg></span></th><td><span class="cell wait">Sans voiture</span></td><td><span class="cell out">Ne fait pas le retour</span></td></tr></tbody></table></div>
+        <div class="barspace" style="height:120px"></div>
+        <div class="mbar new" role="status"><div class="msgs"><p class="mrow"><svg class="ico"><use href="#i-info"/></svg><span class="t">Marc ne fait plus partie de vos inscriptions : la personne a été retirée de l’événement depuis un autre appareil.</span></p></div><span class="x"><svg class="ico"><use href="#i-x"/></svg></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state" aria-label="Action périmée">
+    <h3>22. Une action sur une personne retirée</h3>
+    <p>Tom a été retiré depuis un autre appareil. Avant la relecture, il touche une place libre. Le serveur refuse avec <code>personGone</code> et rend l’état ; la ligne de Tom disparaît. <span class="crit">RP5.4</span></p>
+    <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div>
+      <div class="screen" style="min-height:300px">
+        <p class="ev-h1">Tournoi de Rennes</p>
+        <div class="car"><div class="car-h"><strong>Voiture de Claire</strong><span class="muted">08:15</span></div><ul class="seats"><li class="pass"><svg class="ico"><use href="#i-user"/></svg>Sophie</li><li class="free"><svg class="ico"><use href="#i-plus"/></svg>Place libre</li></ul></div>
+        <div class="barspace" style="height:110px"></div>
+        <div class="mbar err new" role="alert"><div class="msgs"><p class="mrow"><svg class="ico"><use href="#i-err"/></svg><span class="t">Tom n’a pas pu monter dans la voiture de Claire. Tom ne fait plus partie de l’événement.</span></p></div><span class="x"><svg class="ico"><use href="#i-x"/></svg></span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<h2 id="refus">Refus et échecs, mot pour mot</h2>
+<p class="lead">Chaque réponse autre qu’une réussite a ses mots, dans la confirmation si elle est encore ouverte, sinon dans la barre. La confirmation prend donc un problème plus large que <code>BarProblem</code> (<code>"offline" | "failed"</code>). Dans la barre, le texte est <code>Actions.failure</code>, c’est-à-dire « {notDone} {why} », avec <code>notDone</code> = « {prénom} fait toujours partie de l’événement. ».</p>
+<div class="table-wrap"><table>
+<thead><tr><th>réponse</th><th>chemin</th><th>dans la confirmation ouverte</th><th>ses boutons, le focus</th><th>dans la barre (<code>why</code>)</th></tr></thead>
+<tbody>
+<tr><td>hors ligne</td><td>les deux</td><td><code>Actions.offline</code> : « Action impossible, vérifiez la connexion »</td><td>rouge actif, « Annuler » ; focus sur le rouge</td><td><code>Actions.why.offline</code> : « Vérifiez la connexion, puis réessayez. »</td></tr>
+<tr><td>erreur du serveur</td><td>les deux</td><td><code>Actions.failed</code> : « Une erreur est survenue et rien n’a changé. Réessayez dans un instant. »</td><td>idem</td><td><code>Actions.why.failed</code> : « Une erreur est survenue : réessayez dans un instant. »</td></tr>
+<tr><td><code>forbidden</code></td><td>l’appareil</td><td><code>Actions.why.forbidden</code> : « Cet appareil ne peut pas faire ce changement : rechargez la page. »</td><td>le rouge disparaît, « Annuler » devient « Fermer » (<code>Actions.close</code>) ; focus sur « Fermer »</td><td><code>Actions.why.forbidden</code></td></tr>
+<tr><td><code>noOrganiserAccess</code></td><td>l’organisateur</td><td><code>Actions.why.noOrganiserAccess</code> : « L’espace organisateur ne vous est plus ouvert : rechargez la page. »</td><td>« Fermer » seul ; focus dessus</td><td><code>Actions.why.noOrganiserAccess</code></td></tr>
+<tr><td><code>eventEnded</code> (événement anonymisé)</td><td>les deux</td><td><code>Actions.why.eventEnded</code> : « Cet événement est terminé : ses inscriptions ont été effacées. »</td><td>« Fermer » seul ; focus dessus</td><td><code>Actions.why.eventEnded</code></td></tr>
+<tr><td><code>eventNotFound</code> (événement supprimé)</td><td>les deux</td><td><code>Actions.why.eventNotFound</code> : « Cet événement est introuvable : il a peut-être été supprimé. »</td><td>« Fermer » seul ; focus dessus</td><td><code>Actions.why.eventNotFound</code></td></tr>
+<tr><td><code>alreadyRemoved</code></td><td>les deux</td><td>ce n’est pas un refus : la confirmation se ferme comme pour une réussite</td><td>—</td><td>réussite : <code>PersonRemoval.alreadyRemoved</code></td></tr>
+</tbody></table></div>
+<p class="lead" style="margin-top:10px"><strong>Ordre des réponses</strong>, du premier contrôle au dernier ; la première qui s’applique gagne (RP3.4) :</p>
+<ol class="lead">
+  <li>une requête mal formée donne <code>invalid</code> : aucune page ne l’envoie ;</li>
+  <li>un événement inconnu donne <code>eventNotFound</code> ;</li>
+  <li>un événement anonymisé donne <code>eventEnded</code> ;</li>
+  <li>le droit : sur l’appareil, un jeton absent ou mal formé donne <code>forbidden</code> ; pour l’organisateur, un accès refusé par la règle donne <code>noOrganiserAccess</code> ;</li>
+  <li>une personne inconnue dans l’événement donne <code>alreadyRemoved</code> ;</li>
+  <li>sur l’appareil seulement, une personne d’un autre jeton donne <code>forbidden</code> ;</li>
+  <li>sinon, la personne est retirée.</li>
+</ol>
+
+<h2 id="vie-privee">Confidentialité</h2>
+<div class="prose">
+<ul>
+  <li><strong>Dans la base, tout de suite et en entier.</strong> Sont supprimés, dans une seule transaction, à la confirmation :
+    <ul>
+      <li>la ligne <code>person</code> : prénom, numéro, empreinte du jeton, date de création ;</li>
+      <li>ses Rides : lieu, position, heure, note ;</li>
+      <li>ses Placements.</li>
+    </ul>
+    Rien n’est marqué « supprimé » pour être gardé : il n’y a pas de corbeille, et pas d’« Annuler » (Q1 = a). <span class="crit">RP2.1, RP6.1</span></li>
+  <li><strong>Le jeton.</strong> Seule son empreinte est en base, sur la ligne de la personne.
+    <ul>
+      <li>Si l’appareil a d’autres personnes, leurs lignes portent la même empreinte. Elle reste : c’est la leur.</li>
+      <li>Sinon, plus aucune ligne ne la porte, et le jeton ne correspond plus à rien.</li>
+    </ul>
+    <span class="crit">RP6.1</span></li>
+  <li><strong>L’appareil qui l’a inscrite</strong> ne garde aucune donnée de la personne : il n’a jamais stocké que son jeton (<code>fullcar:personal-token:{id}</code>). Le prénom, le numéro et les places ne vivent que dans la mémoire de la page, jusqu’à la relecture. Quand l’appareil n’a plus personne, il garde son jeton (Q3 = a). Ce jeton ne nomme personne et n’ouvre plus rien, et une nouvelle inscription le réutilise. <span class="crit">RP6.3</span></li>
+  <li><strong>Les autres appareils</strong> n’ont rien stocké de la personne : ils l’oublient à leur relecture. Pour taire <code>removedElsewhere</code> dans un autre onglet du même appareil, rien n’est stocké non plus (voir « Focus, barre, envoi »).</li>
+  <li><strong>Les journaux.</strong> Ni le prénom, ni le numéro, ni l’identifiant, ni le jeton n’apparaissent dans un journal du serveur ou dans un événement Sentry (comme OA11.1). <span class="crit">RP6.2</span></li>
+  <li><strong>Une limite à dire, pas à décider ici.</strong> L’hébergeur de la base (Neon) garde un historique de restauration : une ligne supprimée y reste jusqu’à la fin de sa fenêtre, dont la durée dépend du plan. C’est une question d’hébergement, donc du propriétaire. La page Confidentialité (#612) doit le dire, avec la durée.</li>
+</ul>
+</div>
+
+<h2 id="mots">Les mots</h2>
+<p class="lead">Le vocabulaire est celui du glossaire. Le ton et la forme suivent les chaînes existantes : une réussite sans point final (comme <code>Seat.placed</code>), un échec composé par <code>Actions.failure</code>, des mots épicènes (C11.9). Les clés existantes réutilisées sont marquées « existante ».</p>
+<div class="table-wrap"><table class="words">
+<thead><tr><th>clé</th><th>FR</th><th>EN</th><th>où, critère</th></tr></thead>
+<tbody>
+<tr><td><code>DevicePersons.remove</code></td><td lang="fr">Retirer de l’événement</td><td lang="en">Remove from the event</td><td>feuille de la personne, sous « Modifier », RP1.1</td></tr>
+<tr><td><code>PersonRemoval.title</code></td><td lang="fr">Retirer {firstName} de l’événement ?</td><td lang="en">Remove {firstName} from the event?</td><td>titre de la confirmation, RP1.2, RP4.5</td></tr>
+<tr><td><code>PersonRemoval.drives</code></td><td lang="fr">{leg, select, aller {Sa voiture pour l’aller sera retirée.} other {Sa voiture pour le retour sera retirée.}} {passengers, plural, =0 {} one {# personne redeviendra sans voiture.} other {# personnes redeviendront sans voiture.}}</td><td lang="en">{leg, select, aller {Their car for the outbound trip will be removed.} other {Their car for the return trip will be removed.}} {passengers, plural, =0 {} one {# passenger will be without a car again.} other {# passengers will be without a car again.}}</td><td>une phrase par leg où elle conduit, RP1.2</td></tr>
+<tr><td><code>PersonRemoval.passenger</code></td><td lang="fr">{leg, select, aller {Sa place dans la voiture de {driver} à l’aller sera libérée.} other {Sa place dans la voiture de {driver} au retour sera libérée.}}</td><td lang="en">{leg, select, aller {Their seat in {driver}’s car on the outbound trip will be freed.} other {Their seat in {driver}’s car on the return trip will be freed.}}</td><td>une phrase par leg où elle est passagère, RP1.2</td></tr>
+<tr><td><code>PersonRemoval.notified</code></td><td lang="fr">{cars, plural, one {Personne n’est prévenu : pensez à le dire aux personnes de cette voiture.} other {Personne n’est prévenu : pensez à le dire aux personnes de ces voitures.}}</td><td lang="en">{cars, plural, one {Nobody is notified: remember to tell the people in that car.} other {Nobody is notified: remember to tell the people in those cars.}}</td><td>depuis l’appareil, si <code>cars</code> ≥ 1 : ses voitures qui ont un passager, plus celles où elle est passagère, RP1.2</td></tr>
+<tr><td><code>PersonRemoval.notifiedOrganiser</code></td><td lang="fr">Personne n’est prévenu, pas même {firstName}.</td><td lang="en">Nobody is notified, not even {firstName}.</td><td>depuis le panneau, toujours, RP4.5</td></tr>
+<tr><td><code>PersonRemoval.erased</code></td><td lang="fr">Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.</td><td lang="en">Their first name, their number if any, and their sign-ups will be erased.</td><td>toujours, RP1.2</td></tr>
+<tr><td><code>PersonRemoval.final</code></td><td lang="fr">C’est définitif.</td><td lang="en">This cannot be undone.</td><td>toujours, en dernier, RP1.2 (les mêmes mots que <code>DeleteAccount.final</code>)</td></tr>
+<tr><td><code>PersonRemoval.confirm</code></td><td lang="fr">Retirer de l’événement</td><td lang="en">Remove from the event</td><td>bouton rouge, RP1.4</td></tr>
+<tr><td><code>Actions.cancel</code>, <code>Actions.close</code> (existantes)</td><td lang="fr">Annuler · Fermer</td><td lang="en">Cancel · Close</td><td>RP1.3 ; « Fermer » après un refus, RP1.7</td></tr>
+<tr><td><code>PersonRemoval.removed</code></td><td lang="fr">{firstName} ne fait plus partie de l’événement</td><td lang="en">{firstName} is no longer part of the event</td><td>barre, réussite, RP1.5, RP4.6</td></tr>
+<tr><td><code>PersonRemoval.alreadyRemoved</code></td><td lang="fr">{firstName} ne faisait déjà plus partie de l’événement</td><td lang="en">{firstName} had already been removed from the event</td><td>barre, réussite sans écriture, RP1.8</td></tr>
+<tr><td><code>PersonRemoval.removedElsewhere</code></td><td lang="fr">{firstName} ne fait plus partie de vos inscriptions : la personne a été retirée de l’événement depuis un autre appareil.</td><td lang="en">{firstName} is no longer in your sign-ups: they were removed from the event from another device.</td><td>barre, information, RP5.3</td></tr>
+<tr><td><code>Actions.notDone.removePerson</code></td><td lang="fr">{firstName} fait toujours partie de l’événement.</td><td lang="en">{firstName} is still part of the event.</td><td>sujet d’un échec, RP1.7, RP4.7</td></tr>
+<tr><td><code>Actions.why.personGone</code></td><td lang="fr">{firstName} ne fait plus partie de l’événement.</td><td lang="en">{firstName} is no longer part of the event.</td><td>refus d’une action sur une personne retirée, RP5.4</td></tr>
+<tr><td><code>Actions.why.noOrganiserAccess</code></td><td lang="fr">L’espace organisateur ne vous est plus ouvert : rechargez la page.</td><td lang="en">The organiser area is no longer open to you: reload the page.</td><td>RP4.7</td></tr>
+<tr><td><code>Actions.why.eventEnded</code></td><td lang="fr">Cet événement est terminé : ses inscriptions ont été effacées.</td><td lang="en">This event is over: its sign-ups have been erased.</td><td>toute écriture sur un événement anonymisé, RP2.9</td></tr>
+<tr><td><code>Actions.offline</code>, <code>Actions.failed</code>, <code>Actions.why.offline</code>, <code>Actions.why.failed</code>, <code>Actions.why.forbidden</code>, <code>Actions.why.eventNotFound</code> (existantes)</td><td lang="fr">voir « Refus et échecs »</td><td lang="en">see <code>messages/en.json</code></td><td>RP1.7</td></tr>
+<tr><td><code>Admin.persons.title</code></td><td lang="fr">Personnes inscrites ({count})</td><td lang="en">Signed-up people ({count})</td><td>texte et nom du bouton de la section (dans le h3), RP4.1</td></tr>
+<tr><td><code>Event.nobody</code> (existante)</td><td lang="fr">Personne ne s’est encore inscrit.</td><td lang="en">Nobody has signed up yet.</td><td>contenu déplié à 0, RP4.4</td></tr>
+<tr><td><code>Admin.persons.hint</code></td><td lang="fr">Retirer une personne l’efface de l’événement, avec ses voitures et ses places. Personne n’est prévenu.</td><td lang="en">Removing a person erases them from the event, with their cars and seats. Nobody is notified.</td><td>en tête du contenu déplié, RP4.1</td></tr>
+<tr><td><code>Admin.persons.leg</code></td><td lang="fr">{leg} : {state}</td><td lang="en">{leg}: {state}</td><td>une ligne par leg, dans la liste et dans la confirmation de l’organisateur. <code>{leg}</code> = <code>Event.legs.*</code>, <code>{state}</code> = le texte de la cellule de la matrice (<code>DevicePersons.cell.passenger</code>, <code>.state.driver</code>, <code>.state.withoutCar</code>, <code>.state.notConcerned.*</code>), RP4.2, RP4.5</td></tr>
+<tr><td><code>Admin.persons.remove</code></td><td lang="fr">Retirer</td><td lang="en">Remove</td><td>texte du bouton d’une ligne, RP4.2</td></tr>
+<tr><td><code>Admin.persons.removeLabel</code></td><td lang="fr">Retirer {firstName} de l’événement</td><td lang="en">Remove {firstName} from the event</td><td>nom accessible de ce bouton (il commence par le texte visible), RP4.2</td></tr>
+<tr><td><code>Admin.list.more</code>, <code>Admin.list.less</code> (existantes)</td><td lang="fr">Afficher les # autres · Réduire la liste</td><td lang="en">Show the # others · Show fewer</td><td>RP4.3</td></tr>
+</tbody></table></div>
+
+<h2 id="focus">Focus, barre, envoi</h2>
+<div class="prose">
+<ul>
+  <li><strong>Ouverture</strong> de la confirmation : le focus va sur « Annuler » (comme OA9.3). Avec « Annuler » ou Échap, il revient sur le bouton qui l’a ouverte : « Retirer de l’événement » dans la feuille, ou « Retirer » sur la ligne.</li>
+  <li><strong>Réussite depuis l’appareil</strong> : la confirmation et la feuille se ferment. Le focus va sur le prénom de la ligne suivante de la matrice, sinon de la précédente. S’il n’en reste aucune, il va sur « Ajouter une personne » de l’onglet actif.</li>
+  <li><strong>Réussite depuis le panneau</strong> : le focus va sur le prénom de la ligne suivante (<code>data-line-focus</code>), sinon de la précédente. S’il n’en reste aucune, il va sur le bouton du titre de la section, « Personnes inscrites (0) » (O5.7, amendé par O9.9 en v3.4).</li>
+  <li><strong>Refus ou échec, confirmation ouverte</strong> : voir « Refus et échecs ». Quand la confirmation est déjà fermée, l’échec s’affiche dans la barre.</li>
+  <li><strong>Sujet</strong> d’un échec (règle 5 de la v4.2) : le retrait de cette personne. Un nouvel envoi du retrait de la même personne retire cet échec, dès l’envoi.</li>
+  <li><strong>Une réussite retire les lignes devenues sans objet.</strong> Une réussite (<code>removed</code> ou <code>alreadyRemoved</code>) et une information <code>removedElsewhere</code> retirent de la barre toutes les lignes dont le sujet est cette seule personne. Ce sont les échecs de « Modifier », d’un choix de cellule, d’un retrait précédent ou de son inscription, et la réussite d’un placement, avec son « Annuler », qui ne nomme qu’elle. Une ligne qui nomme aussi d’autres personnes reste : elle est encore vraie pour elles.</li>
+  <li><strong>Repère</strong> (règle 8) :
+    <ul>
+      <li>depuis l’appareil : son prénom dans la matrice, ou le bouton « Vos inscriptions » si la section est repliée ;</li>
+      <li>depuis le panneau : le « Retirer » de sa ligne, ou le bouton de « Personnes inscrites » si la section est repliée, ou le bouton du titre de la carte si le panneau est replié ;</li>
+      <li>si la personne n’est plus là, la règle 8 passe au repère suivant.</li>
+    </ul>
+  </li>
+  <li><strong>Information <code>removedElsewhere</code></strong> : dans la région <code>status</code>, une fois par personne disparue, sans « Annuler ». Une page ne l’annonce jamais pour un retrait qu’elle a envoyé elle-même. Elle ne l’annonce pas non plus pour un retrait envoyé par un autre onglet du même appareil : cet onglet le signale aux autres sans rien stocker, par exemple par un <code>BroadcastChannel</code> propre à l’événement. Si le focus était dans une feuille ou une confirmation de cette personne, qui se ferme, il va sur le bouton « Vos inscriptions », ou sur « Ajouter une personne » de l’onglet actif si la section a disparu.</li>
+  <li><strong>Envoi</strong> : le bouton rouge est <code>disabled</code> jusqu’à la réponse, et son libellé ne change pas. « Annuler » reste actif : il ferme la confirmation sans arrêter l’envoi, comme pour « Retirer la voiture ».</li>
+  <li><strong>Les nombres</strong> de la confirmation viennent de l’état que la page montre, sans recomptage par le serveur. Un passager monté entre-temps redevient sans voiture comme les autres, comme avec « Retirer la voiture ».</li>
+  <li><strong>Panneau</strong> : « Personnes inscrites » est repliée à chaque affichage. Son état est gardé en mémoire seulement, comme celui des legs (v3.4) : il survit aux lectures et à une action, et rien n’est stocké. Déplier ou replier ne change ni les legs ni la carte. Son bouton reprend le motif du bouton d’un leg : dans le h3, sur toute la largeur, 44 px, chevron collé au texte, <code>aria-expanded</code> et <code>aria-controls</code>. Une différence, décidée par le coordinateur (#648) : le nombre est dans le nom du bouton (« Personnes inscrites (8) »), et la section n’a pas de résumé. Repliée, elle mesure 49 px à 360 px : 1 px de bordure, 16 px, et la rangée du bouton (32 px, avec les marges négatives de v3.4). Ces 49 px sont calculés sur les classes, non mesurés.</li>
+</ul>
+</div>
+
+<h2 id="criteres">Critères d’acceptation</h2>
+<p class="lead">Chaque critère est prouvé par un test : Playwright pour ce qui se voit, Vitest sur données validées pour ce qui est écrit en base. Les tests amorcent l’événement de l’exemple.</p>
+
+<h3>RP1 : se retirer depuis l’appareil</h3>
+<ul class="crits">
+  <li><strong>RP1.1</strong> La feuille d’une personne de l’appareil, ouverte depuis son prénom, montre sous « Modifier » le bouton <code>DevicePersons.remove</code> : <code>outline</code>, texte rouge, pleine largeur, 44 px au moins. Aucune feuille de cellule, aucune fiche et aucune page sans jeton ne le montrent. Sans JavaScript, il n’existe pas (la matrice non plus).</li>
+  <li><strong>RP1.2</strong> Le bouton ouvre un <code>alertdialog</code> titré <code>PersonRemoval.title</code>. Viennent ensuite, dans cet ordre :
+    <ul>
+      <li>dans l’ordre des legs, une phrase <code>PersonRemoval.drives</code> par leg où la personne conduit, avec le nombre de passagers que montre la page (aucun nombre à 0) ;</li>
+      <li>une phrase <code>PersonRemoval.passenger</code> par leg où elle est passagère ;</li>
+      <li>rien pour « Sans voiture » ni pour « Ne fait pas ce leg » ;</li>
+      <li><code>PersonRemoval.notified</code>, si <code>cars</code> ≥ 1 ;</li>
+      <li><code>erased</code>, puis <code>final</code>.</li>
+    </ul>
+    Le texte exact est vérifié pour Marc, Léa et Tom (sections 2 à 4).</li>
+  <li><strong>RP1.3</strong> À l’ouverture, le focus est sur « Annuler ». Avec « Annuler » ou Échap, aucune requête ne part (<code>page.route</code> n’en voit aucune), rien ne change, et le focus revient sur « Retirer de l’événement ».</li>
+  <li><strong>RP1.4</strong> Le bouton rouge envoie une seule requête. Pendant l’envoi, il est inactif et garde son libellé ; un second appui n’envoie rien.</li>
+  <li><strong>RP1.5</strong> Après une réussite :
+    <ul>
+      <li>la confirmation et la feuille sont fermées, et la ligne a disparu de la matrice ;</li>
+      <li>le résumé, les pastilles, le bandeau et les fiches viennent de l’état rendu par l’action, sans autre requête ;</li>
+      <li>la barre dit <code>PersonRemoval.removed</code> dans <code>status</code>, sans « Annuler » ;</li>
+      <li>le focus suit « Focus, barre, envoi ».</li>
+    </ul>
+  </li>
+  <li><strong>RP1.6</strong> Après le retrait de la dernière personne de l’appareil, « Vos inscriptions » est absente, et un tap sur une place libre ouvre la première inscription.</li>
+  <li><strong>RP1.7</strong> Chaque ligne de « Refus et échecs » a son test, confirmation ouverte et confirmation fermée. Une réponse est retenue par <code>page.route</code> ou amorcée en base : hors ligne, 500, jeton remplacé dans <code>localStorage</code>, événement anonymisé, événement supprimé. Vérifiés :
+    <ul>
+      <li>le texte exact ;</li>
+      <li>les boutons et le focus ;</li>
+      <li>la barre (<code>Actions.failure</code>) ;</li>
+      <li>la base, inchangée.</li>
+    </ul>
+  </li>
+  <li><strong>RP1.8</strong> Le retrait d’une personne déjà retirée est une réussite, et la barre dit <code>PersonRemoval.alreadyRemoved</code>. Deux cas sont testés : la réponse retenue puis la demande renvoyée, et un retrait par l’organisateur entre-temps.</li>
+</ul>
+
+<h3>RP2 : ce qui est effacé (Vitest)</h3>
+<ul class="crits">
+  <li><strong>RP2.1</strong> Après le retrait de Marc :
+    <ul>
+      <li>plus aucune ligne <code>person</code> ne porte son id, et plus aucun <code>ride</code> ne l’a pour conducteur ;</li>
+      <li>Léa, Inès et Hugo ont un Placement d’aller à <code>ride_id</code> nul ;</li>
+      <li>leurs Placements de retour sont inchangés ;</li>
+      <li>la voiture de Sophie a 3 places libres au lieu de 2 ;</li>
+      <li>la couverture lue vaut 5 sans voiture et 1 place libre à l’aller, 3 sans voiture et 5 places libres au retour.</li>
+    </ul>
+  </li>
+  <li><strong>RP2.2</strong> Pour une personne sur un seul leg, les lignes <code>ride</code> et <code>placement</code> de l’autre leg sont identiques avant et après, <code>placed_at</code> compris.</li>
+  <li><strong>RP2.3</strong> Retirer le doublon (sans voiture sur les deux legs) fait passer la couverture de 2 à 1 sans voiture à l’aller et de 3 à 2 au retour. Les places libres ne changent pas (1, puis 4).</li>
+  <li><strong>RP2.4</strong> Une personne qui ne fait aucun leg (aucun Placement) est retirée ; aucune autre ligne ne change.</li>
+  <li><strong>RP2.5</strong> Les autres personnes du même jeton restent, et restent modifiables avec ce jeton : <code>updatePerson</code> et <code>setPersonLeg</code> réussissent.</li>
+  <li><strong>RP2.6</strong> Un second retrait de la même personne, ou la même requête renvoyée, répond <code>alreadyRemoved</code> sans rien écrire.</li>
+  <li><strong>RP2.7</strong> Tout ou rien : une erreur injectée après la suppression des Rides laisse toutes les lignes comme avant.</li>
+  <li><strong>RP2.8</strong> Concurrence, sur données validées, dans les deux ordres. Le retrait verrouille l’Event (partagé), puis les Rides de la personne par id, puis la Person, et seulement ensuite il supprime. Un <code>DELETE</code> de la Person seul verrouillerait la Person avant ses Rides, par la cascade : c’est l’ordre inverse de la règle. Dans chaque cas, on ne trouve jamais un Placement vers un Ride absent ni un Ride sans conducteur. Les cas :
+    <ul>
+      <li>le retrait de Marc contre une prise de place dans sa voiture : place prise puis Léa sans voiture, ou <code>rideGone</code> ;</li>
+      <li>le retrait de Tom contre une prise de place de Tom lui-même : place prise puis effacée, ou <code>personGone</code>, jamais <code>failed</code> ;</li>
+      <li>le retrait de Marc contre son propre <code>setPersonLeg</code> : <code>personGone</code>, ou fait puis effacé ;</li>
+      <li>le retrait de Marc contre une offre de voiture dont il est le conducteur : <code>personGone</code>, ou l’offre puis la voiture effacée ;</li>
+      <li>l’appareil et l’organisateur retirent la même personne en même temps : un <code>removed</code>, un <code>alreadyRemoved</code> ;</li>
+      <li>Marc et sa passagère Léa sont retirés en même temps : les deux réussissent ;</li>
+      <li>une réduction de places de Claire choisit Sophie comme sortante pendant que Sophie est retirée : le retrait réussit, et la réduction répond <code>passengersChanged</code> avec les passagers du moment ;</li>
+      <li>le retrait contre la suppression du retour : les deux réussissent, dans l’ordre où ils prennent l’Event.</li>
+    </ul>
+  </li>
+  <li><strong>RP2.9</strong> Sur un événement anonymisé, le retrait est refusé par <code>eventEnded</code>, et rien n’est écrit.</li>
+</ul>
+
+<h3>RP3 : qui peut retirer qui (Vitest)</h3>
+<ul class="crits">
+  <li><strong>RP3.1</strong> Par l’appareil, le retrait est permis si et seulement si la personne a été créée avec ce jeton (<code>devicePersonIds</code>). Dans le cas contraire, <code>forbidden</code>, et rien n’est écrit. La réponse d’un refus ne contient ni le prénom ni rien d’autre de la personne.</li>
+  <li><strong>RP3.2</strong> Par l’organisateur, le retrait est permis si et seulement si <code>organiser-access.ts</code> accorde l’espace organisateur de cet événement. Le test boucle sur la table d’accès de cette règle (#596, OA7.6), sans écrire de seconde table. Il couvre notamment :
+    <ul>
+      <li>accordé : le navigateur de création d’un événement déjà confirmé, qui garde son jeton jusqu’à « Se déconnecter » ou l’anonymisation ;</li>
+      <li>refusé (<code>noOrganiserAccess</code>, rien d’écrit) : une session d’un autre compte, et un événement sans organisateur.</li>
+    </ul>
+    L’action n’accepte qu’une autorisation produite par cette règle : son type est marqué, comme pour <code>withOrganiserPhones</code>.</li>
+  <li><strong>RP3.3</strong> Un jeton personnel n’ouvre jamais le chemin de l’organisateur, pas même celui du navigateur de création. L’identifiant de la personne voyage dans le corps de la requête, jamais dans l’URL.</li>
+  <li><strong>RP3.4</strong> L’ordre des réponses de « Refus et échecs » est tenu. Cas testés :
+    <ul>
+      <li>un id inconnu avec un jeton absent ou mal formé donne <code>forbidden</code> ;</li>
+      <li>avec un jeton bien formé, il donne <code>alreadyRemoved</code> ;</li>
+      <li>un id d’un autre jeton donne <code>forbidden</code> ;</li>
+      <li>par l’organisateur sans accès, il donne <code>noOrganiserAccess</code>, que l’id soit connu ou non ;</li>
+      <li>un événement anonymisé donne <code>eventEnded</code>, quels que soient le jeton et l’id.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>RP4 : l’espace organisateur</h3>
+<ul class="crits">
+  <li><strong>RP4.1</strong> La section se place après Aller et Retour sous 1024 px, et dans la colonne de gauche sous leur rangée à partir de 1024 px. Elle est cachée quand la carte est repliée.
+    <ul>
+      <li>Son h3 contient un bouton sur toute la largeur, de 44 px au moins, avec un chevron. Son texte et son nom accessible sont <code>Admin.persons.title</code>, nombre compris (« Personnes inscrites (8) »). Il porte <code>aria-expanded="false"</code> à chaque affichage, y compris à 0, et la section n’a pas de résumé.</li>
+      <li>Dépliée, elle montre <code>Admin.persons.hint</code>, puis une ligne par Person de l’événement, y compris celles qui ne font aucun leg.</li>
+      <li>Les lignes sont triées par prénom, selon <code>Intl.Collator</code> dans la langue de la page (<code>sensitivity: "base"</code>), puis par ordre d’inscription.</li>
+      <li>L’état déplié est gardé en mémoire seulement : rien dans <code>localStorage</code>, <code>sessionStorage</code> ni dans un cookie.</li>
+    </ul>
+  </li>
+  <li><strong>RP4.2</strong> Une ligne se compose :
+    <ul>
+      <li>du prénom, qui passe à la ligne dans sa colonne ;</li>
+      <li>d’une ligne <code>Admin.persons.leg</code> par leg, avec le texte exact de la cellule de la matrice (sans retour, le texte seul) ;</li>
+      <li>à droite, du bouton « Retirer » : <code>outline</code>, texte rouge, 44 px au moins, nom accessible <code>Admin.persons.removeLabel</code>.</li>
+    </ul>
+    Aucun numéro dans cette section (Q2 = a).</li>
+  <li><strong>RP4.3</strong> Au-delà de 5 lignes, les règles de liste du panneau s’appliquent (O5.6, O5.8).</li>
+  <li><strong>RP4.4</strong> Sans aucune personne, le bouton dit « Personnes inscrites (0) ». Déplié, il montre <code>Event.nobody</code>, sans <code>Admin.persons.hint</code>.</li>
+  <li><strong>RP4.5</strong> « Retirer » ouvre la confirmation de RP1.2, avec deux différences :
+    <ul>
+      <li>sous le titre, un encadré gris avec une ligne <code>Admin.persons.leg</code> par leg, identique à la ligne de la liste ;</li>
+      <li>au lieu de <code>PersonRemoval.notified</code>, toujours <code>PersonRemoval.notifiedOrganiser</code>.</li>
+    </ul>
+    Le texte exact est vérifié pour le doublon et pour Marc (sections 13 et 14).</li>
+  <li><strong>RP4.6</strong> Retirer le doublon depuis le panneau donne :
+    <ul>
+      <li>l’état du tableau rendu par l’action, puis le panneau relu ;</li>
+      <li>la ligne disparue, et le bouton de la section qui passe de « Personnes inscrites (8) » à « Personnes inscrites (7) » ;</li>
+      <li>repliée, Aller qui montre « 1 sans voiture » et « 1 place libre » ; Retour, « 2 sans voiture » et « 4 places libres » ;</li>
+      <li>les sections de leg qui gardent leur état replié ou déplié ;</li>
+      <li>la barre qui dit <code>PersonRemoval.removed</code>.</li>
+    </ul>
+    Si la relecture du panneau échoue, <code>Admin.stale</code>, comme pour toute action.</li>
+  <li><strong>RP4.7</strong> Les refus et les échecs suivent RP1.7 ; sans accès, la raison est <code>Actions.why.noOrganiserAccess</code>.</li>
+</ul>
+
+<h3>RP5 : les autres appareils</h3>
+<ul class="crits">
+  <li><strong>RP5.1</strong> Deux contextes : Inès est dans la voiture de Marc depuis B, et Marc est retiré depuis A. Sur B, page visible, en moins de 20 s sans action, ou dès le retour au premier plan :
+    <ul>
+      <li>la cellule d’aller d’Inès dit « Sans voiture » ;</li>
+      <li>la pastille d’aller dit « 5 sans voiture », celle du retour « 3 sans voiture » ;</li>
+      <li>la barre de B est vide.</li>
+    </ul>
+  </li>
+  <li><strong>RP5.2</strong> Après la relecture, sur tout appareil :
+    <ul>
+      <li>plus de fiche « Voiture de Marc », ni de point de sa voiture sur la Carte ;</li>
+      <li>la voiture de Sophie a 3 « Place libre » au retour ;</li>
+      <li>la liste « Sans voiture » de l’aller compte Léa, Inès et Hugo en plus.</li>
+    </ul>
+  </li>
+  <li><strong>RP5.3</strong> L’organisateur retire Marc pendant que l’appareil de Marc a la page ouverte, avec la feuille de Marc ouverte :
+    <ul>
+      <li>à la relecture, la ligne et la feuille disparaissent ;</li>
+      <li>la barre dit <code>removedElsewhere</code> une seule fois (<code>status</code>), et le focus suit « Focus, barre, envoi ».</li>
+    </ul>
+    Après un rechargement, rien n’est dit. Deux pages du même contexte : quand A retire Léa, la barre de B ne dit jamais <code>removedElsewhere</code>.</li>
+  <li><strong>RP5.4</strong> Une action envoyée par une page restée sur une personne retirée est refusée par <code>personGone</code>, avec l’état. La barre dit son <code>notDone</code> suivi de <code>Actions.why.personGone</code>, et la ligne disparaît. Les actions concernées sont listées dans « Pour l’architecte ».</li>
+  <li><strong>RP5.5</strong> Dans un second navigateur de l’organisateur, après « Actualiser », la ligne n’est plus dans « Personnes inscrites ».</li>
+</ul>
+
+<h3>RP6 : confidentialité</h3>
+<ul class="crits">
+  <li><strong>RP6.1</strong> On retire une personne amorcée avec un prénom et un numéro uniques. Ensuite, aucune colonne d’aucune table ne contient ce prénom, ce numéro ni son identifiant. L’empreinte de son jeton n’est plus dans aucune ligne, sauf celles des autres personnes du même jeton.</li>
+  <li><strong>RP6.2</strong> Ce prénom, ce numéro, l’identifiant et le jeton n’apparaissent dans aucun journal du serveur ni dans aucun événement Sentry du scénario, refus compris.</li>
+  <li><strong>RP6.3</strong> Avant comme après le retrait, ni <code>localStorage</code> ni <code>sessionStorage</code> ne contiennent de prénom, de numéro ni d’identifiant de personne. Après le retrait de la dernière personne de l’appareil, la clé <code>fullcar:personal-token:{id}</code> est toujours là, avec la même valeur (Q3 = a). Une nouvelle inscription la réutilise.</li>
+</ul>
+
+<h3>RP7 : transverse</h3>
+<ul class="crits">
+  <li><strong>RP7.1</strong> Captures à 360 px, en FR et en EN, sans débordement horizontal : la feuille, les confirmations des sections 2, 3, 4, 13 et 14, la section « Personnes inscrites » repliée et dépliée, à 0 et à 8. Un prénom de 40 caractères sans espace ni trait d’union (« Anastasiamaximiliennebernadettecharlotte ») est testé dans le titre de la confirmation, dans l’encadré et dans la liste.</li>
+  <li><strong>RP7.2</strong> Le FR et l’EN sont livrés ensemble, et la vérification des clés i18n passe. <code>PersonRemoval</code> est ajouté aux espaces de noms de C11.9 (<code>src/i18n/epicene.test.ts</code>), et le test passe.</li>
+  <li><strong>RP7.3</strong> Chaque règle de focus a son test Playwright (<code>toBeFocused</code>). Chaque ligne d’échec a sa paire « retire / ne retire pas » (C11.10). Le retrait des lignes sans objet par une réussite a son test.</li>
+</ul>
+
+<h2 id="architecte">Pour l’architecte</h2>
+<div class="prose">
+<p><strong>De <code>forbidden</code> à <code>personGone</code>.</strong> Aujourd’hui, une personne inconnue de l’événement se lit comme celle d’un autre appareil. Demain, sur une requête bien formée et un jeton bien formé, une personne absente de l’événement donne <code>personGone</code>, avec l’état. Une personne d’un autre jeton garde <code>forbidden</code>. Les actions concernées (lu sur <code>origin/main</code>) :</p>
+<ul>
+  <li><code>updatePerson</code> et <code>setPersonLeg</code> (<code>src/app/e/[id]/persons.ts</code>, via <code>isDevicePerson</code>) ;</li>
+  <li><code>takeSeats</code> (<code>seats.ts</code>, <code>personIds</code>) : tout ou rien, une seule personne retirée refuse tout ;</li>
+  <li><code>undoSeats</code> (<code>seats.ts</code>) : une personne retirée n’est pas un refus. Elle est laissée de côté comme une personne qui n’est plus dans la voiture (C7.4), les autres sont rendues. Si plus personne n’est à rendre, la réponse est <code>Seat.alreadyOut</code>.</li>
+  <li><code>offerRide</code> (<code>offer-ride.ts</code>) : un conducteur <code>device</code> retiré, ou un passager coché retiré ;</li>
+  <li><code>updateRide</code> et <code>removeRide</code> (<code>change-ride.ts</code>) ne changent pas. La voiture d’un conducteur retiré n’existe plus : <code>rideGone</code>, ou la réussite de C8.6. Un sortant retiré donne <code>passengersChanged</code>.</li>
+</ul>
+<p><strong>Tests existants qui affirment <code>forbidden</code> à relire.</strong></p>
+<ul>
+  <li>Celui qui passe à <code>personGone</code> : <code>persons.test.ts</code> « refuses a person id nobody holds, with a token of the event » (vers la ligne 309).</li>
+  <li>Restent <code>forbidden</code>, parce que la personne existe sous un autre jeton :
+    <ul>
+      <li><code>persons.test.ts</code>, C12.4 (lignes 169 et 180) et l’<code>updatePerson</code> d’un autre jeton (ligne 252) ;</li>
+      <li><code>seats.test.ts</code>, « one person of another device… » (lignes 195 et 527) ;</li>
+      <li><code>actions.test.ts</code>, C2.4, C8.1 et C7.3 (lignes 156, 386 et 450) ;</li>
+      <li><code>offer-ride.test.ts</code>, C2.4 (ligne 663) ;</li>
+      <li><code>change-ride.test.ts</code> (lignes 226 et 420).</li>
+    </ul>
+  </li>
+  <li>À vérifier un par un : tout autre test dont l’id n’est porté par personne.</li>
+</ul>
+<p><code>failure-words.ts</code> gagne <code>personGone</code>, <code>noOrganiserAccess</code> et <code>eventEnded</code>, avec leurs tests (<code>failure-words.test.ts</code>).</p>
+<p><strong>L’ordre des verrous</strong> est celui de RP2.8 : Event, puis Rides de la personne, puis Person, puis la suppression.</p>
+</div>
+
+<h2 id="decisions">Décisions</h2>
+<ol class="decisions">
+  <li>Decision : le mot est « Retirer », partout : bouton, confirmation, liste. — Reason : « Retirer la voiture » existe déjà, et le glossaire réserve « Suppression » à un événement entier. Un synonyme est un défaut.</li>
+  <li>Decision : une seule entrée par chemin : sur l’appareil, la feuille de la personne ; pour l’organisateur, la section « Personnes inscrites ». — Reason : une feuille de cellule porte sur un leg, alors que le retrait porte sur la personne. Deux entrées dans le panneau dédoubleraient la même action.</li>
+  <li>Decision : le panneau liste toutes les personnes, dans une section à part. Elle est repliée à chaque affichage, et son état est gardé en mémoire seulement, comme celui des legs. Le nombre est dans le nom du bouton (décision du coordinateur, #648). — Reason : les personnes en voiture et celles qui ne font aucun leg ne sont dans aucune liste de leg (v3.4, « La place d’une action par personne »). Dépliée, la liste rendrait au panneau la hauteur que #648 lui a retirée.</li>
+  <li>Decision : le bouton existe même à 0. — Reason : le focus a besoin d’un point de chute quand la dernière ligne part, et la section ne doit pas apparaître ni disparaître au gré des lectures.</li>
+  <li>Decision : la liste du panneau est triée par ordre alphabétique ; la matrice garde l’ordre de l’événement. — Reason : deux « Léa » côte à côte, c’est un doublon repéré.</li>
+  <li>Decision : la confirmation de l’organisateur montre l’état de la personne sur chaque leg, celle de l’appareil non. — Reason : l’organisateur choisit entre deux homonymes qu’il ne connaît que par la liste. Sur l’appareil, la matrice est juste derrière la feuille.</li>
+  <li>Decision : un conducteur retiré emporte toutes ses voitures, et ses passagers redeviennent sans voiture sur ce leg seulement. — Reason : la règle « Le conducteur retire sa voiture » existe, et la base l’applique déjà (<code>set null (ride_id)</code>).</li>
+  <li>Decision : sur l’appareil, la phrase « Personne n’est prévenu » n’apparaît que si au moins une autre voiture change, et elle dit à qui le dire. Ce n’est pas le cas de « Retirer la voiture », qui la montre toujours. — Reason : retirer une voiture touche toujours une voiture ; retirer une personne sans voiture ne touche personne. « Pensez à le leur dire » n’aurait alors pas de destinataire, et pour une passagère, il s’agit des personnes de la voiture qu’elle quitte.</li>
+  <li>Decision : depuis le panneau, la phrase dit toujours « pas même {prénom} ». — Reason : la personne retirée n’est jamais celle qui agit.</li>
+  <li>Decision : personne n’est prévenu hors de l’application. Les appareils des passagers voient le changement à leur relecture, sans message. — Reason : les notifications sont hors périmètre V1, et « Retirer la voiture » fait déjà ainsi.</li>
+  <li>Decision : l’appareil d’une personne retirée ailleurs reçoit une information, seulement si la page est ouverte, et jamais pour un retrait envoyé par le même appareil, quel que soit l’onglet. — Reason : une ligne qui disparaît sans raison passe pour une panne. Un retrait qu’on a fait soi-même n’a rien à expliquer.</li>
+  <li>Decision : un refus qu’un nouvel essai ne changerait pas retire le bouton rouge, et la confirmation ne propose plus que « Fermer ». — Reason : un bouton qui échouera à coup sûr est un piège. « Annuler » ne voudrait plus rien dire, puisque rien n’a été fait.</li>
+  <li>Decision : <code>Actions.why.eventEnded</code> est nommée pour toute écriture sur un événement anonymisé, pas seulement le retrait. — Reason : #581 refuse ces écritures sans leur donner de mots ; une seule clé évite qu’une seconde apparaisse.</li>
+  <li>Decision : le retrait est idempotent, et un id inconnu avec un jeton bien formé répond <code>alreadyRemoved</code>. — Reason : une réponse perdue suivie d’un renvoi ne doit pas afficher un échec pour une chose faite. La réponse ne dit rien de la personne.</li>
+  <li>Decision : les nombres de la confirmation viennent de la page. — Reason : c’est la règle de « Retirer la voiture ». Le recomptage de « Supprimer le retour » sert un geste sur tout un leg.</li>
+  <li>Decision : une nouvelle page, plutôt qu’une version d’<code>event-board</code> et d’<code>organizer-view</code>. — Reason : l’épique touche deux écrans. Comme <code>organizer-account</code>, <code>home</code> et <code>github-link</code>, une page par épique qui nomme ses voisines ne demande qu’une relecture.</li>
+</ol>
+
+<h2 id="reponses">Réponses du propriétaire (25/10/2026, #645)</h2>
+<div class="prose"><ul>
+  <li><strong>Q1 = (a)</strong> : pas d’« Annuler » ; une confirmation qui dit ce qui change, puis « C’est définitif. ».</li>
+  <li><strong>Q2 = (a)</strong> : pas de numéro dans « Personnes inscrites » ; DO1 est inchangée.</li>
+  <li><strong>Q3 = (a)</strong> : l’appareil qui n’a plus personne garde son jeton.</li>
+</ul></div>
+
+<h2 id="hors">Hors périmètre</h2>
+<div class="prose"><ul>
+  <li>Prévenir qui que ce soit hors de l’application, par e-mail ou par SMS (notifications, hors V1).</li>
+  <li>Empêcher une personne retirée de se réinscrire (blocage, liste noire) : un abus répété se retire de nouveau.</li>
+  <li>Retirer plusieurs personnes d’un coup, ou toutes.</li>
+  <li>Modifier une personne depuis l’espace organisateur (prénom, numéro, places) : seul le retrait est ajouté.</li>
+  <li>Fusionner deux doublons.</li>
+  <li>Un journal ou un historique des retraits.</li>
+  <li>Les Arrêts (#68) : quand ils existeront, ceux d’un Ride partiront avec lui, et l’arrêt choisi par un passager avec son Placement. À redire dans la maquette de #68.</li>
+  <li>Le lien perso (#67) : un appareil qui a reçu le jeton par ce lien voit la personne disparaître comme l’appareil d’origine (RP5.3). C’est un autre appareil : il reçoit l’information.</li>
+</ul></div>
+
+<h2 id="doc">Documentation à mettre à jour</h2>
+<div class="prose">
+<p>Ces chemins sont sensibles (<code>docs/agents/**</code>) : la PR est mergée par l’humain.</p>
+<p><strong><code>docs/agents/product.md</code>, « Règles d’interaction »</strong>, après « Le conducteur réduit ses places » :</p>
+<blockquote>- <strong>Retirer une personne</strong> : depuis sa feuille, sur l’appareil qui l’a inscrite, ou par l’organisateur depuis son espace, après une confirmation. Tout ce qui la concerne est effacé : prénom, numéro, voitures, places. Ses passagers repassent « sans voiture » sur ce leg. Personne n’est prévenu, et rien ne s’annule.</blockquote>
+<p><strong><code>docs/agents/glossary.md</code></strong>, nouvelle ligne après « Pas concernée » :</p>
+<blockquote>| <strong>Retirer une personne</strong> | effacer une Person d’un événement : elle-même depuis l’appareil qui l’a inscrite, ou n’importe qui depuis l’espace organisateur. Ses Rides partent avec elle, et leurs passagers redeviennent sans voiture ; ses Placements sont supprimés. Rien n’est gardé. Jamais « supprimer », qui est le mot d’un événement entier. |</blockquote>
+<p><strong>Page Confidentialité (#612)</strong> : le retrait efface immédiatement, sauf ce que garde la fenêtre de restauration de l’hébergeur, dont la page doit donner la durée.</p>
+</div>
+
+<h2 id="revisions">Révisions</h2>
+<ul class="prose">
+  <li><strong>v2</strong> (25/10/2026). Relecture de la v1 : modifications demandées, 3 points bloquants, corrigés.
+    <ol>
+      <li>Les refus quand la confirmation est ouverte ont maintenant leurs mots : section « Refus et échecs », états 6 et 16, nouvelle clé <code>Actions.why.eventEnded</code>.</li>
+      <li>RP3.2 et le chapeau de la section de l’organisateur renvoient à <code>organiser-access.ts</code> et ne disent plus « en attente ».</li>
+      <li>Les nombres viennent d’un seul exemple, publié en tête de page. Les états 12, 15 et 19 tiennent la règle des legs : retirer une personne sans voiture ne change pas les places.</li>
+    </ol>
+    Suggestions appliquées :
+    <ul>
+      <li>RP2.8 : ordre des verrous et quatre nouveaux cas ;</li>
+      <li>RP3.4 : ordre des réponses ;</li>
+      <li>RP5.3 : pas d’information pour un retrait envoyé par le même appareil ;</li>
+      <li>RP4.5 : l’encadré d’état ;</li>
+      <li>« seront effacés » ;</li>
+      <li>la raison <code>noOrganiserAccess</code> sans réserve ;</li>
+      <li>la phrase « Personne n’est prévenu » expliquée (décision 9) ;</li>
+      <li>le prénom de 40 caractères sans trait d’union ;</li>
+      <li>le retrait des lignes sans objet de la barre ;</li>
+      <li>la liste <code>forbidden</code> → <code>personGone</code>.</li>
+    </ul>
+    Aligné sur organizer-view v3.4 (#648) : plus de vignettes, des legs repliés dont les résumés suivent les nombres, et une section des personnes repliée elle aussi, avec son nombre dans le nom du bouton, même à 0 (décision du coordinateur sur #648). Réponses du propriétaire Q1, Q2 et Q3 = (a), reportées.</li>
+  <li><strong>v1</strong> (25/10/2026) : première version, épique #645.</li>
+</ul>
+</div>
