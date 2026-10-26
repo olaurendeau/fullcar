@@ -160,6 +160,17 @@ describe("readAdminTokenHash", () => {
     });
     expect(hashes).toEqual([undefined, undefined]);
   });
+
+  // #586: a revoked token is a null hash. The event is still there, and no token matches.
+  it("gives null for a known event without a token, which no token matches", async () => {
+    const { hash, token } = await withRollback(async (trx) => {
+      const { id, token } = await seedEvent(trx);
+      await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", id).execute();
+      return { hash: await readAdminTokenHash(trx, id), token };
+    });
+    expect(hash).toBeNull();
+    expect(adminTokenMatches(token, hash)).toBe(false);
+  });
 });
 
 describe("seedEvent", () => {
