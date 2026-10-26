@@ -321,6 +321,7 @@ export function ParticipantBoard({
   // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
   // In the bar, the failure names who drives and each leg offered, then why, `alreadyDriving` included,
   // and `alreadyInCar` the passengers ticked. A success with passengers says who boarded, with « Annuler » (C4.13).
+  // `driverWithoutPhone` (v4.8 rule 7) says so in the bar; in the sheet, the generic words until #777.
   const offerRide: OfferRide = async ({ offer: { driver, otherLeg, ...car }, passengers, creationIds, sending, notDone, landmark, ...sheet }) => {
     const passengerIds = passengers.map((person) => person.id);
     const send = () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIRST_NAME_MAX, PERSON_FIELDS, validatePerson, validatePersonChange, type PersonFields } from "./person";
+import { FIRST_NAME_MAX, PERSON_FIELDS, validateDriver, validatePerson, validatePersonChange, type PersonFields } from "./person";
 
 function personOf(fields: PersonFields) {
   const result = validatePerson(fields);
@@ -182,5 +182,35 @@ describe("validatePersonChange (C2.3)", () => {
       first: "firstName",
     });
     expect(validatePersonChange({ phone: "12" })).toEqual({ ok: false, errors: { phone: "invalid" }, first: "phone" });
+  });
+});
+
+describe("validateDriver (R4, v4.8 rule 6)", () => {
+  it.each([
+    ["missing", undefined],
+    ["null", null],
+    ["empty", ""],
+    ["blank", "  \t "],
+    ["invisible", "\u200b\u202a"],
+  ])("T4.7: requires the phone of a new driver, so a %s phone is an error", (_, phone) => {
+    expect(validateDriver({ firstName: "Marc", phone })).toEqual({ ok: false, errors: { phone: "required" }, first: "phone" });
+  });
+
+  it("reads the rest as validatePerson does: trimmed and cleaned, the first name first", () => {
+    expect(validateDriver({ firstName: " Marc ", phone: "\u202a06 12 34 56 78\u202c" })).toEqual({
+      ok: true,
+      person: { firstName: "Marc", phone: "06 12 34 56 78" },
+    });
+    expect(validateDriver({ firstName: "Marc", phone: "06 12" })).toEqual({ ok: false, errors: { phone: "invalid" }, first: "phone" });
+    expect(validateDriver({ firstName: "", phone: "" })).toEqual({
+      ok: false,
+      errors: { firstName: "required", phone: "required" },
+      first: "firstName",
+    });
+    expect(validateDriver({ firstName: "a".repeat(41), phone: 612345678 })).toEqual({
+      ok: false,
+      errors: { firstName: "tooLong", phone: "invalid" },
+      first: "firstName",
+    });
   });
 });

@@ -92,11 +92,12 @@ async function rowsOf(db: Db, eventId: string) {
 /**
  * Aller: Marc drives Léa, Tom is without a car. Retour: Marc drives Léa, Zoé drives nobody,
  * Inès, who only does the retour, is without a car. The retour counts 2 cars and 4 persons.
+ * Tom, who offers a car, has a number (v4.8).
  */
 async function seedScene(db: Db, eventId: string) {
   const marc = await seedPerson(db, eventId, { firstName: "Marc" });
   const lea = await seedPerson(db, eventId, { firstName: "Léa" });
-  const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+  const tom = await seedPerson(db, eventId, { firstName: "Tom", phone: "06 33 33 33 33" });
   const zoe = await seedPerson(db, eventId, { firstName: "Zoé" });
   const ines = await seedPerson(db, eventId, { firstName: "Inès" });
   const aller = await seedRide(db, eventId, marc.id, { leg: "aller", departureTime: "07:15:00" });

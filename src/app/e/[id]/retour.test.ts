@@ -23,12 +23,12 @@ type Db = Kysely<Database>;
 /**
  * Aller: Marc drives Léa (r1), Tom is without a car. Retour: Marc drives Léa (r3, 3 seats),
  * Zoé drives nobody (r4). Tom is not concerned by the retour. Each has their own device.
- * The retour counts 2 cars and 3 persons.
+ * The retour counts 2 cars and 3 persons. Tom, who offers a car, has a number (v4.8).
  */
 async function seedScene(db: Db, eventId: string) {
   const marc = await seedPerson(db, eventId, { firstName: "Marc" });
   const lea = await seedPerson(db, eventId, { firstName: "Léa" });
-  const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+  const tom = await seedPerson(db, eventId, { firstName: "Tom", phone: "06 33 33 33 33" });
   const zoe = await seedPerson(db, eventId, { firstName: "Zoé" });
   const r1 = await seedRide(db, eventId, marc.id, { leg: "aller" });
   const r3 = await seedRide(db, eventId, marc.id, { leg: "retour" });

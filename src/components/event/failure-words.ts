@@ -161,7 +161,8 @@ export function personWhy(error: Parameters<typeof whyOf>[0] | "drives" | "perso
 }
 
 /**
- * Why « Proposer une voiture » was not done: as `whyOf`, and `alreadyDriving` names who drives.
+ * Why « Proposer une voiture » was not done: as `whyOf`, `driverWithoutPhone` included (v4.8 rule
+ * 7), and `alreadyDriving` names who drives.
  * `alreadyInCar` names the passengers ticked in « Qui monte avec vous ? » (#171), in the order of
  * « Vos inscriptions »; none ticked, only a forged request gets it: the generic reason.
  */
