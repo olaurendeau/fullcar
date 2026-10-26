@@ -5,6 +5,7 @@ import {
   CONFIRMATIONS_PER_ADDRESS,
   CONFIRMATIONS_PER_EVENT,
   GLOBAL_SENDS_PER_HOUR,
+  LOGINS_PER_ADDRESS,
   SEND_WINDOW_MS,
   inSendWindow,
   sendLimitReached,
@@ -58,6 +59,22 @@ describe("sendLimitReached", () => {
 
     it("names the event limit first when both are reached: the event's is the one a resend hits", () => {
       expect(sendLimitReached({ event: 3, address: 5, global: 5 })).toBe("event");
+    });
+  });
+
+  // OA4.5 and decision 9: 5 sign-in requests per hour for one address, with or without an account (OA3.5).
+  describe("sign-in requests per address", () => {
+    it("is 5 per hour", () => {
+      expect(LOGINS_PER_ADDRESS).toBe(5);
+    });
+
+    it("lets the 5th request go, and stops the 6th, named as the address limit", () => {
+      expect(sendLimitReached({ login: 4, global: 4 })).toBeNull();
+      expect(sendLimitReached({ login: 5, global: 5 })).toBe("address");
+    });
+
+    it("is named before the global cap", () => {
+      expect(sendLimitReached({ login: 5, global: 50 })).toBe("address");
     });
   });
 
