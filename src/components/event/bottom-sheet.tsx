@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { HidesPage } from "./hidden-page";
+import { keepPagePlace } from "./page-scroll";
 import { MARGIN, sheetFrame, type SheetFrame, type SheetFrameInput } from "./sheet-frame";
 
 /**
@@ -57,16 +58,19 @@ interface BarTargets {
   actions: HTMLElement | null;
 }
 
-const BarOfSheet = createContext<BarTargets>({ messages: null, actions: null });
+/** None out of a `BottomSheet`'s body. */
+const BarOfSheet = createContext<BarTargets | null>(null);
 
 /**
  * A form's message, main button and « Annuler », moved into the bar of the sheet it is in (v4.6,
  * rule 1), by a portal. Out of the `<form>` in the document, its submit button takes the `form`
  * attribute: Enter in a field still sends it. The bar is there from the sheet's second render:
  * its content mounts first, and what is given here shows in it before the browser paints.
+ * Out of a `BottomSheet`, it throws: a form would lose « Valider » without a word.
  */
 export function SheetBar({ messages, children }: { messages?: ReactNode; children: ReactNode }) {
   const targets = useContext(BarOfSheet);
+  if (!targets) throw new Error("SheetBar is rendered out of a BottomSheet: its buttons would show nowhere");
   return (
     <>
       {targets.messages && messages ? createPortal(messages, targets.messages) : null}
@@ -197,11 +201,18 @@ export function BottomSheet({
   const area = useVisibleArea(open);
   const frame = area && sheetFrame({ ...area, fullHeight });
   const fixed = useFixedHeights(header, bar);
-  // Where the page was as the sheet opened: Safari may scroll it to show a field (rule 7, v4.6-15).
-  const pageAt = useRef(0);
+  // Where the page was as the sheet opened, moved by what the page scrolls itself since: Safari
+  // may scroll it to show a field (rule 7, v4.6-15), /admin to keep its board in place (O1.11).
+  const pageAt = useRef<ReturnType<typeof keepPagePlace> | null>(null);
   useLayoutEffect(() => {
-    if (open) pageAt.current = window.scrollY;
+    if (!open) return;
+    pageAt.current?.release();
+    pageAt.current = keepPagePlace();
   }, [open]);
+  useEffect(() => {
+    const kept = pageAt;
+    return () => kept.current?.release();
+  }, []);
 
   // Radix focuses the sheet when its content mounts. Reopened while it closes, its content is
   // still mounted, and the focus would stay behind it, in the hidden page (#447): the same focus,
@@ -224,7 +235,10 @@ export function BottomSheet({
         {...(description ? {} : { "aria-describedby": undefined })}
         onCloseAutoFocus={(event) => {
           // The page first, then the focus, which scrolls it if it must.
-          if (window.scrollY !== pageAt.current) window.scrollTo({ top: pageAt.current, behavior: "instant" });
+          const kept = pageAt.current;
+          pageAt.current = null;
+          kept?.release();
+          if (kept && window.scrollY !== kept.place.top) window.scrollTo({ top: kept.place.top, behavior: "instant" });
           onCloseAutoFocus?.(event);
         }}
         onEscapeKeyDown={keepOpenForList}
