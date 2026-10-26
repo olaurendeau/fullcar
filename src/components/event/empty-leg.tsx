@@ -11,7 +11,7 @@ export function EmptyLeg({ leg }: { leg: Leg }) {
   const t = useTranslations("Event");
   return (
     <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed px-4 py-7 text-center">
-      <div className="mb-1.5 grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground">
+      <div className="mb-1.5 grid size-11 place-items-center rounded-xl bg-brand-soft text-primary">
         <Car className="size-5" />
       </div>
       <p className="font-semibold">{t(`noCar.${leg}`)}</p>

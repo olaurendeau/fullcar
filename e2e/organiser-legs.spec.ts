@@ -628,7 +628,7 @@ test.describe("O9.5, the README's example", () => {
     await kept();
   });
 
-  test("unfolding and folding both legs leaves the keys of localStorage and sessionStorage, and the cookies, as they were; a reload folds them all", async ({
+  test("unfolding and folding both legs leaves localStorage and sessionStorage, keys and values, and the cookies, as they were; a reload folds them all", async ({
     page,
     context,
     seededEvent,
@@ -636,14 +636,31 @@ test.describe("O9.5, the README's example", () => {
     await page.goto(organiserPath(seededEvent));
     await expect(legButton(page, "aller")).toBeVisible();
     await page.waitForLoadState("networkidle");
-    const keys = () => page.evaluate(() => [Object.keys(localStorage).sort(), Object.keys(sessionStorage).sort()]);
+    // Every entry, its value with its key: a leg's state written into a key already there
+    // changes no key (#739). The page writes none on its own, so each storage starts with
+    // one, another event's folded card (O8.5): the comparison then has a value to watch.
+    await page.evaluate(() => {
+      for (const storage of [localStorage, sessionStorage]) storage.setItem("fullcar:organiser-folded:Ab3dEf7h", "1");
+    });
+    const storages = () =>
+      page.evaluate(() =>
+        Object.fromEntries(
+          Object.entries({ localStorage, sessionStorage }).map(([name, storage]) => [
+            name,
+            Object.fromEntries(Object.keys(storage).sort().map((key) => [key, storage.getItem(key)])),
+          ]),
+        ),
+      );
     const cookies = async () => JSON.stringify(await context.cookies());
-    const before = { keys: await keys(), cookies: await cookies() };
+    const before = { storages: await storages(), cookies: await cookies() };
     await unfoldLegs(page);
+    expect(await storages(), "unfolded").toEqual(before.storages);
     for (const leg of ["aller", "retour"] as const) await legButton(page, leg).click();
+    await expect.poll(() => states(page)).toEqual(["false", "false"]);
+    expect(await storages(), "folded").toEqual(before.storages);
     await unfoldLegs(page);
     await expect.poll(() => states(page)).toEqual(["true", "true"]);
-    expect(await keys()).toEqual(before.keys);
+    expect(await storages(), "unfolded again").toEqual(before.storages);
     expect((await cookies()) === before.cookies, "the cookies, as before").toBe(true);
     await page.reload();
     await expect(legButton(page, "aller")).toBeVisible();

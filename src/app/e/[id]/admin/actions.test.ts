@@ -243,7 +243,7 @@ describe("updateEvent", () => {
         return { answer, token, title: row.title };
       }),
     );
-    expect(answer).toEqual({ ok: true, event: { ...BEFORE, title: FIELDS.title } });
+    expect(answer).toEqual({ ok: true, event: { ...BEFORE, title: FIELDS.title, description: null } });
     expect(title).toBe(FIELDS.title);
     expect(JSON.stringify(answer).includes(token)).toBe(false);
   });
@@ -259,6 +259,25 @@ describe("updateEvent", () => {
     );
     expect(answer).toEqual({ ok: false, error: "invalid" });
     expect(title).toBe(BEFORE.title);
+  });
+
+  it.each<[string, (seeded: { token: string; personToken: string }) => unknown]>([
+    ["another token", ({ token }) => oneCharOff(token)],
+    ["a participant's token", ({ personToken }) => personToken],
+    ["no token", () => undefined],
+  ])("DS1.13: answers invalid for a description sent with %s, and writes nothing", async (_, tokenOf) => {
+    const { answer, row } = await withRollback((trx) =>
+      using(trx, async () => {
+        const { id, token } = await seedEvent(trx, { description: "Rendez-vous à 7 h" });
+        const { token: personToken } = await seedPerson(trx, id);
+        const fields = { ...FIELDS, title: BEFORE.title, description: "Zorglub4729" };
+        const answer = await updateEvent(id, tokenOf({ token, personToken }), fields, BEFORE);
+        const row = await trx.selectFrom("event").select("description").where("id", "=", id).executeTakeFirstOrThrow();
+        return { answer, row };
+      }),
+    );
+    expect(answer).toEqual({ ok: false, error: "invalid" });
+    expect(row.description).toBe("Rendez-vous à 7 h");
   });
 
   it.each([

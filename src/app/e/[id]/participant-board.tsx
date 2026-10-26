@@ -93,6 +93,7 @@ export function ParticipantBoard({
   onAction,
   onState,
   hint,
+  linkChecking,
 }: {
   id: string;
   state: EventState;
@@ -101,6 +102,8 @@ export function ParticipantBoard({
   onState?: (state: EventState) => void;
   /** The organiser's sentence of each leg, without a position: on `/e/{id}/admin` once the link is checked (#485). */
   hint?: MapHint;
+  /** On `/e/{id}/admin`, while the first check of the link runs: the maps wait (#653). */
+  linkChecking?: boolean;
 }) {
   const words = wordsOf(useTranslations(), useFormatter());
   const [state, setState] = useState(rendered);
@@ -494,6 +497,7 @@ export function ParticipantBoard({
       tab={tab}
       onTab={setTab}
       hint={hint}
+      linkChecking={linkChecking}
       device={{
         status: device.status,
         retry: () => {

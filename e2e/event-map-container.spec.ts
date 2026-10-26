@@ -1,6 +1,6 @@
 import type { Locator, Page, Route } from "@playwright/test";
 import type { Leg } from "@/domain/leg";
-import { around, points, seedCar, test } from "./event-map-points";
+import { arriveWaiting, around, idle, points, seedCar, test } from "./event-map-points";
 import { expect } from "./fixtures";
 import { answerTiles, tileAt } from "./tiles";
 
@@ -184,21 +184,25 @@ for (const [where, device] of [
         await seedCar(db, placed.id, "Marc", { position: around(placed.place, { north: 100 }), leg });
         const tile = tileAt(placed.place, FRAMED_ZOOM);
         await answerTiles([tile], { kind: "error" });
-        await page.goto(`/e/${placed.id}`);
+        // The map not started: the device's read held, until `settle`.
+        const settle = await arriveWaiting(page, placed.id);
         await expect(panel(page)).toBeVisible();
         if (leg === "retour") {
           await page.getByRole("tab", { name: "Retour" }).click();
           await expect(page.getByRole("tab", { name: "Retour" })).toHaveAttribute("aria-selected", "true");
         }
-        await page.waitForLoadState("networkidle");
+        await page.waitForLoadState("load");
+        await idle(page);
 
-        // Folded: the button alone, 54 px.
+        // Folded by the person: the button alone, 54 px.
+        await mapButton(page).click();
         await expect(mapButton(page)).toHaveAttribute("aria-expanded", "false");
         await expectContainer(page, false);
 
-        // Leaflet's code refused: its notice, in the container.
+        // Open again, Leaflet's code refused at the start: its notice, in the container.
         const build = await controlBuild(page);
         await mapButton(page).click();
+        settle();
         await expect(theContainer(page).getByText(FAILED, { exact: true })).toBeVisible();
         await expect(mapButton(page)).toBeFocused();
         await expectContainer(page, true);
@@ -276,8 +280,9 @@ test.describe("the region clicked with the mouse, cut off by the window, at 360 
     await page.goto(`/e/${placed.id}`);
     await expect(panel(page)).toBeVisible();
     await page.waitForLoadState("networkidle");
-    await mapButton(page).click();
+    // Open at the arrival, under the fold of a window of 420 px: it starts once scrolled to.
     const map = region(page, "aller");
+    await map.scrollIntoViewIfNeeded();
     await expect(points(map)).toHaveCount(1);
 
     // Its top 100 px above the window, then its top 100 px from the window's bottom; clicked

@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from "@playwright/test";
-import { mapName, openMap, points, seedParking, test } from "./event-map-points";
+import { arriveWaiting, idle, mapName, openMap, points, seedParking, test } from "./event-map-points";
 import { expect } from "./fixtures";
 import { answerTiles, tileAt } from "./tiles";
 
@@ -47,6 +47,8 @@ test.beforeEach(({ db, placed }) => seedParking(db, placed.id, placed.place));
 
 test("the map, folded, open, then its bubble", async ({ page, placed }, testInfo) => {
   await page.goto(`/e/${placed.id}`, { waitUntil: "networkidle" });
+  // Open at the arrival (#653): folded by a tap.
+  await mapButton(page).click();
   await expect(mapButton(page)).toHaveAttribute("aria-expanded", "false");
   await shoot(page, testInfo, "carte-repliee");
 
@@ -72,11 +74,12 @@ test("the map, a tile in error: the tiles' notice", async ({ page, placed }, tes
 });
 
 test("the map, Leaflet's code refused: its notice", async ({ page, placed }, testInfo) => {
-  await page.goto(`/e/${placed.id}`, { waitUntil: "networkidle" });
-  await expect(mapButton(page)).toBeVisible();
-  // As an old build's chunk after a deploy: what the page loads on its own is loaded.
+  // The map not started until `settle`; as an old build's chunk after a deploy: what the page loads on its own is loaded.
+  const settle = await arriveWaiting(page, placed.id);
+  await page.waitForLoadState("load");
+  await idle(page);
   await page.route("**/_next/static/**", (route) => route.fulfill({ status: 404 }));
-  await mapButton(page).click();
+  settle();
   await expect(container(page).getByText("La carte n’a pas pu se charger.", { exact: true })).toBeVisible();
   await shoot(page, testInfo, "carte-leaflet-echec");
 });
