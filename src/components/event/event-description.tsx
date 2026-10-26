@@ -37,12 +37,13 @@ export function EventDescription({ description }: { description: string | null |
 }
 
 /**
- * Folded beyond 4 lines, then « Afficher toute la description » (DS2.4–DS2.13). The server
- * renders the whole text, folded by CSS, and the button when it guesses the text is long; the
- * browser measures and corrects the button alone, once more on each resize, font load and change
- * of the text. Folded on each load, unfolded in this component's memory only. The button keeps
- * the focus; one that goes with the focus sends it to the title. A link hidden by the fold that
- * takes the focus unfolds the text (DS3.7).
+ * Folded beyond 4 lines, then « Afficher toute la description » (DS2.4–DS2.13). The text is
+ * folded by CSS whenever it is not unfolded, from the server's HTML on: it never moves. The
+ * server renders the button when it guesses the text is long; the browser measures and corrects
+ * the button alone, once more on each resize, font load and change of the text. Folded on each
+ * load, unfolded in this component's memory only, and folded again when the button goes: a long
+ * text that comes back comes folded. The button keeps the focus; one that goes with the focus
+ * sends it to the title. A link hidden by the fold that takes the focus unfolds the text (DS3.7).
  */
 function FoldedDescription({ description }: { description: string }) {
   const t = useTranslations("Event.description");
@@ -53,13 +54,16 @@ function FoldedDescription({ description }: { description: string }) {
   const [expanded, setExpanded] = useState(false);
   /** What to bring into view once the text has its new height: the button folded, or a link unfolded. */
   const reveal = useRef<"button" | "focus" | null>(null);
-  const folded = folds && !expanded;
+  const folded = !expanded;
 
   const measure = useCallback(() => {
     const text = textRef.current;
     if (!text) return;
     const next = overflows(text, text.dataset.folded === "true");
-    if (!next && buttonRef.current !== null && document.activeElement === buttonRef.current) focusTitle();
+    if (!next) {
+      if (buttonRef.current !== null && document.activeElement === buttonRef.current) focusTitle();
+      setExpanded(false);
+    }
     setFolds(next);
   }, []);
 
@@ -89,7 +93,7 @@ function FoldedDescription({ description }: { description: string }) {
     const text = event.currentTarget;
     const rects = event.target.getClientRects();
     const last = rects[rects.length - 1];
-    if (!folded || event.target === text || !last) return;
+    if (!folds || !folded || event.target === text || !last) return;
     // From the text's own top, whatever the browser scrolled it by to show what has the focus.
     if (last.bottom - text.getBoundingClientRect().top + text.scrollTop <= text.clientHeight + 1) return;
     text.scrollTop = 0;

@@ -76,6 +76,24 @@ async function sendHeldRegistration(page: Page, firstName: string) {
 
 const storageKeys = (page: Page) => page.evaluate(() => [Object.keys(localStorage).sort(), Object.keys(sessionStorage).sort()]);
 
+/** The storage's keys before any script of the page runs, on each load: a key written as the page mounts is not in them. */
+async function noteKeysBeforeScripts(page: Page) {
+  await page.addInitScript(() => {
+    Object.assign(window, { keysBeforeScripts: [Object.keys(localStorage).sort(), Object.keys(sessionStorage).sort()] });
+  });
+  return () => page.evaluate(() => (window as unknown as { keysBeforeScripts: string[][] }).keysBeforeScripts);
+}
+
+/** The text's height as the server's HTML shows it, the page's scripts blocked: before any measure. */
+async function serverHeight(page: Page, path: string): Promise<number> {
+  const scripts = "**/_next/static/**/*.js";
+  await page.route(scripts, (route) => route.abort());
+  await page.goto(path);
+  const { shown } = await heights(description(page));
+  await page.unroute(scripts);
+  return shown;
+}
+
 test.describe("six short lines", () => {
   test.use({ locale: "fr-FR", eventFields: { description: SIX } });
 
@@ -118,11 +136,11 @@ test.describe("six short lines", () => {
   });
 
   test("DS2.7: unfolded through an action and its state, written nowhere, folded again by a reload", async ({ page, seededEvent }) => {
+    const before = await noteKeysBeforeScripts(page);
     await open(page, `/e/${seededEvent.id}`);
-    const before = await storageKeys(page);
     await toggle(page).click();
     await expectUnfolded(page, 6);
-    expect(await storageKeys(page)).toEqual(before);
+    expect(await storageKeys(page)).toEqual(await before());
 
     await page.getByRole("tabpanel").getByRole("button", { name: FR.add, exact: true }).click();
     await form(page).getByLabel("Prénom").fill("Inès");
@@ -147,6 +165,23 @@ test.describe("six short lines", () => {
     await expect(toggle(page)).toHaveCount(0);
     expect(await heights(description(page))).toEqual({ shown: 4 * LINE, whole: 4 * LINE });
     await expect(page.locator("#event-title")).toBeFocused();
+  });
+
+  test("DS2.8: unfolded, then 4 lines, then 6 again: they come folded, with « Afficher toute la description »", async ({ page, db, seededEvent }) => {
+    await open(page, `/e/${seededEvent.id}`);
+    await toggle(page).click();
+    await expectUnfolded(page, 6);
+    const short = await sendHeldRegistration(page, "Inès");
+    await editEventInDb(db, seededEvent.id, { description: FOUR });
+    short();
+    await expect(toggle(page)).toHaveCount(0);
+
+    const long = await sendHeldRegistration(page, "Hugo");
+    await editEventInDb(db, seededEvent.id, { description: SIX });
+    long();
+    await expect(description(page)).toHaveText(SIX);
+    await expect(toggle(page)).toHaveText(FR.more);
+    await expectFolded(page);
   });
 });
 
@@ -291,8 +326,12 @@ test.describe("DS2.13: the measure follows the page", () => {
           page,
           seededEvent,
         }) => {
+          // The text folded by the server's HTML already: 4 lines before the page's scripts, 4 after.
+          expect(await serverHeight(page, `/e/${seededEvent.id}`)).toBe(4 * LINE);
           const response = await open(page, `/e/${seededEvent.id}`);
-          expect(rendersButton(await response.text())).toBe(guessed);
+          const html = await response.text();
+          expect(html).toMatch(/<p[^>]*id="event-description"[^>]*class="[^"]*line-clamp-4/);
+          expect(rendersButton(html)).toBe(guessed);
           await expect(toggle(page)).toHaveCount(guessed ? 0 : 1);
           expect((await heights(description(page))).shown).toBe(4 * LINE);
         });
