@@ -53,7 +53,7 @@ la base et Playwright tournent dans des conteneurs décrits par `compose.yaml`, 
 
 | commande | effet |
 |---|---|
-| `make ci` | tout ce que la CI exécute : `make check`, puis les tests de bout en bout contre le build de production que `make check` vient de produire (un seul build) |
+| `make ci` | l'équivalent local de la CI, sur une seule machine : `make check`, puis les tests de bout en bout contre le build de production que `make check` vient de produire (un seul build, là où la CI en fait cinq : un job statique et quatre shards) |
 | `make check` | lint, typecheck, tests, clés i18n, build de production |
 | `make up` / `make down` | démarre / arrête et efface l'environnement du slot ; `make up` démarre la base, **lui applique les migrations**, puis démarre `web`, et une migration en échec l'arrête avant `web` (#27) |
 | `make e2e` | construit le **build de production** du slot, puis lance les tests de bout en bout Playwright contre `next start` |
