@@ -820,7 +820,7 @@ tuiles qui ne sont pas au cache, jamais l'IP ni le navigateur du visiteur.
 | `GEOAPIFY_API_KEY` | aucune clé : aucun appel, chaque tuile en 502, `tiles: no key` (aussi quand elle est vide ou blanche) | la clé de Geoapify, réservée au serveur, rognée ; les slots ont une clé de test |
 | `TILES_BREAKER_MS` | `10000` (aussi pour une valeur qui n'est pas faite que de chiffres) | la durée minimale du disjoncteur, en millisecondes ; `0` le coupe (les slots) |
 
-### Les points (#476, #481)
+### Les points (#476, #481, #655)
 
 `src/domain/event-map.ts`, en fonctions pures, sans mots ni Leaflet. `mapOf(flag, cars)` lit
 les voitures d'un leg dans l'ordre des fiches : une voiture sans position n'est pas sur la carte
@@ -829,7 +829,16 @@ les voitures d'un leg dans l'ordre des fiches : une voiture sans position n'est 
 (`atFlag` : pas de ligne, l'étiquette sous le drapeau), même à 25 m ou plus d'une autre ;
 toute autre rejoint le premier point, dans l'ordre des fiches, hors du drapeau, à moins de
 25 m de la position de sa première voiture, ou en ouvre un. `onMap` compte les voitures sur
-la carte, le nombre que dit son nom. `framing` cadre le drapeau seul au zoom 14, ou
+la carte, le nombre que dit son nom. `freeSeatsOf(point)` donne les places libres d'un point
+(v28, #655) : celles de sa voiture (`freeSeats` du tableau, celles de la fiche), ou la somme de
+celles de ses voitures, 0 quand toutes sont pleines. `event-map.tsx` les met en chiffres
+(`format.number`) dans la **pastille** de l'étiquette, après le prénom ou le nombre de voitures :
+un trait de 1 px, l'icône « armchair » de Lucide (`aria-hidden`), le nombre, dans le même bouton,
+du même style pour tout nombre, jamais ambre ; chaque bouton de voiture de la bulle a celle de sa
+voiture. Les noms disent le nombre une fois, par `EventMap.freeSeats`, 0 compris (« 0 place
+libre », et non plus `Board.car.full`) ; celui d'un point groupé est `EventMap.group`, « 2 voitures :
+Nina, Paul, 3 places libres ». Une place prise ou libérée ne change que la pastille et le nom
+du même élément, sans recadrage (`mapUpdate`). `framing` cadre le drapeau seul au zoom 14, ou
 l'emprise du drapeau et des points, au zoom 15 au plus, avec une marge par côté : 32 px, et en
 bas la hauteur des crédits `h` plus 32 px, ou plus 64 px quand le drapeau a un point sous lui
 (v22 : son bouton descend à 60 px sous le drapeau). `bubbleMaxHeight` donne à la bulle la
@@ -837,6 +846,11 @@ hauteur de la carte moins `2 · BUBBLE_INSET` (10 px) moins `h` : elle s'arrête
 crédits. `h` est l'`offsetHeight` des crédits, lu par `leaflet-map.ts` à chaque cadrage et à
 chaque placement de la bulle (24 px sur une ligne, 48 sur deux). Les 64 px valent pour un rem
 de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cette marge.
+À gauche et à droite, la marge est la moitié de l'étiquette la plus large quand elle dépasse
+32 px (#655) : une étiquette est centrée sur son point, et sa pastille, à son bout droit, ne
+doit pas être coupée par le bord de la carte (CA1.3). `leaflet-map.ts` mesure les boutons
+(`offsetWidth`) ; à la première vue, ils n'entrent dans la page qu'une fois la carte cadrée :
+elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les deux.
 
 ### Dans le navigateur (#478 à #485)
 

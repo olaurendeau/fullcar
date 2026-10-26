@@ -350,7 +350,7 @@ for (const [where, device, enlarged, height] of [
       }
       await page.goto(`/e/${placed.id}`);
       const map = await openMap(page, mapName("aller", "3 voitures"));
-      const name = "3 voitures : Nina, Paul, Lou";
+      const name = "3 voitures : Nina, Paul, Lou, 9 places libres";
       await map.getByRole("button", { name, exact: true }).click();
       const bubble = map.getByRole("group", { name, exact: true });
       await expect(bubble.getByRole("button")).toHaveCount(4);

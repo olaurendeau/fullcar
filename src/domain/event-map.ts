@@ -89,6 +89,14 @@ export function mapOf<Car extends MapCar>(flag: Position, cars: readonly Car[]):
   return { flag, points, onMap: cars.length - notOnMap, notOnMap };
 }
 
+/**
+ * The free seats a point shows on its label (#655, CA1.21): its car's, or, grouped, the sum of
+ * its cars', 0 when all are full. Each car's are the board's `freeSeats`, its card's.
+ */
+export function freeSeatsOf(point: { cars: readonly { freeSeats: number }[] }): number {
+  return point.cars.reduce((sum, car) => sum + car.freeSeats, 0);
+}
+
 /** A margin of the view, side by side, in CSS pixels. */
 export interface Padding {
   top: number;
@@ -106,21 +114,24 @@ export type Framing =
  * The flag alone at zoom 14, or the box of the flag and every point, zoom 15 at most, 32 px
  * around. At the bottom, the credits' measured height `credits` more (24 px on one line, 48 on
  * two), and 32 px more again when the flag has a point under it (v22): after a framing, no
- * point, label or point's button is under the credits (CA3.7).
+ * point, label or point's button is under the credits (CA3.7). On the left and right, half the
+ * widest label `halfLabel` when it is more, a label being centred on its point: its badge, at
+ * its right end, is not cut by the map's edge (#655, CA1.3).
  */
-export function framing(flag: Position, points: readonly { position: Position; atFlag: boolean }[], credits: number): Framing {
+export function framing(flag: Position, points: readonly { position: Position; atFlag: boolean }[], credits: number, halfLabel = 0): Framing {
   if (points.length === 0) return { kind: "flag", center: flag, zoom: FLAG_ZOOM };
   const all = [flag, ...points.map((point) => point.position)];
   const lats = all.map((each) => each.lat);
   const lngs = all.map((each) => each.lng);
   const bottom = credits + (points.some((point) => point.atFlag) ? FLAG_POINT_PADDING : FIT_PADDING);
+  const side = Math.max(FIT_PADDING, Math.ceil(halfLabel));
   return {
     kind: "bounds",
     south: Math.min(...lats),
     west: Math.min(...lngs),
     north: Math.max(...lats),
     east: Math.max(...lngs),
-    padding: { top: FIT_PADDING, right: FIT_PADDING, bottom, left: FIT_PADDING },
+    padding: { top: FIT_PADDING, right: side, bottom, left: side },
     maxZoom: MAX_FIT_ZOOM,
   };
 }
