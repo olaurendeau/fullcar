@@ -158,6 +158,20 @@ describe("OA8.2, DS4.2", () => {
     });
   });
 
+  it("counts from the last leg: the aller of an event without a retour, the retour of one with", async () => {
+    await withRollback(async (trx) => {
+      const alone = (await seedEvent(trx, { allerAt: RETOUR, retourAt: null })).id;
+      const later = (await seedEvent(trx, { allerAt: ALLER, retourAt: "1999-03-15 08:00:00" })).id;
+
+      expect(await purgeDayThirty(trx, DAY_THIRTY)).toEqual({ anonymised: 0, deleted: 1 });
+      expect(await findPublicEvent(trx, alone)).toBeUndefined();
+      expect(await findPublicEvent(trx, later)).toBeDefined();
+      // Day 30 of 1999-03-15 begins at 1999-04-13T22:00:00Z.
+      expect(await purgeDayThirty(trx, new Date("1999-04-13T22:00:00Z"))).toEqual({ anonymised: 0, deleted: 1 });
+      expect(await findPublicEvent(trx, later)).toBeUndefined();
+    });
+  });
+
   it("a second run changes nothing", async () => {
     await withRollback(async (trx) => {
       const { id } = await seedFullEvent(trx);
