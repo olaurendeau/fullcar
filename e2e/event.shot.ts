@@ -1,4 +1,6 @@
 import type { Page, TestInfo } from "@playwright/test";
+import { anonymiseEvent } from "@/db/day-thirty";
+import { confirmSeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { DRIVER_PHONE } from "./driver";
@@ -191,6 +193,20 @@ test("event not found", async ({ page }, testInfo) => {
   // The 404's title is streamed after its content: waited for, the page settled (#97 review).
   await expect(page).toHaveTitle("Événement introuvable");
   await shoot(page, testInfo, "event-introuvable");
+});
+
+// #590, OA8.3: the link of an event anonymised at day 30.
+test("event ended", async ({ db, page, seededEvent }, testInfo) => {
+  const accountId = await confirmSeededEvent(db, seededEvent.id);
+  try {
+    await anonymiseEvent(db, seededEvent.id);
+    const response = await page.goto(`/e/${seededEvent.id}`, { waitUntil: "networkidle" });
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Événement terminé");
+    await shoot(page, testInfo, "event-termine");
+  } finally {
+    await db.deleteFrom("account").where("id", "=", accountId).execute();
+  }
 });
 
 test("organiser's link, not valid", async ({ page, seededEvent }, testInfo) => {

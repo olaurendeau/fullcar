@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { ContactFooter } from "@/components/contact/contact-footer";
-import { eventMetadata, loadPublicState } from "../load-event";
+import { EventEnded } from "@/components/event/event-ended";
+import { eventMetadata, loadEventPage } from "../load-event";
 import { OrganiserScreen } from "./organiser-screen";
 
 // No loading.tsx here either: an unknown id answers a real 404 (C6.4).
@@ -20,8 +21,11 @@ export async function generateMetadata({ params }: PageProps<"/e/[id]/admin">): 
 export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) {
   const { id } = await params;
   // The header comes with the legs, from one snapshot (epic #250).
-  const [state, t] = await Promise.all([loadPublicState(id), getTranslations("Admin")]);
-  if (!state) notFound();
+  const [page, t] = await Promise.all([loadEventPage(id), getTranslations("Admin")]);
+  if (!page) notFound();
+  // Anonymised: the page of /e/{id}, until the organiser's screens come (OA8.4).
+  if (page.ended) return <EventEnded title={page.title} allerAt={page.allerAt} />;
+  const { state } = page;
 
   // The page's whole width, for the panel's 1024 px (O7.5); the rest keeps the column of
   // /e/{id}, centred. While the bar of messages shows, room below for it as measured, and its 12 px: nothing stays under it (C11.4).
