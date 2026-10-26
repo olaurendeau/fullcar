@@ -59,6 +59,7 @@ describe("event table", () => {
       { name: "send_status", type: "text", nullable: "YES", default: null },
       { name: "send_status_at", type: "timestamp with time zone", nullable: "YES", default: null },
       { name: "anonymised_at", type: "timestamp with time zone", nullable: "YES", default: null },
+      { name: "description", type: "text", nullable: "YES", default: null },
     ]);
   });
 
@@ -163,6 +164,38 @@ describe("event table", () => {
     expect(row[column as "title" | "location"]).toBe("🚗".repeat(max));
     await expectRefusedBy({ [column]: "🚗".repeat(max + 1) }, constraint);
     await expectRefusedBy({ [column]: "" }, constraint);
+  });
+
+  // #706 (epic #654): the description is optional, and never an empty text: no description
+  // is null. Counted in code points too, so an emoji is one.
+  describe("description", () => {
+    it("is typed as a text or null", () => {
+      expectTypeOf<Selectable<EventTable>["description"]>().toEqualTypeOf<string | null>();
+    });
+
+    it("accepts none", async () => {
+      const row = await withRollback(async (trx) => {
+        await insert(trx);
+        return trx.selectFrom("event").select("description").where("id", "=", ID).executeTakeFirstOrThrow();
+      });
+      expect(row.description).toBeNull();
+    });
+
+    it("accepts 1000 code points, an emoji counting as one, and gives them back as written", async () => {
+      const description = "🚗".repeat(500) + "a".repeat(500);
+      const row = await withRollback(async (trx) => {
+        await insert(trx, { description });
+        return trx.selectFrom("event").select("description").where("id", "=", ID).executeTakeFirstOrThrow();
+      });
+      expect(row.description).toBe(description);
+    });
+
+    it.each([
+      ["1001 code points", "🚗".repeat(500) + "a".repeat(501)],
+      ["an empty text", ""],
+    ])("refuses %s", async (_, description) => {
+      await expectRefusedBy({ description }, "event_description_length");
+    });
   });
 
   // D4: a position is both coordinates or neither, each within its bounds. The rounding
