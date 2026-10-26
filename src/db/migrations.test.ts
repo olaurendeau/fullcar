@@ -80,6 +80,18 @@ describe("migrations", () => {
     expectSuccess(await migrator.migrateToLatest());
   });
 
+  // #706: the down of 0005 gives back exactly what 0004 left: columns, constraints, indexes.
+  it("0005 goes down to the schema 0004 left", async () => {
+    const migrator = createMigrator(db);
+    expectSuccess(await migrator.migrateTo("0004_accounts"));
+    const before = await schemaOf(db);
+    expectSuccess(await migrator.migrateTo("0005_event_description"));
+    expect(await schemaOf(db)).not.toEqual(before);
+    expectSuccess(await migrator.migrateTo("0004_accounts"));
+    expect(await schemaOf(db)).toEqual(before);
+    expectSuccess(await migrator.migrateToLatest());
+  });
+
   // 0003 has no room for an event without a token: going down gives each one a hash of its
   // own, which no token matches, rather than failing or deleting the event.
   it("0004 goes down with events whose token was revoked, still unusable", async () => {

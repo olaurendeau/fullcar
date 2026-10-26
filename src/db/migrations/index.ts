@@ -3,6 +3,7 @@ import * as event from "./0001_event";
 import * as participants from "./0002_participants";
 import * as positions from "./0003_positions";
 import * as accounts from "./0004_accounts";
+import * as eventDescription from "./0005_event_description";
 
 /**
  * Every migration, in order. Listed statically rather than read from the folder,
@@ -14,4 +15,5 @@ export const migrations: Record<string, Migration> = {
   "0002_participants": participants,
   "0003_positions": positions,
   "0004_accounts": accounts,
+  "0005_event_description": eventDescription,
 };
