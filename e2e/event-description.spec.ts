@@ -99,6 +99,9 @@ test.describe("with a description and a link", () => {
     const link = links.first();
     await expect(link).toHaveAttribute("href", PLAN);
     await expect(link).toHaveAttribute("target", "_blank");
+    // The only check of `rel`, not DS3.4: DS3.4 would pass without it, since the site already
+    // sends `Referrer-Policy: no-referrer` and Chromium already opens a target="_blank" link
+    // without opener. Other browsers, or a later change to either, would not: do not remove this check.
     expect((await link.getAttribute("rel"))?.split(/\s+/)).toEqual(expect.arrayContaining(["noopener", "noreferrer", "nofollow", "ugc"]));
     await expect(link).toHaveAttribute("dir", "ltr");
     await expect(link).toHaveCSS("unicode-bidi", "isolate");
