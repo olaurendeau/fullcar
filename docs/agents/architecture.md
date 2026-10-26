@@ -952,13 +952,36 @@ elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les d
   la carte. Sur un point ou sur les crédits (`holdPress`), un `touchstart` à un doigt s'arrête
   là : ni un glisser ni le `tapHold` de Leaflet (Safari sur iPhone), qui annulerait le clic
   d'un appui long, ne le voient. À deux doigts, il passe : un pincement dont le second doigt
-  se pose sur un point ou sur les crédits zoome la carte.
+  se pose sur un point ou sur les crédits zoome la carte. La phrase « deux doigts » est dans le
+  HTML du serveur, toujours, et seule la requête média la montre (`hidden
+  pointer-coarse:block`, #720, v29) : pas de hook qui vaudrait `false` sur le serveur et la
+  ferait arriver à l'hydratation, 28 px plus bas pour la première fiche (CA1.19). Elle suit
+  le pointeur quand il change, comme `dragging`, que `touchQuery` donne à Leaflet. Les tests
+  lisent la page du serveur en n'abandonnant que les `.js` de `/_next/static/chunks/`
+  (`serverPage`, `e2e/event-map-points.ts`) : avec Turbopack, la feuille de style est sous le
+  même chemin et doit charger.
 - **Les points, le drapeau, les lignes** (#480, #481) : chaque point est un vrai `<button>`
   dans un `divIcon`, son marqueur en `keyboard: false` ; seul, il mène à la fiche de sa
   voiture (`showCar`, `src/components/event/focus.ts`) ; groupé, il ouvre notre bulle
   (`role="group"`, pas la popup de Leaflet, dont « Close popup » est en anglais), un bouton
   par voiture dans l'ordre des fiches, puis « Fermer ». Le drapeau est une image nommée
   (`role="img"`), pas un bouton. Les lignes sont des `L.polyline` sans interaction.
+- **L'empilement des étiquettes** (#722, event-map v32, CA1.23) : les points restent à leur
+  position exacte et des étiquettes peuvent se recouvrir. Chaque icône de Leaflet est son
+  propre contexte d'empilement (elle porte un `transform`) : c'est l'icône qu'on monte, par une
+  seule classe à la fois, que choisit `pointLayer` (`event-map-state.ts`, fonction pure) et que
+  `leaflet-map.ts` met **à la place** de la précédente, jamais à côté : deux classes `!important`
+  sur `z-index` laisseraient décider l'ordre de la feuille de style. `z-auto!` par défaut :
+  l'ordre du DOM, celui des fiches, la dernière dessus, quelle que soit la latitude ; `z-999!`
+  quand une souris survole le bouton du point (`pointerenter` dont le `pointerType` est
+  `mouse` : un toucher ne survole rien) ou que le focus est dans l'icône, sa bulle comprise
+  (`focusin`, `focusout` sur l'icône, écoutés une fois l'icône créée, à l'`add` du marqueur) ;
+  `z-1001!` tant que sa bulle est ouverte. Le drapeau est en `z-1000!` (`FLAG_LAYER`) : au-dessus
+  de toute étiquette, survolée ou focalisée comprise, sous le point d'une bulle ouverte, que
+  rien ne recouvre (amendement 6 du coordinateur sur #653, qui l'emporte sur « sous le
+  drapeau »). Les marqueurs restent `interactive: false` (#484) : `riseOnHover` et
+  `setZIndexOffset` n'y feraient rien contre la classe. Après chaque mise à jour, chaque icône
+  est relue, un focus perdu par un élément déplacé n'envoyant pas toujours de `focusout`.
 - **Les mises à jour** (#482) : la carte suit l'état que la page applique (la réponse d'une
   action, « Actualiser » sur `/e/{id}/admin`) ; il n'y a pas de rafraîchissement automatique
   (#67). `event-map.tsx` compare en JSON ce que la carte montre (`MapState`) : un état qui

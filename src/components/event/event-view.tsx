@@ -6,6 +6,7 @@ import type { Leg } from "@/domain/leg";
 import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
 import { DevicePersons } from "./device-persons";
 import { EventDates } from "./event-dates";
+import { EventDescription } from "./event-description";
 import type { LegMap, MapHint } from "./event-map";
 import { pageSettled } from "./event-map-state";
 import { LegPanel, type BoardDevice } from "./leg-panel";
@@ -34,9 +35,9 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
 }
 
 /**
- * The event as its participants see it (#3, R5): title, place, its start and end (v4.3),
- * the bar of messages and « Vos inscriptions » (#162), then one tab per leg, or the aller
- * alone, without tabs, when there is no retour (C5.4). Each leg shows its coverage, its cars
+ * The event as its participants see it (#3, R5): title, place, its start and end (v4.3), the
+ * organiser's description (event-description v3), the bar of messages and « Vos inscriptions »
+ * (#162), then one tab per leg, or the aller alone, without tabs, when there is no retour (C5.4). Each leg shows its coverage, its cars
  * and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
  * When the place has a position, each leg has its map, open on each arrival (#653): one open or
@@ -46,7 +47,7 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
  * The page is settled once the device's persons are read, or none, or failed, and on `/admin`
  * once the first check of the link is over: from then on, for good, a map may start (v29).
  */
-export function EventView({ title, location, locationPosition, allerAt, retourAt, board, device, messageBar, tab, onTab, hint, linkChecking = false }: EventViewProps) {
+export function EventView({ title, location, locationPosition, allerAt, retourAt, description, board, device, messageBar, tab, onTab, hint, linkChecking = false }: EventViewProps) {
   const t = useTranslations("Event.legs");
   const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
   const [mapOpen, setMapOpen] = useState(true);
@@ -70,6 +71,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           </p>
         </div>
         <EventDates start={allerAt} end={retourAt} />
+        <EventDescription description={description} />
       </header>
       {messageBar}
       <DevicePersons board={legs.map((leg) => legOf(board, leg))} device={device} showLeg={onTab} />
