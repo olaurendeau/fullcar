@@ -315,6 +315,30 @@ describe("updateEvent", () => {
     }
   });
 
+  it("DS5.5: when the database fails, neither the log nor the error carries the description", async () => {
+    const marker = "Zorglub4729";
+    const methods = ["log", "info", "warn", "error", "debug", "trace"] as const;
+    const spies = methods.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+    try {
+      const fields = { ...FIELDS, description: marker };
+      const failure = await using(failingDb(marker), () => updateEvent("Ab3dEf7h", newAdminToken(), fields, BEFORE)).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack, JSON.stringify(failure)]) {
+        expect(text?.includes(marker)).toBe(false);
+      }
+      expect(cause).toBeUndefined();
+      const logged = spies.flatMap((spy) => spy.mock.calls);
+      expect(logged).toEqual([["updateEvent: the event could not be changed (SQLSTATE 08006)"]]);
+      expect(JSON.stringify(logged).includes(marker)).toBe(false);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
   it("logs nothing, with the right token or a wrong one", async () => {
     const methods = ["log", "info", "warn", "error", "debug", "trace"] as const;
     const spies = methods.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));

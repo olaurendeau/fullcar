@@ -3,8 +3,10 @@ import {
   addBreadcrumb, captureEvent, captureException, createTransport, defaultStackParser, NodeClient, type NodeOptions, setContext,
   setCurrentClient, setExtra, setTag, setUser, spanStreamingIntegration, startSpan, withIsolationScope, withScope,
 } from "@sentry/nextjs";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { databaseFailure } from "@/db/failure";
 import { scrubBreadcrumb, scrubCreatedDsc, scrubEvent, scrubSpan } from "./scrub";
+import { registerServerHooks } from "./server";
 import { actionBody, drawSecrets, leakedKinds, leakyEvent, NAMES, ORIGIN, PHONES, RELEASE, type Secrets } from "./test-secrets";
 
 /*
@@ -154,5 +156,51 @@ describe("what a NodeClient sends without the hooks", () => {
     await sendEverything();
     const kinds = ["admin link", "admin token", "event id", "name", "personal link", "personal token", "phone"];
     expect(leakedKinds(sent.join("\n"), secrets)).toEqual(kinds);
+  });
+});
+
+describe("DS5.5: the description of an event, in a failure of the database", () => {
+  const MARKER = "Zorglub4729";
+
+  /** What Postgres says of a refused row: it quotes the row, the description among its values. */
+  function postgresError() {
+    const detail = `Failing row contains (${secrets.id}, Tournoi de Rennes, ${MARKER})`;
+    const message = `new row for relation "event" violates check constraint "event_description_check": ${detail}`;
+    return Object.assign(new Error(message), { code: "23514", detail, parameters: [MARKER] });
+  }
+
+  async function capture(error: Error) {
+    startSpan({ name: "POST /e/[id]/admin", attributes: { "sentry.source": "route" } }, () => {
+      captureException(error);
+    });
+    await client.flush(2000);
+    expect(envelopes().map(([, type]) => type)).toContainEqual({ type: "event" });
+    return sent.join("\n");
+  }
+
+  it.each([
+    ["the creation", "createEvent: the event could not be stored"],
+    ["the change", "updateEvent: the event could not be changed"],
+  ])("the error %s throws carries it in no envelope", async (_, message) => {
+    start();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect((await capture(databaseFailure(message, postgresError()))).includes(MARKER)).toBe(false);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("the database's own error, caught by the server's integrations, carries it in no envelope", async () => {
+    start();
+    registerServerHooks(client);
+    const envelope = await capture(postgresError());
+    expect(envelope.includes(MARKER)).toBe(false);
+    expect(envelope).toContain("database error (SQLSTATE 23514)");
+  });
+
+  it("without the hooks, the database's own error carries it, so that the above means something", async () => {
+    start({});
+    expect((await capture(postgresError())).includes(MARKER)).toBe(true);
   });
 });

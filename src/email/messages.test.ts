@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { negotiateLocale } from "@/i18n/negotiate";
 import { renderEmail, type EmailInput } from "./messages";
 
@@ -215,6 +215,30 @@ describe("OA3.2: no text typed by anyone", () => {
     // @ts-expect-error: no first name.
     renderEmail({ kind: "noAccount", locale: "fr", origin: ORIGIN, firstName: "x" });
     expect(true).toBe(true);
+  });
+});
+
+describe("DS5.1: no email carries the description of an event", () => {
+  const MARKER = "Zorglub4729";
+
+  it("the input of none of the four emails has a field for it", () => {
+    // Every key of every one of the four inputs.
+    type Keys<T> = T extends unknown ? keyof T : never;
+    expectTypeOf<Keys<EmailInput>>().toEqualTypeOf<"kind" | "locale" | "origin" | "token" | "deletesAt">();
+    // @ts-expect-error: no description in the confirmation.
+    renderEmail({ kind: "confirmation", locale: "fr", origin: ORIGIN, token: TOKEN, description: MARKER });
+    // @ts-expect-error: no description in the sign-in link.
+    renderEmail({ kind: "signIn", locale: "fr", origin: ORIGIN, token: TOKEN, description: MARKER });
+    // @ts-expect-error: no description in the email for an address with no account.
+    renderEmail({ kind: "noAccount", locale: "fr", origin: ORIGIN, description: MARKER });
+    // @ts-expect-error: no description in the warning.
+    renderEmail({ kind: "inactivityWarning", locale: "fr", origin: ORIGIN, deletesAt: DELETES_AT, description: MARKER });
+  });
+
+  it.each(CASES)("%s, %s: a description given along with the input reaches neither the subject, the text nor the HTML", (kind, locale) => {
+    const input = { ...inputOf(kind, locale), description: MARKER };
+    const email = renderEmail(input);
+    for (const part of [email.subject, email.text, email.html]) expect(part.includes(MARKER)).toBe(false);
   });
 });
 
