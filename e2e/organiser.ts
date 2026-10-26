@@ -152,6 +152,28 @@ export async function unfoldLegs(page: Page, legs: Leg[] = ["aller", "retour"]):
   await page.evaluate((top) => window.scrollTo(0, top), scrollY);
 }
 
+/** A person of event `eventId`, without a car on each of `legs`. */
+export async function seedWithoutCar(db: Kysely<Database>, eventId: string, firstName: string, legs: Leg[], phone: string | null = null) {
+  const { id } = await seedPerson(db, eventId, { firstName, phone });
+  for (const leg of legs) await seedPlacement(db, { personId: id, eventId, leg, rideId: null });
+}
+
+/** Léa's number, in the lists « Sans voiture » of `seedLegsExample`. */
+export const LEGS_EXAMPLE_PHONE = "06 12 34 56 78";
+
+/**
+ * The example of organizer-view v3.5 (« Replier les legs »), for event `eventId`: at the aller,
+ * 2 without a car (Léa with a number) and 3 free seats; at the retour, 4 and 2 seats missing.
+ */
+export async function seedLegsExample(db: Kysely<Database>, eventId: string): Promise<void> {
+  const { id } = await seedPerson(db, eventId, { firstName: "Marc" });
+  await seedRide(db, eventId, id, { seats: 3 });
+  await seedRide(db, eventId, id, { leg: "retour", seats: 2, departureTime: "18:00:00" });
+  await seedWithoutCar(db, eventId, "Léa", ["aller", "retour"], LEGS_EXAMPLE_PHONE);
+  await seedWithoutCar(db, eventId, "Tom", ["aller", "retour"]);
+  for (const name of ["Zoé", "Hugo"]) await seedWithoutCar(db, eventId, name, ["retour"]);
+}
+
 /** The key that keeps the organiser's card of event `id` folded on the device (#204, O8.5). */
 export const foldKey = (id: string) => `fullcar:organiser-folded:${id}`;
 

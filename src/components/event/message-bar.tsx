@@ -141,7 +141,7 @@ function MessageList({
                   variant="outline"
                   className={cn(
                     "h-11 scroll-my-1 px-3 focus-visible:outline-offset-0",
-                    !failing && "border-primary-foreground/45 bg-transparent text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground",
+                    !failing && "border-inverse-foreground/45 bg-transparent text-inverse-foreground hover:bg-inverse-foreground/15 hover:text-inverse-foreground",
                   )}
                   aria-describedby={text}
                   onClick={() => line.undo && onUndo(line.undo)}
@@ -292,7 +292,7 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
         "fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 mx-auto max-w-md",
         open && "flex items-start gap-3 rounded-xl border py-1 pr-1 pl-4 text-sm shadow-lg",
         // With a failure, the whole bar takes the failure's style; a success alone keeps its own (« À 360 px »).
-        open && (failing ? "border-destructive bg-background text-foreground" : "border-transparent bg-primary font-medium text-primary-foreground"),
+        open && (failing ? "border-destructive bg-background text-foreground" : "border-transparent bg-inverse font-medium text-inverse-foreground"),
       )}
     >
       {open && <MessageList lines={lines} failing={failing} written={written} label={t("messages")} onUndo={messages.undo} />}
@@ -300,7 +300,7 @@ export function MessageBar({ messages }: { messages: ReturnType<typeof useMessag
         <Button
           variant="ghost"
           size="icon"
-          className={cn("size-11 shrink-0 focus-visible:outline-offset-0", !failing && "hover:bg-primary-foreground/15 hover:text-primary-foreground")}
+          className={cn("size-11 shrink-0 focus-visible:outline-offset-0", !failing && "hover:bg-inverse-foreground/15 hover:text-inverse-foreground")}
           aria-label={t("close")}
           onClick={() => close(true)}
         >

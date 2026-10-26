@@ -65,6 +65,10 @@ reproduire, dans cet ordre.
   et le bandeau de couverture le reflète.
 - **Le conducteur réduit ses places** sous le nombre d'occupants : il choisit qui sort ; les
   sortants repassent « sans voiture ».
+- **Retirer une personne** : depuis sa feuille, sur l'appareil qui l'a inscrite, ou par
+  l'organisateur depuis son espace, après une confirmation. Tout ce qui la concerne est
+  effacé : prénom, numéro, voitures, places. Ses passagers repassent « sans voiture » sur ce
+  leg. Personne n'est prévenu, et rien ne s'annule.
 - **Fraîcheur** : la page se recharge quand elle revient au premier plan, et interroge le
   serveur toutes les 15 s environ tant qu'elle est visible. Pas de websocket.
 - **Lien court** : `/e/{id}` doit rester court et tenir dans un SMS.
