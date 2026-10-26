@@ -238,8 +238,8 @@ describe("descriptionPieces", () => {
 
   it.each([
     ["200,000 closing parentheses", `https://asa-annecy.example/${")".repeat(200_000)}`],
-    ["200,000 exclamation marks", `https://asa-annecy.example/${"!".repeat(200_000)}`],
-    ["5,000 links", `${PLAN} `.repeat(5_000)],
+    ["1,000,000 exclamation marks", `https://asa-annecy.example/${"!".repeat(1_000_000)}`],
+    ["20,000 links", `${PLAN} `.repeat(20_000)],
     ["200,000 letters after a scheme", `https://${"a".repeat(200_000)}`],
   ])("splits %s in linear time", (_, typed) => {
     const start = performance.now();
