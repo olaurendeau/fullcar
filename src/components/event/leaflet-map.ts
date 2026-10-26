@@ -152,7 +152,7 @@ function holdPress(element: HTMLElement): () => void {
   };
 }
 
-/** Lucide's « flag », as the design draws it, white on a black square; its name is the state's. */
+/** Lucide's « flag », as the design draws it, white on a --primary square; its name is the state's. */
 function flagIcon(flag: HTMLSpanElement): L.DivIcon {
   flag.setAttribute("role", "img");
   // On top, it also takes the touch there: a point's button under it does not (CA1.15).
