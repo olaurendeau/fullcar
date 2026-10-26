@@ -249,6 +249,7 @@
       "passengersChanged": "Quelqu’un a pris ou libéré une place entre-temps : modifiez la voiture de nouveau.",
       "forbidden": "Cet appareil ne peut pas faire ce changement : rechargez la page.",
       "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé.",
+      "eventEnded": "Cet événement est terminé : ses inscriptions ont été effacées.",
       "noRetour": "Il n’y a plus de retour pour cet événement.",
       "editErrors": "Un champ n’a pas été accepté : utilisez de nouveau « Modifier l’événement ».",
       "eventChanged": "Il venait d’être modifié depuis un autre appareil : la page montre la version enregistrée.",
