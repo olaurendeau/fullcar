@@ -66,6 +66,10 @@
       "start": "Début",
       "end": "Fin"
     },
+    "description": {
+      "more": "Afficher toute la description",
+      "less": "Réduire la description"
+    },
     "noCar": {
       "aller": "Aucune voiture proposée pour l’aller",
       "retour": "Aucune voiture proposée pour le retour"
