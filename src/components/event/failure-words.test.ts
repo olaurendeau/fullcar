@@ -76,13 +76,19 @@ const ACTIONS: Record<string, Action> = {
     notDone: { kind: "offerRide", driver: "Marc", legs: "aller" },
     passengers: ["Inès", "Hugo"],
   },
-  "« Proposer une voiture » avec « Je ramène aussi des passagers » : Claire": {
+  "« Proposer une voiture » avec « Je ramène aussi des personnes » : Claire": {
     notDone: { kind: "offerRide", driver: "Claire", legs: "both" },
     passengers: ["Léa"],
   },
   "« Réessayer » de « Vos inscriptions »": { notDone: { kind: "readDevice" } },
   "« Retirer la voiture » : Claire, aller": { notDone: { kind: "removeRide", driver: "Claire", leg: "aller" } },
   "« Modifier » la voiture (#93) : Claire, aller": { notDone: { kind: "editRide", driver: "Claire", leg: "aller" } },
+  "« Proposer une voiture » : Claire, personne de l’appareil, son numéro vidé ailleurs (v4.8)": {
+    notDone: { kind: "offerRide", driver: "Claire", legs: "aller" },
+  },
+  "« Modifier » une personne, le téléphone seul, vidé : Claire, qui conduit (v4.8)": {
+    notDone: { kind: "editPerson", firstName: "Claire", fields: "phone" },
+  },
 };
 
 /** What the page knows of a failure, `source` (offline, a 500, a refusal's key), turned into its reason as the sender does. */
@@ -94,6 +100,7 @@ function whyFor(source: string, action: Action): Why {
   if (source === "notEnoughSeats") return { kind: "notEnoughSeats", free: 1 };
   if (source === "drives") return { kind: "drives", ...action.drives! };
   if (source === "alreadyDriving" && action.notDone.kind === "offerRide") return { kind: "alreadyDriving", driver: action.notDone.driver };
+  if (source === "phoneWhileDriving" && action.notDone.kind === "editPerson") return personWhy("phoneWhileDriving", action.notDone.firstName);
   if (action.undo) return undoWhy(source as Parameters<typeof undoWhy>[0]);
   return whyOf(source as Parameters<typeof whyOf>[0]);
 }
@@ -124,7 +131,7 @@ describe("failureText: each failure, word for word (C11.11)", () => {
   const table = rows();
 
   it("reads every row, and knows every action of the table", () => {
-    expect(table.length).toBeGreaterThanOrEqual(66);
+    expect(table.length).toBeGreaterThanOrEqual(68);
     expect(new Set(table.map((row) => row.action))).toEqual(new Set(Object.keys(ACTIONS)));
     // A failure column of a form `sources` does not know would give no test at all.
     for (const row of table) expect(sources(row.failure), `${row.action}, ${row.failure}`).not.toHaveLength(0);
@@ -215,6 +222,11 @@ describe("editedFields and personWhy: a person's form (C11.11)", () => {
     }
   });
 
+  // v4.8, rule 8: emptying the number of who drives is refused, and the reason names her.
+  it("gives `phoneWhileDriving` the person who drives", () => {
+    expect(personWhy("phoneWhileDriving", "Claire")).toEqual({ kind: "phoneWhileDriving", firstName: "Claire" });
+  });
+
   it("« Modifier » of the first name alone, word for word", () => {
     const notDone: NotDone = { kind: "editPerson", firstName: "Tom", fields: editedFields(["firstName"]) };
     expect(failureText(words("fr"), notDone, personWhy("offline", "Tom"))).toBe("Le prénom de Tom n’a pas été enregistré. Vérifiez la connexion, puis réessayez.");
@@ -226,8 +238,8 @@ describe("editedFields and personWhy: a person's form (C11.11)", () => {
 describe("offerWhy: « Proposer une voiture » (C11.11)", () => {
   const offers = rows().filter((row) => row.action.startsWith("« Proposer une voiture »"));
 
-  it("reads the rows of an offer on one leg and on both", () => {
-    expect(new Set(offers.map((row) => row.action)).size).toBe(2);
+  it("reads the rows of an offer on one leg, on both, and refused for want of a number (v4.8)", () => {
+    expect(new Set(offers.map((row) => row.action)).size).toBe(3);
   });
 
   for (const row of offers) {
@@ -418,7 +430,7 @@ describe("personGone: a person removed from the event meanwhile", () => {
 describe("whyOf", () => {
   it("gives `invalid` and `idTaken` the generic reason, and keeps the others", () => {
     for (const error of ["invalid", "idTaken", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
-    for (const error of ["offline", "seatTaken", "rideGone", "forbidden", "eventNotFound", "passengersChanged", "noRetour"] as const) {
+    for (const error of ["offline", "seatTaken", "rideGone", "forbidden", "eventNotFound", "passengersChanged", "noRetour", "driverWithoutPhone"] as const) {
       expect(whyOf(error)).toEqual({ kind: error });
     }
   });
