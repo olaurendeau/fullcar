@@ -1109,16 +1109,25 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
     gardé 1 heure, il part au passage suivant, en temps normal moins de 26 heures après
     l'envoi (le cron passe une fois par jour ; sur le plan Hobby, à n'importe quelle minute
     de l'heure prévue) ;
-  - un **lien**, utilisé ou non, **30 jours après son expiration** (`linkDeletedAt`) : 30
-    jours et 1 heure après l'envoi pour un lien de connexion, 37 jours pour un lien de
-    confirmation, qui part aussi avec son événement au jour 30. D'ici là, sa page dit encore
-    « Ce lien a expiré » ou « Ce lien a déjà servi » (OA5.4 à OA5.6) à un e-mail ouvert en
-    retard. Un lien ne garde aucune adresse.
+  - un **lien de connexion**, utilisé ou non, **30 jours après son expiration**
+    (`linkDeletedAt`), soit 30 jours et 1 heure après l'envoi. D'ici là, sa page dit encore
+    « Ce lien a expiré » ou « Ce lien a déjà servi » (OA5.4, OA5.5) à un e-mail ouvert en
+    retard ;
+  - un **lien de confirmation** : **tant que son événement est en attente, jamais** par âge.
+    Expiré, il sert encore à recevoir un nouveau lien (OA5.6, `AdminPending.expired` d'OA7.7),
+    et il part avec son événement au jour 30, par la cascade ou par `anonymiseEvent`. Une fois
+    l'événement confirmé, la règle des liens de connexion s'applique : 30 jours après son
+    expiration, soit 37 jours après l'envoi, ou au jour 30 de l'événement si celui-ci vient
+    avant. Le nettoyage lit `event` sans verrou : l'ordre Event, puis lien, reste entier.
+
+  Un lien ne garde aucune adresse.
 - **La route** (`handle.ts`) : un en-tête faux ou absent, ou un `CRON_SECRET` vide ou non
   configuré, donne 401 et rien ne tourne. Le secret n'est lu que dans l'en-tête, jamais
   dans l'URL, et `Bearer {secret}` est comparé par `tokenMatches`, haché des deux côtés. Le
-  jour 30 puis le nettoyage tournent au même instant ; l'échec de l'un n'empêche pas
-  l'autre, et donne 500. Le cron est `0 3 * * *` (UTC), dans `vercel.json`.
+  nettoyage tourne **d'abord**, puis le jour 30, au même instant : le nettoyage est court
+  (trois instructions), et un passage coupé par la durée maximale de la fonction a ainsi
+  déjà effacé les adresses des envois. L'échec de l'un n'empêche pas l'autre, et donne 500.
+  Le cron est `0 3 * * *` (UTC), dans `vercel.json`.
 - **Les comptes inactifs** (#616, `src/app/api/purge/inactive-accounts.ts`) : l'avertissement
   part 30 jours avant les 3 ans sans visite, une seule fois, et le compte n'est supprimé
   qu'après l'envoi effectif de cet avertissement (`warned_at` ; décision 5 du coordinateur

@@ -52,48 +52,64 @@ function expectOnlyCounts(lines: string[]) {
 }
 
 describe("with the right secret", () => {
-  it("runs day 30, then the clean-up, at the same instant, and answers their counts", async () => {
+  it("runs both steps at the same instant, and answers their counts", async () => {
     const run = steps();
     const response = await handlePurge(get(`Bearer ${SECRET}`), SECRET, run, NOW);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.json()).toEqual({ anonymised: 2, deleted: 3, sessions: 4, links: 5, sends: 6 });
-    expect(run.dayThirty.mock.calls).toEqual([[NOW]]);
     expect(run.expiredRows.mock.calls).toEqual([[NOW]]);
+    expect(run.dayThirty.mock.calls).toEqual([[NOW]]);
   });
 
-  it("logs the counts, and nothing else", async () => {
+  it("cleans up first, short, and starts day 30 only once the clean-up has ended: a run cut off still clears the addresses", async () => {
+    const run = steps();
+    let endCleanUp!: (counts: { sessions: number; links: number; sends: number }) => void;
+    run.expiredRows.mockImplementation(() => new Promise((resolve) => (endCleanUp = resolve)));
+
+    const response = handlePurge(get(`Bearer ${SECRET}`), SECRET, run, NOW);
+    await vi.waitFor(() => expect(run.expiredRows).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(run.dayThirty).not.toHaveBeenCalled();
+
+    endCleanUp({ sessions: 4, links: 5, sends: 6 });
+    expect((await response).status).toBe(200);
+    expect(run.dayThirty).toHaveBeenCalledOnce();
+    expect(run.expiredRows.mock.invocationCallOrder[0]).toBeLessThan(run.dayThirty.mock.invocationCallOrder[0]!);
+  });
+
+  it("logs the counts, the clean-up's first, and nothing else", async () => {
     await handlePurge(get(`Bearer ${SECRET}`), SECRET, steps(), NOW);
 
-    expect(logs).toEqual(["purge: day 30: 2 anonymised, 3 deleted", "purge: expired rows: 4 sessions, 5 links, 6 sends"]);
+    expect(logs).toEqual(["purge: expired rows: 4 sessions, 5 links, 6 sends", "purge: day 30: 2 anonymised, 3 deleted"]);
     expectOnlyCounts(logs);
   });
 
-  it("still cleans up when day 30 fails, and answers 500, logging the error's code alone", async () => {
+  it("still runs day 30 when the clean-up fails, and answers 500, logging the error's code alone", async () => {
     const run = steps();
     const failure = Object.assign(new Error(`connection to ${SECRET} refused`), { code: "57P01" });
-    run.dayThirty.mockRejectedValue(failure);
+    run.expiredRows.mockRejectedValue(failure);
 
     const response = await handlePurge(get(`Bearer ${SECRET}`), SECRET, run, NOW);
 
     expect(response.status).toBe(500);
     expect(await response.text()).toBe("");
-    expect(run.expiredRows).toHaveBeenCalledOnce();
-    expect(logs).toEqual(["purge: day 30 failed (SQLSTATE 57P01)", "purge: expired rows: 4 sessions, 5 links, 6 sends"]);
+    expect(run.dayThirty).toHaveBeenCalledOnce();
+    expect(logs).toEqual(["purge: expired rows failed (SQLSTATE 57P01)", "purge: day 30: 2 anonymised, 3 deleted"]);
     expectOnlyCounts(logs);
   });
 
-  it("answers 500 when the clean-up fails, day 30 done", async () => {
+  it("answers 500 when day 30 fails, the clean-up done", async () => {
     const run = steps();
-    run.expiredRows.mockImplementation(() => {
+    run.dayThirty.mockImplementation(() => {
       throw new Error("DATABASE_URL is not set");
     });
 
     const response = await handlePurge(get(`Bearer ${SECRET}`), SECRET, run, NOW);
 
     expect(response.status).toBe(500);
-    expect(logs).toEqual(["purge: day 30: 2 anonymised, 3 deleted", "purge: expired rows failed"]);
+    expect(logs).toEqual(["purge: expired rows: 4 sessions, 5 links, 6 sends", "purge: day 30 failed"]);
   });
 });
 

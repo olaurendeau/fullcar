@@ -26,7 +26,9 @@ const before = (now: Date, ms: number) => new Date(now.getTime() - ms);
 /**
  * Deletes the sessions ended 90 days after their last visit (`sessionIsAlive`), the sends out
  * of the hour of the limits (`inSendWindow`), and the links 30 days after their expiry, used
- * or not (`linkDeletedAt`). A confirmation link also goes with its event, on day 30.
+ * or not (`linkDeletedAt`). A confirmation link of a pending event stays as long as its event:
+ * expired, it still sends a new one (OA5.6), and it goes with the event on day 30. A read of
+ * `event`, without a lock: the order Event, then link, stays whole.
  */
 export async function deleteExpiredRows(db: Kysely<Database>, now: Date): Promise<ExpiredRowCounts> {
   const sessions = await db
@@ -41,6 +43,16 @@ export async function deleteExpiredRows(db: Kysely<Database>, now: Date): Promis
         eb.and([
           eb("kind", "=", "confirmation"),
           eb("created_at", "<=", before(now, CONFIRMATION_LINK_LIFETIME_MS + LINK_KEPT_AFTER_EXPIRY_MS)),
+          // While its event is pending, the link page still reads it to send a new one (OA5.6, OA7.7).
+          eb.not(
+            eb.exists(
+              eb
+                .selectFrom("event")
+                .select("event.id")
+                .whereRef("event.id", "=", "email_link.event_id")
+                .where("event.confirmed_at", "is", null),
+            ),
+          ),
         ]),
       ]),
     )

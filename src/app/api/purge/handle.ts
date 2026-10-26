@@ -9,7 +9,11 @@ import { databaseFailure } from "@/db/failure";
 import { hashToken, tokenMatches } from "@/domain/token-hash";
 import type { DayThirtyCounts } from "./day-thirty";
 
-/** What a run does, at one instant: day 30, then the clean-up of the expired rows. */
+/**
+ * What a run does, at one instant: the clean-up of the expired rows first, three short
+ * statements that clear the addresses of the sends, then day 30, one event at a time. A run
+ * cut off by the function's time limit has still cleaned up.
+ */
 export interface PurgeSteps {
   dayThirty: (now: Date) => Promise<DayThirtyCounts>;
   expiredRows: (now: Date) => Promise<ExpiredRowCounts>;
@@ -36,7 +40,7 @@ async function attempt<T>(name: string, step: () => Promise<T>): Promise<T | und
   }
 }
 
-/** 401 without the right secret; otherwise both steps, even when the first fails: 200 with their counts, or 500. */
+/** 401 without the right secret; otherwise both steps, the second even when the first fails: 200 with their counts, or 500. */
 export async function handlePurge(
   request: Request,
   secret: string | undefined,
@@ -51,10 +55,10 @@ export async function handlePurge(
     return new Response(null, { status: 401, headers: HEADERS });
   }
 
-  const dayThirty = await attempt("day 30", () => steps.dayThirty(now));
-  if (dayThirty) console.info(`purge: day 30: ${dayThirty.anonymised} anonymised, ${dayThirty.deleted} deleted`);
   const expired = await attempt("expired rows", () => steps.expiredRows(now));
   if (expired) console.info(`purge: expired rows: ${expired.sessions} sessions, ${expired.links} links, ${expired.sends} sends`);
+  const dayThirty = await attempt("day 30", () => steps.dayThirty(now));
+  if (dayThirty) console.info(`purge: day 30: ${dayThirty.anonymised} anonymised, ${dayThirty.deleted} deleted`);
 
   if (!dayThirty || !expired) return new Response(null, { status: 500, headers: HEADERS });
   return Response.json({ ...dayThirty, ...expired }, { status: 200, headers: HEADERS });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Database } from "./schema";
 import { anAddress, seedAccount, seedLink, seedSends, seedSession } from "./test-accounts";
 import { withRollback } from "./test-db";
-import { seedEvent } from "./test-events";
+import { confirmSeededEvent, seedEvent } from "./test-events";
 import { tokenKey } from "./token-key";
 import { deleteExpiredRows } from "./expired-rows";
 
@@ -76,10 +76,11 @@ describe("a send", () => {
 });
 
 describe("a link", () => {
-  it("is kept 30 days after its expiry: a sign-in link 30 days and 1 hour, a confirmation link 37 days", async () => {
+  it("is kept 30 days after its expiry: a sign-in link 30 days and 1 hour, the confirmation link of a confirmed event 37 days", async () => {
     await withRollback(async (trx) => {
       const accountId = await seedAccount(trx);
       const { id } = await seedEvent(trx);
+      await confirmSeededEvent(trx, id);
       const login = { kind: "login", accountId, returnEventId: null } as const;
       const confirmation = { kind: "confirmation", eventId: id } as const;
       const loginGone = await seedLink(trx, login, { createdAt: ago(30 * DAY + HOUR) });
@@ -109,21 +110,55 @@ describe("a link", () => {
       expect(await linkExists(trx, kept)).toBe(true);
     });
   });
+
+  // OA5.6, OA7.7: an expired confirmation link still sends a new one while its event waits.
+  it("of confirmation stays while its event is pending, however old, and goes once the event is confirmed", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const expired = await seedLink(trx, { kind: "confirmation", eventId: id }, { createdAt: ago(400 * DAY) });
+      const used = await seedLink(trx, { kind: "confirmation", eventId: id }, { createdAt: ago(400 * DAY), usedAt: ago(399 * DAY) });
+
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 0, sends: 0 });
+      expect(await linkExists(trx, expired)).toBe(true);
+      expect(await linkExists(trx, used)).toBe(true);
+
+      await confirmSeededEvent(trx, id);
+
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 2, sends: 0 });
+      expect(await linkExists(trx, expired)).toBe(false);
+      expect(await linkExists(trx, used)).toBe(false);
+    });
+  });
+
+  it("of confirmation stays for one pending event and goes for a confirmed one, side by side", async () => {
+    await withRollback(async (trx) => {
+      const pending = (await seedEvent(trx)).id;
+      const confirmed = (await seedEvent(trx)).id;
+      await confirmSeededEvent(trx, confirmed);
+      const kept = await seedLink(trx, { kind: "confirmation", eventId: pending }, { createdAt: ago(37 * DAY) });
+      const gone = await seedLink(trx, { kind: "confirmation", eventId: confirmed }, { createdAt: ago(37 * DAY) });
+
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 1, sends: 0 });
+      expect(await linkExists(trx, kept)).toBe(true);
+      expect(await linkExists(trx, gone)).toBe(false);
+    });
+  });
 });
 
 describe("a run", () => {
-  it("leaves the accounts and the events, and a second run deletes nothing", async () => {
+  it("leaves the accounts, the events and a pending event's link, and a second run deletes nothing", async () => {
     await withRollback(async (trx) => {
       const accountId = await seedAccount(trx, { last_visit_at: ago(400 * DAY) });
       const { id } = await seedEvent(trx);
       await seedSession(trx, accountId, { createdAt: ago(400 * DAY), lastVisitAt: ago(400 * DAY) });
       await seedLink(trx, { kind: "login", accountId, returnEventId: id }, { createdAt: ago(400 * DAY) });
-      await seedLink(trx, { kind: "confirmation", eventId: id }, { createdAt: ago(400 * DAY) });
+      const pendingLink = await seedLink(trx, { kind: "confirmation", eventId: id }, { createdAt: ago(400 * DAY) });
       await seedSends(trx, 3, { kind: "confirmation", email: anAddress(), eventId: id, sentAt: ago(400 * DAY) });
 
-      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 1, links: 2, sends: 3 });
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 1, links: 1, sends: 3 });
       expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 0, sends: 0 });
 
+      expect(await linkExists(trx, pendingLink)).toBe(true);
       expect(await trx.selectFrom("account").select("id").where("id", "=", accountId).executeTakeFirst()).toBeDefined();
       expect(await trx.selectFrom("event").select("id").where("id", "=", id).executeTakeFirst()).toBeDefined();
     });

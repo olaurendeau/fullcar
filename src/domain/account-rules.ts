@@ -62,7 +62,10 @@ export function linkOutcome(link: StoredLink | null, expected: LinkKind, now: Da
  */
 export const LINK_KEPT_AFTER_EXPIRY_MS = 30 * DAY;
 
-/** The first instant the daily task may delete the link: 30 days after its expiry. */
+/**
+ * The first instant the daily task may delete the link: 30 days after its expiry. Not for
+ * the confirmation link of a pending event, which stays as long as its event (OA5.6).
+ */
 export function linkDeletedAt(kind: LinkKind, createdAt: Date): Date {
   return new Date(linkExpiresAt(kind, createdAt).getTime() + LINK_KEPT_AFTER_EXPIRY_MS);
 }
