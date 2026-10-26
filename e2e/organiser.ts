@@ -452,9 +452,10 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     async stop() {
       state.on = false;
       // Not bounded by `route.fetch()`, which has no timeout here: no `actionTimeout` is set, and
-      // the context's timeout is then 0. What bounds this wait is the test's own timeout (30 s),
-      // which the fixture's teardown counts against. A search (`/api/lieux`) is bounded by the
-      // app at about 3 s (`TIMEOUT_MS` in `src/app/api/lieux/photon.ts`).
+      // the context's timeout is then 0. What bounds this wait is a timeout the size of the test's
+      // (30 s), which Playwright grants afresh to afterEach hooks and fixture teardown. A search
+      // (`/api/lieux`) is bounded by the app at about 3 s (`TIMEOUT_MS` in
+      // `src/app/api/lieux/photon.ts`).
       await Promise.all(reading);
       await context.unrouteAll({ behavior: "ignoreErrors" });
     },
