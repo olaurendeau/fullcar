@@ -5,6 +5,7 @@
 - Voisines : `language-switch` (#113) décrit le bas de page avant ce changement ; elle n’est
   pas republiée, cette maquette la complète pour la ligne du bas de page.
 - Page : `index.html` (autonome, maquettes à 360 px de large)
+- Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
 
 ## Ce que la page montre
 
