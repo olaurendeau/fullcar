@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 import { getDb } from "@/db/client";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
-import { withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { readEventState, type EventState } from "./event-state";
 import { addPerson, setPersonLeg, updatePerson, type PersonOutcome } from "./persons";
@@ -306,12 +306,12 @@ describe("C2.4, C7.3, C12.3: only the device that created the person changes her
     });
   });
 
-  it("refuses a person id nobody holds, with a token of the event", async () => {
+  it("RP5.4: refuses a person id nobody holds, with a token of the event, as personGone", async () => {
     await withRollback(async (trx) => {
       const { eventId, lea } = await seedScene(trx);
       const personId = randomUUID();
       // The refusal carries the device's current state, which nothing changed.
-      const refused = { ok: false, error: "forbidden", state: await readEventState(trx, eventId, lea.token) };
+      const refused = { ok: false, error: "personGone", state: await readEventState(trx, eventId, lea.token) };
       expect(await updatePerson(trx, eventId, lea.token, { personId, firstName: "Ana", phone: "" })).toEqual(refused);
       expect(await setPersonLeg(trx, eventId, lea.token, { personId, leg: "aller", kind: "notConcerned" })).toEqual(refused);
     });
@@ -495,6 +495,91 @@ describe("the state is read after the write is committed", () => {
       expect(legOf(renamed, "aller").withoutCar).toEqual([{ id: lea.id, firstName: "Zoé" }]);
       const moved = stateOf(await setPersonLeg(db, eventId, lea.token, { personId: lea.id, leg: "aller", kind: "notConcerned" }));
       expect(standing(moved, lea.id)).toEqual({ aller: "notConcerned", retour: "notConcerned" });
+    });
+  });
+});
+
+// RP5.4: the page still shows a person removed from the event since, by another device or the organiser.
+describe("on a person removed meanwhile", () => {
+  /** Tom removed; Hugo, of the same device, stays. */
+  async function removedScene(db: Db) {
+    const scene = await seedScene(db);
+    const hugo = await seedPerson(db, scene.eventId, { firstName: "Hugo" }, scene.tom.token);
+    await seedPlacement(db, { personId: hugo.id, eventId: scene.eventId, leg: "aller", rideId: null });
+    await deleteSeededPerson(db, scene.eventId, scene.tom.id);
+    return { ...scene, hugo };
+  }
+
+  it("RP5.4: updatePerson is refused by personGone, with the state without her, and nobody changes", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, tom, hugo } = await removedScene(trx);
+      const before = await readEventState(trx, eventId, tom.token);
+      const outcome = await updatePerson(trx, eventId, tom.token, { personId: tom.id, firstName: "Thomas", phone: "" });
+      expect(outcome).toEqual({ ok: false, error: "personGone", state: before });
+      expect(standing(before, tom.id)).toEqual({});
+      expect(standing(before, hugo.id).aller).toBe("withoutCar");
+      expect(await personIds(trx, eventId)).not.toContain(tom.id);
+    });
+  });
+
+  it.each(["withoutCar", "notConcerned"] as const)(
+    "RP5.4: setPersonLeg %s is refused by personGone, with the state, and no Placement is written",
+    async (kind) => {
+      await withRollback(async (trx) => {
+        const { eventId, tom } = await removedScene(trx);
+        const before = await readEventState(trx, eventId, tom.token);
+        for (const leg of ["aller", "retour"]) {
+          const outcome = await setPersonLeg(trx, eventId, tom.token, { personId: tom.id, leg, kind });
+          expect(outcome).toEqual({ ok: false, error: "personGone", state: before });
+        }
+        const rows = await trx.selectFrom("placement").select("person_id").where("person_id", "=", tom.id).execute();
+        expect(rows).toEqual([]);
+      });
+    },
+  );
+
+  it("M7.3: on the retour of an event without one, setPersonLeg says noRetour before personGone", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { retourAt: null });
+      const lea = await seedPerson(trx, eventId);
+      await deleteSeededPerson(trx, eventId, lea.id);
+      const outcome = await setPersonLeg(trx, eventId, lea.token, { personId: lea.id, leg: "retour", kind: "withoutCar" });
+      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "noRetour" }));
+    });
+  });
+
+  it("a malformed token is refused as forbidden, the person gone or not", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, tom } = await removedScene(trx);
+      const outcome = await updatePerson(trx, eventId, tom.token.slice(1), { personId: tom.id, firstName: "Thomas" });
+      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
+    });
+  });
+
+  // Read before her removal committed, she is gone once her row is reached: nothing is written
+  // to a person who is no longer there, and no foreign key fails.
+  it("RP5.4: updatePerson that waited for her removal is refused by personGone", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+      const outcome = await whileHeld(
+        db,
+        (trx) => deleteSeededPerson(trx, eventId, tom.id),
+        () => updatePerson(db, eventId, tom.token, { personId: tom.id, firstName: "Thomas" }),
+      );
+      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "personGone" }));
+    });
+  });
+
+  it("RP5.4: setPersonLeg that waited for her removal is refused by personGone, never failed", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+      const outcome = await whileHeld(
+        db,
+        (trx) => deleteSeededPerson(trx, eventId, tom.id),
+        () => setPersonLeg(db, eventId, tom.token, { personId: tom.id, leg: "aller", kind: "withoutCar" }),
+      );
+      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "personGone" }));
+      expect(await personIds(db, eventId)).toEqual([]);
     });
   });
 });

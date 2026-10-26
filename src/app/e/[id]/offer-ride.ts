@@ -5,7 +5,7 @@ import { findDrivenRide, insertRide, lockRides, type RideRef } from "@/db/rides"
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
-import { devicePersonIds } from "@/domain/device";
+import { deviceAccess } from "@/domain/device";
 import { LEGS, otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import { validatePerson, type NewPerson, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
@@ -75,6 +75,8 @@ export type OfferErrors = PersonErrors & RideErrors & Partial<Record<OtherLegFie
  * - `invalid`: what no form sends (an id or a leg malformed, a new driver without a
  *   well-formed token, one id for both cars, a passenger ticked twice, the driver ticked);
  * - `forbidden`: the driver, or a passenger, is not a person of this device;
+ * - `personGone`: with a well-formed token, the driver of the device, or a passenger, is no
+ *   longer a person of the event, removed since the page showed her (RP5.4): `goneIds`;
  * - `alreadyDriving`: she drives another car on this leg, or drives on the other leg and
  *   the offer would change it (C4.6);
  * - `alreadyInCar`: a passenger is in another car on this leg, or drives on it (C4.13);
@@ -85,14 +87,19 @@ export type OfferRefusal =
   | "invalid"
   | "eventNotFound"
   | "forbidden"
+  | "personGone"
   | "alreadyDriving"
   | "alreadyInCar"
   | "idTaken";
 
+/** Who is gone from the event among those an offer named. */
+type PersonGone = { ok: false; error: "personGone"; goneIds: string[] };
+
 export type OfferRideResult =
   | { ok: true; rideId: string; driverId: string }
   | { ok: false; errors: OfferErrors; first: OfferField }
-  | { ok: false; error: OfferRefusal };
+  | { ok: false; error: Exclude<OfferRefusal, "personGone"> }
+  | PersonGone;
 
 type FieldErrors = Extract<OfferRideResult, { errors: OfferErrors }>;
 
@@ -102,7 +109,8 @@ type FieldErrors = Extract<OfferRideResult, { errors: OfferErrors }>;
  */
 export type OfferRideOutcome =
   | { ok: true; state: EventState }
-  | { ok: false; error: Exclude<OfferRefusal, "eventNotFound">; state: EventState }
+  | { ok: false; error: Exclude<OfferRefusal, "eventNotFound" | "personGone">; state: EventState }
+  | (PersonGone & { state: EventState })
   | FieldErrors
   | { ok: false; error: "eventNotFound" };
 
@@ -133,8 +141,17 @@ interface Offer {
 
 /** Thrown inside the transaction, so that what was written before it is rolled back. */
 class Refused extends Error {
-  constructor(readonly refusal: OfferRefusal) {
+  /** `goneIds` for `personGone`: those of the offer no longer persons of the event. */
+  constructor(
+    readonly refusal: OfferRefusal,
+    readonly goneIds: string[] = [],
+  ) {
     super(`offerRide: refused (${refusal})`);
+  }
+
+  get result(): OfferRideResult {
+    const { refusal, goneIds } = this;
+    return refusal === "personGone" ? { ok: false, error: refusal, goneIds } : { ok: false, error: refusal };
   }
 }
 
@@ -291,7 +308,7 @@ export async function offerRide(
       // Given a transaction (tests only), a refusal leaves what was written in it.
       return await atomically(db, (trx) => offerOnce(trx, eventId, token, offer));
     } catch (error) {
-      if (error instanceof Refused) return { ok: false, error: error.refusal };
+      if (error instanceof Refused) return error.result;
       // Rolled back: the next attempt reads her new seats, and locks them first.
       if (error instanceof DriverMoved && !db.isTransaction && attempt < ATTEMPTS) continue;
       throw error;
@@ -325,15 +342,16 @@ async function offerOnce(
   const otherLeg: OtherLeg = locked.legs.includes(other) ? sent : { kind: "keep" };
 
   const driverId = driver.personId;
-  const device = devicePersonIds(token, await readTokenHolders(trx, eventId));
-  // Before any write, so that a transaction passed in is left as it was.
-  if (!passengerIds.every((id) => device.includes(id))) throw new Refused("forbidden");
+  // Before any write, so that a transaction passed in is left as it was. A person of another
+  // device comes before one gone from the event (RP5.4).
+  const named = driver.kind === "device" ? [driverId, ...passengerIds] : passengerIds;
+  const access = deviceAccess(token, await readTokenHolders(trx, eventId), named);
+  if (access.kind === "forbidden") throw new Refused("forbidden");
+  if (access.kind === "personGone") throw new Refused("personGone", access.goneIds);
   if (driver.kind === "new") {
     const tokenHash = hashToken(driver.token);
     const stored = await insertPerson(trx, { id: driverId, eventId, ...driver.person, tokenHash });
     if (stored === undefined || !tokenMatches(token, stored.tokenHash)) throw new Refused("idTaken");
-  } else if (!device.includes(driverId)) {
-    throw new Refused("forbidden");
   }
 
   // The Placements she leaves: on this leg, and on the other unless she keeps it.
@@ -351,7 +369,11 @@ async function offerOnce(
       return id === null ? [] : [{ id, eventId, leg: placement.leg }];
     }),
   );
-  await lockPersons(trx, eventId, [driverId, ...passengerIds]);
+  // Removed after the read, while this waited for her Person: no car for a driver, nor a seat for
+  // a passenger, who is no longer there (RP5.4).
+  const present = new Set(await lockPersons(trx, eventId, [driverId, ...passengerIds]));
+  const goneIds = [driverId, ...passengerIds].filter((id) => !present.has(id));
+  if (goneIds.length > 0) throw new Refused("personGone", goneIds);
   // Her Person locked, only a write that holds her Ride can move her: locked if it was hers.
   const seatsNow = await seatsOf(trx, leaving);
   if (seatsNow.some((seat, at) => seat !== null && seat !== seats[at])) throw new DriverMoved();

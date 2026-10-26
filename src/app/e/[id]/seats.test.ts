@@ -7,7 +7,7 @@ import type { Database } from "@/db/schema";
 import { withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { removeSeededRetour, seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { readEventState, type EventState } from "./event-state";
 import { takeSeats, undoSeats } from "./seats";
@@ -700,6 +700,108 @@ describe("on a retour removed meanwhile", () => {
       const result = await undoSeats(trx, eventId, lea.token, r3, "retour", [{ personId: lea.id, before: "withoutCar" }]);
 
       expect(result).toEqual({ ok: false, error: "noRetour", state: await readEventState(trx, eventId, lea.token) });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+});
+
+// RP5.4: the page still shows a person removed from the event since, by another device or the organiser.
+describe("on a person removed meanwhile", () => {
+  it("RP5.4: takeSeats, all or nothing, is refused by personGone for one person gone, with the state, and places nobody", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, r1 } = await seedScene(trx);
+      await deleteSeededPerson(trx, eventId, hugo.id);
+      const before = await placementsOf(trx, eventId);
+
+      const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id, hugo.id]);
+
+      expect(result).toEqual({ ok: false, error: "personGone", goneIds: [hugo.id], state: await readEventState(trx, eventId, lea.token) });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("a person of another device among them is refused as forbidden, before personGone", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, tom, r1 } = await seedScene(trx);
+      await deleteSeededPerson(trx, eventId, hugo.id);
+      const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [hugo.id, tom.id]);
+      expect(result).toMatchObject({ ok: false, error: "forbidden" });
+    });
+  });
+
+  it("M7.7: on a retour removed too, takeSeats says noRetour before personGone", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r3 } = await seedScene(trx);
+      await removeSeededRetour(trx, eventId);
+      await deleteSeededPerson(trx, eventId, lea.id);
+      expect(await takeSeats(trx, eventId, lea.token, r3, "retour", [lea.id])).toMatchObject({ ok: false, error: "noRetour" });
+    });
+  });
+
+  // Read before her removal committed, she is gone once her Person is locked: no Placement to a
+  // person who is no longer there, so no foreign key's failure, and the others are not placed either.
+  it("RP5.4: takeSeats that waited for a removal is refused by personGone, never failed, and places nobody", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const marc = await seedPerson(db, eventId, { firstName: "Marc" });
+      const rideId = await seedRide(db, eventId, marc.id);
+      const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+      const hugo = await seedPerson(db, eventId, { firstName: "Hugo" }, lea.token);
+
+      const result = await whileHeld(
+        db,
+        (trx) => deleteSeededPerson(trx, eventId, hugo.id),
+        () => takeSeats(db, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
+      );
+
+      expect(result).toMatchObject({ ok: false, error: "personGone", goneIds: [hugo.id] });
+      expect(await placementsOf(db, eventId)).toEqual([]);
+    });
+  });
+
+  /** Léa (without a car before) and Inès (not concerned before), of one device, took seats in r1. */
+  async function seatedScene(db: Db) {
+    const scene = await seedScene(db);
+    const { eventId, lea, ines, r1 } = scene;
+    expect(await takeSeats(db, eventId, lea.token, r1, "aller", [lea.id, ines.id])).toMatchObject({ ok: true });
+    const undo = [
+      { personId: lea.id, before: "withoutCar" },
+      { personId: ines.id, before: "notConcerned" },
+    ];
+    return { ...scene, undo };
+  }
+
+  it("C7.4: undoSeats leaves out a person gone, and gives the others their state before", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, ines, r1, undo } = await seatedScene(trx);
+      await deleteSeededPerson(trx, eventId, ines.id);
+
+      const result = await undoSeats(trx, eventId, lea.token, r1, "aller", undo);
+
+      expect(result).toEqual({ ok: true, undoneIds: [lea.id], state: await readEventState(trx, eventId, lea.token) });
+      expect(passengersOf(result, "aller", r1)).toEqual([]);
+    });
+  });
+
+  it("C7.4: with everybody asked gone, undoSeats succeeds and undoes nobody (Seat.alreadyOut)", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, ines, r1, undo } = await seatedScene(trx);
+      await deleteSeededPerson(trx, eventId, lea.id);
+      await deleteSeededPerson(trx, eventId, ines.id);
+
+      const result = await undoSeats(trx, eventId, lea.token, r1, "aller", undo);
+
+      expect(result).toEqual({ ok: true, undoneIds: [], state: await readEventState(trx, eventId, lea.token) });
+    });
+  });
+
+  it("C7.3: a person of another device among them is refused as forbidden, the gone one aside", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, ines, tom, r1, undo } = await seatedScene(trx);
+      await seedPlacement(trx, { personId: tom.id, eventId, leg: "aller", rideId: r1 });
+      await deleteSeededPerson(trx, eventId, ines.id);
+      const before = await placementsOf(trx, eventId);
+      const asked = [...undo, { personId: tom.id, before: "withoutCar" }];
+      expect(await undoSeats(trx, eventId, lea.token, r1, "aller", asked)).toMatchObject({ ok: false, error: "forbidden" });
       expect(await placementsOf(trx, eventId)).toEqual(before);
     });
   });

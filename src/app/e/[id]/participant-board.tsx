@@ -13,6 +13,7 @@ import {
   noRetourInfo,
   noRetourWhy,
   offerWhy,
+  personGone,
   personWhy,
   undoWhy,
   undoneText,
@@ -263,8 +264,11 @@ export function ParticipantBoard({
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     // The page shows the state a refusal carries.
     const problem = sent.ok ? "failed" : sent.problem;
-    const why = outcome ? personWhy(outcome.error) : whyOf(problem);
-    failedIn(sheet, { notDone: sheet.notDone, landmark, ...noRetourWhy(why, leg, "addPerson") });
+    const { notDone } = sheet;
+    const why = outcome ? personWhy(outcome.error, "firstName" in notDone ? notDone.firstName : "") : whyOf(problem);
+    // Removed meanwhile, the person goes with her sheet: the bar says it at once (RP5.4).
+    const gone = why.kind === "personGone" ? { closes: true } : {};
+    failedIn(sheet, { notDone, landmark, ...noRetourWhy(why, leg, "addPerson"), ...gone });
     return why.kind === "noRetour" && leg ? { kind: "noRetour" } : { kind: "problem", problem };
   }
 
@@ -307,8 +311,10 @@ export function ParticipantBoard({
     const error = !sent.ok ? sent.problem : "error" in sent.value ? sent.value.error : "failed";
     const landmark = () => focusCell(change.personId, change.leg);
     const why = cellWhy(error, cell);
-    if (!informed(sheet, notDone, why)) failedIn(sheet, { notDone, why, landmark, closes: why.kind === "noRetour", leg: change.leg });
-    if (why.kind === "noRetour") return "noRetour";
+    // The leg gone, or the person (RP5.4): the sheet closes, and the bar says why.
+    const closes = why.kind === "noRetour" || why.kind === "personGone";
+    if (!informed(sheet, notDone, why)) failedIn(sheet, { notDone, why, landmark, closes, leg: change.leg });
+    if (why.kind === "noRetour" || why.kind === "personGone") return why.kind;
     return sent.ok ? "failed" : sent.problem;
   };
 
@@ -350,10 +356,14 @@ export function ParticipantBoard({
     }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
     const problem = sent.ok ? "failed" : sent.problem;
-    const why = outcome ? offerWhy(outcome.error, notDone.driver, names) : whyOf(problem);
+    // Its driver, or someone ticked, removed meanwhile: the bar names her at once (RP5.4).
+    const named = [...(driver.kind === "device" ? [{ id: driver.personId, firstName: notDone.driver }] : []), ...passengers];
+    const why =
+      outcome?.error === "personGone" ? personGone(named, outcome.goneIds) : outcome ? offerWhy(outcome.error, notDone.driver, names) : whyOf(problem);
+    const gone = why.kind === "personGone" ? { closes: true } : {};
     // Offered from the retour's tab once it is gone, the sheet closes (rule 9). From the aller's,
     // the retour goes from the sheet; closed, the bar says to offer the car again (decision 47).
-    failedIn(sheet, { notDone, landmark, ...noRetourWhy(why, car.leg, "offerRide") });
+    failedIn(sheet, { notDone, landmark, ...noRetourWhy(why, car.leg, "offerRide"), ...gone });
     return why.kind === "noRetour" ? { kind: "noRetour" } : { kind: "problem", problem };
   };
 
@@ -408,13 +418,20 @@ export function ParticipantBoard({
     const sent = await runAction(`takeSeats:${sheet.key}`, send, sending, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
-    const taken = seatsTaken(sent, seats.names);
+    const taken = seatsTaken(
+      sent,
+      seats.names,
+      persons.map(({ personId }) => personId),
+    );
     const landmark = focusCar(leg, rideId);
     if (taken.kind === "done") {
       const seated = persons.map(({ personId }) => personLeg(personId, leg));
       sheet.changed(seated);
       sheet.whenStillTrue(seated, () => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats) }));
-    } else failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes: taken.kind === "noRetour", leg });
+    } else {
+      const closes = taken.kind === "noRetour" || taken.kind === "personGone";
+      failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes, leg });
+    }
     return taken;
   };
 

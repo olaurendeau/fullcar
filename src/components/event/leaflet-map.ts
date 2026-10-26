@@ -8,7 +8,7 @@ import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { BUBBLE_INSET, bubbleMaxHeight, framing } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
-import { mapUpdate, pointKey, type MapFocus, type TilesEvent } from "./event-map-state";
+import { FLAG_LAYER, mapUpdate, POINT_LAYERS, pointKey, pointLayer, type MapFocus, type TilesEvent } from "./event-map-state";
 
 /** A car of a point: its button in a bubble says « Voiture de {prénom} », and is named what its card says. */
 export interface PointCar {
@@ -164,8 +164,8 @@ function flagIcon(flag: HTMLSpanElement): L.DivIcon {
   flag.className = "pointer-events-auto grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground";
   flag.innerHTML =
     '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/></svg>';
-  // Above every label, whatever the `z-index` Leaflet gives a marker by its latitude.
-  return L.divIcon({ html: flag, className: "z-1000!", iconSize: [32, 32] });
+  // Above every label, under an open bubble's point (`pointLayer`).
+  return L.divIcon({ html: flag, className: FLAG_LAYER, iconSize: [32, 32] });
 }
 
 /** Lucide's « car », as the design draws it in each label. */
@@ -201,8 +201,8 @@ type PointElements = { button: HTMLButtonElement; text: HTMLSpanElement; seats: 
  * badge of its free seats, whole (#655), in a 12 px text. Its name is the whole one. The icon
  * Leaflet places has no size, and the button sits around its point: centred on the car's place,
  * or, at the flag, from the flag's lower edge, its label 24 px under the flag's place, where the
- * flag does not cover it (CA1.15). Without a `z-index` of their own,
- * the labels stack in the DOM's order, the cards' one: the last on top.
+ * flag does not cover it (CA1.15). Its icon's class (`pointLayer`) stacks the labels in the
+ * DOM's order, the cards' one, the last on top, but for the one hovered or focused (#722).
  * Made once per point, and drawn again at each state (`drawPoint`): the same element.
  */
 function pointButton(onPress: () => void): PointElements {
@@ -351,7 +351,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   const spot = (point: CarPoint): L.LatLngTuple => (point.atFlag ? flagAt() : [point.position.lat, point.position.lng]);
 
   /** A point on the map, named by its key (`pointKey`): its marker, its button, its line to the flag (none at the flag). */
-  type Drawn = PointElements & { key: string; point: CarPoint; marker: L.Marker; line: L.Polyline | null };
+  type Drawn = PointElements & { key: string; point: CarPoint; marker: L.Marker; line: L.Polyline | null; hovered: boolean };
   /** The open bubble, of `entry`'s point: its buttons by car, then « Fermer ». */
   type Open = { entry: Drawn; bubble: HTMLDivElement; title: HTMLParagraphElement; cars: Map<string, HTMLButtonElement>; close: HTMLButtonElement };
 
@@ -376,12 +376,37 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     });
   };
   map.on("move zoom resize", place);
+
+  /**
+   * `entry`'s icon given its one class (`pointLayer`, #722, CA1.23), in place of the one it had:
+   * raised while a mouse is over its button or the focus is in its icon, its bubble comprised;
+   * above the flag while its bubble is open. `focusTo`: where the focus is, or goes to during
+   * a `focusout`. The markers stay `interactive: false` (#484): Leaflet's `riseOnHover` and
+   * `setZIndexOffset` would do nothing against the class.
+   */
+  const raise = (entry: Drawn, focusTo: Element | null = document.activeElement) => {
+    const icon = entry.marker.getElement();
+    if (!icon) return;
+    const layer = pointLayer({ hovered: entry.hovered, focused: !!focusTo && icon.contains(focusTo), open: open?.entry === entry });
+    icon.classList.remove(...POINT_LAYERS);
+    icon.classList.add(layer);
+  };
+  /** Its icon in the page, which Leaflet makes once the map has a view: what raises it, listened to there. */
+  const watch = (entry: Drawn) => {
+    const icon = entry.marker.getElement();
+    if (!icon) return;
+    icon.addEventListener("focusin", () => raise(entry));
+    icon.addEventListener("focusout", (event) => raise(entry, event.relatedTarget instanceof Element ? event.relatedTarget : null));
+    raise(entry);
+  };
+
   const closeBubble = () => {
     if (!open) return;
     const { bubble, entry } = open;
     open = null;
     drawPoint(entry, entry.point, false);
     bubble.remove();
+    raise(entry);
   };
   const back = () => {
     const button = open?.entry.button;
@@ -426,6 +451,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     open = shown;
     entry.button.after(bubble);
     drawPoint(entry, entry.point, true);
+    raise(entry);
     place();
     shown.cars.values().next().value?.focus();
   };
@@ -444,8 +470,19 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   // Added last: in the marker pane's order, the Tab order (CA1.4), after the points already there.
   const add = (key: string, point: CarPoint): Drawn => {
     const { button, text, seats } = pointButton(() => (entry.point.cars.length > 1 ? openBubble(entry) : options.onCar(entry.point.cars[0].id)));
-    const icon = L.divIcon({ html: button, className: "z-auto!", iconSize: [0, 0] });
-    const entry: Drawn = { key, point, button, text, seats, line: null, marker: L.marker(spot(point), { icon, keyboard: false, interactive: false }).addTo(map) };
+    const icon = L.divIcon({ html: button, className: POINT_LAYERS[0], iconSize: [0, 0] });
+    const marker = L.marker(spot(point), { icon, keyboard: false, interactive: false });
+    const entry: Drawn = { key, point, button, text, seats, line: null, marker, hovered: false };
+    // A touch emits `pointerenter` too, and hovers nothing.
+    button.addEventListener("pointerenter", (event) => {
+      entry.hovered = event.pointerType === "mouse";
+      raise(entry);
+    });
+    button.addEventListener("pointerleave", () => {
+      entry.hovered = false;
+      raise(entry);
+    });
+    marker.on("add", () => watch(entry)).addTo(map);
     redraw(entry, point);
     return entry;
   };
@@ -558,6 +595,8 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     // Given back where a move took it away, or where the table sends it: never <body>.
     const target = change.focus;
     if (target && (!container.contains(document.activeElement) || JSON.stringify(target) !== JSON.stringify(before))) focusOn(target);
+    // A focus lost by an element moved or removed sends no `focusout` everywhere: each icon read again.
+    for (const entry of drawn) raise(entry);
   };
 
   return {

@@ -48,6 +48,8 @@ export type Why =
   | { kind: "drives"; firstName: string; leg: Leg }
   | { kind: "alreadyDriving"; driver: string }
   | { kind: "noRetourAgain"; action: "offerRide" | "addPerson" }
+  /** A person of the send was removed from the event meanwhile (RP5.4): named as the send showed her. */
+  | { kind: "personGone"; firstName: string }
   /** The retour changed while its removal was confirmed (M3.7): what to use again, `where` the answer is said. */
   | { kind: "retourChanged"; cars: number; persons: number; where: "sheet" | "bar" };
 
@@ -58,6 +60,15 @@ export type Why =
  */
 export function whyOf(error: Plain | "invalid" | "idTaken"): Why {
   return { kind: error === "invalid" || error === "idTaken" ? "failed" : error };
+}
+
+/**
+ * Why a send naming `sent` was refused by `personGone` (RP5.4): the first of them in `goneIds`,
+ * as the send showed her. None of them, which only a forged answer gives: the generic reason.
+ */
+export function personGone(sent: readonly { id: string; firstName: string }[], goneIds: readonly string[]): Why {
+  const gone = sent.find(({ id }) => goneIds.includes(id));
+  return gone ? { kind: "personGone", firstName: gone.firstName } : whyOf("failed");
 }
 
 /**
@@ -113,8 +124,12 @@ export function cellNotDone(action: Exclude<CellAction, "seeCar">, { firstName, 
   return { kind: "choice", firstName, leg, choice: action === "notConcerned" ? "notConcerned" : "lookingForSeat" };
 }
 
-/** Why a cell's action was not done: as `whyOf`, and `drives` names who drives, on the cell's leg. */
-export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives", { firstName, leg }: Cell): Why {
+/**
+ * Why a cell's action was not done: as `whyOf`, `drives` names who drives, on the cell's leg, and
+ * `personGone` the person, removed meanwhile (RP5.4).
+ */
+export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personGone", { firstName, leg }: Cell): Why {
+  if (error === "personGone") return { kind: "personGone", firstName };
   return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
 }
 
@@ -127,8 +142,12 @@ export function editedFields(changed: readonly PersonField[]): "firstName" | "ph
   return changed.length === 1 ? changed[0] : "both";
 }
 
-/** Why a person's form was not done: as `whyOf`; `drives`, which only a cell's action meets, the generic reason. */
-export function personWhy(error: Parameters<typeof whyOf>[0] | "drives"): Why {
+/**
+ * Why the form of `firstName` was not done: as `whyOf`; `drives`, which only a cell's action meets,
+ * the generic reason; `personGone`, she was removed meanwhile (RP5.4).
+ */
+export function personWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personGone", firstName: string): Why {
+  if (error === "personGone") return { kind: "personGone", firstName };
   return whyOf(error === "drives" ? "invalid" : error);
 }
 
