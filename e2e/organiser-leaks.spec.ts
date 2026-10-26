@@ -53,6 +53,25 @@ function carrying(exchanges: Exchange[], token: string): Exchange[] {
   return exchanges.filter(({ requestBody }) => requestBody.includes(token));
 }
 
+/**
+ * The `persons` of the panel's answer, read from the action's answer: one JSON value per line
+ * of the React stream (`<id>:<JSON>`). Throws if no line holds them.
+ */
+function personsIn(answer: string): { firstName: string }[] {
+  for (const line of answer.split("\n")) {
+    let value: unknown;
+    try {
+      value = JSON.parse(line.slice(line.indexOf(":") + 1));
+    } catch {
+      continue;
+    }
+    if (typeof value === "object" && value !== null && "persons" in value && Array.isArray(value.persons)) {
+      return value.persons;
+    }
+  }
+  throw new Error("personsIn: no persons in the panel's answer");
+}
+
 test.use({ locale: "fr-FR" });
 
 let phones: ScenePhones;
@@ -83,6 +102,11 @@ test("O2.5, O6.1, O6.3: with the right link, B's and C's numbers in the panel's 
   expect(numbersIn([...answers(exchanges, seededEvent), await dom(page)], phones, ["a", "e"])).toEqual([]);
   expect(panelRead.answer.includes(phones.b), "B's number in the panel's answer").toBe(true);
   expect(panelRead.answer.includes(phones.c), "C's number in the panel's answer").toBe(true);
+  // RP4.2, Q2 = a: the list of every person carries no number, B's and C's included. The
+  // witness: it holds the scene's five persons, in the event's order.
+  const persons = personsIn(panelRead.answer);
+  expect(persons.map((person) => person.firstName)).toEqual(["Anaïs", "Bastien", "Chloé", "Dylan", "Élise"]);
+  expect(numbersIn([["the persons of the panel's answer", JSON.stringify(persons)]], phones, WITH_A_NUMBER)).toEqual([]);
   // #179, DO1: a leg's section shows the numbers of its own persons without a car, and no
   // other, visible or hidden: C's at the aller, B's at the retour. None elsewhere on the page.
   const { sections, rest } = await htmlByLegSection(page);

@@ -1,5 +1,5 @@
 import { sql, type Kysely } from "kysely";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getDb } from "@/db/client";
 import { updatePerson } from "@/db/persons";
 import type { Database } from "@/db/schema";
@@ -8,8 +8,14 @@ import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import type { Leg } from "@/domain/leg";
-import { legIsEmpty, type OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import { legIsEmpty, organiserPersons, type OrganiserPanelAnswer } from "@/domain/organiser-panel";
 import { readOrganiserState } from "./organiser-state";
+
+// The same function, watched: the persons are built after the access check, not before.
+vi.mock("@/domain/organiser-panel", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/domain/organiser-panel")>();
+  return { ...actual, organiserPersons: vi.fn(actual.organiserPersons) };
+});
 
 type Db = Kysely<Database>;
 
@@ -104,8 +110,58 @@ describe("readOrganiserState", () => {
             carsWithoutPhone: [],
           },
         ],
+        // Their content is RP4.2's, below.
+        persons: expect.any(Array),
       });
       expect(sentNumbers(answer)).toEqual(["b", "c"]);
+      expect(sentNumbers(answer.state === "panel" && answer.persons)).toEqual([]);
+    });
+  });
+
+  it("RP4.2: every person, in the event's order, with a cell per leg and no number", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      // An order of sign-up that is neither the names' nor the ids'.
+      const order = [scene.d, scene.b, scene.e, scene.a, scene.c];
+      for (const [n, { id }] of order.entries()) {
+        await sql`update person set created_at = ${new Date(Date.UTC(2026, 9, 1, 8, n))} where id = ${id}`.execute(trx);
+      }
+      const answer = await readOrganiserState(trx, scene.eventId, scene.token);
+      const withA = { kind: "passenger", rideId: scene.ride, driver: { id: scene.a.id, firstName: "A" } };
+      const withoutCar = { kind: "withoutCar" };
+      const notConcerned = { kind: "notConcerned" };
+      const cells = (aller: object, retour: object) => [
+        { leg: "aller", state: aller },
+        { leg: "retour", state: retour },
+      ];
+      expect(answer.state === "panel" && answer.persons).toStrictEqual([
+        { id: scene.d.id, firstName: "D", cells: cells(withoutCar, notConcerned) },
+        { id: scene.b.id, firstName: "B", cells: cells(withA, withoutCar) },
+        { id: scene.e.id, firstName: "E", cells: cells(withA, notConcerned) },
+        { id: scene.a.id, firstName: "A", cells: cells({ kind: "driver", rideId: scene.ride }, notConcerned) },
+        { id: scene.c.id, firstName: "C", cells: cells(withoutCar, notConcerned) },
+      ]);
+    });
+  });
+
+  it("RP4.2: an event without a retour and without anybody has nobody to list", async () => {
+    await withRollback(async (trx) => {
+      const { id, token } = await seedEvent(trx, { retourAt: null });
+      const answer = await readOrganiserState(trx, id, token);
+      expect(answer.state === "panel" && answer.persons).toStrictEqual([]);
+    });
+  });
+
+  it.each([
+    ["once with the right token", (token: string) => token, 1],
+    ["never with a token one character off", oneCharOff, 0],
+    ["never without a token", () => undefined, 0],
+  ])("builds the persons after the access check only: %s", async (_, tokenOf, times) => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      vi.mocked(organiserPersons).mockClear();
+      await readOrganiserState(trx, scene.eventId, tokenOf(scene.token));
+      expect(organiserPersons).toHaveBeenCalledTimes(times);
     });
   });
 
