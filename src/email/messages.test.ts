@@ -187,6 +187,16 @@ describe("OA3.1: each email has exactly the subject and the text of « Les e-mai
     const email = renderEmail({ kind: "inactivityWarning", locale: "fr", origin: ORIGIN, deletesAt: new Date("2029-03-11T23:30:00Z") });
     expect(email.subject).toBe("Votre compte Fullcar sera supprimé le 12 mars 2029");
   });
+
+  it("writes the first of a month « 1er » in French, « 1 » in English (#625)", () => {
+    const deletesAt = new Date("2029-05-01T10:00:00Z");
+    const fr = renderEmail({ kind: "inactivityWarning", locale: "fr", origin: ORIGIN, deletesAt });
+    const en = renderEmail({ kind: "inactivityWarning", locale: "en", origin: ORIGIN, deletesAt });
+    expect(fr.subject).toBe("Votre compte Fullcar sera supprimé le 1er mai 2029");
+    expect(fr.text).toContain("Sans visite d’ici le 1er mai 2029, il sera supprimé");
+    expect(en.subject).toBe("Your Fullcar account will be deleted on 1 May 2029");
+    expect(en.text).toContain("Without a visit by 1 May 2029, it will be deleted");
+  });
 });
 
 describe("OA3.2: no text typed by anyone", () => {
@@ -264,6 +274,19 @@ describe("OA3.4: the links of the emails", () => {
   it("refuses a token that is not base64url, rather than write it into a link", () => {
     for (const token of ["", "abc def", "abc?x=1", "abc#x", 'a"b', "a<b"]) {
       expect(() => renderEmail({ kind: "signIn", locale: "fr", origin: ORIGIN, token })).toThrow();
+    }
+  });
+
+  it("never writes the refused token into the error's message: errors end up in logs (#625)", () => {
+    for (const token of ["abc def", "abc?x=1", "abc#x", 'a"b', "a<b", `${TOKEN}!`]) {
+      let message: string | undefined;
+      try {
+        renderEmail({ kind: "signIn", locale: "fr", origin: ORIGIN, token });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toBeDefined();
+      expect(message).not.toContain(token);
     }
   });
 });

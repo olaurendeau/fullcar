@@ -1,31 +1,17 @@
-import type { Locator, Page, Request } from "@playwright/test";
-import type { SeededEvent } from "@/db/test-events";
+import type { Page, Request } from "@playwright/test";
 import { expect, leaveNoToken, test as base } from "./fixtures";
 
 leaveNoToken();
 
 // #69: a discreet "contact us" link, at the bottom of the pages, to the chat Crisp hosts.
 // Nothing of Crisp runs in the app's origin: the link opens Crisp's own page in a new tab.
+// On each page, the link, last and discreet (K1, K2, K3, K5, L1.2, L3.6), is in footer.spec.ts (#640).
 const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
 const FR = "Nous contacter (s’ouvre dans un nouvel onglet)";
 const EN = "Contact us (opens in a new tab)";
 const PANEL = "Espace organisateur";
 /** The language switch (#113), named in the language it offers. */
 const SWITCH = { fr: "English", en: "Français" };
-
-/** A well-formed id that no test stores. */
-const UNKNOWN_ID = "Zz9yXw8v";
-
-/** The pages the link is on: which, where, and the title that tells it is shown. */
-const PAGES: [string, (event: SeededEvent) => string, string][] = [
-  ["the home page", () => "/", "Fullcar"],
-  ["the creation form", () => "/nouveau", "Créer un événement"],
-  ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
-  ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
-  ["the organiser's page", ({ id, token }) => `/e/${id}/admin#${token}`, "Tournoi de Rennes"],
-  ["the organiser's page, wrong token", ({ id }) => `/e/${id}/admin#q3Vx9kLmN2pR7sT1uW4yZa`, "Tournoi de Rennes"],
-  ["the organiser's page, no token", ({ id }) => `/e/${id}/admin`, "Tournoi de Rennes"],
-];
 
 const isCrisp = (url: URL) => /(^|\.)crisp\.(chat|im)$/.test(url.hostname);
 
@@ -60,97 +46,8 @@ async function open(page: Page, path: string, heading: string) {
 }
 
 const contactLink = (page: Page, name = FR) => page.getByRole("link", { name, exact: true });
-const languageSwitch = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
-
-/** K1, K3: Crisp's link is the last link, nothing comes after it, discreet, and nothing scrolls sideways. */
-async function expectLastAndDiscreet(page: Page, link: Locator) {
-  // K1: the last link, and no content after it, in the order of the document.
-  expect(await page.locator("a").last().getAttribute("href")).toBe(CRISP_CHAT);
-  const contentAfter = await link.evaluate((a) => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    walker.currentNode = a;
-    while (walker.nextNode()) {
-      const node = walker.currentNode;
-      if (!a.contains(node) && node.textContent?.trim() && node.parentElement?.closest("main")) return true;
-    }
-    return false;
-  });
-  expect(contentAfter).toBe(false);
-
-  // K3: smaller than the text, a 44 px target, nothing scrolls sideways at 360 px.
-  await expectDiscreet(link);
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
-  ).toBe(0);
-}
-
-/** K3, L1.2: smaller than the page's text, and a tap target of 44 px at least. */
-async function expectDiscreet(element: Locator) {
-  const [size, textSize] = await element.evaluate((node) => [
-    parseFloat(getComputedStyle(node).fontSize),
-    parseFloat(getComputedStyle(document.body).fontSize),
-  ]);
-  expect(size).toBeLessThan(textSize);
-  expect((await element.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-}
-
 test.describe("contact link", () => {
   test.use({ locale: "fr-FR" });
-
-  for (const [where, path, heading] of PAGES) {
-    test(`K1, K2, K3, K5: on ${where}, the last link, discreet, to Crisp in a new tab, and nothing from Crisp`, async ({
-      page,
-      crisp,
-      seededEvent,
-    }) => {
-      await open(page, path(seededEvent), heading);
-
-      const link = contactLink(page);
-      await expect(link).toHaveCount(1);
-      await expect(link).toHaveAttribute("href", CRISP_CHAT);
-      await expect(link).toHaveAttribute("target", "_blank");
-      // The only test that protects `rel`: K4 below would pass without it, since Chromium
-      // already opens a target="_blank" link without opener and the app sends no referrer.
-      // Other browsers, or a later change to either, would not: do not remove this check.
-      const rel = ((await link.getAttribute("rel")) ?? "").split(/\s+/);
-      expect(rel).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
-
-      await expectLastAndDiscreet(page, link);
-
-      // L1.2: the language switch beside it is as discreet, with the same 44 px target.
-      const button = languageSwitch(page, SWITCH.fr);
-      await expect(button).toHaveCount(1);
-      await expectDiscreet(button);
-
-      // K5: the page asked nothing of Crisp.
-      expect(crisp.length, "requests to Crisp").toBe(0);
-    });
-  }
-
-  for (const [where, path, heading] of PAGES) {
-    test(`L1.2, L3.6: on ${where}, once in English, the contact link is still the last link, discreet, to the same Crisp`, async ({
-      page,
-      crisp,
-      seededEvent,
-    }) => {
-      await open(page, path(seededEvent), heading);
-      const before = await contactLink(page).getAttribute("href");
-      const button = languageSwitch(page, SWITCH.fr);
-      await expect(button).toBeEnabled();
-      await button.click();
-      await expect(page.locator("html")).toHaveAttribute("lang", "en");
-      await expect(languageSwitch(page, SWITCH.en)).toBeEnabled();
-
-      const link = contactLink(page, EN);
-      await expect(link).toHaveCount(1);
-      // L3.6: the very same address, not one rebuilt for the new language.
-      expect(before).toBe(CRISP_CHAT);
-      await expect(link).toHaveAttribute("href", before!);
-      await expectLastAndDiscreet(page, link);
-      await expectDiscreet(languageSwitch(page, SWITCH.en));
-      expect(crisp.length, "requests to Crisp").toBe(0);
-    });
-  }
 
   test("K1: not in the organiser's panel, and no header added", async ({ page, crisp, seededEvent }) => {
     await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");

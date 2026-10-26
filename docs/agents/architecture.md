@@ -788,7 +788,10 @@ de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cet
   ou l'autre, l'anneau passerait sous les panneaux ou sous le texte. Jamais pour le lien des
   crédits, qui a son propre anneau, à l'intérieur, sur fond blanc opaque.
 - **Les crédits dans la région** (#558) : React les y rend dès le départ, en bas à droite, à
-  z-index 1000, au-dessus du texte de chargement et des points ; cachés avec la boîte sous un
+  z-index 1000, au-dessus du texte de chargement et des panneaux de Leaflet, points et bulle
+  compris : la bulle est dans un `.leaflet-pane` (z-index 400, son propre contexte
+  d'empilement), et son z-index 1001 ne compte que dedans (#578). Rien ne se voit, car
+  `bubbleMaxHeight` l'arrête au-dessus de leur bande. Cachés avec la boîte sous un
   avis de Leaflet. `createEventMap` reçoit l'élément (`credits`) et le remet en dernier dans
   la région, après les panneaux et les contrôles que Leaflet y ajoute : le lien vient en
   dernier dans l'ordre de Tab, après « Zoom arrière ». React n'a pas d'autre enfant dans la

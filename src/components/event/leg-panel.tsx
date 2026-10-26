@@ -1,10 +1,11 @@
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
+import { useFormatDate } from "@/i18n/format-date";
 import type { Message } from "./bar-state";
 import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
@@ -49,11 +50,11 @@ export interface BoardDevice {
  * digits, formatted in UTC (`timeZone` in src/i18n/request.ts).
  */
 export function LegTime({ at }: { at: WallClock }) {
-  const format = useFormatter();
+  const formatDate = useFormatDate();
   const { date, time } = wallClockParts(at);
   return (
     <time dateTime={`${date}T${time}`}>
-      {format.dateTime(wallClockAsUtc(at), { dateStyle: "full", timeStyle: "short" })}
+      {formatDate(wallClockAsUtc(at), { dateStyle: "full", timeStyle: "short" })}
     </time>
   );
 }

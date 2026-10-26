@@ -451,6 +451,17 @@ test.describe("the other leg read from the event (v4.5)", () => {
     });
   });
 
+  test.describe("the retour on the first of a month", () => {
+    test.use({ eventFields: { retourAt: "2027-05-01 18:00:00" } });
+
+    test("E1.6, #625: the line writes « 1er », as the header does", async ({ page, seededEvent }) => {
+      await openFrom(page, seededEvent.id);
+      await expect(otherLeg(page, FR.title.retour)).toHaveAccessibleDescription(
+        "Le retour part du lieu de l’événement, Gymnase des Gayeulles, le samedi 1er mai 2027 à 18:00.",
+      );
+    });
+  });
+
   test("E1.7: who drives already on the retour has no group, so no line; someone else has both back", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     const { Léa: lea } = await device(db, page, id, ["Léa"]);

@@ -1,5 +1,5 @@
 import { Car, Pencil } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Fragment, useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { newCreationId, storageAvailable } from "@/app/e/[id]/device-token";
 import type { OfferErrors, OfferField } from "@/app/e/[id]/offer-ride";
@@ -17,6 +17,7 @@ import type { Position } from "@/domain/place";
 import { passengersFit, RIDE_SEATS_DEFAULT, validateRide, validSeats } from "@/domain/ride";
 import { currentDriver, driverChoice, NEW_DRIVER, passengerCandidates } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
+import { useFormatDate } from "@/i18n/format-date";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
 import { Box } from "./event-fields";
@@ -276,7 +277,7 @@ function RideForm({
   const tActions = useTranslations("Actions");
   const tChanges = useTranslations("RideChanges.leaving");
   const tStates = useTranslations("DevicePersons.state");
-  const format = useFormatter();
+  const formatDate = useFormatDate();
   const ids = useId();
   const idOf = (name: string) => `${ids}-${name}`;
   const editing = mode.kind === "edit" ? mode : undefined;
@@ -606,7 +607,7 @@ function RideForm({
         </div>
       )}
       {place("location", t(`location.${leg}`))}
-      {field("time", t("time"), { type: "time" }, t("timeHint", { date: format.dateTime(wallClockAsUtc(at), { dateStyle: "full" }) }))}
+      {field("time", t("time"), { type: "time" }, t("timeHint", { date: formatDate(wallClockAsUtc(at), { dateStyle: "full" }) }))}
       {field("seats", t("seats"), { type: "text", inputMode: "numeric" }, t("seatsHint"))}
       {field("note", t("note"), "textarea", t("noteHint"))}
       {other && otherField && (
@@ -618,7 +619,7 @@ function RideForm({
           <p id={idOf("other-hint")} className="text-[13px] leading-[18px] text-muted-foreground wrap-anywhere">
             {t(`otherLeg.hint.${otherLegName}`, {
               location: other.location,
-              date: format.dateTime(wallClockAsUtc(other.at), { dateStyle: "full", timeStyle: "short" }),
+              date: formatDate(wallClockAsUtc(other.at), { dateStyle: "full", timeStyle: "short" }),
             })}
           </p>
           <RadioGroup
@@ -649,7 +650,7 @@ function RideForm({
                   {choice === "drive" && drivesThere && (
                     <div className="flex flex-col gap-3.5 pt-1 pb-2 pl-6.5">
                       {place("otherLocation", t(`location.${otherLegName}`))}
-                      {field("otherTime", t(`otherLeg.time.${otherLegName}`), { type: "time" }, t("timeHint", { date: format.dateTime(wallClockAsUtc(other.at), { dateStyle: "full" }) }))}
+                      {field("otherTime", t(`otherLeg.time.${otherLegName}`), { type: "time" }, t("timeHint", { date: formatDate(wallClockAsUtc(other.at), { dateStyle: "full" }) }))}
                       <p className="text-[13px] leading-[18px] text-muted-foreground">{t("otherLeg.same")}</p>
                     </div>
                   )}

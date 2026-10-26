@@ -34,7 +34,7 @@ const EN = {
 };
 type Words = typeof FR;
 
-/** The pages of the footer (contact.spec.ts): which, where, and their title in each language. */
+/** The pages of the footer (footer.spec.ts): which, where, and their title in each language. */
 const PAGES: [string, (event: SeededEvent) => string, Record<"fr" | "en", string>][] = [
   ["the home page", () => "/", { fr: "Fullcar", en: "Fullcar" }],
   ["the event not found", () => `/e/${UNKNOWN_ID}`, { fr: FR.notFound, en: EN.notFound }],
