@@ -5,6 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { removeRetourInDb } from "./event-db";
+import { DRIVER_PHONE } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -27,11 +28,11 @@ const freeSeats = (scope: Locator) => scope.getByRole("button", { name: /^Place 
 const lines = (page: Page) => page.locator('[data-message-bar] [role="group"] > p');
 const undo = (page: Page) => page.locator("[data-message-bar]").getByRole("button", { name: "Annuler" });
 
-/** The device holds `names`, with their token in the page's `localStorage`. */
+/** The device holds `names`, each with a number to drive, with their token in the page's `localStorage`. */
 async function device(db: Db, page: Page, eventId: string, names: string[]) {
   const token = newToken();
   const ids: Record<string, string> = {};
-  for (const firstName of names) ids[firstName] = (await seedPerson(db, eventId, { firstName }, token)).id;
+  for (const firstName of names) ids[firstName] = (await seedPerson(db, eventId, { firstName, phone: DRIVER_PHONE }, token)).id;
   await holdToken(page, eventId, token);
   return ids;
 }

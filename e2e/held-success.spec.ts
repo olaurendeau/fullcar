@@ -4,6 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
+import { DRIVER_PHONE } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -14,12 +15,13 @@ leaveNoToken();
 type Db = Kysely<Database>;
 
 /**
- * On the device, Marc, Tom and Léa. Tom and Léa are without a car on both legs, Marc is not
- * concerned on either. Sophie, of another device, drives nobody at the aller (3 seats).
+ * On the device, Marc, Tom and Léa. Marc and Tom, who drive in « Proposer une voiture », have a
+ * number. Tom and Léa are without a car on both legs, Marc is not concerned on either. Sophie,
+ * of another device, drives nobody at the aller (3 seats).
  */
 async function seedScene(db: Db, eventId: string, token: string) {
-  const mine = async (firstName: string) => (await seedPerson(db, eventId, { firstName }, token)).id;
-  const persons = { marc: await mine("Marc"), tom: await mine("Tom"), lea: await mine("Léa") };
+  const mine = async (firstName: string, phone: string | null = null) => (await seedPerson(db, eventId, { firstName, phone }, token)).id;
+  const persons = { marc: await mine("Marc", DRIVER_PHONE), tom: await mine("Tom", DRIVER_PHONE), lea: await mine("Léa") };
   const sophie = await seedRide(db, eventId, (await seedPerson(db, eventId, { firstName: "Sophie" })).id);
   for (const personId of [persons.tom, persons.lea]) {
     for (const leg of ["aller", "retour"] as const) await seedPlacement(db, { personId, eventId, leg, rideId: null });

@@ -1,6 +1,7 @@
 import type { Locator, Page, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
+import { DRIVER_PHONE, fillDriver } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { answerFor, requestsFor, type PhotonFeature } from "./photon";
 import { namedPlace, recordStatus, searches, textOf } from "./place-field";
@@ -16,7 +17,6 @@ type Db = Kysely<Database>;
 
 const FR = {
   offer: "Proposer une voiture",
-  firstName: "Prénom",
   departure: "Lieu de départ",
   dropOff: "Lieu de dépose",
   retour: "Au retour",
@@ -49,12 +49,12 @@ const positionLines = (page: Page) => form(page).getByText(/^Position : /);
 const removeButton = (page: Page, label: string) => form(page).getByRole("button", { name: `Retirer la position (${label})`, exact: true });
 const submit = (page: Page) => form(page).getByRole("button", { name: "Valider", exact: true });
 
-/** « Proposer une voiture » on the event's Aller, for a new driver, Marc. */
+/** « Proposer une voiture » on the event's Aller, for a new driver, Marc, with a number. */
 async function openForm(page: Page, eventId: string) {
   await page.goto(`/e/${eventId}`);
   await page.getByRole("tabpanel").getByRole("button", { name: FR.offer, exact: true }).click();
   await expect(form(page)).toBeVisible();
-  await form(page).getByLabel(FR.firstName, { exact: true }).fill("Marc");
+  await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
 }
 
 /** « Je ramène aussi des personnes »: the drop-off place unfolds, under « Au retour ». */
