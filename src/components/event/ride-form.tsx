@@ -85,14 +85,25 @@ export type Changed = Offered | { kind: "passengersChanged"; passengers: number 
 /** Changes one of the device's cars (R8), with the device's token. */
 export type UpdateRide = (changing: Changing) => Promise<Changed | undefined>;
 
+/** The other leg, as « Proposer une voiture » shows it: its line says where and when it leaves (v4.5). */
+export interface OtherLegOf {
+  at: WallClock;
+  /** The event's place, its text whole: its position is not read (v4.5-6). */
+  location: string;
+  persons: readonly DevicePerson[];
+}
+
 interface FormProps {
   leg: Leg;
   /** The leg's date and time: the car's date, and its time before it is changed. */
   at: WallClock;
   /** The device's persons and where they stand on the leg. */
   persons: readonly DevicePerson[];
-  /** The other leg's date and time, and where the device's persons stand there; none without a retour. */
-  other?: { at: WallClock; persons: readonly DevicePerson[] };
+  /**
+   * The other leg's date and time, the event's place as typed, and where the device's persons
+   * stand there; none without a retour.
+   */
+  other?: OtherLegOf;
   offerRide: OfferRide;
   /** The event's position, which brings the suggestions for a car's places closer (AL4.1). */
   near?: Position | null;
@@ -603,10 +614,18 @@ function RideForm({
           <span id={idOf("other")} className="pt-1.5 text-sm font-semibold">
             {t(`otherLeg.title.${otherLegName}`)}
           </span>
+          {/* Where and when the other leg leaves, from the event, not from the car (v4.5-2): it describes the group (v4.5-4). */}
+          <p id={idOf("other-hint")} className="text-[13px] leading-[18px] text-muted-foreground wrap-anywhere">
+            {t(`otherLeg.hint.${otherLegName}`, {
+              location: other.location,
+              date: format.dateTime(wallClockAsUtc(other.at), { dateStyle: "full", timeStyle: "short" }),
+            })}
+          </p>
           <RadioGroup
             value={otherChoice}
             onValueChange={(next) => setOtherPick({ driver, choice: otherField.choices.find((choice) => choice === next) ?? otherField.chosen })}
             aria-labelledby={idOf("other")}
+            aria-describedby={idOf("other-hint")}
             className="gap-0"
           >
             {otherField.choices.map((choice) => {

@@ -20,7 +20,7 @@ const FR = {
   departure: "Lieu de départ",
   dropOff: "Lieu de dépose",
   retour: "Au retour",
-  drive: "Je ramène aussi",
+  drive: "Je ramène aussi des passagers",
   note: "Note (facultatif)",
   hint: "Visible par toutes les personnes qui ont le lien.",
   added: "Position ajoutée.",
@@ -57,7 +57,7 @@ async function openForm(page: Page, eventId: string) {
   await form(page).getByLabel(FR.firstName, { exact: true }).fill("Marc");
 }
 
-/** « Je ramène aussi »: the drop-off place unfolds, under « Au retour ». */
+/** « Je ramène aussi des passagers »: the drop-off place unfolds, under « Au retour ». */
 async function driveBack(page: Page) {
   await form(page).getByRole("radiogroup", { name: FR.retour }).getByRole("radio", { name: FR.drive, exact: true }).check();
   await expect(place(page, FR.dropOff)).toBeVisible();
@@ -178,7 +178,7 @@ test.describe("the places of « Proposer une voiture », the event with a positi
     expect(await said()).toEqual([FR.removed, "1 proposition", FR.added]);
   });
 
-  test("AL4.2, AL3.5, AL4.4: « Je ramène aussi »: the drop-off follows text and position, its own « Retirer » named; a keystroke in the departure takes both, said by the departure alone", async ({
+  test("AL4.2, AL3.5, AL4.4: « Je ramène aussi des passagers »: the drop-off follows text and position, its own « Retirer » named; a keystroke in the departure takes both, said by the departure alone", async ({
     page,
     db,
     seededEvent,

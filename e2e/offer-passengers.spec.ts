@@ -243,7 +243,7 @@ test.describe("« Qui monte avec vous ? »", () => {
     await box(page, "Léa").check();
     await box(page, "Tom").check();
     await field(page, "Lieu de départ").fill("Parking du stade");
-    await form(page).getByRole("radiogroup", { name: "Au retour" }).getByRole("radio", { name: "Je ramène aussi", exact: true }).check();
+    await form(page).getByRole("radiogroup", { name: "Au retour" }).getByRole("radio", { name: "Je ramène aussi des passagers", exact: true }).check();
     await removeRetourInDb(db, id);
     await submit(page).click();
 

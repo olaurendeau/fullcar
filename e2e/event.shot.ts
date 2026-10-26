@@ -130,7 +130,7 @@ test("« Proposer une voiture » with « Au retour » unfolded and « Qui monte 
   await sheet.getByRole("radio", { name: "Léa", exact: true }).check();
   for (const name of ["Tom", "Nina"]) await sheet.getByRole("checkbox", { name, exact: true }).check();
   await sheet.getByLabel("Lieu de départ", { exact: true }).fill("Église de Saint-Grégoire");
-  await sheet.getByRole("radio", { name: "Je ramène aussi" }).check();
+  await sheet.getByRole("radio", { name: "Je ramène aussi des passagers" }).check();
   await expect(sheet.getByLabel("Lieu de dépose", { exact: true })).toHaveValue("Église de Saint-Grégoire");
   expect(await sheet.evaluate((element) => element.scrollWidth - element.clientWidth), "the sheet scrolls sideways").toBe(0);
   // The sheet scrolls inside it: its end in view, « Au retour » unfolded above « Qui monte avec vous ? ».

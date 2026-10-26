@@ -169,7 +169,7 @@ test.describe("the subject of « Ajouter une personne » and « Proposer une voi
     } else await drivers.getByRole("radio", { name: driver, exact: true }).check();
     await form.getByLabel(leg === "Aller" ? "Lieu de départ" : "Lieu de dépose", { exact: true }).fill(location);
     if (both) {
-      const [group, choice] = leg === "Aller" ? ["Au retour", "Je ramène aussi"] : ["À l’aller", "J’emmène aussi"];
+      const [group, choice] = leg === "Aller" ? ["Au retour", "Je ramène aussi des passagers"] : ["À l’aller", "J’emmène aussi des passagers"];
       await form.getByRole("radiogroup", { name: group }).getByRole("radio", { name: choice, exact: true }).check();
     }
     await valider(page).click();
@@ -189,7 +189,7 @@ test.describe("the subject of « Ajouter une personne » and « Proposer une voi
   const OFFERS: { what: string; both: boolean; leg: Leg; driver: string; again?: boolean; withdraws: boolean }[] = [
     { what: "Marc's at the aller, Marc at the aller from the form reopened withdraws it", both: false, leg: "Aller", driver: "  Marc  ", withdraws: true },
     {
-      what: "Marc's with « Je ramène aussi » from the Aller tab, Marc with « J’emmène aussi » from the Retour tab withdraws it",
+      what: "Marc's with « Je ramène aussi des passagers » from the Aller tab, Marc with « J’emmène aussi des passagers » from the Retour tab withdraws it",
       both: true,
       leg: "Retour",
       driver: "Marc",

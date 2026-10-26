@@ -169,8 +169,8 @@
         "aller": "À l’aller"
       },
       "drive": {
-        "retour": "Je ramène aussi",
-        "aller": "J’emmène aussi"
+        "retour": "Je ramène aussi des passagers",
+        "aller": "J’emmène aussi des passagers"
       },
       "stay": "Je reste dans la voiture de {driver}",
       "withoutCar": "Je cherche une place",
@@ -182,7 +182,11 @@
         "retour": "Heure de départ du retour",
         "aller": "Heure de départ de l’aller"
       },
-      "same": "Mêmes places et même note pour les deux voitures."
+      "same": "Mêmes places et même note pour les deux voitures.",
+      "hint": {
+        "retour": "Le retour part du lieu de l’événement, {location}, le {date}.",
+        "aller": "L’aller va jusqu’au lieu de l’événement, {location}, le {date}."
+      }
     },
     "location": {
       "aller": "Lieu de départ",
