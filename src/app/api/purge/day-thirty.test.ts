@@ -230,7 +230,12 @@ describe("OA8.2, DS4.2", () => {
       await holder.rollback().execute();
 
       const firstAfter = await everythingOf(db, first!);
-      expect(firstAfter.event?.anonymised_at).toEqual(expect.any(Date));
+      expect(firstAfter.event).toMatchObject({
+        anonymised_at: expect.any(Date),
+        description: null,
+        location_lat: null,
+        location_lng: null,
+      });
       expect(firstAfter).toMatchObject({ persons: [], rides: [], placements: [], links: [] });
       expect(await everythingOf(db, second!)).toEqual(before.second);
       expect(await everythingOf(db, third!)).toEqual(before.third);
