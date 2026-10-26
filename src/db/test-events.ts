@@ -11,6 +11,7 @@ const SEED: NewEvent = {
   allerAt: "2026-12-12 07:30:00",
   retourAt: "2026-12-12 18:00:00",
   locationPosition: null,
+  description: null,
   boostersEnabled: false,
   participationEnabled: false,
   stopsEnabled: false,

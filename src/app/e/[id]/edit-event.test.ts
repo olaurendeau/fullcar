@@ -10,6 +10,7 @@ import { withRollback } from "@/db/test-db";
 import { removeSeededRetour, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { hashAdminToken, newAdminToken } from "@/domain/admin-token";
+import { DESCRIPTION_MAX } from "@/domain/description";
 import { eventFieldsOf, serverBounds, validateEventChange, type EventHeader } from "@/domain/event";
 import { editEvent } from "./edit-event";
 import { offerRide } from "./offer-ride";
@@ -36,6 +37,7 @@ const BEFORE: EventHeader = {
   allerAt: "2026-12-12 07:30:00",
   retourAt: "2026-12-12 18:00:00",
   locationPosition: null,
+  description: null,
 };
 
 const LYON = { lat: 45.7581, lng: 4.6894 };
@@ -147,6 +149,10 @@ describe("editEvent", () => {
       ["an end a day before", { ...FORM, retourDate: "2026-12-11" }, { retourDate: "notAfterAller" }],
       ["a title that is not text", { ...FORM, title: 42 }, { title: "required" }],
       ["a start moved beyond a year", { ...FORM, allerDate: "2027-10-23" }, { allerDate: "tooLate" }],
+      ["DS1.6: a description of 1001 characters", { ...FORM, description: "a".repeat(DESCRIPTION_MAX + 1) }, { description: "tooLong" }],
+      ["DS1.8: a description with a NUL", { ...FORM, description: "Rendez-vous\u0000" }, { description: "invalid" }],
+      ["DS1.8: a description that is not text", { ...FORM, description: 42 }, { description: "invalid" }],
+      ["DS1.8: a description in an object", { ...FORM, description: { text: "Rendez-vous" } }, { description: "invalid" }],
       [
         "fields that are not an object",
         "title",
@@ -186,6 +192,8 @@ describe("editEvent", () => {
       ["with a start in another shape", { ...BEFORE, allerAt: "2026-12-12T07:30:00" }],
       ["with an end that is only a date", { ...BEFORE, retourAt: "2026-12-12" }],
       ["with an end missing rather than null", { ...BEFORE, retourAt: undefined }],
+      ["with a description that is not text", { ...BEFORE, description: 42 }],
+      ["with a description in an array", { ...BEFORE, description: ["Rendez-vous"] }],
     ])("answers invalid for a before %s, even with a field refused, and writes nothing", async (_, before) => {
       await onSeeded(async (trx, eventId, token) => {
         const rows = await rowsOf(trx, eventId);
@@ -439,6 +447,70 @@ describe("editEvent", () => {
           expect(await rowsOf(trx, eventId)).toEqual(rows);
         },
         { locationPosition: LYON },
+      );
+    });
+  });
+
+  describe("event-description: the description", () => {
+    const SAVED = "Rendez-vous à 7 h devant le gymnase";
+
+    it(`DS1.6: writes ${DESCRIPTION_MAX} code points, an emoji counting as one, normalised, and answers them`, async () => {
+      await onSeeded(async (trx, eventId, token) => {
+        const full = `${"🚗".repeat(10)}${"a".repeat(DESCRIPTION_MAX - 10)}`;
+
+        const answer = await editEvent(trx, eventId, token, { ...FORM, description: `  ${full}\r\n` }, BEFORE);
+
+        expect(answer).toEqual({ ok: true, event: { ...BEFORE, description: full } });
+        expect((await findEventById(trx, eventId))?.description).toBe(full);
+      });
+    });
+
+    it.each([
+      ["emptied", ""],
+      ["left invisible only", " \n\t "],
+    ])("DS1.10: %s, the description is removed, and the answer has none", async (_, description) => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const answer = await editEvent(trx, eventId, token, { ...FORM, description }, { ...BEFORE, description: SAVED });
+
+          expect(answer).toEqual({ ok: true, event: BEFORE });
+          expect((await findEventById(trx, eventId))?.description).toBeNull();
+        },
+        { description: SAVED },
+      );
+    });
+
+    it.each<[string, unknown]>([
+      ["by a page that sends no description in before", BEFORE_WITHOUT_POSITION],
+      ["by a page that sends the description in before", { ...BEFORE, description: SAVED }],
+    ])("no description sent keeps the one stored, the title changed, %s", async (_, before) => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const answer = await editEvent(trx, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, before);
+
+          expect(answer).toEqual({ ok: true, event: { ...BEFORE, title: "Tournoi de Rennes U13", description: SAVED } });
+          expect(await findEventById(trx, eventId)).toMatchObject({ title: "Tournoi de Rennes U13", description: SAVED });
+        },
+        { description: SAVED },
+      );
+    });
+
+    it.each<[string, string | null, string | null]>([
+      ["added on another device", null, SAVED],
+      ["changed on another device", SAVED, "Rendez-vous à 8 h"],
+      ["removed on another device", SAVED, null],
+    ])("DS1.11: %s: changed, with what is stored, and nothing written", async (_, loaded, stored) => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const rows = await rowsOf(trx, eventId);
+          const fields = { ...FORM, title: "Tournoi de Rennes U13", description: loaded ?? "" };
+
+          const answer = await editEvent(trx, eventId, token, fields, { ...BEFORE, description: loaded });
+
+          expect(answer).toEqual({ ok: false, error: "changed", event: { ...BEFORE, description: stored } });
+          expect(await rowsOf(trx, eventId)).toEqual(rows);
+        },
+        { description: stored },
       );
     });
   });
