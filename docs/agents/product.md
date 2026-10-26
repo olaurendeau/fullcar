@@ -37,9 +37,9 @@ reproduire, dans cet ordre.
 - **Aller et retour indépendants**, dans le même événement, sous deux onglets.
 - **Effacé à 30 jours.** 30 jours après le dernier leg (heure de Paris), tout ce qui concerne
   les participants est effacé : prénoms, téléphones, voitures, lieux de départ, notes,
-  inscriptions. Restent le titre, le lieu et les dates, dans l'historique de l'organisateur,
-  jusqu'à la suppression de son compte, par lui ou après 3 ans sans visite. Un événement
-  sans compte est supprimé en entier.
+  inscriptions, et la description de l'événement. Restent le titre, le lieu et les dates,
+  dans l'historique de l'organisateur, jusqu'à la suppression de son compte, par lui ou
+  après 3 ans sans visite. Un événement sans compte est supprimé en entier.
 - **Des e-mails, pas de courrier.** Quatre e-mails seulement : confirmer l'adresse, se
   connecter, la réponse à une demande de connexion sans compte, et l'avertissement avant la
   suppression d'un compte inactif. Aucun texte saisi par quelqu'un, aucune image, aucun suivi.

@@ -45,7 +45,7 @@ All you need is Docker and `make`:
 make up      # dev server on http://localhost:3000, with its Postgres database
 make check   # lint, typecheck, i18n keys, tests, build
 make e2e     # end-to-end tests (Playwright, 360 px) against the production build
-make ci      # make check, then the end-to-end tests on its build (a single build): what CI runs
+make ci      # make check, then the end-to-end tests on its build (a single build): the laptop equivalent of CI, which builds five times
 make down    # stops everything and wipes the local data
 make help    # the rest
 ```
