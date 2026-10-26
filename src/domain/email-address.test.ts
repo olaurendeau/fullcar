@@ -50,17 +50,60 @@ describe("emailAddress", () => {
     expect(emailAddress("  Camille.Durand@Exemple.FR \n")).toEqual({ value: "camille.durand@exemple.fr" });
   });
 
-  it("writes an accented address in NFC, whichever way it was typed", () => {
-    const composed = "andré@exemple.fr";
-    const decomposed = "andré@exemple.fr";
-    expect(emailAddress(decomposed)).toEqual({ value: composed });
-    expect(emailAddress("ANDRÉ@EXEMPLE.FR")).toEqual({ value: composed });
+  // #626: one mailbox, one account, whether its domain is typed in Unicode or in punycode.
+  describe("an internationalised domain", () => {
+    it("is written in punycode, so that both forms are one address", () => {
+      const ascii = { value: "camille@xn--bcher-kva.de" };
+      expect(emailAddress("camille@bücher.de")).toEqual(ascii);
+      expect(emailAddress("camille@xn--bcher-kva.de")).toEqual(ascii);
+      expect(emailAddress("CAMILLE@BÜCHER.DE")).toEqual(ascii);
+      expect(emailAddress("Camille@XN--BCHER-KVA.DE")).toEqual(ascii);
+      expect(emailAddress("camille@bu\u0308cher.de")).toEqual(ascii);
+    });
+
+    it("converts every label, in any script", () => {
+      expect(emailAddress("camille@courrier.日本.jp")).toEqual({ value: "camille@courrier.xn--wgv71a.jp" });
+      expect(emailAddress("camille@bücher.xn--p1ai")).toEqual({ value: "camille@xn--bcher-kva.xn--p1ai" });
+    });
+
+    // 57 « ü » make a label of 63 characters in punycode: these domains grow by 6 characters.
+    const umlauts = (count: number) => "u\u0308".repeat(count);
+
+    it("counts length after normalisation and conversion: 254 characters in punycode, not as typed", () => {
+      const typed = (last: number) => `${"a".repeat(64)}@${umlauts(57)}.${"c".repeat(63)}.${"d".repeat(last)}.fr`;
+      expect(typed(58).length).toBe(305);
+      expect([...typed(58).normalize("NFC")].length).toBe(248);
+      const accepted = emailAddress(typed(58));
+      expect("value" in accepted && accepted.value.length).toBe(254);
+      expect(emailAddress(typed(59))).toEqual({ error: "tooLong" });
+    });
+
+    it("counts a label's 63 characters after conversion", () => {
+      const accepted = emailAddress(`camille@${umlauts(57)}.de`);
+      expect("value" in accepted && accepted.value.split(/[@.]/)[1]).toMatch(/^xn--[a-z0-9]{59}$/);
+      expect(emailAddress(`camille@${umlauts(58)}.de`)).toEqual({ error: "invalid" });
+    });
+
+    it.each([
+      ["a label starting with a combining mark", "camille@\u0301bc.de"],
+      ["a label mixing right-to-left and left-to-right letters", "camille@a\u05d0.de"],
+      ["a punycode label that decodes to a control character", "camille@xn--a.de"],
+      ["a punycode label of a decomposed « ü », not in NFC", "camille@xn--bucher-xyd.de"],
+      ["a punycode label of the ligature « \ufb01 », written « fi »", "camille@xn--x-sy8h.de"],
+      ["a punycode label that does not decode", "camille@xn--99999999999.de"],
+      ["a domain that becomes an IP address", "camille@1.0x7f"],
+    ])("refuses %s", (_, address) => {
+      expect(emailAddress(address)).toEqual({ error: "invalid" });
+    });
   });
 
-  it("counts length after normalisation, in characters", () => {
-    const decomposed = `${"é".repeat(64)}@${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(58)}.fr`;
-    expect(decomposed.length).toBe(318);
-    expect(emailAddress(decomposed)).toEqual({ value: decomposed.normalize("NFC") });
+  // #626: nothing shows that Brevo delivers to a local part outside ASCII (SMTPUTF8).
+  it.each([
+    ["an accented local part", "andré@exemple.fr"],
+    ["a decomposed accent in the local part", "andre\u0301@exemple.fr"],
+    ["a local part in another script", "δοκιμή@exemple.fr"],
+  ])("refuses %s", (_, address) => {
+    expect(emailAddress(address)).toEqual({ error: "invalid" });
   });
 
   it.each([
@@ -91,8 +134,6 @@ describe("emailAddress", () => {
     ["digits and hyphens in the domain", "c@club-42.exemple.fr"],
     ["a local part of 64 characters", `${"a".repeat(64)}@exemple.fr`],
     ["a label of 63 characters", `camille@${"b".repeat(63)}.fr`],
-    ["an internationalised domain", "camille@bücher.de"],
-    ["a punycode domain", "camille@xn--bcher-kva.de"],
   ])("accepts %s", (_, address) => {
     expect(emailAddress(address)).toEqual({ value: address });
   });
