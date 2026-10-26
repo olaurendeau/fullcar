@@ -1,0 +1,883 @@
+<title>Description de l’événement</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8; --card: #ffffff;
+    --accent: #2457c5; --accent-soft: #e6edfb; --note: #fff7e0; --note-line: #ecd48a;
+    /* The app's own look, light only, from src/app/globals.css (oklch converted) */
+    --app-bg: #ffffff; --app-fg: #0a0a0a; --app-muted: #737373; --app-muted-bg: #f5f5f5;
+    --app-border: #e5e5e5; --app-primary: #171717; --app-primary-fg: #fafafa;
+    --app-destructive: #e7000b; --app-amber-bg: #fef3c7; --app-amber-fg: #461901; --app-amber-line: #f2d58a;
+    --app-ring: #a1a1a1; --frame: #2b2b2e; --urlbar: #efefef; --urlbar-fg: #444; --scrim: rgba(0,0,0,.32);
+    --fold: #d0342c;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; --fold: #ff7b72; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --muted: #a0a0a8; --line: #33333a; --card: #1f1f23;
+    --accent: #8fb0ff; --accent-soft: #1e2a45; --note: #2f2818; --note-line: #6b5a26;
+    --frame: #4a4a50; --fold: #ff7b72; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; line-height: 1.2; }
+  h2 { font-size: 1.3rem; margin: 48px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 22px 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 80ch; }
+  .prose { max-width: 82ch; }
+  .prose li { margin-bottom: 4px; }
+  a { color: var(--accent); }
+  code { font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 0; font-size: .92rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 32px 24px; margin-top: 20px; align-items: start; }
+  .state { min-width: 0; }
+  .state > h3 { margin-top: 0; }
+  .state > p { color: var(--muted); font-size: 0.9rem; margin: 0 0 10px; }
+  .crit { font-size: 0.8rem; color: var(--accent); font-weight: 600; }
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 80ch; }
+  .table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  .table-wrap table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.9rem; }
+  .table-wrap th, .table-wrap td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .table-wrap th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  .table-wrap tr:last-child td { border-bottom: 0; }
+  table.words td:nth-child(2), table.words td:nth-child(3) { min-width: 220px; }
+  ol.decisions, ul.crits { padding-left: 20px; max-width: 86ch; }
+  ol.decisions li, ul.crits li { margin-bottom: 10px; }
+  ul.crits li b:first-child { color: var(--accent); }
+  .q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 14px; max-width: 86ch; }
+  .q h3 { margin-top: 0; }
+  .q ul { margin: 6px 0; padding-left: 20px; }
+  .rec { font-weight: 600; }
+  .why { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; margin-top: 14px; }
+  .why .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; min-width: 0; }
+  .why .card h3 { margin-top: 4px; }
+  .why .card ul { padding-left: 18px; margin: 6px 0; }
+
+  /* Phone: a 360 px wide viewport inside a 6 px frame */
+  .phone { position: relative; box-sizing: content-box; width: 360px; max-width: calc(100% - 12px); border: 6px solid var(--frame); border-radius: 22px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); }
+  .phone.h780 .viewport { height: 780px; overflow: hidden; position: relative; }
+  .urlbar { background: var(--urlbar); color: var(--urlbar-fg); font: 12px ui-monospace, Menlo, monospace; padding: 7px 10px; overflow-wrap: anywhere; }
+  .screen { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 16px; font-size: 16px; line-height: 24px; min-height: 200px; }
+  .cut { color: var(--app-muted); font-size: 11px; line-height: 16px; text-align: center; letter-spacing: .04em; }
+  .ico { width: 16px; height: 16px; flex: none; }
+  .ico.s { width: 14px; height: 14px; }
+  .muted { color: var(--app-muted); }
+  .small-muted { color: var(--app-muted); font-size: 13px; line-height: 18px; margin: 0; }
+  .ev-h1 { font-size: 24px; font-weight: 700; margin: 0; line-height: 32px; overflow-wrap: anywhere; }
+
+  /* The event header (event-board v4.3), plus the description */
+  .hdr { display: flex; flex-direction: column; gap: 16px; }
+  .hdr .tp { display: flex; flex-direction: column; gap: 8px; }
+  .place { display: flex; align-items: flex-start; gap: 8px; margin: 0; }
+  .place .ico { margin-top: 4px; color: var(--app-muted); }
+  .place span { min-width: 0; overflow-wrap: anywhere; }
+  dl.dates { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 12px; margin: 0; }
+  dl.dates dt { font-size: 14px; color: var(--app-muted); }
+  dl.dates dd { margin: 0; }
+  .descblock { display: flex; flex-direction: column; gap: 0; }
+  .desc { white-space: pre-line; overflow-wrap: anywhere; margin: 0; }
+  .desc.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+  .desc a, .lnk { color: inherit; text-decoration: underline; text-underline-offset: 3px; border-radius: 3px; }
+  .more { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; text-decoration: underline; text-underline-offset: 4px; border-radius: 8px; padding: 0 2px; margin-left: -2px; }
+  .more .ico { width: 16px; height: 16px; color: var(--app-muted); }
+
+  .btn { min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid transparent; background: var(--app-primary); color: var(--app-primary-fg); display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 500; padding: 0 12px; text-align: center; white-space: nowrap; font-size: 14px; line-height: 20px; }
+  .btn.outline { background: var(--app-bg); color: var(--app-fg); border-color: var(--app-border); }
+  .btn.off { background: var(--app-muted-bg); color: var(--app-muted); }
+  .btn.full { width: 100%; }
+  .new { outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 10px; }
+  .focusring { outline: 2px solid var(--app-ring) !important; outline-offset: 3px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-ring) 35%, transparent); }
+
+  .banner { display: flex; gap: 8px; align-items: flex-start; border-radius: 10px; padding: 8px 12px; background: var(--app-amber-bg); color: var(--app-amber-fg); font-weight: 500; margin: 0; font-size: 14px; line-height: 24px; }
+  .banner .ico { margin-top: 4px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--app-muted-bg); border-radius: 10px; padding: 3px; font-size: 14px; line-height: 20px; }
+  .tabs > span { min-height: 44px; box-sizing: border-box; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 8px; font-weight: 500; color: var(--app-muted); }
+  .tabs > span.on { background: var(--app-bg); color: var(--app-fg); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .tabs small { font-size: 12px; line-height: 16px; }
+  .acts2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .car { border: 1px solid var(--app-border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; font-size: 14px; line-height: 20px; }
+  .car-h { display: flex; justify-content: space-between; gap: 8px; }
+  .free { min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; border-radius: 8px; border: 1px dashed #c9c9c9; padding: 0 12px; font-weight: 500; }
+  .foldline { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--fold); z-index: 4; pointer-events: none; }
+  .foldline span { position: absolute; right: 6px; top: -20px; background: var(--fold); color: #fff; font: 600 10px/16px ui-monospace, Menlo, monospace; padding: 0 5px; border-radius: 4px; }
+  .measure { position: absolute; left: 0; z-index: 4; font: 600 10px/16px ui-monospace, Menlo, monospace; background: var(--accent); color: #fff; padding: 0 5px; border-radius: 0 4px 4px 0; }
+
+  /* Form fields (event-fields.tsx) */
+  .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .flabel { font-size: 14px; line-height: 20px; font-weight: 500; }
+  .flabel.err { color: var(--app-destructive); }
+  .inp { height: 40px; box-sizing: border-box; border: 1px solid var(--app-border); border-radius: 10px; padding: 0 10px; display: flex; align-items: center; font-size: 16px; overflow: hidden; white-space: nowrap; }
+  .ta { min-height: 64px; box-sizing: border-box; border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 10px; font-size: 16px; line-height: 24px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ta.ro { background: var(--app-muted-bg); }
+  .ta.err { border-color: var(--app-destructive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-destructive) 20%, transparent); }
+  .ta .caret { display: inline-block; width: 1px; height: 18px; background: var(--app-fg); vertical-align: -3px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .boxrow { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 4px 0; box-sizing: border-box; font-size: 14px; line-height: 20px; }
+  .cb { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--app-primary); background: var(--app-primary); flex: none; margin-top: 2px; display: grid; place-items: center; color: #fff; }
+  .cb.off { background: var(--app-bg); border-color: #c4c4c4; }
+  .ferr { color: var(--app-destructive); font-size: 13px; line-height: 18px; margin: 0; }
+  .count { font-size: 13px; line-height: 18px; color: var(--app-muted); margin: 0; }
+  .count.over { color: var(--app-destructive); }
+  .optbox { border: 1px solid var(--app-border); border-radius: 14px; padding: 8px 14px; font-size: 14px; line-height: 20px; }
+  .alert { margin: 0; color: var(--app-destructive) !important; font-size: 14px; line-height: 20px; }
+
+  /* Sheet over the dimmed page */
+  .behind { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 12px; height: 70px; overflow: hidden; }
+  .behind::after { content: ""; position: absolute; inset: 0; background: var(--scrim); }
+  .sheet { border-top: 1px solid var(--app-border); background: var(--app-bg); display: flex; flex-direction: column; box-shadow: 0 -8px 24px rgba(0,0,0,.12); position: relative; z-index: 1; border-radius: 14px 14px 0 0; }
+  .sheet .sh-h { padding: 16px 16px 0; font-size: 16px; font-weight: 600; }
+  .sheet .sh-b { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 14px; font-size: 16px; line-height: 24px; }
+
+  /* The organiser space, folded (organizer-view v3.5, O8) */
+  .panel { border: 1px solid var(--app-border); border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 20px; }
+  .ptitle { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .ptitle strong { font-size: 16px; display: inline-flex; align-items: center; gap: 6px; }
+
+  /* Ended pages */
+  .ended { display: flex; flex-direction: column; gap: 12px; }
+  .notice { border: 1px solid var(--app-border); border-radius: 10px; padding: 12px; display: grid; grid-template-columns: 16px 1fr; gap: 2px 10px; font-size: 14px; line-height: 20px; }
+  .notice .ico { margin-top: 2px; color: var(--app-muted); }
+  .notice b { font-weight: 600; }
+  .notice span { grid-column: 2; color: var(--app-muted); }
+
+  /* Share preview, schematic */
+  .chat { background: #e7ddd3; border-radius: 14px; padding: 14px; max-width: 360px; box-sizing: border-box; }
+  .bubble { background: #dcf8c6; color: #111; border-radius: 10px; padding: 6px; max-width: 300px; margin-left: auto; font-size: 14px; line-height: 19px; }
+  .bubble .pv { background: rgba(0,0,0,.05); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+  .bubble .pv b { font-size: 14px; }
+  .bubble .pv span { color: #555; font-size: 13px; }
+  .bubble .pv i { color: #777; font-style: normal; font-size: 12px; }
+  .bubble a { color: #1a5fb4; overflow-wrap: anywhere; }
+
+  /* Desktop: 1280 px browser at 50 % */
+  .deskwrap { overflow-x: auto; margin-top: 20px; }
+  .deskscale { width: 652px; height: 330px; position: relative; }
+  .desk { width: 1280px; transform: scale(.5); transform-origin: top left; position: absolute; top: 0; left: 0; border: 6px solid var(--frame); border-radius: 12px; overflow: hidden; background: var(--app-bg); color: var(--app-fg); }
+  .desk .inner { padding: 24px; display: flex; flex-direction: column; align-items: center; }
+  .desk .col { width: 448px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 16px; font-size: 16px; line-height: 24px; }
+
+  /* v2 */
+  .descblock { gap: 8px; }
+  .desc { white-space: pre-wrap; tab-size: 4; }
+  .desc a, .lnk { unicode-bidi: isolate; }
+  .ta.max { max-height: 162px; overflow: hidden; position: relative; padding-right: 14px; }
+  .ta .sb { position: absolute; right: 3px; width: 4px; border-radius: 2px; background: #b9b9b9; }
+  .pill { background: var(--app-amber-bg); color: var(--app-amber-fg); font-size: 12px; line-height: 18px; padding: 0 8px; border-radius: 999px; font-weight: 500; white-space: nowrap; }
+  .sumline { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 13px; line-height: 18px; }
+  .sumline b { font-size: 14px; }
+  .fsheet { display: flex; flex-direction: column; background: var(--app-bg); }
+  .fsheet.h640 { height: 640px; }
+  .fsheet.h369 { height: 369px; }
+  .fsheet .sh-h { flex: none; padding: 16px 16px 12px; font-size: 16px; line-height: 24px; font-weight: 600; border-bottom: 1px solid var(--app-border); }
+  .fsheet .sh-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+  .fsheet .sh-scroll { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; font-size: 16px; line-height: 24px; }
+  .fsheet .sh-bar { flex: none; border-top: 1px solid var(--app-border); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .btn.aria-off { background: var(--app-muted-bg); color: var(--app-muted); }
+  .kb { height: 230px; background: #d1d3d9; color: #555; display: grid; place-items: center; font: 12px ui-monospace, Menlo, monospace; }
+  .vis { position: relative; }
+  .vis .tag { position: absolute; right: 6px; top: 6px; z-index: 3; background: var(--accent); color: #fff; font: 600 10px/16px ui-monospace, Menlo, monospace; padding: 0 5px; border-radius: 4px; }
+  .risk { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--note-line); border-radius: 10px; padding: 10px 14px; margin-top: 14px; max-width: 80ch; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/></symbol>
+  </defs>
+</svg>
+
+
+<div class="wrap">
+  <h1>Description de l’événement</h1>
+  <p class="lead">Un texte libre et facultatif de l’organisateur, lu par tout le groupe dans l’en-tête de l’événement. Épique <a href="https://github.com/olaurendeau/fullcar/issues/654">#654</a>. <b>Version v3</b> : revue de la v2 (un bloquant, la hauteur de la zone de saisie clavier ouvert sur un petit iPhone) ; v2 : revue de la v1 et réponses enregistrées sur #654. Maquettes à 360 px de large ; un navigateur de 1280 px à 50 %.</p>
+  <p class="lead">Voisines, <b>non republiées</b> : <code>event-board</code> v4.6 (l’en-tête, « L’ordre de l’écran », les feuilles pleine hauteur et leur barre d’actions, #650), <code>organizer-view</code> v3.5 (« Modifier l’événement », M2 à M8 ; les legs repliés, #648), <code>organizer-account</code> v4 (création sur <code>/nouveau</code>, jour 30, e-mails), <code>home</code> v2.1 (<code>/nouveau</code>), <code>event-map</code> (la Carte d’un leg), <code>visual-identity</code> (en cours : les couleurs ci-dessous sont celles d’aujourd’hui). Le pointillé bleu marque ce qui est nouveau.</p>
+  <nav class="toc" aria-label="Sommaire">
+    <a href="#reponses">Réponses</a>
+    <a href="#v3">Ce qui change en v3</a>
+    <a href="#v2">Ce qui change en v2</a>
+    <a href="#pourquoi">Pourquoi une page à part</a>
+    <a href="#probleme">Le problème</a>
+    <a href="#histoires">Histoires</a>
+    <a href="#ecrire">Écrire</a>
+    <a href="#lire">Lire</a>
+    <a href="#liens">Les liens</a>
+    <a href="#jour30">Jour 30</a>
+    <a href="#jamais">Où elle ne va jamais</a>
+    <a href="#etats">États</a>
+    <a href="#mots">Les mots</a>
+    <a href="#focus">Focus et sans JavaScript</a>
+    <a href="#criteres">Critères</a>
+    <a href="#decisions">Décisions</a>
+    <a href="#hors">Hors périmètre</a>
+    <a href="#docs">Documentation</a>
+    <a href="#revisions">Révisions</a>
+  </nav>
+
+  <h2 id="reponses">Réponses, enregistrées sur #654</h2>
+  <ul class="crits">
+    <li><b>Q1, jour 30</b> : (a), décision du propriétaire (26/10/2026). La description est effacée au jour 30 avec les inscriptions.</li>
+    <li><b>Q2, où l’écrire</b> : (a), décision du coordinateur. À la création et dans « Modifier l’événement ».</li>
+    <li><b>Q3, les liens</b> : (a), décision du propriétaire. Les URL <code>http(s)</code> deviennent des liens, strictement.</li>
+    <li><b>Revue de la v1, décisions du coordinateur</b> (<a href="https://github.com/olaurendeau/fullcar/issues/654#issuecomment-6409664334">commentaire</a>) : une URL trompeuse reste du texte ; pas de <code>og:description</code> ; le champ a une hauteur maximale.</li>
+  </ul>
+
+  <h2 id="v3">Ce qui change en v3</h2>
+  <ol class="decisions">
+    <li><b>La zone de saisie ne passe jamais sous la barre (bloquant de la revue de la v2).</b> En v2, un iPhone SE en portrait, clavier ouvert, laissait un corps d’environ 96 px. C’est 270 px visibles (event-board v4.6, règle 8), moins les 174 px du titre et de la barre. La zone de 162 px y passait sous « Valider », avec la ligne qu’on tape. La hauteur maximale de la zone est désormais <b>le plus petit de 6 lignes et de la hauteur du corps moins 16 px</b>. La règle 5 de v4.6 tient donc sans exception. Nouveau dessin W4c, à 270 px visibles ; DS1.14 réécrit, avec un cas à 270 px.</li>
+    <li><b>6 lignes, quelle que soit la taille du texte.</b> Le plafond se compte en lignes : 162 px avec les lignes de 24 px sous 768 px, 138 px avec les lignes de 20 px de <code>md:text-sm</code> à partir de 768 px.</li>
+    <li><b>La mesure du pli</b> est refaite aussi quand le texte change, pas seulement au redimensionnement et au chargement des polices (DS2.8, DS2.13).</li>
+    <li><b>DS3.10</b> refuse aussi les caractères de contrôle (Cc) autres que la tabulation et <code>\n</code>, par exemple U+0085 (ligne L23).</li>
+  </ol>
+
+  <h2 id="v2">Ce qui change en v2</h2>
+  <ol class="decisions">
+    <li><b>Liens trompeurs (bloquant 1).</b> Restent du texte : une URL avec un identifiant avant <code>@</code> ; une URL qui contient un caractère bidirectionnel, invisible ou de format ; une URL dont l’hôte n’est pas en ASCII pur, contient un label <code>xn--</code>, ou n’est pas exactement l’hôte que le navigateur ouvrira. Un lien est isolé du texte qui l’entoure (<code>dir="ltr"</code>, <code>unicode-bidi: isolate</code>). Une ligne du tableau et un critère pour chaque cas : DS3.9 à DS3.12.</li>
+    <li><b>Pas de <code>og:description</code> (bloquant 2).</b> La phrase fixe et la clé <code>Event.metaDescription</code> sont retirées. Les métadonnées de <code>/e/…</code> restent celles de <code>main</code>. Le risque accepté est écrit dans « Où elle ne va jamais ». DS5.3 est réécrit.</li>
+    <li><b>Un texte long pendant la saisie (bloquant 3).</b> Le champ grandit jusqu’à 6 lignes (162 px), puis défile à l’intérieur. Le cas réel de 1000 caractères est dessiné sur <code>/nouveau</code> et dans la feuille pleine hauteur d’event-board v4.6, clavier fermé et ouvert : W3, W4, W4b. Nouveau critère DS1.14.</li>
+    <li><b>Le bouton du pli</b> reprend le bouton des listes du panneau (« Afficher les {n} autres » / « Réduire la liste ») : <code>outline</code>, pleine largeur, 44 px, sans chevron. Ce que rend le serveur, la mesure, la rotation, la taille du texte et Safari avant 17 sont dits (DS2.4, DS2.13, DS2.11).</li>
+    <li><b>Le compteur</b> compte exactement ce que compte le serveur, après normalisation (DS1.7).</li>
+    <li><b>Le découpage des liens</b> : les blancs comprennent l’espace insécable et l’espace fine insécable ; <code>…</code> et <code>&gt;</code> finaux sont retirés, et la ponctuation finale répétée aussi ; ce qui peut précéder <code>http</code> est dit (DS3.1).</li>
+    <li><b>Les espaces</b> : <code>white-space: pre-wrap</code>. Ce qu’on voit dans le champ est ce qu’on lit. L’enregistrement retire les blancs en fin de ligne (DS1.4).</li>
+    <li><b>DS1.2</b> dit quel nombre d’actions vaut, selon que #581 est livrée ou non.</li>
+    <li><b><code>/e/{id}/moi</code></b> n’existe pas sur <code>main</code> : DS2.2, DS4.3 et DS5.2 ne valent pour elle qu’une fois livrée.</li>
+    <li><b>DS3.3</b> : pour le serveur, un espion de <code>fetch</code> dans Vitest.</li>
+    <li><b>Anglais</b> : « Show less ».</li>
+    <li><b>Voisine</b> : organizer-view v3.5. R7 la suit : le lien « Mes événements », l’espace organisateur replié et son résumé par leg. Les règles de focus sont vérifiées contre la sienne.</li>
+    <li><b>W5</b> : l’envoi en cours est dessiné, puis l’échec hors ligne (W6).</li>
+  </ol>
+
+  <h2 id="pourquoi">Pourquoi une page à part</h2>
+  <div class="prose">
+    <p>L’en-tête appartient à <code>event-board</code>, mais la description touche quatre maquettes : le formulaire de création (<code>home</code>, <code>organizer-account</code>), la feuille « Modifier l’événement » (<code>organizer-view</code>, avec la forme des feuilles d’<code>event-board</code> v4.6), l’en-tête (<code>event-board</code>) et le jour 30 (<code>organizer-account</code>). Plusieurs sont en révision par d’autres. Une page par fonctionnalité, comme <code>remove-person</code> (#645) : chaque voisine garde ses critères, et celle-ci dit seulement ce qui s’ajoute. La prochaine révision d’<code>event-board</code> ajoute une ligne à « L’ordre de l’écran » qui renvoie ici. Celle d’<code>organizer-account</code> reprend la phrase <code>Anonymized.body</code> modifiée (voir « Les mots »).</p>
+  </div>
+
+  <h2 id="probleme">Le problème</h2>
+  <div class="prose">
+    <p><b>Qui est bloqué :</b> l’organisateur, qui a des détails à donner au groupe : l’heure et le lieu du rendez-vous avant le départ, le matériel, le programme, un lien vers le site du club ou le plan du gymnase. <b>Par quoi :</b> l’événement n’a que quatre textes : le titre (80 caractères), le lieu (120), le début et la fin. Le seul texte libre, la note, appartient à une voiture et à la personne qui conduit. <b>Ce qu’il fait aujourd’hui :</b> il bourre le titre (« Tournoi U11 – RDV 7h15 parking »), qui déborde dans l’onglet du navigateur. Ou il envoie un second message dans le groupe WhatsApp, à côté du lien. Ce message se perd, et ceux qui arrivent par le lien seul ne le voient jamais.</p>
+    <p><b>Les participants</b> ouvrent le lien sans contexte : ils voient où et quand, mais pas ce qu’il faut apporter, ni où se retrouver.</p>
+  </div>
+
+  <h2 id="histoires">Histoires</h2>
+  <ol class="decisions">
+    <li><b>H1 — Écrire en créant.</b> En tant qu’organisateur pressé, je peux taper quelques lignes en créant l’événement, ou ne rien taper, sans que la création me prenne plus de temps. <span class="crit">DS1.1–DS1.8, DS1.14</span></li>
+    <li><b>H2 — Corriger plus tard.</b> En tant qu’organisateur, j’ajoute, je corrige ou j’efface la description depuis « Modifier l’événement », comme le titre. <span class="crit">DS1.9–DS1.14</span></li>
+    <li><b>H3 — Lire sans chercher.</b> En tant que participant, je lis la description sous les dates, avant de m’inscrire, sans qu’elle me cache le bandeau de mon leg. <span class="crit">DS2.1–DS2.13</span></li>
+    <li><b>H4 — Suivre un lien sans être trompé.</b> En tant que participant, je touche un lien de la description. Il s’ouvre dans un nouvel onglet, à l’adresse exacte que je lis, sans que Fullcar le suive, le résume ou le transforme. <span class="crit">DS3.1–DS3.12</span></li>
+    <li><b>H5 — Ne rien laisser traîner.</b> En tant que personne nommée dans une description (« appeler Julie au 06… »), je sais que ce texte disparaît 30 jours après l’événement, et qu’il ne part ni dans un e-mail, ni dans les métadonnées, ni dans un rapport d’erreur. <span class="crit">DS4.1–DS5.7</span></li>
+  </ol>
+
+  <h2 id="ecrire">Écrire</h2>
+  <p class="lead">Un champ facultatif, partagé par la création et la feuille « Modifier l’événement » (il vit dans <code>EventFormFields</code>), après la fin et avant les options. Il grandit avec son texte jusqu’à 6 lignes, puis défile à l’intérieur. Dans une feuille, il ne dépasse jamais non plus la hauteur du corps moins 16 px : il reste entier entre le titre et la barre, clavier ouvert compris. Rien ne s’ajoute au chemin le plus court (DS1.2).</p>
+  <div class="grid">
+    <div class="state">
+      <h3>W1 · /nouveau, champ vide</h3>
+      <p>Une zone de texte (<code>Textarea</code>, <code>field-sizing-content</code>), 64 px au moins, 6 lignes au plus (162 px sous 768 px de large). Sa phrase dit qui la voit et quand elle disparaît. Les champs de l’adresse viennent d’organizer-account. <span class="crit">DS1.1, DS1.2</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/nouveau</div><div class="screen" style="gap:16px">
+        <div class="cut">· · · titre, lieu, date et heure de début : inchangés · · ·</div>
+        <div class="boxrow"><span class="cb"><svg class="ico s" style="width:12px;height:12px"><use href="#i-check"/></svg></span><span><b style="font-weight:500">Retour</b><br><span class="small-muted">Décochez s’il n’y a pas de retour organisé.</span></span></div>
+        <div class="two"><div class="fld"><span class="flabel">Date de fin</span><span class="inp">12/12/2026</span></div><div class="fld"><span class="flabel">Heure de fin</span><span class="inp">18:00</span></div></div>
+        <div class="fld new"><span class="flabel">Description (facultatif)</span><span class="ta"></span><span class="small-muted">Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.</span></div>
+        <div class="optbox"><b>Options</b><div class="small-muted" style="margin-top:4px">Rehausseurs · Participation aux frais · Points de RDV</div></div>
+        <div class="fld"><span class="flabel">Votre adresse e-mail</span><span class="inp"></span><span class="small-muted">Pour retrouver vos événements, sans mot de passe. Les participants n’ont jamais à en donner. <u>Confidentialité</u></span></div>
+        <span class="btn full">Créer</span>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>W2 · /nouveau, rempli</h3>
+      <p>Les retours à la ligne et les espaces sont gardés tels qu’on les voit. Une URL reste du texte dans le champ : elle ne devient un lien qu’à la lecture. Pas de mise en forme, pas d’aperçu. <span class="crit">DS1.3, DS1.4</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/nouveau</div><div class="screen">
+        <div class="cut">· · · titre, lieu, début, retour, fin · · ·</div>
+        <div class="fld new"><span class="flabel">Description (facultatif)</span><span class="ta">Rendez-vous à 7 h 15 sur le parking du collège.
+Prévoir : gourde, pique-nique, chaussures de salle.
+Programme : https://asa-annecy.example/tournoi-u11<span class="caret"></span></span><span class="small-muted">Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.</span></div>
+        <div class="optbox"><b>Options</b><div class="small-muted" style="margin-top:4px">Rehausseurs · Participation aux frais · Points de RDV</div></div>
+        <div class="cut">· · · adresse e-mail, « Créer » · · ·</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>W3 · 1000 caractères, puis au-delà</h3>
+      <p>Le cas réel : le champ s’arrête à 6 lignes (162 px) et défile à l’intérieur. <code>/nouveau</code> n’est pas une feuille : rien de fixe ne le recouvre, la page défile ; le formulaire ne s’allonge pas. Le compteur apparaît à 900 caractères comptés comme le serveur les compte. Au-delà de 1000, il passe en rouge ; « Créer » refuse, l’erreur s’affiche sous le champ, qui prend le focus, et tout le texte reste. Aucun <code>maxlength</code> : un collage n’est jamais coupé. <span class="crit">DS1.6, DS1.7, DS1.14</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/nouveau</div><div class="screen">
+        <div class="two"><div class="fld"><span class="flabel">Date de fin</span><span class="inp">12/12/2026</span></div><div class="fld"><span class="flabel">Heure de fin</span><span class="inp">18:00</span></div></div>
+        <div class="fld new"><span class="flabel">Description (facultatif)</span><span class="ta max">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30 pétantes : on n’attend personne.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club, une tenue de rechange et un petit goûter pour l’après-midi.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30 dans le grand gymnase.
+Programme et plan du gymnase : https://asa-annecy.example/tournoi-u11
+Retour vers 18 h 30 au même parking.<span class="sb" style="top:6px;height:46px"></span></span><span class="small-muted">Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.</span><p class="count">1000 caractères sur 1000</p></div>
+        <div class="optbox"><b>Options</b><div class="small-muted" style="margin-top:4px">Rehausseurs · Participation aux frais · Points de RDV</div></div>
+        <div class="cut">· · · après « Créer », avec 1012 caractères · · ·</div>
+        <div class="fld"><span class="flabel err">Description (facultatif)</span><span class="ta max err focusring">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30 pétantes : on n’attend personne.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club, une tenue de rechange et un petit goûter pour l’après-midi.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.<span class="sb" style="top:6px;height:46px"></span></span><p class="ferr">1000 caractères au maximum.</p><span class="small-muted">Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.</span><p class="count over">1012 caractères sur 1000</p></div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>W4 · « Modifier l’événement », 1000 caractères, 360 × 640</h3>
+      <p>La feuille pleine hauteur d’event-board v4.6 : le titre en haut, la barre d’actions en bas, seul le corps défile. Corps défilé jusqu’au champ, dernier des champs. Il garde ses 162 px et défile à l’intérieur ; sa phrase et son compteur sont dessous, dans le corps. <span class="crit">DS1.9, DS1.14</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+        <div class="fsheet h640 vis"><span class="tag">640 px</span>
+          <div class="sh-h">Modifier l’événement</div>
+          <div class="sh-body"><div class="sh-scroll" style="margin-top:-150px">
+            <div class="fld"><span class="flabel">Lieu</span><span class="inp">Gymnase des Fins, Annecy</span></div>
+            <div class="two"><div class="fld"><span class="flabel">Date de début</span><span class="inp">12/12/2026</span></div><div class="fld"><span class="flabel">Heure de début</span><span class="inp">07:30</span></div></div>
+            <div class="boxrow"><span class="cb"><svg class="ico s" style="width:12px;height:12px"><use href="#i-check"/></svg></span><span><b style="font-weight:500">Retour</b><br><span class="small-muted">Décochez s’il n’y a pas de retour organisé.</span></span></div>
+            <div class="two"><div class="fld"><span class="flabel">Date de fin</span><span class="inp">12/12/2026</span></div><div class="fld"><span class="flabel">Heure de fin</span><span class="inp">18:00</span></div></div>
+            <div class="fld new"><span class="flabel">Description (facultatif)</span><span class="ta max">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30 pétantes : on n’attend personne.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club, une tenue de rechange et un petit goûter pour l’après-midi.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.<span class="sb" style="top:6px;height:46px"></span></span><span class="small-muted">Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.</span><p class="count">1000 caractères sur 1000</p></div>
+          </div></div>
+          <div class="sh-bar"><span class="btn full">Valider</span><span class="btn outline full">Annuler</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>W4b · La même, clavier ouvert (zone visible de 369 px)</h3>
+      <p>La zone visible de la capture 1 de #650. L’en-tête et la barre restent. Le corps mesure 195 px sur la maquette : 195 − 16 = 179 px, plus que 6 lignes, donc la zone garde ses 162 px. Elle est entière, à 8 px au moins de l’en-tête et de la barre (règle 5 de v4.6) ; son libellé passe sous l’en-tête. Le curseur reste visible dans la zone, qui défile seule. La phrase et le compteur se lisent en faisant défiler le corps. <span class="crit">DS1.14</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+        <div class="fsheet h369 vis"><span class="tag">369 px visibles</span>
+          <div class="sh-h">Modifier l’événement</div>
+          <div class="sh-body"><div class="sh-scroll" style="margin-top:-30px">
+            <div class="fld new"><span class="flabel">Description (facultatif)</span><span class="ta max focusring">Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club, une tenue de rechange et un petit goûter pour l’après-midi.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.<span class="caret"></span><span class="sb" style="top:60px;height:46px"></span></span></div>
+          </div></div>
+          <div class="sh-bar"><span class="btn full">Valider</span><span class="btn outline full">Annuler</span></div>
+        </div>
+        <div class="kb">clavier</div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>W4c · Un iPhone SE, clavier ouvert (zone visible de 270 px)</h3>
+      <p>Le cas de la règle 8 de v4.6. Le titre et la barre prennent 174 px, et le corps environ 96 px. La zone est plafonnée à la hauteur du corps moins 16 px, soit environ 80 px : deux lignes et demie. Elle est entière à 8 px sous le titre et à 8 px au-dessus de « Valider ». La ligne qu’on tape est au bas de la zone, donc au-dessus de la barre, jamais dessous. Sous 240 px visibles, la règle 8 fait défiler le titre et la barre avec le corps : seul le plafond de 6 lignes vaut alors. <span class="crit">DS1.14</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+        <div class="fsheet vis" style="height:270px"><span class="tag">270 px visibles</span>
+          <div class="sh-h">Modifier l’événement</div>
+          <div class="sh-body"><div class="sh-scroll" style="margin-top:-32px;padding-top:14px">
+            <div class="fld new"><span class="flabel">Description (facultatif)</span><span class="ta max focusring" style="height:80px;max-height:80px">Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.<span class="caret"></span><span class="sb" style="top:30px;height:20px"></span></span></div>
+          </div></div>
+          <div class="sh-bar"><span class="btn full">Valider</span><span class="btn outline full">Annuler</span></div>
+        </div>
+        <div class="kb">clavier</div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>W5 · Envoi en cours</h3>
+      <p>M2.6 : la zone est en lecture seule, comme les autres champs ; « Envoi en cours… » est dans la barre, juste au-dessus de « Valider », qui est <code>aria-disabled</code> et le décrit. <span class="crit">DS1.12</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+        <div class="fsheet vis" style="height:420px">
+          <div class="sh-h">Modifier l’événement</div>
+          <div class="sh-body"><div class="sh-scroll">
+            <div class="cut">· · · titre, lieu, début, retour, fin · · ·</div>
+            <div class="fld"><span class="flabel">Description (facultatif)</span><span class="ta ro">Rendez-vous à 7 h 00 sur le parking du collège.</span><span class="small-muted">Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.</span></div>
+          </div></div>
+          <div class="sh-bar"><p class="small-muted" style="font-size:14px;line-height:20px">Envoi en cours…</p><span class="btn full aria-off focusring">Valider</span><span class="btn outline full">Annuler</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>W6 · Envoi hors ligne</h3>
+      <p>Rien n’est écrit (tout ou rien). La phrase existante s’affiche dans la barre, au-dessus de « Valider », qui prend le focus ; le texte tapé reste. <span class="crit">DS1.12</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div>
+        <div class="fsheet vis" style="height:420px">
+          <div class="sh-h">Modifier l’événement</div>
+          <div class="sh-body"><div class="sh-scroll">
+            <div class="cut">· · · titre, lieu, début, retour, fin · · ·</div>
+            <div class="fld"><span class="flabel">Description (facultatif)</span><span class="ta">Rendez-vous à 7 h 00 sur le parking du collège.</span><span class="small-muted">Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.</span></div>
+          </div></div>
+          <div class="sh-bar"><p class="alert" role="alert">Action impossible, vérifiez la connexion</p><span class="btn full focusring">Valider</span><span class="btn outline full">Annuler</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 id="lire">Lire</h2>
+  <p class="lead">Dans l’en-tête de l’événement, sous les dates, pour tout le monde : <code>/e/{id}</code>, <code>/e/{id}/admin</code>, et <code>/e/{id}/moi</code> une fois livrée (l’en-tête est le même partout, organizer-view décision 1). Avant la barre de messages, « Vos inscriptions » et les onglets. La Carte reste dans chaque leg, sous ses actions : la description est à l’événement, pas à un leg. Texte de 16 px sur 24 px, comme le lieu et les dates, en <code>white-space: pre-wrap</code> et <code>wrap-anywhere</code> ; pas d’icône ni de titre.</p>
+  <div class="grid">
+    <div class="state">
+      <h3>R1 · Sans description</h3>
+      <p>L’en-tête d’aujourd’hui, inchangé : ni paragraphe vide, ni libellé, ni bouton. Organisateur compris. <span class="crit">DS2.1</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="screen">
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+          <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl></div>
+        <div class="tabs"><span class="on">Aller<small>2 sans voiture</small></span><span>Retour<small>1 sans voiture</small></span></div>
+        <div class="cut">· · · le leg · · ·</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>R2 · Courte, avec un lien</h3>
+      <p>Les retours à la ligne s’affichent. L’URL est un lien souligné, à la couleur du texte, exactement tel qu’il a été tapé. Quatre lignes ou moins : pas de bouton. <span class="crit">DS2.2, DS2.3, DS2.5, DS3.2</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="screen">
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+          <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl>
+          <p class="desc new">Pique-nique tiré du sac.
+Plan d’accès : <a href="#liens" class="lnk" dir="ltr">https://asa-annecy.example/plan</a></p></div>
+        <div class="tabs"><span class="on">Aller<small>2 sans voiture</small></span><span>Retour<small>1 sans voiture</small></span></div>
+        <div class="cut">· · · le leg · · ·</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>R3 · Longue, repliée, à 360 × 780</h3>
+      <p>Au-delà de quatre lignes : quatre lignes, la dernière finie par « … », puis « Afficher toute la description », le bouton <code>outline</code> pleine largeur des listes du panneau. Repliée à chaque chargement. Le bandeau reste au-dessus du pli (C9.2 tient). <span class="crit">DS2.4, DS2.9</span></p>
+      <div class="phone h780"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="viewport"><div class="screen">
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+          <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl>
+          <div class="descblock new"><p class="desc clamp" id="r3-text">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.
+Programme et plan du gymnase : https://asa-annecy.example/tournoi-u11
+Retour vers 18 h 30 au même parking.</p>
+          <span class="btn outline full more2" aria-expanded="false">Afficher toute la description</span></div></div>
+        <div style="border:1px solid var(--app-border);border-radius:14px;padding:4px 12px;min-height:44px;display:flex;align-items:center;justify-content:space-between;font-size:14px;line-height:20px"><span style="display:flex;flex-direction:column"><b>Vos inscriptions</b><span class="small-muted">Léa · Tom</span></span><svg class="ico muted"><use href="#i-down"/></svg></div>
+        <div class="tabs"><span class="on">Aller<small>2 sans voiture</small></span><span>Retour<small>1 sans voiture</small></span></div>
+        <p class="banner"><svg class="ico"><use href="#i-users"/></svg><span>2 sans voiture · il manque 1 place</span></p>
+        <div class="acts2"><span class="btn outline">Ajouter une personne</span><span class="btn outline">Proposer une voiture</span></div>
+        <span class="btn outline" style="justify-content:space-between">Carte <svg class="ico"><use href="#i-down"/></svg></span>
+        <div class="car"><div class="car-h"><b>Voiture de Sophie</b><span class="muted">07:15</span></div><div class="free"><svg class="ico muted"><use href="#i-plus"/></svg>Place libre</div></div>
+      </div><div class="foldline" style="top:779px"><span>pli · 780 px</span></div></div></div>
+    </div>
+
+    <div class="state">
+      <h3>R4 · Dépliée</h3>
+      <p>Le texte entier ; le bouton devient « Réduire la description » et garde le focus. Le lien est un vrai lien. <span class="crit">DS2.6, DS3.2</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="screen">
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+          <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl>
+          <div class="descblock new"><p class="desc">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.
+Programme et plan du gymnase : <a href="#liens" class="lnk" dir="ltr">https://asa-annecy.example/tournoi-u11</a>
+Retour vers 18 h 30 au même parking.</p>
+          <span class="btn outline full focusring" aria-expanded="true">Réduire la description</span></div></div>
+        <div class="tabs"><span class="on">Aller<small>2 sans voiture</small></span><span>Retour<small>1 sans voiture</small></span></div>
+        <div class="cut">· · · le leg · · ·</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>R5 · 1000 caractères sans espace</h3>
+      <p>Le texte se coupe n’importe où (<code>wrap-anywhere</code>) : aucun défilement horizontal. Une URL longue se coupe de même. <span class="crit">DS2.3</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="screen">
+        <div class="hdr"><div class="tp"><p class="ev-h1">WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW</span></p></div>
+          <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl>
+          <div class="descblock new"><p class="desc clamp">WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW</p>
+          <span class="btn outline full">Afficher toute la description</span></div></div>
+        <div class="cut">· · · le reste de l’écran · · ·</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>R6 · Sans JavaScript</h3>
+      <p>Le texte entier, sans bouton ni pli : rien ne pourrait le déplier. Un <code>&lt;noscript&gt;&lt;style&gt;</code> le déplie et cache le bouton, Safari avant 17 compris. Les liens sont des liens. <code>Board.needsJavaScript</code> reste la seule phrase sur JavaScript. <span class="crit">DS2.11</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="screen">
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+          <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl>
+          <p class="desc new">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.
+Programme et plan du gymnase : <a href="#liens" class="lnk" dir="ltr">https://asa-annecy.example/tournoi-u11</a>
+Retour vers 18 h 30 au même parking.</p></div>
+        <div class="tabs"><span class="on">Aller<small>2 sans voiture</small></span><span>Retour<small>1 sans voiture</small></span></div>
+        <p class="small-muted" style="font-size:14px;line-height:20px">S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page.</p>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>R7 · Espace organisateur (organizer-view v3.5)</h3>
+      <p>Le lien « Mes événements », l’espace organisateur (ici replié, O8, avec son résumé par leg), puis le même en-tête, replié de la même façon. « Modifier l’événement » reste dans l’espace organisateur ; la description n’entre ni dans son résumé ni dans les sections des legs. <span class="crit">DS2.2, DS2.8</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div><div class="screen" style="gap:24px">
+        <span style="font-size:14px;line-height:20px;text-decoration:underline;min-height:24px">Mes événements</span>
+        <div class="panel" style="gap:16px"><div class="ptitle"><strong>Espace organisateur <svg class="ico muted"><use href="#i-down"/></svg></strong><span class="btn outline"><svg class="ico"><use href="#i-refresh"/></svg>Actualiser</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div class="sumline"><b>Aller</b><span class="pill">2 sans voiture</span><span>3 places libres</span></div><div class="sumline"><b>Retour</b><span class="pill">1 sans voiture</span><span style="font-weight:600">Il manque 1 place</span></div></div></div>
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+          <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl>
+          <div class="descblock new"><p class="desc clamp">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.
+Programme et plan du gymnase : https://asa-annecy.example/tournoi-u11
+Retour vers 18 h 30 au même parking.</p>
+          <span class="btn outline full">Afficher toute la description</span></div></div>
+        <div class="cut">· · · le tableau · · ·</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>R8 · En anglais</h3>
+      <p>Le texte reste celui de l’organisateur, jamais traduit. Seuls le bouton et les dates changent de langue. <span class="crit">DS2.4</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="screen">
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+          <dl class="dates"><dt>Start</dt><dd>Saturday, 12 December 2026 at 07:30</dd><dt>End</dt><dd>18:00</dd></dl>
+          <div class="descblock new"><p class="desc clamp">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.
+Programme et plan du gymnase : https://asa-annecy.example/tournoi-u11</p>
+          <span class="btn outline full">Show the whole description</span></div></div>
+        <div class="tabs"><span class="on">Outbound<small>2 without a car</small></span><span>Return<small>1 without a car</small></span></div>
+        <div class="cut">· · · dépliée : « Show less » · · ·</div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>R9 · Un lien caché, atteint au clavier</h3>
+      <p>Repliée, le lien, à la septième ligne affichée, est hors de vue. Quand Tab l’atteint, la description se déplie d’elle-même : le focus n’est jamais sur un lien invisible. <span class="crit">DS3.7</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="screen">
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p></div>
+          <div class="descblock new"><p class="desc">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.
+Programme et plan du gymnase : <a href="#liens" class="lnk focusring" dir="ltr">https://asa-annecy.example/tournoi-u11</a>
+Retour vers 18 h 30 au même parking.</p>
+          <span class="btn outline full" aria-expanded="true">Réduire la description</span></div></div>
+        <div class="cut">· · · le reste de l’écran · · ·</div>
+      </div></div>
+    </div>
+  </div>
+
+  <h3>Ce que rend le serveur, et la mesure</h3>
+  <ul class="crits">
+    <li><b>Le serveur</b> rend le texte entier dans le HTML, <b>déjà replié</b> à 4 lignes par CSS (<code>line-clamp</code>). Il rend aussi le bouton quand il devine que le texte dépasse : plus de 4 lignes par <code>\n</code>, ou plus de 140 points de code. 140 points de code tiennent en 4 lignes à 328 px dans une police système de 16 px (environ 40 caractères par ligne).</li>
+    <li><b>Le navigateur</b>, une fois la page hydratée, mesure : le bouton est là si et seulement si le texte replié est coupé (<code>scrollHeight &gt; clientHeight + 1</code>). Déplié, il reste là tant que le texte fait plus de 4 hauteurs de ligne.</li>
+    <li><b>Effet sur la mise en page :</b> aucun décalage quand le serveur a bien deviné, c’est-à-dire pour le cas courant (un texte court, ou franchement long). Le texte ne bouge jamais, puisqu’il est replié dès le serveur. Seul le bouton (44 px, plus 8 px d’écart) peut apparaître ou disparaître une fois, à l’hydratation, quand la devinette s’est trompée (par exemple 120 « W »). Écarté : rendre le texte entier puis le replier, ce qui ferait remonter toute la page de plusieurs centaines de pixels sous les yeux du lecteur.</li>
+    <li><b>Mesurer de nouveau :</b> un <code>ResizeObserver</code> sur le texte (la largeur change à la rotation ou au redimensionnement ; la hauteur d’une ligne change avec la taille du texte ou le zoom), une fois <code>document.fonts.ready</code> résolue, et à chaque changement du texte (une description modifiée arrive par l’état : 6 lignes remplacées par 5 gardent la même hauteur repliée, aucun redimensionnement ne le signalerait). Aucune autre écoute.</li>
+    <li><b>Sans JavaScript :</b> un <code>&lt;noscript&gt;&lt;style&gt;</code> retire le repli et cache le bouton. Pas <code>@media (scripting: none)</code> seul, que Safari ne connaît qu’à partir de la version 17 : un vieil iPhone sans JavaScript recevrait un texte replié qu’il ne pourrait pas ouvrir. Un navigateur que Next.js ne prend pas en charge, JavaScript actif, garde un bouton inerte, comme tous les boutons du tableau : il est hors périmètre.</li>
+  </ul>
+
+  <h3>Sur un ordinateur, 1280 px</h3>
+  <p class="lead">La colonne de l’événement reste à 448 px (<code>max-w-md</code>) : la description y fait 416 px de large et se replie à quatre lignes, comme sur un téléphone. <span class="crit">DS2.10</span></p>
+  <div class="deskwrap"><div class="deskscale" style="height:360px"><div class="desk"><div class="urlbar" style="font-size:16px">fullcar.app/e/k7Qm2xPa</div><div class="inner"><div class="col">
+    <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+      <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl>
+      <div class="descblock new"><p class="desc clamp">Rendez-vous à 7 h 15 sur le parking du collège, départ à 7 h 30.
+Prévoir : gourde, pique-nique, chaussures de salle propres, maillot du club.
+Les matchs commencent à 9 h ; remise des médailles vers 17 h 30.
+Programme et plan du gymnase : https://asa-annecy.example/tournoi-u11
+Retour vers 18 h 30 au même parking.</p>
+      <span class="btn outline full">Afficher toute la description</span></div></div>
+    <div class="tabs"><span class="on">Aller<small>2 sans voiture</small></span><span>Retour<small>1 sans voiture</small></span></div>
+  </div></div></div></div></div>
+
+  <h2 id="liens">Les liens</h2>
+  <div class="prose">
+    <p>Le détail le plus courant d’une description est un lien : le site du club, le plan, un document. Il devient un lien, mais seulement quand <b>ce qu’on lit est exactement l’endroit où il mène</b>. N’importe qui peut créer un événement, et un lien trompeur serait servi par fullcar.app : dans le doute, il reste du texte.</p>
+    <h3>1. Trouver un candidat</h3>
+    <ul>
+      <li><b>Le début :</b> <code>http://</code> ou <code>https://</code>, en majuscules ou en minuscules, au début du texte ou d’une ligne, ou après un caractère qui n’est ni une lettre, ni un chiffre (Unicode), ni l’un de <code>_ - . / @ +</code>. Donc « (https:// », « :https:// », « «https:// » et « &lt;https:// » commencent un candidat ; « xhttps:// » et « a.https:// » non.</li>
+      <li><b>La fin :</b> le premier blanc. Un blanc, c’est une tabulation, <code>\n</code>, ou tout espace de la catégorie Unicode Zs : l’espace, l’espace insécable U+00A0, l’espace fine insécable U+202F, U+2000 à U+200A, U+205F, U+3000.</li>
+      <li><b>La fin retirée :</b> tant que le dernier caractère est l’un de <code>. , ; : ! ? … &gt; " ' » ” ’</code>, ou une <code>)</code> ou un <code>]</code> sans ouvrant dans le candidat, il sort du candidat et redevient du texte. La ponctuation répétée sort donc tout entière (« !!! », « ?! », « ». »).</li>
+    </ul>
+    <h3>2. Le refuser s’il peut tromper</h3>
+    <p>Le candidat entier reste du texte s’il échoue à l’une de ces règles, dans cet ordre :</p>
+    <ul>
+      <li><b>Aucun caractère invisible, bidirectionnel ou de contrôle</b> : aucun caractère de la catégorie Cf, ni U+200B à U+200F, U+2028 à U+202E, U+2060 à U+2064, U+FEFF, ni de la catégorie Cc sauf la tabulation et <code>\n</code>, qui finissent déjà le candidat (U+0000 à U+0008, U+000B à U+001F, U+007F à U+009F, dont U+0085) (DS3.10).</li>
+      <li><b>L’autorité</b>, c’est-à-dire ce qui suit <code>//</code> jusqu’au premier <code>/ \ ? #</code>, <b>ne contient pas de <code>@</code></b> : pas d’identifiant avant l’hôte (DS3.9).</li>
+      <li><b>L’hôte est en ASCII pur</b> : l’autorité s’écrit <code>[A-Za-z0-9.-]+</code>, suivie au plus de <code>:</code> et 1 à 5 chiffres. Aucun de ses labels ne commence par <code>xn--</code>, quelle que soit la casse. Une lettre cyrillique ou grecque dans l’hôte, un IDN ou un punycode restent du texte (DS3.11).</li>
+      <li><b>Le navigateur ouvrira cet hôte-là</b> : <code>new URL(candidat)</code> réussit, et son <code>host</code> est l’autorité tapée, en minuscules. Cela écarte ce que l’analyse d’une URL réécrit sans le montrer : <code>%61</code> dans l’hôte, une adresse IP abrégée (<code>http://0x7f.1</code>), un port par défaut écrit (<code>:443</code>) (DS3.11).</li>
+    </ul>
+    <h3>3. Le lien</h3>
+    <ul>
+      <li><code>&lt;a href="{candidat}" target="_blank" rel="noopener noreferrer nofollow ugc" dir="ltr"&gt;{candidat}&lt;/a&gt;</code>, isolé du texte autour (<code>unicode-bidi: isolate</code>) : un caractère bidirectionnel placé avant ou après lui ne le retourne pas (DS3.12). Ensuite, <code>Contact.newTab</code> en <code>sr-only</code>. Souligné, à la couleur du texte, avec l’anneau de focus de l’application.</li>
+      <li>Le texte du lien est le candidat entier, jamais raccourci ni remplacé par un titre. Pas de Markdown ni de HTML : <code>[ici](https://…)</code> et <code>&lt;b&gt;</code> s’affichent tels quels.</li>
+      <li><b>Aucun aperçu, aucun suivi :</b> ni le serveur ni le navigateur ne demandent l’URL avant un tap (ni image, ni titre, ni favicon). Aucune redirection par notre origine, aucun paramètre ajouté, aucun clic compté. <code>Referrer-Policy: no-referrer</code> s’applique déjà à toute l’application.</li>
+    </ul>
+    <p>Dans le tableau, <code>␣</code> est une espace, <code>⍽</code> une espace insécable, et <code>[U+…]</code> le caractère invisible de ce code. Chaque ligne, L1 à L23, est un cas du test DS3.1.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>tapé</th><th>affiché</th><th>règle</th></tr></thead>
+      <tbody>
+        <tr><td>L1</td><td><code>Infos : https://asa-annecy.example/match.</code></td><td>« Infos : » + lien <code>https://asa-annecy.example/match</code> + « . »</td><td>fin retirée</td></tr>
+        <tr><td>L2</td><td><code>(voir https://fr.wikipedia.org/wiki/Annecy_(ville))</code></td><td>« (voir » + lien <code>…/Annecy_(ville)</code> + « ) »</td><td>parenthèse sans ouvrant</td></tr>
+        <tr><td>L3</td><td><code>Vite !https://asa-annecy.example/plan!!!</code></td><td>« Vite ! » + lien <code>https://asa-annecy.example/plan</code> + « !!! »</td><td>ponctuation répétée</td></tr>
+        <tr><td>L4</td><td><code>Voir https://asa-annecy.example/plan…</code></td><td>« Voir » + lien <code>https://asa-annecy.example/plan</code> + « … »</td><td>points de suspension</td></tr>
+        <tr><td>L5</td><td><code>&lt;https://asa-annecy.example/plan&gt;</code></td><td>« &lt; » + lien <code>https://asa-annecy.example/plan</code> + « &gt; »</td><td>chevrons</td></tr>
+        <tr><td>L6</td><td><code>«⍽https://asa-annecy.example/plan⍽»</code></td><td>« «⍽ » + lien <code>https://asa-annecy.example/plan</code> + « ⍽» »</td><td>insécable = blanc</td></tr>
+        <tr><td>L7</td><td><code>https://asa-annecy.example/plan[U+202F]:</code></td><td>lien <code>https://asa-annecy.example/plan</code> + « [U+202F]: »</td><td>fine insécable = blanc</td></tr>
+        <tr><td>L8</td><td><code>HTTPS://ASA-ANNECY.EXAMPLE</code></td><td>lien <code>HTTPS://ASA-ANNECY.EXAMPLE</code></td><td>casse</td></tr>
+        <tr><td>L9</td><td><code>xhttps://asa-annecy.example</code></td><td>texte</td><td>début</td></tr>
+        <tr><td>L10</td><td><code>www.asa-annecy.example</code></td><td>texte</td><td>pas de schéma</td></tr>
+        <tr><td>L11</td><td><code>javascript:alert(1)</code> · <code>data:text/html,x</code> · <code>mailto:julie@exemple.fr</code> · <code>tel:0612345678</code></td><td>texte</td><td>schéma</td></tr>
+        <tr><td>L12</td><td><code>https://</code> · <code>https://?x</code></td><td>texte</td><td>pas d’hôte</td></tr>
+        <tr><td>L13</td><td><code>[ici](https://asa-annecy.example)</code></td><td>« [ici]( » + lien <code>https://asa-annecy.example</code> + « ) »</td><td>pas de Markdown</td></tr>
+        <tr class="new"><td>L14</td><td><code>https://asa-annecy.example@evil.example/</code></td><td>texte</td><td>identifiant avant <code>@</code> (DS3.9)</td></tr>
+        <tr><td>L15</td><td><code>https://@evil.example/</code> · <code>https://user:mdp@asa-annecy.example/</code></td><td>texte</td><td><code>@</code> dans l’autorité (DS3.9)</td></tr>
+        <tr><td>L16</td><td><code>https://asa-annecy.example/[U+202E]elif.exe</code></td><td>texte</td><td>bidirectionnel (DS3.10)</td></tr>
+        <tr><td>L17</td><td><code>https://asa[U+200B]-annecy.example/</code> · <code>…/plan[U+FEFF]</code> · <code>…/plan[U+2028]x</code></td><td>texte</td><td>invisible, séparateur (DS3.10)</td></tr>
+        <tr class="new"><td>L23</td><td><code>https://asa-annecy.example/plan[U+0085]x</code> · <code>https://asa[U+0007]-annecy.example/</code></td><td>texte</td><td>contrôle Cc (DS3.10)</td></tr>
+        <tr><td>L18</td><td><code>https://аsa-annecy.example/</code> (« а » cyrillique, U+0430)</td><td>texte</td><td>hôte non ASCII (DS3.11)</td></tr>
+        <tr><td>L19</td><td><code>https://xn--sa-annecy-zzz.example/</code> · <code>https://club.XN--abc.example/</code></td><td>texte</td><td>label <code>xn--</code> (DS3.11)</td></tr>
+        <tr><td>L20</td><td><code>https://%61sa-annecy.example/</code> · <code>http://0x7f.1/</code> · <code>https://asa-annecy.example:443/</code></td><td>texte</td><td>hôte réécrit (DS3.11)</td></tr>
+        <tr><td>L21</td><td><code>https://fr.wikipedia.org/wiki/Événement</code></td><td>lien, texte tel que tapé</td><td>chemin non ASCII : permis</td></tr>
+        <tr><td>L22</td><td><code>[U+202E]Voir https://asa-annecy.example/plan</code></td><td>lien <code>https://asa-annecy.example/plan</code>, lu de gauche à droite</td><td>lien isolé (DS3.12)</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <h2 id="jour30">Jour 30</h2>
+  <p class="lead">Une description peut nommer quelqu’un (« appelez Julie au 06… »). Elle est donc effacée avec les données des participants, dans la même transaction que les Persons, les Rides et les Arrêts (Q1 = a). L’historique de l’organisateur garde le titre, le lieu et les dates, rien de plus (organizer-account, OA8.1).</p>
+  <div class="grid">
+    <div class="state">
+      <h3>J1 · /e/{id} anonymisé</h3>
+      <p>La page d’OA8.3, inchangée : ni lieu, ni prénom, ni description. <span class="crit">DS4.3</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa</div><div class="screen">
+        <div class="ended"><p class="ev-h1">Événement terminé</p><p style="margin:0"><b>Tournoi U11 à Annecy</b><br><span class="muted">samedi 12 décembre 2026 à 07:30</span></p><p class="muted" style="margin:0;font-size:14px;line-height:20px">Les inscriptions ont été effacées 30 jours après l’événement.</p><span class="btn full">Créer un événement</span></div>
+      </div></div>
+    </div>
+    <div class="state">
+      <h3>J2 · /e/{id}/admin anonymisé</h3>
+      <p>OA8.4 : titre, lieu, Début et Fin, l’avis. La phrase de l’avis nomme la description parmi ce qui est effacé. <span class="crit">DS4.3</span></p>
+      <div class="phone"><div class="urlbar">fullcar.app/e/k7Qm2xPa/admin</div><div class="screen">
+        <span class="muted" style="font-size:14px;text-decoration:underline">Mes événements</span>
+        <div class="hdr"><div class="tp"><p class="ev-h1">Tournoi U11 à Annecy</p><p class="place"><svg class="ico"><use href="#i-pin"/></svg><span>Gymnase des Fins, Annecy</span></p></div>
+          <dl class="dates"><dt>Début</dt><dd>samedi 12 décembre 2026 à 07:30</dd><dt>Fin</dt><dd>18:00</dd></dl></div>
+        <div class="notice new"><svg class="ico"><use href="#i-info"/></svg><b>Inscriptions effacées</b><span>Le 11 janvier 2027, 30 jours après l’événement, la description, les prénoms, les numéros, les voitures et les inscriptions ont été effacés. Il reste le titre, le lieu et les dates.</span></div>
+      </div></div>
+    </div>
+  </div>
+
+  <h2 id="jamais">Où elle ne va jamais</h2>
+  <div class="prose">
+    <p>La description est un texte saisi : elle n’apparaît que dans le corps de la page de l’événement. Le tableau dit où elle ne va pas, et ce qui le prouve.</p>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>lieu</th><th>règle</th><th>preuve</th></tr></thead>
+    <tbody>
+      <tr><td>E-mails</td><td>Aucun des quatre e-mails (confirmation, connexion, demande sans compte, avertissement) ; ils ne portent déjà aucun texte saisi.</td><td>DS5.1</td></tr>
+      <tr><td><code>&lt;head&gt;</code> : titre du document, métadonnées</td><td>Le titre du document reste celui de l’événement. Aucune balise de la description.</td><td>DS5.2</td></tr>
+      <tr><td>Métadonnées d’aperçu</td><td>Aucune <code>description</code>, aucune balise <code>og:</code> ni <code>twitter:</code> : les métadonnées de <code>/e/…</code> restent celles de <code>main</code>.</td><td>DS5.3</td></tr>
+      <tr><td>Moteurs de recherche</td><td><code>noindex, nofollow</code> inchangé (en-tête et méta), aucun événement dans le sitemap, aucune donnée structurée.</td><td>DS5.4</td></tr>
+      <tr><td>Sentry, journaux du serveur</td><td>Jamais dans un message, une ligne de journal ou un rapport : une erreur de base part en <code>database error (SQLSTATE x)</code>.</td><td>DS5.5</td></tr>
+      <tr><td>Vercel Web Analytics</td><td>Inchangé : l’origine et la route seulement.</td><td>DS5.6</td></tr>
+      <tr><td>URL</td><td>Jamais dans un chemin ni une query string : elle part dans le corps de la server action.</td><td>DS5.7</td></tr>
+      <tr><td>« Mes événements », historique</td><td>Ni avant ni après le jour 30 : une ligne garde le titre, le début et le lieu.</td><td>DS4.3</td></tr>
+    </tbody>
+  </table></div>
+  <div class="risk"><b>Risque accepté</b> (décision du coordinateur, #654) : une messagerie qui fabrique un aperçu sans métadonnées de description peut prendre le début du corps de la page, donc de la description. Cet aperçu reste dans la discussion après le jour 30, hors de notre portée. Le titre de l’événement est déjà dans ces aperçus aujourd’hui, avec la même durée, et seuls ceux qui ont le lien le voient. Une phrase fixe dans <code>og:description</code> a été écartée : elle n’était pas demandée, et chaque lien d’événement, même terminé, aurait porté une phrase dans la langue du robot qui lit l’aperçu.</div>
+  <div class="grid">
+    <div class="state">
+      <h3>P1 · L’aperçu du lien à partager</h3>
+      <p>Schéma : ce que montre une messagerie qui lit les métadonnées. Le titre de l’événement, comme aujourd’hui ; rien d’autre de Fullcar. <span class="crit">DS5.2, DS5.3</span></p>
+      <div class="chat"><div class="bubble"><div class="pv"><b>Tournoi U11 à Annecy</b><i>fullcar.app</i></div><a href="#jamais">https://fullcar.app/e/k7Qm2xPa</a></div></div>
+    </div>
+  </div>
+
+  <h2 id="etats">États</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>état</th><th>où</th><th>maquette</th><th>critères</th></tr></thead>
+    <tbody>
+      <tr><td>Rien encore : pas de description</td><td>en-tête, création</td><td>R1, W1</td><td>DS1.2, DS2.1</td></tr>
+      <tr><td>Une ligne, quelques lignes, un lien</td><td>en-tête</td><td>R2</td><td>DS2.3, DS2.5, DS3.2</td></tr>
+      <tr><td>Exactement quatre lignes</td><td>en-tête</td><td>— (R2 sans bouton)</td><td>DS2.5</td></tr>
+      <tr><td>Trop long : repliée, dépliée</td><td>en-tête</td><td>R3, R4</td><td>DS2.4, DS2.6, DS2.9</td></tr>
+      <tr><td>Le serveur a mal deviné ; rotation ; texte agrandi</td><td>en-tête</td><td>— (« Ce que rend le serveur »)</td><td>DS2.13</td></tr>
+      <tr><td>1000 caractères sans espace, URL longue</td><td>en-tête</td><td>R5</td><td>DS2.3, DS3.6</td></tr>
+      <tr><td>Seulement des espaces ou des retours</td><td>création, feuille</td><td>— (= vide)</td><td>DS1.5</td></tr>
+      <tr><td>Plus de trois retours de suite, blancs en fin de ligne</td><td>enregistrement</td><td>—</td><td>DS1.4</td></tr>
+      <tr><td>1000 caractères en saisie, puis au-delà</td><td>création</td><td>W3</td><td>DS1.6, DS1.7, DS1.14</td></tr>
+      <tr><td>1000 caractères dans la feuille, clavier fermé et ouvert, iPhone SE clavier ouvert</td><td>feuille</td><td>W4, W4b, W4c</td><td>DS1.14</td></tr>
+      <tr><td>Caractère interdit (NUL), valeur non textuelle</td><td>serveur</td><td>—</td><td>DS1.8</td></tr>
+      <tr><td>Modifier, vider, rien changé</td><td>feuille</td><td>W4</td><td>DS1.9, DS1.10</td></tr>
+      <tr><td>Modifiée depuis un autre appareil</td><td>feuille</td><td>— (M6.1)</td><td>DS1.11</td></tr>
+      <tr><td>Envoi en cours</td><td>feuille</td><td>W5</td><td>DS1.12</td></tr>
+      <tr><td>Hors ligne, échec, événement disparu</td><td>feuille, création</td><td>W6</td><td>DS1.12</td></tr>
+      <tr><td>Pas le droit (participant, requête forgée)</td><td>serveur</td><td>—</td><td>DS1.13</td></tr>
+      <tr><td>Mise à jour pendant qu’une page est ouverte</td><td>en-tête</td><td>—</td><td>DS2.7, DS2.8</td></tr>
+      <tr><td>Sans JavaScript, Safari avant 17 compris</td><td>en-tête</td><td>R6</td><td>DS2.11</td></tr>
+      <tr><td>Espace organisateur</td><td>/admin</td><td>R7</td><td>DS2.2</td></tr>
+      <tr><td>Anglais</td><td>en-tête</td><td>R8</td><td>DS2.4</td></tr>
+      <tr><td>Lien caché atteint au clavier</td><td>en-tête</td><td>R9</td><td>DS3.7</td></tr>
+      <tr><td>Lien trompeur : identifiant, invisible ou bidirectionnel, hôte non ASCII ou réécrit</td><td>en-tête</td><td>— (tableau des liens, L14 à L22)</td><td>DS3.9–DS3.12</td></tr>
+      <tr><td>1280 px</td><td>en-tête</td><td>ordinateur</td><td>DS2.10</td></tr>
+      <tr><td>Jour 29, jour 30, événement supprimé, compte supprimé</td><td>purge</td><td>J1, J2</td><td>DS4.1–DS4.5</td></tr>
+      <tr><td>Introuvable</td><td>/e/{id}</td><td>— (inchangé)</td><td>DS2.12</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 id="mots">Les mots</h2>
+  <p class="lead">Le ton et les formes de l’interface d’aujourd’hui (<code>messages/fr.json</code>, <code>en.json</code>) : « (facultatif) » comme la note d’une voiture ; « Visible par toutes les personnes qui ont le lien » comme le lieu d’une voiture ; « Afficher… / Réduire… » comme les listes du panneau. Aucune autre clé.</p>
+  <div class="table-wrap"><table class="words">
+    <thead><tr><th>clé</th><th>fr</th><th>en</th><th>où</th></tr></thead>
+    <tbody>
+      <tr><td><code>CreateEvent.description</code></td><td>Description (facultatif)</td><td>Description (optional)</td><td>libellé, création et feuille</td></tr>
+      <tr><td><code>CreateEvent.descriptionHint</code></td><td>Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.</td><td>What the group should know. Visible to everyone who has the link, erased 30 days after the event.</td><td>sous le champ, <code>aria-describedby</code></td></tr>
+      <tr><td><code>CreateEvent.descriptionCount</code></td><td>{count} caractères sur {max}</td><td>{count} of {max} characters</td><td>à partir de 900, sous la phrase</td></tr>
+      <tr><td><code>CreateEvent.errors.tooLong</code> (inchangée)</td><td>1000 caractères au maximum.</td><td>1000 characters at most.</td><td>au-delà de 1000</td></tr>
+      <tr><td><code>CreateEvent.errors.invalidText</code> (inchangée)</td><td>Ce texte contient un caractère non autorisé.</td><td>This text contains a character that is not allowed.</td><td>NUL</td></tr>
+      <tr><td><code>Event.description.more</code></td><td>Afficher toute la description</td><td>Show the whole description</td><td>bouton, repliée</td></tr>
+      <tr><td><code>Event.description.less</code></td><td>Réduire la description</td><td>Show less</td><td>bouton, dépliée</td></tr>
+      <tr><td><code>Contact.newTab</code> (inchangée)</td><td>(s’ouvre dans un nouvel onglet)</td><td>(opens in a new tab)</td><td><code>sr-only</code> après chaque lien</td></tr>
+      <tr><td><code>Anonymized.body</code> (modifiée, organizer-account)</td><td>Le {date}, 30 jours après l’événement, la description, les prénoms, les numéros, les voitures et les inscriptions ont été effacés. Il reste le titre, le lieu et les dates.</td><td>On {date}, 30 days after the event, the description, first names, phone numbers, cars and sign-ups were erased. The title, place and dates remain.</td><td>OA8.4</td></tr>
+      <tr><td><code>Actions.offline</code>, <code>Actions.failed</code>, <code>EditEvent.sending</code>, <code>EditEvent.*</code> (inchangées)</td><td>Action impossible, vérifiez la connexion · Envoi en cours… · …</td><td>Action failed, check your connection · … </td><td>barre d’actions de la feuille, création</td></tr>
+    </tbody>
+  </table></div>
+  <p class="lead">Retirée en v2 : <code>Event.metaDescription</code>.</p>
+
+  <h2 id="focus">Focus et sans JavaScript</h2>
+  <ul class="crits">
+    <li><b>Le bouton</b> est le <code>Button</code> <code>outline</code>, <code>h-11 w-full</code>, des listes du panneau (<code>organiser-lists.tsx</code>), à 8 px sous le texte, sans chevron : <code>type="button"</code>, <code>aria-expanded</code>, <code>aria-controls</code> vers le texte. Son libellé dit l’action. Il garde le focus après chaque tap, Entrée ou Espace. Safari ne donne pas le focus au bouton qu’on touche : le code le lui donne, comme « Réduire la liste ». Après « Réduire la description », s’il était sorti de l’écran, il revient en vue (<code>scrollIntoView({ block: "nearest" })</code>).</li>
+    <li><b>Un lien caché par le pli</b> qui reçoit le focus déplie la description (R9). Un lecteur d’écran lit tout le texte, plié ou non : le pli est visuel.</li>
+    <li><b>Un bouton qui disparaît avec le focus</b> (la description, modifiée, tient en quatre lignes ; retirée ; ou la mesure qui change à la rotation) : le focus va sur le h1, <code>#event-title</code>, comme les autres retraits de l’écran.</li>
+    <li><b>Ordre au clavier sur <code>/admin</code></b> (organizer-view v3.5) : « Mes événements », l’espace organisateur et tout son contenu (« Personnes inscrites » comprise, une fois livrée), puis l’en-tête : les liens de la description, son bouton, puis « Vos inscriptions » et les onglets. Les règles de focus d’organizer-view (retrait d’une liste, d’une section, du Retour) ne visent que le panneau : aucune n’envoie le focus dans l’en-tête, et la description n’en ajoute aucune au panneau.</li>
+    <li><b>Création et feuille :</b> une description refusée est un champ en erreur comme les autres ; le premier champ en erreur prend le focus, dans l’ordre des champs (la description vient après la fin). Dans la feuille, il est mis en vue entre l’en-tête et la barre (v4.6, règle 5).</li>
+    <li><b>Sans JavaScript :</b> le texte entier, sans pli ni bouton, par un <code>&lt;noscript&gt;&lt;style&gt;</code> ; aucun mot de plus. La création reste impossible sans JavaScript (C1.5, inchangé).</li>
+    <li><b>Aucun mouvement :</b> déplier et replier ne s’animent pas.</li>
+  </ul>
+
+  <h2 id="criteres">Critères d’acceptation</h2>
+  <p class="lead">Chacun se prouve par un test : Vitest pour le domaine et les actions, Playwright pour l’écran, à 360 × 780 sauf mention. « Le marqueur » est un mot distinctif amorcé dans la description, <code>Zorglub4729</code>. Changés en v2 : DS1.2, DS1.4, DS1.7, DS1.12, DS2.2, DS2.4, DS2.6, DS2.11, DS3.1, DS3.2, DS3.3, DS4.3, DS5.2, DS5.3. Nouveaux : DS1.14, DS2.13, DS3.9 à DS3.12. Changés en v3 : DS1.14, DS2.8, DS2.13, DS3.1, DS3.10.</p>
+
+  <h3>Écrire</h3>
+  <ul class="crits">
+    <li><b>DS1.1</b> <code>/nouveau</code> a une zone de texte nommée « Description (facultatif) », vide, placée après « Heure de fin » (après la case « Retour » quand elle est décochée) et avant « Options », décrite par <code>CreateEvent.descriptionHint</code> (<code>aria-describedby</code>).</li>
+    <li><b>DS1.2</b> Le test du chemin le plus court en vigueur sur <code>main</code> au moment du merge passe sans changement, champ présent et non touché. Tant que #581 n’est pas livrée, c’est A2.2 de #232 (7 actions depuis <code>/</code>, C1.4 amendé). Une fois OA1.2 et OA1.3 livrées, ce sont elles (8 actions sans session, 7 avec). Dans les deux cas, en moins de 30 s. L’événement créé n’a pas de description (<code>null</code> en base), et l’en-tête de <code>/e/{id}</code> n’a rien de plus qu’aujourd’hui.</li>
+    <li><b>DS1.3</b> Créé avec « Rendez-vous 7 h 15.⏎Prévoir un pique-nique. », <code>/e/{id}</code> montre deux lignes, la seconde commençant par « Prévoir » (<code>innerText</code> avec <code>\n</code>).</li>
+    <li><b>DS1.4</b> L’enregistrement normalise, par une seule fonction du domaine, sûre dans le navigateur (Vitest). Il rogne le texte au début et à la fin. <code>\r\n</code> et <code>\r</code> deviennent <code>\n</code>. Les blancs (tabulation, catégorie Zs) en fin de chaque ligne sont retirés. Trois retours de suite ou plus deviennent deux : « a\n\n\n\nb » → « a\n\nb », « a␣␣\n␣\n\n\nb » → « a\n\nb ». Les espaces et tabulations à l’intérieur d’une ligne restent, et s’affichent tels quels (<code>pre-wrap</code>, <code>tab-size: 4</code>).</li>
+    <li><b>DS1.5</b> Un texte sans caractère visible (espaces, retours, caractères invisibles, la règle de <code>text()</code>) n’est pas une description : <code>null</code>, sans erreur.</li>
+    <li><b>DS1.6</b> La longueur se compte en points de code après normalisation : 1000 passe ; 1001 affiche « 1000 caractères au maximum. » sous le champ. Rien n’est créé ni enregistré, tout le texte reste, et le focus va sur le champ s’il est le premier en erreur. Un emoji compte pour un. Le serveur applique la même règle (Vitest sur l’action, création et modification).</li>
+    <li><b>DS1.7</b> Le compteur montre la longueur que compterait le serveur : la même fonction de DS1.4, sur la valeur du champ. En dessous de 900, pas de compteur. À partir de 900, « {count} caractères sur 1000 » sous la phrase, dans <code>aria-describedby</code>, sans région vivante ; au-delà de 1000, en couleur d’erreur. Exemple : 899 « a », quatre retours, « b », puis trois espaces finales donnent « 902 caractères sur 1000 ». La zone n’a pas de <code>maxlength</code> : un collage de 1200 caractères reste entier.</li>
+    <li><b>DS1.8</b> Un caractère NUL donne <code>CreateEvent.errors.invalidText</code> ; une valeur qui n’est pas une chaîne (requête forgée) est refusée sans exception (Vitest). Rien n’est écrit.</li>
+    <li><b>DS1.9</b> « Modifier l’événement » montre le même champ, dernier des champs du corps, prérempli avec le texte enregistré, retours à la ligne compris.</li>
+    <li><b>DS1.10</b> La description compte dans « un champ est changé » (M2.5). Rien changé : « Valider » ferme sans requête. Remise à sa valeur chargée : pas changée. Vidée : l’enregistrement retire la description, et l’en-tête de <code>/admin</code> n’en a plus aussitôt.</li>
+    <li><b>DS1.11</b> Modifications simultanées (M6.1, M6.2) : la description fait partie de <code>before</code>. Changée seulement sur un autre appareil, la réponse est <code>changed</code> ; un champ non changé prend la valeur enregistrée, un champ changé garde ce qui a été tapé.</li>
+    <li><b>DS1.12</b> Pendant l’envoi, la zone est en lecture seule (M2.6), et « Envoi en cours… » est dans la barre d’actions, au-dessus de « Valider » (W5). Hors ligne ou en échec, la phrase existante au-dessus de « Valider » (ou de « Créer »), le texte tapé reste, et rien n’est écrit (W6). L’événement disparu : M8.3, inchangé.</li>
+    <li><b>DS1.13</b> Seul l’organisateur écrit la description : <code>updateEvent</code> sans droits la refuse comme les autres champs (Vitest). Aucune feuille de participant n’a de champ « Description ».</li>
+    <li><b>DS1.14</b> La zone grandit avec son texte, puis défile à l’intérieur (<code>overflow-y: auto</code>). <b>Sa hauteur maximale est le plus petit de deux nombres.</b>
+      <ul>
+        <li><b>6 lignes</b> : 6 fois la hauteur de ligne de la zone, plus sa marge intérieure (8 px en haut et en bas) et sa bordure. Cela fait 162 px avec les lignes de 24 px (<code>text-base</code>, sous 768 px de large), et 138 px avec les lignes de 20 px (<code>md:text-sm</code>, à partir de 768 px).</li>
+        <li><b>Dans une feuille, la hauteur du corps moins 16 px</b> : 8 px de chaque côté, règle 5 d’event-board v4.6. Elle est relue avec la hauteur visible (<code>visualViewport</code>, règle 4), à chacun de ses <code>resize</code>.</li>
+      </ul>
+      Sa hauteur minimale, 64 px, cède à ce plafond quand il est plus petit. Sur <code>/nouveau</code>, qui n’est pas une feuille, seules les 6 lignes valent. Sous 240 px visibles, la règle 8 de v4.6 fait défiler le titre et la barre avec le corps : seules les 6 lignes valent aussi. Ni la zone, ni la ligne du curseur ne passent jamais sous la barre : aucune exception à la règle 5. Playwright, avec 1000 caractères, le curseur à la fin du texte :
+      <ul>
+        <li>sur <code>/nouveau</code> à 360 × 780 : 162 px ; à 1024 × 768 : 138 px ;</li>
+        <li>dans la feuille, à 360 × 640 et à 360 × 369 (la zone visible clavier ouvert de #650) : 162 px. La zone a le focus, et elle est entière entre le titre et la barre, à 8 px au moins de chacun ;</li>
+        <li><b>dans la feuille, à 360 × 270</b> (un iPhone SE clavier ouvert, règle 8 de v4.6) : la hauteur de la zone est celle du corps moins 16 px, à 1 px près. Son haut est à 8 px au moins sous le titre, son bas à 8 px au moins au-dessus de la barre. Elle est défilée jusqu’au bout (<code>scrollTop + clientHeight = scrollHeight</code>) : la ligne du curseur est dans la zone, donc au-dessus de « Valider » ;</li>
+        <li>le titre et la barre restent en place dans ces trois cas (event-board v4.6).</li>
+      </ul>
+      Dans un navigateur sans <code>field-sizing</code>, la zone garde sa hauteur minimale, sous le même plafond, et défile, comme la note d’une voiture.</li>
+  </ul>
+
+  <h3>Lire</h3>
+  <ul class="crits">
+    <li><b>DS2.1</b> Sans description, le <code>&lt;header&gt;</code> de l’événement a exactement le contenu d’aujourd’hui : titre, lieu, Début, Fin. Aucun élément vide, aucun bouton.</li>
+    <li><b>DS2.2</b> Avec une description, son texte est dans le <code>&lt;header&gt;</code>, après la liste des dates, avant la barre de messages et « Vos inscriptions », sur <code>/e/{id}</code> et <code>/e/{id}/admin</code>, et sur <code>/e/{id}/moi</code> une fois cette page livrée. Il n’est ni dans un onglet, ni dans la Carte, ni dans l’espace organisateur.</li>
+    <li><b>DS2.3</b> Chaque <code>\n</code> commence une ligne, une ligne vide s’affiche vide, et rien n’est interprété (« **gras** » et « &lt;b&gt;x&lt;/b&gt; » s’affichent tels quels). Une description de 1000 « W » sans espace, avec un titre et un lieu de 30 « W » : aucun défilement horizontal (<code>horizontalOverflow</code> = 0), repliée comme dépliée.</li>
+    <li><b>DS2.4</b> Une description de six lignes courtes (« Ligne 1 » à « Ligne 6 ») : le texte fait 4 hauteurs de ligne (96 px), son <code>scrollHeight</code> est plus grand, et le bouton « Afficher toute la description » (EN « Show the whole description ») est là, 8 px sous le texte, pleine largeur, 44 px, <code>aria-expanded="false"</code>, <code>aria-controls</code> vers le texte. Le HTML du serveur contient déjà ce texte replié et ce bouton. Repliée à chaque chargement.</li>
+    <li><b>DS2.5</b> Quatre lignes courtes exactement : tout est affiché, pas de bouton, ni dans le HTML du serveur ni après l’hydratation.</li>
+    <li><b>DS2.6</b> Un tap sur le bouton : le texte entier (hauteur = <code>scrollHeight</code>), le libellé « Réduire la description » (EN « Show less »), <code>aria-expanded="true"</code>, focus sur le bouton (WebKit compris). Un second tap : 4 lignes, focus sur le bouton, bouton dans la fenêtre.</li>
+    <li><b>DS2.7</b> L’état déplié tient tant que la page est ouverte, à travers les actions et les mises à jour de l’état ; il ne s’écrit nulle part (aucune clé ajoutée au <code>localStorage</code> ni au <code>sessionStorage</code>) ; un rechargement replie.</li>
+    <li><b>DS2.8</b> L’état qu’une action ou une lecture rend porte la description. Après un enregistrement de l’organisateur, <code>/admin</code> montre la nouvelle aussitôt, et une page <code>/e/{id}</code> ouverte la montre au rechargement ou à sa prochaine action. La mesure du pli est refaite à chaque changement du texte : devenue assez courte, la description perd son bouton ; s’il avait le focus, le focus va sur <code>#event-title</code>.</li>
+    <li><b>DS2.9</b> C9.2 tient. Titre et lieu de 30 caractères, description de 1000 caractères en mots, une personne sans voiture à l’aller, à 360 × 780 : le bandeau de l’aller est entièrement dans la fenêtre au chargement. Le même avec trois personnes sur l’appareil et « Vos inscriptions » dépliée.</li>
+    <li><b>DS2.10</b> À 1280 px, le texte fait au plus 416 px de large et se replie à 4 lignes.</li>
+    <li><b>DS2.11</b> Sans JavaScript (<code>javaScriptEnabled: false</code>), le texte entier est visible (hauteur = <code>scrollHeight</code>), le bouton n’est pas visible, et les liens ont leur <code>href</code>. Le dépli vient d’un <code>&lt;noscript&gt;</code> dans le HTML de la page, pas d’une requête média <code>scripting</code> (Vitest ou e2e : le HTML contient ce <code>&lt;noscript&gt;</code>).</li>
+    <li><b>DS2.12</b> « Événement introuvable », un événement anonymisé (OA8.3, OA8.4) et « Mes événements » ne montrent aucune description, même amorcée avant le jour 30.</li>
+    <li><b>DS2.13</b> La mesure suit la page. Une description qui tient en 4 lignes à 768 px de large mais pas à 360 : passer la fenêtre de 768 à 360 px fait apparaître le bouton, et l’inverse le retire. Passer la taille du texte de la page à 125 % refait la mesure de même. Un état qui remplace une description de 6 lignes courtes par une de 4, sans redimensionnement, retire le bouton ; l’inverse le fait apparaître. Le serveur rend le bouton si et seulement si la description a plus de 4 lignes par <code>\n</code> ou plus de 140 points de code (Vitest sur la fonction qui devine).</li>
+  </ul>
+
+  <h3>Les liens</h3>
+  <ul class="crits">
+    <li><b>DS3.1</b> Vitest sur la fonction pure qui découpe le texte : chaque ligne L1 à L23 du tableau de « Les liens » donne exactement les morceaux indiqués (texte, lien, texte). Elle suit, dans l’ordre, le début, la fin au premier blanc (catégorie Zs comprise), la fin retirée (répétée), puis les règles de refus.</li>
+    <li><b>DS3.2</b> Un lien a un <code>href</code> égal au candidat, <code>target="_blank"</code>, un <code>rel</code> qui contient <code>noopener</code>, <code>noreferrer</code>, <code>nofollow</code> et <code>ugc</code>, <code>dir="ltr"</code> et le style calculé <code>unicode-bidi: isolate</code>. Son texte visible est égal au candidat, et son nom accessible finit par « (s’ouvre dans un nouvel onglet) ».</li>
+    <li><b>DS3.3</b> Aucune requête avant un tap. Côté navigateur (Playwright) : au chargement de <code>/e/{id}</code> avec <code>https://lien-test.example/x</code> dans la description, et jusqu’au tap, aucune requête vers <code>lien-test.example</code>. Côté serveur (Vitest) : <code>fetch</code> est espionné pendant la création, la modification et la lecture de l’état de cet événement (<code>readEventState</code>, les métadonnées), et n’est jamais appelé avec cet hôte.</li>
+    <li><b>DS3.4</b> Après le tap : un nouvel onglet, dont l’URL est exactement le <code>href</code> (rien d’ajouté, aucune redirection par notre origine), <code>window.opener</code> vaut <code>null</code> et <code>document.referrer</code> est vide.</li>
+    <li><b>DS3.5</b> Aucun aperçu : la page n’a ni image, ni titre, ni favicon de la page liée.</li>
+    <li><b>DS3.6</b> Au clavier, un lien montre l’anneau de focus de l’application ; une URL de 300 caractères se coupe dans la colonne, sans défilement horizontal.</li>
+    <li><b>DS3.7</b> Repliée, avec un lien hors des 4 lignes visibles : la touche Tab qui l’atteint déplie la description ; le lien a le focus et est dans la fenêtre ; le bouton dit « Réduire la description ».</li>
+    <li><b>DS3.8</b> <code>javascript:alert(1)</code>, <code>data:text/html,x</code>, <code>mailto:</code>, <code>tel:</code> et <code>www.</code> ne donnent aucun <code>&lt;a&gt;</code> dans la description (Playwright, L10 et L11).</li>
+    <li><b>DS3.9</b> Une URL dont l’autorité contient <code>@</code> ne donne aucun <code>&lt;a&gt;</code> : L14, L15 (Vitest, et Playwright pour L14 : l’en-tête ne contient aucun lien vers <code>evil.example</code>).</li>
+    <li><b>DS3.10</b> Une URL qui contient un caractère de la catégorie Cf, ou de U+200B à U+200F, U+2028 à U+202E, U+2060 à U+2064, ou U+FEFF, ou un caractère de la catégorie Cc autre que la tabulation et <code>\n</code>, ne donne aucun <code>&lt;a&gt;</code> : L16, L17, L23. Chaque code de ces plages est essayé au milieu de l’hôte et à la fin du chemin, U+0085 compris (Vitest).</li>
+    <li><b>DS3.11</b> Une URL ne donne aucun <code>&lt;a&gt;</code> si son hôte n’est pas en ASCII pur, si un label commence par <code>xn--</code> (toute casse), ou si le <code>host</code> de <code>new URL()</code> n’est pas l’autorité tapée en minuscules : L18, L19, L20. Un chemin non ASCII reste permis : L21 (Vitest).</li>
+    <li><b>DS3.12</b> Un caractère bidirectionnel hors de l’URL ne la retourne pas : pour L22, le lien est rendu, et sa boîte de texte se lit de gauche à droite. Playwright : le premier caractère, « h », est à gauche du dernier, « n ».</li>
+  </ul>
+
+  <h3>Jour 30</h3>
+  <ul class="crits">
+    <li><b>DS4.1</b> À l’anonymisation (OA8.1), la description passe à <code>null</code> dans la même transaction que les Persons, Placements, Rides et Arrêts (Vitest : le marqueur, amorcé dans la description, n’apparaît plus dans aucune table).</li>
+    <li><b>DS4.2</b> Au jour 29, la description est intacte. Une seconde exécution ne change rien. Une exécution interrompue laisse l’événement soit intact, description comprise, soit anonymisé en entier (OA8.2).</li>
+    <li><b>DS4.3</b> Anonymisé : <code>/e/{id}</code>, <code>/e/{id}/admin</code> et la ligne de « Mes événements » ne contiennent pas le marqueur, ni <code>/e/{id}/moi</code> une fois livrée. L’avis de <code>/admin</code> dit <code>Anonymized.body</code> modifiée.</li>
+    <li><b>DS4.4</b> Un événement supprimé en entier (en attente au jour 30, ou laissé par un compte supprimé) ne laisse aucune ligne qui porte le marqueur.</li>
+    <li><b>DS4.5</b> Compte supprimé, événement pas encore anonymisé : la description reste lisible sur <code>/e/{id}</code> jusqu’au jour 30, et personne ne peut la modifier (« Cet événement n’a plus d’organisateur »).</li>
+  </ul>
+
+  <h3>Où elle ne va jamais</h3>
+  <ul class="crits">
+    <li><b>DS5.1</b> Création sans session avec le marqueur dans la description : l’e-mail de confirmation (faux Brevo du slot), sujet, texte et HTML, ne le contient pas. Aucun modèle d’e-mail ne lit la description (Vitest sur <code>src/email/messages.ts</code> : leurs paramètres n’ont pas de description).</li>
+    <li><b>DS5.2</b> Le <code>&lt;head&gt;</code> de <code>/e/{id}</code> et <code>/e/{id}/admin</code> ne contient pas le marqueur, ni celui de <code>/e/{id}/moi</code> une fois livrée ; le titre du document reste le titre de l’événement.</li>
+    <li><b>DS5.3</b> Ces pages n’ont ni <code>&lt;meta name="description"&gt;</code>, ni aucune balise <code>og:</code> ou <code>twitter:</code>, avec ou sans description : leurs métadonnées sont celles de <code>main</code> (le titre et <code>robots</code>).</li>
+    <li><b>DS5.4</b> <code>X-Robots-Tag: noindex, nofollow</code> et la méta <code>robots</code> restent ; <code>/sitemap.xml</code> ne contient aucun événement ; aucune donnée structurée (<code>application/ld+json</code>) sur ces pages.</li>
+    <li><b>DS5.5</b> Une panne de base forcée pendant la création et pendant la modification, avec le marqueur : aucune ligne de journal et aucun message d’erreur levé ne le contient (Vitest, comme <code>databaseFailure</code>). Un rapport Sentry construit par <code>scrub.ts</code> à partir de cette erreur non plus (<code>pipeline.test.ts</code>).</li>
+    <li><b>DS5.6</b> Vercel Web Analytics : inchangé (les tests d’<code>analytics.ts</code> passent).</li>
+    <li><b>DS5.7</b> Pendant la création et la modification, aucune URL de requête du navigateur ne contient le marqueur (Playwright).</li>
+  </ul>
+
+  <h2 id="decisions">Décisions</h2>
+  <ol class="decisions">
+    <li>Decision : une page à part, <code>event-description</code>, plutôt qu’une révision d’<code>event-board</code>. — Reason : la fonctionnalité touche quatre maquettes, dont plusieurs en révision par d’autres ; une page par fonctionnalité, comme <code>remove-person</code>.</li>
+    <li>Decision : le mot est « Description » (<code>description</code> en base et dans le code), jamais « note ». — Reason : « note » est le mot du Ride (glossaire) ; deux noms pour deux choses. Le glossaire gagne une ligne.</li>
+    <li>Decision : un champ facultatif à la création et dans « Modifier l’événement », par le composant partagé <code>EventFormFields</code>, après la fin et avant les options. — Reason : Q2 = (a), décision du coordinateur. Le chemin le plus court ne bouge pas, et l’organisateur découvre le champ avant de partager le lien.</li>
+    <li>Decision : 1000 points de code, comptés après normalisation. — Reason : un programme, une liste de matériel et deux liens tiennent en 600 ; au-delà, c’est un document, qui mérite un lien. Le pli rend la longueur sans effet sur l’écran.</li>
+    <li>Decision : <code>white-space: pre-wrap</code>, blancs de fin de ligne retirés, une ligne vide au plus entre deux paragraphes. — Reason : ce qu’on voit dans le champ est ce qu’on lit ; les listes du type « Prévoir : … » sont le cas courant ; mille retours feraient une description dépliée de 24 000 px.</li>
+    <li>Decision : un compteur à partir de 900, qui compte comme le serveur ; pas de <code>maxlength</code>. — Reason : comme pour la note, l’erreur arrive à l’envoi ; le compteur dit de combien raccourcir, et un collage coupé en silence perdrait la fin sans le dire.</li>
+    <li>Decision : la zone de saisie s’arrête au plus petit de 6 lignes et, dans une feuille, de la hauteur du corps moins 16 px ; puis elle défile à l’intérieur. — Reason : à 1000 caractères, elle ferait environ 1000 px. Six lignes laissent voir assez de texte pour se relire. Le second plafond garde la zone et la ligne qu’on tape au-dessus de la barre sur tout téléphone, jusqu’à un iPhone SE clavier ouvert (W4c) : la règle 5 de v4.6 tient sans exception, et #650 ne revient pas par ce champ.</li>
+    <li>Decision : dans l’en-tête, sous les dates, pour tout le monde, organisateur compris. — Reason : c’est une information de l’événement, comme le lieu ; l’en-tête est le même sur <code>/e/{id}</code> et <code>/admin</code> (organizer-view, décision 1).</li>
+    <li>Decision : repliée au-delà de 4 lignes, à chaque chargement, en mémoire seulement. — Reason : quatre lignes coûtent 96 px, le bouton 44 et l’écart 8 : le bandeau reste au-dessus du pli (C9.2). Garder l’état en mémoire suit la Carte (#478) et les legs (organizer-view, Q3 = a).</li>
+    <li>Decision : le bouton du pli est celui des listes du panneau (<code>outline</code>, pleine largeur, 44 px, « Afficher… / Réduire… »), pas le bouton de titre des sections d’organizer-view v3.5. — Reason : il fait la même chose, montrer la suite d’un contenu dont on voit déjà le début, alors qu’un bouton de titre cache tout le contenu et suppose un titre, que la description n’a pas. Il est déjà dans l’application, avec ses mots et sa règle de focus sur WebKit.</li>
+    <li>Decision : le serveur rend le texte déjà replié, et le bouton quand il devine un dépassement (plus de 4 lignes par <code>\n</code> ou plus de 140 points de code) ; le navigateur corrige à la mesure. — Reason : le texte ne bouge jamais ; seul le bouton peut bouger, une fois, quand la devinette se trompe. Rendre le texte entier puis le replier ferait remonter la page sous les yeux du lecteur.</li>
+    <li>Decision : sans JavaScript, le texte entier, sans bouton, par un <code>&lt;noscript&gt;&lt;style&gt;</code>. — Reason : rien ne pourrait le déplier ; <code>@media (scripting: none)</code> manque à Safari avant 17.</li>
+    <li>Decision : ni icône ni libellé « Description » au-dessus du texte. — Reason : sous le titre, le lieu et les dates, un paragraphe se lit comme ce qu’il est ; un libellé coûterait une ligne au pli.</li>
+    <li>Decision : les URL <code>http(s)://</code> deviennent des liens dont le texte est le candidat tapé, dans un nouvel onglet, avec <code>rel="noopener noreferrer nofollow ugc"</code>, sans aperçu ni redirection. — Reason : Q3 = (a), décision du propriétaire.</li>
+    <li>Decision : restent du texte une URL avec <code>@</code> dans l’autorité, une URL avec un caractère invisible ou bidirectionnel, une URL dont l’hôte n’est pas en ASCII pur, contient un label <code>xn--</code> ou n’est pas exactement l’hôte ouvert, ainsi que <code>www.</code>, <code>mailto:</code>, <code>tel:</code> et les numéros. — Reason : décision du coordinateur sur la revue de la v1. N’importe qui peut créer un événement, et un lien trompeur serait servi par fullcar.app. Exiger que l’hôte lu soit l’hôte ouvert couvre aussi le <code>%</code> et les adresses IP abrégées.</li>
+    <li>Decision : un lien est isolé du texte autour (<code>dir="ltr"</code>, <code>unicode-bidi: isolate</code>). — Reason : un caractère bidirectionnel placé avant l’URL, donc hors de la règle précédente, pourrait sinon en retourner la lecture.</li>
+    <li>Decision : les caractères de contrôle (Cc) autres que la tabulation et <code>\n</code> font rester l’URL en texte, comme les invisibles. — Reason : revue de la v2 ; U+0085 et ses voisins ne se voient pas et n’ont rien à faire dans une adresse.</li>
+    <li>Decision : un lien caché qui reçoit le focus déplie la description. — Reason : le focus ne doit jamais être sur un élément invisible, et retirer les liens de l’ordre de Tab les cacherait au clavier.</li>
+    <li>Decision : effacée au jour 30, avec les données des participants. — Reason : Q1 = (a), décision du propriétaire ; elle peut nommer quelqu’un.</li>
+    <li>Decision : aucune métadonnée de description ni balise <code>og:</code> ; le risque d’un aperçu qui prend le début du corps est accepté. — Reason : décision du coordinateur sur la revue de la v1. La phrase fixe n’était pas demandée, et elle aurait marqué chaque lien, même d’un événement terminé.</li>
+  </ol>
+
+  <h2 id="hors">Hors périmètre</h2>
+  <ul class="crits">
+    <li>La mise en forme (gras, titres, listes, Markdown, HTML), les images et les pièces jointes.</li>
+    <li>L’aperçu d’un lien (carte, image, titre de la page liée), les liens raccourcis, le comptage des clics ; les noms de domaine internationalisés comme liens.</li>
+    <li>Prévenir les participants qu’elle a changé, ou la marquer « modifiée » : les notifications sont hors V1. « Personne n’est prévenu » (<code>EditEvent.saved</code>) vaut aussi pour elle.</li>
+    <li>Répondre, commenter, réagir : la messagerie est hors V1. La description va de l’organisateur au groupe, dans un seul sens.</li>
+    <li>Une description par leg, ou par voiture (c’est la note du Ride).</li>
+    <li>La traduction du texte, ou une description par langue.</li>
+    <li>La description dans « Mes événements », un e-mail, les métadonnées, une image Open Graph, les moteurs de recherche.</li>
+    <li>L’historique des versions, ou savoir qui l’a lue.</li>
+    <li>Un bouton « Copier la description ».</li>
+    <li>Les options (#68), qui restent hors de la feuille.</li>
+  </ul>
+
+  <h2 id="docs">Documentation à mettre à jour</h2>
+  <div class="prose">
+    <p>Ce sont des chemins sensibles : la PR qui les touche est mergée par l’humain.</p>
+    <ul>
+      <li><code>docs/agents/glossary.md</code> : l’Event porte « description (facultative) ». Une ligne <b>Description</b> : « le texte libre de l’organisateur pour tout le groupe, facultatif, 1000 caractères au plus, retours à la ligne gardés, URL <code>http(s)</code> en liens quand elles ne peuvent pas tromper. Lue dans l’en-tête par toute personne qui a le lien. Effacée à l’anonymisation. Jamais « note », qui est celle du Ride. » L’Anonymisation ajoute la description à ce qui est effacé.</li>
+      <li><code>docs/agents/product.md</code>, « Effacé à 30 jours » : « prénoms, téléphones, voitures, lieux de départ, notes, <b>la description de l’événement</b>, inscriptions ».</li>
+      <li>La migration qui ajoute la colonne (<code>**/migrations/**</code>).</li>
+      <li><code>/confidentialite</code>, ligne « Ce que nous gardons » : la description, effacée au jour 30. C’est le texte du propriétaire.</li>
+    </ul>
+    <p>Pour l’architecte : <code>EventHeader</code> et l’état rendu par les actions (<code>EventState</code>) portent la description. <code>validateEvent</code> et <code>validateEventChange</code> la valident, par la fonction de normalisation partagée avec le compteur. <code>updateEvent</code> la compare dans <code>before</code>, et la purge l’efface. Le découpage en liens et la devinette du pli sont des fonctions pures du domaine, sûres dans le navigateur.</p>
+  </div>
+
+  <h2 id="revisions">Révisions</h2>
+  <ul class="crits">
+    <li>v1 (25/10/2026) : première version, épique #654. Publiée sur https://claude.ai/artifact/KVWTqFEG6W7HpfQB5rTF8q.</li>
+    <li>v2 (26/10/2026) : réponses Q1 = a et Q3 = a (propriétaire), Q2 = a (coordinateur), enregistrées sur #654. La revue de la v1 a demandé des modifications, avec trois bloquants, tranchés par le coordinateur : les URL trompeuses restent du texte (DS3.9 à DS3.12) ; pas d’<code>og:description</code>, risque accepté (DS5.3) ; une hauteur maximale de 6 lignes pour la zone de saisie (DS1.14, W3, W4, W4b). Suggestions appliquées : le bouton des listes ; ce que rend le serveur, la mesure, Safari avant 17 (DS2.4, DS2.11, DS2.13) ; le compteur qui compte comme le serveur ; le découpage des liens ; <code>pre-wrap</code> ; DS1.2 selon #581 ; <code>/moi</code> une fois livrée ; un espion de <code>fetch</code> ; « Show less » ; organizer-view v3.5 (R7, focus) ; l’envoi en cours dessiné (W5).</li>
+    <li>v3 (26/10/2026) : la revue de la v2 confirme les trois bloquants de la v1 levés, et approuve les ajouts. Un bloquant nouveau, levé : la zone de saisie est plafonnée au plus petit de 6 lignes et de la hauteur du corps moins 16 px ; aucune exception à la règle 5 de v4.6 ; dessin W4c à 270 px visibles ; DS1.14 réécrit. Suggestions appliquées : la mesure du pli refaite quand le texte change (DS2.8, DS2.13) ; les contrôles Cc refusés dans une URL (DS3.10, L23) ; le plafond dit en lignes, 162 px puis 138 px avec <code>md:text-sm</code>. Republiée à la même URL.</li>
+  </ul>
+</div>
