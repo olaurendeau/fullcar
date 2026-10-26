@@ -9,6 +9,7 @@
   - `organizer-view` v3.4 (#648) : plus de vignettes, sections de leg repliées ; son designer dessine « Personnes inscrites » repliée, en voisine ;
   - `organizer-account` v4 : l’accès par la règle unique `organiser-access.ts` (#596).
 - Cette maquette suppose #581 livrée : il n’y a plus de lien d’organisateur.
+- Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
 
 ## Ce que la page montre
 
