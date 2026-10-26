@@ -136,6 +136,33 @@ export function framing(flag: Position, points: readonly { position: Position; a
   };
 }
 
+/** A tile of the map, in CSS pixels: the world is this wide at zoom 0 (EPSG:3857, Leaflet's). */
+const TILE_SIZE = 256;
+
+/** The Web Mercator ordinate of `lat`, on a sphere of radius 1, growing to the north. */
+function mercator(lat: number): number {
+  return Math.log(Math.tan(Math.PI / 4 + radians(lat) / 2));
+}
+
+/**
+ * The highest whole zoom, `view.maxZoom` at most, at which the box of `view` holds, inside its
+ * padding, in a map `width` × `height` px: 0 when no zoom does. Leaflet's own zoom for a box
+ * (`getBoundsZoom`) takes the next one when the box would need less than 1 % of a zoom less:
+ * the box then passes its padding by up to 0.7 %, and a label at its edge leaves the view (#820).
+ */
+export function fittingZoom(view: Extract<Framing, { kind: "bounds" }>, width: number, height: number): number {
+  const { top, right, bottom, left } = view.padding;
+  const room = { x: width - left - right, y: height - top - bottom };
+  if (room.x <= 0 || room.y <= 0) return 0;
+  // The box's size at zoom 0, in CSS pixels.
+  const span = {
+    x: ((view.east - view.west) / 360) * TILE_SIZE,
+    y: ((mercator(view.north) - mercator(view.south)) / (2 * Math.PI)) * TILE_SIZE,
+  };
+  const most = (pixels: number, atZero: number) => (atZero > 0 ? Math.floor(Math.log2(pixels / atZero)) : Infinity);
+  return Math.max(0, Math.min(view.maxZoom, most(room.x, span.x), most(room.y, span.y)));
+}
+
 /**
  * The bubble's highest, in a map `height` px high whose credits are `credits` px high: from
  * `BUBBLE_INSET` under the top to `BUBBLE_INSET` above the credits (v22). It scrolls beyond.

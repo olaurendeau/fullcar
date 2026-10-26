@@ -1,6 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BUBBLE_INSET, bubbleMaxHeight, distanceMetres, framing, freeSeatsOf, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "./event-map";
+import {
+  BUBBLE_INSET,
+  bubbleMaxHeight,
+  distanceMetres,
+  fittingZoom,
+  framing,
+  freeSeatsOf,
+  mapOf,
+  SAME_POSITION_METRES,
+  type EventMapPoints,
+  type Framing,
+} from "./event-map";
 import type { Position } from "./place";
 import { browserUnsafe } from "./test-browser-safe";
 
@@ -317,6 +328,36 @@ describe("framing", () => {
     const map = mapOf(FLAG, [car("a", BRINDAS), car("b", east(FLAG, 10))]);
 
     expect(framing(map.flag, map.points, ONE_LINE)).toMatchObject({ padding: { bottom: 88 } });
+  });
+});
+
+describe("fittingZoom", () => {
+  // CA1.3's cars (event-map-cars.spec.ts), and the map of a Pixel 7: 326 × 239 px, the widest
+  // label 106 px wide.
+  const PLACE: Position = { lat: 44.5, lng: 2 };
+  const points = [
+    { position: east(PLACE, 3000), atFlag: false },
+    { position: north(PLACE, 600), atFlag: false },
+    { position: north(PLACE, 10), atFlag: true },
+  ];
+  const view = framing(PLACE, points, 24, 53) as Extract<Framing, { kind: "bounds" }>;
+
+  it("stays out of a zoom where the box passes its padding, even by less than 1 % of a zoom, which Leaflet's own takes (#820)", () => {
+    // At zoom 13, the 3 km are 220.35 px, for 326 − 2 × 53 = 220: the label at the west edge
+    // would leave the view.
+    expect(fittingZoom(view, 326, 239)).toBe(12);
+    expect(fittingZoom(view, 327, 239)).toBe(13);
+  });
+
+  it("takes the highest zoom where the box fits on both axes, the view's maxZoom at most", () => {
+    expect(fittingZoom({ ...view, east: east(PLACE, 1000).lng }, 326, 239)).toBe(14);
+    // The height decides: 600 m are 176 px at zoom 15, for 239 − 32 − 88 = 119.
+    expect(fittingZoom({ ...view, east: PLACE.lng }, 326, 239)).toBe(14);
+    expect(fittingZoom({ ...view, east: PLACE.lng, north: north(PLACE, 10).lat }, 326, 239)).toBe(15);
+  });
+
+  it("takes zoom 0 for a map with no room inside its padding", () => {
+    expect(fittingZoom(view, 100, 239)).toBe(0);
   });
 });
 
