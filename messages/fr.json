@@ -255,7 +255,9 @@
       "retourNotConfirmed": "La suppression du retour n’a pas été confirmée : utilisez de nouveau « Modifier l’événement ».",
       "retourChanged": "Le retour a changé pendant la confirmation : il compte maintenant {cars, plural, one {# voiture} other {# voitures}} et {persons, plural, one {# personne} other {# personnes}}. {where, select, sheet {Utilisez de nouveau « Valider » pour confirmer.} other {Utilisez de nouveau « Modifier l’événement ».}}",
       "noRetourAgain": "Il n’y a plus de retour pour cet événement : {action, select, offerRide {proposez de nouveau la voiture, pour l’aller seulement.} other {ajoutez de nouveau cette personne, pour l’aller seulement.}}",
-      "personGone": "{firstName} ne fait plus partie de l’événement."
+      "personGone": "{firstName} ne fait plus partie de l’événement.",
+      "driverWithoutPhone": "Un numéro est requis pour proposer une voiture.",
+      "phoneWhileDriving": "Un numéro est requis tant que {firstName} conduit."
     },
     "info": {
       "noRetour": "Il n’y a plus de retour pour cet événement : la voiture de {driver} n’est plus proposée.",
