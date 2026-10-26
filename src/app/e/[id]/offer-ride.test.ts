@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 import { readTokenHolders } from "@/db/persons";
 import { findPlacement, setPlacement } from "@/db/placements";
 import type { Database } from "@/db/schema";
-import { withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
 import { offerRide as offerRideAction } from "./actions";
@@ -651,28 +651,71 @@ describe("offerRide", () => {
     });
 
     type Scene = Awaited<ReturnType<typeof aDeviceScene>>;
-    it.each<[string, (trx: Db, scene: Scene) => string | Promise<string>]>([
-      ["of another device", (_trx, scene) => scene.tom.id],
-      ["nobody is", () => randomUUID()],
+    it.each<[string, "forbidden" | "personGone", (trx: Db, scene: Scene) => string | Promise<string>]>([
+      ["of another device", "forbidden", (_trx, scene) => scene.tom.id],
+      // RP5.4: a person of no other device of the event is gone from it, removed since.
+      ["nobody is", "personGone", () => randomUUID()],
       // Not a person of this event, though her token is the same: refused before the
       // foreign key of her placement would fail.
       [
         "of another event, with the same token",
+        "personGone",
         async (trx, scene) => (await seedPerson(trx, (await seedEvent(trx)).id, { firstName: "Bea" }, scene.token)).id,
       ],
-    ])("C2.4: a passenger %s is refused as forbidden, and nothing changes", async (_, passengerOf) => {
+    ])("C2.4: a passenger %s is refused as %s, and nothing changes", async (_, error, passengerOf) => {
       await withRollback(async (trx) => {
         const { id: eventId } = await seedEvent(trx);
         const scene = await aDeviceScene(trx, eventId);
         const stranger = await passengerOf(trx, scene);
         const before = await rowsOf(trx, eventId);
         const passengerIds = [scene.bea.id, stranger];
+        const refused = error === "forbidden" ? { ok: false, error } : { ok: false, error, goneIds: [stranger] };
         const offer = anOffer("aller", scene.driver, { passengerIds });
-        expect(await offerRide(trx, eventId, scene.token, offer)).toEqual({ ok: false, error: "forbidden" });
+        expect(await offerRide(trx, eventId, scene.token, offer)).toEqual(refused);
         // Refused before the newcomer is written: even a transaction passed in is left as it was.
         const asNewcomer = anOffer("aller", aNewDriver(), { passengerIds });
-        expect(await offerRide(trx, eventId, scene.token, asNewcomer)).toEqual({ ok: false, error: "forbidden" });
+        expect(await offerRide(trx, eventId, scene.token, asNewcomer)).toEqual(refused);
         expect(await rowsOf(trx, eventId)).toEqual(before);
+      });
+    });
+
+    it("RP5.4: a driver of the device removed since is refused by personGone, and nothing changes", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const scene = await aDeviceScene(trx, eventId);
+        await deleteSeededPerson(trx, eventId, scene.ana.id);
+        const before = await rowsOf(trx, eventId);
+        const offer = anOffer("aller", scene.driver, { passengerIds: [scene.bea.id] });
+        expect(await offerRide(trx, eventId, scene.token, offer)).toEqual({ ok: false, error: "personGone", goneIds: [scene.ana.id] });
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+      });
+    });
+
+    it("a passenger of another device is refused as forbidden, before a driver gone", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const scene = await aDeviceScene(trx, eventId);
+        await deleteSeededPerson(trx, eventId, scene.ana.id);
+        const offer = anOffer("aller", scene.driver, { passengerIds: [scene.tom.id] });
+        expect(await offerRide(trx, eventId, scene.token, offer)).toEqual({ ok: false, error: "forbidden" });
+      });
+    });
+
+    // Read before her removal committed, she is gone once her Person is locked: no Placement to
+    // a person who is no longer there, so no foreign key's failure, and no car either.
+    it.each(["driver", "passenger"] as const)("RP5.4: an offer that waited for the removal of its %s is refused by personGone", async (who) => {
+      await withCommittedEvent(async (db, eventId) => {
+        const scene = await aDeviceScene(db, eventId);
+        const gone = who === "driver" ? scene.ana : scene.bea;
+        const before = await rowsOf(db, eventId);
+        const offer = anOffer("aller", scene.driver, { passengerIds: [scene.bea.id] });
+        const result = await whileHeld(
+          db,
+          (trx) => deleteSeededPerson(trx, eventId, gone.id),
+          () => offerRide(db, eventId, scene.token, offer),
+        );
+        expect(result).toEqual({ ok: false, error: "personGone", goneIds: [gone.id] });
+        expect((await rowsOf(db, eventId)).rides).toEqual(before.rides);
       });
     });
 

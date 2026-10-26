@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { devicePersonIds } from "./device";
+import { deviceAccess, devicePersonIds } from "./device";
 import { isPersonalToken, personalTokenFromBytes } from "./personal-token";
 import { hashToken } from "./token-hash";
 
@@ -84,6 +84,43 @@ describe("devicePersonIds", () => {
       vi.mocked(timingSafeEqual).mockClear();
       devicePersonIds(token, persons);
       expect(timingSafeEqual).toHaveBeenCalledTimes(persons.length);
+    }
+  });
+});
+
+// RP5.4: a person gone from the event is told apart from a person of another token.
+describe("deviceAccess", () => {
+  const mine = newToken();
+  const theirs = newToken();
+  const persons = [
+    { id: "p1", tokenHash: hashToken(mine) },
+    { id: "p2", tokenHash: hashToken(theirs) },
+    { id: "p3", tokenHash: hashToken(mine) },
+  ];
+
+  it("grants persons all of the token's", () => {
+    expect(deviceAccess(mine, persons, ["p3", "p1"])).toEqual({ kind: "device" });
+  });
+
+  it("refuses a person of another token as forbidden", () => {
+    expect(deviceAccess(mine, persons, ["p1", "p2"])).toEqual({ kind: "forbidden" });
+    expect(deviceAccess(newToken(), persons, ["p1"])).toEqual({ kind: "forbidden" });
+  });
+
+  it("says which persons are gone from the event, in the order asked, with a well-formed token", () => {
+    expect(deviceAccess(mine, persons, ["gone2", "p1", "gone1"])).toEqual({ kind: "personGone", goneIds: ["gone2", "gone1"] });
+    // A device whose last person was removed keeps its token (Q3 = a), which nobody holds any more.
+    expect(deviceAccess(newToken(), [], ["p1"])).toEqual({ kind: "personGone", goneIds: ["p1"] });
+  });
+
+  it("refuses as forbidden, before personGone, a request with a person of another token", () => {
+    expect(deviceAccess(mine, persons, ["gone", "p2"])).toEqual({ kind: "forbidden" });
+  });
+
+  it("refuses as forbidden a malformed or absent token, whoever is asked", () => {
+    for (const token of [mine.slice(1), "", undefined]) {
+      expect(deviceAccess(token, persons, ["gone"])).toEqual({ kind: "forbidden" });
+      expect(deviceAccess(token, persons, ["p1"])).toEqual({ kind: "forbidden" });
     }
   });
 });

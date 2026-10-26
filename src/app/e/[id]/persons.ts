@@ -1,11 +1,11 @@
 import type { Kysely } from "kysely";
-import { insertPerson, readTokenHolders, updatePerson as storePersonFields } from "@/db/persons";
+import { insertPerson, lockPersons, readTokenHolders, updatePerson as storePersonFields } from "@/db/persons";
 import { deletePlacement, setPlacement } from "@/db/placements";
 import { findDrivenRide } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
-import { devicePersonIds } from "@/domain/device";
+import { deviceAccess } from "@/domain/device";
 import { initialLegs, LEGS, type Leg } from "@/domain/leg";
 import { validatePerson, validatePersonChange, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
@@ -25,6 +25,8 @@ export type PersonRefusal =
   | "eventNotFound"
   /** The token is malformed or absent, the person is not the device's, or the id is someone else's. */
   | "forbidden"
+  /** With a well-formed token, no person of the event has the id: removed since the page showed her (RP5.4). */
+  | "personGone"
   /** The person drives on that leg: she has no Placement there to change. */
   | "drives"
   /** Something only a forged request sends: an id, a leg or a state that is not one. */
@@ -43,6 +45,7 @@ export type PersonOutcome =
 type Written = { ok: true } | { ok: false; error: "eventNotFound" } | { ok: false; error: Refused };
 
 const FORBIDDEN = { ok: false, error: "forbidden" } as const;
+const PERSON_GONE = { ok: false, error: "personGone" } as const;
 const INVALID = { ok: false, error: "invalid" } as const;
 const NO_RETOUR = { ok: false, error: "noRetour" } as const;
 
@@ -78,10 +81,15 @@ async function writeThenRead(
   return written.ok ? { ok: true, state } : { ok: false, error: written.error, state };
 }
 
-/** Whether `personId` was created with `token`: every change goes through here (C2.4, C7.3). */
-async function isDevicePerson(trx: Kysely<Database>, eventId: string, token: unknown, personId: string) {
-  if (!isPersonalToken(token)) return false;
-  return devicePersonIds(token, await readTokenHolders(trx, eventId)).includes(personId);
+/**
+ * Why `personId` may not be changed with `token`, nothing when she is the device's: every change
+ * goes through here (C2.4, C7.3). `forbidden` for another token's, `personGone` when no person of
+ * the event has the id any more (RP5.4).
+ */
+async function refusalFor(trx: Kysely<Database>, eventId: string, token: unknown, personId: string) {
+  if (!isPersonalToken(token)) return FORBIDDEN;
+  const access = deviceAccess(token, await readTokenHolders(trx, eventId), [personId]);
+  return access.kind === "device" ? undefined : access.kind === "forbidden" ? FORBIDDEN : PERSON_GONE;
 }
 
 /**
@@ -139,8 +147,11 @@ export async function updatePerson(
   const { personId } = fields;
   return writeThenRead(db, eventId, token, async (trx) => {
     if (!isCreationId(personId)) return INVALID;
-    if (!(await isDevicePerson(trx, eventId, token, personId))) return FORBIDDEN;
-    if (Object.keys(validation.change).length > 0) await storePersonFields(trx, { id: personId, eventId }, validation.change);
+    const refused = await refusalFor(trx, eventId, token, personId);
+    if (refused) return refused;
+    // Removed after the read, while the update waited for her row: no row is left to update.
+    const { change } = validation;
+    if (Object.keys(change).length > 0 && !(await storePersonFields(trx, { id: personId, eventId }, change))) return PERSON_GONE;
     return { ok: true };
   });
 }
@@ -164,7 +175,11 @@ export async function setPersonLeg(
     const leg = LEGS.find((known) => known === fields.leg);
     if (kind === undefined || leg === undefined || !isCreationId(personId)) return INVALID;
     if (!legs.includes(leg)) return NO_RETOUR;
-    if (!(await isDevicePerson(trx, eventId, token, personId))) return FORBIDDEN;
+    const refused = await refusalFor(trx, eventId, token, personId);
+    if (refused) return refused;
+    // Her Person locked (lock order: Event, then Person), no removal can take her away meanwhile;
+    // removed after the read, while this waited, she is not there to place (RP5.4).
+    if ((await lockPersons(trx, eventId, [personId])).length === 0) return PERSON_GONE;
     const placement = { personId, eventId, leg };
     if ((await findDrivenRide(trx, { driverId: personId, eventId, leg })) !== undefined) {
       return { ok: false, error: "drives" };

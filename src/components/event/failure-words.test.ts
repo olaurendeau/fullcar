@@ -16,6 +16,7 @@ import {
   noRetourInfo,
   noRetourWhy,
   offerWhy,
+  personGone,
   personWhy,
   undoWhy,
   undoneText,
@@ -208,16 +209,16 @@ describe("editedFields and personWhy: a person's form (C11.11)", () => {
   });
 
   it("gives `drives`, which only a cell's action meets, the generic reason, and the others as `whyOf` does", () => {
-    expect(personWhy("drives")).toEqual({ kind: "failed" });
+    expect(personWhy("drives", "Tom")).toEqual({ kind: "failed" });
     for (const error of ["forbidden", "eventNotFound", "invalid", "idTaken", "noRetour", "offline", "failed"] as const) {
-      expect(personWhy(error)).toEqual(whyOf(error));
+      expect(personWhy(error, "Tom")).toEqual(whyOf(error));
     }
   });
 
   it("« Modifier » of the first name alone, word for word", () => {
     const notDone: NotDone = { kind: "editPerson", firstName: "Tom", fields: editedFields(["firstName"]) };
-    expect(failureText(words("fr"), notDone, personWhy("offline"))).toBe("Le prénom de Tom n’a pas été enregistré. Vérifiez la connexion, puis réessayez.");
-    expect(failureText(words("en"), notDone, personWhy("offline"))).toBe("Tom’s first name was not saved. Check your connection, then try again.");
+    expect(failureText(words("fr"), notDone, personWhy("offline", "Tom"))).toBe("Le prénom de Tom n’a pas été enregistré. Vérifiez la connexion, puis réessayez.");
+    expect(failureText(words("en"), notDone, personWhy("offline", "Tom"))).toBe("Tom’s first name was not saved. Check your connection, then try again.");
   });
 });
 
@@ -372,6 +373,48 @@ describe("noRetourWhy", () => {
   });
 });
 
+// RP5.4 (remove-person v2): an action on a person removed meanwhile names her, `Actions.why.personGone`.
+describe("personGone: a person removed from the event meanwhile", () => {
+  const readme = readFileSync(new URL("../../../docs/design/remove-person/README.md", import.meta.url), "utf8").split("\n");
+  const row = readme.find((line) => line.startsWith("| `Actions.why.personGone` |"))?.split(" | ");
+  const [fr, en] = [row?.[1] ?? "", row?.[2] ?? ""].map((text) => text.replace("{firstName}", "Tom"));
+
+  it("reads its words in the design's table", () => {
+    expect(fr).toBe("Tom ne fait plus partie de l’événement.");
+    expect(en).toBe("Tom is no longer part of the event.");
+  });
+
+  it("names the first of those sent who is gone, as the send showed her", () => {
+    const sent = [
+      { id: "p1", firstName: "Léa" },
+      { id: "p2", firstName: "Tom" },
+      { id: "p3", firstName: "Zoé" },
+    ];
+    expect(personGone(sent, ["p3", "p2"])).toEqual({ kind: "personGone", firstName: "Tom" });
+    // None of those sent, which only a forged answer gives: the generic reason.
+    expect(personGone(sent, ["p9"])).toEqual({ kind: "failed" });
+  });
+
+  it("a cell's action, a person's form and an offer name her, word for word", () => {
+    const cell = { firstName: "Tom", leg: "aller" as const, state: { kind: "withoutCar" as const } };
+    const cases: [NotDone, Why][] = [
+      [cellNotDone("notConcerned", cell), cellWhy("personGone", cell)],
+      [{ kind: "editPerson", firstName: "Tom", fields: "firstName" }, personWhy("personGone", "Tom")],
+      [{ kind: "offerRide", driver: "Tom", legs: "aller" }, personGone([{ id: "p2", firstName: "Tom" }], ["p2"])],
+      [{ kind: "seats", names: ["Tom"], driver: "Claire" }, personGone([{ id: "p2", firstName: "Tom" }], ["p2"])],
+    ];
+    for (const [notDone, why] of cases) {
+      expect(why).toEqual({ kind: "personGone", firstName: "Tom" });
+      for (const [locale, text] of [["fr", fr], ["en", en]] as const) {
+        expect(failureText(words(locale), notDone, why).endsWith(` ${text}`)).toBe(true);
+      }
+    }
+    expect(failureText(words("fr"), { kind: "seats", names: ["Tom"], driver: "Claire" }, cases[3][1])).toBe(
+      "Tom n’a pas pu monter dans la voiture de Claire. Tom ne fait plus partie de l’événement.",
+    );
+  });
+});
+
 describe("whyOf", () => {
   it("gives `invalid` and `idTaken` the generic reason, and keeps the others", () => {
     for (const error of ["invalid", "idTaken", "failed"] as const) expect(whyOf(error)).toEqual({ kind: "failed" });
@@ -393,7 +436,7 @@ const NO_RETOUR: Record<string, () => [NotDone, Why]> = {
     whyOf("noRetour"),
   ],
   "« Proposer une voiture » depuis le Retour : Marc": () => [{ kind: "offerRide", driver: "Marc", legs: "retour" }, offerWhy("noRetour", "Marc", [])],
-  "« Ajouter une personne » depuis le Retour : Inès": () => [{ kind: "addPerson", firstName: "Inès" }, personWhy("noRetour")],
+  "« Ajouter une personne » depuis le Retour : Inès": () => [{ kind: "addPerson", firstName: "Inès" }, personWhy("noRetour", "Inès")],
   "« Modifier » la voiture : Sophie, retour": () => [{ kind: "editRide", driver: "Sophie", leg: "retour" }, whyOf("noRetour")],
   // #266, decision 47: a sheet of the aller that sent on the retour too, closed before the answer.
   "« Proposer une voiture » depuis l’Aller, « Je ramène aussi », feuille fermée : Claire": () => [

@@ -21,3 +21,20 @@ export function devicePersonIds(token: unknown, persons: readonly TokenHolder[])
   }
   return ids;
 }
+
+/**
+ * Whether `ids` may be changed with `token` (RP5.4, #645): `device` when all of them are the
+ * device's persons; `forbidden` when the token is malformed or absent, or when one of them is
+ * held by another token, which comes first; otherwise `personGone`, with those of `ids` that
+ * no person of the event holds any more, in the order asked: removed since the page showed them.
+ */
+export type DeviceAccess = { kind: "device" } | { kind: "forbidden" } | { kind: "personGone"; goneIds: string[] };
+
+export function deviceAccess(token: unknown, persons: readonly TokenHolder[], ids: readonly string[]): DeviceAccess {
+  if (!isPersonalToken(token)) return { kind: "forbidden" };
+  const mine = new Set(devicePersonIds(token, persons));
+  const held = new Set(persons.map((person) => person.id));
+  if (ids.some((id) => held.has(id) && !mine.has(id))) return { kind: "forbidden" };
+  const goneIds = ids.filter((id) => !held.has(id));
+  return goneIds.length > 0 ? { kind: "personGone", goneIds } : { kind: "device" };
+}
