@@ -133,7 +133,7 @@ test.describe("the focus ring on the event's page", () => {
     await holdToken(page, eventId, token);
   });
 
-  test("F1.9: « Placer » inactive is opaque, grey on grey, and shows the ring; one box ticked, it is black again", async ({
+  test("F1.9: « Placer » inactive is opaque, grey on grey, and shows the ring; one box ticked, it is petrol again (--primary, #651)", async ({
     page,
     seededEvent,
   }) => {
@@ -157,7 +157,7 @@ test.describe("the focus ring on the event's page", () => {
 
     await sheet.getByRole("checkbox").first().check();
     await expect(place).not.toHaveAttribute("aria-disabled");
-    await expect.poll(() => rgba(place, "background-color")).toEqual({ r: 23, g: 23, b: 23, a: 1 });
+    await expect.poll(() => rgba(place, "background-color")).toEqual({ r: 0, g: 90, b: 91, a: 1 });
   });
 
   test("F1.10: a click on the button of « Vos inscriptions » keeps the focus there without the ring", async ({
