@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
-import { insertPerson, lockPersons, readTokenHolders, updatePerson } from "./persons";
+import { deletePerson, insertPerson, lockPersons, readTokenHolders, updatePerson } from "./persons";
 import type { Database } from "./schema";
 import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
-import { seedPerson } from "./test-participants";
+import { seedPerson, seedPlacement } from "./test-participants";
 import { atomically } from "./transaction";
 
 const HASH_A = "a".repeat(64);
@@ -136,6 +136,36 @@ describe("lockPersons", () => {
         await expect(forUpdate()).rejects.toMatchObject({ code: "55P03" });
       });
       await expect(forUpdate()).resolves.toBeDefined();
+    });
+  });
+});
+
+describe("deletePerson", () => {
+  it("deletes that person's row and Placements only: the others of the same token keep theirs, hash included", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const lea = await seedPerson(trx, eventId, { firstName: "Léa", phone: "06 12 34 56 78" });
+      const tom = await seedPerson(trx, eventId, { firstName: "Tom" }, lea.token);
+      await seedPlacement(trx, { personId: lea.id, eventId, leg: "aller", rideId: null });
+      await seedPlacement(trx, { personId: tom.id, eventId, leg: "aller", rideId: null });
+      const tomBefore = (await personsOf(trx, eventId)).find((row) => row.id === tom.id);
+
+      expect(await deletePerson(trx, { id: lea.id, eventId })).toBe(true);
+      expect(await personsOf(trx, eventId)).toEqual([tomBefore]);
+      const placements = await trx.selectFrom("placement").select("person_id").where("event_id", "=", eventId).execute();
+      expect(placements).toEqual([{ person_id: tom.id }]);
+    });
+  });
+
+  it("deletes nothing for an id of another event, nor for an id deleted already", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: otherId } = await seedEvent(trx);
+      const { id } = await seedPerson(trx, eventId);
+      expect(await deletePerson(trx, { id, eventId: otherId })).toBe(false);
+      expect(await personsOf(trx, eventId)).toHaveLength(1);
+      expect(await deletePerson(trx, { id, eventId })).toBe(true);
+      expect(await deletePerson(trx, { id, eventId })).toBe(false);
     });
   });
 });
