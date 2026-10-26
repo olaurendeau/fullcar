@@ -13,6 +13,7 @@ import type { Leg } from "@/domain/leg";
 import { withVisiblePhones } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
 import { readEventState, type EventState } from "./event-state";
+import { eventMetadata, loadPublicState } from "./load-event";
 
 // Passed through, and watched: the board and the numbers must follow the same device.
 vi.mock("@/domain/board", async (importOriginal) => {
@@ -227,6 +228,23 @@ describe("readEventState", () => {
         description,
       });
     });
+  });
+
+  it("DS3.3: makes no network call for a link in the description, on a read nor for the metadata", async () => {
+    const description = "Le plan : https://lien-test.example/x";
+    const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in this test"));
+    try {
+      await withCommittedEvent(async (db, eventId) => {
+        await db.updateTable("event").set({ description }).where("id", "=", eventId).execute();
+        // The read of an action, then the page's: its state, and its document's title (DS5.2, DS5.3).
+        expect((await readEventState(db, eventId))?.event.description).toBe(description);
+        expect((await loadPublicState(eventId))?.event.description).toBe(description);
+        expect(await eventMetadata(eventId)).toStrictEqual({ title: "Tournoi de Rennes" });
+      });
+      expect(network).not.toHaveBeenCalled();
+    } finally {
+      network.mockRestore();
+    }
   });
 
   it("is plain data, unchanged by serialization", async () => {
