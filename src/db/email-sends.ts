@@ -34,10 +34,10 @@ export async function lockGlobalSends(db: Kysely<Database>): Promise<void> {
 }
 
 /**
- * Records the send unless a limit stops it, in one transaction, the caller's if given. A
- * confirmation email locks its event (`noKeyUpdate`: shared locks would not order two sends
- * for it), then the address; a sign-in request only the address; then the global cap. The
- * email goes out once committed: these locks held through a call to Brevo would stall all sends.
+ * Records the send unless a limit stops it, in one READ COMMITTED transaction, the caller's
+ * if given (in REPEATABLE READ the count would miss a send committed during the wait). Locks
+ * the event (`noKeyUpdate`: callers write its row too, and two `share` would deadlock on the
+ * upgrade), the address, then the global cap. Send the email once committed, never inside.
  */
 export async function recordSend(db: Kysely<Database>, request: SendRequest, now = new Date()): Promise<SendClaim> {
   return atomically(db, async (trx) => {

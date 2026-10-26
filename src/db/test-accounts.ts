@@ -71,6 +71,7 @@ export async function seedSends(
  * application's connection and a maker of new addresses, then deletes the accounts (their
  * sessions and sign-in links by cascade) and the sends of those addresses, even when `fn`
  * fails. When `fn` fails, its error is the one thrown.
+ * Only email-sends.test.ts may commit sends in the window: its global-cap test counts them all.
  */
 export async function withCommittedAddresses<T>(
   fn: (db: Kysely<Database>, address: () => string) => Promise<T>,

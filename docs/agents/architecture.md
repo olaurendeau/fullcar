@@ -431,12 +431,12 @@ La preuve est un test de concurrence (#594), sur données validées, comme ceux 
 Un lien de connexion ou de confirmation ne sert qu'une fois, même quand deux requêtes le
 présentent ensemble : un test de concurrence le prouve aussi.
 
-À partir de #594, `recordSend` (`src/db/email-sends.ts`) compte et inscrit l'envoi : l'Event
-en `noKeyUpdate` (deux verrous partagés ne s'attendent pas), puis l'adresse et le plafond
-global par `pg_advisory_xact_lock` ; la décision vient de `sendLimitReached`. L'e-mail part
-**après** la validation : tenir ces verrous pendant l'appel à Brevo ferait attendre tous les
-autres envois. Un lien s'use en une instruction (`useLink`, `src/db/email-links.ts`) :
-`update … set used_at = now() where … and used_at is null … returning`.
+À partir de #594, `recordSend` (`src/db/email-sends.ts`) prend l'Event en `noKeyUpdate` (#599
+et #602 écrivent sa ligne dans la même transaction : deux `share` s'interbloqueraient en
+passant à l'exclusif), puis l'adresse et le plafond global (`pg_advisory_xact_lock`), et
+l'e-mail part **après** la validation. `useLink` (`src/db/email-links.ts`) s'use en un
+`update … where … and used_at is null … returning`, après l'Event pour une confirmation.
+Les deux ne sont justes qu'en `READ COMMITTED`, le niveau qu'ouvre `atomically`.
 
 ## Jetons, et pourquoi ils sont la pièce critique
 

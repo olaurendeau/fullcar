@@ -74,13 +74,11 @@ export async function findLink(db: Kysely<Database>, token: unknown): Promise<Li
 }
 
 /**
- * Uses the token's link on the page for links of kind `expected`, once. The link is marked
- * used in one statement, which also checks it is unused, of that kind and not expired:
- * of two requests at once, the second waits for the first's row lock, then finds the link
- * used. Whatever the reason a link is not used, the outcome comes from the domain's rule,
- * linkOutcome, on the link as committed.
- * Call it in the transaction that does what the link opens: if that fails, the link stays
- * unused.
+ * Uses the link once, in one statement: of two requests at once, the second waits for the
+ * first's row lock, then finds it used. Otherwise the outcome is linkOutcome's.
+ * Call it in the READ COMMITTED transaction that does what the link opens (in REPEATABLE
+ * READ the second request fails with 40001). Event, then link: for a confirmation link,
+ * findLink, lockEvent, then useLink, or it deadlocks (40P01) with #602 and the purge.
  */
 export async function useLink(db: Kysely<Database>, token: unknown, expected: LinkKind, now = new Date()): Promise<LinkUse> {
   const key = tokenKey(token);

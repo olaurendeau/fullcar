@@ -88,6 +88,7 @@ describe("sendLimitReached", () => {
     it("is above what one address or one event can send, so that it never stops an ordinary user first", () => {
       expect(GLOBAL_SENDS_PER_HOUR).toBeGreaterThan(CONFIRMATIONS_PER_ADDRESS);
       expect(GLOBAL_SENDS_PER_HOUR).toBeGreaterThan(CONFIRMATIONS_PER_EVENT);
+      expect(GLOBAL_SENDS_PER_HOUR).toBeGreaterThan(LOGINS_PER_ADDRESS);
     });
 
     it("lets the 50th email of the hour go, and stops the 51st, whatever the address", () => {
@@ -95,9 +96,10 @@ describe("sendLimitReached", () => {
       expect(sendLimitReached({ event: 0, address: 0, global: 50 })).toBe("global");
     });
 
-    it("applies to an email without an event or an address limit, such as a sign-in link", () => {
+    it("applies to an email counted only in the global cap, and to a sign-in request below its address limit", () => {
       expect(sendLimitReached({ global: 49 })).toBeNull();
       expect(sendLimitReached({ global: 50 })).toBe("global");
+      expect(sendLimitReached({ login: LOGINS_PER_ADDRESS - 1, global: 50 })).toBe("global");
     });
 
     it("is named after the event and address limits, which tell the user more", () => {

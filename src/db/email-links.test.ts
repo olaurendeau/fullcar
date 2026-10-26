@@ -75,11 +75,8 @@ describe("useLink", () => {
       const accountId = await seedAccount(trx);
       const { id: eventId } = await seedEvent(trx);
       const login = await seedLink(trx, { kind: "login", accountId, returnEventId: null }, { createdAt: ago(61 * MINUTE) });
-      const confirmation = await seedLink(
-        trx,
-        { kind: "confirmation", eventId },
-        { createdAt: ago(CONFIRMATION_LINK_LIFETIME_MS + MINUTE) },
-      );
+      const confirmationAge = { createdAt: ago(CONFIRMATION_LINK_LIFETIME_MS + MINUTE) };
+      const confirmation = await seedLink(trx, { kind: "confirmation", eventId }, confirmationAge);
       expect(await useLink(trx, login, "login")).toEqual({ outcome: "expired" });
       expect(await useLink(trx, confirmation, "confirmation")).toEqual({ outcome: "expired" });
       expect((await findLink(trx, login))?.usedAt).toBeNull();
@@ -90,11 +87,8 @@ describe("useLink", () => {
   it("uses a link until the last instant of its lifetime", async () => {
     await withRollback(async (trx) => {
       const createdAt = new Date("2026-03-01T10:00:00.000Z");
-      const token = await seedLink(
-        trx,
-        { kind: "login", accountId: await seedAccount(trx), returnEventId: null },
-        { createdAt },
-      );
+      const accountId = await seedAccount(trx);
+      const token = await seedLink(trx, { kind: "login", accountId, returnEventId: null }, { createdAt });
       const end = createdAt.getTime() + LOGIN_LINK_LIFETIME_MS;
       expect(await useLink(trx, token, "login", new Date(end))).toEqual({ outcome: "expired" });
       expect(await useLink(trx, token, "login", new Date(end - 1))).toMatchObject({ outcome: "valid" });

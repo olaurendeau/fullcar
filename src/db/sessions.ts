@@ -34,8 +34,9 @@ export async function findSession(db: Kysely<Database>, token: unknown, now = ne
 
 /**
  * A page load with the session (OA9.6, OA9.7): the session slides, and the account notes
- * the visit and its language, in one transaction. An ended session stays ended, and the
- * account is left as it was: nothing for it, as for an unknown token.
+ * the visit and its language and clears its inactivity warning, in one transaction. An
+ * ended session stays ended, and the account is left as it was: nothing for it, as for an
+ * unknown token.
  */
 export async function visitSession(
   db: Kysely<Database>,
@@ -56,7 +57,8 @@ export async function visitSession(
       .returning(["token_hash", "account_id"])
       .executeTakeFirst();
     if (!session || !isTokenOf(token, session.token_hash)) return undefined;
-    const visit = { last_visit_at: sql<Date>`now()`, locale };
+    // A warning followed by a visit no longer counts (decision 5 on #581): the next deletion warns again.
+    const visit = { last_visit_at: sql<Date>`now()`, locale, warned_at: null };
     await trx.updateTable("account").set(visit).where("id", "=", session.account_id).execute();
     return findAccount(trx, session.account_id);
   });

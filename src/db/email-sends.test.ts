@@ -17,10 +17,8 @@ import { seedEvent } from "./test-events";
 const MINUTE = 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms);
 
-/** The sends to `email` the database keeps. */
-async function sendsTo(db: Kysely<Database>, email: string) {
-  return db.selectFrom("email_send").select(["kind", "email", "event_id"]).where("email", "=", email).execute();
-}
+const sendsTo = (db: Kysely<Database>, email: string) =>
+  db.selectFrom("email_send").select(["kind", "email", "event_id"]).where("email", "=", email).execute();
 
 /** Every send of the window, as the global cap counts it. */
 async function sendsInWindow(db: Kysely<Database>) {
@@ -32,8 +30,7 @@ async function sendsInWindow(db: Kysely<Database>) {
 /** Sends to as many addresses as needed for the window to hold `count` sends, all kinds together. */
 async function fillWindowTo(db: Kysely<Database>, count: number, address: () => string = anAddress) {
   const missing = count - (await sendsInWindow(db));
-  if (missing < 0) throw new Error("fillWindowTo: the window already holds more sends");
-  await seedSends(db, missing, { kind: "login", email: () => address() });
+  await seedSends(db, missing, { kind: "login", email: address });
 }
 
 describe("recordSend", () => {

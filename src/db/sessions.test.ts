@@ -72,16 +72,22 @@ describe("visitSession", () => {
       const token = await seedSession(trx, accountId, { createdAt: daysAgo(80), lastVisitAt: daysAgo(80) });
       const before = Date.now();
       expect(await visitSession(trx, token, "en")).toMatchObject({ id: accountId, locale: "en" });
-      const session = await trx
-        .selectFrom("session")
-        .select(["created_at", "last_visit_at"])
-        .where("account_id", "=", accountId)
-        .executeTakeFirstOrThrow();
+      const dates = ["created_at", "last_visit_at"] as const;
+      const session = await trx.selectFrom("session").select(dates).where("account_id", "=", accountId).executeTakeFirstOrThrow();
       const account = await accountRow(trx, accountId);
       expect(session.last_visit_at.getTime()).toBeGreaterThan(before - 60_000);
       expect(session.created_at.getTime()).toBeLessThan(daysAgo(79).getTime());
       expect(account).toEqual({ locale: "en", last_visit_at: session.last_visit_at });
       expect(await findSession(trx, token, new Date(Date.now() + 89 * DAY))).toMatchObject({ id: accountId });
+    });
+  });
+
+  // Decision 5 on #581: a warning followed by a visit no longer counts; the next deletion needs a new warning.
+  it("clears the inactivity warning", async () => {
+    await withRollback(async (trx) => {
+      const accountId = await seedAccount(trx, { last_visit_at: daysAgo(1066), warned_at: daysAgo(10) });
+      const token = await seedSession(trx, accountId, { lastVisitAt: daysAgo(1) });
+      expect(await visitSession(trx, token, "fr")).toMatchObject({ id: accountId, warnedAt: null });
     });
   });
 

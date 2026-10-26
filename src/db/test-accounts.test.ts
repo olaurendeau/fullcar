@@ -10,7 +10,8 @@ it("withCommittedAddresses deletes the accounts and sends of its addresses, even
     withCommittedAddresses(async (db, address) => {
       email = address();
       await seedAccount(db, { email });
-      await seedSends(db, 2, { kind: "login", email });
+      // Two hours ago: out of the window, so the committed global-cap test never counts them.
+      await seedSends(db, 2, { kind: "login", email, sentAt: new Date(Date.now() - 2 * 60 * 60_000) });
       throw failure;
     }),
   ).rejects.toBe(failure);
