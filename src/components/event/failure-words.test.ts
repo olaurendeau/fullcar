@@ -75,7 +75,7 @@ const ACTIONS: Record<string, Action> = {
     notDone: { kind: "offerRide", driver: "Marc", legs: "aller" },
     passengers: ["Inès", "Hugo"],
   },
-  "« Proposer une voiture » avec « Je ramène aussi » : Claire": {
+  "« Proposer une voiture » avec « Je ramène aussi des passagers » : Claire": {
     notDone: { kind: "offerRide", driver: "Claire", legs: "both" },
     passengers: ["Léa"],
   },
