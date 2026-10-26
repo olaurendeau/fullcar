@@ -1098,8 +1098,11 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   ne change rien (OA8.2). Aucune transaction ne couvre toute la purge.
 - **Après l'anonymisation**, les écritures sont refusées : une écriture qui a attendu le
   verrou de l'Event voit `anonymised_at` (`retour.ts`, `edit-event.ts`). `/e/{id}` répond
-  200 avec « Événement terminé » et `noindex` (#590), un statut qui ne demande pas de
-  middleware (décision du coordinateur sur #581).
+  200 avec « Événement terminé » et `noindex` (#590, #797), un statut qui ne demande pas de
+  middleware (décision du coordinateur sur #581). `editEvent` répond `eventEnded` avant de
+  contrôler le jeton : l'événement anonymisé n'a plus de hash de jeton à comparer. Un appel
+  sans jeton, ou avec un faux, apprend donc que l'événement est anonymisé, ce que `/e/{id}`
+  dit déjà à tout le monde.
 - **Les sessions, les envois et les liens** (`session`, `email_send`, `email_link`) sont
   nettoyés par âge, par la même tâche (#589, `src/db/expired-rows.ts`) : une ligne part quand
   aucune règle ne la lit plus. Une ligne effacée plus tôt changerait la réponse d'une règle.
