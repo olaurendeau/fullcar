@@ -9,8 +9,19 @@ import { optionalText, type TextError } from "./text";
 /** At most, in code points after normalisation: an emoji counts as one. */
 export const DESCRIPTION_MAX = 1000;
 
-/** Blanks at the end of a line: tabs and the Unicode Zs spaces, non-breaking ones included. */
-const LINE_END_BLANKS = /[\t\p{Zs}]+(?=\n|$)/gu;
+/** A blank: a tab or a Unicode Zs space, non-breaking ones included. All of them are one code unit. */
+const BLANK = /^[\t\p{Zs}]$/u;
+
+/**
+ * The line without the blanks at its end, by a loop from the end: a regular expression
+ * such as `/[\t\p{Zs}]+(?=\n|$)/` backtracks, quadratic on a long run of blanks inside a line,
+ * and it would run before any length check.
+ */
+function withoutEndBlanks(line: string): string {
+  let end = line.length;
+  while (end > 0 && BLANK.test(line[end - 1])) end--;
+  return line.slice(0, end);
+}
 
 /**
  * The text as it is stored: `\r\n` and `\r` become `\n`, blanks at the end of each line go,
@@ -20,7 +31,9 @@ const LINE_END_BLANKS = /[\t\p{Zs}]+(?=\n|$)/gu;
 export function normalizeDescription(value: string): string {
   return value
     .replace(/\r\n?/g, "\n")
-    .replace(LINE_END_BLANKS, "")
+    .split("\n")
+    .map(withoutEndBlanks)
+    .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

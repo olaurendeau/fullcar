@@ -24,6 +24,22 @@ describe("normalizeDescription", () => {
       expect(normalizeDescription(typed)).toBe(stored);
     });
 
+    // Before any length check: a forged request or a long paste must not stall the server or the counter.
+    it.each([
+      ["200,000 spaces then a letter", `${" ".repeat(200_000)}a`, "a"],
+      ["a letter, 200,000 spaces, then a letter", `a${" ".repeat(200_000)}b`, `a${" ".repeat(200_000)}b`],
+      ["200,000 tabs and non-breaking spaces, then two lines", `${"\t\u00a0".repeat(100_000)}a\nb`, "a\nb"],
+    ])("normalises %s in linear time", (_, typed, stored) => {
+      const start = performance.now();
+      const normalized = normalizeDescription(typed);
+      const count = descriptionCount(typed);
+      const read = description(typed);
+      expect(performance.now() - start).toBeLessThan(200);
+      expect(normalized).toBe(stored);
+      expect(count).toBe([...stored].length);
+      expect(read).toEqual(stored.length > DESCRIPTION_MAX ? { error: "tooLong" } : { value: stored });
+    });
+
     it("gives the same text twice", () => {
       const once = normalizeDescription(" a \r\n\r\n\r\n b\t\n");
       expect(normalizeDescription(once)).toBe(once);
