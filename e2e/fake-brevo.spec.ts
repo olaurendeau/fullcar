@@ -1,17 +1,13 @@
 import { brevoSettings, createBrevo } from "@/email/brevo";
 import { expect, test } from "./fixtures";
 import { answerMail, mailTo, newAddress, releaseMail, type MailAnswer } from "./mailbox";
+import { EARLY_MS } from "./timers";
 
 // The fake Brevo itself, as the app will reach it: `BREVO_URL`, `BREVO_API_KEY` and
 // `EMAIL_FROM` of `web` (compose.yaml).
 const BREVO_URL = "http://brevo:2326/v3/smtp/email";
 const API_KEY = "fullcar-test-brevo-key-4d8e1b6a";
 const EMAIL_FROM = "Fullcar <bonjour@fullcar.test>";
-/**
- * How early a timer may end, as `Date.now` measures it: Node's timers keep their own clock, in
- * whole milliseconds, and a bound of 10 s can end at 9 999 ms. A lower bound allows for it.
- */
-const EARLY_MS = 10;
 
 /** A message as Brevo's API takes it, to `to`. */
 function messageTo(to: string, fields: Record<string, unknown> = {}) {
