@@ -18,7 +18,7 @@ import type { AdminLinkCheck } from "./admin-link";
 
 /**
  * The panel as last read: the two links, and its legs, or `null` once withdrawn (O1.10): the
- * links stay, the tiles and the sections go.
+ * links stay, the sections go.
  */
 export interface Panel {
   publicUrl: string;
@@ -52,6 +52,11 @@ export type ScreenState =
       expanded: ReadonlySet<string>;
       /** The card folded (#204): read once, as the first panel arrives, then changed by its button alone. */
       folded: boolean;
+      /**
+       * The legs whose section is unfolded (O9.5): none as the panel appears, then changed by their
+       * buttons alone; kept through the reads, the panel withdrawn and the card folded, in memory alone.
+       */
+      unfolded: ReadonlySet<Leg>;
     };
 
 export type ScreenEvent =
@@ -66,7 +71,8 @@ export type ScreenEvent =
   | { type: "refreshEnded"; read: number; legs?: OrganiserLeg[] }
   /** The panel read again after an action of the board, the latest such read (O1.10): with its legs, or without on a failure. */
   | { type: "reread"; legs?: OrganiserLeg[] }
-  | { type: "listToggled"; key: string };
+  | { type: "listToggled"; key: string }
+  | { type: "legToggled"; leg: Leg };
 
 function fromCheck(check: AdminLinkCheck, folded = false): ScreenState {
   switch (check.state) {
@@ -79,7 +85,7 @@ function fromCheck(check: AdminLinkCheck, folded = false): ScreenState {
     case "valid": {
       const { publicUrl, adminUrl, legs } = check;
       const panel = { publicUrl, adminUrl, legs };
-      return { state: "ready", panel, refreshing: null, refreshFailed: 0, refreshed: false, expanded: new Set(), folded };
+      return { state: "ready", panel, refreshing: null, refreshFailed: 0, refreshed: false, expanded: new Set(), folded, unfolded: new Set() };
     }
   }
 }
@@ -96,10 +102,19 @@ function stillExpanded(expanded: ReadonlySet<string>, legs: OrganiserLeg[]): Rea
 
 type Ready = Extract<ScreenState, { state: "ready" }>;
 
-/** `legs` applied, the alert and the announcement gone, no read running: the panel and its unfolded lists. */
+/** The legs still unfolded once `legs` are applied: a leg gone takes its state with it, and comes back folded (O9.5). */
+function stillUnfolded(unfolded: ReadonlySet<Leg>, legs: OrganiserLeg[]): ReadonlySet<Leg> {
+  return new Set(legs.map((leg) => leg.leg).filter((leg) => unfolded.has(leg)));
+}
+
+/**
+ * `legs` applied, the alert and the announcement gone, no read running: the panel, its unfolded
+ * lists and legs. Withdrawn (`legs` null), both are kept for the read that gives the panel back (decision 58).
+ */
 function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean): Ready {
   const expanded = legs ? stillExpanded(state.expanded, legs) : state.expanded;
-  return { ...state, panel: { ...state.panel, legs }, expanded, refreshing: null, refreshFailed: 0, refreshed };
+  const unfolded = legs ? stillUnfolded(state.unfolded, legs) : state.unfolded;
+  return { ...state, panel: { ...state.panel, legs }, expanded, unfolded, refreshing: null, refreshFailed: 0, refreshed };
 }
 
 /**
@@ -107,7 +122,8 @@ function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean):
  * latest read counts: the end of any other changes nothing, nor does it once the link was
  * checked again. A read after an action says nothing (O1.10): a success replaces the panel, a
  * failure withdraws it and empties the alert, so that one message is left, the action's in the
- * bar. Whether the card is folded, only its button changes (O8.6): no read, action nor failure.
+ * bar. Whether the card is folded, only its button changes (O8.6): no read, action nor failure;
+ * whether a leg is, its button, or the read that takes that leg away (O9.5).
  * It also ends a refresh still running, whose board was read before the action: the
  * organiser who asked for it hears its outcome, « actualisé » or the alert, withdrawn.
  */
@@ -120,6 +136,11 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
     const refreshing = state.refreshing !== null;
     if (event.legs || !refreshing) return applied(state, event.legs ?? null, refreshing);
     return { ...applied(state, null, false), refreshFailed: state.refreshFailed + 1 };
+  }
+  if (event.type === "legToggled") {
+    const unfolded = new Set(state.unfolded);
+    if (!unfolded.delete(event.leg)) unfolded.add(event.leg);
+    return { ...state, unfolded };
   }
   if (event.type === "listToggled") {
     const expanded = new Set(state.expanded);

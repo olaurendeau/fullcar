@@ -131,6 +131,27 @@ export async function seedCrowd(db: Kysely<Database>, eventId: string): Promise<
   }
 }
 
+/** The button of a leg's title in the organiser's panel (O9.1), in any language. */
+export const legButton = (page: Page, leg: Leg) => page.locator(`[id="organiser-leg-${leg}"] > button`);
+
+/**
+ * Unfolds the panel's sections of `legs`, both by default, once the panel shows (O9.4): every
+ * section arrives folded (O9.2), and what its lists say is read unfolded. A leg the event does
+ * not have is skipped; one already unfolded stays so. The page is then scrolled back where it
+ * was: a click scrolls to its button, and a test that measures expects the page as it arrived.
+ */
+export async function unfoldLegs(page: Page, legs: Leg[] = ["aller", "retour"]): Promise<void> {
+  await expect(legButton(page, "aller")).toBeVisible();
+  const scrollY = await page.evaluate(() => window.scrollY);
+  for (const leg of legs) {
+    const button = legButton(page, leg);
+    if ((await button.count()) === 0) continue;
+    if ((await button.getAttribute("aria-expanded")) === "false") await button.click();
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+  }
+  await page.evaluate((top) => window.scrollTo(0, top), scrollY);
+}
+
 /** The key that keeps the organiser's card of event `id` folded on the device (#204, O8.5). */
 export const foldKey = (id: string) => `fullcar:organiser-folded:${id}`;
 

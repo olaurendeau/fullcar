@@ -5,11 +5,11 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { contrast } from "./contrast";
 import { leaveNoToken } from "./fixtures";
-import { expect, organiserPath, seedCrowd, test, watchHash } from "./organiser";
+import { expect, legButton, organiserPath, seedCrowd, test, unfoldLegs } from "./organiser";
 
 /*
- * #180, epic #154: the organiser area's tiles, one per leg, under 1024 px, and its two
- * columns from 1024 px; the widths of O7.5. Each test runs under the fixture
+ * #180, epic #154: the organiser area's sections under 1024 px, folded at first (v3.5, O9),
+ * and its two columns from 1024 px; the widths of O7.5. Each test runs under the fixture
  * `organiserTraffic` (O6.1, O2.10). No assertion, title or message here shows the token:
  * a URL is compared, and a mismatch is named, never printed.
  */
@@ -21,12 +21,10 @@ const FR = {
   shareLink: "Lien à partager",
   adminLink: "Lien d’organisateur",
   nobody: "Personne ne s’est encore inscrit.",
+  noCarRetour: "Aucune voiture proposée pour le retour",
 };
 
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
-/** The tiles: the panel's buttons named after a leg. */
-const tiles = (page: Page) => panel(page).getByRole("button", { name: /^(Aller|Retour)\b/ });
-const tile = (page: Page, leg: "Aller" | "Retour") => panel(page).getByRole("button", { name: new RegExp(`^${leg}\\b`) });
 const section = (page: Page, leg: "Aller" | "Retour") => panel(page).getByRole("region", { name: leg, exact: true });
 const heading = (page: Page, leg: "Aller" | "Retour") => section(page, leg).getByRole("heading", { level: 3 });
 const linkGroup = (page: Page, name: string) => panel(page).getByRole("group", { name });
@@ -49,10 +47,10 @@ async function withoutCar(db: Kysely<Database>, eventId: string, firstName: stri
 }
 
 /**
- * The tiles of the README: at the aller, 2 without a car and 3 free seats; at the retour,
+ * The README's example: at the aller, 2 without a car and 3 free seats; at the retour,
  * 4 without a car and 2 free seats, so 2 seats missing.
  */
-async function seedTiles(db: Kysely<Database>, eventId: string) {
+async function seedExample(db: Kysely<Database>, eventId: string) {
   const { id } = await seedPerson(db, eventId, { firstName: "Marc" });
   await seedRide(db, eventId, id, { seats: 3 });
   await seedRide(db, eventId, id, { leg: "retour", seats: 2, departureTime: "18:00:00" });
@@ -62,111 +60,40 @@ async function seedTiles(db: Kysely<Database>, eventId: string) {
 
 test.use({ locale: "fr-FR" });
 
-test.describe("the tiles", () => {
+test.describe("the README's example", () => {
   test.beforeEach(async ({ db, seededEvent }) => {
-    await seedTiles(db, seededEvent.id);
+    await seedExample(db, seededEvent.id);
   });
 
-  test("O1.3, O1.4: at 360 px, two tiles side by side, white and bordered, a pill when N > 0, the seats; buttons of 44 px with no icon", async ({
+  test("O1.3: at 360 px, the sections one under the other, Aller first, folded; the summary's pill is the tab's, the seats missing in bold", async ({
     page,
     seededEvent,
   }) => {
     await page.goto(organiserPath(seededEvent));
-    await expect(tiles(page)).toHaveCount(2);
-    const aller = panel(page).getByRole("button", { name: "Aller 2 sans voiture 3 places libres", exact: true });
-    const retour = panel(page).getByRole("button", { name: "Retour 4 sans voiture Il manque 2 places", exact: true });
-    await expect(aller).toBeVisible();
-    await expect(retour).toBeVisible();
-    // Name, pill and seats, and nothing between them: the folded summary of #204 reads the same.
-    expect(await retour.evaluate((element) => element.textContent)).toBe("Retour4 sans voitureIl manque 2 places");
+    await expect(legButton(page, "aller")).toHaveAttribute("aria-expanded", "false");
+    await expect(legButton(page, "retour")).toHaveAttribute("aria-expanded", "false");
+    const [aller, retour] = await Promise.all([box(section(page, "Aller")), box(section(page, "Retour"))]);
+    expect(aller.y + aller.height).toBeLessThanOrEqual(retour.y);
+    expect(Math.abs(aller.x - retour.x)).toBeLessThanOrEqual(1);
 
-    const [allerBox, retourBox] = await Promise.all([box(aller), box(retour)]);
-    expect(Math.abs(allerBox.y - retourBox.y)).toBeLessThanOrEqual(1);
-    expect(allerBox.x).toBeLessThan(retourBox.x);
-
-    const white = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     const pill = page.getByRole("tab", { name: "Retour 4 sans voiture" }).getByText("4 sans voiture", { exact: true });
-    const pillBackground = await pill.evaluate((element) => getComputedStyle(element).backgroundColor);
-    for (const each of [aller, retour]) {
-      expect((await box(each)).height).toBeGreaterThanOrEqual(44);
-      await expect(each).toHaveAttribute("type", "button");
-      await expect(each.locator("svg")).toHaveCount(0);
-      // White, bordered: never the amber of the pill nor of a banner.
-      await expect(each).toHaveCSS("background-color", white);
-      expect(white).not.toBe(pillBackground);
-      await expect(each).toHaveCSS("border-top-style", "solid");
-      await expect(each).toHaveCSS("border-top-width", "1px");
-    }
-    // The tab's amber pill, the same colours.
-    const tilePill = retour.getByText("4 sans voiture", { exact: true });
+    const summaryPill = section(page, "Retour").getByText("4 sans voiture", { exact: true });
     for (const property of ["background-color", "color"]) {
       const tab = await pill.evaluate((element, name) => getComputedStyle(element).getPropertyValue(name), property);
-      await expect(tilePill).toHaveCSS(property, tab);
+      await expect(summaryPill).toHaveCSS(property, tab);
     }
-    await expect(retour.getByText("Il manque 2 places", { exact: true })).toHaveCSS("font-weight", "600");
+    await expect(section(page, "Retour").getByText("Il manque 2 places", { exact: true })).toHaveCSS("font-weight", "600");
     await expect(page.locator('a[href^="#"]')).toHaveCount(0);
   });
 
-  test("O1.4, O6.3: a tap or Enter on a tile scrolls to its section and focuses its h3; the URL stays, no hashchange", async ({
-    page,
-    seededEvent,
-    baseURL,
-  }) => {
-    const hashChanges = await watchHash(page);
-    const arrival = new URL(organiserPath(seededEvent), baseURL).href;
-    await page.goto(organiserPath(seededEvent));
-    await expect(tiles(page)).toHaveCount(2);
-    await expect(heading(page, "Retour")).not.toBeInViewport();
-
-    // By touch.
-    await tile(page, "Retour").tap();
-    await expect(heading(page, "Retour")).toBeFocused();
-    await expect(heading(page, "Retour")).toBeInViewport();
-    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-
-    // By keyboard, from the top again.
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(heading(page, "Retour")).not.toBeInViewport();
-    await tile(page, "Retour").focus();
-    await page.keyboard.press("Enter");
-    await expect(heading(page, "Retour")).toBeFocused();
-    await expect(heading(page, "Retour")).toBeInViewport();
-
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await tile(page, "Aller").focus();
-    await page.keyboard.press("Space");
-    await expect(heading(page, "Aller")).toBeFocused();
-    await expect(heading(page, "Aller")).toBeInViewport();
-
-    expect(page.url() === arrival, "the URL is still the one arrived at, fragment included").toBe(true);
-    expect(await hashChanges()).toBe(0);
-    await expect(panel(page)).toBeVisible();
-    await expect(page.locator('a[href^="#"]')).toHaveCount(0);
-  });
-
-  test("O1.3: no tile from 1024 px", async ({ page, seededEvent }) => {
-    await page.setViewportSize({ width: 1023, height: 800 });
-    await page.goto(organiserPath(seededEvent));
-    await expect(tiles(page)).toHaveCount(2);
-    for (const each of await tiles(page).all()) await expect(each).toBeVisible();
-
-    // Hidden, the tiles leave the accessibility tree: none is found by its role any more.
-    for (const width of [1024, 1280]) {
-      await page.setViewportSize({ width, height: 800 });
-      await expect(tiles(page)).toHaveCount(0);
-      await expect(panel(page).locator("button").filter({ hasText: /^Aller/ })).toBeHidden();
-    }
-  });
-
-  test("O4.1 (amended by #250): under 1024 px, top to bottom: the title, the tiles, both links, the warning, « Modifier l’événement », then the sections", async ({
+  test("O4.1 (amended by #250 and v3.5): under 1024 px, top to bottom: the title, both links, the warning, « Modifier l’événement », then the sections", async ({
     page,
     seededEvent,
   }) => {
     await page.goto(organiserPath(seededEvent));
-    await expect(tiles(page)).toHaveCount(2);
+    await expect(heading(page, "Retour")).toBeVisible();
     const parts = [
       panel(page).getByRole("heading", { level: 2 }),
-      tile(page, "Aller"),
       linkGroup(page, FR.shareLink),
       linkGroup(page, FR.adminLink),
       panel(page).getByRole("note"),
@@ -179,19 +106,16 @@ test.describe("the tiles", () => {
     expect(new Set(tops).size).toBe(tops.length);
   });
 
-  test("O4.2: at 360 × 780, with tiles, both links and the warning are visible without scrolling", async ({
-    page,
-    seededEvent,
-  }) => {
+  test("O4.2: at 360 × 780, both links and the warning are visible without scrolling", async ({ page, seededEvent }) => {
     await page.goto(organiserPath(seededEvent));
-    await expect(tiles(page)).toHaveCount(2);
+    await expect(heading(page, "Retour")).toBeVisible();
     await expect(linkGroup(page, FR.shareLink).getByTestId("link")).toBeInViewport({ ratio: 1 });
     await expect(linkGroup(page, FR.adminLink).getByTestId("link")).toBeInViewport({ ratio: 1 });
     await expect(panel(page).getByRole("note")).toBeInViewport({ ratio: 1 });
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
   });
 
-  // From 1024 px, the very width where the tiles go (O1.3), not only on a wide screen.
+  // From 1024 px, the very width where the columns start, not only on a wide screen.
   for (const width of [1024, 1280]) {
     test.describe(`at ${width} × 800`, () => {
       test.use({ viewport: { width, height: 800 } });
@@ -202,7 +126,6 @@ test.describe("the tiles", () => {
       }) => {
         await page.goto(organiserPath(seededEvent));
         await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
-        await expect(tiles(page)).toHaveCount(0);
         const [share, admin, warning, aller, retour] = await Promise.all(
           [
             linkGroup(page, FR.shareLink),
@@ -235,7 +158,7 @@ test.describe("the tiles", () => {
   }
 });
 
-test("O1.3, O1.5: everyone seated, and an empty leg beside: its name and « Personne… » without a pill, at 4.5:1 at least", async ({
+test("O1.3, O1.5: everyone seated, and an empty leg beside: folded, its name then « Personne… » without a pill, at 4.5:1 at least", async ({
   db,
   page,
   seededEvent,
@@ -246,34 +169,42 @@ test("O1.3, O1.5: everyone seated, and an empty leg beside: its name and « Pers
   await seedPlacement(db, { personId: lea.id, eventId: seededEvent.id, leg: "aller", rideId: ride });
 
   await page.goto(organiserPath(seededEvent));
-  await expect(panel(page).getByRole("button", { name: "Aller Tout le monde a une place", exact: true })).toBeVisible();
-  const retour = panel(page).getByRole("button", { name: `Retour ${FR.nobody}`, exact: true });
-  await expect(retour).toBeVisible();
+  await expect(legButton(page, "aller")).toHaveAccessibleDescription("Tout le monde a une place");
+  await expect(legButton(page, "retour")).toHaveAccessibleName("Retour");
+  await expect(legButton(page, "retour")).toHaveAccessibleDescription(FR.nobody);
+  const retour = section(page, "Retour");
   await expect(retour.getByText(/sans voiture/)).toHaveCount(0);
-  const nobody = retour.getByText(FR.nobody, { exact: true });
-  expect(await contrast(nobody, retour)).toBeGreaterThanOrEqual(4.5);
+  const nobody = retour.getByText(FR.nobody, { exact: true }).filter({ visible: true });
+  await expect(nobody).toBeVisible();
+  // The section has no background of its own: the page's shows through.
+  expect(await contrast(nobody, page.locator("body"))).toBeGreaterThanOrEqual(4.5);
+  // Unfolded, the board's empty state.
+  await unfoldLegs(page, ["retour"]);
+  await expect(retour.getByText(FR.noCarRetour, { exact: true })).toBeVisible();
 });
 
-test("O1.3: no tile on an event with neither car nor person", async ({ page, seededEvent }) => {
+test("O1.5: an event with neither car nor person: both sections folded, « Personne… » in each", async ({ page, seededEvent }) => {
   await page.goto(organiserPath(seededEvent));
-  await expect(heading(page, "Retour")).toBeVisible();
-  await expect(tiles(page)).toHaveCount(0);
+  for (const leg of ["Aller", "Retour"] as const) {
+    await expect(heading(page, leg).getByRole("button")).toHaveAttribute("aria-expanded", "false");
+    await expect(section(page, leg).getByText(FR.nobody, { exact: true }).filter({ visible: true })).toHaveCount(1);
+    await expect(section(page, leg).getByText(/sans voiture/)).toHaveCount(0);
+  }
 });
 
 test.describe("without a retour", () => {
   test.use({ eventFields: { retourAt: null } });
 
-  test("O1.7: a single tile, the panel's whole width; at 1024 and 1280 px, the section in the left column", async ({
+  test("O1.7: a single section, and « Retour » nowhere in the panel; at 1024 and 1280 px, the section in the left column", async ({
     db,
     page,
     seededEvent,
   }) => {
     await withoutCar(db, seededEvent.id, "Tom", ["aller"]);
     await page.goto(organiserPath(seededEvent));
-    await expect(tiles(page)).toHaveCount(1);
-    const [only, share] = await Promise.all([box(tile(page, "Aller")), box(linkGroup(page, FR.shareLink))]);
-    expect(Math.abs(only.x - share.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(only.width - share.width)).toBeLessThanOrEqual(1);
+    await expect(legButton(page, "aller")).toBeVisible();
+    await expect(panel(page).getByRole("region")).toHaveCount(1);
+    await expect(panel(page).getByText(/Retour/)).toHaveCount(0);
 
     for (const width of [1024, 1280]) {
       await page.setViewportSize({ width, height: 800 });
@@ -313,6 +244,7 @@ test.describe("a crowd", () => {
     }) => {
       await page.setViewportSize(viewport);
       await page.goto(organiserPath(seededEvent));
+      await unfoldLegs(page);
       for (const [leg, title, more] of [
         ["Aller", "Sans voiture (14)", "Afficher les 9 autres"],
         ["Aller", "Voitures sans numéro (7)", "Afficher les 2 autres"],
@@ -338,7 +270,7 @@ async function placeOf(locator: Locator) {
 
 test.describe("O7.5", () => {
   test.beforeEach(async ({ db, seededEvent }) => {
-    await seedTiles(db, seededEvent.id);
+    await seedExample(db, seededEvent.id);
   });
 
   test("at 1280 px, the panel is at most 1024 px wide, centred; the header and the board have the width of /e/{id}", async ({

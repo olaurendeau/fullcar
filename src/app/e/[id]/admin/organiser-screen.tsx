@@ -8,6 +8,7 @@ import { EditEventSheet, LONG_WAIT } from "@/components/event/edit-event-sheet";
 import { failureText, wordsOf } from "@/components/event/failure-words";
 import { focusLandmark, focusMapHint, focusMapToggle } from "@/components/event/focus";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
+import { legHeadingId } from "@/components/event/organiser-leg";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
@@ -33,7 +34,9 @@ import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRea
  *   After an action of the board, which shows its outcome already, the panel alone is read
  *   again, and withdrawn should that fail (O1.10). Only the latest read counts.
  * - Once a panel is applied, the focus on a line or a button it took away goes to its list's
- *   title, or to its section's when the list went too (O5.7); never to `<body>`.
+ *   title, or to the button of its section's title when the list went too (O5.8 amended,
+ *   decision 60); in a section gone, the retour's, to Aller's button (decision 57); never to
+ *   `<body>`.
  * - Its frame keeps the board in place on screen as it changes height (O1.11).
  * - While a sheet hides the page, the live regions keep what they said: their next words wait
  *   for it to show. The legs' dates are the page's, from the header of the state the board
@@ -83,13 +86,17 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     if (noted && !noted.element.isConnected) noted.fallbacks.find((each) => each?.isConnected)?.focus();
   }, [screen]);
 
-  /** Notes, before a panel is applied, the focus in the panel: its list's title, its section's, then the panel's. */
+  /**
+   * Notes, before a panel is applied, the focus in the panel: its list's title, the button of its
+   * section's title, Aller's button, then the panel's title's.
+   */
   function noteFocus() {
     const element = document.activeElement;
     if (!element || !frame.current?.contains(element)) return;
     const list = element.closest("[data-organiser-list]")?.querySelector("h4");
-    const section = element.closest('section[aria-labelledby^="organiser-leg-"]')?.querySelector("h3");
-    focused.current = { element, fallbacks: [list ?? null, section ?? null, title.current] };
+    const section = element.closest('section[aria-labelledby^="organiser-leg-"]')?.querySelector<HTMLElement>("h3 > button");
+    const aller = section && document.getElementById(legHeadingId("aller"))?.querySelector<HTMLElement>("button");
+    focused.current = { element, fallbacks: [list ?? null, section ?? null, aller ?? null, title.current] };
   }
 
   // The screen now, not when the action left: one sent during « Chargement » may end after it.
@@ -235,6 +242,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         onRefresh={refresh}
         expanded={screen.expanded}
         onToggle={(key) => dispatch({ type: "listToggled", key })}
+        unfolded={screen.unfolded}
+        onToggleLeg={(leg) => dispatch({ type: "legToggled", leg })}
         folded={screen.folded}
         onToggleFolded={() => {
           dispatch({ type: "toggleFolded" });
