@@ -7,6 +7,7 @@
 - Page : `index.html` (autonome ; maquettes à 360 px de large, et des navigateurs de 1280 px montrés à 75 % et à 55 %)
 - Version : v3.5 (à relire ; les legs se replient, [#648](https://github.com/olaurendeau/fullcar/issues/648) ; v3.4 : modifications demandées en revue, réponses du propriétaire Q1 à Q3 = a ; v3.3.9 approuvée en revue de design ; v3.3.9 : M2.8 reformulé, [#442](https://github.com/olaurendeau/fullcar/issues/442) ; v3.3.8 : sept suggestions de la revue de la v3.3.7 appliquées, tri du coordinateur sur #372 ; v3.3.7 : la décision 44 dit l'exception du propriétaire sur #267, et M1.1 et M1.3 sont reformulés après la relecture de PR #376, [#372](https://github.com/olaurendeau/fullcar/issues/372) ; v3.3.6 : approuvée en v3.3.5 ; la ligne « Envoi en cours… » et cinq précisions de test, tri du coordinateur sur #250 ; v3.3.5 : revue de la v3.3.4 appliquée ; v3.3.4 : approuvée en v3.3.3, dix suggestions de la revue appliquées ; v3.3.3 : revue de la v3.3.2 ; v3.3.2 : revue de la v3.3.1 ; v3.3.1 : DE1 et DE2 décidées par le propriétaire le 2026-10-20 ; v3.3 : modifier l'événement ; v3.2.2 : la carte se replie)
 - Epic de la v3.3 (modifier l'événement) : https://github.com/olaurendeau/fullcar/issues/250
+- Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
 
 ## Décisions de l'humain (2026-10-18)
 

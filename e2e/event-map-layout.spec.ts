@@ -108,7 +108,7 @@ test("CA1.8: 240 px high under a window of 448 px, 280 px from 448 px", async ({
 test.describe("at 360 × 780, a title and a place of 30 characters", () => {
   test.use({ eventFields: { title: "W".repeat(30), location: "W".repeat(30) } });
 
-  test("CA1.9: the map folded, its container 54 px, the banner and the first card above the fold", async ({ db, page, placed }) => {
+  test("CA1.9: the map folded by the person, its container 54 px, the banner and the first card above the fold", async ({ db, page, placed }) => {
     // event-board's mixed case (« Page complète à 360 × 780 »), all three on the device:
     // Claire drives the aller and looks for a seat back, Léa rides with her and looks too, Tom only goes.
     const token = newToken();
@@ -124,6 +124,8 @@ test.describe("at 360 × 780, a title and a place of 30 characters", () => {
     await expect(page.getByRole("button", { name: /^Vos inscriptions/ })).toHaveAttribute("aria-expanded", "true");
     const panel = page.getByRole("tabpanel");
     const button = panel.getByRole("button", { name: "Carte", exact: true });
+    // Open at the arrival (#653): folded by a tap.
+    await button.click();
     await expect(button).toHaveAttribute("aria-expanded", "false");
     const banner = panel.getByRole("status").filter({ hasText: /\S/ });
     await expect(banner).toBeInViewport({ ratio: 1 });

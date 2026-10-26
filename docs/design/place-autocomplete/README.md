@@ -4,6 +4,7 @@
 - Issue : https://github.com/olaurendeau/fullcar/issues/237 (prérequis de #238, maquette `event-map`)
 - Page : `index.html` (autonome ; maquettes à 360 px de large, et un navigateur de 1280 px à taille réelle)
 - Version : v6 (v5 approuvée ; correction de texte #453, disjoncteur selon #448 ; v5 : cinq corrections ; v4 : re-revue de la v3 ; v3 : décision du propriétaire sur les lieux de voiture ; v2 : revue de design de la v1)
+- Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
 
 ## Décisions du propriétaire (2026-10-23)
 

@@ -75,9 +75,15 @@ describe("updates in one tick", () => {
   });
 });
 
+describe("BLANK_EVENT_FIELDS", () => {
+  it("starts the description empty", () => {
+    expect(BLANK_EVENT_FIELDS.values.description).toBe("");
+  });
+});
+
 describe("loadedEventFields", () => {
-  const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00" };
-  const values = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerDate: "2026-12-12", allerTime: "07:30" };
+  const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", description: null };
+  const values = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerDate: "2026-12-12", allerTime: "07:30", description: "" };
 
   // M1.5: the fields show what is saved, the box checked with a retour; M1.7: on one day, the end date follows.
   it("shows the saved values, and the end date follows on a one-day event", () => {
@@ -110,18 +116,31 @@ describe("loadedEventFields", () => {
     expect(loaded.values).toMatchObject({ location: "Gymnase", locationPosition: position });
     expect(loaded.locationLabel ?? null).toBeNull();
   });
+
+  it("loads the saved description as it is, and none as an empty field", () => {
+    const description = "Rendez-vous à 7 h\n\nDevant le gymnase";
+    expect(loadedEventFields({ ...header, description, retourAt: null }).values.description).toBe(description);
+    expect(loadedEventFields({ ...header, retourAt: null }).values.description).toBe("");
+  });
 });
 
 describe("eventFieldsChanged", () => {
-  const loaded = loadedEventFields({ title: "T", location: "L", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
+  const loaded = loadedEventFields({ title: "T", location: "L", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00", description: "D" }).values;
 
   // M2.5: a field changed, then put back as it was loaded, is not changed.
   it("is false for the loaded values", () => {
     expect(eventFieldsChanged({ ...loaded }, loaded)).toBe(false);
   });
 
-  it.each(["title", "location", "allerDate", "allerTime", "retourDate", "retourTime"] as const)("is true once %s differs", (name) => {
+  it.each(["title", "location", "allerDate", "allerTime", "retourDate", "retourTime", "description"] as const)("is true once %s differs", (name) => {
     expect(eventFieldsChanged({ ...loaded, [name]: "x" }, loaded)).toBe(true);
+  });
+
+  // DS1.10: the description counts in « a field is changed »; put back as it was loaded, it does not.
+  it("is true once the description is emptied, and false once it is put back", () => {
+    const emptied = withEventField("description", "")({ values: loaded, retourDateFollows: true });
+    expect(eventFieldsChanged(emptied.values, loaded)).toBe(true);
+    expect(eventFieldsChanged(withEventField("description", "D")(emptied).values, loaded)).toBe(false);
   });
 
   it("is true once the box Retour differs", () => {
@@ -159,7 +178,7 @@ describe("eventFieldsChanged", () => {
 
 // M6.1, M6.2: the server answers `changed` with the saved values, and the form takes them in.
 describe("withSavedFields", () => {
-  const event = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" };
+  const event = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00", description: null };
   const loaded = loadedEventFields(event);
   const without = loadedEventFields({ ...event, retourAt: null });
   const typed = (values: Partial<EventFieldsState["values"]>, from = loaded): EventFieldsState => ({
@@ -215,6 +234,17 @@ describe("withSavedFields", () => {
       values: { ...moved.values, retourDate: "2026-12-14" },
       retourDateFollows: false,
     });
+  });
+
+  // DS1.11: the description is one more field: not changed here, it takes the saved one; changed, it keeps what was typed.
+  it.each<[string, string | null]>([
+    ["written", "Rendez-vous à 7 h"],
+    ["removed", null],
+  ])("the description %s there takes its saved value when not changed here, and keeps what was typed", (_, saved) => {
+    const from = loadedEventFields({ ...event, description: "Rendez-vous à 8 h" });
+    const there = loadedEventFields({ ...event, description: saved });
+    expect(withSavedFields(from.values, there)(typed({ title: "Tournoi" }, from)).values).toEqual({ ...there.values, title: "Tournoi" });
+    expect(withSavedFields(from.values, there)(typed({ description: "Rendez-vous à 9 h" }, from)).values.description).toBe("Rendez-vous à 9 h");
   });
 
   // Applied to the state current when it runs: a keystroke made before it is kept.
@@ -282,7 +312,7 @@ describe("EventFormFields", () => {
     const element = node as Element;
     return [element, ...elements(element.props?.children)];
   };
-  const rendered = loadedEventFields({ title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" });
+  const rendered = loadedEventFields({ title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00", description: null });
   const meanwhile: EventFieldsState = { values: { ...rendered.values, location: "Salle Carrel", retourTime: "19:00" }, retourDateFollows: false };
 
   /** Renders the fields with `rendered`, changes the one named `name`, and applies its update to `meanwhile`. */
@@ -343,7 +373,7 @@ describe("EventFormFields", () => {
 
 // M5.1: the cars of a leg whose date or time changed keep their time; the sheet says so.
 describe("carTimesKept", () => {
-  const loaded = loadedEventFields({ title: "T", location: "L", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" }).values;
+  const loaded = loadedEventFields({ title: "T", location: "L", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00", description: null }).values;
   const cars = { aller: 3, retour: 2 };
 
   it.each([

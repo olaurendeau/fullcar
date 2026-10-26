@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { distanceMetres, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
+import type { DeviceStatus } from "@/domain/tap";
 import {
   LEAFLET_IDLE,
   leafletFocus,
   leafletStep,
   mapUpdate,
+  pageSettled,
   pointKey,
   TILES_QUIET,
   tilesStep,
@@ -595,5 +597,24 @@ describe("the tiles' notice (CA2.4)", () => {
     expect(tilesStep(shown, "load", true)).toEqual({ view: { failing: true, notice: true }, focus: null });
     for (const event of ["loading", "tileerror", "retry"] as const) expect(tilesStep(shown, event, true).focus).toBeNull();
     expect(tilesStep(after(["loading"]), "load", true).focus).toBeNull();
+  });
+});
+
+describe("the page settled (CA1.2, CA1.20)", () => {
+  // The device's status, whether the first check of the link runs (on /admin only), settled.
+  const table: [DeviceStatus, boolean, boolean][] = [
+    ["pending", false, false],
+    ["loading", false, false],
+    ["none", false, true],
+    ["ready", false, true],
+    ["failed", false, true],
+    ["pending", true, false],
+    ["loading", true, false],
+    ["none", true, false],
+    ["ready", true, false],
+    ["failed", true, false],
+  ];
+  it.each(table)("the device %s, the link checking: %s, settled: %s", (device, linkChecking, settled) => {
+    expect(pageSettled(device, linkChecking)).toBe(settled);
   });
 });

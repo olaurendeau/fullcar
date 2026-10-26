@@ -5,7 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { contrast } from "./contrast";
-import { around, points, seedCar, test } from "./event-map-points";
+import { arriveWaiting, around, idle, points, seedCar, test } from "./event-map-points";
 import { expect } from "./fixtures";
 import { answerTiles, requestsForTile, tileAt, type TileAnswer } from "./tiles";
 
@@ -74,13 +74,21 @@ function creditsCorner(page: Page) {
   });
 }
 
-/** The page hydrated and quiet: what it loads on its own is loaded, so that a route set now catches Leaflet's code alone. */
-async function quiet(page: Page, id: string, fragment = "") {
-  await page.goto(`/e/${id}${fragment}`);
+/**
+ * The page hydrated and quiet, the map not started (`arriveWaiting`): what it loads on its own is
+ * loaded, so that a route set now catches Leaflet's code alone. `settle` starts the map, its box
+ * in the screen.
+ */
+async function quiet(page: Page, id: string, fragment = ""): Promise<() => void> {
+  const settle = await arriveWaiting(page, id, `/e/${id}${fragment}`);
   await expect(panel(page)).toBeVisible();
-  await page.waitForLoadState("networkidle");
-  await expect(page.locator(".leaflet-container")).toHaveCount(0);
+  await page.waitForLoadState("load");
+  await idle(page);
+  return settle;
 }
+
+/** What has the focus: `<body>`, where the arrival leaves it (CA2.11). */
+const onBody = (page: Page) => page.evaluate(() => document.activeElement === document.body);
 
 /** The text of every live region of the page, in the DOM's order. */
 function liveRegions(page: Page): Promise<(string | null)[]> {
@@ -144,17 +152,25 @@ async function holdBuild(page: Page) {
 }
 
 test.describe("Leaflet's code", () => {
-  test("CA1.14: held, « Chargement de la carte… » in the box, aria-busy, 4.5:1, the credits already in its corner, and no status region more", async ({ page, placed }) => {
-    await quiet(page, placed.id);
-    const before = await page.locator('[role="status"]').count();
+  test("CA1.14: waiting, nothing in the box; held, « Chargement de la carte… » in it, aria-busy, 4.5:1, the credits already in its corner, and no status region more", async ({
+    page,
+    placed,
+  }) => {
+    const settle = await quiet(page, placed.id);
     const build = await holdBuild(page);
+    // Before the start: neither the text, nor aria-busy, nor tabindex.
+    const box = credits(page).locator("xpath=../..");
+    await expect(box.getByText(LOADING)).toHaveCount(0);
+    await expect(box).not.toHaveAttribute("aria-busy");
+    await expect(box).not.toHaveAttribute("tabindex");
 
-    await mapButton(page).click();
+    settle();
     const text = busyBox(page).getByText(LOADING, { exact: true });
     await expect(text).toBeVisible();
     await expect(busyBox(page)).toHaveCount(1);
     expect(await contrast(text, text)).toBeGreaterThanOrEqual(4.5);
-    expect(await page.locator('[role="status"]').count()).toBe(before);
+    // As many status regions as once the map is there, which has none: none more while it loads.
+    const loadingStatuses = await page.locator('[role="status"]').count();
     // Before Leaflet is there: the credits in the box's bottom right corner, above the loading text.
     const loading = await creditsCorner(page);
     expect(loading).toEqual({ right: 0, bottom: 0, height: 24, seen: true });
@@ -163,16 +179,17 @@ test.describe("Leaflet's code", () => {
     await expect(page.getByRole("region", { name: ALLER_MAP }).locator(".leaflet-tile-loaded").first()).toBeVisible();
     await expect(container(page).locator("[aria-busy]")).toHaveCount(0);
     await expect(container(page).getByText(LOADING)).toHaveCount(0);
+    expect(await page.locator('[role="status"]').count()).toBe(loadingStatuses);
     // Nothing moves when the map comes.
     expect(await creditsCorner(page)).toEqual(loading);
   });
 
   test("CA2.8: refused, the notice in place of the map; « Réessayer », the box focused; loaded, the focus on « Carte »", async ({ page, placed }) => {
-    await quiet(page, placed.id);
+    const settle = await quiet(page, placed.id);
     const build = await holdBuild(page);
     build.refuseAll();
 
-    await mapButton(page).click();
+    settle();
     await expect(notice(page, FAILED)).toBeVisible();
     await expect(notice(page, FAILED).getByText(BODY, { exact: true })).toBeVisible();
     await expect(notice(page, FAILED).getByRole("button")).toHaveText(["Réessayer"]);
@@ -183,7 +200,8 @@ test.describe("Leaflet's code", () => {
     await expect(credits(page)).toHaveCount(1);
     await expect(credits(page)).toBeHidden();
     await expect(container(page).getByRole("link", { name: /OpenStreetMap/ })).toHaveCount(0);
-    await expect(mapButton(page)).toBeFocused();
+    // At the arrival, the focus stays where it was.
+    expect(await onBody(page)).toBe(true);
 
     // « Réessayer »: the box, loading, in place of the notice, has the focus; loaded, the map, and the focus on « Carte ».
     build.hold();
@@ -199,11 +217,11 @@ test.describe("Leaflet's code", () => {
   });
 
   test("CA2.8: online, the second then the third failure, « toujours » and the focus on « Recharger la page », which reloads the same address", async ({ page, placed }) => {
-    await quiet(page, placed.id, "#carte");
+    const settle = await quiet(page, placed.id, "#carte");
     const address = page.url();
     const build = await holdBuild(page);
     build.refuseAll();
-    await mapButton(page).click();
+    settle();
     await expect(notice(page, FAILED)).toBeVisible();
 
     for (const failure of ["second", "third"]) {
@@ -229,10 +247,10 @@ test.describe("Leaflet's code", () => {
   });
 
   test("CA2.8: offline, the second failure gives the first notice, the focus on its « Réessayer »", async ({ context, page, placed }) => {
-    await quiet(page, placed.id);
+    const settle = await quiet(page, placed.id);
     const build = await holdBuild(page);
     build.refuseAll();
-    await mapButton(page).click();
+    settle();
     await expect(notice(page, FAILED)).toBeVisible();
 
     await context.setOffline(true);
@@ -245,11 +263,11 @@ test.describe("Leaflet's code", () => {
   });
 
   test("CA2.10: one import for both legs; « Réessayer » on the aller, loaded, and the retour shows its map, not the notice", async ({ page, placed }) => {
-    await quiet(page, placed.id);
+    const settle = await quiet(page, placed.id);
     const build = await holdBuild(page);
 
     // Both legs open, one state for the page: one attempt, refused.
-    await mapButton(page).click();
+    settle();
     await build.refuse();
     await expect(notice(page, FAILED)).toBeVisible();
     await expect(container(page, "retour").getByText(FAILED, { exact: true })).toHaveCount(1);
@@ -279,10 +297,10 @@ test.describe("Leaflet's code", () => {
   });
 
   test("CA2.10: folded while it loads, the attempt ends all the same; opened again, its notice, no request, the focus on « Carte »", async ({ page, placed }) => {
-    await quiet(page, placed.id);
+    const settle = await quiet(page, placed.id);
     const build = await holdBuild(page);
 
-    await mapButton(page).click();
+    settle();
     await expect(busyBox(page)).toHaveCount(1);
     await mapButton(page).click();
     await expect(mapButton(page)).toHaveAttribute("aria-expanded", "false");
@@ -302,20 +320,16 @@ test.describe("Leaflet's code", () => {
 });
 
 /**
- * Opens the aller's map, `answer` set for the flag's tile of the view, zoom 15: the map, the
- * status our route gave that tile, and the live regions' text before the opening.
+ * Arrives at the aller's map, open, which starts, `answer` set for the flag's tile of the view,
+ * zoom 15: the map, the status our route gave that tile, and the live regions' text once hydrated.
  */
 async function openWithFlagTile(page: Page, place: Position, id: string, answer: TileAnswer) {
   const tile = tileAt(place, FRAMED_ZOOM);
   await answerTiles([tile], answer);
+  const response = page.waitForResponse((each) => new URL(each.url()).pathname === `/tuiles/${tile}`);
   await page.goto(`/e/${id}`);
   await expect(panel(page)).toBeVisible();
   const live = await liveRegions(page);
-  const response = page.waitForResponse((each) => new URL(each.url()).pathname === `/tuiles/${tile}`);
-  await expect(async () => {
-    if ((await mapButton(page).getAttribute("aria-expanded")) !== "true") await mapButton(page).click();
-    await expect(mapButton(page)).toHaveAttribute("aria-expanded", "true", { timeout: 500 });
-  }).toPass();
   const status = (await response).status();
   // Through our route to the fake tile provider.
   await expect.poll(async () => (await requestsForTile(tile)).length).toBeGreaterThan(0);

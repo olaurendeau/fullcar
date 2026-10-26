@@ -304,6 +304,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           onAction={reread}
           onState={setShown}
           hint={screen.state === "ready" ? { onEdit: openEdit, sending: editSending } : undefined}
+          // The screen's, not `link.check`'s: the check is applied in a layout effect, and the area with it.
+          linkChecking={screen.state === "loading"}
         />
         {children}
       </div>

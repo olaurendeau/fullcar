@@ -310,7 +310,7 @@ describe("panelRead", () => {
 });
 
 describe("screenRead", () => {
-  const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: null };
+  const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: null, description: null };
   const board: EventState = { event: header, legs: [] };
   const panel = { state: "panel", legs: after };
 
@@ -349,6 +349,16 @@ describe("editAnswer", () => {
       kind: "changed",
       event: placed,
     });
+  });
+
+  // DS1.10, DS2.8: the description the server stored, a text or none, shows at once on /admin.
+  it.each<[string, Record<string, unknown>]>([
+    ["a description", { ...event, description: "Rendez-vous à 7 h" }],
+    ["no description", { ...event, description: null }],
+    ["a header without a description, from a server before it", event],
+  ])("is saved or changed, with %s", (_, stored) => {
+    expect(editAnswer({ ok: true, value: { ok: true, event: stored } })).toStrictEqual({ kind: "saved", event: stored });
+    expect(editAnswer({ ok: true, value: { ok: false, error: "changed", event: stored } })).toStrictEqual({ kind: "changed", event: stored });
   });
 
   // M2.3: the server's errors show by their field.
@@ -394,6 +404,8 @@ describe("editAnswer", () => {
     ["`ok` with a header missing its title", { ok: true, event: { ...event, title: undefined } }],
     ["`ok` with a header missing its position", { ok: true, event: { ...event, locationPosition: undefined } }],
     ["`changed` with a position that is not one", { ok: false, error: "changed", event: { ...event, locationPosition: { lat: "48.1" } } }],
+    ["`ok` with a description that is not text", { ok: true, event: { ...event, description: 42 } }],
+    ["`changed` with a description in an array", { ok: false, error: "changed", event: { ...event, description: ["Rendez-vous"] } }],
     ["no answer", undefined],
   ])("is the failure on %s", (_, value) => {
     expect(editAnswer({ ok: true, value })).toStrictEqual({ kind: "problem", problem: "failed" });
@@ -405,7 +417,7 @@ describe("editAnswer", () => {
 // M3.7 (#273): a removal confirmed, its confirmation closed after 10 s, then the sheet: the same,
 // with what the removal did not do, and the numbers of a retour changed meanwhile.
 describe("editFailure: the sheet closed before the answer, word for word", () => {
-  const event = { title: "Tournoi de Rennes U13", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 14:00:00", retourAt: null };
+  const event = { title: "Tournoi de Rennes U13", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 14:00:00", retourAt: null, description: null };
   const words = (locale: "fr" | "en") =>
     wordsOf(createTranslator<Messages>({ locale, messages: locale === "fr" ? fr : en }), createFormatter({ locale }));
   /** The answers of a row's failure column. */
