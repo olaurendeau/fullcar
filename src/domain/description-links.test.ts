@@ -145,7 +145,8 @@ describe("descriptionPieces", () => {
     );
   });
 
-  // DS3.9: an authority with @ stays text.
+  // DS3.9: an authority with @ stays text. Coordinator's decision on #725: a candidate with
+  // @ anywhere stays text, since `https://evil.example\@asa-annecy.example/` reads like L14 reversed.
   describe("DS3.9", () => {
     it.each([
       "https://asa-annecy.example@evil.example/",
@@ -153,12 +154,13 @@ describe("descriptionPieces", () => {
       "https://user:mdp@asa-annecy.example/",
       "http://asa-annecy.example:80@evil.example",
       "https://a@b@evil.example?x",
+      "https://evil.example\\@asa-annecy.example/",
+      "https://evil.example?@asa-annecy.example/",
+      "https://evil.example#@asa-annecy.example/",
+      "https://evil.example/@asa-annecy.example/",
+      "https://asa-annecy.example/@julie",
     ])("keeps %s as text", (typed) => {
       expect(descriptionPieces(`Voir ${typed}`)).toEqual([text(`Voir ${typed}`)]);
-    });
-
-    it("allows @ after the authority", () => {
-      expect(descriptionPieces("https://asa-annecy.example/@julie")).toEqual([link("https://asa-annecy.example/@julie")]);
     });
   });
 
@@ -234,6 +236,18 @@ describe("descriptionPieces", () => {
     });
   });
 
+  it.each([
+    ["200,000 closing parentheses", `https://asa-annecy.example/${")".repeat(200_000)}`],
+    ["200,000 exclamation marks", `https://asa-annecy.example/${"!".repeat(200_000)}`],
+    ["5,000 links", `${PLAN} `.repeat(5_000)],
+    ["200,000 letters after a scheme", `https://${"a".repeat(200_000)}`],
+  ])("splits %s in linear time", (_, typed) => {
+    const start = performance.now();
+    const pieces = descriptionPieces(typed);
+    expect(performance.now() - start).toBeLessThan(200);
+    expect(pieces.map((piece) => (piece.kind === "text" ? piece.text : piece.href)).join("")).toBe(typed);
+  });
+
   describe("no network call", () => {
     afterEach(() => {
       vi.restoreAllMocks();
@@ -253,6 +267,11 @@ describe("description-links.ts", () => {
 
   it("uses nothing from Node, so the header can split the text in the browser", () => {
     expect(browserUnsafeReached(source, file.pathname)).toEqual([]);
+  });
+
+  it("has no lookbehind, which Safari before 16.4 cannot parse", () => {
+    expect(source).not.toContain("(?<=");
+    expect(source).not.toContain("(?<!");
   });
 
   it("reads URL.host, never .hash", () => {

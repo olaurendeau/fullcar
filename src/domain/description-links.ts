@@ -19,9 +19,6 @@ const BLANK = /[\t\n\p{Zs}]/u;
 /** Cut from the end of a candidate, as many times as needed. */
 const TRAILING = new Set([".", ",", ";", ":", "!", "?", "…", ">", '"', "'", "»", "”", "’"]);
 
-/** Cut from the end of a candidate when the candidate does not open it. */
-const OPENERS: Record<string, string> = { ")": "(", "]": "[" };
-
 /** Invisible, bidirectional, format or control: Cf, these ranges, and every Cc (tab and `\n` end the candidate first). */
 const HIDDEN = /[\p{Cf}\p{Cc}\u200b-\u200f\u2028-\u202e\u2060-\u2064\ufeff]/u;
 
@@ -37,22 +34,35 @@ function count(value: string, char: string): number {
   return value.split(char).length - 1;
 }
 
-/** The candidate without its trailing punctuation. */
+/**
+ * The candidate without its trailing punctuation, and without a trailing `)` or `]` that the
+ * candidate does not open. Linear: the brackets are counted once, and a cut closer is taken
+ * off its count; an opener is never cut.
+ */
 function withoutTrailing(candidate: string): string {
-  let end = candidate;
+  const closers: Record<string, number> = { ")": count(candidate, ")"), "]": count(candidate, "]") };
+  const openers: Record<string, number> = { ")": count(candidate, "("), "]": count(candidate, "[") };
+  let end = candidate.length;
   for (;;) {
-    const last = end[end.length - 1] ?? "";
-    const opener = OPENERS[last];
-    if (TRAILING.has(last) || (opener !== undefined && count(end, last) > count(end, opener))) end = end.slice(0, -1);
-    else return end;
+    const last = candidate[end - 1] ?? "";
+    if (TRAILING.has(last)) end--;
+    else if (last in closers && closers[last] > openers[last]) {
+      closers[last]--;
+      end--;
+    } else return candidate.slice(0, end);
   }
 }
 
-/** Whether the candidate leads exactly where it reads, by the refusal rules in their order. */
+/**
+ * Whether the candidate leads exactly where it reads, by the refusal rules in their order.
+ * Decision of the coordinator on #725, stricter than the design: an `@` anywhere, not only in
+ * the authority, keeps it text, since `https://evil.example\@asa-annecy.example/` (or `?@`,
+ * `#@`) reads like L14 reversed.
+ */
 function isLink(candidate: string): boolean {
   if (HIDDEN.test(candidate)) return false;
+  if (candidate.includes("@")) return false;
   const authority = candidate.slice(candidate.indexOf("//") + 2).split(/[/\\?#]/)[0];
-  if (authority.includes("@")) return false;
   if (!ASCII_AUTHORITY.test(authority)) return false;
   if (authority.split(":")[0].split(".").some((label) => label.toLowerCase().startsWith("xn--"))) return false;
   try {
@@ -74,11 +84,13 @@ export function descriptionPieces(description: string): DescriptionPiece[] {
 
   let done = 0;
   const scheme = new RegExp(SCHEME);
+  const blank = new RegExp(BLANK, "gu");
   for (let match = scheme.exec(description); match !== null; match = scheme.exec(description)) {
     const start = match.index;
     if (GLUED.test(charBefore(description, start))) continue;
-    const blank = description.slice(start).search(BLANK);
-    const candidate = withoutTrailing(description.slice(start, blank === -1 ? description.length : start + blank));
+    blank.lastIndex = start;
+    const stop = blank.exec(description)?.index ?? description.length;
+    const candidate = withoutTrailing(description.slice(start, stop));
     const end = start + candidate.length;
     addText(description.slice(done, start));
     if (isLink(candidate)) pieces.push({ kind: "link", href: candidate });
