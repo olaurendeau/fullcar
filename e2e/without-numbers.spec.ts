@@ -1,12 +1,13 @@
 import { cursorOf } from "./cursor";
+import { numbersHidden } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { withoutNumbers } from "./without-numbers";
 
 leaveNoToken();
 
 /*
- * #354: one `withoutNumbers`, shared by `e2e/cursor.ts` and `e2e/focus-ring-board.spec.ts`. A
- * phone number never reaches a test's output. Each check compares a boolean: a failure prints
+ * #354: one `withoutNumbers`, shared by `e2e/cursor.ts`, `e2e/driver.ts` and
+ * `e2e/focus-ring-board.spec.ts`. A phone number never reaches a test's output. Each check compares a boolean: a failure prints
  * true or false, never the text that holds the number.
  */
 
@@ -31,6 +32,21 @@ test.describe("withoutNumbers", () => {
 test("cursorOf: a failure on a tel: link names its number hidden", async ({ page }) => {
   await page.setContent(`<a href="tel:${PHONE.replaceAll(" ", "")}" hidden>Appeler Léa au ${PHONE}</a>`);
   const message = await cursorOf(page.getByText(`Appeler Léa au ${PHONE}`)).then(
+    () => "",
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  );
+  expect(message !== "", "a failure").toBe(true);
+  expect(message.includes("<numéro>"), "the number hidden in the message").toBe(true);
+  for (const phone of [PHONE, PHONE.replaceAll(" ", "")]) {
+    expect(message.includes(phone), `the number, ${phone.length} characters, in the message`).toBe(false);
+  }
+});
+
+test("numbersHidden: a failing toContainText on a tel: link names its number hidden", async ({ page }) => {
+  await page.setContent(`<a href="tel:${PHONE.replaceAll(" ", "")}">Appeler Léa au ${PHONE}</a>`);
+  const message = await numbersHidden(() =>
+    expect(page.getByRole("link")).toContainText("Appeler Paul", { timeout: 1_000 }),
+  ).then(
     () => "",
     (error: unknown) => (error instanceof Error ? error.message : String(error)),
   );
