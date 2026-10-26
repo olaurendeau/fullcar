@@ -6,7 +6,7 @@
  */
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { BUBBLE_INSET, bubbleMaxHeight, framing } from "@/domain/event-map";
+import { BUBBLE_INSET, bubbleMaxHeight, fittingZoom, framing } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
 import { FLAG_LAYER, mapUpdate, POINT_LAYERS, pointKey, pointLayer, type MapFocus, type TilesEvent } from "./event-map-state";
 
@@ -563,7 +563,10 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
           [view.north, view.east],
         ];
         const { top, right, bottom, left } = view.padding;
-        map.fitBounds(box, { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom], maxZoom: view.maxZoom, animate: false });
+        // Leaflet's zoom for the box may pass its padding (#820): the one that holds it, at most.
+        const size = map.getSize();
+        const maxZoom = fittingZoom(view, size.x, size.y);
+        map.fitBounds(box, { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom], maxZoom, animate: false });
       }
     });
   };
