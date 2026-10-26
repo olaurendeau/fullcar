@@ -24,7 +24,10 @@ export type NotDone =
   | { kind: "editEvent" }
   | { kind: "removeRetour" };
 
-/** The reasons said by their key alone; the last three, of « Modifier l’événement » closed before its answer (v3.3.2). */
+/**
+ * The reasons said by their key alone: `driverWithoutPhone`, an offer whose driver has no number
+ * (v4.8, rule 7); the last three, of « Modifier l’événement » closed before its answer (v3.3.2).
+ */
 type Plain =
   | "offline"
   | "failed"
@@ -34,6 +37,7 @@ type Plain =
   | "forbidden"
   | "eventNotFound"
   | "noRetour"
+  | "driverWithoutPhone"
   | "editErrors"
   | "eventChanged"
   | "retourNotConfirmed";
@@ -50,6 +54,8 @@ export type Why =
   | { kind: "noRetourAgain"; action: "offerRide" | "addPerson" }
   /** A person of the send was removed from the event meanwhile (RP5.4): named as the send showed her. */
   | { kind: "personGone"; firstName: string }
+  /** Her number emptied while she drives (v4.8, rule 8): named as the send showed her. */
+  | { kind: "phoneWhileDriving"; firstName: string }
   /** The retour changed while its removal was confirmed (M3.7): what to use again, `where` the answer is said. */
   | { kind: "retourChanged"; cars: number; persons: number; where: "sheet" | "bar" };
 
@@ -144,10 +150,11 @@ export function editedFields(changed: readonly PersonField[]): "firstName" | "ph
 
 /**
  * Why the form of `firstName` was not done: as `whyOf`; `drives`, which only a cell's action meets,
- * the generic reason; `personGone`, she was removed meanwhile (RP5.4).
+ * the generic reason; `personGone`, she was removed meanwhile (RP5.4); `phoneWhileDriving`, her
+ * number emptied while she drives (v4.8, rule 8).
  */
-export function personWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personGone", firstName: string): Why {
-  if (error === "personGone") return { kind: "personGone", firstName };
+export function personWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personGone" | "phoneWhileDriving", firstName: string): Why {
+  if (error === "personGone" || error === "phoneWhileDriving") return { kind: error, firstName };
   return whyOf(error === "drives" ? "invalid" : error);
 }
 

@@ -36,10 +36,1320 @@
   visible ; toute feuille garde son titre en haut et ses boutons en bas, au-dessus du
   clavier, et seul son corps défile (#650). Aucun mot nouveau. Voir « Ce qui change en
   v4.6 »
+- v4.7 : le geste « retour » du navigateur (glisser depuis le bord gauche sur iPhone, le
+  bouton « retour » d’Android) ferme la feuille ouverte, comme Échap, au lieu de quitter la
+  page (#656). L’adresse ne change pas, et une feuille fermée autrement ne laisse aucune
+  entrée d’historique. Dans une étape, le retour revient à l’étape d’avant, comme
+  « Annuler » (décision du propriétaire, Q1 : b). Aucun mot nouveau. Voir « Ce qui change en
+  v4.7 »
+- v4.8 : le numéro de téléphone, demandé au bon moment et obligatoire pour qui conduit
+  (#766, décisions du propriétaire). La fiche d’une voiture demande un numéro quand aucune
+  personne de l’appareil qui s’y trouve n’en a. « Ajouter une personne » reprend le numéro de
+  la dernière personne de l’appareil qui en a un. On ne propose plus de voiture sans numéro,
+  et on ne peut pas retirer le sien tant qu’on conduit. Les conducteurs déjà inscrits sans
+  numéro restent tels quels. Qui voit un numéro ne change pas (DO1). Voir « Ce qui change en
+  v4.8 ». Avec elle, les libellés de la v4.5 deviennent « Je ramène aussi des personnes » et
+  « J’emmène aussi des personnes » (décision du propriétaire sur #649, 26/10)
 - Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
   la maquette `language-switch` depuis sa v3 (#236)
 - Page : `index.html` (autonome, maquettes à 360 px de large)
 - Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
+
+## Ce qui change en v4.8 : le numéro au bon moment, obligatoire pour qui conduit (#766)
+
+Question du propriétaire (26/10) : « Est-ce qu’on ne devrait pas rendre obligatoires les
+numéros de téléphone ? Sinon je ne vois pas comment les gens peuvent s’organiser… » Après
+l’avis du product designer, il a décidé (#766) :
+
+- **Q1 (b)** : demander le numéro au bon moment, le préremplir pour les personnes d’un même
+  appareil, et le rendre obligatoire pour qui conduit. Les conducteurs déjà inscrits sans
+  numéro restent tels quels, et restent dans « Voitures sans numéro » de l’espace
+  organisateur.
+- **Q2 (b)** : rien n’est montré aux personnes de la même voiture quand quelqu’un n’a pas de
+  numéro. Le silence d’aujourd’hui reste.
+- **Q3 (a)** : le numéro est prérempli et modifiable, avec « Même numéro que {firstName}.
+  Modifiez-le si besoin. »
+- **Qui voit un numéro ne change pas** (DO1, `phone-visibility.ts`).
+
+### Le problème
+
+Le numéro sert surtout dans une voiture, sur un leg : la personne qui conduit et ses
+passagers se retrouvent (« j’ai dix minutes de retard », « quelle entrée ? »). Aujourd’hui,
+le champ est facultatif partout. Sur la fiche, une personne de la voiture sans numéro
+n’affiche rien. Personne ne voit qu’un numéro manque, et personne ne se le voit demander.
+Seul l’organisateur le voit, dans « Voitures sans numéro » et « Pas de numéro ». Une voiture
+proposée sans numéro ne peut être appelée par personne. Et un conducteur qui retire sa
+voiture lit « Personne n’est prévenu : pensez à le leur dire. », sans moyen de le faire si
+ses passagers n’ont pas laissé de numéro.
+
+### Ce qui se passe aujourd’hui (`main`, `58bf602`)
+
+- `PersonForm.phone` « Téléphone (facultatif) » dans « Ajouter une personne », dans la
+  première inscription depuis une place libre, dans « Modifier {prénom} », et pour « Une
+  nouvelle personne » de « Proposer une voiture ». Toujours la même aide :
+  « Visible seulement par l’organisateur et par les personnes de la même voiture. »
+- `offerRide` accepte une nouvelle personne sans numéro (`validatePerson`, téléphone
+  facultatif) et une personne de l’appareil sans numéro.
+- `updatePerson` accepte un numéro vidé pour toute personne, y compris une personne qui
+  conduit.
+- `ride-card.tsx` ne dessine un lien `tel:` que si un numéro est là, et rien sinon.
+- `offerRide` renvoie ses erreurs de champ sans l’état (`offer-ride.ts:107–115`) ; seuls ses
+  refus le portent, relu après la transaction (C11.6).
+- Une seule requête lit la valeur de `phone` : `src/db/event-rows.ts` (`PERSON_COLUMNS`,
+  chemin sensible). `architecture.md` (« une règle, un seul endroit ») et
+  `review-checklist.md` en font une règle bloquante.
+- `organiser-lists.tsx` montre « Pas de numéro » et « Voitures sans numéro ({count}) ».
+
+### La règle (v4.8)
+
+**1. La fiche demande un numéro, à l’appareil seulement.** Sur la fiche d’une voiture, sur
+son leg, quand l’appareil a au moins une personne dans cette voiture (qui conduit, ou
+passagère) et qu’**aucune** d’elles n’a de numéro, la fiche montre, sous ses places et
+au-dessus de « Modifier » / « Retirer la voiture » :
+
+- une phrase :
+  - « Ajoutez un numéro pour que {driver} puisse vous joindre. », quand les personnes de
+    l’appareil sont passagères ;
+  - « Ajoutez un numéro pour que les personnes à bord puissent vous joindre. », quand la
+    personne de l’appareil est celle qui conduit (seul un conducteur inscrit avant la v4.8
+    peut ne pas avoir de numéro) ;
+- un bouton « Ajouter un numéro », contour, 44 px, icône téléphone. Son nom accessible est
+  « Ajouter un numéro pour {firstName} », et la phrase le décrit (`aria-describedby`).
+
+Un seul message par fiche : un numéro suffit pour joindre la famille. Avec Léa et Tom dans
+la voiture de Marc, sans numéro tous les deux, la fiche montre un seul message. Si Tom a un
+numéro, elle n’en montre aucun.
+
+`{firstName}` est la personne dont le bouton ouvre le formulaire : celle de l’appareil qui
+conduit, sinon la première passagère de l’appareil dans l’ordre de la fiche.
+
+Le message ne s’affiche jamais :
+- sur la fiche d’une voiture où l’appareil n’a personne ;
+- tant que les personnes de l’appareil ne sont pas connues (chargement, échec : C5.9) ;
+- sans JavaScript.
+
+Il apparaît sans être annoncé : après un tap, la barre dit déjà « Léa est dans la voiture de
+Marc », et un second message la couperait.
+
+**2. Le bouton ouvre « Modifier {firstName} ».** Il ouvre directement le formulaire de C2.3,
+sans passer par la feuille du prénom. Le focus est dans le champ du téléphone, et pas dans
+« Prénom ». Le formulaire est celui d’aujourd’hui : mêmes champs, mêmes règles, même
+« Valider » sans changement qui n’envoie rien (v4.4). Sur téléphone, il prend toute la
+hauteur visible (v4.6), et le geste « retour » le ferme comme Échap (v4.7).
+- **Enregistré avec un numéro** : la feuille se ferme, et le message part de la fiche. Le
+  lien `tel:` de la personne y apparaît, comme pour toute personne de la voiture qui a un
+  numéro (C10.1). Le focus va sur le titre de la fiche, « Voiture de {driver} »
+  (`focusCarTitle`), puisque le bouton n’existe plus. La barre ne dit rien, comme après tout
+  « Modifier » réussi.
+- **Fermé sans enregistrer** (« Fermer », Échap, le geste « retour »), ou enregistré sans
+  numéro (seul le prénom a changé) : le message reste, et le focus revient sur « Ajouter un
+  numéro ».
+- **Échec** : les mots d’aujourd’hui. Feuille ouverte : `Actions.offline` ou
+  `Actions.failed` dans le formulaire. Feuille fermée : la barre dit « Le téléphone de Léa
+  n’a pas été enregistré. Vérifiez la connexion, puis réessayez. »
+  (`Actions.notDone.editPerson`). Personne retirée entre-temps : `personGone` (RP5.4),
+  inchangé.
+
+**3. Le silence reste pour les autres (Q2 b).** Aucune fiche ne dit qu’une personne d’un
+autre appareil n’a pas de numéro : ni « Pas de numéro », ni rien d’autre. La feuille du prénom
+de « Vos inscriptions » ne change pas non plus : le lien `tel:` s’il y a un numéro, puis
+« Modifier ».
+
+**4. « Ajouter une personne » reprend le numéro de l’appareil (Q3 a).** Quand l’appareil a
+au moins une personne qui a un numéro, le champ « Téléphone (facultatif) » de « Ajouter une
+personne » s’ouvre avec le numéro de la **dernière** de ces personnes, dans l’ordre de « Vos
+inscriptions ». Sous le champ, avant l’aide, une ligne : « Même numéro que {firstName}.
+Modifiez-le si besoin. »
+- Le focus reste dans « Prénom », comme aujourd’hui (C1.2).
+- La ligne reste tant que le champ contient exactement ce numéro. Si on change ou vide le
+  champ, elle part. Si on retape le même numéro, elle revient.
+- Vidé, le champ crée la personne sans numéro, comme aujourd’hui.
+- C’est vrai partout où « Ajouter une personne » s’ouvre : le bouton du leg, et « Ajouter
+  une personne » dans la feuille « Qui monte dans la voiture de {driver} ? » (C6.6).
+- Pas de préremplissage :
+  - dans la première inscription, où l’appareil n’a encore personne ;
+  - dans « Modifier {prénom} » ;
+  - pour « Une nouvelle personne » de « Proposer une voiture » (décision v4.8-8) ;
+  - dans le champ « Téléphone de {prénom} » de la règle 7.
+- Le numéro prérempli est déjà visible par cet appareil, parmi ses propres personnes
+  (C10.1). Rien de nouveau n’est envoyé ni stocké.
+
+**5. Depuis une place libre, l’aide dit pourquoi.** Dans le formulaire « Ajouter une
+personne » ouvert depuis une place libre, l’aide du téléphone devient « Pour que {driver}
+puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même
+voiture. » C’est vrai dans la première inscription (`RegisterSheet`, C5.4) et dans « Ajouter
+une personne » de la feuille d’une place (C6.6). Le libellé reste « Téléphone (facultatif) » :
+un passager n’est pas obligé d’en donner un. C5.4 tient toujours en trois actions : place
+libre, prénom, « Valider ».
+
+**6. Proposer une voiture demande un numéro à une nouvelle personne.** Pour « Une nouvelle
+personne », ou sans personne sur l’appareil :
+- le champ devient « Téléphone », sans « (facultatif) » ;
+- son aide devient « Pour que les personnes à bord puissent vous joindre. Visible seulement
+  par l’organisateur et par les personnes de la même voiture. » ;
+- vide, « Valider » ne crée rien. L’erreur « Un numéro est requis pour proposer une
+  voiture. » s’affiche sous le champ, avant l’aide, et le focus va au premier champ en
+  erreur, dans l’ordre du formulaire (C4.7) ;
+- mal formé, l’erreur est celle d’aujourd’hui, `FormErrors.invalidPhone`.
+
+**7. Une personne de l’appareil sans numéro qui conduit en donne un.** Dans « Qui conduit ? »,
+quand la personne choisie est une personne de l’appareil sans numéro, un champ apparaît dans
+le groupe, sous les boutons radio :
+- libellé « Téléphone de {firstName} », vide ;
+- même aide et mêmes erreurs que la règle 6.
+
+Choisir une personne qui a un numéro, ou « Une nouvelle personne », retire ce champ. Choisir
+une autre personne sans numéro le montre de nouveau, vide, à son prénom.
+
+« Valider » enregistre le numéro sur la personne et crée la ou les voitures dans la **même
+écriture**, tout ou rien (C4.5). Si l’offre est refusée ou échoue, le numéro n’est pas
+enregistré non plus. Les mots d’échec de l’offre ne changent pas
+(`Actions.notDone.offerRide`).
+
+**Côté serveur.** `offerRide` sait si la personne de l’appareil qui conduit a un numéro par
+une **condition de présence lue sous le verrou de sa Person** : `phone IS NOT NULL`, dans la
+requête de `lockPersons` ou à côté. Elle rend un booléen, jamais la valeur.
+`phone-visibility.ts` et `event-rows.ts` ne changent pas (décision v4.8-18). Si elle n’a pas
+de numéro et que l’offre n’en porte pas, c’est le **refus** `driverWithoutPhone`, et non une
+erreur de champ. Comme tout refus, il porte l’état relu après la transaction (C11.6). Une
+erreur de champ reviendrait sans l’état (décision v4.8-19). Rien n’est créé.
+
+C’est le cas où la page croyait que la personne avait un numéro, vidé ailleurs entre-temps.
+Avec l’état relu, la page retire son lien `tel:`, dans la feuille de son prénom comme sur les
+fiches. Le formulaire reste ouvert, ses autres champs gardés. Il montre « Téléphone de
+{firstName} », vide, avec « Un numéro est requis pour proposer une voiture. », et le focus y
+va (état 18). Si la feuille a été fermée avant la réponse, la barre le dit : « La voiture de
+Claire pour l’aller n’a pas été proposée. Un numéro est requis pour proposer une voiture. »
+(`Actions.notDone.offerRide` + `Actions.why.driverWithoutPhone`).
+
+Une nouvelle personne sans numéro reste une erreur de champ (règle 6) : rien dans la page
+n’est périmé, et le navigateur la voit avant d’envoyer.
+
+**8. On ne retire pas son numéro tant qu’on conduit.** Dans « Modifier {prénom} », pour une
+personne qui conduit sur au moins un leg :
+- le libellé devient « Téléphone », et l’aide celle de la règle 6 ;
+- **vider** le champ, puis « Valider », ne change rien. L’erreur « Un numéro est requis tant
+  que {firstName} conduit. » s’affiche sous le champ, et le focus y va. `{firstName}` est le
+  prénom affiché avant le changement ;
+- **changer** le numéro pour un autre numéro valide est accepté ;
+- un conducteur inscrit avant la v4.8 sans numéro peut changer son prénom en laissant le
+  champ vide. Un champ laissé tel quel n’est pas envoyé (v4.4), donc rien ne le refuse. Rien
+  ne l’oblige à ajouter un numéro (Q1 b).
+
+Dès qu’elle ne conduit plus (voiture retirée), le libellé redevient « Téléphone
+(facultatif) », et vider le champ supprime le numéro (C2.3).
+
+**Côté serveur.** `updatePerson` verrouille la Person, puis regarde si elle conduit un Ride
+sur l’un des legs. Il n’a pas besoin de lire `phone` : la question est « conduit-elle ? »,
+et le numéro envoyé est dans la requête. Un numéro envoyé vide pour une personne qui conduit
+est le **refus** `phoneWhileDriving`, qui porte l’état (décision v4.8-19). Rien n’est écrit,
+prénom compris. Le verrou est celui que prend `offerRide` : une offre et un effacement
+envoyés ensemble s’ordonnent (T5.6).
+
+C’est le cas où elle se met à conduire depuis un autre appareil pendant que le formulaire
+est ouvert, avec « Téléphone (facultatif) ». Avec l’état relu, le formulaire passe au
+libellé « Téléphone » et montre « Un numéro est requis tant que {firstName} conduit. », le
+focus dans le champ. Si la feuille a été fermée avant la réponse, la barre le dit : « Le
+téléphone de Claire n’a pas été enregistré. Un numéro est requis tant que Claire
+conduit. » (`Actions.notDone.editPerson` + `Actions.why.phoneWhileDriving`).
+
+**9. Ce qui ne change pas.**
+- « Modifier la voiture » ne demande rien : il n’a pas de champ de téléphone.
+- « Prendre une place » (le tap, la feuille), « Sortir de la voiture », « Je cherche une
+  place » : rien de nouveau. Le geste reste unique.
+- La création d’un événement : aucun champ de téléphone. Le critère des 30 s ne bouge pas.
+- L’espace organisateur : mêmes mots, même code (« Ce que voit l’organisateur »).
+- Qui voit un numéro : `withVisiblePhones` et `withOrganiserPhones`, inchangés.
+
+### Ce que voit l’organisateur
+
+Rien ne change dans `organizer-view`. « Voitures sans numéro ({count}) » ne peut plus
+contenir que des voitures de conducteurs inscrits avant la v4.8. Son aide, « Les personnes à
+bord ne peuvent pas appeler la personne qui conduit. Demandez-lui d’ajouter son numéro. »,
+reste vraie, et la fiche de cette voiture lui demande désormais aussi (règle 1). Quand ce
+conducteur ajoute un numéro, sa voiture quitte la liste, comme aujourd’hui. Avec la dernière,
+la liste dit « Toutes les voitures ont un numéro. » « Pas de numéro » dans « Sans voiture »
+garde son sens : un passager n’est pas obligé d’en donner un.
+
+### Les états de la v4.8 (dessinés dans la page)
+
+La numérotation est celle de la page.
+
+| n° | état | ce que montre l’écran | critère |
+|---|---|---|---|
+| 1 | Léa, sans numéro, passagère de Marc à l’aller | la fiche de Marc : le lien de Marc, Léa sans lien, Inès avec le sien, une place libre, puis « Ajoutez un numéro pour que Marc puisse vous joindre. » et « Ajouter un numéro » | T1.1, T1.3 |
+| 2 | « Ajouter un numéro » touché | « Modifier Léa », le focus dans « Téléphone (facultatif) », vide | T1.2 |
+| 3 | enregistré | la fiche sans message, le lien de Léa dans sa ligne, le focus sur « Voiture de Marc » | T1.2 |
+| 4 | Léa et Tom, aucun numéro | un seul message, le bouton nommé pour Léa | T1.4 |
+| 5 | Léa et Tom, Tom a un numéro | aucun message | T1.4 |
+| 6 | Claire conduit, inscrite avant la v4.8, sans numéro | « Ajoutez un numéro pour que les personnes à bord puissent vous joindre. », puis « Modifier » et « Retirer la voiture » | T1.6 |
+| 7 | Sophie, d’un autre appareil, sans numéro, dans la voiture de Marc | rien pour Sophie : ni « Pas de numéro », ni message | T1.10 |
+| 8 | hors ligne, « Valider » depuis la fiche, feuille fermée | la barre : « Le téléphone de Léa n’a pas été enregistré. Vérifiez la connexion, puis réessayez. », et le message reste | T1.8 |
+| 9 | 360 px, un conducteur au prénom de 40 caractères | la phrase passe à la ligne, le bouton tient, aucun débordement | T1.9 |
+| 10 | « Ajouter une personne », Tom a le dernier numéro | le champ prérempli, « Même numéro que Tom. Modifiez-le si besoin. », puis l’aide | T2.1, T2.2 |
+| 11 | le numéro changé | la ligne « Même numéro que Tom » est partie | T2.3 |
+| 12 | première inscription depuis une place libre de Marc | « Pour que Marc puisse vous joindre. Visible seulement… », le libellé « Téléphone (facultatif) » | T3.1 |
+| 13 | « Proposer une voiture », nouvelle personne | « Téléphone », l’aide pour qui conduit | T4.1 |
+| 14 | le même, numéro vide, « Valider » | « Un numéro est requis pour proposer une voiture. », le focus dans le champ | T4.1 |
+| 15 | « Qui conduit ? » : Claire, sans numéro | « Téléphone de Claire » sous les boutons radio | T4.4 |
+| 16 | « Modifier Claire », qui conduit, numéro vidé | « Téléphone », « Un numéro est requis tant que Claire conduit. » | T5.1 |
+| 17 | en anglais | « Add a number so that Marc can reach you. », « Add a number » ; « Phone », « A number is needed to offer a car. » | T1.11, T4.10 |
+| 18 | « Proposer une voiture », Claire choisie, son numéro vidé ailleurs, « Valider » | le refus `driverWithoutPhone` avec l’état : « Téléphone de Claire » apparaît, vide, en erreur, le focus dedans ; lieu et heure gardés ; Claire n’a plus de lien `tel:` | T4.8 |
+
+Sans maquette, décrits par les règles : la fiche d’une voiture où l’appareil n’a personne
+(règle 1), le chargement et l’échec de « Vos inscriptions » (règle 1), la personne qui se
+met à conduire pendant « Modifier » (règle 8, T5.7), les deux refus dans la barre, feuille
+fermée (règles 7 et 8), l’espace organisateur (inchangé).
+
+### Les mots de la v4.8
+
+Apostrophes typographiques (’), comme dans le reste de `messages/fr.json`.
+
+| clé | `messages/fr.json` | `messages/en.json` | où |
+|---|---|---|---|
+| `Board.car.addPhoneWhy.passenger` | Ajoutez un numéro pour que {driver} puisse vous joindre. | Add a number so that {driver} can reach you. | fiche, règle 1 (texte de l’epic) |
+| `Board.car.addPhoneWhy.driver` | Ajoutez un numéro pour que les personnes à bord puissent vous joindre. | Add a number so that the people on board can reach you. | fiche, conducteur d’avant la v4.8 (v4.8-3) |
+| `Board.car.addPhone` | Ajouter un numéro | Add a number | texte visible du bouton |
+| `Board.car.addPhoneLabel` | Ajouter un numéro pour {firstName} | Add a number for {firstName} | nom accessible du bouton (v4.8-5) |
+| `PersonForm.samePhone` | Même numéro que {firstName}. Modifiez-le si besoin. | Same number as {firstName}. Change it if needed. | « Ajouter une personne », règle 4 (texte de l’epic) |
+| `PersonForm.phoneHintForSeat` | Pour que {driver} puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that {driver} can reach you. Only visible to the organiser and to the people in the same car. | depuis une place libre, règle 5 |
+| `PersonForm.phoneDriving` | Téléphone | Phone | « Modifier {prénom} » d’une personne qui conduit, règle 8 |
+| `PersonForm.phoneHintDriving` | Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that the people on board can reach you. Only visible to the organiser and to the people in the same car. | même texte que `RideForm.phoneHint` |
+| `RideForm.phone` | Téléphone | Phone | nouvelle personne qui conduit, règle 6 |
+| `RideForm.driverPhone` | Téléphone de {firstName} | {firstName}’s phone | personne de l’appareil sans numéro, règle 7 |
+| `RideForm.phoneHint` | Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that the people on board can reach you. Only visible to the organiser and to the people in the same car. | règles 6 et 7 |
+| `FormErrors.driverPhone` | Un numéro est requis pour proposer une voiture. | A number is needed to offer a car. | règles 6 et 7 (v4.8-11) |
+| `FormErrors.phoneWhileDriving` | Un numéro est requis tant que {firstName} conduit. | A number is needed while {firstName} is driving. | règle 8 |
+| `Actions.why.driverWithoutPhone` | Un numéro est requis pour proposer une voiture. | A number is needed to offer a car. | barre, refus `driverWithoutPhone`, feuille fermée (règle 7, v4.8-19) |
+| `Actions.why.phoneWhileDriving` | Un numéro est requis tant que {firstName} conduit. | A number is needed while {firstName} is driving. | barre, refus `phoneWhileDriving`, feuille fermée (règle 8, v4.8-19) |
+
+**Inchangés**, et réutilisés tels quels :
+- `PersonForm.phone` « Téléphone (facultatif) » / “Phone (optional)” : « Ajouter une
+  personne », première inscription, « Modifier » d’une personne qui ne conduit pas ;
+- `PersonForm.phoneHint` : partout ailleurs ;
+- `FormErrors.invalidPhone` ;
+- `Actions.notDone.editPerson`, `Actions.notDone.offerRide`, et les `Actions.why.*` d’avant ;
+- `Board.call` ;
+- toutes les clés `Admin.*`.
+
+Ordre d’une description accessible de champ, comme aujourd’hui : l’erreur, puis la ligne
+« Même numéro que… » s’il y en a une, puis l’aide. Exemples, mot pour mot :
+- règle 4 : « Même numéro que Tom. Modifiez-le si besoin. Visible seulement par
+  l’organisateur et par les personnes de la même voiture. » ;
+- règles 4 et 5 ensemble (feuille d’une place) : « Même numéro que Claire. Modifiez-le si
+  besoin. Pour que Marc puisse vous joindre. Visible seulement par l’organisateur et par les
+  personnes de la même voiture. » ;
+- règle 6 en erreur : « Un numéro est requis pour proposer une voiture. Pour que les
+  personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les
+  personnes de la même voiture. »
+
+Les deux refus, feuille fermée, dans la barre (table « Chaque échec, mot pour mot ») :
+- « La voiture de Claire pour l’aller n’a pas été proposée. Un numéro est requis pour
+  proposer une voiture. » / “Claire’s car for the outbound trip was not offered. A number
+  is needed to offer a car.” ;
+- « Le téléphone de Claire n’a pas été enregistré. Un numéro est requis tant que Claire
+  conduit. » / “Claire’s phone number was not saved. A number is needed while Claire is
+  driving.”
+
+### Critères de la v4.8
+
+**Histoire H11, « Être joignable par sa voiture ».** En tant que parent dont l’enfant monte
+dans la voiture de quelqu’un, quand personne de chez moi n’y a laissé de numéro, la fiche de
+la voiture me le demande, et je l’ajoute en un tap, pour que la personne qui conduit puisse
+me joindre.
+
+**Histoire H12, « Ne pas retaper mon numéro ».** En tant que parent qui inscrit un deuxième
+enfant, je trouve mon numéro déjà dans le champ, et je le change si l’enfant a le sien.
+
+**Histoire H13, « Une voiture qu’on peut appeler ».** En tant que passager d’une voiture
+proposée depuis la v4.8, j’ai toujours le numéro de la personne qui conduit, parce qu’elle a
+dû en donner un pour proposer sa voiture et qu’elle ne peut pas le retirer tant qu’elle
+conduit.
+
+**Scène commune**, Playwright, projet `e2e` (360 px) sauf mention contraire. L’événement
+amorcé (`seededEvent`) est « Tournoi de Rennes ». Marc (`seedPerson`, son propre jeton, numéro
+`MARC_PHONE`) conduit à l’aller (`seedRide`, 3 places). L’appareil porte le jeton de Claire,
+Léa et Tom (`seedPerson` avec un même jeton, sans numéro sauf mention). Les numéros sont des
+constantes du test. Toute vérification qui pourrait les imprimer passe par `withoutNumbers`
+(#354). « Aucune requête » veut dire que `page.on("request")` ne voit aucune requête
+`next-action`.
+
+**T1 : la fiche demande un numéro** (`e2e/phone-ask.spec.ts`).
+
+- **T1.1** Léa est passagère de Marc à l’aller (`seedPlacement`).
+  - L’article « Voiture de Marc » contient le texte « Ajoutez un numéro pour que Marc puisse
+    vous joindre. »
+  - Il contient un bouton `getByRole("button", { name: "Ajouter un numéro pour Léa" })`, de
+    texte visible « Ajouter un numéro ». Sa description accessible est exactement cette
+    phrase.
+  - La boîte du bouton est sous celle de la dernière ligne de places, et il fait au moins
+    44 px de haut.
+  - Sur `main`, le texte est absent : le test échoue.
+- **T1.2** On touche ce bouton.
+  - Le dialogue « Modifier Léa » s’ouvre, et « Téléphone (facultatif) » a le focus, vide.
+  - On y tape `LEA_PHONE`, puis « Valider ». Le dialogue se ferme, et l’article ne contient
+    plus « Ajoutez un numéro ».
+  - Il contient le lien `tel:` de Léa (nom accessible « Appeler Léa au … »).
+  - Le titre « Voiture de Marc » a le focus.
+  - En base, `phone` de Léa vaut `LEA_PHONE`. La barre ne contient aucun message.
+- **T1.3** Le geste reste unique. Léa, sans numéro, est la seule personne de l’appareil
+  « sans voiture » à l’aller. **Un** clic sur « Place libre : prendre une place dans la
+  voiture de Marc » la place (C5, inchangé). Le message de T1.1 apparaît ensuite sans aucun
+  autre clic. La barre dit « Léa est dans la voiture de Marc », avec « Annuler », comme
+  aujourd’hui.
+- **T1.4** Un numéro suffit.
+  - Léa et Tom sont passagers de Marc, sans numéro : l’article contient exactement **un**
+    texte « Ajoutez un numéro pour que Marc puisse vous joindre. », et le bouton
+    « Ajouter un numéro pour Léa » (Léa est avant Tom dans la fiche). Aucun bouton
+    « Ajouter un numéro pour Tom ».
+  - Tom a un numéro (`seedPerson` avec `TOM_PHONE`) : l’article ne contient aucun
+    « Ajoutez un numéro ».
+- **T1.5** Seulement là où l’appareil a quelqu’un.
+  - Léa est dans la voiture de Marc, et Tom dans celle de Karim (un autre appareil, avec un
+    numéro), sans numéro tous les deux. Chaque article a son message : « … pour que Marc… »
+    avec « Ajouter un numéro pour Léa », « … pour que Karim… » avec « Ajouter un numéro pour
+    Tom ».
+  - Une troisième voiture, celle de Sophie, sans personne de l’appareil, n’a aucun
+    message.
+  - Sur un second contexte de navigateur (un appareil sans personne), aucun article ne
+    contient « Ajoutez un numéro ».
+  - Pendant le chargement de « Vos inscriptions » (réponse retenue par `page.route`),
+    aucun article ne contient « Ajoutez un numéro ».
+- **T1.6** Un conducteur d’avant la v4.8.
+  - Claire, sans numéro, conduit à l’aller (`seedRide`, donc sans passer par le
+    formulaire), et Léa, sans numéro, est sa passagère. L’article « Voiture de Claire »
+    contient « Ajoutez un numéro pour que les personnes à bord puissent vous joindre. » et
+    le bouton « Ajouter un numéro pour Claire ».
+  - Ce bouton est au-dessus de « Modifier » et de « Retirer la voiture ».
+  - Le toucher ouvre « Modifier Claire », avec le focus dans le champ dont le libellé est
+    exactement « Téléphone » (règle 8).
+- **T1.7** Fermé sans rien changer. Depuis T1.1, on touche le bouton, puis « Fermer » ;
+  puis de nouveau, et Échap. Chaque fois : aucune requête, le message reste, et le focus est
+  sur « Ajouter un numéro pour Léa ».
+- **T1.8** Hors ligne. Depuis T1.2, le numéro tapé, `context.setOffline(true)`, puis
+  « Valider » : le formulaire montre « Action impossible, vérifiez la connexion ». On le
+  ferme. La barre dit « Le téléphone de Léa n’a pas été enregistré. Vérifiez la connexion,
+  puis réessayez. » L’article contient toujours le message. En base, Léa n’a pas de numéro.
+- **T1.9** À 360 × 780, Marc s’appelle « Marc-Alexandre-Emmanuel-Christophe-Jean » (40
+  caractères), et la scène est celle de T1.1.
+  - `document.documentElement.scrollWidth` vaut au plus 360.
+  - Pour l’article, `scrollWidth` vaut au plus `clientWidth`.
+  - La phrase fait au moins deux lignes, et le bouton au moins 44 px de haut.
+  - La même chose en anglais.
+- **T1.10** Le silence reste (Q2 b). Léa, avec un numéro, et Sophie (un autre appareil,
+  sans numéro) sont passagères de Marc. L’article ne contient ni « Pas de numéro », ni
+  « No number », ni « Ajoutez un numéro ». La ligne de Sophie n’a aucun lien. La feuille du
+  prénom « Léa » de « Vos inscriptions » n’a pas d’autre élément que son lien et
+  « Modifier ».
+- **T1.11** En anglais (`locale: "en-GB"`), scène de T1.1 : « Add a number so that Marc can
+  reach you. », et le bouton `{ name: "Add a number for Léa" }`, de texte « Add a number ».
+  Scène de T1.6 : « Add a number so that the people on board can reach you. »
+
+**T2 : « Ajouter une personne » reprend le numéro** (`e2e/phone-prefill.spec.ts`).
+
+- **T2.1** Claire a `CLAIRE_PHONE`, Léa et Tom n’en ont pas. On touche « Ajouter une
+  personne » sur l’onglet Aller.
+  - « Prénom » a le focus.
+  - « Téléphone (facultatif) » a pour valeur `CLAIRE_PHONE`, et pour description exactement
+    « Même numéro que Claire. Modifiez-le si besoin. Visible seulement par l’organisateur et
+    par les personnes de la même voiture. »
+  - On tape « Inès », puis « Valider » : en base, Inès a `CLAIRE_PHONE`.
+  - Sur `main`, le champ est vide : le test échoue.
+- **T2.2** La dernière qui en a un. Claire a `CLAIRE_PHONE`, Léa aucun, Tom `TOM_PHONE`,
+  dans cet ordre dans « Vos inscriptions » : le champ a `TOM_PHONE`, et la ligne dit « Même
+  numéro que Tom. Modifiez-le si besoin. »
+- **T2.3** Changé ou vidé.
+  - Depuis T2.1, on remplace le numéro par `INES_PHONE` : la description ne contient plus
+    « Même numéro ». On retape `CLAIRE_PHONE` : elle le contient de nouveau.
+  - On vide le champ, on tape « Inès », puis « Valider » : en base, Inès n’a pas de numéro.
+- **T2.4** Rien à reprendre.
+  - Aucune personne de l’appareil n’a de numéro : le champ est vide, et sa description est
+    exactement l’aide d’aujourd’hui.
+  - Dans les mêmes conditions que T2.1 :
+    - dans « Proposer une voiture » puis « Une nouvelle personne », « Téléphone » est vide ;
+    - dans « Modifier Léa », le champ est vide ;
+    - aucune de ces deux descriptions ne contient « Même numéro ».
+- **T2.5** Depuis la feuille d’une place. Claire a `CLAIRE_PHONE`, et Léa et Tom sont sans
+  voiture. On touche une place libre de Marc : la feuille « Qui monte dans la voiture de
+  Marc ? » s’ouvre. On touche « Ajouter une personne ». Le champ a `CLAIRE_PHONE`, et sa
+  description est exactement « Même numéro que Claire. Modifiez-le si besoin. Pour que Marc
+  puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même
+  voiture. »
+- **T2.6** En anglais, scène de T2.1 : « Same number as Claire. Change it if needed. Only
+  visible to the organiser and to the people in the same car. »
+
+**T3 : l’aide depuis une place libre** (`e2e/phone-prefill.spec.ts`).
+
+- **T3.1** Appareil sans personne. Un clic sur une place libre de Marc ouvre la première
+  inscription.
+  - Le champ a pour libellé exactement « Téléphone (facultatif) ». Sa description est
+    exactement « Pour que Marc puisse vous joindre. Visible seulement par l’organisateur et
+    par les personnes de la même voiture. »
+  - « Inès », puis « Valider », sans numéro : Inès est dans la voiture de Marc. Ce sont
+    trois actions, comme C5.4.
+- **T3.2** « Ajouter une personne » depuis le bouton du leg, appareil sans personne : la
+  description reste exactement « Visible seulement par l’organisateur et par les personnes
+  de la même voiture. » C’est une garde : sur `main`, elle passe déjà.
+
+**T4 : un numéro pour proposer une voiture** (`e2e/phone-driver.spec.ts`, et Vitest pour
+T4.7 et T4.8).
+
+- **T4.1** Appareil sans personne, « Proposer une voiture » sur l’onglet Aller.
+  - Le groupe « Qui conduit ? » contient « Prénom » et un champ de libellé exactement
+    « Téléphone ». Aucun champ ne s’appelle « Téléphone (facultatif) ».
+  - Sa description est exactement « Pour que les personnes à bord puissent vous joindre.
+    Visible seulement par l’organisateur et par les personnes de la même voiture. »
+  - On remplit « Marc », le lieu et l’heure, sans numéro, puis « Valider » : aucune
+    requête. Le champ a `aria-invalid="true"`, sa description commence par « Un numéro est
+    requis pour proposer une voiture. », et il a le focus. En base, aucune personne et aucun
+    Ride.
+  - Sur `main`, la voiture est créée : le test échoue.
+- **T4.2** La même chose avec `MARC_PHONE` : la voiture de Marc est créée, et en base Marc a
+  `MARC_PHONE`. La fiche montre son lien `tel:` à l’appareil, qui est le sien (C10.1).
+- **T4.3** Avec « 06 12 » : l’erreur est « Numéro non valide : de 6 à 15 chiffres, avec
+  seulement des espaces et + . - ( ) » (inchangée), et rien n’est créé.
+- **T4.4** Une personne de l’appareil sans numéro. Claire et Léa sans numéro, Tom avec
+  `TOM_PHONE`, aucune ne conduit.
+  - On choisit Claire dans « Qui conduit ? » : un champ « Téléphone de Claire » apparaît,
+    vide, dans le groupe et sous le dernier bouton radio, avec la description de T4.1.
+  - On choisit Léa : le champ s’appelle « Téléphone de Léa », vide.
+  - On choisit Tom : aucun champ de téléphone dans le groupe.
+  - On choisit « Une nouvelle personne » : « Prénom » et « Téléphone ».
+- **T4.5** Claire choisie, champ vide, « Valider » : « Un numéro est requis pour proposer une
+  voiture. », le focus dans « Téléphone de Claire », rien de créé. Avec `CLAIRE_PHONE` : la
+  voiture de Claire est créée, et en base Claire a `CLAIRE_PHONE`.
+- **T4.6** Hors ligne, Claire choisie, `CLAIRE_PHONE` tapé, « Valider » : la feuille reste
+  ouverte avec « Action impossible, vérifiez la connexion », et le champ garde
+  `CLAIRE_PHONE`. En base, ni voiture ni numéro.
+- **T4.7** Vitest, `offerRide` :
+  - une nouvelle personne sans numéro (absent, `""`, espaces) : erreurs de champ
+    `{ phone: "required" }`, `first: "phone"` s’il est le premier en erreur. Rien n’est
+    écrit, sur un événement connu comme inconnu (comme les autres erreurs de champ) ;
+  - une personne de l’appareil sans numéro en base, sans numéro envoyé : le refus
+    `{ ok: false, error: "driverWithoutPhone" }`, avec l’état relu après la transaction
+    (C11.6), où cette personne n’a pas de numéro. Rien n’est écrit, et l’état ne porte
+    aucun numéro de plus que ce que C10.1 permet à cet appareil ;
+  - une personne de l’appareil avec un numéro en base, sans numéro envoyé : acceptée,
+    numéro inchangé ;
+  - une personne de l’appareil, numéro envoyé : validé par les règles de R1, puis écrit
+    sur sa Person dans la même transaction que le ou les Rides ;
+  - l’offre refusée après cette écriture (`alreadyDriving`, `alreadyInCar`, `noRetour`,
+    `idTaken`) laisse le numéro comme il était ;
+  - renvoyée après une réponse perdue (C4.10), elle n’écrit rien de plus ;
+  - en revue : la présence est lue par une condition (`phone IS NOT NULL`) sous le verrou de
+    la Person, qui rend un booléen. Aucune requête nouvelle ne sélectionne la valeur de
+    `phone` (v4.8-18).
+- **T4.8** Le numéro vidé ailleurs. La page montre Claire avec `CLAIRE_PHONE`, donc pas de
+  champ. Avant « Valider », la base vide son numéro (`UPDATE` du test, comme un autre
+  appareil). « Valider » :
+  - la réponse est le refus `driverWithoutPhone`, avec l’état ;
+  - le formulaire reste ouvert, lieu et heure gardés. « Téléphone de Claire » apparaît,
+    vide, avec `aria-invalid="true"`, et sa description commence par « Un numéro est requis
+    pour proposer une voiture. ». Le focus est dans ce champ ;
+  - on ferme le formulaire : la feuille du prénom « Claire » n’a plus de lien `tel:` ;
+  - en base, aucun Ride.
+  - Seconde scène, la réponse retenue (`page.route`) et le formulaire fermé avant elle : la
+    barre dit « La voiture de Claire pour l’aller n’a pas été proposée. Un numéro est requis
+    pour proposer une voiture. »
+- **T4.9** « Je ramène aussi des personnes » avec une nouvelle personne : une seule saisie
+  du numéro crée les deux voitures. Sans numéro, aucune des deux n’est créée.
+- **T4.10** En anglais : « Phone », “So that the people on board can reach you. Only visible
+  to the organiser and to the people in the same car.”, « A number is needed to offer a
+  car. », et « Claire’s phone » pour T4.4.
+- **T4.11** Les conducteurs d’avant restent tels quels. Claire, sans numéro, conduit
+  (`seedRide`).
+  - « Modifier la voiture » : on change la note, puis « Valider ». C’est enregistré, sans
+    aucun champ de téléphone dans le formulaire.
+  - La fiche reste proposée, avec le message de T1.6.
+
+**T5 : on ne retire pas son numéro tant qu’on conduit** (`e2e/phone-driver.spec.ts`, et
+Vitest pour T5.5 et T5.6).
+
+- **T5.1** Claire a `CLAIRE_PHONE` et conduit à l’aller. On ouvre « Modifier Claire » depuis
+  « Vos inscriptions ».
+  - Le champ a pour libellé exactement « Téléphone », et pour description la phrase de
+    T4.1.
+  - On le vide, puis « Valider » : la feuille reste ouverte. Le champ est en erreur, avec
+    « Un numéro est requis tant que Claire conduit. », et il a le focus. Aucune requête.
+  - En base, Claire a toujours `CLAIRE_PHONE`.
+  - Sur `main`, le numéro est supprimé : le test échoue.
+- **T5.2** On remplace par `OTHER_PHONE` : enregistré.
+- **T5.3** Un conducteur d’avant, sans numéro (`seedRide`). On ouvre « Modifier Claire ».
+  - Libellé « Téléphone », champ vide.
+  - On change « Claire » en « Clara », puis « Valider » : c’est enregistré, sans erreur. En
+    base, `phone` est toujours `null`.
+- **T5.4** Claire retire sa voiture (« Retirer la voiture », confirmé). « Modifier Claire »
+  a de nouveau le libellé « Téléphone (facultatif) ». Le vider supprime le numéro (C2.3).
+- **T5.5** Vitest, `updatePerson` :
+  - `phone: ""` pour une personne qui conduit un Ride sur l’aller, ou seulement sur le
+    retour : le refus `{ ok: false, error: "phoneWhileDriving" }`, avec l’état (C11.6),
+    rien d’écrit ;
+  - la même chose avec le prénom changé dans la même requête : rien d’écrit non plus,
+    tout ou rien ;
+  - un autre numéro valide : écrit ;
+  - `phone` absent (champ non envoyé) : rien de refusé ;
+  - pour une personne qui ne conduit pas : `null` écrit, comme aujourd’hui.
+- **T5.6** Vitest, deux connexions, comme les tests de C12.8 : une offre qui fait conduire
+  Claire (personne de l’appareil, avec `CLAIRE_PHONE`, sans numéro envoyé) et un
+  `updatePerson` qui vide son numéro, lancés ensemble, dans les deux ordres d’arrivée.
+  Après les deux, exactement un des deux a réussi : soit le Ride existe et Claire a toujours
+  `CLAIRE_PHONE`, soit le numéro est vidé et aucun Ride n’existe. L’offre lit la présence du
+  numéro sous le verrou de la Person (v4.8-18), et l’effacement regarde « conduit-elle ? »
+  sous le même verrou.
+- **T5.7** Claire, avec `CLAIRE_PHONE`, ne conduit pas, et « Modifier Claire » est ouvert
+  (« Téléphone (facultatif) »). Une voiture de Claire est créée en base (`seedRide`). On vide
+  le champ, puis « Valider » :
+  - la réponse est le refus `phoneWhileDriving`, avec l’état, qui montre que Claire conduit ;
+  - le formulaire montre « Un numéro est requis tant que Claire conduit. » et le libellé
+    « Téléphone », le focus dans le champ ;
+  - en base, Claire a toujours `CLAIRE_PHONE`.
+  - Seconde scène, la réponse retenue et le formulaire fermé avant elle : la barre dit « Le
+    téléphone de Claire n’a pas été enregistré. Un numéro est requis tant que Claire
+    conduit. »
+
+**T6 : ce qui ne bouge pas** (gardes).
+
+- **T6.1** Espace organisateur, `/e/{id}/admin` avec la session de l’organisateur (fixtures
+  d’`organiser-panel.spec.ts`).
+  - Claire, sans numéro, conduit (`seedRide`) : « Voitures sans numéro (1) » liste
+    « Voiture de Claire », avec son aide inchangée.
+  - Claire ajoute un numéro depuis la fiche (T1.6) sur son appareil. Après « Actualiser »
+    dans l’espace organisateur, la section dit « Toutes les voitures ont un numéro. »
+- **T6.2** En revue :
+  - la PR n’ajoute aucune migration, et `person.phone` reste nullable ;
+  - `src/domain/phone-visibility.ts`, `phone-visibility.test.ts` et `src/db/event-rows.ts`
+    ne changent pas ;
+  - hors d’`event-rows.ts`, `phone` n’apparaît que dans une condition de présence sous le
+    verrou (`phone IS NOT NULL`, un booléen) et dans les écritures. Aucun `select` ne prend sa
+    valeur, ni `selectAll()`, ni `returningAll()` sur `person`.
+- **T6.3** Les tests des critères du produit passent sans changement d’attente :
+  - créer un événement en 8 actions (7 avec une session) ;
+  - le tap unique avec une personne « sans voiture » ;
+  - la feuille avec deux personnes.
+
+**Non prouvable par un test** : que les gens laissent davantage de numéros, et qu’ils ne
+tapent pas un faux numéro pour passer le champ obligatoire. Rien ne le mesure : pas de suivi.
+À regarder avec le propriétaire lors d’un prochain événement réel. La vérification d’un
+numéro reste hors périmètre.
+
+### Décisions de la v4.8
+
+v4.8-1. Décision : les critères s’appellent T1 à T6, et non N1 à N6 comme dans l’avis du
+product designer. — Raison : N1.1 à N1.6 existent déjà (v4.4.6).
+
+v4.8-2. Décision : un seul message par fiche, quand aucune personne de l’appareil dans cette
+voiture n’a de numéro. — Raison : décision du propriétaire (#766). La personne qui conduit
+joint la famille avec n’importe lequel de ses numéros. Un message par enfant demanderait le
+même numéro deux fois.
+
+v4.8-3. Décision : quand la personne de l’appareil est celle qui conduit, la phrase est
+« Ajoutez un numéro pour que les personnes à bord puissent vous joindre. » — Raison : la
+phrase de l’epic nomme `{driver}`, ce qui serait faux pour la personne qui conduit. Ce cas
+n’existe que pour les conducteurs inscrits avant la v4.8. « Les personnes à bord » est la
+forme épicène de `Admin.carsWithoutPhone.hint` et de `RideForm.noteHint`.
+
+v4.8-4. Décision : le bouton ouvre « Modifier {prénom} » directement, le focus dans le
+téléphone. Pour la personne qui conduit si elle est de l’appareil, sinon pour la première
+passagère de l’appareil dans l’ordre de la fiche. — Raison : c’est le seul champ que le
+message demande. Passer par la feuille du prénom ajouterait un tap.
+
+v4.8-5. Décision : le texte visible est « Ajouter un numéro », et le nom accessible
+« Ajouter un numéro pour {prénom} ». — Raison : un leg peut avoir deux messages (Léa chez
+Marc, Tom chez Karim). Le nom commence par le texte visible (WCAG 2.5.3).
+
+v4.8-6. Décision : l’apparition du message n’est pas annoncée. — Raison : elle suit un tap
+dont la barre annonce déjà la réussite. Le message reste sur la fiche, et un lecteur d’écran
+le rencontre en la lisant.
+
+v4.8-7. Décision : rien n’est montré aux autres, ni sur la fiche, ni dans la feuille du
+prénom. — Raison : décision du propriétaire, Q2 (b).
+
+v4.8-8. Décision : le préremplissage ne vaut que dans « Ajouter une personne » : le bouton du
+leg, et la feuille d’une place. Pas pour « Une nouvelle personne » qui conduit, ni dans
+« Modifier », ni dans « Téléphone de {prénom} ». — Raison : le propriétaire a retenu Q3 (a)
+sur l’avis qui excluait la nouvelle personne qui conduit. Une seconde personne qui conduit
+est en général un autre adulte. Dans un champ obligatoire, un numéro prérempli serait
+accepté sans être lu, et la voiture appellerait le mauvais adulte. L’epic dit « quand un
+appareil ajoute une personne » ; l’exception est une décision du coordinateur (26/10).
+
+v4.8-9. Décision : « la dernière personne qui en a un » se lit dans l’ordre de « Vos
+inscriptions ». — Raison : c’est l’ordre que l’appareil voit. La personne ajoutée en dernier
+y est en dernier.
+
+v4.8-10. Décision : la ligne « Même numéro que… » ne reste que tant que le champ contient
+exactement ce numéro. — Raison : sinon, elle dirait quelque chose de faux.
+
+v4.8-11. Décision : un numéro manquant pour qui conduit dit « Un numéro est requis pour
+proposer une voiture. », et non « Champ requis. ». — Raison : le champ était facultatif
+partout, et il le reste ailleurs. L’erreur dit pourquoi celui-ci ne l’est pas.
+
+v4.8-12. Décision : une personne de l’appareil sans numéro qui conduit en donne un dans le
+même formulaire, sous « Qui conduit ? », et il est enregistré dans la même écriture que la
+voiture. — Raison : un seul « Valider », tout ou rien (C4.5). Une seconde feuille, ou un
+« Modifier » d’abord, briserait le chemin.
+
+v4.8-13. Décision : vider son numéro est refusé tant qu’on conduit sur l’un des legs. Le
+changer est accepté. — Raison : sinon, l’obligation se contournerait juste après la
+création de la voiture. Le changement reste libre : on peut corriger un numéro.
+
+v4.8-14. Décision : dans « Modifier » d’une personne qui conduit, le libellé est
+« Téléphone », et l’aide ne dit pas « requis ». Un conducteur d’avant sans numéro peut
+enregistrer d’autres changements avec le champ vide. — Raison : décision du propriétaire,
+Q1 (b), « restent tels quels ». Le refus ne porte que sur un numéro qu’on retire, et l’aide
+ne promet rien que le formulaire n’applique pas.
+
+v4.8-15. Décision : aucune contrainte en base, aucune migration. La règle vit dans
+`offerRide` et `updatePerson`, vérifiée sous le verrou de la Person (v4.8-18). — Raison : les
+conducteurs d’avant n’ont pas de numéro, et une contrainte les refuserait. Les migrations
+sont un chemin sensible. L’architecte décide du mécanisme.
+
+v4.8-16. Décision : l’aide depuis une place libre garde le libellé « Téléphone
+(facultatif) ». — Raison : un passager n’est pas obligé d’en donner un (Q1 b). C5.4 garde
+ses trois actions.
+
+v4.8-17. Décision : « Modifier la voiture » ne demande rien. — Raison : il ne change pas qui
+conduit. Un conducteur d’avant reste tel quel, et la fiche le lui demande déjà (v4.8-3).
+
+v4.8-18. Décision du coordinateur (revue de la v4.8) : le serveur sait si qui conduit a un
+numéro par une condition de présence lue sous le verrou de la Person, par exemple
+`phone IS NOT NULL` dans la requête de `lockPersons` ou à côté. Elle rend un booléen, jamais
+la valeur. `phone-visibility.ts` et `event-rows.ts` ne changent pas. — Raison : une seule
+requête lit la valeur de `phone` : `architecture.md` (« une règle, un seul endroit »),
+`PERSON_COLUMNS` d’`event-rows.ts` (chemin sensible), `review-checklist.md`. Un booléen sous
+le verrou suffit à la règle 7, et ordonne l’offre et l’effacement (T5.6). La règle 8 n’en a
+pas besoin : elle ne demande que « conduit-elle ? ».
+
+v4.8-19. Décision : « pas de numéro pour qui conduit » (règle 7, une personne de l’appareil)
+et « numéro vidé par qui conduit » (règle 8, côté serveur) sont des refus qui portent
+l’état (`driverWithoutPhone`, `phoneWhileDriving`), et non des erreurs de champ. — Raison :
+revue de la v4.8. Les erreurs de champ reviennent sans l’état (`offer-ride.ts:107–115`), et
+seuls les refus le portent (C11.6). Ces deux refus viennent d’une page périmée : l’état
+relu retire le lien `tel:` de Claire, ou montre qu’elle conduit, et le formulaire met le
+champ en erreur. Une nouvelle personne sans numéro reste une erreur de champ : rien n’y est
+périmé.
+
+### Hors périmètre de la v4.8
+
+- « Pas de numéro » ou toute autre marque visible des autres personnes (Q2 b).
+- Un numéro obligatoire pour un passager, à l’inscription ou en prenant une place.
+- Un numéro par appareil, un « contact », une nouvelle donnée stockée.
+- Vérifier un numéro (SMS, appel) ou détecter un faux numéro : aucune bibliothèque nouvelle.
+  Le format reste celui de R1.
+- Obliger les conducteurs d’avant à ajouter un numéro.
+- Toute visibilité nouvelle d’un numéro, pour l’organisateur comme pour les autres (DO1).
+- La messagerie, les notifications (hors périmètre V1).
+- Ce que dit la page de confidentialité : son texte revient au propriétaire (voir
+  « Documentation »).
+
+### Documentation
+
+Sur `main`, `docs/agents/architecture.md`, `docs/agents/glossary.md` et
+`docs/agents/product.md` ne sont pas des chemins sensibles (`merge.sensitive_paths` de
+`.claude/workflow.json`) : leurs lignes vont dans la PR de la tâche 1.
+`docs/agents/review-checklist.md` l’est : ses lignes vont dans une PR à elles, que le
+propriétaire fusionne.
+
+- `docs/agents/glossary.md` :
+  - **Person**, « téléphone (optionnel) » devient « téléphone (optionnel, sauf pour qui
+    conduit) » ;
+  - **Ride**, après « conducteur (Person) », ajouter : « qui a un numéro : on ne propose pas
+    de voiture sans numéro, et on ne retire pas le sien tant qu’on conduit (#766). Un
+    conducteur inscrit avant peut ne pas en avoir. »
+- `docs/agents/product.md`, « Règles d’interaction » : une puce, qui écrit la décision du
+  propriétaire sur #766 : « **Proposer une voiture** demande un numéro à qui conduit. Ailleurs, le
+  numéro reste facultatif ; il est demandé sur la fiche d’une voiture quand personne de
+  l’appareil qui s’y trouve n’en a, et repris d’une personne de l’appareil à l’autre. »
+- `docs/agents/architecture.md`, « Visibilité du téléphone : une règle, un seul endroit »,
+  après « une seule requête lit la colonne `phone` : `src/db/event-rows.ts`. » : ajouter
+  « Un test de présence de `phone` sous le verrou de la Person est permis (`phone IS NOT
+  NULL`, qui rend un booléen, jamais la valeur, #766) ; lire sa valeur hors de cette requête
+  reste bloquant. »
+- `docs/agents/review-checklist.md` (chemin sensible, **PR à elle, fusionnée par le
+  propriétaire**), « Visibilité du téléphone » :
+  - à la puce « Une seule requête lit la colonne `phone` », ajouter : « Un test de présence
+    de `phone` sous le verrou est permis (`phone IS NOT NULL`, un booléen, jamais la
+    valeur) ; lire sa valeur hors de la requête unique reste bloquant. » ;
+  - ajouter une puce : « un Ride créé a un conducteur avec un numéro ; vider le numéro de
+    qui conduit est refusé, sous le verrou de sa Person ».
+- **Page de confidentialité** (`privacy-policy`, texte du propriétaire) : elle doit dire que
+  le numéro est facultatif, sauf pour proposer une voiture, et qu’il peut être prérempli
+  d’une personne à l’autre sur un même appareil.
+
+### Les tests existants
+
+Ce qui échoue sur la v4.8 sans être mis à jour :
+
+- **Tout e2e qui propose une voiture par le formulaire sans numéro**, avec une nouvelle
+  personne ou une personne de l’appareil sans numéro. Candidats sur `main`, à vérifier un
+  par un :
+  - `aller-sheets`, `bar-retour`, `bar-rides`, `bar-subjects`, `cursor` ;
+  - `event-header-state`, `event-map-organiser`, `event-map`, `event` ;
+  - `find-seat`, `focus-ring-board`, `held-success` ;
+  - `identity-follow`, `identity-not-found`, `journey` ;
+  - `offer-other-leg`, `offer-passengers`, `offer-places`, `offer-ride` ;
+  - `organiser-edit-legs`, `retour-sheets`, `ride-remove` (tous `e2e/*.spec.ts`) ;
+  - `e2e/event.shot.ts`.
+
+  Recommandation : un assistant partagé (par exemple `fillDriver(form, { firstName, phone
+  })` dans `e2e/`) qui remplit « Téléphone » ou « Téléphone de {prénom} ». Ou bien la
+  personne amorcée avec un numéro, quand le test ne porte pas sur le formulaire. Un test qui
+  porte sur un conducteur sans numéro l’amorce par `seedRide`.
+- **Les libellés et descriptions du téléphone** :
+  - `e2e/add-person.spec.ts` : la description depuis une place libre, et tout second ajout
+    sur un appareil dont une personne a un numéro, désormais prérempli ;
+  - `e2e/person-edit.spec.ts` et `e2e/bar-persons.spec.ts` : là où la personne modifiée
+    conduit, le libellé devient « Téléphone ».
+- **Vitest** :
+  - `offer-ride.test.ts` et `offer-ride.action.test.ts` : les offres d’une nouvelle
+    personne sans numéro ;
+  - `persons.test.ts` : le cas « vider le numéro » d’une personne qui conduit ;
+  - `person-error.test.ts` : les nouveaux codes ;
+  - `failure-words.test.ts`, si des clés y sont parcourues.
+- **Captures** : `e2e/event.shot.ts` et `e2e/board.shot.ts`, pour le formulaire et la
+  fiche.
+- **Sans changement** : les tests de l’espace organisateur, qui amorcent leurs voitures ;
+  `phone-visibility.test.ts` ; `organiser-panel.test.ts`.
+
+Le titre d’un test qui cite un libellé change avec lui. Ses identifiants de critère restent.
+
+### Pour le développement de la v4.8
+
+- **Trois tâches**, chacune sous 1000 lignes.
+  1. Le numéro obligatoire pour qui conduit : le serveur, `ride-form.tsx`, « Modifier » pour
+     qui conduit, T4 et T5. Avec la mise à jour des e2e qui proposent une voiture, et leur
+     assistant partagé. C’est la plus grosse, à cause des tests. Si elle dépasse le plafond,
+     l’assistant et les e2e passent d’abord, seuls (ils remplissent un champ facultatif
+     aujourd’hui : ils passent sur `main`).
+  2. Le message de la fiche : T1, et T6.1.
+  3. Le préremplissage et l’aide depuis une place : T2 et T3.
+- **Ordre** : 1 d’abord. 2 et 3 sont indépendantes ensuite. T1.6 et T4.11 amorcent un
+  conducteur sans numéro par `seedRide`, que la tâche 1 ne touche pas.
+- **Les clés de la v4.8** arrivent avec la tâche qui les affiche, FR et EN ensemble (C11.1).
+- **La documentation** : `architecture.md`, `glossary.md` et `product.md` dans la PR de la
+  tâche 1 ; `review-checklist.md` dans une PR à elle, que le propriétaire fusionne.
+
+## Ce qui change en v4.7 : le geste « retour » ferme la feuille (#656)
+
+Issue : https://github.com/olaurendeau/fullcar/issues/656, séparée de #650 par décision du
+propriétaire (25/10/2026 ; question 3 de la v4.6). Sur iPhone, glisser depuis le bord gauche,
+une feuille ouverte, quitte la page et perd ce qui a été saisi. Le propriétaire veut que le
+geste ferme la feuille, comme Échap. Cette révision part de la v4.6 (suite). Elle ne dépend
+pas de la façon dont #691 à #697 construisent la feuille (décision du coordinateur, v4.7-10).
+Aucun mot nouveau. Dans une étape, le retour revient à l’étape d’avant, comme « Annuler » :
+réponse du propriétaire à Q1, (b), inscrite sur #656 (v4.7-11).
+
+### Le problème
+
+Une personne remplit « Modifier Claire » ou « Proposer une voiture » sur son téléphone. Elle
+fait le geste « retour » : sur iPhone, elle glisse depuis le bord gauche, souvent sans le
+vouloir, en visant le début d’un champ ; sur Android, elle touche le bouton ou fait le geste
+« retour ». Depuis la v4.6, une feuille à champ de saisie prend tout l’écran : elle ressemble
+à une page, et le geste devient le réflexe pour « revenir ». Le navigateur quitte alors
+l’événement pour la page d’avant : l’accueil, la création de l’événement, « Mes
+événements ». Sur Android, sans page d’avant, il revient à l’application d’où vient le lien.
+Ce qui a été tapé est perdu. Au retour, la page montre le tableau, sans la feuille.
+Aujourd’hui, la personne s’en protège en touchant « Fermer », jamais le geste. Quand elle
+glisse quand même, elle rouvre le lien et recommence.
+
+### Ce qui se passe aujourd’hui (`main`, `8b4cd9b`)
+
+En une phrase : aucune feuille ne touche à l’historique, et le geste « retour » quitte
+`/e/{id}` (ou `/e/{id}/admin#{jeton}`) pour la page d’avant, avec la feuille et sa saisie.
+
+- Ouvrir une feuille n’ajoute aucune entrée d’historique. Le seul code qui en ajoute est
+  `goToAdminLink` : `router.push` vers `/e/{id}/admin#{jeton}`, après la création.
+- Échap ferme la feuille (Radix, `BottomSheet`). Depuis une liste de propositions ouverte, il
+  ferme la liste seule (AL1.5). Dans une étape (« Qui sort de la voiture ? », « Ajouter une
+  personne » dans la feuille d’une place), Échap ferme toute la feuille ; seul « Annuler »
+  revient à l’étape d’avant. Sur « Supprimer le retour ? », Échap revient au formulaire,
+  sauf pendant les 10 s où la réponse est attendue : il ne fait rien.
+- La barre de messages ignore Échap tant qu’un dialogue est ouvert (`message-bar.tsx`).
+- Le jeton d’admin est dans le fragment. `useAdminLinkCheck` le relit à chaque `hashchange`,
+  et à chaque envoi : tout changement du fragment relance la vérification du lien.
+- Next.js 16.4 remplace `history.pushState` (`app-router.js`) : un état poussé reçoit `__NA`
+  et l’arbre de la page. À `popstate`, Next restaure cet arbre, sans recharger. Un état non
+  vide **sans** `__NA` lui fait recharger la page (`window.location.reload()`).
+- Ni Next ni l’application ne règlent `history.scrollRestoration`, qui reste `auto` : un
+  retour vers une entrée de la même page rend le défilement noté pour cette entrée.
+
+### La règle (v4.7)
+
+**1. Le retour ferme ce qu’Échap fermerait.** Une feuille ouverte, le geste ou le bouton
+« retour » du navigateur ferme la feuille comme Échap. C’est vrai pour glisser depuis le
+bord gauche sur iPhone, pour le bouton ou le geste « retour » d’Android, et pour
+« Précédent », Alt+← ou le bouton de la souris sur ordinateur. Rien n’est envoyé. Ce qui a
+été tapé sans être envoyé est perdu, comme avec Échap (v4.7-2), sauf dans une étape, où le
+retour revient au formulaire, ses changements gardés (règle 3). Le focus va où Échap
+l’aurait mis, et la page reste où elle était. La barre de messages ne change pas. La règle
+vaut pour toutes les feuilles de la page, à champ de saisie ou non (v4.7-1), sur `/e/{id}`
+comme sur `/e/{id}/admin#{jeton}`.
+
+**2. Le premier plan d’abord.** Une boîte de confirmation ouverte au-dessus d’une feuille
+(« Supprimer le retour ? », au-dessus de « Modifier l’événement ») se ferme seule au retour,
+comme avec Échap : l’organisateur revient au formulaire, et ce qu’il y a tapé est gardé.
+Pendant les 10 s d’attente de sa réponse, Échap n’y fait rien, et le retour non plus
+(v4.7-6). Une liste de propositions ouverte se ferme avec sa feuille : pour elle, le retour
+n’est pas l’Échap du champ (v4.7-5).
+
+**3. Une étape revient à l’étape d’avant** (décision du propriétaire, Q1 : b, v4.7-11).
+Dans « Qui sort de la voiture ? », l’étape de « Modifier la voiture », le retour fait ce que
+fait « Annuler » : il revient au formulaire, avec ses changements gardés (lieu, heure,
+places, note). Dans la feuille d’une place, depuis « Ajouter une personne », il revient à
+« Qui monte dans la voiture de {driver} ? », comme « Annuler », et ce qui a été tapé dans
+« Ajouter une personne » est perdu, comme avec « Annuler ». Un second retour ferme la
+feuille. Échap ne change pas : il ferme toujours toute la feuille.
+
+**3 bis. Une étape ou une boîte compte un pas tant qu’elle est ouverte, quelle que soit la
+façon dont elle s’ouvre ou finit** (v4.7-12). Les étapes et la boîte ne s’ouvrent et ne se
+ferment pas seulement d’un toucher : la réponse du serveur en ouvre et en ferme aussi.
+
+- **Toute façon de l’ouvrir ajoute un pas.** « Qui sort de la voiture ? » s’ouvre au
+  « Valider » du formulaire quand les places tapées sont sous le nombre de passagers, ou
+  après la réponse de `updateRide`, quand le serveur compte plus de passagers que de places
+  (`ride-form.tsx:403`, depuis un « Valider » qui tenait sur l’appareil). « Supprimer le
+  retour ? » s’ouvre après la réponse `confirmRetour` de « Valider »
+  (`edit-event-sheet.tsx:200`), ou au « Valider » qui la rouvre avec ses nombres changés
+  (décision 49). « Ajouter une personne » de la feuille d’une place s’ouvre d’un toucher.
+- **Une étape rouverte n’ajoute rien.** « Qui sort de la voiture ? » refusée par le serveur
+  (`RideChanges.leaving.changed`) se rouvre depuis elle-même, pour un nouveau tour
+  (`round + 1`) : c’est le même pas. De même, la boîte qui reste ouverte avec de nouveaux
+  nombres, un échec (`problem`), un refus (`invalid`, dit « failed ») ou `eventNotFound`
+  garde son pas.
+- **Toute façon de la finir, la feuille restant ouverte, retire un pas.** « Annuler » de
+  l’étape ; la réponse `errors` qui ramène au formulaire (`ride-form.tsx:394`) ; la réponse
+  dont les places tiennent désormais (`:403`, l’étape fermée) ; « Valider » d’« Ajouter une
+  personne » de la feuille d’une place, qui revient à la liste, la personne ajoutée cochée
+  (`onDone` → `setAdding(null)`) ; « Annuler » ou Échap de la boîte ; les réponses `changed`
+  et `errors` de « Supprimer le retour », qui ferment la boîte seule et laissent le
+  formulaire dire pourquoi (`edit-event-sheet.tsx:267`) ; la boîte fermée après ses 10 s
+  d’attente.
+- **Fermer la feuille depuis l’intérieur d’une étape ou de la boîte retire deux pas** : le
+  sien et celui de la feuille. Ce sont Échap dans l’étape, une réponse `done` ou `noRetour`
+  à « Valider » de l’étape, la réponse `saved` à « Supprimer le retour », et la feuille
+  d’une place fermée depuis « Ajouter une personne » (`onGone`).
+- **Le retour lui-même** retire le pas de l’étape ou de la boîte : il ne fait rien d’autre
+  dans l’historique.
+
+Après chacune de ces fins, un retour fait ce que dit la règle 4 pour ce qui reste ouvert : il
+ferme la feuille si elle l’est encore, et quitte la page sinon.
+
+**4. Un retour, un pas.** Une feuille ouverte compte un pas en arrière, et un seul. Une
+boîte ou une étape qui a sa propre règle (règles 2 et 3) compte un pas de plus. Le premier
+retour ferme la feuille ; le suivant quitte la page, comme aujourd’hui sans feuille. Un même
+retour ne ferme jamais une feuille *et* ne quitte jamais la page.
+
+**5. Fermée autrement, la feuille ne laisse rien.** Après « Fermer », « Annuler », Échap, un
+toucher sur le voile, un « Valider » ou un « Placer n personnes » qui ferme, une action de
+cellule, « Voir la voiture » ou « Trouver une place », un seul retour quitte la page, comme
+si la feuille n’avait jamais été ouverte. Ce que l’action a fait n’est pas défait : le
+défilement de « Trouver une place », le focus après une action (v4.7-7).
+
+**6. L’adresse ne change pas.** Feuille ouverte, l’adresse est la même que sans feuille,
+caractère pour caractère. `/e/{id}` reste court pour un SMS. Le jeton de
+`/e/{id}/admin#{jeton}` reste dans le fragment, et aucun `hashchange` n’a lieu. Rien dans
+l’adresse ne dit qu’une feuille est ouverte (v4.7-3).
+
+**7. Rien n’est rechargé ni demandé.** Le retour qui ferme une feuille ne recharge pas la
+page et n’envoie aucune requête, en ligne comme hors ligne.
+
+**8. Rien d’une personne dans l’historique.** Ce que la page ajoute à l’historique est une
+marque opaque : ni prénom, ni numéro, ni jeton, ni texte tapé (v4.7-4).
+
+**9. Rechargée, ou revenue par « Suivant ».** Une page rechargée feuille ouverte s’affiche
+sans feuille, comme aujourd’hui. « Suivant », après un retour qui a fermé une feuille, ne la
+rouvre pas. Dans ces deux cas seulement, un retour peut ne rien faire de visible avant celui
+qui quitte la page. Il y en a au plus un, et il ne recharge rien (v4.7-8).
+
+### Le mécanisme (recommandation à l’architecte, qui décide)
+
+- **À l’ouverture**, dans le toucher ou la touche qui ouvre la feuille, la page ajoute une
+  entrée : `history.pushState({ <marque>: <identifiant de cette ouverture> }, "")`, **sans
+  troisième argument**. L’adresse ne change pas, le fragment non plus. Le `pushState` de
+  Next y copie `__NA` et l’arbre : à `popstate`, Next restaure la même page, sans requête.
+  Jamais le `pushState` d’origine, ni un état sans `__NA` : Next rechargerait la page au
+  retour (G1.1 l’attrape).
+- **Une étape ou la boîte** ajoute sa propre entrée de la même façon, à chaque ouverture de
+  la règle 3 bis, qu’elle vienne d’un toucher ou d’une réponse ; jamais pour un tour de plus
+  (`round + 1`). À `popstate`, l’étape ou la boîte ouverte finit par le chemin d’« Annuler ».
+  Toute autre fin, la feuille restant ouverte, fait `history.back()` une fois ; une
+  fermeture de toute la feuille depuis l’étape ou la boîte retire les deux entrées
+  (`history.go(-2)`, ou deux `history.back()`), si ce sont encore les siennes. Le plus
+  simple est que la feuille tienne la profondeur qu’elle a ajoutée (0, 1 ou 2) et la
+  ramène à ce qui est ouvert après chaque changement d’étape, quelle qu’en soit la cause,
+  plutôt que chaque chemin appelle l’historique lui-même.
+- **À `popstate`**, si une feuille est ouverte et que l’entrée active n’est plus la sienne,
+  elle se ferme par le même chemin qu’Échap, **sans** `history.back()`.
+- **Fermée autrement**, si l’entrée active est encore la sienne (sa marque, son
+  identifiant), la page fait `history.back()` une fois, puis attend le `popstate` qui suit ;
+  sinon, elle ne fait rien. Une feuille ouverte pendant cette attente ajoute son entrée
+  après ce `popstate` (G1.9).
+- **Le défilement.** `scrollRestoration` est `auto` : le retour qui retire l’entrée d’une
+  feuille fermée par une action rendrait le défilement d’avant l’action. Soit l’entrée part
+  avant que l’action fasse défiler (attendre le `popstate`), soit le défilement de l’action
+  est refait ensuite. L’architecte choisit, G1.10 prouve. Le `scrollY` que la v4.6 rend à la
+  fermeture sur iPhone (v4.6-15) suit la même règle.
+- **Les écritures de Next.** Après une mise à jour de type navigation, Next fait
+  `replaceState({ __NA, arbre })` sans garder l’état ajouté (`preserveCustomHistoryState:
+  false`) : la marque de l’entrée active serait perdue, et la fermeture laisserait une
+  entrée sans effet. Rien ne navigue aujourd’hui feuille ouverte ; G1.11 le garde, avec des
+  envois faits depuis une feuille.
+- **Chrome sur Android** saute, au retour, une entrée ajoutée par une page qui n’a reçu
+  aucune action de la personne depuis l’entrée précédente. Chaque entrée de la page suit une
+  telle action : le toucher qui ouvre la feuille, l’étape ou la boîte, ou le « Valider » dont
+  la réponse ouvre l’étape ou la boîte, même ajoutée après un `await`. La règle ne
+  s’applique donc pas ; c’est ce que vérifie G2.7, que Playwright ne peut pas prouver.
+- **Écartés.** Un fragment (`#feuille`) ou un paramètre (`?feuille`) changerait l’adresse
+  copiée et partagée. Sur `/admin`, il remplacerait le jeton et relancerait sa vérification.
+  `beforeunload` n’arrête pas le geste d’iPhone, et pose une question au lieu de fermer.
+  `CloseWatcher` n’existe que dans Chromium, et le geste de Safari ne le déclenche pas.
+- **Indépendant de #691 à #697** (v4.7-10). Le mécanisme ne lit que « la feuille est
+  ouverte » et appelle la fermeture d’Échap. Il ne dépend ni de `fullHeight`, ni de
+  `SheetBar`, ni de `visualViewport` ou `sheet-frame.ts`. Il touche `bottom-sheet.tsx`, que
+  #691 modifie aussi : l’ordre des fusions crée un conflit de texte, pas de conception.
+  `remove-retour-dialog.tsx`, `seat-sheet.tsx` et `ride-form.tsx` (les étapes) s’en servent
+  aussi.
+
+### Les risques, un par un
+
+| risque | ce qui se passerait | ce qui l’empêche | preuve |
+|---|---|---|---|
+| double retour | la feuille fermée par le retour fait aussi `history.back()` : un geste ferme la feuille **et** quitte la page | la fermeture par `popstate` ne fait pas `history.back()` | G1.4 |
+| deux gestes rapides | le premier ferme, le second quitte | voulu (règle 4) | G1.4 |
+| entrée sans effet après « Valider », Échap, « Fermer » | un retour ne fait rien, la personne recommence | `history.back()` à la fermeture, si l’entrée est la sienne | G1.5 |
+| historique profond | une entrée par ouverture : vingt retours pour quitter | au plus une entrée de feuille à la fois (deux avec une boîte ou une étape) | G1.6 |
+| fermée depuis une étape ou la boîte | Échap ou « Valider » dans « Qui sort de la voiture ? », ou `saved` à « Supprimer le retour », laisse l’entrée de la feuille : un retour sans effet | la fermeture retire les deux entrées | G1.15, G1.17 |
+| étape ou boîte ouverte ou finie par une réponse | une étape ouverte par `updateRide` sans entrée : le retour ferme toute la feuille ; une boîte fermée par `saved` qui ne retire qu’un pas : un retour sans effet | chaque ouverture ajoute un pas, chaque fin en retire un, la fermeture de la feuille deux (règle 3 bis) | G1.15, G1.17 |
+| rouvrir aussitôt | le `history.back()` en vol ferme la feuille qu’on vient d’ouvrir | l’ouverture attend le `popstate` de la fermeture | G1.9 |
+| lien à partager | l’adresse copiée feuille ouverte porte `#feuille`, ou s’allonge | l’adresse ne change pas | G1.7 |
+| lien d’organisateur | un fragment changé remplace le jeton, ou relance la vérification (« Ce lien d’organisateur n’est pas valide. ») | pas de troisième argument à `pushState`, aucun `hashchange` | G1.8 |
+| Next recharge la page | un état sans `__NA` : `location.reload()` au retour, la saisie perdue | le `pushState` de Next, jamais celui d’origine | G1.1 |
+| défilement rendu | « Trouver une place » amène à la place, puis le retour de la page ramène l’ancien défilement | l’entrée part avant le défilement de l’action, ou il est refait | G1.10 |
+| Next efface la marque | une entrée sans effet après une navigation, feuille ouverte | rien ne navigue feuille ouverte ; envois gardés par test | G1.11 |
+| rechargement, « Suivant » | une entrée sans feuille : un retour sans effet | accepté, au plus un (v4.7-8) | G1.12, G1.13 |
+| Chrome saute l’entrée | le retour quitte la page malgré l’entrée | l’entrée est ajoutée dans le toucher | G2.7 |
+| Safari pendant le geste | un éclair de la page d’avant, ou de la feuille | à vérifier à la main | G2.4 |
+| « Supprimer le retour ? » en attente | trois retours en moins de 10 s quittent la page pendant l’envoi | accepté (v4.7-6) : un retour ne se refuse pas | G1.15 |
+| l’historique garde des données | un prénom ou un jeton gardé par le navigateur, parfois au-delà de l’onglet | une marque opaque seulement | G1.14 |
+
+### Les états de la v4.7 (dessinés dans la page)
+
+D’abord, « L’historique, pas à pas » : une pile par scène — ouvrir puis retour ; ouvrir puis
+« Valider » ou Échap ; deux retours ; cinq ouvertures et fermetures ; page rechargée feuille
+ouverte (un retour sans effet, puis la page d’avant) ; une boîte au-dessus d’une feuille ;
+une étape, puis retour. Puis, numérotés comme dans la page :
+
+1. Avant, sur iPhone : « Modifier Claire », « Clara » tapé. Le geste depuis le bord gauche
+   ramène à la page d’avant, et « Clara » est perdu.
+2. Après, pendant le geste : la feuille glisse vers la droite, et le tableau apparaît
+   dessous, pas la page d’avant.
+3. Après, à la fin du geste : le tableau, au même défilement. Le focus est sur « Claire »
+   dans « Vos inscriptions », l’adresse est inchangée, et rien n’est enregistré.
+4. Geste lâché à mi-chemin : la feuille reste, « Clara » aussi.
+5. Android, bouton « retour » : la feuille se ferme. Un second retour quitte la page.
+6. `/e/{id}/admin#{jeton}` : « Modifier l’événement » fermé par le retour. L’espace
+   organisateur reste, à la même adresse.
+7. « Supprimer le retour ? » (7a), puis le retour (7b) : le formulaire revient, « Retour »
+   toujours décoché, le titre tapé gardé.
+8. « Qui sort de la voiture ? » (8a), puis le retour (8b) : « Modifier la voiture » revient,
+   1 place et la note tapée gardées, le focus sur « Places, sans compter qui conduit »,
+   comme après « Annuler » ; un second retour ferme la feuille.
+9. « Lieu de départ », liste ouverte : le retour ferme la feuille et la liste.
+10. « Trouver une place » : la feuille fermée, la place libre reste en vue, avec le focus.
+11. Ordinateur, 1280 px : « Précédent » ferme la feuille.
+
+### Les mots de la v4.7
+
+Aucun mot nouveau, changé ou retiré. Le retour ne dit rien : ni message, ni annonce, comme
+Échap. Pas de « Vos changements seront perdus » (hors périmètre). Les états dessinés
+reprennent des mots existants, tels qu’ils sont dans `messages/fr.json` et
+`messages/en.json` :
+
+| où | français | anglais |
+|---|---|---|
+| titres | « Modifier {firstName} », « Proposer une voiture », « Modifier la voiture », « Modifier l’événement », « Qui sort de la voiture ? », « Qui monte dans la voiture de {driver} ? » | “Edit {firstName}”, “Offer a car”, “Edit the car”, “Edit the event”, “Who leaves the car?”, “Who gets in {driver}’s car?” |
+| boîte | « Supprimer le retour ? », « Supprimer le retour », « Annuler » (`EditEvent.removeRetour.title`, `.confirm`, `Actions.cancel`) | “Remove the return trip?”, “Remove the return trip”, “Cancel” |
+| barre | « Valider », « Fermer », « Annuler » | “Confirm”, “Close”, “Cancel” |
+| espace organisateur, affiché | « Lien à partager », « Lien d’organisateur » (`Admin.shareLink.label`, `Admin.adminLink.label`) | “Link to share”, “Organiser link” |
+| espace organisateur, qui ne doit pas s’afficher après un retour | « Chargement de l’espace organisateur… », « Ce lien d’organisateur n’est pas valide. » (`Admin.loading`, `Admin.invalid.title`) | “Loading the organiser area…”, “This organiser link is not valid.” |
+| « Vos inscriptions », qui ne doit pas s’afficher après un retour | « Chargement de vos inscriptions… » (`DevicePersons.loading`) | “Loading your sign-ups…” |
+
+### Critères de la v4.7
+
+**Histoire H9, « Revenir en arrière sans quitter l’événement ».** En tant que personne qui
+remplit une feuille sur son téléphone, quand je fais le geste « retour », je veux que la
+feuille se ferme comme avec Échap, pour rester sur l’événement au lieu d’en sortir.
+
+**Histoire H10, « Le lien d’organisateur survit au retour ».** En tant qu’organisateur sur
+`/e/{id}/admin#{jeton}`, quand je fais le geste « retour » dans « Modifier l’événement », je
+veux que la feuille se ferme sans que mon lien change ni soit vérifié de nouveau.
+
+**G1 : prouvés par Playwright avant la fusion**, projet `e2e` (Chromium, Pixel 7 émulé,
+360 px), sauf mention contraire. Chaque test va d’abord sur `/`, puis sur la page de
+l’événement : « quitter la page » veut dire que `page.url()` redevient celle de `/`. Après le
+chargement, le test pose `window.__g1 = 1` : « sans rechargement » veut dire que
+`window.__g1` vaut encore 1 et qu’aucun évènement `load` n’a eu lieu. « Sans requête » veut
+dire qu’entre le `page.goBack()` et la fin de la vérification, `page.on("request")` ne voit
+ni document, ni requête RSC (en-tête `RSC` ou paramètre `_rsc`), ni requête `next-action`.
+Les préchargements de Next (en-tête `Next-Router-Prefetch`) ne comptent pas : la page a un
+`<Link>`, « Nous contacter » du pied de page (`contact-footer.tsx`), que Next peut précharger
+quand il passe en vue.
+« Fermée » veut dire qu’il n’y a plus de `role="dialog"` ni de `role="alertdialog"`.
+
+- **G1.1** Pour chacune de ces feuilles : la cellule « Tom · Aller » ; « Claire » ;
+  « Modifier Claire » avec « Clara » tapé ; « Ajouter une personne » depuis l’onglet Aller,
+  dans la feuille d’une place, et en première inscription depuis une place libre
+  (`RegisterSheet`), « Inès » tapé ; « Qui monte dans la voiture de Sophie ? » ; « Proposer
+  une voiture » avec « Marc » tapé ; « Modifier la voiture » avec la note changée ;
+  « Modifier l’événement » sur `/admin`, le titre changé. On l’ouvre, puis `page.goBack()` :
+  la feuille est fermée, `page.url()` est celle d’avant l’ouverture, sans rechargement ni
+  requête. En base, rien n’a changé (Claire s’appelle toujours « Claire »).
+- **G1.2** Comme Échap. Pour la cellule « Tom · Aller », « Claire », « Modifier Claire »,
+  « Proposer une voiture » (onglet Aller) et « Qui monte dans la voiture de Sophie ? » :
+  après `page.goBack()`, l’élément qui a le focus est celui qui l’a après Échap dans la même
+  scène (même rôle, même nom accessible). La page étant à `scrollY` = 800 avant
+  l’ouverture, elle y est encore (à 1 px). `messages(page)` est le même avant l’ouverture et
+  après le retour, et `recordBar` ne voit aucune écriture.
+- **G1.3** Hors ligne (`context.setOffline(true)`), « Modifier Claire » ouvert, « Clara »
+  tapé, `page.goBack()` : la feuille est fermée, aucune alerte non vide dans la page, aucune
+  ligne dans la barre, nulle part « Action impossible, vérifiez la connexion ».
+- **G1.4** Un retour, un pas. « Modifier Claire » ouvert, `page.goBack()`, puis 1 000 ms
+  d’attente : `page.url()` est toujours celle de l’événement, et la feuille est fermée. Un
+  second `page.goBack()` quitte la page. Deux `page.goBack()` à la suite, sans attente : la
+  page est quittée, et un `page.goForward()` revient à l’événement sans feuille.
+- **G1.5** Aucune entrée laissée. Pour chaque façon de fermer — « Fermer », Échap, un clic
+  à (180, 10) sur la cellule « Tom · Aller », « Valider » qui enregistre (« Modifier
+  Claire », téléphone changé, réponse reçue), « Valider » sans changement, « Ne fait pas
+  l’aller » dans la cellule, « Trouver une place », « Placer 2 personnes », « Annuler » de
+  « Modifier l’événement » — un seul `page.goBack()` quitte la page.
+- **G1.6** Historique borné. `L` est `history.length` avant la première ouverture. Cinq
+  ouvertures, fermées par « Fermer », Échap, le voile, « Valider » et `page.goBack()` :
+  `history.length` vaut au plus `L + 1` après chacune. Ensuite, un seul `page.goBack()`
+  quitte la page. Passer de l’onglet Aller à Retour, et replier puis déplier « Vos
+  inscriptions », ne change pas `history.length`.
+- **G1.7** L’adresse. Feuille ouverte, `page.url()` est identique à celle d’avant
+  l’ouverture, sur `/e/{id}` (ni `#`, ni `?`) comme sur `/e/{id}/admin#{jeton}`.
+- **G1.8** Le lien d’organisateur. Sur `/e/{id}/admin#{jeton}`, « Modifier l’événement »
+  ouvert, le titre changé, `page.goBack()` : la feuille est fermée, et `location.hash` vaut
+  `#{jeton}`. Un écouteur `hashchange` posé avant l’ouverture n’a rien vu. Aucune requête
+  `next-action` ne part. « Lien à partager » et « Lien d’organisateur » sont affichés, sans
+  « Chargement de l’espace organisateur… » ni « Ce lien d’organisateur n’est pas valide. ».
+  Puis un `page.goBack()` quitte la page. Même chose avec la cellule « Tom · Aller » sous
+  l’espace organisateur. Arrivée par la création (`/nouveau`, puis `router.push` vers
+  `/admin#{jeton}`) : feuille ouverte, un `page.goBack()` la ferme, et le suivant mène à la
+  même page qu’un `page.goBack()` sans feuille dans la même scène.
+- **G1.9** Rouvrir aussitôt. « Fermer », puis, sans attente, un clic qui rouvre la même
+  feuille : 1 000 ms plus tard, elle est ouverte. Un `page.goBack()` la ferme, le suivant
+  quitte la page.
+- **G1.10** L’action n’est pas défaite. « Trouver une place » pour Léa au retour : 1 000 ms
+  après la fermeture, la première place libre est entièrement visible
+  (`toBeInViewport({ ratio: 1 })`) et a le focus. « Voir la voiture » : le titre de la carte
+  aussi. « Proposer une voiture » validé avec des passagers : le titre de la carte aussi.
+  Les tests existants du focus après une action passent sans changement.
+- **G1.11** Les envois d’une feuille. Hors ligne, « Valider » dans « Modifier Claire »
+  échoue (K1.9) ; de retour en ligne, « Valider » enregistre et ferme : un seul
+  `page.goBack()` quitte la page. Puis, réponse retenue par `page.route`, « Valider » et
+  `page.goBack()` pendant l’envoi : la feuille est fermée. La réponse relâchée,
+  `messages(page)` est celui de la même scène fermée par Échap pendant l’envoi, et un seul
+  `page.goBack()` quitte la page.
+- **G1.12** Rechargée. « Modifier Claire » ouvert, `page.reload()` : aucune feuille. Le test
+  pose de nouveau `window.__g1 = 1`. Un `page.goBack()` : l’adresse est celle de
+  l’événement, sans feuille ni rechargement. Le suivant quitte la page.
+- **G1.13** « Suivant ». Une feuille fermée par `page.goBack()`, puis `page.goForward()` :
+  aucune feuille, sans rechargement ni requête. Ensuite, deux `page.goBack()` quittent la
+  page, et le premier ne recharge rien.
+- **G1.14** Rien d’une personne. Feuille ouverte, `history.state` a exactement une clé de
+  plus qu’avant l’ouverture, et ses autres valeurs n’ont pas changé. `JSON.stringify` de
+  cette valeur ne contient ni « Clara », ni « Claire », ni le numéro de Claire, ni, sur
+  `/admin`, le jeton.
+- **G1.15** « Supprimer le retour ? ». « Modifier l’événement », « Retour » décoché, titre
+  changé, « Valider » : la boîte s’ouvre à la réponse `confirmRetour`, après un `await`.
+  - `page.goBack()` : la boîte est fermée, la feuille ouverte, « Retour » décoché, le titre
+    tapé gardé, et le focus sur « Valider », comme après Échap. Le `page.goBack()` suivant
+    ferme la feuille, et le suivant quitte la page.
+  - « Annuler » de la boîte : un `page.goBack()` ferme la feuille, et le suivant quitte.
+  - « Supprimer le retour », réponse `saved` : la boîte et la feuille sont fermées. Un seul
+    `page.goBack()` quitte la page.
+  - « Supprimer le retour », réponse `changed` (l’événement modifié par un autre appareil
+    entre-temps) : la boîte se ferme, la feuille reste et dit « L’événement vient d’être
+    modifié depuis un autre appareil. ». Un `page.goBack()` ferme la feuille, et le suivant
+    quitte la page. De même pour une réponse `errors`.
+  - « Supprimer le retour », réponse `confirmRetour` aux nombres changés : la boîte reste et
+    dit « Le retour a changé entre-temps : vérifiez les nombres ci-dessus, puis confirmez de
+    nouveau. ». Un `page.goBack()` la ferme seule, le suivant ferme la feuille.
+  - Réponse retenue par `page.route`, « Supprimer le retour » touché : un `page.goBack()`
+    dans les 10 s laisse la boîte ouverte, et rien n’est renvoyé. La réponse relâchée, la
+    suite est celle des tests existants.
+  - `history.length` vaut au plus `L + 2` tout au long.
+- **G1.16** La liste des propositions. « Lieu de départ » de « Proposer une voiture », liste
+  ouverte (`fake-photon`), `page.goBack()` : ni feuille, ni `role="listbox"`.
+- **G1.17** Une étape revient à l’étape d’avant (v4.7-11, v4.7-12). Scène de K1.5 :
+  « Modifier la voiture » de Claire (deux passagers), places de 3 à 1, note changée,
+  « Valider » : « Qui sort de la voiture ? ».
+  - `page.goBack()` : le titre est « Modifier la voiture », « Places, sans compter qui
+    conduit » vaut 1 et a le focus, comme après « Annuler » de l’étape, et la note est
+    celle tapée. Aucune requête `next-action` ; la base garde 3 places et l’ancienne note.
+    Le `page.goBack()` suivant ferme la feuille, et le suivant quitte la page.
+  - « Qui sort de la voiture ? » fermée par Échap : un seul `page.goBack()` quitte la page.
+    Même chose après « Valider » de l’étape, Nina cochée, réponse `done`.
+  - « Annuler » de l’étape : le formulaire revient ; un `page.goBack()` ferme la feuille, et
+    le suivant quitte la page.
+  - **Ouverte par la réponse.** Places de 3 à 2 (elles tiennent sur l’appareil), mais un
+    autre appareil a fait monter un troisième passager : « Valider », et « Qui sort de la
+    voiture ? » s’ouvre à la réponse de `updateRide`. `page.goBack()` : le formulaire
+    revient, 2 places et la note tapée. Le suivant ferme la feuille, le suivant quitte.
+  - **Rouverte.** Dans l’étape, un autre appareil change les passagers, puis « Valider » :
+    l’étape se rouvre pour un nouveau tour, avec « Quelqu’un a pris ou libéré une place
+    entre-temps : rien n’a changé. Choisissez à nouveau parmi les personnes à bord. ».
+    `history.length` n’a pas changé ; un `page.goBack()` revient au formulaire, le suivant
+    ferme la feuille.
+  - **Finie par la réponse `errors`.** Dans l’étape, « Valider » dont l’envoi est réécrit
+    par `page.route` (une note de 300 caractères) : la réponse `errors` ramène au formulaire,
+    l’erreur sous « Note (facultatif) ». Un seul `page.goBack()` ferme la feuille, et le
+    suivant quitte la page. De même quand la réponse dit que les places tiennent désormais
+    (un passager parti entre-temps) : le formulaire revient, et un retour ferme la feuille.
+  - Dans la feuille d’une place de la voiture de Sophie, « Ajouter une personne », « Inès »
+    tapé, `page.goBack()` : le titre est « Qui monte dans la voiture de Sophie ? », la liste
+    est là, et Inès n’est pas créée. Le suivant ferme la feuille, et le suivant quitte la
+    page.
+  - La même, « Valider » qui enregistre Inès : la feuille revient à « Qui monte dans la
+    voiture de Sophie ? », Inès cochée et focalisée. Un `page.goBack()` ferme la feuille, et
+    le suivant quitte la page.
+  - `history.length` vaut au plus `L + 2` tout au long.
+- **G1.18** Les gardes. Sans feuille ouverte, le premier `page.goBack()` quitte la page :
+  le chargement n’ajoute aucune entrée. À 1280 × 800, G1.1 et G1.5 (Échap) pour « Modifier
+  Claire ». Les tests existants des feuilles passent sans changement.
+
+**G2 : vérifiés à la main, après le déploiement, sans bloquer** (v4.7-9 ; décision du
+propriétaire pour #650, v4.6-8), sur https://fullcar.app. iPhone : Safari récent, barre
+d’adresse en haut puis en bas. Playwright n’a ni le geste de Safari d’iOS, ni le bouton
+d’Android, ni la règle de Chrome sur les entrées sautées.
+
+- **G2.1** « Modifier Claire », taper « Clara », glisser depuis le bord gauche jusqu’au
+  bout : la feuille se ferme, le tableau est là, au même endroit. « Claire » n’a pas changé.
+  La page ne se recharge pas : « Vos inscriptions » ne repasse pas par « Chargement de vos
+  inscriptions… ».
+- **G2.2** Le même geste, lâché à mi-chemin : la feuille reste, et « Clara » est dans le
+  champ.
+- **G2.3** Clavier ouvert, dans « Proposer une voiture » : le geste ferme la feuille et le
+  clavier, et rien ne reste décalé (K2.5).
+- **G2.4** Pendant le geste, on voit le tableau sous la feuille, jamais la page d’avant. À
+  la fin, ni éclair, ni rechargement.
+- **G2.5** Deux gestes : le premier ferme la feuille ; le second ramène à la page d’avant,
+  ou ne fait rien si l’onglet n’en a pas.
+- **G2.6** Sur `/e/{id}/admin#{jeton}` : le geste ferme « Modifier l’événement » ;
+  l’espace organisateur reste, et « Copier » du « Lien d’organisateur » donne toujours le
+  lien avec le jeton.
+- **G2.7** Android, Chrome, en navigation à trois boutons puis par gestes. Ouvrir une
+  feuille d’un toucher, ne rien faire d’autre, puis « retour » : la feuille se ferme (Chrome
+  ne saute pas l’entrée). Second retour : la page d’avant, ou l’application d’où vient le
+  lien.
+- **G2.8** Lien ouvert depuis une messagerie (Messages, WhatsApp), sur iPhone et sur
+  Android : feuille ouverte, le geste ferme la feuille ; sans feuille, il fait ce qu’il
+  fait aujourd’hui.
+- **G2.9** « Qui sort de la voiture ? », places changées : le geste revient à « Modifier la
+  voiture », les changements gardés ; un second geste ferme la feuille.
+
+Un G2 qui échoue ouvre une nouvelle issue, avec une vidéo de l’écran. Elle revient au
+product designer.
+
+### Décisions de la v4.7
+
+v4.7-1. Décision : le retour ferme toutes les feuilles, pas seulement celles qui portent un
+champ de saisie. — Raison : le propriétaire dit « comme Échap », et Échap ferme toutes les
+feuilles. Sur Android, « retour » ferme ce qui est ouvert, partout. Une feuille qui change
+de contenu (la personne devient « Modifier Claire », la place « Ajouter une personne »)
+aurait sinon une règle qui change sous le doigt. Une feuille de choix cache aussi le
+tableau, et en sortir par le retour surprend, même sans rien perdre.
+
+v4.7-2. Décision : le retour est Échap, y compris pour ce qui a été tapé et pas envoyé, qui
+est perdu. — Raison : la demande du propriétaire. Le dommage de #656 est de quitter
+l’événement ; rester sur la page, feuille fermée, est ce qu’Échap fait déjà. Garder un
+brouillon serait une autre décision, hors périmètre.
+
+v4.7-3. Décision : l’adresse ne change jamais, ni fragment, ni paramètre. — Raison : le
+fragment porte le jeton d’admin (et portera celui du lien perso), relu à chaque `hashchange`.
+`/e/{id}` doit tenir dans un SMS, et une adresse copiée feuille ouverte se partage telle
+quelle.
+
+v4.7-4. Décision : l’entrée ajoutée ne porte qu’une marque opaque. — Raison : le navigateur
+garde l’historique d’un onglet, parfois au-delà de sa fermeture. Rien d’une personne n’y va :
+ni prénom, ni numéro, ni jeton, ni texte tapé. Rien de ce qui est stocké sur une personne ne
+change.
+
+v4.7-5. Décision : la liste des propositions n’a pas de pas à elle ; le retour ferme la
+feuille et la liste. — Raison : la liste s’ouvre en tapant, sans toucher, et se ferme et se
+rouvre au fil des lettres : un pas par ouverture remplirait l’historique. Échap reste sa
+touche (AL1.5).
+
+v4.7-6. Décision : « Supprimer le retour ? » a son propre pas (règle 3 bis). Pendant ses 10 s d’attente,
+le retour ne ferme rien, comme Échap. — Raison : sinon, le retour fermerait « Modifier
+l’événement » et perdrait ce que l’organisateur y a tapé. Risque accepté : un retour ne se
+refuse pas, il se compte seulement. Trois retours en moins de 10 s quittent donc la page
+pendant l’envoi. Après deux, la feuille reste ouverte sans entrée, et le retour suivant
+quitte la page comme aujourd’hui.
+
+v4.7-7. Décision : une feuille fermée autrement retire son entrée, et ce que fait l’action
+reste. — Raison : sinon, chaque ouverture laisserait un retour sans effet, et le défilement
+rendu par le navigateur défairait « Trouver une place ».
+
+v4.7-8. Décision : après un rechargement ou un « Suivant », un retour sans effet est
+accepté, au plus un. — Raison : l’enlever demanderait que la page fasse elle-même un retour
+au chargement, qui croiserait le premier toucher et ferait restaurer à Next un arbre de la
+page d’avant. Un retour sans effet ne perd rien. Rouvrir la feuille au « Suivant »
+demanderait de garder son contenu dans l’historique, contre v4.7-4.
+
+v4.7-9. Décision du coordinateur, inscrite sur #656 : G1 est la seule preuve avant la
+fusion ; G2 se vérifie à la main après le déploiement, sans bloquer. — Raison : la même
+règle que la décision du propriétaire pour #650 (v4.6-8). Playwright n’a ni le geste de Safari d’iOS, ni le bouton d’Android, ni la règle
+de Chrome sur les entrées sautées. `page.goBack()` prouve tout le reste.
+
+v4.7-10. Décision du coordinateur : la v4.7 part de la v4.6 (suite), et le mécanisme ne
+dépend pas de la façon dont #691 construit la feuille. — Raison : #691 vient de commencer.
+Le mécanisme ne lit que l’état ouvert de la feuille.
+
+v4.7-11. Décision du propriétaire (Q1 : b), inscrite sur #656 : dans une étape (« Qui sort
+de la voiture ? », « Ajouter une personne » dans la feuille d’une place), le retour revient
+à l’étape d’avant, comme « Annuler », ses changements gardés ; un second retour ferme la
+feuille. Échap ne change pas. — Raison : une étape pleine hauteur se lit comme une page de
+plus, et le geste « retour » y veut dire « revenir ». C’est aussi là que se perd la saisie
+la plus longue. L’option écartée, (a), fermait toute la feuille comme Échap.
+
+v4.7-12. Décision : une étape ou une boîte compte un pas tant qu’elle est ouverte. Toute
+façon de l’ouvrir en ajoute un, qu’elle vienne d’un toucher ou d’une réponse du serveur ; un
+nouveau tour de la même étape n’en ajoute aucun ; toute façon de la finir, la feuille restant
+ouverte, en retire un ; fermer la feuille depuis l’intérieur en retire deux. — Raison : revue
+de design de la v4.7 (suite), bloquant 1. « Qui sort de la voiture ? » et « Supprimer le
+retour ? » s’ouvrent et se ferment aussi sur une réponse, et « Valider » d’« Ajouter une
+personne » ramène à la liste sans fermer la feuille. Une règle liée aux seuls touchers
+laissait une étape sans pas, ou un pas sans étape.
+
+### Hors périmètre de la v4.7
+
+- Garder ce qui a été tapé après une fermeture, quelle qu’elle soit (un brouillon), ou
+  demander « Abandonner les changements ? ».
+- « Retirer la voiture ? », ouverte depuis la carte, sans feuille : le retour quitte la
+  page, comme aujourd’hui. Rien n’y est tapé.
+- Rouvrir une feuille par « Suivant », ou une adresse qui ouvre une feuille.
+- Les onglets Aller et Retour, le repli de « Vos inscriptions », la bulle de la carte et la
+  barre de messages : ils ne comptent aucun pas, et le retour ne les ferme pas.
+- Les autres pages (`/`, `/nouveau`, le compte). La feuille « Corriger l’adresse »
+  d’organizer-account (OA2.5) et le lien perso (`/e/{id}/moi#{jeton}`) suivront la règle
+  quand ils seront construits.
+- Fermer une feuille en la glissant vers le bas (toujours hors périmètre depuis la v4.6).
+- Un projet WebKit dans Playwright : il toucherait `playwright.config.ts`, que seul le
+  propriétaire fusionne, et WebKit de bureau n’est pas Safari d’iOS.
+- La fraîcheur (relire la page au premier plan, toutes les 15 s) n’est pas construite.
+  Quand elle le sera, G1.11 devra rester vrai.
+
+### Pour le développement de la v4.7
+
+- **Une tâche**, qui peut se construire en parallèle de #691 à #697. Elle touche
+  `bottom-sheet.tsx` (ou un module à part que `BottomSheet` appelle, avec son test Vitest),
+  `remove-retour-dialog.tsx`, `seat-sheet.tsx` et `ride-form.tsx` (les étapes).
+- Les tests G1 vont dans un fichier `e2e/sheet-back.spec.ts`. La tâche recopie G2 dans
+  l’issue comme vérifications après le déploiement, sans les cocher.
+- Aucune donnée, aucune route, aucun mot ne change. Aucun fichier sensible :
+  `next.config.*`, `proxy.ts` et `playwright.config.ts` ne changent pas.
 
 ## Ce qui change en v4.6 : les feuilles sur téléphone et le clavier (#650)
 
@@ -109,7 +1419,7 @@ comme le calcul. Le développeur mesure les vraies valeurs dans les tests K1.
 | « Qui monte dans la voiture de Sophie ? » | une place libre | non | ≈ 408 px à 3 personnes ; ≈ 650 px à 8, et tout défile | « Placer n personnes » et « Fermer » en pied, qui défile | sans objet |
 | « Ajouter une personne » (première inscription depuis une place libre, `RegisterSheet`, C5.4) | une place libre, sur un appareil sans personne | oui | ≈ 525 px (« Cette personne prendra une place dans la voiture de {driver}. » et « Sans compte ni e-mail… » sous le titre) | « Valider » à la fin du corps, « Fermer » en pied | « Valider » et « Fermer » sous le clavier |
 | « Ajouter une personne » (dans la feuille d’une place, `SeatSheet`) | « Ajouter une personne » de la feuille « Qui monte… » | oui | ≈ 440 px | « Valider » et « Annuler » à la fin du corps, pas de « Fermer » | sous le clavier |
-| « Proposer une voiture » | le bouton d’un onglet | oui | ≈ 1 190 px avec 3 personnes et le retour ; ≈ 1 440 px avec « Je ramène aussi des passagers » ; plafonnée à 640 px, tout défile | « Valider » vers 1 050 px dans le défilement, « Fermer » après | sous le clavier, au bout du défilement |
+| « Proposer une voiture » | le bouton d’un onglet | oui | ≈ 1 190 px avec 3 personnes et le retour ; ≈ 1 440 px avec « Je ramène aussi des personnes » ; plafonnée à 640 px, tout défile | « Valider » vers 1 050 px dans le défilement, « Fermer » après | sous le clavier, au bout du défilement |
 | « Modifier la voiture » | « Modifier » d’une fiche | oui | ≈ 640 px, tout l’écran à 1 px près | « Valider » à la fin du corps, « Fermer » au ras du bas | le clavier couvre « Places, sans compter qui conduit » et la suite (capture 2) |
 | « Qui sort de la voiture ? » (une étape de « Modifier la voiture », dans la même feuille) | « Valider » de « Modifier la voiture », places sous le nombre de passagers | non, mais les changements tapés attendent leur envoi | ≈ 400 px avec 3 passagers : la feuille rétrécit, sous elle le voile, et un toucher dessus perd les changements | « Valider » et « Annuler » à la fin du corps, l’alerte au-dessus des cases | sans objet (le clavier se ferme au toucher sur « Valider ») |
 | « Modifier l’événement » (organisateur) | « Modifier l’événement » | oui | ≈ 600 px ; ≈ 680 px avec les phrases « … gardent leur heure » | « Valider » et « Annuler » à la fin du corps, pas de « Fermer » | sous le clavier |
@@ -256,7 +1566,7 @@ Aucun mot nouveau, changé ou retiré. Ceux des états dessinés, tels qu’ils 
 | champs | « Prénom », « Téléphone (facultatif) » | “First name”, “Phone (optional)” |
 | aide | « Visible seulement par l’organisateur et par les personnes de la même voiture. » | “Only visible to the organiser and to the people in the same car.” |
 | champs | « Lieu de départ » / « Lieu de dépose », « Heure de départ », « Places, sans compter qui conduit », « Note (facultatif) » | “Departure place” / “Drop-off place”, “Departure time”, “Seats, driver not included”, “Note (optional)” |
-| autre leg (v4.5) | « Au retour », « Le retour part du lieu de l’événement, {location}, le {date}. », « Je ramène aussi des passagers » | “On the return trip”, “The return trip leaves {location} on {date}.”, “I bring people back too” |
+| autre leg (v4.5) | « Au retour », « Le retour part du lieu de l’événement, {location}, le {date}. », « Je ramène aussi des personnes » | “On the return trip”, “The return trip leaves {location} on {date}.”, “I bring people back too” |
 | barre | « Valider », « Fermer », « Annuler » | “Confirm”, “Close”, “Cancel” |
 | barre | « Placer n personnes » (`Sheet.submit`) | “Seat n people” |
 | barre, échec | « Action impossible, vérifiez la connexion » (`Actions.offline`) | “Action failed, check your connection” |
@@ -507,7 +1817,7 @@ la barre de messages (v4.2.1-9), avec le même nom.
 - Le geste « retour » du navigateur, qui quitte la page au lieu de fermer la feuille, et
   perd la saisie : issue https://github.com/olaurendeau/fullcar/issues/656 (décision du
   propriétaire, question 3). Une feuille pleine hauteur ressemble à une page, ce qui le rend
-  plus probable.
+  plus probable. Traité en v4.7.
 - Fermer une feuille en la glissant vers le bas, ou une poignée de glissement.
 - Les boîtes de confirmation centrées (« Retirer la voiture ? », « Supprimer le
   retour ? »).
@@ -552,13 +1862,19 @@ propriétaire : options A, B et F du product designer, avec « des passagers ».
 française de la ligne est celle que le coordinateur a retenue sur #649 (v4.5-7). Issue :
 https://github.com/olaurendeau/fullcar/issues/649.
 
+Le 26/10, le propriétaire a remplacé « des passagers » par « des personnes », pour la règle
+épicène C11.9 (D7), qui écarte « passager » du formulaire voiture (décision sur #649) : « Je
+ramène aussi des personnes », « J’emmène aussi des personnes ». L’anglais ne change pas.
+Les libellés de cette page sont ceux-là, et `main` les porte déjà (`messages/fr.json`,
+`e2e/aller-sheets.spec.ts`, `e2e/bar-rides.spec.ts`).
+
 ### Ce qui change
 
 Seul le groupe de l’autre leg de « Proposer une voiture » change. Les onglets, la matrice,
 les feuilles, la barre et l’espace organisateur gardent leurs mots.
 
 1. **Les deux choix « conduire »** disent qui ils transportent : « Je ramène aussi des
-   passagers » au retour, « J’emmène aussi des passagers » à l’aller. En anglais : « I bring
+   personnes » au retour, « J’emmène aussi des personnes » à l’aller. En anglais : « I bring
    people back too » et « I take people there too ». Aucune valeur de `messages/en.json` ne
    contient plus « drive back ».
 2. **Une ligne d’aide**, sous le titre du groupe et avant son premier bouton radio, dit où et
@@ -579,7 +1895,7 @@ les feuilles, la barre et l’espace organisateur gardent leurs mots.
 5. **Son style** est celui des aides du formulaire (`text-[13px] leading-[18px]
    text-muted-foreground`). Elle passe à la ligne entre les mots, et un mot plus long que la
    ligne se coupe (`wrap-anywhere`, comme les prénoms). Elle ne déborde jamais du groupe.
-6. **Elle ne suit pas l’heure saisie.** Avec « Je ramène aussi des passagers », la voiture du
+6. **Elle ne suit pas l’heure saisie.** Avec « Je ramène aussi des personnes », la voiture du
    retour peut partir à 18:30. La ligne dit toujours 18:00 : elle décrit le leg, comme
    « Fin » dans l’en-tête, et pas la voiture.
 7. **Elle part avec le groupe** :
@@ -601,8 +1917,8 @@ Ce qui reste :
 
 | clé | `messages/fr.json` | `messages/en.json` | avant |
 |---|---|---|---|
-| `RideForm.otherLeg.drive.retour` | Je ramène aussi des passagers | I bring people back too | Je ramène aussi / I drive back too |
-| `RideForm.otherLeg.drive.aller` | J’emmène aussi des passagers | I take people there too | J’emmène aussi / I drive there too |
+| `RideForm.otherLeg.drive.retour` | Je ramène aussi des personnes | I bring people back too | Je ramène aussi / I drive back too |
+| `RideForm.otherLeg.drive.aller` | J’emmène aussi des personnes | I take people there too | J’emmène aussi / I drive there too |
 | `RideForm.otherLeg.hint.retour` | Le retour part du lieu de l’événement, {location}, le {date}. | The return trip leaves {location} on {date}. | nouvelle |
 | `RideForm.otherLeg.hint.aller` | L’aller va jusqu’au lieu de l’événement, {location}, le {date}. | The outbound trip goes to {location} on {date}. | nouvelle |
 
@@ -630,9 +1946,9 @@ apostrophes droites ('), comme le reste de `glossary.md`, et non typographiques 
 
 | état | ce que montre le groupe de l’autre leg | critère |
 |---|---|---|
-| depuis l’Aller, une nouvelle personne conduit | « Au retour », la ligne du retour, puis « Je ramène aussi des passagers », « Je cherche une place », « Je ne fais pas le retour » (coché) | E1.1 |
-| depuis le Retour | « À l’aller », la ligne de l’aller, puis « J’emmène aussi des passagers »… | E1.2 |
-| « Je ramène aussi des passagers » coché, heure changée en 18:30 | la ligne reste au-dessus des choix et dit toujours 18:00 ; le lieu de dépose et l’heure se déplient dessous, comme avant | E1.3 |
+| depuis l’Aller, une nouvelle personne conduit | « Au retour », la ligne du retour, puis « Je ramène aussi des personnes », « Je cherche une place », « Je ne fais pas le retour » (coché) | E1.1 |
+| depuis le Retour | « À l’aller », la ligne de l’aller, puis « J’emmène aussi des personnes »… | E1.2 |
+| « Je ramène aussi des personnes » coché, heure changée en 18:30 | la ligne reste au-dessus des choix et dit toujours 18:00 ; le lieu de dépose et l’heure se déplient dessous, comme avant | E1.3 |
 | en anglais | « On the return trip », « The return trip leaves… », « I bring people back too » ; à l’aller, « I take people there too » | E1.4 |
 | un lieu de 120 caractères, à 360 px | la ligne passe sur plusieurs lignes, le lieu entier, sans débordement | E1.5 |
 | le retour un autre jour | la date entière du retour, « dimanche 13 décembre 2026 à 17:00 » | E1.6 |
@@ -659,7 +1975,7 @@ pas.
   - Le groupe `otherLeg(page, "Au retour")` a exactement pour description accessible « Le
     retour part du lieu de l’événement, Gymnase des Gayeulles, le samedi 12 décembre 2026 à
     18:00. » (`toHaveAccessibleDescription`).
-  - Ses boutons radio sont, dans l’ordre, « Je ramène aussi des passagers », « Je cherche
+  - Ses boutons radio sont, dans l’ordre, « Je ramène aussi des personnes », « Je cherche
     une place » et « Je ne fais pas le retour », le troisième coché.
   - La ligne est visible. Sa boîte englobante est sous celle du titre « Au retour » et
     au-dessus de celle du premier bouton radio.
@@ -667,7 +1983,7 @@ pas.
   - Seconde scène : Claire, personne de l’appareil, est passagère de la voiture de Marc au
     retour (`seedRide`, leg `retour`, puis `seedPlacement`). On choisit Claire dans « Qui
     conduit ? ». Le groupe a la même description. Ses boutons radio sont, dans l’ordre, « Je
-    ramène aussi des passagers », « Je reste dans la voiture de Marc » (coché), « Je cherche
+    ramène aussi des personnes », « Je reste dans la voiture de Marc » (coché), « Je cherche
     une place » et « Je ne fais pas le retour ». Les trois autres que « Je reste… » sont
     décrits par « Quittera la voiture de Marc » (C4.5).
 
@@ -675,9 +1991,9 @@ pas.
 - **E1.2** Depuis l’onglet Retour, la même ouverture.
   - Le groupe `otherLeg(page, "À l’aller")` a exactement pour description « L’aller va
     jusqu’au lieu de l’événement, Gymnase des Gayeulles, le samedi 12 décembre 2026 à 07:30. ».
-  - Son premier bouton radio est « J’emmène aussi des passagers ».
+  - Son premier bouton radio est « J’emmène aussi des personnes ».
 - **E1.3** Depuis l’onglet Aller, une nouvelle personne, Marc, conduit.
-  - On coche « Je ramène aussi des passagers ». « Lieu de dépose » et « Heure de départ du
+  - On coche « Je ramène aussi des personnes ». « Lieu de dépose » et « Heure de départ du
     retour » se déplient, comme avant (C4.11).
   - On met cette heure à 18:30. La description du groupe reste celle de E1.1, à 18:00.
   - Après « Valider », la base a une voiture de Marc au retour, qui part à 18:30.
@@ -715,7 +2031,7 @@ pas.
 
 **Non prouvable par un test** : que la phrase soit bien comprise. On le vérifie à la revue,
 et de nouveau avec un parent qui dépose et repart. Depuis l’onglet Aller, sans aide, il dit ce
-que crée « Je ramène aussi des passagers ».
+que crée « Je ramène aussi des personnes ».
 
 ### Les tests à mettre aux nouveaux libellés
 
@@ -753,7 +2069,7 @@ Issue : https://github.com/olaurendeau/fullcar/issues/372.
 ### Le cas
 
 Claire, personne de l’appareil, propose sa voiture sur les deux legs : depuis l’onglet Aller
-avec « Je ramène aussi des passagers », ou depuis l’onglet Retour avec « J’emmène aussi des passagers ». L’envoi échoue
+avec « Je ramène aussi des personnes », ou depuis l’onglet Retour avec « J’emmène aussi des personnes ». L’envoi échoue
 hors ligne, ou sur une erreur. La barre dit « Les voitures de Claire pour l’aller et le retour
 n’ont pas été proposées. Vérifiez la connexion, puis réessayez. », et la région `alert`
 l’annonce. Puis l’organisateur supprime le retour. La page l’apprend par la réponse d’une
@@ -851,7 +2167,7 @@ offered. » suivi de la même raison.
 Prouvés par Playwright, dans `e2e/aller-sheets.spec.ts`, avec la scène des tests de PR #371 :
 
 - Claire, personne de l’appareil (`seedClaire`) ;
-- « Proposer une voiture » depuis l’onglet Aller, Claire conduit, « Je ramène aussi des passagers » ;
+- « Proposer une voiture » depuis l’onglet Aller, Claire conduit, « Je ramène aussi des personnes » ;
   « Valider », puis Échap ferme la feuille avant la réponse ;
 - l’échec : hors ligne (`loseFirst`, `context.setOffline`) ou sur une erreur
   (`holdFirst(page, PLACE, true)`, `failHeld`) ;
@@ -928,7 +2244,7 @@ viens de faire.
   C’est une garde.
 - **N1.6** Les deux autres tests de PR #371, sans changement. Proposer de nouveau la voiture
   de Claire pour l’aller retire la ligne réduite dès l’envoi, avant la réponse. Depuis l’onglet
-  Retour, avec « J’emmène aussi des passagers », « Fermer » donne le focus au bouton « Proposer une voiture »
+  Retour, avec « J’emmène aussi des personnes », « Fermer » donne le focus au bouton « Proposer une voiture »
   de l’aller. Ce sont des gardes.
 
 **Non prouvable par un test** : ce que prononce un lecteur d’écran. On vérifie en revue,
@@ -984,7 +2300,7 @@ d’**au moins une de ses personnes, sur son leg**. « Envoyée après » se lit
    « Sortir de la voiture ») ; « Modifier » la voiture de ce leg, avec cette personne dans
    « Qui sort de la voiture ? » ; un placement ou un « Annuler » qui la porte sur ce leg ;
    « Proposer une voiture » qui la fait conduire ou monter sur ce leg, ou qui règle ce leg
-   comme l’autre leg de qui conduit (« J’emmène aussi des passagers », « Je cherche une place », « Je ne
+   comme l’autre leg de qui conduit (« J’emmène aussi des personnes », « Je cherche une place », « Je ne
    fais pas l’aller »…, sauf « Je reste dans la voiture de… », qui ne change rien).
    « Retirer la voiture » est déjà réglé par la règle 5. « Modifier » une personne (prénom,
    téléphone) ne change pas son état sur un leg : il n’en fait pas partie.
@@ -1475,7 +2791,7 @@ jamais un bouton qui ne peut qu’échouer.
   `messages(page)` = [« Aucune place libre à l’aller pour l’instant. »]. L’information de
   l’aller reste (v4.4.2-1).
 - **B1.7** #267 le construit. C’est la scène de M7.6 (organizer-view). Claire, depuis
-  l’onglet Aller, avec « Je ramène aussi des passagers » ; le retour est supprimé en base, et la feuille
+  l’onglet Aller, avec « Je ramène aussi des personnes » ; le retour est supprimé en base, et la feuille
   est fermée avant la réponse. La barre dit « Les voitures de Claire pour l’aller et le retour
   n’ont pas été proposées. Il n’y a plus de retour pour cet événement : proposez de nouveau
   la voiture, pour l’aller seulement. ». La page n’a plus d’onglets. Puis « Proposer une
@@ -1642,7 +2958,7 @@ lignes déjà dans la barre restent, mêmes textes, même ordre, sans écriture 
 Relevé à la revue de la v4.4 ; la maquette organizer-view n’est pas changée ici.
 
 Décision v4.4.4-5 (#341, pour #267). M7.6, et la ligne « Proposer une voiture » depuis
-l’Aller avec « Je ramène aussi des passagers », feuille fermée, de sa table « mot pour mot », devraient
+l’Aller avec « Je ramène aussi des personnes », feuille fermée, de sa table « mot pour mot », devraient
 dire que cet échec `noRetourAgain` a pour sujet sa seule partie aller
 (`offer:aller:{personId}` ou `offer:aller:new:{prénom}`). La voiture proposée de nouveau
 pour l’aller seul le retire donc dès l’envoi (B1.7 ici). Les mots ne changent pas. La
@@ -2068,11 +3384,11 @@ indisponible garde son avertissement en tête (C1.14, D5).
   sur l’onglet Retour. Sous le titre, la ligne d’aide de la v4.5 (`RideForm.otherLeg.hint.*`),
   qui dit où et quand part l’autre leg, et décrit le groupe (`aria-describedby`). Boutons
   radio :
-  - « Je ramène aussi des passagers » / « J’emmène aussi des passagers » : déplie le **lieu** de l’autre leg (« Lieu de
+  - « Je ramène aussi des personnes » / « J’emmène aussi des personnes » : déplie le **lieu** de l’autre leg (« Lieu de
     dépose » au retour, « Lieu de départ » à l’aller, prérempli avec le lieu saisi et qui le
     suit tant qu’on ne le change pas, comme la date de retour de la création d’événement)
     et son **heure** (préremplie avec l’heure de l’autre leg dans l’événement : 18:00 pour
-    « Je ramène aussi des passagers » depuis l’Aller du Tournoi de Rennes, 07:30 pour « J’emmène aussi des passagers »
+    « Je ramène aussi des personnes » depuis l’Aller du Tournoi de Rennes, 07:30 pour « J’emmène aussi des personnes »
     depuis le Retour), puis la phrase
     `RideForm.otherLeg.same`. Places et note valent pour les deux voitures. Mêmes règles
     de champ (R4).
@@ -2320,7 +3636,7 @@ tests Playwright (C11.10) :
 | une action de cellule (« Ne fait pas l’aller / le retour », « Je cherche une place », « Sortir de la voiture ») | la cellule (`cell:{personId}:{leg}`) | après l’échec de « Ne fait pas l’aller » pour Tom · Aller, « Ne fait pas l’aller » depuis la même cellule, rouverte | une action depuis Tom · Retour ; une place prise pour Tom par un tap |
 | « Ajouter une personne » (depuis le tableau, une place ou la feuille) | le prénom envoyé, espaces de début et de fin retirés (`person:new:{prénom}`) | « Inès » échoue depuis le bouton de l’onglet Aller ; « Inès » (avec des espaces autour) est renvoyé depuis la feuille d’une place de l’onglet Retour | « Hugo » envoyé depuis le même bouton |
 | « Modifier » une personne | la personne et chaque champ envoyé (`person:{personId}` + champs) | après l’échec du prénom et du téléphone de Tom, un « Modifier » de Tom qui envoie les deux | un « Modifier » de Tom qui n’envoie que le téléphone ; un « Modifier » de Léa ; un « Valider » sans changement de Tom, qui n’envoie rien (v4.4, V1.5) |
-| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi des passagers ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi des passagers » depuis l’onglet Aller, Marc avec « J’emmène aussi des passagers » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs (hors ligne ou erreur, avec un retour qui existe). Exception, un échec `noRetourAgain` : son sujet est la seule partie aller, et Claire à l’aller seul le retire (v4.4.4, B1.7). De même pour un échec sur les deux legs réduit à l’aller par la transition (v4.4.6, N1.6) |
+| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi des personnes ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi des personnes » depuis l’onglet Aller, Marc avec « J’emmène aussi des personnes » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs (hors ligne ou erreur, avec un retour qui existe). Exception, un échec `noRetourAgain` : son sujet est la seule partie aller, et Claire à l’aller seul le retire (v4.4.4, B1.7). De même pour un échec sur les deux legs réduit à l’aller par la transition (v4.4.6, N1.6) |
 | « Modifier » la voiture (#93) | la modification de cette voiture (`ride:{rideId}:edit`, comme PR #218) | un nouveau « Modifier » de la même voiture | « Retirer la voiture » de cette voiture, **qui échoue** (`ride-remove.spec.ts:350`) ; « Modifier » d’une autre voiture ; un « Valider » sans changement de cette voiture, qui n’envoie rien (v4.4.5, W1.6). Un retrait **réussi** retire l’échec (règle 5, v4.4.1) |
 | « Retirer la voiture » | le retrait de cette voiture (`ride:{rideId}`, comme PR #213) | un nouveau « Retirer la voiture » de la même voiture | « Modifier » de cette voiture |
 | « Réessayer » de « Vos inscriptions » | la lecture de « Vos inscriptions » (`device:read`) | le « Réessayer » suivant | le retour du réseau (`setOffline(false)`, évènement `online`) |
@@ -2588,10 +3904,10 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | première inscription, depuis une place, erreurs et stockage | Ajouter une personne | C1.2 à C1.14, C5.4 |
 | feuille des passagers | La feuille | C6.1 à C6.9 |
 | proposer, appareil sans personne (4 actions) | Proposer une voiture | C4.1, C4.4 |
-| proposer, « Je ramène aussi des passagers » et « Qui monte avec vous ? » | Proposer une voiture | revue, C4.5 |
+| proposer, « Je ramène aussi des personnes » et « Qui monte avec vous ? » | Proposer une voiture | revue, C4.5 |
 | proposer, erreurs | Proposer une voiture | C4.7 |
 | proposer, passagère au retour : « Je reste… », « Quittera la voiture de… » | Proposer une voiture | C3.5, C4.5 |
-| proposer depuis l’onglet Retour : « À l’aller », « J’emmène aussi des passagers » | Proposer une voiture | revue, R4, E1.2 |
+| proposer depuis l’onglet Retour : « À l’aller », « J’emmène aussi des personnes » | Proposer une voiture | revue, R4, E1.2 |
 | l’autre leg : la ligne d’aide, depuis l’Aller et depuis le Retour | L’autre leg, lu depuis l’événement (v4.5) | E1.1, E1.2 |
 | l’autre leg : un lieu de 120 caractères à 360 px ; en anglais ; le retour un autre jour | L’autre leg, lu depuis l’événement (v4.5) | E1.4, E1.5, E1.6 |
 | l’autre leg absent : pas de ligne | L’autre leg, lu depuis l’événement (v4.5) | E1.7 |
@@ -2619,6 +3935,7 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | v4.4.5 : une réussite retenue, puis « Sortir de la voiture » pour la même personne : la barre ne dit rien ; la même suite en échec : la réussite s’écrit | Réussite retenue, et « Modifier la voiture » sans changement (v4.4.5) | S1.1 à S1.5 |
 | v4.4.5 : « Modifier la voiture » sans changement : avant « Valider », après (feuille fermée, focus sur « Modifier », barre inchangée) | Réussite retenue, et « Modifier la voiture » sans changement (v4.4.5) | W1.1 à W1.6 |
 | v4.4.6 : l’échec hors ligne d’une offre sur les deux legs, avant et après la suppression du retour (réduit à l’aller, rien d’annoncé) ; avec un échec plus récent d’Hugo | Une ligne d’échec réduite à l’aller (v4.4.6) | N1.1 à N1.4 |
+| v4.8 : la fiche qui demande un numéro (passagère, deux enfants, un numéro qui suffit, conducteur d’avant, silence pour les autres, hors ligne, 360 px) ; « Ajouter une personne » prérempli, puis changé ; l’aide depuis une place libre ; « Proposer une voiture » avec une nouvelle personne, en erreur, avec une personne de l’appareil sans numéro ; « Modifier » de qui conduit ; en anglais ; le refus du serveur quand le numéro a été vidé ailleurs (v4.8 suite) | Le numéro au bon moment (v4.8) | T1.1 à T5.7 |
 
 ## Les mots
 
@@ -2694,8 +4011,8 @@ ou changé dans cette version.
 | `RideForm.leavesCar` | Quittera la voiture de {driver} | Will leave {driver}’s car | nouveau (C4.5) | #90 |
 | `RideForm.otherLeg.title.retour` | Au retour | On the return trip | revue — v4 | #90 |
 | `RideForm.otherLeg.title.aller` | À l’aller | On the outbound trip | symétrique de la revue — v4 | #90 |
-| `RideForm.otherLeg.drive.retour` | Je ramène aussi des passagers | I bring people back too | revue — v4 ; « des passagers », #649 — v4.5 | #90, #649 |
-| `RideForm.otherLeg.drive.aller` | J’emmène aussi des passagers | I take people there too | symétrique de la revue — v4 ; « des passagers », #649 — v4.5 | #90, #649 |
+| `RideForm.otherLeg.drive.retour` | Je ramène aussi des personnes | I bring people back too | revue — v4 ; « des personnes », #649 — v4.5, décision du propriétaire du 26/10 | #90, #649 |
+| `RideForm.otherLeg.drive.aller` | J’emmène aussi des personnes | I take people there too | symétrique de la revue — v4 ; « des personnes », #649 — v4.5, décision du propriétaire du 26/10 | #90, #649 |
 | `RideForm.otherLeg.hint.retour` | Le retour part du lieu de l’événement, {location}, le {date}. | The return trip leaves {location} on {date}. | nouveau (E1.1) — v4.5 | #649 |
 | `RideForm.otherLeg.hint.aller` | L’aller va jusqu’au lieu de l’événement, {location}, le {date}. | The outbound trip goes to {location} on {date}. | nouveau (E1.2) — v4.5 | #649 |
 | `RideForm.otherLeg.stay` | Je reste dans la voiture de {driver} | I stay in {driver}’s car | nouveau — v4 | #90 |
@@ -2754,7 +4071,7 @@ ou changé dans cette version.
 | `Actions.notDone.choice` | {person} : « {choice} » n’a pas été enregistré. | {person}: “{choice}” was not saved. | « Ne fait pas l’aller / le retour », « Je cherche une place » ; {person} = `DevicePersons.sheetTitle`, {choice} = le libellé du bouton (C3.1, C3.2, C11.11) — v4.2 | #216 |
 | `Actions.notDone.addPerson` | {firstName} n’a pas pu rejoindre vos inscriptions. | {firstName} could not be added to your sign-ups. | « Ajouter une personne » (C1.10, C6.6, C11.11) — v4.2 | #216 |
 | `Actions.notDone.editPerson` | {fields, select, firstName {Le prénom de {firstName} n’a pas été enregistré.} phone {Le téléphone de {firstName} n’a pas été enregistré.} other {Le prénom et le téléphone de {firstName} n’ont pas été enregistrés.}} | {fields, select, firstName {{firstName}’s first name was not saved.} phone {{firstName}’s phone number was not saved.} other {{firstName}’s first name and phone number were not saved.}} | « Modifier » une personne ; {fields} = les champs envoyés (`firstName`, `phone`, `both`) ; {firstName} = le prénom d’avant (C2.3, C11.11) — v4.2, champs en v4.2.2 | #216 |
-| `Actions.notDone.offerRide` | {legs, select, both {Les voitures de {driver} pour l’aller et le retour n’ont pas été proposées.} aller {La voiture de {driver} pour l’aller n’a pas été proposée.} other {La voiture de {driver} pour le retour n’a pas été proposée.}} | {legs, select, both {{driver}’s cars for the outbound and return trips were not offered.} aller {{driver}’s car for the outbound trip was not offered.} other {{driver}’s car for the return trip was not offered.}} | « Proposer une voiture » ; `both` avec « Je ramène aussi des passagers » / « J’emmène aussi des passagers » (C4.1, C4.11, C11.11) — v4.2 | #216 |
+| `Actions.notDone.offerRide` | {legs, select, both {Les voitures de {driver} pour l’aller et le retour n’ont pas été proposées.} aller {La voiture de {driver} pour l’aller n’a pas été proposée.} other {La voiture de {driver} pour le retour n’a pas été proposée.}} | {legs, select, both {{driver}’s cars for the outbound and return trips were not offered.} aller {{driver}’s car for the outbound trip was not offered.} other {{driver}’s car for the return trip was not offered.}} | « Proposer une voiture » ; `both` avec « Je ramène aussi des personnes » / « J’emmène aussi des personnes » (C4.1, C4.11, C11.11) — v4.2 | #216 |
 | `Actions.notDone.removeRide` | {leg, select, aller {La voiture de {driver} pour l’aller n’a pas été retirée.} other {La voiture de {driver} pour le retour n’a pas été retirée.}} | {leg, select, aller {{driver}’s car for the outbound trip was not removed.} other {{driver}’s car for the return trip was not removed.}} | « Retirer la voiture » (C8.6, C11.11) — v4.2 | #216 |
 | `Actions.notDone.editRide` | {leg, select, aller {Les changements de la voiture de {driver} pour l’aller n’ont pas été enregistrés.} other {Les changements de la voiture de {driver} pour le retour n’ont pas été enregistrés.}} | {leg, select, aller {The changes to {driver}’s car for the outbound trip were not saved.} other {The changes to {driver}’s car for the return trip were not saved.}} | « Modifier » la voiture, #93 (C8.2, C11.11) — v4.2 | #216 |
 | `Actions.notDone.readDevice` | Vos inscriptions n’ont pas pu être chargées. | Your sign-ups could not be loaded. | « Réessayer » de « Vos inscriptions » (C5.9, C11.11) — v4.2.1 | #216 |
@@ -2773,6 +4090,21 @@ ou changé dans cette version.
 | `Actions.why.eventNotFound` | Cet événement est introuvable : il a peut-être été supprimé. | This event can no longer be found: it may have been deleted. | `eventNotFound` (mots de `EventNotFound`) — v4.2 | #216 |
 | `Actions.names.andOthers` | {first}, {second} et {others, plural, one {# autre} other {# autres}} | {first}, {second} and {others, plural, one {# other} other {# others}} | 4 personnes et plus ; jusqu’à 3, `format.list` (C11.11) — v4.2 | #216 |
 | `Actions.messages` | Messages | Messages | nom du groupe `role="group"` de la liste de la barre quand elle défile (C11.4) — v4.2 | #216 |
+| `Board.car.addPhoneWhy.passenger` | Ajoutez un numéro pour que {driver} puisse vous joindre. | Add a number so that {driver} can reach you. | fiche, règle 1 — v4.8 | #766 |
+| `Board.car.addPhoneWhy.driver` | Ajoutez un numéro pour que les personnes à bord puissent vous joindre. | Add a number so that the people on board can reach you. | fiche, conducteur d’avant la v4.8 (v4.8-3) — v4.8 | #766 |
+| `Board.car.addPhone` | Ajouter un numéro | Add a number | texte visible du bouton — v4.8 | #766 |
+| `Board.car.addPhoneLabel` | Ajouter un numéro pour {firstName} | Add a number for {firstName} | nom accessible du bouton (v4.8-5) — v4.8 | #766 |
+| `PersonForm.samePhone` | Même numéro que {firstName}. Modifiez-le si besoin. | Same number as {firstName}. Change it if needed. | « Ajouter une personne », règle 4 — v4.8 | #766 |
+| `PersonForm.phoneHintForSeat` | Pour que {driver} puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that {driver} can reach you. Only visible to the organiser and to the people in the same car. | depuis une place libre, règle 5 — v4.8 | #766 |
+| `PersonForm.phoneDriving` | Téléphone | Phone | « Modifier » de qui conduit, règle 8 — v4.8 | #766 |
+| `PersonForm.phoneHintDriving` | Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that the people on board can reach you. Only visible to the organiser and to the people in the same car. | règle 8 — v4.8 | #766 |
+| `RideForm.phone` | Téléphone | Phone | nouvelle personne qui conduit, règle 6 — v4.8 | #766 |
+| `RideForm.driverPhone` | Téléphone de {firstName} | {firstName}’s phone | personne de l’appareil sans numéro, règle 7 — v4.8 | #766 |
+| `RideForm.phoneHint` | Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that the people on board can reach you. Only visible to the organiser and to the people in the same car. | règles 6 et 7 — v4.8 | #766 |
+| `FormErrors.driverPhone` | Un numéro est requis pour proposer une voiture. | A number is needed to offer a car. | règles 6 et 7 (v4.8-11) — v4.8 | #766 |
+| `FormErrors.phoneWhileDriving` | Un numéro est requis tant que {firstName} conduit. | A number is needed while {firstName} is driving. | règle 8 — v4.8 | #766 |
+| `Actions.why.driverWithoutPhone` | Un numéro est requis pour proposer une voiture. | A number is needed to offer a car. | refus `driverWithoutPhone`, règle 7 — v4.8 (suite) | #766 |
+| `Actions.why.phoneWhileDriving` | Un numéro est requis tant que {firstName} conduit. | A number is needed while {firstName} is driving. | refus `phoneWhileDriving`, règle 8 — v4.8 (suite) | #766 |
 
 ### Chaque échec, mot pour mot (v4.2)
 
@@ -2833,12 +4165,12 @@ ouverts qui ont envoyé, les messages restent ceux de v4.1.
 | « Proposer une voiture », ce leg seulement : Marc, aller | `alreadyInCar` (passagers cochés) | La voiture de Marc pour l’aller n’a pas été proposée. Parmi Inès et Hugo, une personne au moins est déjà dans une voiture. | Marc’s car for the outbound trip was not offered. Of Inès and Hugo, at least one is already in a car. | `Actions.notDone.offerRide` + `Actions.why.passengerInCar` | C4.1, C4.6, C4.13, C11.11 |
 | « Proposer une voiture », ce leg seulement : Marc, aller | `forbidden` | La voiture de Marc pour l’aller n’a pas été proposée. Cet appareil ne peut pas faire ce changement : rechargez la page. | Marc’s car for the outbound trip was not offered. This device cannot make this change: reload the page. | `Actions.notDone.offerRide` + `Actions.why.forbidden` | C4.1, C4.6, C4.13, C11.11 |
 | « Proposer une voiture », ce leg seulement : Marc, aller | `eventNotFound` | La voiture de Marc pour l’aller n’a pas été proposée. Cet événement est introuvable : il a peut-être été supprimé. | Marc’s car for the outbound trip was not offered. This event can no longer be found: it may have been deleted. | `Actions.notDone.offerRide` + `Actions.why.eventNotFound` | C4.1, C4.6, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | hors ligne | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Vérifiez la connexion, puis réessayez. | Claire’s cars for the outbound and return trips were not offered. Check your connection, then try again. | `Actions.notDone.offerRide` + `Actions.why.offline` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | erreur serveur (500, réseau), `invalid`, `idTaken` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Une erreur est survenue : réessayez dans un instant. | Claire’s cars for the outbound and return trips were not offered. Something went wrong: try again in a moment. | `Actions.notDone.offerRide` + `Actions.why.failed` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | `alreadyDriving` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture. | Claire’s cars for the outbound and return trips were not offered. Claire is already driving a car. | `Actions.notDone.offerRide` + `Actions.why.alreadyDriving` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | `alreadyInCar` (passagers cochés) | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Léa est déjà dans une voiture. | Claire’s cars for the outbound and return trips were not offered. Léa is already in a car. | `Actions.notDone.offerRide` + `Actions.why.passengerInCar` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | `forbidden` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet appareil ne peut pas faire ce changement : rechargez la page. | Claire’s cars for the outbound and return trips were not offered. This device cannot make this change: reload the page. | `Actions.notDone.offerRide` + `Actions.why.forbidden` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | `eventNotFound` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet événement est introuvable : il a peut-être été supprimé. | Claire’s cars for the outbound and return trips were not offered. This event can no longer be found: it may have been deleted. | `Actions.notDone.offerRide` + `Actions.why.eventNotFound` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des personnes » : Claire | hors ligne | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Vérifiez la connexion, puis réessayez. | Claire’s cars for the outbound and return trips were not offered. Check your connection, then try again. | `Actions.notDone.offerRide` + `Actions.why.offline` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des personnes » : Claire | erreur serveur (500, réseau), `invalid`, `idTaken` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Une erreur est survenue : réessayez dans un instant. | Claire’s cars for the outbound and return trips were not offered. Something went wrong: try again in a moment. | `Actions.notDone.offerRide` + `Actions.why.failed` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des personnes » : Claire | `alreadyDriving` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture. | Claire’s cars for the outbound and return trips were not offered. Claire is already driving a car. | `Actions.notDone.offerRide` + `Actions.why.alreadyDriving` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des personnes » : Claire | `alreadyInCar` (passagers cochés) | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Léa est déjà dans une voiture. | Claire’s cars for the outbound and return trips were not offered. Léa is already in a car. | `Actions.notDone.offerRide` + `Actions.why.passengerInCar` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des personnes » : Claire | `forbidden` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet appareil ne peut pas faire ce changement : rechargez la page. | Claire’s cars for the outbound and return trips were not offered. This device cannot make this change: reload the page. | `Actions.notDone.offerRide` + `Actions.why.forbidden` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des personnes » : Claire | `eventNotFound` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet événement est introuvable : il a peut-être été supprimé. | Claire’s cars for the outbound and return trips were not offered. This event can no longer be found: it may have been deleted. | `Actions.notDone.offerRide` + `Actions.why.eventNotFound` | C4.11, C4.12, C4.13, C11.11 |
 | « Réessayer » de « Vos inscriptions » | hors ligne | Vos inscriptions n’ont pas pu être chargées. Vérifiez la connexion, puis réessayez. | Your sign-ups could not be loaded. Check your connection, then try again. | `Actions.notDone.readDevice` + `Actions.why.offline` | C5.9, C11.11 |
 | « Réessayer » de « Vos inscriptions » | erreur serveur (500, réseau), `invalid`, `idTaken` | Vos inscriptions n’ont pas pu être chargées. Une erreur est survenue : réessayez dans un instant. | Your sign-ups could not be loaded. Something went wrong: try again in a moment. | `Actions.notDone.readDevice` + `Actions.why.failed` | C5.9, C11.11 |
 | « Retirer la voiture » : Claire, aller | hors ligne | La voiture de Claire pour l’aller n’a pas été retirée. Vérifiez la connexion, puis réessayez. | Claire’s car for the outbound trip was not removed. Check your connection, then try again. | `Actions.notDone.removeRide` + `Actions.why.offline` | C8.6, C11.11 |
@@ -2851,6 +4183,8 @@ ouverts qui ont envoyé, les messages restent ceux de v4.1.
 | « Modifier » la voiture (#93) : Claire, aller | `passengersChanged` | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Quelqu’un a pris ou libéré une place entre-temps : modifiez la voiture de nouveau. | The changes to Claire’s car for the outbound trip were not saved. Someone took or left a seat in the meantime: edit the car again. | `Actions.notDone.editRide` + `Actions.why.passengersChanged` | C8.2, C8.5, C11.11 |
 | « Modifier » la voiture (#93) : Claire, aller | `forbidden` | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Cet appareil ne peut pas faire ce changement : rechargez la page. | The changes to Claire’s car for the outbound trip were not saved. This device cannot make this change: reload the page. | `Actions.notDone.editRide` + `Actions.why.forbidden` | C8.2, C8.5, C11.11 |
 | « Modifier » la voiture (#93) : Claire, aller | `eventNotFound` | Les changements de la voiture de Claire pour l’aller n’ont pas été enregistrés. Cet événement est introuvable : il a peut-être été supprimé. | The changes to Claire’s car for the outbound trip were not saved. This event can no longer be found: it may have been deleted. | `Actions.notDone.editRide` + `Actions.why.eventNotFound` | C8.2, C8.5, C11.11 |
+| « Proposer une voiture » : Claire, personne de l’appareil, son numéro vidé ailleurs (v4.8) | `driverWithoutPhone` | La voiture de Claire pour l’aller n’a pas été proposée. Un numéro est requis pour proposer une voiture. | Claire’s car for the outbound trip was not offered. A number is needed to offer a car. | `Actions.notDone.offerRide` + `Actions.why.driverWithoutPhone` | T4.8 |
+| « Modifier » une personne, le téléphone seul, vidé : Claire, qui conduit (v4.8) | `phoneWhileDriving` | Le téléphone de Claire n’a pas été enregistré. Un numéro est requis tant que Claire conduit. | Claire’s phone number was not saved. A number is needed while Claire is driving. | `Actions.notDone.editPerson` + `Actions.why.phoneWhileDriving` | T5.7 |
 
 ### Clés nouvelles en v4.2
 
@@ -2948,7 +4282,7 @@ ne fais pas… », comme C4.4) ; « Je reste dans la voiture de {conducteur} » 
 cas ; absent si elle conduit déjà sur l’autre leg. — Raison : ne rien changer qu’on n’a pas
 choisi ; C4.1 garde ses quatre actions.
 
-v4-9. Décision : « Je ramène aussi des passagers » déplie le lieu (prérempli, qui suit le lieu de ce leg
+v4-9. Décision : « Je ramène aussi des personnes » déplie le lieu (prérempli, qui suit le lieu de ce leg
 tant qu’on ne le change pas) et l’heure (préremplie) de l’autre leg ; places et note
 communes. — Raison : au retour le lieu est celui de la dépose (glossaire) ; zéro saisie dans
 le cas courant.
@@ -3112,6 +4446,32 @@ v4.4.6-2. Décision : réduire une ligne n’est pas l’écrire. Rien n’est a
 
 v4.4.6-3. Décision : si l’écriture de cet échec est encore en attente, elle écrit le texte réduit, à son heure. — Raison : la réduction ne doit pas faire taire un échec qui n’a pas encore été annoncé. Il l’est donc dans les mots que la barre montre, et jamais dans le texte entier, que la barre ne montre plus. Seule exception, inchangée : une écriture plus récente dans la région `alert` annule l’écriture en attente (point 3), et seul ce nouvel échec est annoncé, comme pour deux échecs du même passage ; la ligne réduite se relit alors dans la liste.
 
+### Nouvelles en v4.8 (le numéro au bon moment, #766)
+
+v4.8-1 à v4.8-19, écrites en entier dans « Décisions de la v4.8 » : critères T (N est pris) ;
+un message par fiche, à l’appareil seul ; la phrase de qui conduit pour un conducteur
+d’avant ; le bouton ouvre « Modifier », le focus dans le téléphone ; son nom porte le
+prénom ; pas d’annonce ; silence pour les autres (décision du propriétaire, Q2 : b) ; pas
+de préremplissage pour une nouvelle personne qui conduit (décision du coordinateur) ; la
+dernière dans l’ordre de « Vos inscriptions » ; la ligne « Même numéro » tant que c’est ce
+numéro ; une erreur qui dit pourquoi ; le numéro écrit avec la voiture ; pas de numéro vidé
+tant qu’on conduit, mais changé ; les conducteurs d’avant tels quels (Q1 : b) ; aucune
+contrainte en base ; l’aide depuis une place garde « (facultatif) » ; « Modifier la
+voiture » ne demande rien. En v4.8 (suite) : la présence du numéro lue sous le verrou, un
+booléen, jamais la valeur (décision du coordinateur) ; deux refus qui portent l’état.
+
+### Nouvelles en v4.7 (le geste « retour », #656)
+
+v4.7-1 à v4.7-12, écrites en entier dans « Décisions de la v4.7 » : le retour ferme toutes
+les feuilles, comme Échap, saisie comprise, sauf dans une étape ; l’adresse ne change jamais ; l’historique ne
+porte qu’une marque opaque ; la liste des propositions n’a pas de pas à elle ;
+« Supprimer le retour ? » a le sien ; une feuille fermée autrement retire son entrée sans
+défaire l’action ; un retour sans effet est accepté après un rechargement ou un
+« Suivant » ; G2 après le déploiement, sans bloquer ; le mécanisme ne dépend pas de #691
+(décision du coordinateur) ; dans une étape, le retour revient à l’étape d’avant
+(décision du propriétaire, Q1 : b) ; une étape ou la boîte compte un pas, quelle que soit la
+façon dont elle s’ouvre ou finit (v4.7-12).
+
 ### Nouvelles en v4.6 (les feuilles sur téléphone et le clavier, #650)
 
 v4.6-1 à v4.6-16, écrites en entier dans « Décisions de la v4.6 » : pleine hauteur pour les
@@ -3126,9 +4486,9 @@ rendu à la fermeture ; la zone des messages est nommée.
 
 ### Nouvelles en v4.5 (l’autre leg, lu depuis l’événement, #649)
 
-v4.5-1. Décision du propriétaire sur #649, inscrite ici : les choix « conduire » de l’autre leg nomment leurs passagers (« Je ramène aussi des passagers », « J’emmène aussi des passagers » ; « I bring people back too », « I take people there too »), et une ligne dit où et quand part l’autre leg. — Raison : une conductrice qui dépose puis rentre lisait « le retour » comme son propre chemin à vide. « Ramener » avec un complément ne se lit qu’avec des passagers, et la ligne donne une heure que son chemin à vide n’a pas. L’anglais « I drive back too » disait cette lecture mot pour mot.
+v4.5-1. Décision du propriétaire sur #649, inscrite ici : les choix « conduire » de l’autre leg nomment leurs passagers (« Je ramène aussi des passagers », « J’emmène aussi des passagers » ; « I bring people back too », « I take people there too »), et une ligne dit où et quand part l’autre leg. — Raison : une conductrice qui dépose puis rentre lisait « le retour » comme son propre chemin à vide. « Ramener » avec un complément ne se lit qu’avec des passagers, et la ligne donne une heure que son chemin à vide n’a pas. L’anglais « I drive back too » disait cette lecture mot pour mot. Devenu « des personnes » en v4.8, décision du propriétaire du 26/10 (#649).
 
-v4.5-2. Décision : la ligne décrit le leg, pas la voiture. Elle donne l’heure de l’autre leg dans l’événement, et ne suit pas l’heure saisie avec « Je ramène aussi des passagers ». — Raison : elle répond à « de quel retour parle-t-on ? », pas à « quand part ma voiture ? », que le champ « Heure de départ du retour » montre juste dessous. Une ligne qui suivrait le champ répéterait le champ et perdrait le repère.
+v4.5-2. Décision : la ligne décrit le leg, pas la voiture. Elle donne l’heure de l’autre leg dans l’événement, et ne suit pas l’heure saisie avec « Je ramène aussi des personnes ». — Raison : elle répond à « de quel retour parle-t-on ? », pas à « quand part ma voiture ? », que le champ « Heure de départ du retour » montre juste dessous. Une ligne qui suivrait le champ répéterait le champ et perdrait le repère.
 
 v4.5-3. Décision : la date est toujours écrite en entier, même le jour de ce leg. — Raison : la phrase dit « le {date} », et « le 18:00 » ne se dit pas. La ligne se lit seule, au lecteur d’écran aussi, loin de l’en-tête.
 
@@ -3217,6 +4577,40 @@ v4.5-7. Décision du coordinateur sur #649 : en français, la ligne dit « Le re
   - « Trouver une place » écrit une information, et non plus une réussite (v4.2.2) ;
   - PR #209 et #213, ouvertes, écrivent encore `Actions.failed` dans la barre : à aligner.
 
+- **v4.8, le numéro (#766)** :
+  - **`offerRide`** :
+    - la nouvelle personne qui conduit doit avoir un numéro. Absent ou vide, c’est l’erreur de
+      champ `phone: "required"` ;
+    - le `driver` d’une personne de l’appareil peut porter `phone`. Sous le verrou de la
+      Person, une condition de présence (`phone IS NOT NULL`, dans la requête de
+      `lockPersons` ou à côté) dit si elle a un numéro : un booléen, jamais la valeur
+      (v4.8-18). Sans numéro, et sans numéro dans l’offre, c’est le refus
+      `driverWithoutPhone`, qui porte l’état, comme les autres refus (C11.6, v4.8-19) ;
+    - un `phone` envoyé est validé par R1, puis écrit sur la Person avant les Rides, dans la
+      même transaction ;
+    - la page sait déjà qui a un numéro : la section de l’appareil porte ses numéros (C10.1).
+  - **`updatePerson`** : `phone` envoyé vide pour une Person qui conduit un Ride sur un leg,
+    vu sous le verrou de sa ligne `person`, est le refus `phoneWhileDriving`, qui porte
+    l’état (v4.8-19). Rien n’y lit `phone`. Le verrou de la Person est celui que prend
+    `offerRide` : les deux écritures s’ordonnent, et T5.6 le prouve.
+  - **`event-rows.ts`, `phone-visibility.ts`** : inchangés. Aucun `select` nouveau de la
+    valeur de `phone` (v4.8-18).
+  - **Client** :
+    - `ride-card.tsx` reçoit les identifiants des personnes de l’appareil (déjà dans
+      `LegBoard.device`) pour décider du message ;
+    - `person-form.tsx` reçoit le numéro à préremplir et le prénom de sa personne, et sait
+      s’il est ouvert depuis une place (`{driver}`) ;
+    - `ride-form.tsx` montre « Téléphone de {prénom} » d’après le numéro de la personne
+      choisie ;
+    - `person-error.ts` traduit `required` sur le téléphone d’une nouvelle personne qui
+      conduit en `FormErrors.driverPhone`. Les refus `driverWithoutPhone` et
+      `phoneWhileDriving` mettent le champ en erreur avec `FormErrors.driverPhone` et
+      `FormErrors.phoneWhileDriving`, feuille ouverte. Feuille fermée, ils vont dans la
+      barre avec `Actions.why.driverWithoutPhone` et `Actions.why.phoneWhileDriving` ;
+    - l’erreur du client et celle du serveur sont les mêmes (C1.8).
+  - **Inchangés** : `phone-visibility.ts`, `organiser-panel.ts`, `organiser-lists.tsx`, le
+    schéma, les déclencheurs.
+
 ## Critères de l’epic à amender
 
 - **C2.2** : « chaque leg affiche une section » devient « une matrice “Vos inscriptions” au-
@@ -3230,7 +4624,7 @@ v4.5-7. Décision du coordinateur sur #649 : en français, la ligne dit « Le re
 - **R4** : « Conducteur » devient « Qui conduit ? » et « conducteur non compris » devient
   « sans compter qui conduit » ; plus l’autre leg et « Qui monte avec vous ? ».
 - **C4.2** : « La voiture n’apparaît que sur le leg où elle a été proposée » devient « … sauf
-  avec “Je ramène aussi des passagers” / “J’emmène aussi des passagers”, qui crée aussi une voiture sur l’autre leg ».
+  avec “Je ramène aussi des personnes” / “J’emmène aussi des personnes”, qui crée aussi une voiture sur l’autre leg ».
   Un test de C4.2 écrit sur l’ancien texte échouerait.
 - **C4.4** devient le comportement par défaut ; **C4.5** : la seule écriture couvre aussi
   l’autre leg et les passagers de « Qui monte avec vous ? » ; **C4.10** couvre aussi le
@@ -3341,6 +4735,28 @@ v4.5-7. Décision du coordinateur sur #649 : en français, la ligne dit « Le re
   une réussite de placement abandonnée selon la règle 2 n’est jamais écrite ».
 - **Nouveaux** : S1.1 à S1.5 et W1.1 à W1.7, dans « Critères de la v4.4.5 ».
 
+### v4.8 (#766), le numéro de téléphone
+
+- **R4**, ligne « conducteur » : « une **nouvelle personne** (prénom et téléphone, règles de
+  R1) » devient « une **nouvelle personne** (prénom et téléphone **requis**, règles de R1) ;
+  une personne de l’appareil sans numéro en donne un (v4.8, #766) ».
+- **C2.3** : « Vider le téléphone le supprime. » devient « Vider le téléphone le supprime,
+  sauf pour une personne qui conduit (v4.8, T5). »
+- **C1.2** : la phrase « Visible seulement… » reste sous le téléphone. Depuis une place
+  libre et pour qui conduit, une phrase la précède (v4.8, règles 5 et 6).
+- **Table des états**, ligne « conducteur sans téléphone : aucun lien `tel:` sur sa carte » :
+  elle ne vaut plus que pour un conducteur d’avant la v4.8. La fiche demande un numéro à son
+  appareil (T1.6).
+- **Nouveaux** : histoires H11 à H13, T1.1 à T6.3, dans « Critères de la v4.8 ».
+
+### v4.7 (#656), le geste « retour »
+
+- Aucun critère de #66 n’est amendé : mots, boutons, ordre du focus et « Le focus après une
+  action » ne changent pas. Le retour fait ce qu’Échap fait déjà.
+- **Nouveaux** : histoires H9 et H10, G1.1 à G1.18 (Playwright, avant la fusion) et G2.1 à
+  G2.9 (iPhone et Android, après le déploiement, sans bloquer), dans « Critères de la
+  v4.7 ».
+
 ### v4.6 (#650), les feuilles sur téléphone
 
 - Aucun critère de #66 n’est amendé : leurs mots, leurs boutons et l’ordre du focus ne
@@ -3354,7 +4770,7 @@ v4.5-7. Décision du coordinateur sur #649 : en français, la ligne dit « Le re
 ### v4.5 (#649), l’autre leg lu depuis l’événement
 
 - **C4.2** : l’amendement de la v4 cite les nouveaux libellés, « … sauf avec “Je ramène aussi
-  des passagers” / “J’emmène aussi des passagers”, qui crée aussi une voiture sur l’autre
+  des personnes” / “J’emmène aussi des personnes”, qui crée aussi une voiture sur l’autre
   leg ».
 - **C4.11**, et tout critère de #66 qui cite « Je ramène aussi » ou « J’emmène aussi » :
   le nouveau libellé, sans autre changement.
@@ -3362,8 +4778,8 @@ v4.5-7. Décision du coordinateur sur #649 : en français, la ligne dit « Le re
   les libellés que la v4.5 remplace et sans la ligne d’aide. Les tests trouvent un bouton radio
   par son nom exact : un critère qui cite l’ancien libellé chercherait un bouton qui n’existe
   plus. Jusqu’à leur prochaine révision, la v4.5 fait foi. Chaque citation de « Je ramène
-  aussi » devient « Je ramène aussi des passagers », chaque « J’emmène aussi » devient
-  « J’emmène aussi des passagers », et chaque « I drive back too » devient « I bring people
+  aussi » devient « Je ramène aussi des personnes », chaque « J’emmène aussi » devient
+  « J’emmène aussi des personnes », et chaque « I drive back too » devient « I bring people
   back too ». Une maquette du groupe montre aussi la ligne d’aide, sous son titre.
   - `docs/design/place-autocomplete/` :
     - les critères **AL3.5** (`index.html:597`) et **AL4.2** (`index.html:602`), qui nomment
@@ -3424,9 +4840,17 @@ v4.5-7. Décision du coordinateur sur #649 : en français, la ligne dit « Le re
 
 ## Hors périmètre
 
+En v4.7 :
+
+- Un brouillon gardé après une fermeture, ou « Abandonner les changements ? » ;
+  « Retirer la voiture ? » ouverte sans feuille ; rouvrir une feuille par « Suivant » ou par
+  une adresse ; un pas en arrière pour les onglets, le repli, la bulle de la carte ou la
+  barre ; les autres pages ; un projet WebKit dans Playwright. Voir « Hors périmètre de la
+  v4.7 ».
+
 En v4.6 :
 
-- Le geste « retour » du navigateur sur une feuille ouverte : issue #656.
+- Le geste « retour » du navigateur sur une feuille ouverte : issue #656. Traité en v4.7.
 - Fermer une feuille en la glissant vers le bas ; les boîtes de confirmation centrées ; le
   formulaire de création et les pages du compte ; `viewport-fit=cover`.
 
@@ -3987,3 +5411,101 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
       ordinateur (règle 9) ;
     - la zone des messages qui déborde est nommée « Messages » et focalisable (v4.6-16).
   - Pas encore relue de nouveau. Republiée à la même URL.
+- v4.7 (2026-10-26) : le geste « retour » ferme la feuille (#656, séparée de #650 par
+  décision du propriétaire). Construite sur la v4.6 (suite), sans dépendre de #691 à #697
+  (décision du coordinateur).
+  - Le retour ferme ce qu’Échap fermerait, sur toutes les feuilles ; la boîte « Supprimer le
+    retour ? » d’abord ; la liste des propositions avec sa feuille. Un retour, un pas.
+  - L’adresse ne change pas, jeton d’admin compris ; rien n’est rechargé ni demandé ;
+    l’historique ne porte qu’une marque opaque.
+  - Une feuille fermée autrement retire son entrée, sans défaire le défilement de « Trouver
+    une place ». Un retour sans effet accepté après un rechargement ou un « Suivant ».
+  - Le mécanisme recommandé (`pushState` de Next sans adresse, `popstate`, `history.back()`
+    à la fermeture) et ses risques, un par un.
+  - Critères H9, H10, G1.1 à G1.18 (Playwright) et G2.1 à G2.9 (à la main, après le
+    déploiement). Aucun mot nouveau.
+  - Q1 au propriétaire : dans une étape, le retour ferme la feuille (a) ou revient à l’étape
+    d’avant (b, recommandé).
+  - La page ajoute la section « Le geste « retour » (v4.7) », avec treize états. Reprend la
+    ligne d’amendement de visual-identity (#754) de `main`.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.7 (suite) (2026-10-26) : réponse du propriétaire à Q1, (b), inscrite sur #656. Le
+  numéro ne change pas : la v4.7 n’a pas été copiée dans le dépôt.
+  - Règle 3 : dans une étape, le retour revient à l’étape d’avant, comme « Annuler », ses
+    changements gardés ; un second retour ferme la feuille. Échap ne change pas. La règle 1
+    le note ; le mécanisme ajoute l’entrée de l’étape, et la fermeture depuis l’étape retire
+    les deux entrées (nouveau risque dans la table).
+  - G1.17 et G2.9 ne gardent que ce cas, avec « Annuler » de l’étape, sa fermeture par Échap
+    ou « Valider », et la feuille d’une place. v4.7-11 devient la décision. La branche (a)
+    est retirée.
+  - La page : les états 8a et 8b montrent l’étape puis le formulaire revenu, une pile « Une
+    étape, puis retour » s’ajoute à l’historique, et la question devient la décision. La
+    liste des états du README suit la numérotation de la page : onze états et sept piles.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.7 (suite 2) (2026-10-26) : revue de design de la v4.7 (suite), **changements
+  demandés**, deux bloquants, appliqués. Le numéro ne change pas : la v4.7 n’a pas été
+  copiée dans le dépôt.
+  - Bloquant 1 : les étapes et la boîte s’ouvrent et se ferment aussi sur une réponse du
+    serveur. Nouvelle règle 3 bis et décision v4.7-12 : toute ouverture ajoute un pas, un
+    nouveau tour n’en ajoute pas, toute fin la feuille restant ouverte en retire un, fermer
+    la feuille depuis l’intérieur en retire deux. Le mécanisme et la table des risques
+    suivent. G1.15 gagne `saved`, `changed`, `confirmRetour` et « Annuler » ; G1.17 gagne
+    l’étape ouverte par la réponse, rouverte, et finie par `errors` ou par des places qui
+    tiennent. Le dernier point de G1.17 suit le code : « Valider » d’« Ajouter une
+    personne » ramène à la liste, puis un retour ferme la feuille.
+  - Écart avec la revue, sur un point : pour « Supprimer le retour », c’est `errors` (un
+    champ refusé), avec `changed`, qui ferme la boîte seule. Un refus `invalid` la laisse
+    ouverte, avec « failed » (`edit-event-sheet.tsx:259–265`). G1.15 suit le code.
+  - Bloquant 2 : la classe des entrées de feuille dans les piles devient `bk-sh` ; `sheet`
+    reprenait la règle `.sheet` de la page, fond blanc sous un texte clair en thème sombre.
+  - Suggestions appliquées : la maquette 8b met le focus sur « Places, sans compter qui
+    conduit » après le retour, comme « Annuler » (`ride-form.tsx:350–361`) ; la règle de
+    Chrome dit « une action de la personne depuis l’entrée précédente » ; G1 ne compte pas
+    les préchargements `Next-Router-Prefetch` (« Nous contacter » est un `<Link>`) ;
+    v4.7-9 cite la décision du coordinateur sur #656.
+  - Pas encore relue de nouveau. Republiée à la même URL.
+- v4.8 (2026-10-26) : le numéro au bon moment, obligatoire pour qui conduit (#766,
+  décisions du propriétaire Q1 b, Q2 b, Q3 a). Construite sur la v4.7 (suite 2), approuvée,
+  version 35 de l’artifact ; la v4.7 n’y change pas d’un octet.
+  - La fiche demande un numéro quand aucune personne de l’appareil qui s’y trouve n’en a :
+    un message par fiche, un bouton qui ouvre « Modifier {prénom} », le focus dans le
+    téléphone.
+  - « Ajouter une personne » reprend le numéro de la dernière personne de l’appareil qui en
+    a un. Depuis une place libre, l’aide dit pourquoi.
+  - « Proposer une voiture » demande un numéro à qui conduit, nouvelle personne ou personne
+    de l’appareil sans numéro, écrit avec la voiture. Vider son numéro est refusé tant
+    qu’on conduit. Les conducteurs d’avant restent tels quels.
+  - Rien de montré aux autres. Qui voit un numéro ne change pas. Aucun changement dans
+    l’espace organisateur.
+  - Critères H11 à H13, T1.1 à T6.3. Treize clés nouvelles. Décisions v4.8-1 à v4.8-17 ;
+    v4.8-8 confirmée par le coordinateur. `glossary.md` et `product.md` dans la PR de la
+    tâche 1 (pas sensibles sur `main`) ; `review-checklist.md` à part.
+  - La page ajoute la section « Le numéro au bon moment (v4.8) », avec dix-sept états.
+  - Pas encore relue en revue de design. Republiée à la même URL : version 36 de l’artifact,
+    `index.html` sha1 `eb4214c7caae512c206fc3a419f482e4b05d7638`.
+- v4.8, « des personnes » (2026-10-26) : décision du propriétaire sur #649 du 26/10, pour la
+  règle épicène C11.9 (D7). « Je ramène aussi des passagers » et « J’emmène aussi des
+  passagers » deviennent « Je ramène aussi des personnes » et « J’emmène aussi des
+  personnes » dans les mots de la v4.5 et la table générale, les critères (E1, et ceux des
+  autres versions qui les citent), les états, la table des échecs et les maquettes.
+  L’anglais ne change pas. `main` porte déjà ces libellés. Restent tels quels, comme
+  historique : la ligne v4.5 de la liste des versions, et ces révisions.
+- v4.8 (suite) (2026-10-26) : revue de design de la v4.8, modifications demandées.
+  - Bloquant, tranché par le coordinateur (v4.8-18) : le serveur ne lit pas la valeur de
+    `phone` pour savoir si qui conduit en a un. C’est une condition de présence sous le
+    verrou de la Person (`phone IS NOT NULL`), qui rend un booléen. `phone-visibility.ts`
+    et `event-rows.ts` ne changent pas. Règles 7 et 8, T4.7, T5.6 et T6.2 le disent. La
+    documentation ajoute les lignes d’`architecture.md` (tâche 1) et de
+    `review-checklist.md` (PR à elle, fusionnée par le propriétaire).
+  - « Pas de numéro pour qui conduit » et « numéro vidé par qui conduit » deviennent des
+    refus qui portent l’état (`driverWithoutPhone`, `phoneWhileDriving`, v4.8-19) : la page
+    retire le lien `tel:` périmé et montre le champ en erreur. T4.8, T5.5 et T5.7 suivent.
+    Deux clés nouvelles, `Actions.why.driverWithoutPhone` et
+    `Actions.why.phoneWhileDriving`, pour la barre quand la feuille est fermée, et deux
+    lignes dans « Chaque échec, mot pour mot ».
+  - v4.5-1 rendue telle que décidée, avec la note « Devenu « des personnes » en v4.8,
+    décision du propriétaire du 26/10 (#649). »
+  - La page ajoute l’état 18 : « Téléphone de Claire » en erreur après le refus du
+    serveur.
+  - La v4.7 n’y change pas d’un octet. Republiée à la même URL : version 37 de l’artifact,
+    `index.html` sha1 `3d949fe67e46a1bc32569bdc1d637a967b6ba59a`.

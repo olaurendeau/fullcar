@@ -255,7 +255,9 @@
       "retourNotConfirmed": "Removing the return trip was not confirmed: use “Edit the event” again.",
       "retourChanged": "The return trip changed during the confirmation: it now has {cars, plural, one {# car} other {# cars}} and {persons, plural, one {# person} other {# people}}. {where, select, sheet {Use “Confirm” again.} other {Use “Edit the event” again.}}",
       "noRetourAgain": "This event no longer has a return trip: {action, select, offerRide {offer the car again, for the outbound trip only.} other {add this person again, for the outbound trip only.}}",
-      "personGone": "{firstName} is no longer part of the event."
+      "personGone": "{firstName} is no longer part of the event.",
+      "driverWithoutPhone": "A number is needed to offer a car.",
+      "phoneWhileDriving": "A number is needed while {firstName} is driving."
     },
     "info": {
       "noRetour": "This event no longer has a return trip: {driver}’s car is no longer offered.",
