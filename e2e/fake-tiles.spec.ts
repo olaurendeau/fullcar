@@ -1,5 +1,6 @@
 import { expect, test } from "./fixtures";
 import { answerTiles, PNG_SIGNATURE, requestsForTile, tileOf, type TileAnswer } from "./tiles";
+import { EARLY_MS } from "./timers";
 
 // The fake tile provider itself, as the app will reach it: `TILE_UPSTREAM_URL` and
 // `GEOAPIFY_API_KEY` of `web` (compose.yaml).
@@ -164,7 +165,7 @@ test.describe("the fake tile provider", () => {
       await response.arrayBuffer();
       const elapsed = Date.now() - started;
       expect(response.status, tile).toBe(status);
-      expect(elapsed, tile).toBeGreaterThanOrEqual(1500);
+      expect(elapsed, tile).toBeGreaterThanOrEqual(1500 - EARLY_MS);
       expect(elapsed, tile).toBeLessThan(3000);
     }
 

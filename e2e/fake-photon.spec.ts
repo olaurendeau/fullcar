@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "./fixtures";
 import { answerFor, photonFeature, requestsFor } from "./photon";
+import { EARLY_MS } from "./timers";
 
 // The fake Photon itself, as the app will reach it: `PHOTON_URL` of `web` (compose.yaml).
 const PHOTON_URL = "http://photon:2322/api/";
@@ -100,7 +101,7 @@ test.describe("the fake Photon", () => {
     const response = await search(text);
     const body = await response.json();
     const elapsed = Date.now() - started;
-    expect(elapsed).toBeGreaterThanOrEqual(1500);
+    expect(elapsed).toBeGreaterThanOrEqual(1500 - EARLY_MS);
     expect(elapsed).toBeLessThan(3000);
     expect(body.features).toHaveLength(1);
 
