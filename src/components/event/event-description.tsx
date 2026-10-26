@@ -1,35 +1,152 @@
 import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FocusEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { guessFolds } from "@/domain/description";
 import { descriptionPieces } from "@/domain/description-links";
+import { focusTitle } from "./focus";
+
+/** Lines shown while folded (event-description v3, « Lire »). */
+const FOLDED_LINES = 4;
+
+/**
+ * Without JavaScript, nothing could unfold the text: shown whole, without the button. From a
+ * `<noscript>`, not a `scripting` media query, which Safari lacks before 17 (DS2.11).
+ */
+const WITHOUT_SCRIPT =
+  "#event-description{display:block;overflow:visible;-webkit-line-clamp:none;line-clamp:none}#event-description-toggle{display:none}";
+
+/**
+ * Whether the text takes more than 4 lines: folded, its whole height beyond the one shown;
+ * unfolded, beyond 4 of its lines, whatever the text's size.
+ */
+function overflows(text: HTMLElement, folded: boolean): boolean {
+  if (folded) return text.scrollHeight > text.clientHeight + 1;
+  return text.scrollHeight > FOLDED_LINES * parseFloat(getComputedStyle(text).lineHeight) + 1;
+}
 
 /**
  * The organiser's description, in the header after the dates (event-description v3, « Lire »):
  * 16 px on 24, `pre-wrap`, `tab-size: 4`, wrapped anywhere, without icon or label. Its
  * `http(s)` URLs that lead where they read are links (« Les liens », 3): to a new tab, which
  * `Contact.newTab` says, without referrer, isolated from the text around them. Nothing
- * without a description. Not folded yet: #712 folds it.
+ * without a description.
  */
 export function EventDescription({ description }: { description: string | null | undefined }) {
-  const t = useTranslations("Contact");
   if (!description) return null;
+  return <FoldedDescription description={description} />;
+}
+
+/**
+ * Folded beyond 4 lines, then « Afficher toute la description » (DS2.4–DS2.13). The server
+ * renders the whole text, folded by CSS, and the button when it guesses the text is long; the
+ * browser measures and corrects the button alone, once more on each resize, font load and change
+ * of the text. Folded on each load, unfolded in this component's memory only. The button keeps
+ * the focus; one that goes with the focus sends it to the title. A link hidden by the fold that
+ * takes the focus unfolds the text (DS3.7).
+ */
+function FoldedDescription({ description }: { description: string }) {
+  const t = useTranslations("Event.description");
+  const contact = useTranslations("Contact");
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [folds, setFolds] = useState(() => guessFolds(description));
+  const [expanded, setExpanded] = useState(false);
+  /** What to bring into view once the text has its new height: the button folded, or a link unfolded. */
+  const reveal = useRef<"button" | "focus" | null>(null);
+  const folded = folds && !expanded;
+
+  const measure = useCallback(() => {
+    const text = textRef.current;
+    if (!text) return;
+    const next = overflows(text, text.dataset.folded === "true");
+    if (!next && buttonRef.current !== null && document.activeElement === buttonRef.current) focusTitle();
+    setFolds(next);
+  }, []);
+
+  // Each change of the text: 6 lines replaced by 5 keep the same folded height, which no resize would tell.
+  useLayoutEffect(measure, [description, measure]);
+
+  useEffect(() => {
+    const text = textRef.current;
+    if (!text) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(text);
+    let live = true;
+    void document.fonts?.ready.then(() => live && measure());
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
+  }, [measure]);
+
+  useEffect(() => {
+    const target = reveal.current === "button" ? buttonRef.current : reveal.current === "focus" ? document.activeElement : null;
+    reveal.current = null;
+    target?.scrollIntoView({ block: "nearest" });
+  }, [expanded]);
+
+  function unfoldForHidden(event: FocusEvent<HTMLParagraphElement>) {
+    const text = event.currentTarget;
+    const rects = event.target.getClientRects();
+    const last = rects[rects.length - 1];
+    if (!folded || event.target === text || !last) return;
+    // From the text's own top, whatever the browser scrolled it by to show what has the focus.
+    if (last.bottom - text.getBoundingClientRect().top + text.scrollTop <= text.clientHeight + 1) return;
+    text.scrollTop = 0;
+    reveal.current = "focus";
+    setExpanded(true);
+  }
+
   return (
-    <p id="event-description" className="whitespace-pre-wrap wrap-anywhere [tab-size:4]">
-      {descriptionPieces(description).map((piece, index) =>
-        piece.kind === "text" ? (
-          piece.text
-        ) : (
-          <a
-            key={index}
-            href={piece.href}
-            target="_blank"
-            rel="noopener noreferrer nofollow ugc"
-            dir="ltr"
-            className="rounded-sm underline underline-offset-4 [unicode-bidi:isolate] focus-visible:focus-ring"
-          >
-            {piece.href}
-            <span className="sr-only"> {t("newTab")}</span>
-          </a>
-        ),
+    <div className="flex flex-col">
+      <p
+        ref={textRef}
+        id="event-description"
+        data-folded={folded}
+        onFocus={unfoldForHidden}
+        className={`whitespace-pre-wrap wrap-anywhere [tab-size:4]${folded ? " line-clamp-4" : ""}`}
+      >
+        {descriptionPieces(description).map((piece, index) =>
+          piece.kind === "text" ? (
+            piece.text
+          ) : (
+            <a
+              key={index}
+              href={piece.href}
+              target="_blank"
+              rel="noopener noreferrer nofollow ugc"
+              dir="ltr"
+              className="rounded-sm underline underline-offset-4 [unicode-bidi:isolate] focus-visible:focus-ring"
+            >
+              {piece.href}
+              <span className="sr-only"> {contact("newTab")}</span>
+            </a>
+          ),
+        )}
+      </p>
+      {folds && (
+        <Button
+          ref={buttonRef}
+          id="event-description-toggle"
+          type="button"
+          variant="outline"
+          className="mt-2 h-11 w-full"
+          aria-expanded={expanded}
+          aria-controls="event-description"
+          onClick={(event) => {
+            // Safari does not focus a button it clicks.
+            event.currentTarget.focus();
+            if (textRef.current) textRef.current.scrollTop = 0;
+            reveal.current = expanded ? "button" : null;
+            setExpanded(!expanded);
+          }}
+        >
+          {expanded ? t("less") : t("more")}
+        </Button>
       )}
-    </p>
+      <noscript>
+        <style>{WITHOUT_SCRIPT}</style>
+      </noscript>
+    </div>
   );
 }

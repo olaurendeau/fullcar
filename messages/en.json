@@ -66,6 +66,10 @@
       "start": "Start",
       "end": "End"
     },
+    "description": {
+      "more": "Show the whole description",
+      "less": "Show less"
+    },
     "noCar": {
       "aller": "No car offered for the outbound trip",
       "retour": "No car offered for the return trip"
