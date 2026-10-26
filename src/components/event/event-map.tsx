@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import type { BoardCar } from "@/domain/board";
-import { mapOf } from "@/domain/event-map";
+import { freeSeatsOf, mapOf } from "@/domain/event-map";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { cn } from "@/lib/utils";
@@ -34,7 +34,7 @@ export interface MapHint {
 }
 
 /** What the map reads of a car, and nothing more: the driver's first name, never their number. */
-type MapCar = Pick<BoardCar, "id" | "location" | "position" | "freeSeats" | "full"> & { driver: Pick<BoardCar["driver"], "firstName"> };
+type MapCar = Pick<BoardCar, "id" | "location" | "position" | "freeSeats"> & { driver: Pick<BoardCar["driver"], "firstName"> };
 
 /** A touch screen, where one finger scrolls the page and two move the map (CA1.11). */
 const TOUCH = "(pointer: coarse)";
@@ -246,7 +246,9 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const zoomOut = t("zoomOut");
   const close = tActions("close");
   const { points: grouped, onMap, notOnMap } = mapOf(map.position, cars);
-  const points: CarPoint[] = grouped.map(({ position, atFlag, cars: here }) => {
+  const points: CarPoint[] = grouped.map((point) => {
+    const { position, atFlag, cars: here } = point;
+    // Every count of seats in a name, 0 included: « 0 place libre », never « Complet » (v29, CA1.22).
     const pointCars = here.map((car) => ({
       id: car.id,
       position: car.position,
@@ -254,10 +256,12 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       name: t(`car.${leg}`, {
         car: tCar("title", { driver: car.driver.firstName }),
         location: car.location,
-        seats: car.full ? tCar("full") : t("freeSeats", { free: car.freeSeats }),
+        seats: t("freeSeats", { free: car.freeSeats }),
       }),
+      seats: format.number(car.freeSeats),
     }));
-    if (here.length === 1) return { position, atFlag, label: here[0].driver.firstName, name: pointCars[0].name, cars: pointCars };
+    const free = freeSeatsOf(point);
+    if (here.length === 1) return { position, atFlag, label: here[0].driver.firstName, name: pointCars[0].name, seats: format.number(free), cars: pointCars };
     return {
       position,
       atFlag,
@@ -269,7 +273,9 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
           here.map((car) => car.driver.firstName),
           { type: "conjunction", style: "narrow" },
         ),
+        seats: t("freeSeats", { free }),
       }),
+      seats: format.number(free),
       cars: pointCars,
     };
   });

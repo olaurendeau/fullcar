@@ -338,11 +338,11 @@ d'`editEvent`, pour une prise de place et une voiture proposée.
 dans une seule transaction d'`atomically`, en `READ COMMITTED`. Le retrait suit l'ordre
 Event, puis Ride, puis Person, en quatre temps :
 
-1. L'Event en partage, par `lockLegs(trx, id, [])` (`src/app/e/[id]/retour.ts`). Un retrait
-   et une suppression du retour se suivent donc dans l'ordre où ils prennent l'Event, et
-   deux retraits ne s'attendent pas sur lui.
-2. Les Rides que la personne conduit, sur les deux legs, lus puis verrouillés par
-   identifiant croissant (`lockRides`, `src/db/rides.ts`).
+1. L'Event en partage, par `lockEvent(trx, id, "share")` (`src/db/events.ts`), comme
+   `lockLegs` sans leg. Un retrait et une suppression du retour se suivent donc dans l'ordre
+   où ils prennent l'Event, et deux retraits ne s'attendent pas sur lui.
+2. Les Rides que la personne conduit, sur les deux legs, lus (`findDrivenRides`) puis
+   verrouillés par identifiant croissant (`lockRides`, `src/db/rides.ts`).
 3. Sa Person (`lockPersons`, `src/db/persons.ts`).
 4. Ensuite seulement, la suppression : ses Rides, dont les passagers repassent « sans
    voiture » par la clé `placement → ride`, ses Placements, puis la Person.
@@ -371,6 +371,18 @@ relit donc sous ses verrous ce qu'il a lu avant eux :
   `DriverMoved` dans `offerRide`, au lieu de verrouiller ce Ride après la Person. Decision :
   reprendre la transaction plutôt que verrouiller tard. — Reason : c'est le précédent
   d'`offerRide`, et l'ordre Ride, puis Person, reste vrai sans exception.
+- **La borne de la reprise (#665).** Une seule reprise. La première tentative tient l'Event
+  en partage. La reprise le tient en `FOR NO KEY UPDATE` (`lockEvent(trx, id,
+  "noKeyUpdate")`), comme une modification de l'événement : toute écriture sur ses legs, dont
+  `offerRide`, prend l'Event en partage dès sa première instruction, donc aucune ne tourne
+  pendant la reprise, et aucune voiture de la personne ne peut plus y apparaître. Il n'y a
+  rien au-delà de la borne, donc jamais de `failed` (RP2.8). Decision : une reprise, sous le
+  verrou exclusif de l'Event, plutôt que trois essais en partage comme `offerRide`. —
+  Reason : trois essais en partage finissent en `failed` si la voiture apparaît à chaque
+  fois, ce que RP2.8 exclut ; sous le verrou exclusif, la reprise ne peut pas échouer pour
+  cette raison. Elle ne coûte qu'une attente des écritures en cours sur l'événement, pour un
+  cas rare : une voiture proposée par cette personne au moment même où on la retire. Avec
+  une transaction passée par un test, il n'y a pas de reprise, comme dans `offerRide`.
 
 Les autres écritures voient un retrait de la même façon. Avec une requête et un jeton bien
 formés, une personne absente de l'événement donne `personGone`, avec l'état, et non plus
@@ -820,7 +832,7 @@ tuiles qui ne sont pas au cache, jamais l'IP ni le navigateur du visiteur.
 | `GEOAPIFY_API_KEY` | aucune clé : aucun appel, chaque tuile en 502, `tiles: no key` (aussi quand elle est vide ou blanche) | la clé de Geoapify, réservée au serveur, rognée ; les slots ont une clé de test |
 | `TILES_BREAKER_MS` | `10000` (aussi pour une valeur qui n'est pas faite que de chiffres) | la durée minimale du disjoncteur, en millisecondes ; `0` le coupe (les slots) |
 
-### Les points (#476, #481)
+### Les points (#476, #481, #655)
 
 `src/domain/event-map.ts`, en fonctions pures, sans mots ni Leaflet. `mapOf(flag, cars)` lit
 les voitures d'un leg dans l'ordre des fiches : une voiture sans position n'est pas sur la carte
@@ -829,7 +841,16 @@ les voitures d'un leg dans l'ordre des fiches : une voiture sans position n'est 
 (`atFlag` : pas de ligne, l'étiquette sous le drapeau), même à 25 m ou plus d'une autre ;
 toute autre rejoint le premier point, dans l'ordre des fiches, hors du drapeau, à moins de
 25 m de la position de sa première voiture, ou en ouvre un. `onMap` compte les voitures sur
-la carte, le nombre que dit son nom. `framing` cadre le drapeau seul au zoom 14, ou
+la carte, le nombre que dit son nom. `freeSeatsOf(point)` donne les places libres d'un point
+(v28, #655) : celles de sa voiture (`freeSeats` du tableau, celles de la fiche), ou la somme de
+celles de ses voitures, 0 quand toutes sont pleines. `event-map.tsx` les met en chiffres
+(`format.number`) dans la **pastille** de l'étiquette, après le prénom ou le nombre de voitures :
+un trait de 1 px, l'icône « armchair » de Lucide (`aria-hidden`), le nombre, dans le même bouton,
+du même style pour tout nombre, jamais ambre ; chaque bouton de voiture de la bulle a celle de sa
+voiture. Les noms disent le nombre une fois, par `EventMap.freeSeats`, 0 compris (« 0 place
+libre », et non plus `Board.car.full`) ; celui d'un point groupé est `EventMap.group`, « 2 voitures :
+Nina, Paul, 3 places libres ». Une place prise ou libérée ne change que la pastille et le nom
+du même élément, sans recadrage (`mapUpdate`). `framing` cadre le drapeau seul au zoom 14, ou
 l'emprise du drapeau et des points, au zoom 15 au plus, avec une marge par côté : 32 px, et en
 bas la hauteur des crédits `h` plus 32 px, ou plus 64 px quand le drapeau a un point sous lui
 (v22 : son bouton descend à 60 px sous le drapeau). `bubbleMaxHeight` donne à la bulle la
@@ -837,6 +858,11 @@ hauteur de la carte moins `2 · BUBBLE_INSET` (10 px) moins `h` : elle s'arrête
 crédits. `h` est l'`offsetHeight` des crédits, lu par `leaflet-map.ts` à chaque cadrage et à
 chaque placement de la bulle (24 px sur une ligne, 48 sur deux). Les 64 px valent pour un rem
 de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cette marge.
+À gauche et à droite, la marge est la moitié de l'étiquette la plus large quand elle dépasse
+32 px (#655) : une étiquette est centrée sur son point, et sa pastille, à son bout droit, ne
+doit pas être coupée par le bord de la carte (CA1.3). `leaflet-map.ts` mesure les boutons
+(`offsetWidth`) ; à la première vue, ils n'entrent dans la page qu'une fois la carte cadrée :
+elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les deux.
 
 ### Dans le navigateur (#478 à #485)
 

@@ -77,7 +77,7 @@ test("CA1.4, CA1.5: points in the order of the cards, between the container and 
   }
 
   const names = [
-    "Voiture de Zoé, départ : 12 rue des Lilas, Complet",
+    "Voiture de Zoé, départ : 12 rue des Lilas, 0 place libre",
     "Voiture de Marc, départ : Place de la mairie, 2 places libres",
     "Voiture de Inès, départ : Gare de Cesson, 3 places libres",
   ];
@@ -87,7 +87,7 @@ test("CA1.4, CA1.5: points in the order of the cards, between the container and 
   const map = await openMap(page, mapName("aller", "3 voitures"));
   expect(await focusableIn(map)).toEqual([...names, "Zoom avant", "Zoom arrière", OSM_LINK]);
 
-  // CA1.5: the first name, the place and the free seats (or « Complet ») of each name are on its card.
+  // CA1.5: the first name, the place and the free seats of each name are on its card, « 0 place libre » its « Complet ».
   const panel = page.getByRole("tabpanel");
   for (const [driver, location, seats] of [
     ["Zoé", "12 rue des Lilas", "Complet"],
@@ -200,7 +200,7 @@ test("CA1.16, CA1.8: a first name of 40 characters, its label cut at 120 px, its
 
   await expect(map.getByRole("button", { name: "Voiture de Claire, départ : 12 rue des Lilas, 3 places libres", exact: true })).toBeVisible();
   await expect(map.getByRole("button", { name: "Voiture de Claire, départ : Place de la mairie, 3 places libres", exact: true })).toBeVisible();
-  await expect(map.locator(".leaflet-marker-pane button", { hasText: /^Claire$/ })).toHaveCount(2);
+  await expect(map.locator(".leaflet-marker-pane button").filter({ has: page.getByText("Claire", { exact: true }) })).toHaveCount(2);
 
   // CA1.8, the points' part: a text of 12 px at least, a target of 44 × 44 px at least.
   for (const point of await points(map).all()) {

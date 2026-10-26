@@ -426,7 +426,7 @@
       "retour": "{car}, drops off at {location}, {seats}"
     },
     "freeSeats": "{free, plural, one {# free seat} other {# free seats}}",
-    "group": "{count, plural, other {# cars}}: {drivers}",
+    "group": "{count, plural, other {# cars}}: {drivers}, {seats}",
     "notOnMap": "{count, plural, one {# car is not on the map: its place has no position.} other {# cars are not on the map: their places have no position.}}",
     "touchHint": "Use two fingers to move or zoom the map.",
     "organiserHint": "To show the map, pick the event’s place from the suggestions.",

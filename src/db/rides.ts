@@ -201,3 +201,21 @@ export async function findDrivenRide(
     .executeTakeFirst();
   return row?.id;
 }
+
+/**
+ * The Rides the person drives in that event, on both legs, by ascending id: the order
+ * `lockRides` takes them in. None if she drives nowhere.
+ */
+export async function findDrivenRides(
+  db: Kysely<Database>,
+  driver: { driverId: string; eventId: string },
+): Promise<RideRef[]> {
+  const rows = await db
+    .selectFrom("ride")
+    .select(["id", "leg"])
+    .where("driver_id", "=", driver.driverId)
+    .where("event_id", "=", driver.eventId)
+    .orderBy("id")
+    .execute();
+  return rows.map((row) => ({ id: row.id, eventId: driver.eventId, leg: row.leg }));
+}
