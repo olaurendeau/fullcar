@@ -19,6 +19,7 @@ const event: NewEvent = {
   allerAt: "2026-12-12 07:30:00",
   retourAt: "2026-12-12 18:00:00",
   locationPosition: null,
+  description: null,
   boostersEnabled: true,
   participationEnabled: false,
   stopsEnabled: true,
@@ -54,11 +55,20 @@ describe("insertEvent", () => {
       retour_at: "2026-12-12 18:00:00",
       location_lat: null,
       location_lng: null,
+      description: null,
       boosters_enabled: true,
       participation_enabled: false,
       stops_enabled: true,
     });
     expect(row.admin_token_hash).toEqual(Buffer.from(HASH, "hex"));
+  });
+
+  it("stores the description, with its line breaks", async () => {
+    const stored = await withRollback(async (trx) => {
+      const id = await insertEvent(trx, { ...event, description: "Rendez-vous à 7 h\n\nPrévoir un pique-nique" }, HASH);
+      return (await findEventById(trx, id))?.description;
+    });
+    expect(stored).toBe("Rendez-vous à 7 h\n\nPrévoir un pique-nique");
   });
 
   it("AL1.7, AL2.1: stores the position of the location", async () => {
@@ -209,11 +219,35 @@ describe("writeEventFields", () => {
         retour_at: null,
         location_lat: null,
         location_lng: null,
+        description: null,
         boosters_enabled: true,
         participation_enabled: false,
         stops_enabled: false,
       });
       expect(await readAdminTokenHash(trx, id)).toBe(hash);
+    });
+  });
+
+  it("writes the description sent, null included", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const fields = { title: "Finale", location: "Stade", allerAt: "2026-12-13 14:00:00", retourAt: null };
+
+      await writeEventFields(trx, id, { ...fields, description: "Rendez-vous à 7 h" });
+      expect((await findEventById(trx, id))?.description).toBe("Rendez-vous à 7 h");
+
+      await writeEventFields(trx, id, { ...fields, description: null });
+      expect((await findEventById(trx, id))?.description).toBeNull();
+    });
+  });
+
+  it("keeps the description stored when none is sent", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx, { description: "Rendez-vous à 7 h" });
+      const fields = { title: "Finale", location: "Stade", allerAt: "2026-12-13 14:00:00", retourAt: null };
+
+      expect(await writeEventFields(trx, id, fields)).toBe(true);
+      expect(await findEventById(trx, id)).toMatchObject({ title: "Finale", description: "Rendez-vous à 7 h" });
     });
   });
 

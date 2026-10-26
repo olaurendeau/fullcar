@@ -41,17 +41,20 @@ const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" } as const;
 
 /**
  * `before` as a page sends it, the values it loaded, or nothing: `validateEventChange` throws on
- * another shape. A page from before the positions sends no `locationPosition`: it is then
- * compared without it.
+ * another shape. A page from before the positions sends no `locationPosition`, one from before
+ * the description no `description`: each is then compared without it.
  */
 function headerOf(input: unknown): EventChange | undefined {
   if (typeof input !== "object" || input === null) return undefined;
-  const { title, location, allerAt, retourAt, locationPosition } = input as Record<string, unknown>;
+  const { title, location, allerAt, retourAt, locationPosition, description } = input as Record<string, unknown>;
   if (typeof title !== "string" || typeof location !== "string" || !isWallClock(allerAt)) return undefined;
   if (retourAt !== null && !isWallClock(retourAt)) return undefined;
-  if (locationPosition === undefined) return { title, location, allerAt, retourAt };
+  if (description !== undefined && description !== null && typeof description !== "string") return undefined;
+  const header: EventChange = { title, location, allerAt, retourAt };
+  if (description !== undefined) header.description = description;
+  if (locationPosition === undefined) return header;
   const position = positionOf(locationPosition);
-  return "error" in position ? undefined : { title, location, allerAt, retourAt, locationPosition: position.value };
+  return "error" in position ? undefined : { ...header, locationPosition: position.value };
 }
 
 function isCount(value: unknown): value is number {
@@ -66,14 +69,18 @@ function countsOf(input: unknown): { ok: true; counts?: LegCounts } | { ok: fals
   return isCount(cars) && isCount(persons) ? { ok: true, counts: { cars, persons } } : { ok: false };
 }
 
-/** `loaded` without a position, from a page before the positions, is compared without it. */
+/**
+ * `loaded` without a position, from a page before the positions, is compared without it; without
+ * a description, from a page before the description, too.
+ */
 function sameHeader(stored: EventHeader, loaded: EventChange): boolean {
   return (
     stored.title === loaded.title &&
     stored.location === loaded.location &&
     stored.allerAt === loaded.allerAt &&
     stored.retourAt === loaded.retourAt &&
-    (loaded.locationPosition === undefined || samePosition(stored.locationPosition, loaded.locationPosition))
+    (loaded.locationPosition === undefined || samePosition(stored.locationPosition, loaded.locationPosition)) &&
+    (loaded.description === undefined || stored.description === loaded.description)
   );
 }
 
@@ -86,7 +93,8 @@ function sameHeader(stored: EventHeader, loaded: EventChange): boolean {
  * retour removed when it is unchecked (`removeRetour`, `confirmRetour`), then the fields
  * written. A `before` forged with a past date makes the bounds skip that date, then is
  * refused as `changed` under the lock. A position not sent, by a page from before the
- * positions, keeps the one stored, even with another text (D6, AL5.6).
+ * positions, keeps the one stored, even with another text (D6, AL5.6); a description not
+ * sent keeps the one stored.
  *
  * The application passes the connection: the transaction is `atomically`'s, READ COMMITTED,
  * so that the retour, counted again after the lock, includes a write committed while the
@@ -126,8 +134,8 @@ export async function editEvent(
       if (!removed.ok) return removed;
     }
     if (!(await writeEventFields(trx, eventId, event))) return EVENT_NOT_FOUND;
-    // Not sent, the position stored is kept (D6, AL5.6): the answer says it.
-    const { locationPosition = stored.locationPosition } = event;
-    return { ok: true, event: { ...event, locationPosition } };
+    // Not sent, the position stored is kept (D6, AL5.6), and the description stored: the answer says it.
+    const { locationPosition = stored.locationPosition, description = stored.description } = event;
+    return { ok: true, event: { ...event, locationPosition, description } };
   });
 }

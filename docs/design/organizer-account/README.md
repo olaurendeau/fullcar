@@ -5,6 +5,7 @@
 - Page : `index.html` (autonome ; maquettes à 360 px, et deux navigateurs de 1280 px à 55 %)
 - Version : v4
 - Voisines : `organizer-view` v3.3.9 (l’espace organisateur, dont cette maquette retire le lien d’organisateur et « Gardez ce lien ») ; `home` v2.1 (accueil et `/nouveau`) ; `github-link` (bas de page).
+- Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
 
 ## Ce que la page montre
 

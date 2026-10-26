@@ -15,6 +15,7 @@
   montrent l’écran tel qu’il était le 17/10 (en-tête « Aller » / « Retour », bas de page sans
   « Accueil ») : seules les sections « L’anneau de focus (v3) » et « Le pointeur (v3.3.3) »
   sont à jour de l’écran actuel.
+- Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
 
 ## Ce qui change en v3.3.4 : l’anneau d’« Annuler » dans la barre (#350)
 

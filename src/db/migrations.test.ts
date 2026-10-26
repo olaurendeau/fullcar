@@ -1,12 +1,12 @@
 import { sql, type Kysely } from "kysely";
 import { NO_MIGRATIONS, type MigrationResultSet } from "kysely/migration";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { adminTokenMatches } from "@/domain/admin-token";
+import { adminTokenMatches, hashAdminToken, newAdminToken } from "@/domain/admin-token";
+import { generatePublicId } from "@/domain/public-id";
 import { createDb } from "./client";
 import { createMigrator } from "./migrator";
 import type { Database } from "./schema";
 import { migrations } from "./migrations";
-import { seedEvent } from "./test-events";
 
 function expectSuccess({ error, results }: MigrationResultSet) {
   expect(error).toBeUndefined();
@@ -38,6 +38,27 @@ async function schemaOf(db: Kysely<Database>) {
     where schemaname = 'public' and tablename not like 'kysely_%'
     order by tablename, indexname`.execute(db);
   return { columns, constraints, indexes };
+}
+
+/**
+ * An event as the schema of 0004 has it, with its token: `seedEvent` writes the columns of the
+ * latest migration, the description among them, which 0004 does not have.
+ */
+async function seedEventOf0004(db: Kysely<Database>): Promise<{ id: string; token: string }> {
+  const token = newAdminToken();
+  const { id } = await db
+    .insertInto("event")
+    .values({
+      id: generatePublicId(),
+      title: "Tournoi de Rennes",
+      location: "Gymnase des Gayeulles",
+      aller_at: "2026-12-12 07:30:00",
+      retour_at: null,
+      admin_token_hash: Buffer.from(hashAdminToken(token), "hex"),
+    })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  return { id, token };
 }
 
 /** The definition of a constraint of the event table, as Postgres writes it back. */
@@ -111,7 +132,7 @@ describe("migrations", () => {
   it("0004 goes down with events whose token was revoked, still unusable", async () => {
     const migrator = createMigrator(db);
     expectSuccess(await migrator.migrateTo("0004_accounts"));
-    const events = [await seedEvent(db), await seedEvent(db)];
+    const events = [await seedEventOf0004(db), await seedEventOf0004(db)];
     const ids = events.map((event) => event.id);
     try {
       const { id: accountId } = await db
