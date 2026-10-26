@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from "react";
+import { scrollPageBy } from "@/components/event/page-scroll";
 
 /*
  * The board does not move on screen when the panel above it changes height (O1.11, README
@@ -70,7 +71,8 @@ export function useKeepBoardInPlace(ref: RefObject<HTMLElement | null>) {
       const delta = compensation({ top: top + window.scrollY - scrolled, before: height, after, clamped });
       height = after;
       end = null;
-      if (delta !== 0) window.scrollBy({ top: delta, behavior: "instant" });
+      // A sheet open or closing gives the page back by as much lower (#691).
+      if (delta !== 0) scrollPageBy(delta);
       scrolled = window.scrollY;
     });
     window.addEventListener("scroll", onScroll, { passive: true });
