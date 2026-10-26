@@ -70,6 +70,7 @@ export type OfferErrors = PersonErrors & RideErrors & Partial<Record<OtherLegFie
 
 /**
  * - `eventNotFound`: no such event (or a malformed id, never looked up);
+ * - `eventEnded`: the event is anonymised (#588), before any other refusal;
  * - `noRetour`: the car, or the driver's choice on the other leg (`withoutCar`, `drive`),
  *   is on a retour the event no longer has (decision 40), before any other refusal;
  * - `invalid`: what no form sends (an id or a leg malformed, a new driver without a
@@ -86,6 +87,7 @@ export type OfferRefusal =
   | "noRetour"
   | "invalid"
   | "eventNotFound"
+  | "eventEnded"
   | "forbidden"
   | "personGone"
   | "alreadyDriving"

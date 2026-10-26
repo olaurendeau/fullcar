@@ -24,9 +24,18 @@ export const CONFIRMATIONS_PER_ADDRESS = 5;
 export const BREVO_DAILY_QUOTA = 300;
 
 /**
- * Every email, of every kind, per hour, whatever its address (coordinator decision 2 on
- * #581). The per-event and per-address limits do not stop someone who sprays many
- * addresses; this cap does, without keeping any IP address. At 50, one hour of abuse
+ * Sign-in requests per address and per hour (OA4.5, decision 9), an address without an
+ * account included (OA3.5): the answer goes out whether or not the address has an account.
+ */
+export const LOGINS_PER_ADDRESS = 5;
+
+/**
+ * Every confirmation email and every answer to a sign-in request, per hour, whatever its
+ * address (coordinator decision 2 on #581). The inactivity warnings are not counted
+ * (decision on #616): the daily task sends 20 at most per run, and a batch of them must
+ * not stop the sign-ins and confirmations of the hour. The per-event and per-address
+ * limits do not stop someone who sprays many addresses; this cap does, without keeping
+ * any IP address. At 50, one hour of abuse
  * spends a sixth of BREVO_DAILY_QUOTA, and the rest of the day still has emails to send.
  * Fullcar's ordinary traffic is far below it: an organiser sends a handful a month.
  */
@@ -35,10 +44,14 @@ export const GLOBAL_SENDS_PER_HOUR = 50;
 /** The limit that stops an email: the most specific one first, since it tells the user more. */
 export type SendLimit = "event" | "address" | "global";
 
-/** Emails sent in the window. `event` and `address` count confirmation emails; `global`, every email. */
+/**
+ * Emails sent in the window. `event` and `address` count confirmation emails, `login` the
+ * answers to sign-in requests to the address, `global` both kinds together.
+ */
 export interface RecentSends {
   event?: number;
   address?: number;
+  login?: number;
   global: number;
 }
 
@@ -51,6 +64,7 @@ export function inSendWindow(sentAt: Date, now: Date): boolean {
 export function sendLimitReached(recent: RecentSends): SendLimit | null {
   if ((recent.event ?? 0) >= CONFIRMATIONS_PER_EVENT) return "event";
   if ((recent.address ?? 0) >= CONFIRMATIONS_PER_ADDRESS) return "address";
+  if ((recent.login ?? 0) >= LOGINS_PER_ADDRESS) return "address";
   if (recent.global >= GLOBAL_SENDS_PER_HOUR) return "global";
   return null;
 }

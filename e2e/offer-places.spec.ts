@@ -390,13 +390,16 @@ test.describe("the drop-off place at the bottom of the sheet, in a window of 360
     await expect(popupBox).toBeInViewport({ ratio: 1 });
   }
 
-  /** How far the drop-off's field, its label first, is under the top of what the sheet shows. */
+  /**
+   * How far the drop-off's field, its label first, is under the top of what the sheet shows: since
+   * event-board v4.6, 8 px under its fixed header, which the body scrolls under (rule 5).
+   */
   const underTop = (page: Page) =>
     form(page)
       .getByText(FR.dropOff, { exact: true })
       .evaluate((label) => {
-        const sheet = label.closest('[role="dialog"]')!;
-        return label.getBoundingClientRect().top - (sheet.getBoundingClientRect().top + sheet.clientTop);
+        const header = label.closest('[role="dialog"]')!.querySelector('[data-slot="sheet-header"]')!;
+        return label.getBoundingClientRect().top - (header.getBoundingClientRect().bottom + 8);
       });
 
   test("AL1.11: the drop-off's list opens under the field, whole in the window, five options and the footer in it", async ({ page, seededEvent }) => {

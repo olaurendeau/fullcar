@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
+import { anonymiseEvent } from "@/db/day-thirty";
 import { findEventById, lockEvent, writeEventFields } from "@/db/events";
 import { countLegRows, type LegCounts } from "@/db/legs";
 import { readTokenHolders } from "@/db/persons";
@@ -11,10 +12,11 @@ import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
+import { removeRide, updateRide } from "./change-ride";
 import { offerRide } from "./offer-ride";
-import { addPerson, setPersonLeg } from "./persons";
-import { removeRetour } from "./retour";
-import { takeSeats } from "./seats";
+import { addPerson, setPersonLeg, updatePerson } from "./persons";
+import { lockLegs, removeRetour } from "./retour";
+import { takeSeats, undoSeats } from "./seats";
 
 type Db = Kysely<Database>;
 
@@ -198,6 +200,69 @@ describe("M3.6: the removal of the retour and a write on the retour, at the same
       expect(written).toMatchObject({ ok: false, error: "noRetour" });
       expect((await findEventById(db, eventId))?.retour_at).toBeNull();
       expect(await hiddenRetourRows(db, eventId)).toBe(0);
+    });
+  });
+});
+
+/** The other writes on the legs, by the persons of the scene: with the four above, every one that starts with `lockLegs`. */
+const OTHER_WRITES: [string, (db: Db, eventId: string, scene: Scene) => Promise<unknown>][] = [
+  ["a seat given back", (db, eventId, { lea, r1 }) => undoSeats(db, eventId, lea.token, r1, "aller", [{ personId: lea.id, before: "withoutCar" }])],
+  ["a person changed", (db, eventId, { lea }) => updatePerson(db, eventId, lea.token, { personId: lea.id, firstName: "Léonie", phone: "" })],
+  [
+    "a car changed",
+    (db, eventId, { marc, r1 }) =>
+      updateRide(db, eventId, marc.token, r1, "aller", { location: "Mairie de Cesson", time: "07:15", seats: "4", note: "", seenPassengerIds: [], leaving: [] }),
+  ],
+  ["a car removed", (db, eventId, { marc, r1 }) => removeRide(db, eventId, marc.token, r1, "aller")],
+];
+
+/** Anonymises the event as the purge does on day 30: under the Event's exclusive lock. */
+async function anonymisation(db: Db, eventId: string) {
+  await atomically(db, async (trx) => {
+    await lockEvent(trx, eventId, "noKeyUpdate");
+    await anonymiseEvent(trx, eventId);
+  });
+}
+
+describe("eventEnded: a write on an anonymised event (#588)", () => {
+  it("lockLegs refuses it, after eventNotFound and before noRetour", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { retourAt: null });
+      expect(await lockLegs(trx, eventId, ["retour"])).toEqual({ ok: false, error: "noRetour" });
+      await anonymiseEvent(trx, eventId);
+      expect(await lockLegs(trx, eventId, ["retour"])).toEqual({ ok: false, error: "eventEnded" });
+      expect(await lockLegs(trx, eventId, [])).toEqual({ ok: false, error: "eventEnded" });
+      expect(await lockLegs(trx, "Zz9yXw8v", [])).toEqual({ ok: false, error: "eventNotFound" });
+    });
+  });
+
+  it.each([...WRITES.map(([name, , write]) => [name, write] as const), ...OTHER_WRITES])(
+    "%s is refused by eventEnded, and nothing is written",
+    async (_, write) => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const scene = await seedScene(trx, eventId);
+        // The tokens of the scene stay with the test; their persons are gone with the rest.
+        await anonymiseEvent(trx, eventId);
+
+        expect(await write(trx, eventId, scene)).toMatchObject({ ok: false, error: "eventEnded" });
+        expect(await rowsOf(trx, eventId)).toEqual({ rides: [], placements: [], persons: [] });
+      });
+    },
+  );
+
+  it.each(WRITES)("the anonymisation first: %s waits for it, then is refused by eventEnded (committed data)", async (_, __, write) => {
+    await withCommittedEvent(async (db, eventId) => {
+      const scene = await seedScene(db, eventId);
+
+      const written = await whileHeld(
+        db,
+        (trx) => anonymisation(trx, eventId),
+        () => write(db, eventId, scene),
+      );
+
+      expect(written).toMatchObject({ ok: false, error: "eventEnded" });
+      expect(await rowsOf(db, eventId)).toEqual({ rides: [], placements: [], persons: [] });
     });
   });
 });

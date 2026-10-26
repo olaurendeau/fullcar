@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DAY_THIRTY_DAYS,
   dayThirty,
+  dayThirtyFate,
   isDayThirtyReached,
   isPast,
   lastLegAt,
@@ -183,6 +184,38 @@ describe("OA6.3: dayThirty", () => {
     expect(dayThirty({ allerAt: "2028-02-10 10:00:00", retourAt: null })).toBe("2028-03-11");
     expect(dayThirty({ allerAt: "2027-02-10 10:00:00", retourAt: null })).toBe("2027-03-12");
     expect(dayThirty({ allerAt: "2026-10-01 10:00:00", retourAt: "2026-10-31 18:00:00" })).toBe("2026-11-30");
+  });
+});
+
+describe("OA2.7, OA8.1, OA8.2: dayThirtyFate", () => {
+  // Day 30 of withoutRetour is 2027-01-11, which begins at 2027-01-10T23:00:00Z.
+  const dayTwentyNine = new Date("2027-01-10T22:59:59Z");
+  const dayThirtyBegins = new Date("2027-01-10T23:00:00Z");
+  const confirmed = { ...withoutRetour, hasAccount: true, anonymised: false };
+  const pending = { ...withoutRetour, hasAccount: false, anonymised: false };
+
+  it("on day 29, keeps every event as it is", () => {
+    expect(dayThirtyFate(confirmed, dayTwentyNine)).toBe("keep");
+    expect(dayThirtyFate(pending, dayTwentyNine)).toBe("keep");
+  });
+
+  it("from day 30, anonymises an event with an account, and deletes one without", () => {
+    expect(dayThirtyFate(confirmed, dayThirtyBegins)).toBe("anonymise");
+    expect(dayThirtyFate(pending, dayThirtyBegins)).toBe("delete");
+  });
+
+  it("keeps an event already anonymised: a second run changes nothing", () => {
+    expect(dayThirtyFate({ ...confirmed, anonymised: true }, dayThirtyBegins)).toBe("keep");
+  });
+
+  it("deletes an anonymised event whose account is gone, as one without an account", () => {
+    expect(dayThirtyFate({ ...pending, anonymised: true }, dayThirtyBegins)).toBe("delete");
+  });
+
+  it("counts from the retour when there is one", () => {
+    const withRetourConfirmed = { ...withRetour, hasAccount: true, anonymised: false };
+    expect(dayThirtyFate(withRetourConfirmed, dayThirtyBegins)).toBe("keep");
+    expect(dayThirtyFate(withRetourConfirmed, new Date("2027-01-12T23:00:00Z"))).toBe("anonymise");
   });
 });
 

@@ -88,16 +88,23 @@ export async function findEventById(db: Kysely<Database>, id: string): Promise<P
  */
 export type EventLock = "share" | "noKeyUpdate";
 
+/** The event as `lockEvent` gives it. */
+export type LockedEvent = PublicEvent & Pick<Selectable<EventTable>, "account_id" | "anonymised_at">;
+
 /**
  * `SELECT … FOR SHARE`, or `FOR NO KEY UPDATE`, on the event, held until the transaction
  * ends: the first lock of every write on a leg (lock order: Event, then Ride, then Person).
  * Under READ COMMITTED, a lock obtained after waiting gives the row as committed: a write
- * that waited for the removal of the retour sees `retour_at` null (M3.6). Nothing for an
- * unknown event. Outside a transaction the lock ends with the statement: call it inside
- * `atomically`.
+ * that waited for the removal of the retour sees `retour_at` null (M3.6), and one that waited
+ * for the purge sees `anonymised_at` (#588). Gives the public fields, and what a write decides
+ * on under the lock: its account and when it was anonymised. Nothing for an unknown event.
+ * Outside a transaction the lock ends with the statement: call it inside `atomically`.
  */
-export async function lockEvent(db: Kysely<Database>, id: string, lock: EventLock): Promise<PublicEvent | undefined> {
-  const query = db.selectFrom("event").select(PUBLIC_EVENT_COLUMNS).where("id", "=", id);
+export async function lockEvent(db: Kysely<Database>, id: string, lock: EventLock): Promise<LockedEvent | undefined> {
+  const query = db
+    .selectFrom("event")
+    .select([...PUBLIC_EVENT_COLUMNS, "account_id", "anonymised_at"])
+    .where("id", "=", id);
   return (lock === "share" ? query.forShare() : query.forNoKeyUpdate()).executeTakeFirst();
 }
 

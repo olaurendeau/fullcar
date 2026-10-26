@@ -1,4 +1,5 @@
 import type { Kysely } from "kysely";
+import { isAnonymised } from "@/db/day-thirty";
 import { lockEvent, readAdminTokenHash, writeEventFields } from "@/db/events";
 import type { LegCounts } from "@/db/legs";
 import type { Database } from "@/db/schema";
@@ -26,6 +27,8 @@ import { removeRetour } from "./retour";
  * - `confirmRetour`: the retour unchecked still holds these, and `removal` is not them (M3.5).
  * - `invalid`: the token is not the event's, or a request no page sends (M8.2).
  * - `eventNotFound`: no such event, or deleted since the page loaded (M8.3).
+ * - `eventEnded`: the event is anonymised, or was while the change waited for its lock
+ *   (#588): before the token, which anonymising revoked.
  *
  * Nothing but `ok` has written anything, and no answer carries the token.
  */
@@ -34,10 +37,11 @@ export type EditEventOutcome =
   | { ok: false; errors: EventErrors }
   | { ok: false; error: "changed"; event: EventHeader }
   | ({ ok: false; error: "confirmRetour" } & LegCounts)
-  | { ok: false; error: "invalid" | "eventNotFound" };
+  | { ok: false; error: "invalid" | "eventNotFound" | "eventEnded" };
 
 const INVALID = { ok: false, error: "invalid" } as const;
 const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" } as const;
+const EVENT_ENDED = { ok: false, error: "eventEnded" } as const;
 
 /**
  * `before` as a page sends it, the values it loaded, or nothing: `validateEventChange` throws on
@@ -115,6 +119,8 @@ export async function editEvent(
   if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
   const storedHash = await readAdminTokenHash(db, eventId);
   if (storedHash === undefined) return EVENT_NOT_FOUND;
+  // Anonymised, the event has no token left (event_anonymised_bare): only then is it looked up.
+  if (storedHash === null && (await isAnonymised(db, eventId))) return EVENT_ENDED;
   if (!adminTokenMatches(token, storedHash)) return INVALID;
   const loaded = headerOf(before);
   const confirmed = countsOf(removal);
@@ -127,6 +133,7 @@ export async function editEvent(
   return atomically(db, async (trx): Promise<EditEventOutcome> => {
     const row = await lockEvent(trx, eventId, "noKeyUpdate");
     if (row === undefined) return EVENT_NOT_FOUND;
+    if (row.anonymised_at !== null) return EVENT_ENDED;
     const stored = headerFrom(row);
     if (!sameHeader(stored, loaded)) return { ok: false, error: "changed", event: stored };
     if (event.retourAt === null && stored.retourAt !== null) {

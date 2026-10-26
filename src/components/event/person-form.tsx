@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import type { Leg } from "@/domain/leg";
 import { PERSON_FIELDS, validatePerson, type PersonErrors, type PersonField } from "@/domain/person";
 import { cn } from "@/lib/utils";
-import { BottomSheet } from "./bottom-sheet";
+import { BottomSheet, SheetBar } from "./bottom-sheet";
 import { Box } from "./create-event-form";
 import { editedFields, type NotDone } from "./failure-words";
 import { focusAddPerson } from "./focus";
@@ -288,25 +288,31 @@ export function PersonForm({
   };
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
+    <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       {field("firstName", { type: "text", autoComplete: "given-name" })}
       {field("phone", { type: "tel", autoComplete: "tel" }, t("phoneHint"))}
       {hasRetour && (
         <Box id={idOf("both")} label={t("both")} hint={t(`bothHint.${leg}`)} checked={bothLegs} onChange={setBothLegs} />
       )}
-      {problem && (
-        <p role="alert" className="text-sm text-destructive">
-          {tActions(problem)}
-        </p>
-      )}
-      <Button ref={submitButton} type="submit" className="h-11 w-full" disabled={sending}>
-        {tActions("submit")}
-      </Button>
-      {onCancel && (
-        <Button type="button" variant="outline" className="h-11 w-full" onClick={onCancel}>
-          {tActions("cancel")}
+      {/* In the sheet's bar, out of the form: « Valider » is its submit button by `form` (v4.6, rule 1). */}
+      <SheetBar
+        messages={
+          problem && (
+            <p role="alert" className="text-sm text-destructive">
+              {tActions(problem)}
+            </p>
+          )
+        }
+      >
+        <Button ref={submitButton} type="submit" form={idOf("form")} className="h-11 w-full" disabled={sending}>
+          {tActions("submit")}
         </Button>
-      )}
+        {onCancel && (
+          <Button type="button" variant="outline" className="h-11 w-full" onClick={onCancel}>
+            {tActions("cancel")}
+          </Button>
+        )}
+      </SheetBar>
     </form>
   );
 }

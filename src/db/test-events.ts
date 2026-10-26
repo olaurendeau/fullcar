@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Kysely } from "kysely";
 import { hashAdminToken, newAdminToken } from "@/domain/admin-token";
 import type { NewEvent } from "@/domain/event";
@@ -41,4 +42,18 @@ export async function seedEvent(
 export async function removeSeededRetour(db: Kysely<Database>, eventId: string): Promise<void> {
   await deleteLegRows(db, eventId, "retour");
   await db.updateTable("event").set({ retour_at: null }).where("id", "=", eventId).execute();
+}
+
+/**
+ * The event confirmed by a new account of its own, as a used confirmation link leaves it.
+ * Gives the account's id. The address is drawn: a concurrency test may commit accounts too.
+ */
+export async function confirmSeededEvent(db: Kysely<Database>, eventId: string): Promise<string> {
+  const { id } = await db
+    .insertInto("account")
+    .values({ email: `camille-${randomUUID()}@exemple.fr`, locale: "fr" })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  await db.updateTable("event").set({ account_id: id, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+  return id;
 }
