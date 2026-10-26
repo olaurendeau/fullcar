@@ -345,11 +345,12 @@ onAdmin.describe("an event without a retour", () => {
 
   onAdmin("CA2.9: a retour added, the aller's map open: the Retour tab, once shown, has its map open", async ({ db, page, seededEvent }) => {
     await page.goto(organiserPath(seededEvent));
+    // Open at the arrival (#653), under the organiser area: started once scrolled to.
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
     await expect(async () => {
-      if ((await toggle(page).getAttribute("aria-expanded")) !== "true") await toggle(page).click();
-      await expect(toggle(page)).toHaveAttribute("aria-expanded", "true", { timeout: 500 });
+      await region(page).scrollIntoViewIfNeeded();
+      await expect(region(page).locator(".leaflet-tile-loaded").first()).toBeVisible({ timeout: 1_000 });
     }).toPass();
-    await expect(region(page).locator(".leaflet-tile-loaded").first()).toBeVisible();
 
     // The aller's map mounts anew in its tab: none of its tiles still loading.
     await tilesLoaded(page);

@@ -14,12 +14,14 @@ import { focusLandmark, showCar } from "./focus";
 import { leafletImport } from "./leaflet-import";
 import type { CarPoint, EventMapHandle, MapState } from "./leaflet-map";
 
-/** What a leg's map needs from the page: the event's place, and the page's open or folded state. */
+/** What a leg's map needs from the page: the event's place, the page's open or folded state, and whether it is settled. */
 export interface LegMap {
   location: string;
   position: Position;
-  /** One state for the whole page, both legs, in memory only (`EventView`). */
+  /** One state for the whole page, both legs, in memory only (`EventView`): open at the arrival. */
   open: boolean;
+  /** The page settled (`pageSettled`), for good: until then, no map starts. */
+  settled: boolean;
   onToggle: () => void;
 }
 
@@ -148,11 +150,13 @@ function Credits({ ref }: { ref: Ref<HTMLParagraphElement> }) {
  * A leg's map (epic #238, event-map v18), in le conteneur (#562, v27), a bordered block hidden
  * whole without JavaScript: the « Carte » button as its header, a fixed label whose chevron says
  * the state; then the part it folds, `hidden` while folded, with the map's box, edge to edge,
- * 240 px high, 280 px from a 448 px window. Leaflet is imported at the first
- * opening, once for the page and both legs (CA2.10, `leaflet-import`), and starts only once the
- * map is open and its panel shown, a hidden tab having no size (CA1.13). Until it has started,
+ * 240 px high, 280 px from a 448 px window. The map starts (#653, v29), and for good, once it is
+ * open, the page settled, and its box at least 1 px in the screen with a width, a hidden tab
+ * having none (CA1.13); folded by the person before, it asks for nothing. Starting imports
+ * Leaflet, once for the page and both legs (CA2.10, `leaflet-import`). Before, the box waits,
+ * without text, `aria-busy` or `tabindex` (CA1.14); started, until Leaflet is there,
  * « Chargement de la carte… » in the box, `aria-busy`, and no `status` region of its own: the
- * leg's panel keeps its only one, the banner's.
+ * leg's panel keeps its only one, the banner's. Nothing of it takes the focus or scrolls (CA2.11).
  * A failed import (offline, or an old build's chunk after a deploy) puts « La carte n’a pas pu se
  * charger. » in place of the box, whose « Réessayer » imports again; from the second failure in
  * a row, online, « … toujours … » with « Recharger la page » first (CA2.8, `leafletStep`).
@@ -186,17 +190,25 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const focusNext = useRef<LeafletFocus>(null);
   const tiles = useRef(TILES_QUIET);
   const [tilesNotice, setTilesNotice] = useState(false);
-  // Once started, a map stays: shown again, it only takes its new size.
+  // Once started, a map stays: shown again, it only takes its new size; scrolled away, it stays.
   const [started, setStarted] = useState(false);
   const touch = useTouch();
   const containerId = `event-map-${leg}`;
   const tilesNoticeId = `${containerId}-tiles`;
   const Chevron = map.open ? ChevronUp : ChevronDown;
 
-  // The first opening imports, once for the page; folded before it ends, the import ends all the same.
-  useEffect(() => {
-    if (map.open) leafletImport.open();
-  }, [map.open]);
+  // Measured now, never from an observer's entry of before: the page settling may have pushed the
+  // box under the fold. The first start imports, once for the page; folded before it ends, the
+  // import ends all the same.
+  const start = useEffectEvent(() => {
+    const element = box.current;
+    if (started || !map.open || !map.settled || !element || element.offsetWidth === 0) return;
+    const { top, bottom } = element.getBoundingClientRect();
+    if (bottom <= 0 || top >= window.innerHeight) return;
+    setStarted(true);
+    leafletImport.open();
+  });
+  useEffect(() => start(), [map.open, map.settled]);
 
   // The import ended: read before React draws it, while the box still has the focus it had.
   // « Réessayer » gives it from its own leg only, at its click.
@@ -210,6 +222,8 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   );
 
   const onRetryImport = () => {
+    // A leg shown after the failure, which had not started: « Réessayer » starts it, its box taking the focus.
+    setStarted(true);
     const before = leafletImport.snapshot().state;
     leafletImport.retry();
     focusNext.current = leafletFocus(before, "retry", leafletImport.snapshot().state, false);
@@ -234,12 +248,21 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
     if (!element) return;
     const observer = new ResizeObserver(() => {
       if (element.offsetWidth === 0) return;
-      setStarted(true);
+      start();
       handle.current?.resize();
     });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  // Into the screen, or out of it, until it starts.
+  useEffect(() => {
+    const element = box.current;
+    if (started || !element) return;
+    const observer = new IntersectionObserver(() => start());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [started]);
 
   const flagLabel = t("event", { location: map.location });
   const zoomIn = t("zoomIn");
@@ -319,7 +342,8 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   }, []);
 
   const failed = imported.phase === "failed";
-  const loading = !failed && (library === null || !started);
+  // Waiting, before the start: neither text nor `aria-busy` (CA1.14).
+  const loading = !failed && started && library === null;
 
   return (
     // Le conteneur (v24): « Vos inscriptions »'s pattern, its button as header; not a landmark,

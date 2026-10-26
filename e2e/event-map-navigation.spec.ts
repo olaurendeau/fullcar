@@ -1,11 +1,11 @@
 import type { Page } from "@playwright/test";
-import { test } from "./event-map-points";
+import { arriveWaiting, idle, test } from "./event-map-points";
 import { expect } from "./fixtures";
 
 /*
  * #567: Leaflet's import is the page's, not the document's. Its failure on an event page, then
  * a client-side navigation away and back (« Accueil », then the browser's back): the map's
- * opening is a first attempt again, not the notice of the page left.
+ * start is a first attempt again, not the notice of the page left.
  */
 
 test.use({ locale: "fr-FR" });
@@ -17,16 +17,17 @@ const panel = (page: Page) => page.getByRole("tabpanel");
 const mapButton = (page: Page) => panel(page).getByRole("button", { name: "Carte", exact: true });
 const container = (page: Page) => page.locator('[id="event-map-aller"]');
 
-test("a failure, then « Accueil » and back by client-side navigation: the opening asks again, and the map loads", async ({ page, placed }) => {
-  await page.goto(`/e/${placed.id}`);
+test("a failure, then « Accueil » and back by client-side navigation: the start asks again, and the map loads", async ({ page, placed }) => {
+  // The map not started until `settle`: what the page loads on its own is loaded, the route catches Leaflet's code alone.
+  const settle = await arriveWaiting(page, placed.id);
   await expect(panel(page)).toBeVisible();
-  // What the page loads on its own is loaded: the route catches Leaflet's code alone.
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("load");
+  await idle(page);
   // Gone at a document's load: still there, the navigations were client-side.
   await page.evaluate(() => ((window as { sameDocument?: boolean }).sameDocument = true));
 
   await page.route("**/_next/static/**", (route) => route.fulfill({ status: 404 }));
-  await mapButton(page).click();
+  settle();
   await expect(container(page).getByText(FAILED, { exact: true })).toBeVisible();
   await page.unroute("**/_next/static/**");
 
@@ -37,7 +38,7 @@ test("a failure, then « Accueil » and back by client-side navigation: the open
   await expect(panel(page)).toBeVisible();
   expect(await page.evaluate(() => (window as { sameDocument?: boolean }).sameDocument)).toBe(true);
 
-  if ((await mapButton(page).getAttribute("aria-expanded")) !== "true") await mapButton(page).click();
+  await expect(mapButton(page)).toHaveAttribute("aria-expanded", "true");
   // Leaflet started in the region: the module was asked for again, and loaded.
   await expect(page.getByRole("region", { name: ALLER_MAP })).toHaveClass(/\bleaflet-container\b/);
   await expect(container(page).getByText(FAILED)).toHaveCount(0);

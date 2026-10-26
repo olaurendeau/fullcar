@@ -1,8 +1,9 @@
-import type { Locator, Page, Request } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { generatePublicId } from "@/domain/public-id";
+import { arriveWaiting, idle, watchMap } from "./event-map-points";
 import { expect, test as base } from "./fixtures";
 import { placeOf, requestsForTile, tileAt } from "./tiles";
 
@@ -71,19 +72,6 @@ async function folded(page: Page, button: Locator): Promise<Locator> {
   return page.locator(`[id="${id}"]`);
 }
 
-/** A tile request, to our route. */
-const isTile = (request: Request) => new URL(request.url()).pathname.startsWith("/tuiles/");
-
-/** How many of `requests` brought Leaflet: its class names, in its script and in its style sheet, none of ours has. */
-async function leafletCount(requests: Request[]): Promise<number> {
-  const texts = await Promise.all(
-    requests
-      .filter((request) => ["script", "stylesheet"].includes(request.resourceType()))
-      .map((request) => request.response().then((response) => response?.text() ?? "").catch(() => "")),
-  );
-  return texts.filter((text) => text.includes("leaflet-control-zoom")).length;
-}
-
 /** The names of what takes the focus inside `map`, its container excluded, in the DOM's order; a link without one, its text. */
 function focusableIn(map: Locator): Promise<(string | null)[]> {
   return map.evaluate((container) =>
@@ -116,20 +104,34 @@ function bordered(button: Locator, id: string): Promise<boolean> {
   }, id);
 }
 
-/** CA1.1 on a leg: « Carte » between its actions and its first card, the header of a bordered container, folded, then open under the same name. */
+/**
+ * CA1.1 on a leg: « Carte » between its actions and its first card, the header of a bordered
+ * container, open; a click folds it, another opens it, under the same name.
+ */
 async function expectButton(page: Page, panel: Locator, driver: string) {
   const button = mapButton(panel);
-  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await expect(button).toHaveAttribute("aria-expanded", "true");
   expect(await inDomOrder(panel.getByRole("button", { name: "Proposer une voiture" }), button, panel.getByRole("article", { name: `Voiture de ${driver}` }))).toBe(true);
   const container = await folded(page, button);
-  await expect(container).toHaveAttribute("hidden", "");
+  await expect(container).toBeVisible();
   expect(await bordered(button, (await button.getAttribute("aria-controls"))!)).toBe(true);
   expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
-  await openMap(panel);
+  await button.click();
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await expect(container).toHaveAttribute("hidden", "");
   await expect(button).toHaveAccessibleName("Carte");
+  await button.click();
+  await expect(button).toHaveAttribute("aria-expanded", "true");
   await expect(container).not.toHaveAttribute("hidden");
+  await expect(button).toHaveAccessibleName("Carte");
 }
+
+/** The server's HTML of a leg: « Carte » open, and the part it folds shown, before any script. */
+const SERVER_OPEN = (leg: string) => [
+  new RegExp(`<button(?=[^>]*data-map-toggle="${leg}")(?=[^>]*aria-expanded="true")[^>]*>`),
+  new RegExp(`<div(?=[^>]*id="event-map-${leg}")(?![^>]*\\shidden[\\s=>])[^>]*>`),
+];
 
 for (const [where, device] of [
   ["360 px", {}],
@@ -139,18 +141,21 @@ for (const [where, device] of [
   test.describe(`the « Carte » button, at ${where}`, () => {
     test.use({ locale: "fr-FR", ...device });
 
-    test("CA1.1: each leg has le conteneur, « Carte » as its header, between its actions and its first card, folded, then open", async ({ db, page, placed }) => {
+    test("CA1.1: each leg has le conteneur, « Carte » as its header, between its actions and its first card, open from the server's HTML; folded, then open", async ({
+      db,
+      page,
+      placed,
+    }) => {
       await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Marc" })).id);
       await seedRide(db, placed.id, (await seedPerson(db, placed.id, { firstName: "Zoé" })).id, { leg: "retour" });
 
+      const html = await (await page.request.get(`/e/${placed.id}`)).text();
+      for (const leg of ["aller", "retour"]) for (const tag of SERVER_OPEN(leg)) expect(html).toMatch(tag);
       await page.goto(`/e/${placed.id}`);
       await hydrated(page);
       await expectButton(page, page.getByRole("tabpanel"), "Marc");
-      await selectTab(page, "Retour");
       // One state for the page: the retour's map is open too.
-      await expect(mapButton(page.getByRole("tabpanel"))).toHaveAttribute("aria-expanded", "true");
-      await mapButton(page.getByRole("tabpanel")).click();
-      await expect(mapButton(page.getByRole("tabpanel"))).toHaveAttribute("aria-expanded", "false");
+      await selectTab(page, "Retour");
       await expectButton(page, page.getByRole("tabpanel"), "Zoé");
     });
   });
@@ -159,29 +164,37 @@ for (const [where, device] of [
 test.describe("the map, open", () => {
   test.use({ locale: "fr-FR" });
 
-  test("CA1.2: neither Leaflet nor a tile before the first opening; both after", async ({ page, placed }) => {
-    // Requests, not responses: one sent before the click and still waiting for its answer counts.
-    const before: Request[] = [];
-    const after: Request[] = [];
-    let clicked = false;
-    page.on("request", (request) => (clicked ? after : before).push(request));
-
-    await page.goto(`/e/${placed.id}`);
-    await hydrated(page);
-    // What the page starts on its own, at its mount or just after, has been sent by then.
-    await page.waitForLoadState("networkidle");
+  test("CA1.2: neither Leaflet nor a tile until the page is settled; settled, its box in the screen, both, without a click", async ({ page, placed }) => {
+    // Requests, not responses: one sent while the page is not settled, still waiting for its answer, counts.
+    const watch = watchMap(page);
+    const settle = await arriveWaiting(page, placed.id);
+    await expect(page.getByRole("region", { name: ALLER_MAP })).toBeInViewport();
+    await idle(page);
     await expect(page.locator(".leaflet-container")).toHaveCount(0);
+    expect(await watch.leaflet()).toBe(0);
+    expect(watch.tiles()).toBe(0);
 
-    clicked = true;
-    await mapButton(page.getByRole("tabpanel")).click();
-    await expect(page.getByRole("region", { name: ALLER_MAP })).toBeVisible();
+    settle();
     await expect(page.locator(".leaflet-tile-loaded").first()).toBeVisible();
-    expect(await leafletCount(before)).toBe(0);
-    expect(before.filter(isTile).length).toBe(0);
-    expect(await leafletCount(after)).toBeGreaterThan(0);
-    expect(after.filter(isTile).length).toBeGreaterThan(0);
+    expect(await watch.leaflet()).toBeGreaterThan(0);
+    expect(watch.tiles()).toBeGreaterThan(0);
     // The flag's tile went through our route to the fake tile provider.
     await expect.poll(async () => (await requestsForTile(tileAt(placed.place, 14))).length).toBeGreaterThan(0);
+  });
+
+  test("CA1.2: folded by the person before its box is in the screen, nothing is asked for, even after a scroll", async ({ page, placed }) => {
+    const watch = watchMap(page);
+    const settle = await arriveWaiting(page, placed.id);
+    await mapButton(page.getByRole("tabpanel")).click();
+    await expect(mapButton(page.getByRole("tabpanel"))).toHaveAttribute("aria-expanded", "false");
+    settle();
+    // Read: the device's actions are enabled, and the page settled.
+    await expect(page.getByRole("tabpanel").getByRole("button", { name: "Proposer une voiture" })).toBeEnabled();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await idle(page);
+    await expect(page.locator(".leaflet-container")).toHaveCount(0);
+    expect(await watch.leaflet()).toBe(0);
+    expect(watch.tiles()).toBe(0);
   });
 
   test("CA1.4: the flag is a named image out of the Tab order; the zoom is translated, 44 px; no attribution control of Leaflet's", async ({ page, placed }) => {

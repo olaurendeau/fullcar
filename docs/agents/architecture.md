@@ -23,7 +23,7 @@ est lu par trente personnes pendant trois jours, puis purgé.
 | purge | Vercel Cron quotidienne vers une route protégée par `CRON_SECRET` (voir « La purge ») |
 | e-mail | Brevo, son API d'e-mails transactionnels, appelée par notre serveur seulement, en `fetch` simple (voir « Les e-mails ») |
 | lieux | Photon (instance publique de komoot, OpenStreetMap), appelé par notre serveur seulement, derrière `POST /api/lieux` (voir « Auto-complétion des lieux ») |
-| carte | Leaflet 1.9.4, version exacte, chargé par `import()` à la première ouverture d'une carte ; tuiles raster de Geoapify (OpenStreetMap, style `positron` en @2x), demandées par notre serveur seulement, avec notre clé, derrière `GET /tuiles/{z}/{x}/{y}`, en cache au CDN de Vercel (voir « La carte de l'événement ») |
+| carte | Leaflet 1.9.4, version exacte, chargé par `import()` au premier démarrage d'une carte ; tuiles raster de Geoapify (OpenStreetMap, style `positron` en @2x), demandées par notre serveur seulement, avec notre clé, derrière `GET /tuiles/{z}/{x}/{y}`, en cache au CDN de Vercel (voir « La carte de l'événement ») |
 
 Polices : la pile de polices système, **aucune police web**, ni distante ni servie par
 l'application. Aucune requête du navigateur vers un tiers, et rien à télécharger avant le
@@ -659,7 +659,7 @@ en fonctions pures. Le champ, `place-field.tsx`, s'en sert dans les quatre formu
 
 ## La carte de l'événement (#238)
 
-À partir de l'épic #238 (« maquette approuvée, v27 », `docs/design/event-map/`, qui fait foi
+À partir de l'épic #238 (« maquette approuvée, v27 », puis v32 pour #653 et #655, `docs/design/event-map/`, qui fait foi
 pour l'écran, les mots, les critères et la table « Mises à jour et focus »), chaque leg a sa
 **Carte** quand le lieu de l'événement a une position. Rien de plus n'est stocké, et le
 serveur ne reçoit rien de nouveau, sauf les demandes de tuiles : la carte lit la position de l'événement
@@ -775,7 +775,7 @@ de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cet
 - **`src/components/event/leaflet-map.ts`** est le seul fichier qui importe `leaflet` et
   `leaflet/dist/leaflet.css`, et on ne l'atteint que par l'`import()` de
   `src/components/event/leaflet-import.ts`, un seul pour la page et ses deux legs (#553,
-  CA2.10), à la première ouverture d'une carte : avant, la page ne charge ni l'un ni l'autre
+  CA2.10), au premier démarrage d'une carte : avant, la page ne charge ni l'un ni l'autre
   (CA1.2, `e2e/event-map.spec.ts`). Aucun lint ne l'impose : la revue le tient. `createEventMap`
   rend `{ update, resize, retryTiles, destroy }`, et n'a aucun mot : `event-map.tsx` les lui
   donne traduits.
@@ -808,14 +808,29 @@ de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cet
   ne reçoit que son identifiant, son lieu, sa position, ses places libres et le prénom de qui
   conduit, jamais un numéro.
 - **L'état ouvert ou replié** est celui de la page : `EventView` le tient (`useState`), un
-  seul pour les deux legs, en mémoire, replié à chaque chargement et quand la position de
-  l'événement part. Il passe par `LegTabs` puis `LegPanel`, ou droit à `LegPanel` pour un
+  seul pour les deux legs, en mémoire, déplié à chaque arrivée, dès le HTML du serveur (#653),
+  et replié quand la position de l'événement part : une position qui revient donne le bouton
+  replié. Il passe par `LegTabs` puis `LegPanel`, ou droit à `LegPanel` pour un
   événement sans retour ; `LegPanel` pose la carte après les actions et le `<noscript>`,
   avant les fiches. Tenu par la page, il survit au remontage du panneau de l'aller quand le
   retour part (CA2.7).
-- **Le démarrage** : Leaflet ne démarre que carte ouverte et boîte d'une largeur non nulle
-  (`ResizeObserver`), puisqu'un onglet caché n'a pas de taille (CA1.13). Une carte démarrée
-  reste ; montrée de nouveau, elle prend sa taille (`resize`). Elle n'est cadrée qu'une fois
+- **Le démarrage** (#653, v29) : Leaflet ne démarre que carte ouverte, **page posée**, et
+  boîte d'au moins 1 px dans l'écran et d'une largeur non nulle, puisqu'un onglet caché n'a pas
+  de taille (CA1.13). La page est posée (`pageSettled`, `event-map-state.ts`) quand le statut
+  de l'appareil est `none`, `ready` ou `failed`, et, sur `/e/{id}/admin`, quand la première
+  vérification du lien est finie : `OrganiserScreen` passe `linkChecking`
+  (`screen.state === "loading"`, pas `link.check.state`, que le réducteur applique dans un
+  effet de mise en page, avec l'espace organisateur) à `ParticipantBoard`. Avant, « Vos
+  inscriptions » et l'espace organisateur, à venir au-dessus, pousseraient la boîte sous le pli.
+  `EventView` tient ce verrou : posée une fois, posée pour de bon ; il passe par
+  `LegMap.settled`. `event-map.tsx` observe la boîte (`ResizeObserver`,
+  `IntersectionObserver`) et la mesure de nouveau (`getBoundingClientRect` contre
+  `innerHeight`) dans l'effet qui suit le passage à posée, jamais d'après une entrée d'observateur
+  d'avant. Le démarrage appelle `leafletImport.open()` ; « Réessayer » démarre aussi le leg qui
+  ne l'était pas. Avant, la boîte attend, sans « Chargement de la carte… », sans `aria-busy` ni
+  `tabindex` (CA1.14) ; rien ne prend le focus ni ne fait défiler à l'arrivée (CA2.11). Repliée
+  par la personne avant d'entrer dans l'écran, elle ne demande rien. Une carte démarrée
+  reste, remontée hors de l'écran comprise (CA1.20) ; montrée de nouveau, elle prend sa taille (`resize`). Elle n'est cadrée qu'une fois
   son conteneur d'une taille non nulle (`frame`, #480) : repliée ou dans un onglet caché,
   elle cadrerait ses points dans 0 × 0 px ; #482 étend cette garde aux recadrages après une
   mise à jour (CA1.3).
@@ -886,7 +901,9 @@ de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cet
 
 Les tests de bout en bout de la carte sont `e2e/event-map*.spec.ts` (la mise en page à 360
 et à 1280 px dans `event-map-layout.spec.ts`, CA1.8 et CA1.9 ; les crédits dans
-`event-map-credits.spec.ts`, CA3.7), ceux de la notice de Leaflet `e2e/licences.spec.ts`, ceux de la route
+`event-map-credits.spec.ts`, CA3.7 ; le démarrage une fois la page posée et le focus à
+l'arrivée dans `event-map-start.spec.ts`, CA1.20 et CA2.11 ; `arriveWaiting`, dans
+`e2e/event-map-points.ts`, arrive la lecture de l'appareil retenue, la carte pas démarrée), ceux de la notice de Leaflet `e2e/licences.spec.ts`, ceux de la route
 `e2e/tiles.spec.ts`, ceux de la clé `e2e/tiles-key.spec.ts`, ceux du faux fournisseur
 `e2e/fake-tiles.spec.ts`, et les captures de la maquette `e2e/event-map.shot.ts`.
 
