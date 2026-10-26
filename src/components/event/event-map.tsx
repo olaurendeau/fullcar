@@ -272,7 +272,10 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
       seats: format.number(car.freeSeats),
     }));
     const free = freeSeatsOf(point);
-    if (here.length === 1) return { position, atFlag, label: here[0].driver.firstName, name: pointCars[0].name, seats: format.number(free), cars: pointCars };
+    if (here.length === 1) {
+      const { name } = pointCars[0];
+      return { position, atFlag, label: here[0].driver.firstName, name, title: name, seats: format.number(free), cars: pointCars };
+    }
     return {
       position,
       atFlag,
@@ -286,6 +289,8 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
         ),
         seats: t("freeSeats", { free }),
       }),
+      // Short, the first names being on its buttons: one line at 360 px for two cars (v29, CA1.6).
+      title: t("groupTitle", { count: here.length, seats: t("freeSeats", { free }) }),
       seats: format.number(free),
       cars: pointCars,
     };

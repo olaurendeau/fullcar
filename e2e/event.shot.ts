@@ -1,6 +1,7 @@
 import type { Page, TestInfo } from "@playwright/test";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
+import { DRIVER_PHONE } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -111,13 +112,13 @@ test("« Proposer une voiture » with errors", async ({ db, page, seededEvent },
   await shoot(page, testInfo, "proposer-voiture-erreurs");
 });
 
-// C11.2, #169, #171: Léa, a passenger of Marc on the retour, also drives back: « Au retour »
+// C11.2, #169, #171: Léa, with a number, a passenger of Marc on the retour, also drives back: « Au retour »
 // unfolded; Tom and Nina, of her device, without a car at the aller, ride with her.
 test("« Proposer une voiture » with « Au retour » unfolded and « Qui monte avec vous ? »", async ({ db, page, seededEvent }, testInfo) => {
   const { id } = seededEvent;
   const token = newToken();
   const marc = await seedPerson(db, id, { firstName: "Marc" });
-  const lea = await seedPerson(db, id, { firstName: "Léa" }, token);
+  const lea = await seedPerson(db, id, { firstName: "Léa", phone: DRIVER_PHONE }, token);
   await seedPlacement(db, { personId: lea.id, eventId: id, leg: "retour", rideId: await seedRide(db, id, marc.id, { leg: "retour" }) });
   for (const firstName of ["Tom", "Nina"]) {
     const { id: personId } = await seedPerson(db, id, { firstName }, token);

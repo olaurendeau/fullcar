@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import { failHeld, holdFirst, holdToken, messages, newToken, recordBar } from "./device";
+import { DRIVER_PHONE, fillDriver } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -52,14 +53,14 @@ async function addFromTab(page: Page, firstName: string) {
   await add(page.getByRole("dialog", { name: "Ajouter une personne" }), firstName);
 }
 
-/** The device holds Claire, who goes nowhere yet; Sophie, of another device, drives on the retour. */
+/** The device holds Claire, with a number, who goes nowhere yet; Sophie, of another device, drives on the retour. */
 test.describe("the subject of « Ajouter une personne » and « Proposer une voiture »", () => {
   test.use({ locale: "fr-FR" });
   const token = newToken();
 
   test.beforeEach(async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
-    await seedPerson(db, id, { firstName: "Claire" }, token);
+    await seedPerson(db, id, { firstName: "Claire", phone: DRIVER_PHONE }, token);
     await seedRide(db, id, (await seedPerson(db, id, { firstName: "Sophie" })).id, { leg: "retour" });
     await holdToken(page, id, token);
   });
@@ -165,7 +166,7 @@ test.describe("the subject of « Ajouter une personne » and « Proposer une voi
     const drivers = form.getByRole("radiogroup", { name: "Qui conduit ?" });
     if (driver.trim() === "Marc") {
       await checkNewDriver(form, drivers.getByRole("radio", { name: "Une nouvelle personne", exact: true }));
-      await form.getByLabel("Prénom", { exact: true }).fill(driver);
+      await fillDriver(form, { firstName: driver, phone: DRIVER_PHONE });
     } else await drivers.getByRole("radio", { name: driver, exact: true }).check();
     await form.getByLabel(leg === "Aller" ? "Lieu de départ" : "Lieu de dépose", { exact: true }).fill(location);
     if (both) {

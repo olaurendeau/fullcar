@@ -352,12 +352,12 @@ for (const [where, device, enlarged, height] of [
       const map = await openMap(page, mapName("aller", "3 voitures"));
       const name = "3 voitures : Nina, Paul, Lou, 9 places libres";
       await map.getByRole("button", { name, exact: true }).click();
-      const bubble = map.getByRole("group", { name, exact: true });
+      const bubble = map.getByRole("group", { name: "3 voitures, 9 places libres", exact: true });
       await expect(bubble.getByRole("button")).toHaveCount(4);
       const [region, credits, shown] = [(await map.boundingBox())!, (await creditsOf(map).boundingBox())!, (await bubble.boundingBox())!];
       expect(credits.height).toBe(height);
-      // Taller than the room, it scrolls: its highest is the map's height, less 20 px, less the credits'.
-      expect(await bubble.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+      // Taller than the room, its list of cars scrolls (CA1.6): its highest is the map's height, less 20 px, less the credits'.
+      expect(await bubble.getByRole("button").first().evaluate((button) => button.parentElement!.scrollHeight > button.parentElement!.clientHeight)).toBe(true);
       expect(shown.height).toBeCloseTo(region.height - 20 - credits.height, 0);
       expect(overlap(shown, credits)).toBe(false);
     });

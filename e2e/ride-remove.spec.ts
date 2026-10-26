@@ -4,6 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { bar, failHeld, holdFirst, holdToken, messages, newToken, watchAlerts } from "./device";
+import { DRIVER_PHONE, fillDriver } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -382,7 +383,7 @@ test.describe("an offer sent again after a removal", () => {
   const form = (page: Page) => page.getByRole("dialog", { name: "Proposer une voiture" });
   async function offer(page: Page) {
     await panel(page).getByRole("button", { name: "Proposer une voiture", exact: true }).click();
-    await form(page).getByLabel("Prénom", { exact: true }).fill("Marc");
+    await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
     await form(page).getByLabel("Lieu de départ", { exact: true }).fill("Mairie de Vitré");
     await form(page).getByRole("button", { name: "Valider" }).click();
   }

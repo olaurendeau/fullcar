@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
+import { DRIVER_PHONE, fillDriver } from "./driver";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { areaEditButton, organiserPath, test as organiserTest } from "./organiser";
@@ -144,7 +145,7 @@ const RETOUR_FAILURES: Record<string, { text: string; device: boolean; fail: (pa
       loseClosed(page, GARE, async () => {
         await panel(page).getByRole("button", { name: "Proposer une voiture", exact: true }).click();
         const form = sheet(page, "Proposer une voiture");
-        await form.getByLabel("Prénom", { exact: true }).fill("Marc");
+        await fillDriver(form, { firstName: "Marc", phone: DRIVER_PHONE });
         await form.getByLabel("Lieu de dépose", { exact: true }).fill(GARE);
         await form.getByRole("button", { name: "Valider" }).click();
       }),
