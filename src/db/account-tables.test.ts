@@ -75,26 +75,31 @@ function columns(trx: Trx, table: string) {
 
 const TIMESTAMP = "timestamp with time zone";
 
-// Addresses as src/domain/email-address.ts writes them, in several scripts: the database
-// must accept every one, since one address is one account.
+// Addresses as src/domain/email-address.ts writes them, typed in several scripts: the
+// database must accept every one, since one address is one account. Since #626 the local
+// part is ASCII and the domain is in punycode: the domain writes nothing but ASCII.
 const NORMALISED = [
   " Camille.Durand@Exemple.FR ",
-  "ÉLODIE@exemple.fr",
-  "ÉMILE@exemple.fr",
-  "STRAẞE@exemple.de",
-  "İSTANBUL@örnek.com.tr",
-  "ΟΔΥΣΣΕΥΣ@παράδειγμα.ελ",
-  "ПРИМЕР@пример.рф",
+  "ELODIE@ÉCOLE.fr",
+  "Emile@ÉCOLE.fr",
+  "STRASSE@STRAẞE.de",
+  "ISTANBUL@ÖRNEK.com.tr",
+  "ODYSSEUS@ΠΑΡΆΔΕΙΓΜΑ.ΕΛ",
+  "PRIMER@ПРИМЕР.РФ",
 ].map((raw) => {
   const read = emailAddress(raw);
   if (!("value" in read)) throw new Error(`not an address: ${raw}`);
   return read.value;
 });
 
-// What a write that forgot the domain would store: case, spaces, a decomposed accent.
+// What a write that forgot the domain would store: case, spaces, a decomposed accent. A
+// letter outside ASCII reaches the check only by such a raw write, never through the
+// domain: these prove that pg_c_utf8 lowercases it, whatever the database's locale.
 const NOT_NORMALISED = [
   ["an uppercase ASCII letter", "Camille@exemple.fr"],
   ["an uppercase accented letter", "Élodie@exemple.fr"],
+  ["an uppercase Cyrillic letter", "Пример@exemple.fr"],
+  ["an uppercase letter in a domain not in punycode", "camille@École.fr"],
   ["a decomposed accent", "élodie@exemple.fr"],
   ["a leading space", " camille@exemple.fr"],
   ["a trailing space", "camille@exemple.fr "],
