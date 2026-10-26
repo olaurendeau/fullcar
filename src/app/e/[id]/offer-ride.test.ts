@@ -13,6 +13,7 @@ import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-
 import { offerRide as offerRideAction } from "./actions";
 import { readEventState } from "./event-state";
 import { offerRide, type RideOffer } from "./offer-ride";
+import { stillOpen } from "./test-state";
 
 type Db = Kysely<Database>;
 
@@ -140,7 +141,7 @@ async function aDeviceScene(db: Db, eventId: string) {
 }
 
 function legOf(state: Awaited<ReturnType<typeof readEventState>>, leg: Leg) {
-  const found = state?.legs.find((board) => board.leg === leg);
+  const found = stillOpen(state)?.legs.find((board) => board.leg === leg);
   if (found === undefined) throw new Error(`no ${leg} in the state`);
   return found;
 }

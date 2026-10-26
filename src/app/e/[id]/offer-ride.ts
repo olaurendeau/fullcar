@@ -23,7 +23,7 @@ import {
 } from "@/domain/ride";
 import { hashToken, tokenMatches } from "@/domain/token-hash";
 import { findPublicEvent } from "./event";
-import type { EventState } from "./event-state";
+import type { DeviceState } from "./event-state";
 import { lockLegs } from "./retour";
 
 /**
@@ -110,9 +110,9 @@ type FieldErrors = Extract<OfferRideResult, { errors: OfferErrors }>;
  * takeSeats); field errors and `eventNotFound` come without it.
  */
 export type OfferRideOutcome =
-  | { ok: true; state: EventState }
-  | { ok: false; error: Exclude<OfferRefusal, "eventNotFound" | "personGone">; state: EventState }
-  | (PersonGone & { state: EventState })
+  | { ok: true; state: DeviceState }
+  | { ok: false; error: Exclude<OfferRefusal, "eventNotFound" | "personGone">; state: DeviceState }
+  | (PersonGone & { state: DeviceState })
   | FieldErrors
   | { ok: false; error: "eventNotFound" };
 

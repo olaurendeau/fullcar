@@ -10,6 +10,7 @@ import { seedPerson, seedPlacement } from "@/db/test-participants";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
 import { offerRide } from "./actions";
 import { readEventState } from "./event-state";
+import { stillOpen } from "./test-state";
 
 // The action reaches the database through getDb(): here, the test's transaction, unless
 // the test leaves it to the real connection.
@@ -64,7 +65,7 @@ describe("offerRide (action)", () => {
       const result = await offerRide(eventId, lea.token, offer);
 
       expect(result).toEqual({ ok: true, state: await readEventState(db, eventId, lea.token) });
-      const aller = result.ok ? result.state.legs.find((leg) => leg.leg === "aller") : undefined;
+      const aller = result.ok ? stillOpen(result.state)?.legs.find((leg) => leg.leg === "aller") : undefined;
       expect(aller?.cars.map((car) => [car.id, car.driver.id])).toEqual([[offer.rideId, lea.id]]);
       expect(aller?.withoutCar).toEqual([]);
       expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);

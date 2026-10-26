@@ -10,6 +10,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import {
   addPerson,
   loadEventState,
+  offerRide,
   removeRide,
   setPersonLeg,
   takeSeats,
@@ -525,5 +526,48 @@ describe("undoSeats", () => {
     } finally {
       log.mockRestore();
     }
+  });
+});
+
+/** The event of `seedScene` once anonymised, as anyone holding its link may read it (OA8.3). */
+const ENDED: EndedEvent = { ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" };
+
+type Scene = Awaited<ReturnType<typeof seedScene>>;
+
+// #806, OA8.3: anyone holding the link may call these actions; the place, which stays in the row, may be someone's address.
+describe.each<[string, (scene: Scene) => Promise<unknown>]>([
+  ["takeSeats", ({ eventId, tom, r1 }) => takeSeats(eventId, tom.token, r1, "aller", [tom.id])],
+  ["undoSeats", ({ eventId, lea, r1 }) => undoSeats(eventId, lea.token, r1, "aller", [{ personId: lea.id, before: "withoutCar" }])],
+  [
+    "addPerson",
+    ({ eventId }) =>
+      addPerson(eventId, "q3Vx9kLmN2pR7sT1uW4yZQ", { id: randomUUID(), firstName: "Zoé", phone: "", bothLegs: true, leg: "aller" }),
+  ],
+  ["updatePerson", ({ eventId, lea }) => updatePerson(eventId, lea.token, { personId: lea.id, firstName: "Léonie", phone: "" })],
+  ["setPersonLeg", ({ eventId, tom }) => setPersonLeg(eventId, tom.token, { personId: tom.id, leg: "aller", kind: "notConcerned" })],
+  [
+    "offerRide",
+    ({ eventId, tom }) =>
+      offerRide(eventId, tom.token, {
+        rideId: randomUUID(),
+        leg: "aller",
+        driver: { kind: "device", personId: tom.id },
+        location: "Salle Paul Bert",
+        time: "07:00",
+        seats: "3",
+        note: "",
+      }),
+  ],
+  ["updateRide", ({ eventId, marc, r1 }) => updateRide(eventId, marc.token, r1, "aller", rideForm())],
+  ["removeRide", ({ eventId, marc, r1 }) => removeRide(eventId, marc.token, r1, "aller")],
+])("%s on an anonymised event (#806)", (_, action) => {
+  it("OA8.3: refuses it by eventEnded, with the event ended, neither its place nor anyone", async () => {
+    await inTransaction(async (trx) => {
+      const scene = await seedScene(trx);
+      await anonymiseEvent(trx, scene.eventId);
+      const answer = await action(scene);
+      expect(answer).toStrictEqual({ ok: false, error: "eventEnded", state: ENDED });
+      expect(JSON.stringify(answer)).not.toContain("Gymnase des Gayeulles");
+    });
   });
 });
