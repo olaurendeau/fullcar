@@ -331,6 +331,62 @@ ordres, pour une prise de place, « sans voiture », une voiture proposée et un
 ajoutée « Aller et retour ». `src/app/e/[id]/edit-event.test.ts` refait la preuve au travers
 d'`editEvent`, pour une prise de place et une voiture proposée.
 
+### Retirer une personne (#645)
+
+À partir de l'épique #645 (maquette `docs/design/remove-person/` v2, RP2.8), une Person peut
+être retirée d'un événement : sa ligne `person`, ses Rides et ses Placements sont supprimés
+dans une seule transaction d'`atomically`, en `READ COMMITTED`. Le retrait suit l'ordre
+Event, puis Ride, puis Person, en quatre temps :
+
+1. L'Event en partage, par `lockLegs(trx, id, [])` (`src/app/e/[id]/retour.ts`). Un retrait
+   et une suppression du retour se suivent donc dans l'ordre où ils prennent l'Event, et
+   deux retraits ne s'attendent pas sur lui.
+2. Les Rides que la personne conduit, sur les deux legs, lus puis verrouillés par
+   identifiant croissant (`lockRides`, `src/db/rides.ts`).
+3. Sa Person (`lockPersons`, `src/db/persons.ts`).
+4. Ensuite seulement, la suppression : ses Rides, dont les passagers repassent « sans
+   voiture » par la clé `placement → ride`, ses Placements, puis la Person.
+
+Un simple `DELETE` de la Person, laissé à la cascade de `ride (driver_id, event_id)`,
+inverserait cet ordre. Postgres verrouille d'abord la ligne `person` qu'il supprime, puis la
+cascade verrouille ses Rides : la Person passe avant le Ride. Une écriture qui tient l'un de
+ces Rides et attend ensuite cette Person (`lockPersons` après `lockRides`, ou les
+déclencheurs de C12.8) attendrait le retrait pendant que le retrait l'attend. Postgres
+romprait cet interblocage en faisant échouer l'une des deux (`40P01`) : c'est un `failed`,
+que RP2.8 exclut.
+
+Sous `READ COMMITTED`, un verrou obtenu après une attente rend la ligne validée. Le retrait
+relit donc sous ses verrous ce qu'il a lu avant eux :
+
+- **La Person.** `lockPersons` rend les identifiants qu'il a verrouillés. S'il ne rend rien,
+  la personne a été retirée pendant l'attente, par l'autre chemin ou par la même requête
+  renvoyée. La réponse est alors `alreadyRemoved`, et rien n'est écrit (RP2.6). Lancés
+  ensemble depuis l'appareil et depuis l'espace organisateur, deux retraits donnent ainsi un
+  `removed` et un `alreadyRemoved`.
+- **Ses Rides.** Ils sont relus une fois la Person verrouillée. À partir de là, aucune
+  écriture ne peut plus lui donner de voiture : `offerRide` verrouille la Person de qui
+  conduit avant de créer son Ride, et `ride_driver_placed` la verrouille aussi. Une voiture
+  apparue entre la lecture et le verrou, c'est-à-dire une offre validée pendant l'attente,
+  n'est pas verrouillée. La transaction est alors annulée et reprise du début, comme
+  `DriverMoved` dans `offerRide`, au lieu de verrouiller ce Ride après la Person. Decision :
+  reprendre la transaction plutôt que verrouiller tard. — Reason : c'est le précédent
+  d'`offerRide`, et l'ordre Ride, puis Person, reste vrai sans exception.
+
+Les autres écritures voient un retrait de la même façon. Avec une requête et un jeton bien
+formés, une personne absente de l'événement donne `personGone`, avec l'état, et non plus
+`forbidden`. La personne d'un autre jeton garde `forbidden`, et `noRetour` passe toujours
+avant les deux. C'est le cas d'`updatePerson` et de `setPersonLeg` (`persons.ts`), de
+`takeSeats` (`seats.ts`, tout ou rien : une seule personne retirée refuse tout) et
+d'`offerRide` (`offer-ride.ts`, un conducteur ou un passager coché retiré). Le contrôle se
+fait sur ce que rend `lockPersons`, jamais sur la seule lecture d'avant le verrou : une
+personne retirée pendant que l'écriture attendait sa Person est vue absente. Une prise de
+place n'insère donc jamais un Placement vers une Person supprimée, ce qui serait une
+violation de clé (`23503`), donc un `failed`. `undoSeats` laisse de côté une personne
+retirée et rend les autres (C7.4), et répond `Seat.alreadyOut` s'il ne reste personne à
+rendre. `change-ride.ts` ne change pas : la voiture d'un conducteur retiré donne `rideGone`,
+et un sortant retiré donne `passengersChanged`. La preuve est un test de concurrence sur
+données validées, dans les deux ordres, pour les huit cas de RP2.8 (#667).
+
 ### L'adresse après l'Event (#581)
 
 Les limites d'envoi (3 e-mails de confirmation par heure et par événement, 5 par heure vers
@@ -464,6 +520,18 @@ ci-dessus valent pour chacun.
   (#596). Elle donne l'accès à la session du compte de l'événement, ou au jeton d'admin du
   navigateur de création. `withOrganiserPhones` n'accepte qu'une autorisation produite par
   cette règle (voir « Visibilité du téléphone »).
+- **Le retrait d'une personne par l'organisateur** (#645, `removeAsOrganiser`,
+  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin :
+  aujourd'hui par `adminTokenMatches`, comme `editEvent`, puis par `organiser-access.ts`
+  seul (#675). La requête porte aussi le jeton personnel de l'appareil, mais seulement pour
+  relire le tableau que la page montre (`readEventState`), dont « Vos inscriptions » et les
+  numéros visibles dépendent de ce jeton. Ce jeton ne donne aucun droit sur ce chemin : un
+  jeton personnel n'ouvre jamais le retrait par l'organisateur, pas même celui du navigateur
+  de création (RP3.3). L'identifiant de la personne voyage dans le corps, jamais dans l'URL.
+  Après le retrait, le panneau est relu, avec la section « Personnes inscrites »
+  d'organizer-view v3.5. Le focus suit O5.8, tel qu'amendé par organizer-view v3.5. Le
+  repère de la barre est le bouton de l'espace organisateur replié (O8) quand le panneau est
+  replié.
 - **Jamais journalisés**, ni les jetons ni les adresses e-mail (OA11.1) : un journal ne
   porte que des mots fixes et des nombres.
 
@@ -1050,6 +1118,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | jetons tirés par le serveur | `src/domain/server-token.ts`, à partir de #593 | seul tirage des jetons d'admin, de session et de lien, 128 bits de `randomBytes` ; `newAdminToken` s'en sert |
 | règles du compte | `src/domain/email-address.ts`, `account-rules.ts` et `send-limits.ts`, à partir de #593 | la lecture d'une adresse, les durées (lien de connexion 1 h, de confirmation 7 jours, session 90 jours, inactivité 3 ans) et le résultat d'un lien ; la limite par événement, la limite par adresse et le plafond global horaire, à partir de #623 ; la limite des demandes de connexion par adresse (OA4.5), à partir de #603 |
 | accès à l'espace organisateur | `src/domain/organiser-access.ts`, à partir de #596 | la seule règle d'accès : session du compte de l'événement, ou jeton d'admin du navigateur de création ; seule à produire l'autorisation que `withOrganiserPhones` accepte |
+| retrait d'une personne | `src/app/e/[id]/remove-person.ts` et `src/domain/person-removal.ts`, à partir de #665 | le cas d'usage, sans server action exportée : `removeFromDevice` (le droit par `devicePersonIds`) et `removeAsOrganiser` (le droit par le seul jeton d'admin, puis `organiser-access.ts`, #675), l'ordre des réponses (RP3.4) et celui des verrous (voir « Retirer une personne ») ; le domaine, en fonctions pures : ce que devient chaque leg, et les lignes de la confirmation, lues dans l'état que la page montre |
 | compte dans la base | `src/db/accounts.ts`, `sessions.ts`, `email-links.ts`, `email-sends.ts`, à partir de #594 ; `src/db/my-events.ts`, à partir de #606 | les comptes, les sessions, les liens (un seul usage, même en concurrence) et les envois (limites sous verrou, Event puis adresse) ; Mes événements en agrégats, sans aucun téléphone |
 | connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/`, à partir de #607 | les pages et actions de connexion et des liens ; la page Mes événements |
 | création | `src/app/create-event.ts`, à partir de #599 | le cas d'usage de la création, avec une adresse ou une session ; l'envoi de la confirmation par `after()` |
@@ -1151,7 +1220,7 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   | `placement (person_id, event_id)` → `person (id, event_id)` | `CASCADE` | un Placement appartient à sa Person, du même événement |
   | `placement (ride_id, event_id, leg)` → `ride (id, event_id, leg)` | `SET NULL (ride_id)` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » ; seule `ride_id` est remise à `null`, `event_id` et `leg` restent |
   | `placement.stop_id` | `SET NULL` | quand un Arrêt est supprimé, le passager monte (ou descend) au lieu du Ride |
-  | `ride (driver_id, event_id)` → `person (id, event_id)` | `CASCADE` | supprimer le conducteur retire sa voiture, et ses passagers repassent « sans voiture » par la clé `placement → ride` ; rien ne supprime de personne dans #66 |
+  | `ride (driver_id, event_id)` → `person (id, event_id)` | `CASCADE` | supprimer le conducteur retire sa voiture, et ses passagers repassent « sans voiture » par la clé `placement → ride` ; à partir de #645, le retrait d'une personne supprime sa Person, mais verrouille et supprime d'abord ses Rides, pour garder l'ordre Ride, puis Person (voir « Retirer une personne ») |
   | `event.account_id` | `SET NULL` | un événement survit à son compte : il reste ouvert aux participants, sans organisateur, jusqu'à son jour 30 (OA9.5) ; il garde `confirmed_at` (#586) |
   | `session.account_id` | `CASCADE` | une session appartient à son compte : le supprimer ferme toutes ses sessions (#586) |
   | `email_link.account_id` | `CASCADE` | un lien de connexion appartient à son compte ; un lien de confirmation, lui, appartient à son Event (`email_link.event_id`, en `CASCADE` comme toute table qui tient à un événement) (#586) |
