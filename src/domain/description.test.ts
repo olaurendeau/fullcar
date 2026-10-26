@@ -11,7 +11,7 @@ describe("normalizeDescription", () => {
       ["turns \\r\\n into \\n", "a\r\nb", "a\nb"],
       ["turns a lone \\r into \\n", "a\rb\r\rc", "a\nb\n\nc"],
       ["removes spaces and tabs at the end of a line", "a  \t\nb\t \nc", "a\nb\nc"],
-      ["removes a non-breaking and a narrow no-break space at the end of a line", "a \nb \nc　", "a\nb\nc"],
+      ["removes a non-breaking and a narrow no-break space at the end of a line", "a\u00a0\nb\u202f\nc\u3000", "a\nb\nc"],
       ["turns four newlines into two", "a\n\n\n\nb", "a\n\nb"],
       ["turns three newlines into two", "a\n\n\nb", "a\n\nb"],
       ["keeps two newlines", "a\n\nb", "a\n\nb"],
@@ -19,7 +19,7 @@ describe("normalizeDescription", () => {
       ["counts \\r\\n as one newline", "a\r\n\r\n\r\nb", "a\n\nb"],
       ["keeps spaces and tabs inside a line", "a  b\tc", "a  b\tc"],
       ["keeps spaces at the start of an inner line", "a\n    b", "a\n    b"],
-      ["keeps a line separator, which is not a newline", "a  b", "a  b"],
+      ["keeps a line separator, which is not a newline", "a \u2028b", "a \u2028b"],
     ])("%s", (_, typed, stored) => {
       expect(normalizeDescription(typed)).toBe(stored);
     });
@@ -44,9 +44,9 @@ describe("description", () => {
       ["nothing", ""],
       ["spaces", "   "],
       ["newlines", "\n\n\r\n\r"],
-      ["tabs and non-breaking spaces", "\t  "],
-      ["zero-width characters", "​‌‍⁠﻿"],
-      ["direction marks among newlines", "‎\n‏\n‪"],
+      ["tabs and non-breaking spaces", "\t\u00a0\u202f"],
+      ["zero-width characters", "\u200b\u200c\u200d\u2060\ufeff"],
+      ["direction marks among newlines", "\u200e\n\u200f\n\u202a"],
       ["a missing value", undefined],
       ["null", null],
     ])("reads %s as no description", (_, value) => {
@@ -113,7 +113,7 @@ describe("descriptionCount", () => {
     it.each([
       ["plain text", "Rendez-vous à 7 h"],
       ["trailing blanks and extra newlines", "a  \r\n\r\n\r\n\r\nb\t"],
-      ["emoji", "\u{1f697}\u{1f468}‍\u{1f469}‍\u{1f467}"],
+      ["emoji", "\u{1f697}\u{1f468}\u200d\u{1f469}\u200d\u{1f467}"],
       ["1001 code points", "a".repeat(1001)],
       ["1200 pasted code points", `${"a ".repeat(600)}`],
     ])("counts %s as the server stores it", (_, field) => {
@@ -123,7 +123,7 @@ describe("descriptionCount", () => {
     });
 
     it("counts text with only invisible characters as 0, as the server stores none", () => {
-      expect(descriptionCount("​\n‍  \n")).toBe(0);
+      expect(descriptionCount("\u200b\n\u200d  \n")).toBe(0);
       expect(descriptionCount("")).toBe(0);
     });
 
@@ -148,7 +148,7 @@ describe("guessFolds", () => {
       ["140 emoji, one code point each", "\u{1f697}".repeat(140), false],
       ["141 emoji", "\u{1f697}".repeat(141), true],
       ["140 code points over 4 lines", `${"a".repeat(34)}\n${"b".repeat(34)}\n${"c".repeat(34)}\n${"d".repeat(35)}`, false],
-      ["a line separator, which is not a newline", "a b c d e", false],
+      ["a line separator, which is not a newline", "a\u2028b\u2028c\u2028d\u2028e", false],
     ])("%s: %s", (_, text, folds) => {
       expect(guessFolds(text)).toBe(folds);
     });
