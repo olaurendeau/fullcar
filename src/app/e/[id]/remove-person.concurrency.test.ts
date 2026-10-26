@@ -529,6 +529,11 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
     });
   });
 
+  // The confirmation counted 3 persons on the retour, and Marc's removal leaves 2. Decision
+  // (coordinator, #767): `confirmRetour` with the new counts, and the retour stays, not « both
+  // succeed » as RP2.8 says. — Reason: organizer-view's recount rule wins: counts that changed
+  // without falling to zero write nothing, and the organiser confirms again. `confirmRetour` is
+  // no `failed`, and a new confirmation then passes. RP2.8 is aligned at remove-person's next revision.
   it("the removal first: the change waits for the Event, counts the retour again, and asks for a new confirmation", async () => {
     await withCommittedEvent(async (db, eventId, adminToken) => {
       const { marc } = await seedScene(db, eventId);
