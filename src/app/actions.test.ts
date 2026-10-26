@@ -46,6 +46,13 @@ const failingDb = new Proxy({} as Kysely<Database>, {
   },
 });
 
+/** The marker of event-description: a word nothing else writes, looked for wherever the description must not go. */
+const MARKER = "Zorglub4729";
+/** A link of the description: nothing on the server may call its host (DS3.3). */
+const LINK = "https://lien-test.example/x";
+/** Every way the server writes a line of log. */
+const CONSOLE = ["log", "info", "warn", "error", "debug", "trace"] as const;
+
 function countEvents(trx: Transaction<Database>) {
   return trx
     .selectFrom("event")
@@ -238,6 +245,56 @@ describe("createEvent", () => {
       ["a boolean", true],
     ])("DS1.8: refuses %s as invalid, without an exception, and creates nothing", async (_, description) => {
       expect(await refused({ ...valid, description })).toEqual({ description: "invalid" });
+    });
+
+    it("DS3.3: makes no network call for a link in the description", async () => {
+      const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in this test"));
+      try {
+        const description = `Le plan : ${LINK}`;
+        expect((await created({ ...valid, description })).row.description).toBe(description);
+        expect(network).not.toHaveBeenCalled();
+      } finally {
+        network.mockRestore();
+      }
+    });
+
+    it("DS5.5: logs nothing of the description when the event is stored", async () => {
+      const spies = CONSOLE.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+      try {
+        await created({ ...valid, description: MARKER });
+        expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+      }
+    });
+
+    it("DS5.5: when the database fails, neither the log nor the error carries the description", async () => {
+      // What Postgres says of a refused row quotes it, the description among its values.
+      const detail = `Failing row contains (Ab3dEf7h, Match à Lyon, ${MARKER})`;
+      connection.current = new Proxy({} as Kysely<Database>, {
+        get() {
+          throw Object.assign(new Error(`relation "event": ${detail}`), { code: "23514", detail, parameters: [MARKER] });
+        },
+      });
+      const spies = CONSOLE.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+      try {
+        const failure = await createEvent({ ...valid, description: MARKER }).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(failure).toBeInstanceOf(Error);
+        const { message, stack, cause } = failure as Error;
+        for (const text of [message, stack, JSON.stringify(failure)]) {
+          expect(text?.includes(MARKER)).toBe(false);
+        }
+        expect(cause).toBeUndefined();
+        const logged = spies.flatMap((spy) => spy.mock.calls);
+        expect(logged).toEqual([["createEvent: the event could not be stored (SQLSTATE 23514)"]]);
+        expect(JSON.stringify(logged).includes(MARKER)).toBe(false);
+      } finally {
+        connection.current = undefined;
+        for (const spy of spies) spy.mockRestore();
+      }
     });
   });
 

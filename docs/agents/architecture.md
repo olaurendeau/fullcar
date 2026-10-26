@@ -396,7 +396,11 @@ place n'insère donc jamais un Placement vers une Person supprimée, ce qui sera
 violation de clé (`23503`), donc un `failed`. `undoSeats` laisse de côté une personne
 retirée et rend les autres (C7.4), et répond `Seat.alreadyOut` s'il ne reste personne à
 rendre. `change-ride.ts` ne change pas : la voiture d'un conducteur retiré donne `rideGone`,
-et un sortant retiré donne `passengersChanged`. La preuve est un test de concurrence sur
+et un sortant retiré donne `passengersChanged` si le retrait est validé avant que la réduction
+lise ses passagers. S'il est encore en cours, la réduction, qui l'a lu parmi eux, attend pour le
+sortir, trouve sa ligne effacée et réussit : le retrait ne verrouille pas le Ride où la personne
+est assise, et le résultat est celui qu'a choisi le conducteur (décision du coordinateur, #767).
+La preuve est un test de concurrence sur
 données validées, dans les deux ordres, pour les huit cas de RP2.8 (#667).
 
 ### L'adresse après l'Event (#581)

@@ -514,6 +514,45 @@ describe("editEvent", () => {
         { description: stored },
       );
     });
+
+    it("DS3.3: makes no network call for a link in the description, written or kept", async () => {
+      const link = "https://lien-test.example/x";
+      const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in this test"));
+      try {
+        await onSeeded(async (trx, eventId, token) => {
+          const written = `Le plan : ${link}`;
+          const answer = await editEvent(trx, eventId, token, { ...FORM, description: written }, BEFORE);
+          expect(answer).toEqual({ ok: true, event: { ...BEFORE, description: written } });
+
+          // Changed again without a description sent: the link is kept, and still not called.
+          const kept = await editEvent(trx, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, { ...BEFORE, description: written });
+          expect(kept).toEqual({ ok: true, event: { ...BEFORE, title: "Tournoi de Rennes U13", description: written } });
+        });
+        expect(network).not.toHaveBeenCalled();
+      } finally {
+        network.mockRestore();
+      }
+    });
+
+    it("DS5.5: logs nothing of the description, written, kept or refused", async () => {
+      const marker = "Zorglub4729";
+      const methods = ["log", "info", "warn", "error", "debug", "trace"] as const;
+      const spies = methods.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+      try {
+        await onSeeded(async (trx, eventId, token) => {
+          const answers = [
+            await editEvent(trx, eventId, token, { ...FORM, description: marker }, BEFORE),
+            await editEvent(trx, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, { ...BEFORE, description: marker }),
+            await editEvent(trx, eventId, token, { ...FORM, description: `${marker}\u0000` }, { ...BEFORE, description: marker }),
+          ];
+          expect(answers.map((answer) => answer.ok)).toEqual([true, true, false]);
+          expect(answers[2]).toEqual({ ok: false, errors: { description: "invalid" } });
+        });
+        expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+      }
+    });
   });
 
   describe("M8.2: the organiser's token", () => {
