@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { BrowserContext, Page, Response } from "@playwright/test";
+import { formatDate } from "@/i18n/format-date";
 import { expect, expectText, expectUrl, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -84,7 +85,7 @@ function deviceDate(page: Page, days: number): Promise<string> {
 
 /** A leg's date and time as the page must write them: the digits typed, in any zone (C1.12). */
 function legText(lang: "fr" | "en", date: string, time: string): RegExp {
-  const day = new Intl.DateTimeFormat(lang, { dateStyle: "full", timeZone: "UTC" }).format(new Date(`${date}T00:00Z`));
+  const day = formatDate(lang, new Date(`${date}T00:00Z`), { dateStyle: "full", timeZone: "UTC" });
   return new RegExp(`^${day} ${WORDS[lang].at(time)}$`);
 }
 
@@ -211,9 +212,7 @@ function holdsWords(text: string, words: string): boolean {
 async function expectOneLanguage(page: Page, lang: "fr" | "en", date: string) {
   await expect(page.locator("html")).toHaveAttribute("lang", lang);
   const other = lang === "fr" ? "en" : "fr";
-  const otherDate = new Intl.DateTimeFormat(other, { dateStyle: "full", timeZone: "UTC" }).format(
-    new Date(`${date}T00:00Z`),
-  );
+  const otherDate = formatDate(other, new Date(`${date}T00:00Z`), { dateStyle: "full", timeZone: "UTC" });
   const text = await page.locator("body").innerText();
   expect([...onlyIn(other), otherDate].filter((words) => holdsWords(text, words))).toEqual([]);
 }
