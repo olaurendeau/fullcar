@@ -19,7 +19,7 @@ const FR = {
   location: { aller: "Lieu de départ", retour: "Lieu de dépose" },
   time: "Heure de départ",
   title: { aller: "À l’aller", retour: "Au retour" },
-  drive: { aller: "J’emmène aussi", retour: "Je ramène aussi" },
+  drive: { aller: "J’emmène aussi des personnes", retour: "Je ramène aussi des personnes" },
   withoutCar: "Je cherche une place",
   notConcerned: { aller: "Je ne fais pas l’aller", retour: "Je ne fais pas le retour" },
   otherTime: { aller: "Heure de départ de l’aller", retour: "Heure de départ du retour" },
@@ -83,7 +83,7 @@ async function radios(group: Locator) {
 test.describe("the other leg in « Proposer une voiture »", () => {
   test.use({ locale: "fr-FR" });
 
-  test("C4.11, C4.2, C4.4: « Je ramène aussi » makes the retour's car where and when unfolded; the place follows until changed", async ({ db, page, seededEvent }) => {
+  test("C4.11, C4.2, C4.4: « Je ramène aussi des personnes » makes the retour's car where and when unfolded; the place follows until changed", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     await page.goto(`/e/${id}`);
     await openForm(page);
@@ -121,7 +121,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     await expect(freeSeats(car(page, "Marc"))).toHaveCount(2);
   });
 
-  test("C4.2: « J’emmène aussi » from the Retour tab, from her state there by default", async ({ db, page, seededEvent }) => {
+  test("C4.2: « J’emmène aussi des personnes » from the Retour tab, from her state there by default", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     const { Léa: lea } = await device(db, page, id, ["Léa"]);
     await place(db, id, lea, "aller", null);
@@ -171,7 +171,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     expect((await rides(db, id)).map((ride) => ride.leg)).toEqual(["aller", "aller"]);
   });
 
-  test("C4.11: « Je ramène aussi » checked before anyone drives is kept once someone does (review of #212)", async ({ db, page, seededEvent }) => {
+  test("C4.11: « Je ramène aussi des personnes » checked before anyone drives is kept once someone does (review of #212)", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     await device(db, page, id, ["Léa", "Tom"]);
     await page.goto(`/e/${id}`);
@@ -223,7 +223,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     ]);
   });
 
-  test("C4.12, C3.5: a passenger of Marc stays by default; « Je ramène aussi » leaves his car, which frees a seat", async ({ db, page, seededEvent }) => {
+  test("C4.12, C3.5: a passenger of Marc stays by default; « Je ramène aussi des personnes » leaves his car, which frees a seat", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     const marc = await seedPerson(db, id, { firstName: "Marc" });
     const marcsCar = await seedRide(db, id, marc.id, { leg: "retour" });
@@ -240,7 +240,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
       await expect(radio(group, leaving)).toHaveAccessibleDescription("Quittera la voiture de Marc");
     }
     await expect(radio(group, stay)).toHaveAccessibleDescription("");
-    // C3.5: without « Je ramène aussi », the retour does not change.
+    // C3.5: without « Je ramène aussi des personnes », the retour does not change.
     await field(page, FR.location.aller).fill("Gare");
     await submit(page).click();
     await expect(form(page)).toHaveCount(0);
@@ -256,7 +256,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     await expect(car(page, "Tom")).toContainText("Église");
   });
 
-  test("C4.10: a response lost, then sent again with « Je ramène aussi »: exactly two cars", async ({ db, page, seededEvent }) => {
+  test("C4.10: a response lost, then sent again with « Je ramène aussi des personnes »: exactly two cars", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     let lost = false;
     await page.route("**/e/**", async (route) => {
@@ -315,6 +315,216 @@ test.describe("the other leg in « Proposer une voiture »", () => {
       await expect(field(page, FR.firstName)).toBeVisible();
       await expect(form(page).getByRole("radiogroup")).toHaveCount(0);
       await expect(form(page)).not.toContainText(FR.title.retour);
+    });
+  });
+});
+
+// #649, event-board v4.5 (E1.1 to E1.7): the other leg read from the event, its line under its title.
+
+const LONG_PLACE = "Complexe sportif intercommunal Colette-Besson, entrée par le parking nord, 12 boulevard Albert-Ier, 35200 Rennes, France";
+
+const HINT = {
+  retour: "Le retour part du lieu de l’événement, Gymnase des Gayeulles, le samedi 12 décembre 2026 à 18:00.",
+  aller: "L’aller va jusqu’au lieu de l’événement, Gymnase des Gayeulles, le samedi 12 décembre 2026 à 07:30.",
+};
+
+const EN = {
+  offer: "Offer a car",
+  title: { aller: "On the outbound trip", retour: "On the return trip" },
+  drive: { aller: "I take people there too", retour: "I bring people back too" },
+  hint: {
+    retour: /^The return trip leaves Gymnase des Gayeulles on Saturday, December 12, 2026 at 6:00\sPM\.$/,
+    aller: /^The outbound trip goes to Gymnase des Gayeulles on Saturday, December 12, 2026 at 7:30\sAM\.$/,
+  },
+};
+
+/** The line of a group: the element its `aria-describedby` names. */
+async function hintOf(group: Locator) {
+  const id = await group.getAttribute("aria-describedby");
+  expect(id).toBeTruthy();
+  return group.page().locator(`[id="${id}"]`);
+}
+
+/** Opens « Proposer une voiture », or `offer` in another language, from the Aller or from the tab named. */
+async function openFrom(page: Page, eventId: string, tab?: string, offer = FR.offer) {
+  await page.goto(`/e/${eventId}`);
+  if (tab) await selectTab(page, tab);
+  await panel(page).getByRole("button", { name: offer, exact: true }).click();
+  await expect(page.getByRole("dialog", { name: offer })).toBeVisible();
+}
+
+/** E1.5: the line wraps, the place whole, and nothing overflows the page, the sheet, the group or the line. */
+async function expectWrapped(page: Page, offer: string, group: Locator) {
+  const line = await hintOf(group);
+  await expect(line).toBeVisible();
+  await expect(line).toContainText(LONG_PLACE);
+  await expect(line).not.toContainText("…");
+  expect((await line.boundingBox())!.height).toBeGreaterThanOrEqual(36);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  for (const scope of [page.getByRole("dialog", { name: offer }), group]) {
+    expect(await scope.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+  }
+  expect(await line.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(0);
+}
+
+test.describe("the other leg read from the event (v4.5)", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("E1.1: from the Aller, « Au retour » is described by where and when the retour leaves", async ({ page, seededEvent }) => {
+    await openFrom(page, seededEvent.id);
+    const group = otherLeg(page, FR.title.retour);
+    await expect(group).toHaveAccessibleDescription(HINT.retour);
+    expect(await radios(group)).toEqual({ names: [FR.drive.retour, FR.withoutCar, FR.notConcerned.retour], checked: [FR.notConcerned.retour] });
+    const line = await hintOf(group);
+    await expect(line).toBeVisible();
+    const [title, hint, first] = await Promise.all([
+      form(page).getByText(FR.title.retour, { exact: true }).boundingBox(),
+      line.boundingBox(),
+      group.getByRole("radio").first().boundingBox(),
+    ]);
+    expect(hint!.y).toBeGreaterThanOrEqual(title!.y + title!.height);
+    expect(hint!.y + hint!.height).toBeLessThanOrEqual(first!.y);
+    await expect(radio(form(page), "Je ramène aussi")).toHaveCount(0);
+  });
+
+  test("E1.1, C4.5: a passenger of Marc on the retour: the same line, then the four choices", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const marc = await seedPerson(db, id, { firstName: "Marc" });
+    const marcsCar = await seedRide(db, id, marc.id, { leg: "retour" });
+    const { Claire: claire } = await device(db, page, id, ["Claire"]);
+    await place(db, id, claire, "retour", marcsCar);
+    await openFrom(page, id);
+    await radio(form(page).getByRole("radiogroup", { name: "Qui conduit ?" }), "Claire").check();
+    const group = otherLeg(page, FR.title.retour);
+    await expect(group).toHaveAccessibleDescription(HINT.retour);
+    const stay = "Je reste dans la voiture de Marc";
+    expect(await radios(group)).toEqual({ names: [FR.drive.retour, stay, FR.withoutCar, FR.notConcerned.retour], checked: [stay] });
+    for (const leaving of [FR.drive.retour, FR.withoutCar, FR.notConcerned.retour]) {
+      await expect(radio(group, leaving)).toHaveAccessibleDescription("Quittera la voiture de Marc");
+    }
+  });
+
+  test("E1.2: from the Retour, « À l’aller » is described by where and when the aller goes", async ({ page, seededEvent }) => {
+    await openFrom(page, seededEvent.id, "Retour");
+    const group = otherLeg(page, FR.title.aller);
+    await expect(group).toHaveAccessibleDescription(HINT.aller);
+    expect((await radios(group)).names[0]).toBe(FR.drive.aller);
+  });
+
+  test("E1.3: the line describes the leg, not the car: still 18:00 when the retour's car leaves at 18:30", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    await openFrom(page, id);
+    const group = otherLeg(page, FR.title.retour);
+    await field(page, FR.firstName).fill("Marc");
+    await field(page, FR.location.aller).fill("Mairie");
+    await radio(group, FR.drive.retour).check();
+    await expect(field(page, FR.location.retour)).toBeVisible();
+    await expect(field(page, FR.otherTime.retour)).toBeVisible();
+    await field(page, FR.otherTime.retour).fill("18:30");
+    await expect(group).toHaveAccessibleDescription(HINT.retour);
+    await submit(page).click();
+    await expect(form(page)).toHaveCount(0);
+    expect((await rides(db, id)).map((ride) => [ride.leg, ride.departure_time])).toEqual([
+      ["aller", "07:30:00"],
+      ["retour", "18:30:00"],
+    ]);
+  });
+
+  test.describe("a place of 120 characters", () => {
+    test.use({ eventFields: { location: LONG_PLACE } });
+
+    test("E1.5: at 360 px, the line wraps, the place whole, and nothing overflows", async ({ page, seededEvent }) => {
+      expect(LONG_PLACE).toHaveLength(120);
+      await openFrom(page, seededEvent.id);
+      await expectWrapped(page, FR.offer, otherLeg(page, FR.title.retour));
+    });
+  });
+
+  test.describe("the retour another day", () => {
+    test.use({ eventFields: { retourAt: "2026-12-13 17:00:00" } });
+
+    test("E1.6: the line gives the retour's whole date", async ({ page, seededEvent }) => {
+      await openFrom(page, seededEvent.id);
+      await expect(otherLeg(page, FR.title.retour)).toHaveAccessibleDescription(
+        "Le retour part du lieu de l’événement, Gymnase des Gayeulles, le dimanche 13 décembre 2026 à 17:00.",
+      );
+    });
+  });
+
+  test.describe("the retour on the first of a month", () => {
+    test.use({ eventFields: { retourAt: "2027-05-01 18:00:00" } });
+
+    test("E1.6, #625: the line writes « 1er », as the header does", async ({ page, seededEvent }) => {
+      await openFrom(page, seededEvent.id);
+      await expect(otherLeg(page, FR.title.retour)).toHaveAccessibleDescription(
+        "Le retour part du lieu de l’événement, Gymnase des Gayeulles, le samedi 1er mai 2027 à 18:00.",
+      );
+    });
+  });
+
+  test("E1.7: who drives already on the retour has no group, so no line; someone else has both back", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Léa: lea } = await device(db, page, id, ["Léa"]);
+    await seedRide(db, id, lea, { leg: "retour" });
+    await openFrom(page, id);
+    const drivers = form(page).getByRole("radiogroup", { name: "Qui conduit ?" });
+    await radio(drivers, "Léa").check();
+    await expect(otherLeg(page, FR.title.retour)).toHaveCount(0);
+    await expect(form(page)).not.toContainText("Le retour part");
+    await radio(drivers, FR.newDriver).check();
+    await expect(otherLeg(page, FR.title.retour)).toHaveAccessibleDescription(HINT.retour);
+    await radio(drivers, "Léa").check();
+    await expect(otherLeg(page, FR.title.retour)).toHaveCount(0);
+    await expect(form(page)).not.toContainText("Le retour part");
+  });
+
+  test("E1.7: « Modifier la voiture » has no group, so no line", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Léa: lea } = await device(db, page, id, ["Léa"]);
+    await seedRide(db, id, lea, { leg: "aller" });
+    await page.goto(`/e/${id}`);
+    await car(page, "Léa").getByRole("button", { name: "Modifier", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Modifier la voiture" });
+    await expect(sheet.getByLabel(FR.location.aller, { exact: true })).toBeVisible();
+    await expect(sheet.getByRole("radiogroup", { name: FR.title.retour })).toHaveCount(0);
+    await expect(sheet).not.toContainText("Le retour part");
+  });
+
+  test.describe("without a retour", () => {
+    test.use({ eventFields: { retourAt: null } });
+
+    test("E1.7: no group « Au retour », no line", async ({ page, seededEvent }) => {
+      await page.goto(`/e/${seededEvent.id}`);
+      await page.getByRole("button", { name: FR.offer, exact: true }).click();
+      await expect(field(page, FR.firstName)).toBeVisible();
+      await expect(form(page).getByRole("radiogroup", { name: FR.title.retour })).toHaveCount(0);
+      await expect(form(page)).not.toContainText("Le retour part");
+    });
+  });
+});
+
+test.describe("the other leg read from the event, in English (v4.5)", () => {
+  test.use({ locale: "en-US" });
+  const group = (page: Page, title: string) => page.getByRole("dialog", { name: EN.offer }).getByRole("radiogroup", { name: title });
+
+  test("E1.4: the lines and the choices that drive, from either tab", async ({ page, seededEvent }) => {
+    await openFrom(page, seededEvent.id, undefined, EN.offer);
+    const retour = group(page, EN.title.retour);
+    await expect(retour).toHaveAccessibleDescription(EN.hint.retour);
+    expect((await radios(retour)).names[0]).toBe(EN.drive.retour);
+
+    await openFrom(page, seededEvent.id, "Return", EN.offer);
+    const aller = group(page, EN.title.aller);
+    await expect(aller).toHaveAccessibleDescription(EN.hint.aller);
+    expect((await radios(aller)).names[0]).toBe(EN.drive.aller);
+  });
+
+  test.describe("a place of 120 characters", () => {
+    test.use({ eventFields: { location: LONG_PLACE } });
+
+    test("E1.5: at 360 px, the line wraps in English too", async ({ page, seededEvent }) => {
+      await openFrom(page, seededEvent.id, undefined, EN.offer);
+      await expectWrapped(page, EN.offer, group(page, EN.title.retour));
     });
   });
 });

@@ -48,6 +48,8 @@ export function LegTabs(props: {
   aller: VisibleLegBoard;
   retour: VisibleLegBoard;
   device: BoardDevice;
+  /** The event's place as typed, for the line of the other leg in « Proposer une voiture » (#649). */
+  location: string;
   /** The event's position, for the suggestions of a car's places. */
   near: Position | null;
   tab: Leg;
@@ -92,7 +94,7 @@ export function LegTabs(props: {
             device={props.device}
             hasRetour
             near={props.near}
-            other={{ at: legs[1 - index].at, persons: legs[1 - index].board.device }}
+            other={{ at: legs[1 - index].at, location: props.location, persons: legs[1 - index].board.device }}
             map={props.map}
             hint={props.hint}
           />

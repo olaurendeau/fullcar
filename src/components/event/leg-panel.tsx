@@ -1,5 +1,4 @@
 import { useTranslations } from "next-intl";
-import type { DevicePerson } from "@/domain/board";
 import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
@@ -15,7 +14,7 @@ import { EventMap, OrganiserHint, type LegMap, type MapHint } from "./event-map"
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import type { RemoveRide } from "./remove-ride-dialog";
-import { OfferRideButton, type OfferRide, type UpdateRide } from "./ride-form";
+import { OfferRideButton, type OfferRide, type OtherLegOf, type UpdateRide } from "./ride-form";
 import { useSeatSheet, type TakeSeats } from "./seat-sheet";
 import { WithoutCarList } from "./without-car-list";
 
@@ -85,8 +84,8 @@ export function LegPanel({
   board: VisibleLegBoard;
   device: BoardDevice;
   hasRetour: boolean;
-  /** The other leg's date and time, and the device's persons there, for « Proposer une voiture » (#169). */
-  other?: { at: WallClock; persons: readonly DevicePerson[] };
+  /** The other leg's date and time, the event's place, and the device's persons there, for « Proposer une voiture » (#169, #649). */
+  other?: OtherLegOf;
   /** The event's position, for the suggestions of a car's places (AL4.1). */
   near: Position | null;
   /** The event's place and the page's open or folded map; none without a position (CA2.1). */
