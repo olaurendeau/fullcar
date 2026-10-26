@@ -115,3 +115,18 @@ export async function lockPersons(db: Kysely<Database>, eventId: string, ids: re
     .execute();
   return rows.map((row) => row.id);
 }
+
+/**
+ * Whether a person of that event had that id, and is now gone, her hash with her: the
+ * other persons of the same token keep theirs. Her Placements and Rides go by cascade; the
+ * removal deletes her Rides first, under their locks, to keep the lock order (Ride, then
+ * Person, see « Retirer une personne »).
+ */
+export async function deletePerson(db: Kysely<Database>, person: PersonRef): Promise<boolean> {
+  const result = await db
+    .deleteFrom("person")
+    .where("id", "=", person.id)
+    .where("event_id", "=", person.eventId)
+    .executeTakeFirst();
+  return Number(result.numDeletedRows) > 0;
+}

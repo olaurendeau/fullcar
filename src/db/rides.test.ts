@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   deleteRide,
   findDrivenRide,
+  findDrivenRides,
   insertRide,
   lockRide,
   ridePassengers,
@@ -286,6 +287,34 @@ describe("findDrivenRide", () => {
       expect(await findDrivenRide(trx, { driverId, eventId, leg: "aller" })).toBeUndefined();
       expect(await findDrivenRide(trx, { driverId, eventId: otherId, leg: "retour" })).toBeUndefined();
       expect(await findDrivenRide(trx, { driverId: walkerId, eventId, leg: "retour" })).toBeUndefined();
+    });
+  });
+});
+
+describe("findDrivenRides", () => {
+  it("lists the rides the person drives, on both legs, by ascending id, in that event only", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: otherId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      const { id: otherDriverId } = await seedPerson(trx, eventId);
+      const aller = await seedRide(trx, eventId, driverId, { leg: "aller" });
+      const retour = await seedRide(trx, eventId, driverId, { leg: "retour" });
+      await seedRide(trx, eventId, otherDriverId, { leg: "aller" });
+      const expected = [
+        { id: aller, eventId, leg: "aller" },
+        { id: retour, eventId, leg: "retour" },
+      ].sort((a, b) => (a.id < b.id ? -1 : 1));
+      expect(await findDrivenRides(trx, { driverId, eventId })).toEqual(expected);
+      expect(await findDrivenRides(trx, { driverId, eventId: otherId })).toEqual([]);
+    });
+  });
+
+  it("lists none for a person who drives nowhere", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: driverId } = await seedPerson(trx, eventId);
+      expect(await findDrivenRides(trx, { driverId, eventId })).toEqual([]);
     });
   });
 });
