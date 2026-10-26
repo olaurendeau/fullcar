@@ -86,7 +86,7 @@ for (const [where, device, height, width] of [
       for (const side of [...(await sides(points(map))), ...(await sides(zoom))]) expect(side).toBeGreaterThanOrEqual(44);
 
       await map.getByRole("button", { name: GROUP, exact: true }).click();
-      const bubble = map.getByRole("group", { name: GROUP, exact: true });
+      const bubble = map.getByRole("group", { name: "2 voitures, 3 places libres", exact: true });
       await expect(bubble.getByRole("button")).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
       for (const side of await sides(bubble.getByRole("button"))) expect(side).toBeGreaterThanOrEqual(44);
       expect(await sideways(page)).toBe(0);

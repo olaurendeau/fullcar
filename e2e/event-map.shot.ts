@@ -60,7 +60,7 @@ test("the map, folded, open, then its bubble", async ({ page, placed }, testInfo
   await shoot(page, testInfo, "carte-ouverte");
 
   await map.getByRole("button", { name: GROUP, exact: true }).click();
-  await expect(map.getByRole("group", { name: GROUP, exact: true }).getByRole("button")).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
+  await expect(map.getByRole("group", { name: "2 voitures, 3 places libres", exact: true }).getByRole("button")).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
   await shoot(page, testInfo, "carte-bulle");
 });
 
