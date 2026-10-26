@@ -7,8 +7,11 @@ import {
   leafletFocus,
   leafletStep,
   mapUpdate,
+  FLAG_LAYER,
   pageSettled,
+  POINT_LAYERS,
   pointKey,
+  pointLayer,
   TILES_QUIET,
   tilesStep,
   type LeafletEvent,
@@ -616,5 +619,42 @@ describe("the page settled (CA1.2, CA1.20)", () => {
   ];
   it.each(table)("the device %s, the link checking: %s, settled: %s", (device, linkChecking, settled) => {
     expect(pageSettled(device, linkChecking)).toBe(settled);
+  });
+});
+
+describe("a point's layer (#722, CA1.23)", () => {
+  /** The z-index a layer's class gives, `auto` as 0. */
+  const zOf = (layer: string) => (layer === "z-auto!" ? 0 : Number(/^z-(\d+)!$/.exec(layer)?.[1]));
+
+  // Hovered by a mouse, the focus in its icon, its bubble open: its one class.
+  const table: [boolean, boolean, boolean, string][] = [
+    [false, false, false, "z-auto!"],
+    [true, false, false, "z-999!"],
+    [false, true, false, "z-999!"],
+    [true, true, false, "z-999!"],
+    [false, false, true, "z-1001!"],
+    [true, false, true, "z-1001!"],
+    [false, true, true, "z-1001!"],
+    [true, true, true, "z-1001!"],
+  ];
+  it.each(table)("hovered: %s, focused: %s, open: %s: %s", (hovered, focused, open, layer) => {
+    expect(pointLayer({ hovered, focused, open })).toBe(layer);
+  });
+
+  it("one class of its own z-index each: the icon never has two that compete", () => {
+    expect(new Set(POINT_LAYERS.map(zOf)).size).toBe(POINT_LAYERS.length);
+    for (const [hovered, focused, open] of table) expect(POINT_LAYERS).toContain(pointLayer({ hovered, focused, open }));
+  });
+
+  it("raised, above the other labels and under the flag; its bubble open, above the flag", () => {
+    const [still, raised, open] = [
+      zOf(pointLayer({ hovered: false, focused: false, open: false })),
+      zOf(pointLayer({ hovered: true, focused: false, open: false })),
+      zOf(pointLayer({ hovered: false, focused: false, open: true })),
+    ];
+    const flag = zOf(FLAG_LAYER);
+    expect(still).toBeLessThan(raised);
+    expect(raised).toBeLessThan(flag);
+    expect(open).toBeGreaterThan(flag);
   });
 });

@@ -959,6 +959,22 @@ elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les d
   (`role="group"`, pas la popup de Leaflet, dont « Close popup » est en anglais), un bouton
   par voiture dans l'ordre des fiches, puis « Fermer ». Le drapeau est une image nommée
   (`role="img"`), pas un bouton. Les lignes sont des `L.polyline` sans interaction.
+- **L'empilement des étiquettes** (#722, event-map v32, CA1.23) : les points restent à leur
+  position exacte et des étiquettes peuvent se recouvrir. Chaque icône de Leaflet est son
+  propre contexte d'empilement (elle porte un `transform`) : c'est l'icône qu'on monte, par une
+  seule classe à la fois, que choisit `pointLayer` (`event-map-state.ts`, fonction pure) et que
+  `leaflet-map.ts` met **à la place** de la précédente, jamais à côté : deux classes `!important`
+  sur `z-index` laisseraient décider l'ordre de la feuille de style. `z-auto!` par défaut :
+  l'ordre du DOM, celui des fiches, la dernière dessus, quelle que soit la latitude ; `z-999!`
+  quand une souris survole le bouton du point (`pointerenter` dont le `pointerType` est
+  `mouse` : un toucher ne survole rien) ou que le focus est dans l'icône, sa bulle comprise
+  (`focusin`, `focusout` sur l'icône, écoutés une fois l'icône créée, à l'`add` du marqueur) ;
+  `z-1001!` tant que sa bulle est ouverte. Le drapeau est en `z-1000!` (`FLAG_LAYER`) : au-dessus
+  de toute étiquette, survolée ou focalisée comprise, sous le point d'une bulle ouverte, que
+  rien ne recouvre (amendement 6 du coordinateur sur #653, qui l'emporte sur « sous le
+  drapeau »). Les marqueurs restent `interactive: false` (#484) : `riseOnHover` et
+  `setZIndexOffset` n'y feraient rien contre la classe. Après chaque mise à jour, chaque icône
+  est relue, un focus perdu par un élément déplacé n'envoyant pas toujours de `focusout`.
 - **Les mises à jour** (#482) : la carte suit l'état que la page applique (la réponse d'une
   action, « Actualiser » sur `/e/{id}/admin`) ; il n'y a pas de rafraîchissement automatique
   (#67). `event-map.tsx` compare en JSON ce que la carte montre (`MapState`) : un état qui

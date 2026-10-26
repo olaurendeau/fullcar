@@ -4,7 +4,8 @@
  * outputs of `mapOf`, the points kept, moved, created and removed, whether to reframe, to
  * close the bubble, and where the focus goes. Then (#483) Leaflet's import and the tiles'
  * notice, the rows « Leaflet : … » and « tuiles : … », the import one for the page since
- * #553; and (#653) when the page is settled. Pure functions: the map draws what they say.
+ * #553; (#653) when the page is settled; and (#722) which point's label is raised. Pure
+ * functions: the map draws what they say.
  */
 import { distanceMetres, SAME_POSITION_METRES, type EventMapPoints, type MapCar, type MapPoint } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
@@ -131,6 +132,40 @@ export function mapUpdate<Car extends MapCar>(before: MapPoints<Car>, after: Map
   else next = bubbleStays ? focus : bubbleFocus(view.bubble, before, after);
 
   return { points, removed, reorder, reframe, closeBubble, focus: next };
+}
+
+/**
+ * The flag's icon class: above every label, whatever the `z-index` Leaflet gives a marker by
+ * its latitude, which a class with `!` beats.
+ */
+export const FLAG_LAYER = "z-1000!";
+
+/**
+ * A point's icon classes, one at a time (event-map v32, #722): in the order of the cards, as the
+ * DOM stacks them; raised, above the other labels and under the flag; its bubble open, above
+ * the flag (amendment 6 on #653). Each Leaflet icon is a stacking context of its own (its
+ * `transform`): its label and its bubble are compared to the others by its class alone.
+ */
+export const POINT_LAYERS = ["z-auto!", "z-999!", "z-1001!"] as const;
+export type PointLayer = (typeof POINT_LAYERS)[number];
+
+/** What raises a point's label. */
+export interface PointRaise {
+  /** A mouse is over its button: a touch hovers nothing. */
+  hovered: boolean;
+  /** The focus is in its icon: on its button, or in its bubble. */
+  focused: boolean;
+  /** Its bubble is open. */
+  open: boolean;
+}
+
+/**
+ * The one class of a point's icon (CA1.23): it replaces the one before, never sits beside it,
+ * since two `!important` classes for `z-index` would leave the order of the style sheet to decide.
+ */
+export function pointLayer({ hovered, focused, open }: PointRaise): PointLayer {
+  if (open) return "z-1001!";
+  return hovered || focused ? "z-999!" : "z-auto!";
 }
 
 /**
