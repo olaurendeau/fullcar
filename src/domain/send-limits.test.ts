@@ -5,6 +5,7 @@ import {
   CONFIRMATIONS_PER_ADDRESS,
   CONFIRMATIONS_PER_EVENT,
   GLOBAL_SENDS_PER_HOUR,
+  LOGINS_PER_ADDRESS,
   SEND_WINDOW_MS,
   inSendWindow,
   sendLimitReached,
@@ -61,6 +62,22 @@ describe("sendLimitReached", () => {
     });
   });
 
+  // OA4.5 and decision 9: 5 sign-in requests per hour for one address, with or without an account (OA3.5).
+  describe("sign-in requests per address", () => {
+    it("is 5 per hour", () => {
+      expect(LOGINS_PER_ADDRESS).toBe(5);
+    });
+
+    it("lets the 5th request go, and stops the 6th, named as the address limit", () => {
+      expect(sendLimitReached({ login: 4, global: 4 })).toBeNull();
+      expect(sendLimitReached({ login: 5, global: 5 })).toBe("address");
+    });
+
+    it("is named before the global cap", () => {
+      expect(sendLimitReached({ login: 5, global: 50 })).toBe("address");
+    });
+  });
+
   // Coordinator decision 2 on #581: a global cap per hour, below the Brevo quota.
   describe("global cap", () => {
     it("is per hour, and well below the Brevo daily quota", () => {
@@ -71,6 +88,7 @@ describe("sendLimitReached", () => {
     it("is above what one address or one event can send, so that it never stops an ordinary user first", () => {
       expect(GLOBAL_SENDS_PER_HOUR).toBeGreaterThan(CONFIRMATIONS_PER_ADDRESS);
       expect(GLOBAL_SENDS_PER_HOUR).toBeGreaterThan(CONFIRMATIONS_PER_EVENT);
+      expect(GLOBAL_SENDS_PER_HOUR).toBeGreaterThan(LOGINS_PER_ADDRESS);
     });
 
     it("lets the 50th email of the hour go, and stops the 51st, whatever the address", () => {
@@ -78,9 +96,10 @@ describe("sendLimitReached", () => {
       expect(sendLimitReached({ event: 0, address: 0, global: 50 })).toBe("global");
     });
 
-    it("applies to an email without an event or an address limit, such as a sign-in link", () => {
+    it("applies to an email counted only in the global cap, and to a sign-in request below its address limit", () => {
       expect(sendLimitReached({ global: 49 })).toBeNull();
       expect(sendLimitReached({ global: 50 })).toBe("global");
+      expect(sendLimitReached({ login: LOGINS_PER_ADDRESS - 1, global: 50 })).toBe("global");
     });
 
     it("is named after the event and address limits, which tell the user more", () => {

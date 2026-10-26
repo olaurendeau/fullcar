@@ -35,7 +35,7 @@ export type SeatsTaken =
 /** What the server answers `takeSeats`, an unknown event included. */
 type SeatsAnswer =
   | { ok: true }
-  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "noRetour" }
+  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "eventEnded" | "noRetour" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number }
   | { ok: false; error: "personGone"; goneIds: string[] };
 

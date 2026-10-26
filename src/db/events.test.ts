@@ -7,7 +7,7 @@ import { INSERT_ATTEMPTS, findEventById, insertEvent, lockEvent, readAdminTokenH
 import type { Database } from "./schema";
 import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
-import { seedEvent } from "./test-events";
+import { confirmSeededEvent, seedEvent } from "./test-events";
 
 const HASH = hashAdminToken("not a real token");
 
@@ -283,12 +283,17 @@ describe("writeEventFields", () => {
 });
 
 describe("lockEvent", () => {
-  it("gives the event's public fields, and nothing for an unknown id", async () => {
+  it("gives the event's public fields, its account and when it was anonymised, and nothing for an unknown id", async () => {
     await withRollback(async (trx) => {
       const { id } = await seedEvent(trx);
-      expect(await lockEvent(trx, id, "share")).toEqual(await findEventById(trx, id));
-      expect(await lockEvent(trx, id, "noKeyUpdate")).toEqual(await findEventById(trx, id));
+      const fresh = { ...(await findEventById(trx, id)), account_id: null, anonymised_at: null };
+      expect(await lockEvent(trx, id, "share")).toEqual(fresh);
+      expect(await lockEvent(trx, id, "noKeyUpdate")).toEqual(fresh);
       expect(await lockEvent(trx, "Zz9yXw8v", "share")).toBeUndefined();
+
+      const accountId = await confirmSeededEvent(trx, id);
+      await trx.updateTable("event").set({ admin_token_hash: null, anonymised_at: new Date() }).where("id", "=", id).execute();
+      expect(await lockEvent(trx, id, "share")).toMatchObject({ account_id: accountId, anonymised_at: expect.any(Date) });
     });
   });
 

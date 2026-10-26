@@ -36,12 +36,12 @@ async function backendPid(trx: ControlledTransaction<Database>) {
   return rows[0]!.pid;
 }
 
-/** Resolves once some session waits for a lock that the session `pid` holds. */
-async function someoneBlockedBy(db: Kysely<Database>, pid: number) {
+/** Resolves, with its pid, once some session waits for a lock that the session `pid` holds. */
+async function someoneBlockedBy(db: Kysely<Database>, pid: number): Promise<number> {
   for (let attempt = 0; attempt < 120; attempt++) {
     const { rows } = await sql<{ pid: number }>`
       select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
-    if (rows.length > 0) return;
+    if (rows.length > 0) return rows[0]!.pid;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error("no session ever waited for the first one");
@@ -50,12 +50,14 @@ async function someoneBlockedBy(db: Kysely<Database>, pid: number) {
 /**
  * For a concurrency test on committed data: `first` in a transaction (REPEATABLE READ)
  * held open until `second`, run on `db`, waits for one of its locks, then committed.
- * Gives what `second` gives.
+ * `whileWaiting`, given the pid of the session that waits, looks at what it holds before
+ * the commit. Gives what `second` gives.
  */
 export async function whileHeld<T>(
   db: Kysely<Database>,
   first: (trx: Kysely<Database>) => Promise<unknown>,
   second: () => Promise<T>,
+  whileWaiting?: (waitingPid: number) => Promise<void>,
 ): Promise<T> {
   const holder = await db.startTransaction().setIsolationLevel("repeatable read").execute();
   try {
@@ -63,7 +65,8 @@ export async function whileHeld<T>(
     const pid = await backendPid(holder);
     const pending = second();
     pending.catch(() => {});
-    await someoneBlockedBy(db, pid);
+    const waiting = await someoneBlockedBy(db, pid);
+    await whileWaiting?.(waiting);
     await holder.commit().execute();
     return await pending;
   } finally {

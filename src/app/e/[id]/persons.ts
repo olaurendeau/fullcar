@@ -23,6 +23,8 @@ import { lockLegs } from "./retour";
 export type PersonRefusal =
   /** No such event, or a malformed id. */
   | "eventNotFound"
+  /** The event is anonymised (#588): before any other refusal. */
+  | "eventEnded"
   /** The token is malformed or absent, the person is not the device's, or the id is someone else's. */
   | "forbidden"
   /** With a well-formed token, no person of the event has the id: removed since the page showed her (RP5.4). */
@@ -71,7 +73,7 @@ async function writeThenRead(
 ): Promise<PersonOutcome> {
   const written = await atomically(db, async (trx): Promise<Written> => {
     const locked = await lockLegs(trx, eventId, []);
-    if (!locked.ok) return { ok: false, error: "eventNotFound" };
+    if (!locked.ok) return { ok: false, error: locked.error === "eventEnded" ? "eventEnded" : "eventNotFound" };
     return write(trx, locked.legs);
   });
   if (!written.ok && written.error === "eventNotFound") return written;

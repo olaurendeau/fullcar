@@ -431,6 +431,13 @@ La preuve est un test de concurrence (#594), sur données validées, comme ceux 
 Un lien de connexion ou de confirmation ne sert qu'une fois, même quand deux requêtes le
 présentent ensemble : un test de concurrence le prouve aussi.
 
+À partir de #594, `recordSend` (`src/db/email-sends.ts`) prend l'Event en `noKeyUpdate` (#599
+et #602 écrivent sa ligne dans la même transaction : deux `share` s'interbloqueraient en
+passant à l'exclusif), puis l'adresse et le plafond global (`pg_advisory_xact_lock`), et
+l'e-mail part **après** la validation. `useLink` (`src/db/email-links.ts`) s'use en un
+`update … where … and used_at is null … returning`, après l'Event pour une confirmation.
+Les deux ne sont justes qu'en `READ COMMITTED`, le niveau qu'ouvre `atomically`.
+
 ## Jetons, et pourquoi ils sont la pièce critique
 
 Un participant n'a pas de compte, et l'organisateur n'a pas de mot de passe (#581) : **un
@@ -1189,7 +1196,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | jeton d'admin dans le navigateur | `src/app/e/[id]/admin/admin-token-store.ts`, à partir de #597 | seul code navigateur qui touche au jeton d'admin, rangé sous `fullcar:admin-token:{id}` (voir « Session, liens et jeton d'admin ») |
 | jeton de session dans le navigateur | `src/app/session-token.ts` ; `src/components/account/session-visit.tsx`, à partir de #595 | seul code navigateur qui touche au jeton de session, rangé sous `fullcar:session` ; `session-visit.tsx`, monté par le layout racine, envoie la visite à chaque chargement de page |
 | jetons tirés par le serveur | `src/domain/server-token.ts`, à partir de #593 | seul tirage des jetons d'admin, de session et de lien, 128 bits de `randomBytes` ; `newAdminToken` s'en sert |
-| règles du compte | `src/domain/email-address.ts`, `account-rules.ts` et `send-limits.ts`, à partir de #593 | la lecture d'une adresse, les durées (lien de connexion 1 h, de confirmation 7 jours, session 90 jours, inactivité 3 ans) et le résultat d'un lien ; la limite par événement, la limite par adresse et le plafond global horaire, à partir de #623 ; la limite des demandes de connexion par adresse (OA4.5), à partir de #603 |
+| règles du compte | `src/domain/email-address.ts`, `account-rules.ts` et `send-limits.ts`, à partir de #593 | la lecture d'une adresse, les durées (lien de connexion 1 h, de confirmation 7 jours, session 90 jours, inactivité 3 ans) et le résultat d'un lien ; la limite par événement, la limite par adresse et le plafond global horaire, à partir de #623 ; la limite des demandes de connexion par adresse (OA4.5, `LOGINS_PER_ADDRESS`), à partir de #594 |
 | accès à l'espace organisateur | `src/domain/organiser-access.ts`, à partir de #596 | la seule règle d'accès : session du compte de l'événement, ou jeton d'admin du navigateur de création ; seule à produire l'autorisation que `withOrganiserPhones` accepte |
 | retrait d'une personne | `src/app/e/[id]/remove-person.ts` et `src/domain/person-removal.ts`, à partir de #665 | le cas d'usage, sans server action exportée : `removeFromDevice` (le droit par `devicePersonIds`) et `removeAsOrganiser` (le droit par le seul jeton d'admin, puis `organiser-access.ts`, #675), l'ordre des réponses (RP3.4) et celui des verrous (voir « Retirer une personne ») ; le domaine, en fonctions pures : ce que devient chaque leg, et les lignes de la confirmation, lues dans l'état que la page montre |
 | compte dans la base | `src/db/accounts.ts`, `sessions.ts`, `email-links.ts`, `email-sends.ts`, à partir de #594 ; `src/db/my-events.ts`, à partir de #606 | les comptes, les sessions, les liens (un seul usage, même en concurrence) et les envois (limites sous verrou, Event puis adresse) ; Mes événements en agrégats, sans aucun téléphone |
