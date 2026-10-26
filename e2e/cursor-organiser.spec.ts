@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { cursorOf, cursorsOf } from "./cursor";
 import { leaveNoToken } from "./fixtures";
-import { expect, holdActionsWith, organiserPath, seedCrowd, test } from "./organiser";
+import { expect, holdActionsWith, legButton, organiserPath, seedCrowd, test, unfoldLegs } from "./organiser";
 
 /*
  * #347: the pointer of the language-switch design (v3.3.3) in the organiser area, P1.9. The
@@ -18,7 +18,7 @@ const refresh = (page: Page) => panel(page).getByRole("button", { name: FR.refre
 
 test.use({ locale: "fr-FR" });
 
-test("P1.9: on /e/{id}/admin, the fold button, a tile, « Copier », « Partager », « Actualiser » and « Afficher les N autres » have the hand; « Actualiser » reading has the arrow", async ({
+test("P1.9: on /e/{id}/admin, the fold button, a leg's button, « Copier », « Partager », « Actualiser » and « Afficher les N autres » have the hand; « Actualiser » reading has the arrow", async ({
   page,
   db,
   seededEvent,
@@ -28,10 +28,11 @@ test("P1.9: on /e/{id}/admin, the fold button, a tile, « Copier », « Partager
   await page.addInitScript(() => Object.defineProperty(navigator, "share", { configurable: true, value: async () => {} }));
   await page.goto(organiserPath(seededEvent));
   await expect(refresh(page)).toBeVisible();
+  await unfoldLegs(page, ["aller"]);
   expect(
     await cursorsOf({
       "the fold button": page.getByRole("button", { name: FR.panel, exact: true }),
-      "a tile": panel(page).getByRole("button", { name: /sans voiture|place/ }).first(),
+      "a leg's button": legButton(page, "aller"),
       Copier: panel(page).getByRole("button", { name: FR.copy, exact: true }).first(),
       Partager: panel(page).getByRole("button", { name: FR.share, exact: true }),
       Actualiser: refresh(page),
@@ -39,7 +40,7 @@ test("P1.9: on /e/{id}/admin, the fold button, a tile, « Copier », « Partager
     }),
   ).toEqual({
     "the fold button": "pointer",
-    "a tile": "pointer",
+    "a leg's button": "pointer",
     Copier: "pointer",
     Partager: "pointer",
     Actualiser: "pointer",

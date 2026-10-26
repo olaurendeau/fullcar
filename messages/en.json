@@ -169,8 +169,8 @@
         "aller": "On the outbound trip"
       },
       "drive": {
-        "retour": "I drive back too",
-        "aller": "I drive there too"
+        "retour": "I bring people back too",
+        "aller": "I take people there too"
       },
       "stay": "I stay in {driver}’s car",
       "withoutCar": "I need a seat",
@@ -182,7 +182,11 @@
         "retour": "Return departure time",
         "aller": "Outbound departure time"
       },
-      "same": "Same seats and note for both cars."
+      "same": "Same seats and note for both cars.",
+      "hint": {
+        "retour": "The return trip leaves {location} on {date}.",
+        "aller": "The outbound trip goes to {location} on {date}."
+      }
     },
     "location": {
       "aller": "Departure place",
