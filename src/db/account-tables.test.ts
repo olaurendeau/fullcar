@@ -94,7 +94,8 @@ const NORMALISED = [
 
 // What a write that forgot the domain would store: case, spaces, a decomposed accent. A
 // letter outside ASCII reaches the check only by such a raw write, never through the
-// domain: these prove that pg_c_utf8 lowercases it, whatever the database's locale.
+// domain. The test database's locale lowercases it even without pg_c_utf8: the cases under
+// the C collation, at the end of this file, prove the check does not rely on that locale.
 const NOT_NORMALISED = [
   ["an uppercase ASCII letter", "Camille@exemple.fr"],
   ["an uppercase accented letter", "Élodie@exemple.fr"],
@@ -585,6 +586,40 @@ describe("account tables", () => {
       });
       expect(row).toMatchObject({ account_id: null, anonymised_at: null });
       expect(row?.confirmed_at).toBeInstanceOf(Date);
+    });
+  });
+
+  // In the test database's locale (en_US.utf8), lower() already lowercases É and Cyrillic:
+  // the cases above would pass without pg_c_utf8. Here each check, as the database stores
+  // it, is copied onto a temporary table whose column is in the C collation, where lower()
+  // touches nothing but ASCII: only pg_c_utf8 still refuses an uppercase letter outside ASCII.
+  describe.each([
+    ["account", "email", (trx: Trx) => addAccount(trx)],
+    ["email_send", "email", (trx: Trx) => addSend(trx)],
+    ["event", "pending_email", async (trx: Trx) => (await seedEvent(trx)).id],
+  ] as const)("the check on %s.%s, on a column in the C collation", (table, column, addRow) => {
+    // Changing the column's type re-parses the check copied by LIKE in its new collation.
+    async function writeUnderC(trx: Trx, email: string) {
+      const id = await addRow(trx);
+      await sql`create temporary table address_under_c (like ${sql.table(table)} including constraints)`.execute(trx);
+      await sql`alter table address_under_c alter column ${sql.ref(column)} type text collate "C"`.execute(trx);
+      await sql`insert into address_under_c select * from ${sql.table(table)} where id = ${id}`.execute(trx);
+      await sql`update address_under_c set ${sql.ref(column)} = ${email}`.execute(trx);
+      const { rows } = await sql<{ email: string }>`select ${sql.ref(column)} as email from address_under_c`.execute(trx);
+      return rows;
+    }
+
+    it("accepts every address as the domain writes it", async () => {
+      for (const email of NORMALISED) {
+        expect(await withRollback((trx) => writeUnderC(trx, email))).toEqual([{ email }]);
+      }
+    });
+
+    it.each(NOT_NORMALISED)("refuses an address with %s", async (_, email) => {
+      await expect(withRollback((trx) => writeUnderC(trx, email))).rejects.toMatchObject({
+        table: "address_under_c",
+        constraint: `${table}_${column}_normalised`,
+      });
     });
   });
 });
