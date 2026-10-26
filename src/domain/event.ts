@@ -14,6 +14,7 @@ import {
   type WallClock,
   type WallDate,
 } from "./wall-clock";
+import { description } from "./description";
 import { positionOf, type Position } from "./place";
 import { text, type TextError } from "./text";
 
@@ -22,8 +23,11 @@ export const LOCATION_MAX = 120;
 /** How far ahead an event may be, in days: catches a wrong year. */
 const HORIZON_DAYS = 365;
 
-/** The fields that can carry an error, in the order of the form: the first one gets the focus. */
-export const EVENT_FIELDS = ["title", "location", "allerDate", "allerTime", "retourDate", "retourTime"] as const;
+/**
+ * The fields that can carry an error, in the order of the form: the first one gets the focus.
+ * The description comes after the end, before the options (event-description v3, « Écrire »).
+ */
+export const EVENT_FIELDS = ["title", "location", "allerDate", "allerTime", "retourDate", "retourTime", "description"] as const;
 export type EventField = (typeof EVENT_FIELDS)[number];
 
 /** Error codes, translated by the view. */
@@ -45,6 +49,11 @@ export interface EventFields {
   retour: boolean;
   retourDate?: string;
   retourTime?: string;
+  /**
+   * The description, as sent: `undefined` is not sent, anything else is checked by
+   * `description`, so that a value that is not a string is `invalid`, not missing.
+   */
+  description?: unknown;
   boosters?: boolean;
   participation?: boolean;
   stops?: boolean;
@@ -58,10 +67,18 @@ export interface EventHeader {
   locationPosition: Position | null;
   allerAt: WallClock;
   retourAt: WallClock | null;
+  /** The organiser's text, normalised, or `null` (event-description v3: anyone with the link reads it). */
+  description: string | null;
 }
 
-/** A change of the header: without `locationPosition`, the saved position is kept (D6, AL5.6). */
-export type EventChange = Omit<EventHeader, "locationPosition"> & { locationPosition?: Position | null };
+/**
+ * A change of the header: without `locationPosition`, the saved position is kept (D6, AL5.6);
+ * without `description`, the saved description is kept.
+ */
+export type EventChange = Omit<EventHeader, "locationPosition" | "description"> & {
+  locationPosition?: Position | null;
+  description?: string | null;
+};
 
 export interface NewEvent extends EventHeader {
   boostersEnabled: boolean;
@@ -95,6 +112,7 @@ export function eventFieldsOf(input: unknown): EventFields {
     retour: box("retour"),
     retourDate: text("retourDate"),
     retourTime: text("retourTime"),
+    description: fields.description,
     boosters: box("boosters"),
     participation: box("participation"),
     stops: box("stops"),
@@ -163,6 +181,7 @@ export function validateEvent(fields: EventFields, bounds: DateBounds): EventVal
     event: {
       ...result.event,
       locationPosition: result.event.locationPosition ?? null,
+      description: result.event.description ?? null,
       boostersEnabled: fields.boosters === true,
       participationEnabled: fields.participation === true,
       stopsEnabled: fields.stops === true,
@@ -189,7 +208,7 @@ export function validateEventChange(
 
 function validate(fields: EventFields, bounds: DateBounds, kept: KeptDates): EventChangeValidation {
   const errors: EventErrors = {};
-  const checked = {
+  const checked: Partial<Record<EventField, { value: string } | { error: EventError }>> = {
     title: text(fields.title, TITLE_MAX),
     location: text(fields.location, LOCATION_MAX),
     allerDate: date(fields.allerDate, bounds, kept.allerDate),
@@ -209,6 +228,9 @@ function validate(fields: EventFields, bounds: DateBounds, kept: KeptDates): Eve
   // A position the form never sends says more than the text's own error.
   const position = locationPositionOf(fields);
   if ("error" in position) errors.location = position.error;
+  // Not sent, the description is not checked: a change then keeps the saved one.
+  const said = fields.description === undefined ? undefined : description(fields.description);
+  if (said !== undefined && "error" in said) errors.description = said.error;
 
   const { title, location, allerDate, allerTime, retourDate, retourTime } = values;
   const allerAt = allerDate && allerTime ? toWallClock(allerDate, allerTime) : undefined;
@@ -225,5 +247,6 @@ function validate(fields: EventFields, bounds: DateBounds, kept: KeptDates): Eve
   }
   const event: EventChange = { title, location, allerAt, retourAt: retourAt ?? null };
   if ("value" in position && position.value !== undefined) event.locationPosition = position.value;
+  if (said !== undefined && "value" in said) event.description = said.value;
   return { ok: true, event };
 }

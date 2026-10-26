@@ -208,11 +208,13 @@ describe("readEventState", () => {
   });
 
   // Epic #250: an open page applies the header of the state its next action brings back (M7.2).
-  it.each<[string, Partial<NewEvent>, string | null, Position | null]>([
-    ["with a retour", {}, "2026-12-12 18:00:00", null],
-    ["without a retour: no end", { retourAt: null }, null, null],
-    ["with the position of its location", { locationPosition: { lat: 47.65762, lng: -2.74833 } }, "2026-12-12 18:00:00", { lat: 47.65762, lng: -2.74833 }],
-  ])("carries the event's header, %s", async (_, fields, retourAt, locationPosition) => {
+  it.each<[string, Partial<NewEvent>, string | null, Position | null, string | null]>([
+    ["with a retour", {}, "2026-12-12 18:00:00", null, null],
+    ["without a retour: no end", { retourAt: null }, null, null, null],
+    ["with the position of its location", { locationPosition: { lat: 47.65762, lng: -2.74833 } }, "2026-12-12 18:00:00", { lat: 47.65762, lng: -2.74833 }, null],
+    // DS2.8: the state a read or an action gives carries the description.
+    ["DS2.8: with its description", { description: "Rendez-vous à 7 h\nDevant le gymnase" }, "2026-12-12 18:00:00", null, "Rendez-vous à 7 h\nDevant le gymnase"],
+  ])("carries the event's header, %s", async (_, fields, retourAt, locationPosition, description) => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx, { title: "Match à Vannes", location: "Salle du Vincin", ...fields });
       const state = await readEventState(trx, eventId);
@@ -222,6 +224,7 @@ describe("readEventState", () => {
         locationPosition,
         allerAt: "2026-12-12 07:30:00",
         retourAt,
+        description,
       });
     });
   });

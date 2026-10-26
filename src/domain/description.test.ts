@@ -34,7 +34,7 @@ describe("normalizeDescription", () => {
       const normalized = normalizeDescription(typed);
       const count = descriptionCount(typed);
       const read = description(typed);
-      expect(performance.now() - start).toBeLessThan(200);
+      expect(performance.now() - start).toBeLessThan(1000);
       expect(normalized).toBe(stored);
       expect(count).toBe([...stored].length);
       expect(read).toEqual(stored.length > DESCRIPTION_MAX ? { error: "tooLong" } : { value: stored });

@@ -7,6 +7,7 @@ import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
 import { DevicePersons } from "./device-persons";
 import { EventDates } from "./event-dates";
 import type { LegMap, MapHint } from "./event-map";
+import { pageSettled } from "./event-map-state";
 import { LegPanel, type BoardDevice } from "./leg-panel";
 import { LegTabs } from "./leg-tabs";
 
@@ -23,6 +24,8 @@ export interface EventViewProps extends EventHeader {
   onTab: (leg: Leg) => void;
   /** On `/e/{id}/admin` once the link is checked: the organiser's sentence, while the place has no position (#485). */
   hint?: MapHint;
+  /** On `/e/{id}/admin`, while the first check of the link runs: the page is not settled (#653). */
+  linkChecking?: boolean;
 }
 
 /** A leg's state; one the board does not have is empty. */
@@ -36,19 +39,24 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
  * alone, without tabs, when there is no retour (C5.4). Each leg shows its coverage, its cars
  * and its persons without a car (#86).
  * A long title or place wraps anywhere rather than scrolling sideways (C1.10).
- * When the place has a position, each leg has its map, folded on each load: one open or folded
- * state for the page, in memory only, which outlives the remount of a leg's panel (#478), and
- * folds when the position goes (#482). Without a position, each leg has the organiser's
+ * When the place has a position, each leg has its map, open on each arrival (#653): one open or
+ * folded state for the page, in memory only, which outlives the remount of a leg's panel (#478),
+ * and folds when the position goes (#482). Without a position, each leg has the organiser's
  * sentence instead, when `hint` is given (#485).
+ * The page is settled once the device's persons are read, or none, or failed, and on `/admin`
+ * once the first check of the link is over: from then on, for good, a map may start (v29).
  */
-export function EventView({ title, location, locationPosition, allerAt, retourAt, board, device, messageBar, tab, onTab, hint }: EventViewProps) {
+export function EventView({ title, location, locationPosition, allerAt, retourAt, board, device, messageBar, tab, onTab, hint, linkChecking = false }: EventViewProps) {
   const t = useTranslations("Event.legs");
   const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
-  const [mapOpen, setMapOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(true);
   // The position gone, the map is folded: one that comes back is a button, folded (« Mises à jour et focus »).
   if (!locationPosition && mapOpen) setMapOpen(false);
+  // Settled once, settled for good: a read retried later does not hold the maps again.
+  const [settled, setSettled] = useState(false);
+  if (!settled && pageSettled(device.status, linkChecking)) setSettled(true);
   const map: LegMap | undefined = locationPosition
-    ? { location, position: locationPosition, open: mapOpen, onToggle: () => setMapOpen((open) => !open) }
+    ? { location, position: locationPosition, open: mapOpen, settled, onToggle: () => setMapOpen((open) => !open) }
     : undefined;
 
   return (

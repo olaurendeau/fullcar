@@ -32,6 +32,7 @@ export async function insertEvent(
         location_lng: event.locationPosition?.lng ?? null,
         aller_at: event.allerAt,
         retour_at: event.retourAt,
+        description: event.description,
         boosters_enabled: event.boostersEnabled,
         participation_enabled: event.participationEnabled,
         stops_enabled: event.stopsEnabled,
@@ -67,6 +68,7 @@ const PUBLIC_EVENT_COLUMNS = [
   "location_lng",
   "aller_at",
   "retour_at",
+  "description",
   "boosters_enabled",
   "participation_enabled",
   "stops_enabled",
@@ -101,10 +103,11 @@ export async function lockEvent(db: Kysely<Database>, id: string, lock: EventLoc
 
 /**
  * What the organiser changes: the options and the token are not among them. Without
- * `locationPosition`, the position stored stays as it is.
+ * `locationPosition`, the position stored stays as it is; without `description`, the
+ * description stored does.
  */
 export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" | "retourAt"> &
-  Partial<Pick<NewEvent, "locationPosition">>;
+  Partial<Pick<NewEvent, "locationPosition" | "description">>;
 
 /**
  * Whether the event existed, and now has these fields. A retour removed has its Rides and
@@ -112,13 +115,14 @@ export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" 
  * (`removeRetour`): no row of the retour stays under a `retour_at` null.
  */
 export async function writeEventFields(db: Kysely<Database>, id: string, fields: EventFieldsChange): Promise<boolean> {
-  const { locationPosition: position } = fields;
+  const { locationPosition: position, description } = fields;
   const result = await db
     .updateTable("event")
     .set({ title: fields.title, location: fields.location, aller_at: fields.allerAt, retour_at: fields.retourAt })
     .$if(position !== undefined, (update) =>
       update.set({ location_lat: position?.lat ?? null, location_lng: position?.lng ?? null }),
     )
+    .$if(description !== undefined, (update) => update.set({ description }))
     .where("id", "=", id)
     .executeTakeFirst();
   return Number(result.numUpdatedRows) > 0;

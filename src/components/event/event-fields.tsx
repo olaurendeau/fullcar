@@ -22,8 +22,12 @@ import type { PlaceValue } from "./place-field-state";
  * sends its values whole, so the place and its position always leave together (« Un lieu, une
  * valeur »); and a merge (M6.1) or a comparison (M2.5) that reads the values sees the couple, where
  * a position beside them was dropped (review of #515). The label never leaves the browser.
+ * The description is its text as typed, empty without one: the rules normalise it as they check it.
  */
-export type EventFieldValues = Pick<Required<SentFields>, EventField | "retour"> & { locationPosition: Position | null };
+export type EventFieldValues = Pick<Required<SentFields>, Exclude<EventField, "description"> | "retour"> & {
+  locationPosition: Position | null;
+  description: string;
+};
 
 /**
  * The fields' state. `retourDateFollows`: the retour date follows the aller date until it is
@@ -41,7 +45,17 @@ export interface EventFieldsState {
 
 /** The creation's start: every text empty, Retour checked (C1.1). */
 export const BLANK_EVENT_FIELDS: EventFieldsState = {
-  values: { title: "", location: "", locationPosition: null, allerDate: "", allerTime: "", retourDate: "", retourTime: "", retour: true },
+  values: {
+    title: "",
+    location: "",
+    locationPosition: null,
+    allerDate: "",
+    allerTime: "",
+    retourDate: "",
+    retourTime: "",
+    retour: true,
+    description: "",
+  },
   retourDateFollows: true,
 };
 
@@ -49,9 +63,9 @@ export const BLANK_EVENT_FIELDS: EventFieldsState = {
  * The fields of a form opened on saved values (organizer-view v3.3.6, « Le formulaire »): the box
  * Retour checked if and only if there is a retour. The end date follows the start date when both
  * were on the same day (decision 43), or when there is no end yet: checking the box shows the
- * start's date, then the end's time empty (M1.6).
+ * start's date, then the end's time empty (M1.6). Without a description, its field is empty.
  */
-export function loadedEventFields({ title, location, locationPosition, allerAt, retourAt }: EventHeader): EventFieldsState {
+export function loadedEventFields({ title, location, locationPosition, allerAt, retourAt, description }: EventHeader): EventFieldsState {
   const aller = wallClockParts(allerAt);
   const retour = retourAt === null ? undefined : wallClockParts(retourAt);
   return {
@@ -64,6 +78,8 @@ export function loadedEventFields({ title, location, locationPosition, allerAt, 
       retour: retour !== undefined,
       retourDate: retour?.date ?? aller.date,
       retourTime: retour?.time ?? "",
+      // A header from a server before the description has none (`isHeader`).
+      description: description ?? "",
     },
     retourDateFollows: retour === undefined || retour.date === aller.date,
   };
@@ -149,6 +165,7 @@ export function withSavedFields(loaded: EventFieldValues, saved: EventFieldsStat
       retour: kept("retour"),
       retourDate: kept("retourDate"),
       retourTime: kept("retourTime"),
+      description: kept("description"),
     };
     const typed = state.values.retourDate !== loaded.retourDate;
     const retourDateFollows = typed ? state.retourDateFollows : saved.retourDateFollows;
@@ -204,7 +221,7 @@ export function EventFormFields({
     return message ? { id: idOf(`${name}-error`), message: t(`errors.${message.key}`, message.values) } : undefined;
   };
 
-  const text = (name: EventField, type: "text" | "date" | "time" = "text") => {
+  const text = (name: Exclude<EventField, "description">, type: "text" | "date" | "time" = "text") => {
     const error = errorOf(name);
     const leg = name.startsWith("aller") ? "aller" : name.startsWith("retour") ? "retour" : undefined;
     const describedBy = [error && error.id, leg && notes[leg] && idOf(`${leg}-note`)].filter(Boolean).join(" ");

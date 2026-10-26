@@ -1,6 +1,7 @@
 import { sql, type Kysely, type Transaction } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hashAdminToken } from "@/domain/admin-token";
+import { DESCRIPTION_MAX } from "@/domain/description";
 import type { EventFields } from "@/domain/event";
 import { isPublicId } from "@/domain/public-id";
 import type { Database } from "@/db/schema";
@@ -204,6 +205,39 @@ describe("createEvent", () => {
       ["sent without a location", { ...valid, location: undefined, locationPosition: { lat: 45.7581, lng: 4.6894 } }],
     ])("creates nothing from a position %s: invalid, on the location", async (_, fields) => {
       expect(await refused(fields)).toEqual({ location: "invalid" });
+    });
+  });
+
+  describe("event-description: the description", () => {
+    it("stores none without a description, or with one invisible only", async () => {
+      expect((await created(valid)).row.description).toBeNull();
+      expect((await created({ ...valid, description: " \r\n\t\u00a0" })).row.description).toBeNull();
+    });
+
+    it(`DS1.6: stores ${DESCRIPTION_MAX} code points, an emoji counting as one; refuses one more and creates nothing`, async () => {
+      const full = `${"🚗".repeat(10)}${"a".repeat(DESCRIPTION_MAX - 10)}`;
+      expect((await created({ ...valid, description: full })).row.description).toBe(full);
+      expect(await refused({ ...valid, description: `${full}b` })).toEqual({ description: "tooLong" });
+    });
+
+    // The migration writes its own limit, and the domain normalises before it counts.
+    it(`stores a raw text over ${DESCRIPTION_MAX} that normalises to exactly ${DESCRIPTION_MAX}: the domain and the check agree`, async () => {
+      const half = DESCRIPTION_MAX / 2 - 1;
+      const stored = `${"🚗".repeat(10)}${"a".repeat(half - 10)}\n\n${"b".repeat(half)}`;
+      const raw = `  ${stored.replace("\n\n", "   \r\n\r\n\r\n\r\n")}\t\n\n`;
+      expect([...stored].length).toBe(DESCRIPTION_MAX);
+      expect([...raw].length).toBeGreaterThan(DESCRIPTION_MAX);
+      expect((await created({ ...valid, description: raw })).row.description).toBe(stored);
+    });
+
+    it.each<[string, unknown]>([
+      ["a NUL character", "Rendez-vous\u0000à 7 h"],
+      ["a number", 42],
+      ["an array", ["Rendez-vous"]],
+      ["an object", { text: "Rendez-vous" }],
+      ["a boolean", true],
+    ])("DS1.8: refuses %s as invalid, without an exception, and creates nothing", async (_, description) => {
+      expect(await refused({ ...valid, description })).toEqual({ description: "invalid" });
     });
   });
 

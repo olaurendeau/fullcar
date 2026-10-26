@@ -2,7 +2,7 @@
  * What the map's end-to-end tests share (event-map v18): an event of the test's own at
  * `placeOf` its id, its cars around it, the map opened, and where its points, lines and flag are.
  */
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
@@ -10,6 +10,7 @@ import { seedPerson, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { generatePublicId } from "@/domain/public-id";
+import { holdActions, holdToken, newToken } from "./device";
 import { expect, test as base } from "./fixtures";
 import { placeOf } from "./tiles";
 
@@ -62,7 +63,10 @@ export async function seedParking(db: Kysely<Database>, eventId: string, place: 
   await seedCar(db, eventId, "Paul", { position: { ...parking }, location: "Parking du marché", departureTime: "10:00:00", seats: 2 });
 }
 
-/** Opens the map of the shown leg, clicked again only while it stays folded (a click before hydration), until a tile shows. */
+/**
+ * The map of the shown leg, open since the arrival (#653), clicked only while it stays folded,
+ * its box scrolled into the screen, where it starts once the page is settled, until a tile shows.
+ */
 export async function openMap(page: Page, name: string): Promise<Locator> {
   const button = page.getByRole("tabpanel").getByRole("button", { name: "Carte", exact: true });
   await expect(async () => {
@@ -70,8 +74,53 @@ export async function openMap(page: Page, name: string): Promise<Locator> {
     await expect(button).toHaveAttribute("aria-expanded", "true", { timeout: 500 });
   }).toPass();
   const map = page.getByRole("region", { name, exact: true });
-  await expect(map.locator(".leaflet-tile-loaded").first()).toBeVisible();
+  // Scrolled again while « Vos inscriptions » or the organiser area, arriving above, push it down.
+  await expect(async () => {
+    await map.scrollIntoViewIfNeeded();
+    await expect(map.locator(".leaflet-tile-loaded").first()).toBeVisible({ timeout: 1_000 });
+  }).toPass();
   return map;
+}
+
+/** A tile request, to our route. */
+export const isTile = (request: Request) => new URL(request.url()).pathname.startsWith("/tuiles/");
+
+/** How many of `requests` brought Leaflet: its class names, in its script and in its style sheet, none of ours has. */
+export async function leafletCount(requests: Request[]): Promise<number> {
+  const texts = await Promise.all(
+    requests
+      .filter((request) => ["script", "stylesheet"].includes(request.resourceType()))
+      .map((request) => request.response().then((response) => response?.text() ?? "").catch(() => "")),
+  );
+  return texts.filter((text) => text.includes("leaflet-control-zoom")).length;
+}
+
+/** From now on, the page's requests: how many brought Leaflet, and how many asked for a tile. */
+export function watchMap(page: Page) {
+  const requests: Request[] = [];
+  page.on("request", (request) => requests.push(request));
+  return { leaflet: () => leafletCount(requests), tiles: () => requests.filter(isTile).length };
+}
+
+/** Once what the page did so far has sent what it would: two frames for its effects, then half a second. */
+export async function idle(page: Page) {
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await page.waitForTimeout(500);
+}
+
+/**
+ * Arrives at event `id`'s `path` with the map not started (CA1.20): the device has a token of
+ * its own, and every server action, the read of its persons first, is held, so that the page is
+ * not settled. The read sent, the page is hydrated; `settle` lets the actions go.
+ */
+export async function arriveWaiting(page: Page, id: string, path = `/e/${id}`): Promise<() => void> {
+  await holdToken(page, id, newToken());
+  const settle = await holdActions(page);
+  const read = page.waitForRequest((request) => request.method() === "POST" && !!request.headers()["next-action"]);
+  await page.goto(path);
+  await read;
+  await expect(page.locator(".leaflet-container")).toHaveCount(0);
+  return settle;
 }
 
 /** The car points of `map`, in the DOM's order: an open bubble's buttons are not points. */

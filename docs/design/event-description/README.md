@@ -9,6 +9,7 @@
   l’événement », M2 à M8 ; les legs repliés, #648), `organizer-account` v4 (création sur
   `/nouveau`, jour 30 OA8, e-mails), `home` v2.1 (`/nouveau`), `event-map` (la Carte d’un leg),
   `visual-identity` (en cours : les couleurs de la maquette sont celles d’aujourd’hui).
+- Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
 
 ## Réponses (enregistrées sur #654)
 

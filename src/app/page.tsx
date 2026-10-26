@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { BrandMark } from "@/components/brand/brand-mark";
 import { ContactFooter } from "@/components/contact/contact-footer";
 import { Button } from "@/components/ui/button";
 import { publicPageMetadata } from "./site";
@@ -20,7 +21,11 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 p-4">
       <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-bold">{t("title")}</h1>
+        {/* The mark beside the h1, outside it: the h1's name stays « Fullcar » (#651, VI4.3). */}
+        <div className="flex items-start gap-2.5">
+          <BrandMark className="size-9" />
+          <h1 className="text-3xl font-bold">{t("title")}</h1>
+        </div>
         <p className="text-muted-foreground">{t("tagline")}</p>
       </div>
       <p>{t("intro")}</p>
@@ -36,7 +41,7 @@ export default function Home() {
               {/* The list already gives each item its rank to a screen reader. */}
               <span
                 aria-hidden="true"
-                className="row-span-2 grid size-7 place-items-center rounded-full bg-muted text-sm font-semibold"
+                className="row-span-2 grid size-7 place-items-center rounded-full bg-brand-soft text-sm font-semibold text-primary"
               >
                 {index + 1}
               </span>

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DESCRIPTION_MAX } from "./description";
 import {
   EVENT_FIELDS,
   LOCATION_MAX,
@@ -48,9 +49,34 @@ describe("validateEvent", () => {
       allerAt: "2026-12-12 07:30:00",
       retourAt: "2026-12-12 18:00:00",
       locationPosition: null,
+      description: null,
       boostersEnabled: false,
       participationEnabled: false,
       stopsEnabled: false,
+    });
+  });
+
+  describe("event-description: the description, optional", () => {
+    it("is null when none is sent, or when it is invisible only", () => {
+      expect(eventOf(valid).description).toBeNull();
+      expect(eventOf({ ...valid, description: " \n\t\u200b " }).description).toBeNull();
+    });
+
+    it("is stored normalised", () => {
+      expect(eventOf({ ...valid, description: "  Rendez-vous  \r\n\r\n\r\nà 7 h\n" }).description).toBe("Rendez-vous\n\nà 7 h");
+    });
+
+    it(`DS1.6: accepts ${DESCRIPTION_MAX} code points after normalisation, an emoji counting as one, and refuses one more`, () => {
+      const full = `${"🚗".repeat(10)}${"a".repeat(DESCRIPTION_MAX - 10)}`;
+      expect(eventOf({ ...valid, description: `\n${full}  \n` }).description).toBe(full);
+      expect(errorsOf({ ...valid, description: `${full}b` })).toEqual({ description: "tooLong" });
+    });
+
+    it("DS1.8: refuses a NUL, or a value that is not a string, as invalid", () => {
+      expect(errorsOf({ ...valid, description: "Rendez-vous\u0000" })).toEqual({ description: "invalid" });
+      for (const forged of [42, ["Rendez-vous"], { text: "x" }, true]) {
+        expect(errorsOf({ ...valid, description: forged })).toEqual({ description: "invalid" });
+      }
     });
   });
 
@@ -249,6 +275,7 @@ describe("validateEventChange", () => {
     allerAt: "2026-10-12 07:30:00",
     retourAt: "2026-10-12 18:00:00",
     locationPosition: null,
+    description: null,
   };
   const kept: EventFields = {
     title: before.title,
@@ -356,7 +383,7 @@ describe("validateEventChange", () => {
           { ...valid, allerDate: "2027-10-21", retourDate: "2027-10-21" },
           deviceBounds(at),
         );
-        const created: EventHeader = { title, location, allerAt, retourAt, locationPosition };
+        const created: EventHeader = { title, location, allerAt, retourAt, locationPosition, description: null };
         process.env.TZ = "America/Toronto";
         const montreal = deviceBounds(at);
         expect(montreal.max).toBe("2027-10-20");
@@ -397,6 +424,22 @@ describe("validateEventChange", () => {
       expect(changeErrors({ ...kept, location: undefined, locationPosition: LYON })).toEqual({ location: "invalid" });
     });
   });
+
+  describe("the description", () => {
+    it("carries the description sent, normalised, or null to remove it", () => {
+      expect(changed({ ...kept, description: " Rendez-vous \n" }).description).toBe("Rendez-vous");
+      expect(changed({ ...kept, description: "   " }).description).toBeNull();
+    });
+
+    it("without a description sent, carries none, so that the saved one is kept", () => {
+      expect(changed(kept)).not.toHaveProperty("description");
+    });
+
+    it("DS1.6, DS1.8: refuses it as the creation does", () => {
+      expect(changeErrors({ ...kept, description: "a".repeat(DESCRIPTION_MAX + 1) })).toEqual({ description: "tooLong" });
+      expect(changeErrors({ ...kept, description: 42 })).toEqual({ description: "invalid" });
+    });
+  });
 });
 
 describe("eventFieldsOf: a forged request", () => {
@@ -414,6 +457,12 @@ describe("eventFieldsOf: a forged request", () => {
     expect(eventFieldsOf({ ...valid, locationPosition: null }).locationPosition).toBeNull();
     expect(eventFieldsOf({ ...valid, locationPosition: "x" }).locationPosition).toBe("x");
     expect(eventFieldsOf(valid).locationPosition).toBeUndefined();
+  });
+
+  it("passes the description on as sent, for the rules to check: a forged one is invalid, not missing", () => {
+    expect(eventFieldsOf({ ...valid, description: "Rendez-vous" }).description).toBe("Rendez-vous");
+    expect(eventFieldsOf({ ...valid, description: 42 }).description).toBe(42);
+    expect(eventFieldsOf(valid).description).toBeUndefined();
   });
 
   it.each([null, undefined, "title", 42, true])("reads %s as an empty form", (input) => {
@@ -441,7 +490,8 @@ describe("eventFieldsOf: a forged request", () => {
 
 describe("firstInvalidField", () => {
   it("follows the order of the form, for the focus", () => {
-    expect(EVENT_FIELDS).toEqual(["title", "location", "allerDate", "allerTime", "retourDate", "retourTime"]);
+    expect(EVENT_FIELDS).toEqual(["title", "location", "allerDate", "allerTime", "retourDate", "retourTime", "description"]);
+    expect(firstInvalidField({ description: "tooLong", retourTime: "required" })).toBe("retourTime");
     expect(firstInvalidField({ retourTime: "required", location: "tooLong" })).toBe("location");
     expect(firstInvalidField({ retourDate: "tooLate", allerTime: "invalid" })).toBe("allerTime");
     expect(firstInvalidField({})).toBeUndefined();

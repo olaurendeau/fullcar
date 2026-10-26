@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
-import { findPublicEvent } from "./event";
+import { findPublicEvent, headerFrom } from "./event";
 
 /** A connection that fails the test as soon as anything reaches for it. */
 const untouchable = new Proxy({} as Kysely<Database>, {
@@ -41,6 +41,7 @@ describe("findPublicEvent", () => {
         retour_at: null,
         location_lat: null,
         location_lng: null,
+        description: null,
         boosters_enabled: false,
         participation_enabled: false,
         stops_enabled: false,
@@ -52,6 +53,17 @@ describe("findPublicEvent", () => {
     await withRollback(async (trx) => {
       await seedEvent(trx);
       expect(await findPublicEvent(trx, "Zz9yXw8v")).toBeUndefined();
+    });
+  });
+});
+
+describe("headerFrom", () => {
+  it("carries the description stored, or null without one", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx, { description: "Rendez-vous à 7 h\nDevant le gymnase" });
+      const { id: bare } = await seedEvent(trx);
+      expect(headerFrom((await findPublicEvent(trx, id))!).description).toBe("Rendez-vous à 7 h\nDevant le gymnase");
+      expect(headerFrom((await findPublicEvent(trx, bare))!).description).toBeNull();
     });
   });
 });
