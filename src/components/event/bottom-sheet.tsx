@@ -44,12 +44,16 @@ function focusFirstIn(sheet: HTMLElement) {
 
 /**
  * Escape from a place field whose list is open closes that list, not the sheet (AL1.5): Radix
- * hears it on the document before the field does. The same rule for every sheet.
+ * hears it on the document before the field does. The same rule for every sheet. Escape from a
+ * confirmation opened over the sheet (« Retirer de l’événement », RP1.3) closes that confirmation
+ * alone, never the sheet under it: just opened, Radix may not have counted the confirmation as
+ * the top layer yet.
  */
 function keepOpenForList(event: KeyboardEvent) {
   const from = event.target;
   const listOpen = from instanceof Element && from.getAttribute("role") === "combobox" && from.getAttribute("aria-expanded") === "true";
-  if (listOpen) event.preventDefault();
+  const fromConfirmation = from instanceof Element && from.closest('[role="alertdialog"]') !== null;
+  if (listOpen || fromConfirmation) event.preventDefault();
 }
 
 /** Where `SheetBar` puts what it is given: the bar's messages, and its buttons above « Fermer ». */
