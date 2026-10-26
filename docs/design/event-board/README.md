@@ -28,9 +28,720 @@
 - v4.4.6 : quand le retour est supprimé, l’échec hors ligne ou en erreur d’une offre sur les
   deux legs reste, réduit à l’aller (décision du propriétaire sur #267, construite par PR
   #371), et cette réduction n’est pas annoncée (#372). Voir « Ce qui change en v4.4.6 »
+- v4.5 : l’autre leg de « Proposer une voiture » se lit depuis l’événement. Les choix
+  deviennent « Je ramène aussi des passagers » et « J’emmène aussi des passagers », et une
+  ligne dit où et quand part l’autre leg (décision du propriétaire, #649). Voir « Ce qui
+  change en v4.5 »
+- v4.6 : sur téléphone, une feuille qui porte un champ de saisie prend toute la hauteur
+  visible ; toute feuille garde son titre en haut et ses boutons en bas, au-dessus du
+  clavier, et seul son corps défile (#650). Aucun mot nouveau. Voir « Ce qui change en
+  v4.6 »
 - Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
   la maquette `language-switch` depuis sa v3 (#236)
 - Page : `index.html` (autonome, maquettes à 360 px de large)
+
+## Ce qui change en v4.6 : les feuilles sur téléphone et le clavier (#650)
+
+Issue : https://github.com/olaurendeau/fullcar/issues/650. Constat du propriétaire, le
+25/10/2026, sur iPhone (Safari récent, clavier ouvert) : dans « Modifier {prénom} », la
+barre de remplissage automatique et le clavier recouvrent « Valider ». Dans « Modifier la
+voiture », le clavier recouvre la suite du formulaire. Il signale aussi « de petits soucis de
+scroll ». Réponses du propriétaire sur #650, le 26/10 : pleine hauteur pour les seules
+feuilles à champ de saisie (question 1, a) ; pas de vérification sur iPhone avant la fusion,
+elle se fait après le déploiement, sans bloquer (question 2) ; le geste « retour » est
+l’issue #656 (question 3). Aucun mot n’est ajouté ni changé : cette révision ne touche qu’à
+la place des choses. La v4.6 (suite) applique la revue de design de la v4.6 (cinq
+bloquants, dont deux tranchés par le coordinateur, et sept suggestions).
+
+### Le problème
+
+Une personne qui modifie son prénom, ou sa voiture, sur un iPhone ne peut pas valider sans
+fermer d’abord le clavier. Elle ne voit pas « Valider ». Elle doit deviner qu’il faut fermer
+le clavier, puis faire défiler la feuille, ou fermer la feuille et recommencer. Sur Android,
+Chrome se comporte de la même façon par défaut.
+
+### Ce qui se passe aujourd’hui (`main`, `d81e745`)
+
+- Toutes les feuilles de la page passent par `BottomSheet` (`src/components/event/bottom-sheet.tsx`),
+  sur `SheetContent side="bottom"` : `fixed bottom-0`, hauteur `h-auto`, plafonnée à
+  `max-h-dvh`, et **toute la feuille défile d’un bloc** (`overflow-y-auto` sur le contenu) :
+  le titre, les champs et les boutons défilent ensemble.
+- Les formulaires mettent « Valider » (et « Annuler ») **à la fin de leur corps**. Seul
+  « Fermer » est dans le pied (`SheetFooter`), avec « Placer n personnes » pour la feuille
+  d’une place libre. Le pied défile lui aussi.
+- Une feuille plus courte que l’écran laisse voir le tableau au-dessus, sous un voile flouté
+  (`bg-black/10 backdrop-blur-xs`). Un toucher sur ce voile ferme la feuille, et ce qui a
+  été tapé est perdu.
+- **Le clavier sur iPhone.** Safari ne réduit pas la page quand le clavier s’ouvre. Il ne
+  connaît pas `interactive-widget` (caniuse : non pris en charge de 3.2 à 27.2), et `dvh`
+  ne compte pas le clavier. Un élément `fixed; bottom: 0` reste donc collé au bas de la
+  page, **sous le clavier**. Safari décale la zone visible juste assez pour montrer le champ
+  qui a le focus, jamais le bouton. Mesuré sur la capture 1 (iPhone de 375 × 812 pt, barre
+  d’adresse en haut) : la zone visible va de 100 à 469 pt, soit 369 pt. La barre de
+  remplissage flottante d’iOS couvre en plus environ 298 à 355 pt de cette zone, et
+  « Valider » est juste dessous.
+- **Les « petits soucis de scroll ».** Clavier ouvert, deux défilements se disputent le même
+  doigt : celui de la feuille, et le décalage de la zone visible par Safari, que le
+  verrouillage de Radix (`react-remove-scroll`) n’empêche pas. En bout de course, le rebond
+  emporte le titre et les boutons avec le reste. Après la fermeture du clavier, la page
+  peut rester décalée.
+- `src/app/layout.tsx` : `viewport` = `width=device-width, initial-scale=1`, sans
+  `interactive-widget` ni `viewport-fit`.
+- La liste des propositions d’un lieu (`place-field.tsx`) se règle déjà sur
+  `window.visualViewport` (AL1.11).
+- Les champs sont en `text-base` (16 px) sur téléphone : Safari ne zoome pas au focus. Ce
+  point ne change pas.
+
+### Les feuilles, une par une
+
+Hauteurs **estimées d’après les classes** (± 10 px ; titre sur une ligne, en français,
+sans erreur), à 360 × 640, la largeur de référence sur la hauteur la plus courte qu’on
+teste. Vérification sur la capture 1 : « Valider » y est à 246 pt du haut de la feuille,
+comme le calcul. Le développeur mesure les vraies valeurs dans les tests K1.
+
+| feuille | ouverte depuis | champ de saisie | hauteur aujourd’hui à 360 × 640 | où sont ses boutons aujourd’hui | iPhone, clavier ouvert, aujourd’hui |
+|---|---|---|---|---|---|
+| « Tom · Aller » (cellule) | une cellule de « Vos inscriptions » | non | ≈ 346 px (3 actions) | les actions dans le corps, « Fermer » en pied | sans objet |
+| « Claire » (une personne) | un prénom de « Vos inscriptions » | non | ≈ 234 px | « Modifier » dans le corps, « Fermer » en pied | sans objet |
+| « Modifier Claire » | « Modifier » de la feuille d’une personne | oui | ≈ 366 px | « Valider » à la fin du corps, « Fermer » en pied | « Valider » sous la barre de remplissage, « Fermer » sous le clavier (capture 1) |
+| « Ajouter une personne » | le bouton d’un onglet | oui | ≈ 490 px ; ≈ 600 px avec l’avis « Cet appareil ne pourra pas s’en souvenir » | « Valider » à la fin du corps, « Fermer » en pied | « Valider » et « Fermer » sous le clavier |
+| « Qui monte dans la voiture de Sophie ? » | une place libre | non | ≈ 408 px à 3 personnes ; ≈ 650 px à 8, et tout défile | « Placer n personnes » et « Fermer » en pied, qui défile | sans objet |
+| « Ajouter une personne » (première inscription depuis une place libre, `RegisterSheet`, C5.4) | une place libre, sur un appareil sans personne | oui | ≈ 525 px (« Cette personne prendra une place dans la voiture de {driver}. » et « Sans compte ni e-mail… » sous le titre) | « Valider » à la fin du corps, « Fermer » en pied | « Valider » et « Fermer » sous le clavier |
+| « Ajouter une personne » (dans la feuille d’une place, `SeatSheet`) | « Ajouter une personne » de la feuille « Qui monte… » | oui | ≈ 440 px | « Valider » et « Annuler » à la fin du corps, pas de « Fermer » | sous le clavier |
+| « Proposer une voiture » | le bouton d’un onglet | oui | ≈ 1 190 px avec 3 personnes et le retour ; ≈ 1 440 px avec « Je ramène aussi des passagers » ; plafonnée à 640 px, tout défile | « Valider » vers 1 050 px dans le défilement, « Fermer » après | sous le clavier, au bout du défilement |
+| « Modifier la voiture » | « Modifier » d’une fiche | oui | ≈ 640 px, tout l’écran à 1 px près | « Valider » à la fin du corps, « Fermer » au ras du bas | le clavier couvre « Places, sans compter qui conduit » et la suite (capture 2) |
+| « Qui sort de la voiture ? » (une étape de « Modifier la voiture », dans la même feuille) | « Valider » de « Modifier la voiture », places sous le nombre de passagers | non, mais les changements tapés attendent leur envoi | ≈ 400 px avec 3 passagers : la feuille rétrécit, sous elle le voile, et un toucher dessus perd les changements | « Valider » et « Annuler » à la fin du corps, l’alerte au-dessus des cases | sans objet (le clavier se ferme au toucher sur « Valider ») |
+| « Modifier l’événement » (organisateur) | « Modifier l’événement » | oui | ≈ 600 px ; ≈ 680 px avec les phrases « … gardent leur heure » | « Valider » et « Annuler » à la fin du corps, pas de « Fermer » | sous le clavier |
+
+Les deux boîtes de confirmation (« Retirer la voiture ? », « Supprimer le retour ? ») ne
+sont pas des feuilles : elles sont centrées, sans champ, et ne changent pas.
+
+### La règle (v4.6)
+
+**1. Trois parties.** Toute feuille a, de haut en bas :
+- **l’en-tête** : le titre et sa description. Il reste en haut ;
+- **le corps** : ce qui est entre les deux. **Seul le corps défile** ;
+- **la barre d’actions** : le bouton principal de la feuille et ses messages, puis
+  « Fermer » ou « Annuler ». Elle reste en bas. Ses boutons gardent leur forme et leur ordre
+  d’aujourd’hui : empilés, pleine largeur, 44 px, le principal en haut. L’ordre du
+  document et du focus ne change pas : derniers champs, message, bouton principal, puis
+  « Fermer » ou « Annuler ». Entrée dans un champ envoie toujours le formulaire.
+
+Ce qui va dans la barre, feuille par feuille :
+
+| feuille | barre d’actions |
+|---|---|
+| « Modifier {prénom} », « Ajouter une personne » (depuis un onglet, et première inscription depuis une place libre, `RegisterSheet`) | message d’échec, « Valider », « Fermer » |
+| « Ajouter une personne » dans la feuille d’une place (`SeatSheet`) | message d’échec, « Valider », « Annuler » |
+| « Proposer une voiture », « Modifier la voiture » | message d’échec ou « Quelqu’un a pris ou libéré une place entre-temps : rien n’a changé. … » (`RideChanges.leaving.changed`), « Valider », « Fermer » |
+| « Qui sort de la voiture ? » | son alerte (`RideChanges.leaving.changed`, un échec), « Valider », « Annuler ». L’alerte quitte le dessus des cases pour la barre, y compris sur ordinateur (règle 9). La ligne « n cochée(s) sur m » reste sous la liste, dans le corps |
+| « Modifier l’événement » | l’alerte d’échec, les avis (`changed`, `invalid`, `eventNotFound`, suppression tardive), « Envoi en cours… », « Valider », « Annuler » |
+| « Qui monte dans la voiture de {driver} ? » | inchangée : message, « Placer n personnes », « Fermer » |
+| « {prénom} · {leg} », « {prénom} » | « Fermer ». Les actions de la cellule et « Modifier » restent dans le corps : ce sont des choix, pas l’action de la feuille. L’échec d’une action de cellule reste au-dessus de ces actions |
+
+Un message de la barre est toujours **juste au-dessus du bouton dont il donne la réponse**.
+La zone des messages de la barre fait au plus 30 % de la hauteur visible, et défile
+au-delà (la même idée que les 40 % de la barre de messages, v4.2-9). Quand elle déborde,
+elle est un `role="group"` nommé « Messages » (`Actions.messages`, le nom de la liste de la
+barre de messages), avec `tabIndex={0}` pour défiler au clavier. Elle le garde tant qu’elle
+a le focus, même si elle cesse de déborder (v4.2.3). L’avis « Cet appareil
+ne pourra pas s’en souvenir » reste en haut du corps, comme aujourd’hui.
+
+**2. Sur téléphone (fenêtre de moins de 640 px de large), une feuille qui porte un champ de
+saisie prend toute la hauteur visible** (décision du propriétaire, question 1, a). Ce sont
+« Modifier {prénom} », « Ajouter une personne » (des trois endroits : un onglet, la feuille
+d’une place, et la première inscription depuis une place libre, `RegisterSheet`), « Proposer
+une voiture », « Modifier la voiture » et « Modifier l’événement ». Une feuille qui change
+de contenu change de règle avec lui : la feuille d’une personne devient pleine hauteur avec
+« Modifier {prénom} », celle d’une place libre avec « Ajouter une personne ». **Une étape
+d’un formulaire garde la pleine hauteur** tant que ce qui a été tapé attend son envoi :
+« Qui sort de la voiture ? », l’étape de « Modifier la voiture », reste pleine hauteur, et
+« Annuler » revient au formulaire, ses changements gardés (décision du coordinateur). Une feuille
+pleine hauteur n’a ni coins arrondis ni bande du tableau au-dessus : aucun toucher hors de la
+feuille ne peut la fermer et perdre la saisie. Quand le corps est trop court pour remplir
+l’écran, la barre reste en bas, et l’espace libre est entre le corps et la barre.
+
+**3. Une feuille sans champ de saisie garde la hauteur de son contenu** (cellule, personne,
+place libre), sauf une étape d’un formulaire (règle 2). Elle laisse voir le tableau voilé au-dessus, et
+un toucher sur le voile la ferme, comme aujourd’hui. Si son contenu dépasse la hauteur
+visible, elle s’arrête au haut de la zone visible, et son corps défile entre l’en-tête et
+la barre.
+
+**4. La hauteur visible**, c’est la zone que la personne voit vraiment : entre le haut de la
+fenêtre (sous la barre d’adresse) et le haut du clavier, quand il est ouvert. Sur iPhone,
+c’est `window.visualViewport` (`offsetTop`, `height`), relue à chacun de ses `resize` et
+`scroll`. Sans elle, c’est `100dvh`. Clavier ouvert, la feuille suit donc la zone visible :
+son haut au haut de cette zone, sa barre juste au-dessus du clavier. Clavier fermé, elle
+redescend jusqu’en bas de l’écran. Sa marge du bas compte alors
+`env(safe-area-inset-bottom)`, mais pas quand le clavier est ouvert.
+
+**5. Tout élément du corps qui prend le focus est entièrement visible**, entre l’en-tête et
+la barre, avec 8 px de marge au moins : un champ, une case à cocher, un bouton radio, un
+bouton (les actions d’une cellule, « Ajouter une personne » de la feuille d’une place), un
+lien. Ni l’en-tête ni la barre ne le cachent, même en partie (WCAG 2.4.11). Cela vaut à Tab
+et Maj+Tab, aux flèches d’un groupe de boutons radio, aux flèches du clavier d’iOS, au
+toucher, au focus mis par la page à l’ouverture, et au premier champ en erreur après
+« Valider ». Le message d’erreur d’un champ, juste dessous, est visible aussi quand il tient.
+Les éléments de la barre sont toujours visibles.
+
+**6. La liste des propositions d’un lieu peut couvrir la barre d’actions tant qu’elle est
+ouverte.** Elle garde la place qu’AL1.11 lui donne : jusqu’à 8 px au-dessus du bas de la
+zone visible, donc du clavier. Une fois la liste fermée (un choix, Échap, un toucher
+ailleurs), la barre se revoit en entier.
+
+**7. Rien d’autre ne bouge.** La page derrière ne défile jamais tant qu’une feuille est
+ouverte, et une feuille ne se déplace pas d’un bloc :
+- la feuille qui arrive au bout de son défilement ne fait pas défiler la page (pas
+  d’enchaînement) ;
+- glisser le doigt sur l’en-tête ou sur la barre peut faire défiler la feuille, qui est une
+  seule zone qui défile (règle 10), mais jamais la page derrière (décision du
+  coordinateur) ;
+- sur iPhone, le rebond en bout de course reste dans la feuille : il peut emporter l’en-tête
+  ou la barre avec le contenu, jamais la feuille entière ni la page ;
+- l’ouverture du clavier ne fait pas défiler la page derrière ; sa fermeture ne laisse ni
+  bande vide ni décalage ;
+- fermée, la feuille rend la page exactement où elle était (`scrollY` inchangé) ; le focus
+  va où le dit « Le focus après une action », inchangé.
+
+**8. Une zone visible très basse** (moins de 240 px de hauteur visible, la règle 4, quelle que
+soit la largeur ; un téléphone en paysage avec le clavier fait souvent 640 px de large ou
+plus) : l’en-tête et la barre défilent avec le corps, comme aujourd’hui, pour que le champ
+où l’on tape reste visible. C’est la hauteur de `visualViewport` qui compte, pas celle de la
+fenêtre : sur iPhone, le clavier ne réduit pas la fenêtre. Un téléphone en portrait, clavier ouvert, en a toujours
+plus (≈ 270 pt au moins sur un iPhone SE avec la barre de remplissage).
+
+**9. Sur ordinateur et tablette (640 px de large et plus)**, rien ne change à l’œil : la
+feuille fait au plus 448 px de large, est centrée, et a la hauteur de son contenu. Les
+règles 1, 4, 5, 6, 7 et 8 s’appliquent aussi. Une feuille plus haute que la fenêtre garde
+donc son titre et ses boutons visibles, et un clavier de tablette ne cache pas « Valider ».
+La règle 1 change une chose à l’œil, sur ordinateur aussi : l’alerte de « Qui sort de la
+voiture ? » quitte le dessus des cases pour la barre, juste au-dessus de « Valider ».
+
+**10. Le mécanisme (recommandation à l’architecte, qui décide).** Le contenu de la feuille
+reste l’élément qui défile, à la hauteur visible. L’en-tête est collé en haut
+(`sticky top-0`) et la barre collée en bas (`sticky bottom-0`), au-dessus du corps et sous
+la liste des propositions. `scroll-padding` vaut leur hauteur mesurée. `overscroll-behavior:
+contain` est posé sur l’élément qui défile. Le bouton principal sort du `<form>` dans le
+document : il garde `type="submit"` et prend l’attribut `form`, ou bien le `<form>` englobe
+le corps et la barre. **Une seule zone qui défile** (décision du coordinateur) : un corps qui
+défilerait seul couperait la liste des propositions, qui ne pourrait plus couvrir la barre
+(règle 6). Sur iPhone, `window.scrollY` est gardé à l’ouverture d’une feuille et rendu à sa
+fermeture : Safari peut faire défiler la page derrière pour montrer un champ, malgré le
+verrouillage. Seul K2.5 le prouve. On n’ajoute pas `interactive-widget=resizes-content` au viewport :
+Safari l’ignore, et ce réglage changerait la mise en page de toutes les pages sur Android,
+pas seulement les feuilles. L’API VirtualKeyboard n’existe que dans Chromium.
+
+**Les autres maquettes de cette page** (« Ajouter une personne », « La feuille », « Proposer
+une voiture », « L’autre leg, lu depuis l’événement », « Modifier, retirer »…) montrent le
+contenu des feuilles, leurs mots et l’ordre de leurs boutons. Elles les dessinent à leur
+hauteur d’avant, sous une bande du tableau. Sur téléphone, la hauteur et les parties fixes
+sont celles de cette section ; leur contenu, la ligne d’aide et les libellés de la v4.5
+compris, ne change pas.
+
+### Les mots de la v4.6
+
+Aucun mot nouveau, changé ou retiré. Ceux des états dessinés, tels qu’ils sont dans
+`messages/fr.json` et `messages/en.json` :
+
+| où | français | anglais |
+|---|---|---|
+| titre | « Modifier {firstName} » | “Edit {firstName}” |
+| titre | « Ajouter une personne » | “Add a person” |
+| titre | « Proposer une voiture » | “Offer a car” |
+| titre | « Modifier la voiture » | “Edit the car” |
+| titre | « Modifier l’événement » | “Edit the event” |
+| titre | « Qui monte dans la voiture de {driver} ? » | “Who gets in {driver}’s car?” |
+| titre | « {firstName} · {leg} » (« Tom · Aller ») | “{firstName} · {leg}” |
+| champs | « Prénom », « Téléphone (facultatif) » | “First name”, “Phone (optional)” |
+| aide | « Visible seulement par l’organisateur et par les personnes de la même voiture. » | “Only visible to the organiser and to the people in the same car.” |
+| champs | « Lieu de départ » / « Lieu de dépose », « Heure de départ », « Places, sans compter qui conduit », « Note (facultatif) » | “Departure place” / “Drop-off place”, “Departure time”, “Seats, driver not included”, “Note (optional)” |
+| autre leg (v4.5) | « Au retour », « Le retour part du lieu de l’événement, {location}, le {date}. », « Je ramène aussi des passagers » | “On the return trip”, “The return trip leaves {location} on {date}.”, “I bring people back too” |
+| barre | « Valider », « Fermer », « Annuler » | “Confirm”, “Close”, “Cancel” |
+| barre | « Placer n personnes » (`Sheet.submit`) | “Seat n people” |
+| barre, échec | « Action impossible, vérifiez la connexion » (`Actions.offline`) | “Action failed, check your connection” |
+| barre, échec | « Une erreur est survenue et rien n’a changé. Réessayez dans un instant. » (`Actions.failed`) | “Something went wrong and nothing has changed. Try again in a moment.” |
+| barre, envoi | « Envoi en cours… » (`EditEvent.sending`) | “Sending…” |
+| zone des messages qui déborde, son nom | « Messages » (`Actions.messages`) | “Messages” |
+| description, première inscription depuis une place libre | « Cette personne prendra une place dans la voiture de {driver}. » (`PersonForm.forSeat`), « Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement. » | “This person will take a seat in {driver}’s car.”, “No account, no e-mail: this device will remember it for this event.” |
+| étape « Qui sort de la voiture ? » | inchangés : `RideChanges.leaving.title` « Qui sort de la voiture ? », `.body`, `.rule` « Les personnes qui sortent redeviennent sans voiture. », `.count`, `.changed` | “Who leaves the car?”, “Those who leave are without a car again.” |
+| erreur d’un champ | « Champ requis. » (`FormErrors.required`), et les autres de `FormErrors`, inchangées, sous leur champ | “Required.” |
+
+### Les états de la v4.6 (dessinés dans la page)
+
+1. Avant et après : « Modifier Claire » sur iPhone, clavier ouvert. Après, « Téléphone
+   (facultatif) » et sa ligne d’aide restent visibles sous « Prénom ».
+2. « Modifier Claire » à 360 × 640, clavier fermé : la feuille prend toute la hauteur.
+3. « Modifier la voiture », clavier ouvert, le corps défilé jusqu’à « Note (facultatif) » :
+   le titre en haut, « Valider » et « Fermer » au-dessus du clavier.
+4. « Proposer une voiture » à 360 × 640, à mi-défilement, sur le groupe « Au retour » de la
+   v4.5 (ligne d’aide comprise) : l’en-tête et la barre restent fixes, et un filet les
+   sépare du corps qui passe dessous.
+5. « Lieu de départ », clavier ouvert, la liste des propositions ouverte par-dessus la barre.
+6. Hors ligne après « Valider » : « Action impossible, vérifiez la connexion » dans la barre,
+   juste au-dessus de « Valider », qui a le focus ; le clavier est fermé.
+7. Prénom vidé puis Entrée : le focus est sur « Prénom », le clavier ouvert, « Champ
+   requis. » visible dessous, « Téléphone (facultatif) » en dessous, et la barre au-dessus du
+   clavier.
+8. Ce qui ne change pas : la cellule « Tom · Aller », de la hauteur de son contenu, le
+   tableau voilé au-dessus.
+9. « Qui monte dans la voiture de Sophie ? » avec 10 personnes : la feuille s’arrête au haut
+   de l’écran, la liste remplit le corps et défile, « Placer 2 personnes » et « Fermer »
+   restent visibles, sans espace vide au-dessus de la barre.
+10. La même feuille passée à « Ajouter une personne » : pleine hauteur, et « Valider » et
+    « Annuler » dans la barre.
+11. « Modifier l’événement » pendant l’envoi : « Envoi en cours… », « Valider » inactif
+    (`aria-disabled`), « Annuler ».
+12. Ordinateur, 1280 px : « Modifier Claire » comme aujourd’hui.
+13. Zone visible de moins de 240 px (paysage avec clavier) : tout défile d’un bloc.
+14. « Modifier la voiture », places passées de 3 à 1 avec deux passagers, puis « Valider » :
+    l’étape « Qui sort de la voiture ? » garde la pleine hauteur, sans voile au-dessus.
+15. « Ajouter une personne », première inscription depuis une place libre (`RegisterSheet`) :
+    pleine hauteur, « Valider » et « Fermer » dans la barre.
+16. Tab dans « Qui monte dans la voiture de Sophie ? » : la case qui a le focus remonte
+    au-dessus de la barre, jamais dessous.
+
+### Critères de la v4.6
+
+**K1 : prouvés par Playwright avant la fusion**, sur le projet `e2e` (Chromium, Pixel 7
+émulé, 360 px), sauf mention contraire. C’est la seule preuve avant la fusion (décision du
+propriétaire, question 2). « Entièrement visible » veut dire `toBeInViewport({ ratio: 1 })`,
+et, pour un élément du corps, une boîte comprise entre le bas de l’en-tête et le haut de la
+barre.
+
+- **K1.1** À 360 × 640, chacune des feuilles à champ de saisie (« Ajouter une personne »
+  depuis l’onglet Aller, dans la feuille d’une place, et en première inscription depuis une
+  place libre sur un appareil sans personne, `RegisterSheet` ; « Modifier Claire » ;
+  « Proposer une voiture » ; « Modifier la voiture » ; « Modifier l’événement ») a une boîte
+  `role="dialog"` de (0, 0, 360, 640) à 1 px près. Son bouton principal et son « Fermer » ou
+  « Annuler » sont entièrement visibles dès l’ouverture, sans aucun défilement.
+- **K1.2** À 360 × 640, « Proposer une voiture » (Claire, Léa et Tom sans voiture, avec un
+  retour) : le corps défile (`scrollHeight > clientHeight`). Corps défilé en haut puis en
+  bas, la boîte du titre et celles de « Valider » et « Fermer » ne bougent pas (à 1 px), et
+  restent entièrement visibles. Le groupe « Au retour » garde sa description de la v4.5
+  (E1.1).
+- **K1.3** À 360 × 640, la cellule « Tom · Aller », la feuille « Claire » et « Qui monte dans
+  la voiture de Sophie ? » avec 2 personnes ont une hauteur inférieure à 640 px, et leur
+  haut est à plus de 0 px (le tableau voilé se voit au-dessus). Un clic à (180, 10) les
+  ferme, comme aujourd’hui.
+- **K1.4** À 360 × 480, « Qui monte dans la voiture de Sophie ? » avec 8 personnes : le test
+  vérifie d’abord que la feuille déborde (`scrollHeight > clientHeight` de l’élément qui
+  défile). Sa boîte est (0, 0, 360, 480). Défilée en haut puis en bas, « Placer n personnes »
+  et « Fermer » restent entièrement visibles.
+- **K1.5** La feuille d’une personne, d’abord à sa hauteur, passe à (0, 0, 360, 640) dès que
+  « Modifier » montre « Modifier Claire ». La feuille d’une place fait de même avec
+  « Ajouter une personne », et revient à sa hauteur après « Annuler ». « Modifier la voiture »
+  de Claire (deux passagers), places de 3 à 1, note changée, « Valider » : l’étape « Qui sort
+  de la voiture ? » garde (0, 0, 360, 640) ; un clic à (180, 10) ne la ferme pas ; « Annuler »
+  revient au formulaire, toujours (0, 0, 360, 640), avec 1 place et la note tapée.
+- **K1.6** (fenêtre qui rétrécit : Android en `resizes-content`, ordinateur) Dans « Modifier
+  la voiture » à 360 × 640, focus dans « Note (facultatif) », puis `setViewportSize` à
+  360 × 420. La boîte de la feuille devient (0, 0, 360, 420), « Note (facultatif) » est
+  entièrement visible dans le corps, à 8 px au moins de la barre, et « Valider » est
+  entièrement visible.
+- **K1.7** (clavier d’iPhone simulé) Un `addInitScript` remplace `window.visualViewport` par
+  un objet à nous (`width` 360, `height`, `offsetTop`, `pageTop`, `scale` 1, et ses
+  événements). On ouvre « Modifier Claire » à 360 × 640, focus dans « Prénom », puis on
+  passe à `height` 340 et `offsetTop` 0, et on émet `resize`. Le haut de la feuille est à 0
+  et son bas à 340 (`getBoundingClientRect`, à 1 px), et le bas de « Fermer » est à 340 au
+  plus. Puis `offsetTop` passe à 120 (Safari a décalé la zone visible), avec un `scroll` :
+  la feuille va de 120 à 460, et « Prénom » et « Valider » sont dedans. Retour à `height`
+  640 et `offsetTop` 0 : la feuille revient à (0, 640). La même chose dans « Modifier la
+  voiture », focus dans « Note (facultatif) » : la note et « Valider » sont dans la feuille
+  à chaque étape.
+- **K1.8** « Modifier la voiture » à 360 × 420 : le test vérifie d’abord que la feuille
+  déborde (`scrollHeight > clientHeight`). « Lieu de départ » vidé, focus dans « Note
+  (facultatif) » (la feuille a défilé en bas), puis « Valider » : « Lieu de départ » a le
+  focus, et sa boîte et celle de « Champ requis. » sont entièrement entre l’en-tête et la
+  barre.
+- **K1.9** Hors ligne (`context.setOffline(true)`), « Valider » dans « Modifier Claire » à
+  360 × 640 : « Action impossible, vérifiez la connexion » est entièrement visible, dans la
+  barre, juste au-dessus de « Valider » (pas d’élément entre les deux), et « Valider » a le
+  focus. Même chose, dans « Modifier l’événement », pour « Envoi en cours… » pendant un envoi
+  retenu.
+- **K1.10** Page défilée à `scrollY` = 800, on ouvre « Proposer une voiture ». Une molette de
+  2 000 px vers le bas sur le corps (jusqu’au bout), puis sur l’en-tête, puis sur la barre,
+  laisse `window.scrollY` à 800 et la boîte `role="dialog"` à (0, 0, 360, 640) ; la feuille,
+  elle, peut avoir défilé. Fermée par « Fermer », la page est toujours à 800. Même test avec
+  la cellule « Tom · Aller ».
+- **K1.11** L’ordre du focus ne change pas : dans « Modifier Claire », Tab depuis
+  « Téléphone (facultatif) » mène à « Valider », puis à « Fermer ». Les tests existants qui
+  appuient sur Entrée dans un champ (`e2e/aller-sheets.spec.ts` M7.6 ; W1.2) et ceux du focus
+  après une action passent sans changement.
+- **K1.12** (AL1.11 gardé) À 360 × 420, « Lieu de dépose » en bas de « Proposer une
+  voiture », liste ouverte : le bas de la liste est à 412 px au plus, et
+  `elementFromPoint` au centre de « Valider » renvoie un élément de la liste. Après un
+  choix, la liste est fermée et « Valider » est de nouveau entièrement visible.
+- **K1.13** À 640 × 230, « Modifier la voiture », focus dans « Heure de départ » : le champ
+  est entièrement visible ; l’en-tête et la barre défilent avec le corps (le titre sort de
+  l’écran quand on défile vers le bas). Puis, avec l’objet de K1.7, fenêtre de 640 × 360 et
+  `visualViewport` de hauteur 200 : la même chose. Une règle qui ne lirait que la hauteur de
+  la fenêtre (une requête média) échoue à cette étape.
+- **K1.14** À 1280 × 800, « Modifier Claire » fait 448 px de large, est centrée, a la hauteur
+  de son contenu (son haut est à plus de 0 px), et ses coins du haut sont arrondis. À
+  1280 × 600, « Proposer une voiture » garde « Valider » et « Fermer » entièrement visibles,
+  en haut comme en bas du défilement.
+- **K1.16** (WCAG 2.4.11) Chaque élément qui prend le focus est entièrement entre le bas de
+  l’en-tête et le haut de la barre, à 8 px au moins, ou bien dans la barre :
+  - « Qui monte dans la voiture de Sophie ? » à 360 × 480 avec 8 personnes : Tab depuis la
+    première case jusqu’à « Fermer », puis Maj+Tab jusqu’à la première case ;
+  - « Proposer une voiture » à 360 × 640, 8 personnes de l’appareil sans voiture : Tab de
+    « Qui conduit ? » à « Fermer », les flèches dans « Qui conduit ? » et « Au retour », et
+    chacune des 8 cases de « Qui monte avec vous ? » ;
+  - la cellule « Tom · Aller » à 360 × 300 : Tab sur chacune de ses actions.
+- **K1.15** À 360 px, en français et en anglais, puis avec `font-size: 125%` sur la racine :
+  aucune feuille n’a de débordement horizontal (`scrollWidth − clientWidth = 0`), aucun
+  bouton de la barre ne coupe son texte, et chaque cible fait au moins 44 px. E1.5 reste
+  vrai.
+
+**K2 : vérifiés à la main sur iPhone, après le déploiement, sans bloquer** (Safari, iOS
+récent, barre d’adresse en haut puis en bas). Décision du propriétaire (question 2) : ni la
+fusion ni la tâche n’attendent ces vérifications. Playwright ne peut pas les prouver : il n’a
+ni WebKit d’iOS ni clavier virtuel. Le propriétaire les fait quand il le peut, sur
+https://fullcar.app. **Risque accepté** : si iOS dessine sa barre de remplissage automatique
+*dans* la zone visible, `visualViewport` ne la compte pas, et elle peut encore couvrir le bas
+de la barre d’actions. « Valider », en haut de la barre, est le bouton le moins exposé
+(v4.6-2).
+
+- **K2.1** « Modifier {prénom} », toucher « Prénom » : le clavier s’ouvre. La feuille occupe
+  tout l’espace entre la barre d’adresse et le clavier. « Valider » est entièrement visible,
+  pas même en partie sous la barre de remplissage automatique, et un toucher dessus
+  enregistre sans qu’il faille fermer le clavier.
+- **K2.2** « Modifier la voiture », toucher « Lieu de départ », puis faire défiler le
+  formulaire, clavier ouvert, jusqu’à « Note (facultatif) » : chaque champ s’atteint. Le
+  titre reste en haut, « Valider » et « Fermer » restent au-dessus du clavier.
+- **K2.3** Les flèches ∧ ∨ au-dessus du clavier passent d’un champ à l’autre : chaque champ
+  qui prend le focus vient entièrement en vue, jamais sous la barre d’actions.
+- **K2.4** Faire défiler la feuille au doigt jusqu’en haut puis jusqu’en bas, et tirer
+  au-delà, sur le corps, sur le titre et sur la barre : la page derrière ne bouge pas, et la
+  feuille ne glisse pas d’un bloc. Le rebond peut emporter le titre ou la barre avec le
+  contenu ; une fois arrêté, ils sont de nouveau en haut et en bas.
+- **K2.5** Fermer le clavier : la feuille redescend jusqu’en bas de l’écran, sans bande
+  vide. Fermer la feuille : le tableau est exactement où il était avant l’ouverture, sans
+  décalage (le `scrollY` gardé à l’ouverture, règle 10). C’est la seule preuve de ce point.
+- **K2.6** « Proposer une voiture », taper « Gare » dans « Lieu de départ » : la liste
+  s’ouvre au-dessus du clavier, au moins trois propositions se lisent, et un toucher en
+  choisit une. La liste fermée, « Valider » est entièrement visible.
+- **K2.7** Les mêmes K2.1 et K2.2 sur un téléphone Android (Chrome), si le propriétaire en a
+  un sous la main.
+
+Un K2 qui échoue ouvre une nouvelle issue, avec la capture et, pour K2.1, la hauteur de la
+barre de remplissage. Elle revient au product designer. Personne ne devine de marge.
+
+### Décisions de la v4.6
+
+v4.6-1. Décision du propriétaire (question 1, a) : sur téléphone (moins de 640 px), une
+feuille qui porte un champ de saisie prend toute la hauteur visible, et une feuille de choix
+garde la hauteur de son contenu. — Raison : un formulaire a besoin de toute la place quand le
+clavier s’ouvre, et on ne doit pas pouvoir le fermer, saisie perdue, d’un toucher sur le
+voile. Une feuille de choix montre d’où elle vient, et se ferme d’un toucher.
+
+v4.6-2. Décision : toute feuille a un en-tête fixe en haut, une barre d’actions fixe en bas,
+et seul le corps défile entre les deux. Les boutons de la barre restent empilés, le
+principal en haut. — Raison : « Valider » est toujours au même endroit, sous le pouce, et
+l’ordre du focus ne change pas. Sur iPhone, la barre de remplissage couvre d’abord le bas de
+la barre, donc « Fermer » plutôt que « Valider ».
+
+v4.6-3. Décision : un message qui répond au bouton principal est dans la barre, juste
+au-dessus de lui, et la zone des messages fait au plus 30 % de la hauteur visible. —
+Raison : après « Valider », le focus est sur ce bouton. Laissé dans le corps, le message
+pourrait être hors de vue.
+
+v4.6-4. Décision : la hauteur visible est celle de `window.visualViewport`, `100dvh` à
+défaut. On n’ajoute pas `interactive-widget` au viewport. — Raison : Safari ne connaît pas
+`interactive-widget` (caniuse, jusqu’à 27.2), et `dvh` ne compte pas le clavier. Un seul
+mécanisme vaut pour tous les navigateurs. Ce réglage changerait aussi toutes les pages sur
+Android.
+
+v4.6-5. Décision : la liste des propositions d’un lieu peut couvrir la barre tant qu’elle
+est ouverte (AL1.11 inchangé). — Raison : pendant qu’on choisit un lieu, on ne valide pas.
+Bornée par la barre, la liste n’aurait que deux lignes sur iPhone avec le clavier.
+
+v4.6-6. Décision : sous 240 px de hauteur visible, l’en-tête et la barre défilent avec le
+corps. — Raison : en paysage avec le clavier, l’en-tête et la barre prendraient toute la
+hauteur, et le champ où l’on tape ne se verrait plus.
+
+v4.6-7. Décision : sur ordinateur, l’aspect ne change pas, et seules les parties fixes
+s’appliquent. — Raison : le constat porte sur le téléphone. Une fenêtre basse a pourtant le
+même défaut de boutons qui défilent.
+
+v4.6-8. Décision du propriétaire (question 2) : la preuve avant la fusion est K1, avec
+`visualViewport` simulé. Les vérifications sur iPhone (K2) se font après le déploiement, sans
+bloquer, et le risque de la barre de remplissage dessinée dans la zone visible est accepté. —
+Raison : le choix du propriétaire.
+
+v4.6-9. Décision : les maquettes des autres sections ne sont pas redessinées. Elles gardent
+leur contenu, et cette section donne la hauteur et les parties fixes. — Raison : leur sujet
+est le contenu des feuilles, et la v4.5 vient d’être approuvée sur ces dessins.
+
+v4.6-10. Décision du coordinateur, v4.6 (suite) : « Qui sort de la voiture ? », étape de
+« Modifier la voiture », garde la pleine hauteur. — Raison : les changements tapés attendent
+leur envoi ; une feuille qui rétrécirait laisserait un voile qui, d’un toucher, les perdrait.
+
+v4.6-11. Décision : la première inscription depuis une place libre (`RegisterSheet`, C5.4)
+est une feuille à champ de saisie comme les autres : pleine hauteur, « Valider » et
+« Fermer » dans la barre. — Raison : revue, bloquant 1 ; elle manquait à la liste.
+
+v4.6-12. Décision : la règle 5 vaut pour tout élément qui prend le focus, pas seulement un
+champ. — Raison : revue, bloquant 3 ; une case ou une action sous la barre fixe échoue à
+WCAG 2.4.11.
+
+v4.6-13. Décision : la règle 8 vaut à toute largeur, et se lit sur la hauteur de
+`visualViewport`. — Raison : revue, bloquant 4 ; un téléphone en paysage fait souvent 640 px
+ou plus, et sur iPhone le clavier ne réduit pas la fenêtre.
+
+v4.6-14. Décision du coordinateur, v4.6 (suite) : une seule zone qui défile, l’en-tête et la
+barre collés dedans ; glisser sur eux peut faire défiler la feuille, jamais la page. —
+Raison : un corps qui défilerait seul couperait la liste des propositions (règle 6, AL1.11).
+
+v4.6-15. Décision : sur iPhone, `window.scrollY` est gardé à l’ouverture d’une feuille et
+rendu à sa fermeture. — Raison : suggestion de la revue ; Safari peut faire défiler la page
+derrière pour montrer un champ, malgré le verrouillage.
+
+v4.6-16. Décision : la zone des messages qui déborde est un `role="group"` nommé
+« Messages », focalisable. — Raison : suggestion de la revue ; c’est le motif de la liste de
+la barre de messages (v4.2.1-9), avec le même nom.
+
+### Hors périmètre de la v4.6
+
+- Le geste « retour » du navigateur, qui quitte la page au lieu de fermer la feuille, et
+  perd la saisie : issue https://github.com/olaurendeau/fullcar/issues/656 (décision du
+  propriétaire, question 3). Une feuille pleine hauteur ressemble à une page, ce qui le rend
+  plus probable.
+- Fermer une feuille en la glissant vers le bas, ou une poignée de glissement.
+- Les boîtes de confirmation centrées (« Retirer la voiture ? », « Supprimer le
+  retour ? »).
+- Le formulaire de création d’un événement (`/`, `/nouveau`) et les pages du compte : ce ne
+  sont pas des feuilles. La feuille « Corriger l’adresse » d’organizer-account (OA2.5),
+  pas encore construite, suivra la même règle quand elle le sera.
+- `viewport-fit=cover` et les zones sûres de la page.
+- Les mots : aucun ne change.
+
+### Pour le développement de la v4.6
+
+- **Une tâche**, sur `BottomSheet` (et `SheetContent` au besoin), et sur les composants qui
+  hébergent une feuille : `PersonSheet` (`person-sheet.tsx`), `AddPersonButton`
+  (`person-form.tsx`), `OfferRideButton` et `EditRideButton` (`ride-form.tsx`),
+  `RegisterSheet` et `SeatSheet` (`seat-sheet.tsx`), `EditEventSheet`
+  (`edit-event-sheet.tsx`).
+- Les formulaires `PersonForm`, `RideForm` (avec `LeavingStep`) et `EditEventForm` sortent
+  leurs boutons et leurs messages vers la prop `actions` de la feuille qui les héberge. Elle
+  existe déjà, et seule `SeatSheet` l’utilise aujourd’hui. `BottomSheet` dit si la feuille
+  est pleine hauteur (un champ de saisie, ou une étape d’un formulaire).
+- La liste de `place-field.tsx` garde son calcul.
+- La tâche ajoute les tests K1, dans un fichier `e2e/sheet-layout.spec.ts` ou dans
+  `e2e/sheet.spec.ts`. Elle recopie K2 dans l’issue comme vérifications après déploiement,
+  sans les cocher.
+- Aucune donnée, aucune route, aucun mot ne change.
+
+### Pour la prochaine révision de place-autocomplete
+
+AL1.11 reste vrai. Ajouter une phrase : « La liste peut couvrir la barre d’actions de la
+feuille (event-board v4.6-5). »
+
+## Ce qui change en v4.5 : l’autre leg se lit depuis l’événement (#649)
+
+Constat du propriétaire (25/10), sur un test en famille. Une testeuse, maman qui conduit les
+enfants à l’aller, a lu « faire le retour » comme « rentrer chez moi à vide après les avoir
+déposés ». Pour le produit, le retour est le leg qui part de l’événement, avec des passagers.
+Le risque est dans « Proposer une voiture ». Pour une nouvelle personne, « Je ne fais pas le
+retour » est coché par défaut, et elle le lit comme faux, puisqu’elle rentre chez elle. Alors
+elle choisit « Je ramène aussi », en anglais « I drive back too », qui dit exactement sa
+lecture. Le retour affiche alors des places que personne ne conduira. Décision du
+propriétaire : options A, B et F du product designer, avec « des passagers ». La formulation
+française de la ligne est celle que le coordinateur a retenue sur #649 (v4.5-7). Issue :
+https://github.com/olaurendeau/fullcar/issues/649.
+
+### Ce qui change
+
+Seul le groupe de l’autre leg de « Proposer une voiture » change. Les onglets, la matrice,
+les feuilles, la barre et l’espace organisateur gardent leurs mots.
+
+1. **Les deux choix « conduire »** disent qui ils transportent : « Je ramène aussi des
+   passagers » au retour, « J’emmène aussi des passagers » à l’aller. En anglais : « I bring
+   people back too » et « I take people there too ». Aucune valeur de `messages/en.json` ne
+   contient plus « drive back ».
+2. **Une ligne d’aide**, sous le titre du groupe et avant son premier bouton radio, dit où et
+   quand part l’autre leg :
+   - au retour, « Le retour part du lieu de l’événement, {location}, le {date}. » ;
+   - à l’aller, « L’aller va jusqu’au lieu de l’événement, {location}, le {date}. ».
+
+   « Le lieu de l’événement » porte la préposition, et le lieu saisi suit entre virgules : la
+   phrase se lit avec n’importe quel lieu (v4.5-7).
+
+   `{location}` est le texte du lieu de l’événement, entier, jamais tronqué. Sa Position n’y
+   est pour rien. `{date}` est la date et l’heure de l’autre leg dans l’événement, au format
+   de `LegTime` (`{ dateStyle: "full", timeStyle: "short" }`) : « samedi 12 décembre 2026 à
+   18:00 », « Saturday, December 12, 2026 at 6:00 PM ».
+3. **La date est toujours écrite en entier**, même quand l’autre leg tombe le même jour.
+4. **Elle décrit le groupe** : le `radiogroup` porte `aria-describedby` vers elle. Un lecteur
+   d’écran lit le nom du groupe, « Au retour », puis la ligne, une fois, avant les choix.
+5. **Son style** est celui des aides du formulaire (`text-[13px] leading-[18px]
+   text-muted-foreground`). Elle passe à la ligne entre les mots, et un mot plus long que la
+   ligne se coupe (`wrap-anywhere`, comme les prénoms). Elle ne déborde jamais du groupe.
+6. **Elle ne suit pas l’heure saisie.** Avec « Je ramène aussi des passagers », la voiture du
+   retour peut partir à 18:30. La ligne dit toujours 18:00 : elle décrit le leg, comme
+   « Fin » dans l’en-tête, et pas la voiture.
+7. **Elle part avec le groupe** :
+   - sur un événement sans retour ;
+   - quand la personne qui conduit conduit déjà sur l’autre leg (C4.6) ;
+   - quand le retour disparaît pendant que la feuille est ouverte (M7.6).
+
+   « Modifier la voiture » n’a pas de groupe de l’autre leg, donc pas de ligne.
+8. **Le glossaire**, à l’entrée Leg, reçoit la phrase F (voir « Les mots de la v4.5 »).
+
+Ce qui reste :
+- les titres « Au retour » / « À l’aller » ;
+- « Je cherche une place », « Je ne fais pas le retour » / « Je ne fais pas l’aller », « Je
+  reste dans la voiture de {driver} » ;
+- « Lieu de dépose », « Heure de départ du retour » ;
+- `RideForm.otherLeg.same` et le choix par défaut (C4.4).
+
+### Les mots de la v4.5
+
+| clé | `messages/fr.json` | `messages/en.json` | avant |
+|---|---|---|---|
+| `RideForm.otherLeg.drive.retour` | Je ramène aussi des passagers | I bring people back too | Je ramène aussi / I drive back too |
+| `RideForm.otherLeg.drive.aller` | J’emmène aussi des passagers | I take people there too | J’emmène aussi / I drive there too |
+| `RideForm.otherLeg.hint.retour` | Le retour part du lieu de l’événement, {location}, le {date}. | The return trip leaves {location} on {date}. | nouvelle |
+| `RideForm.otherLeg.hint.aller` | L’aller va jusqu’au lieu de l’événement, {location}, le {date}. | The outbound trip goes to {location} on {date}. | nouvelle |
+
+Les apostrophes sont typographiques (’), comme dans le reste de `messages/fr.json`. Avec
+l’événement des maquettes, la ligne se lit :
+
+| depuis | fr | en |
+|---|---|---|
+| l’onglet Aller | Le retour part du lieu de l’événement, Gymnase Colette-Besson, Rennes, le samedi 12 décembre 2026 à 18:00. | The return trip leaves Gymnase Colette-Besson, Rennes on Saturday, December 12, 2026 at 6:00 PM. |
+| l’onglet Retour | L’aller va jusqu’au lieu de l’événement, Gymnase Colette-Besson, Rennes, le samedi 12 décembre 2026 à 07:30. | The outbound trip goes to Gymnase Colette-Besson, Rennes on Saturday, December 12, 2026 at 7:30 AM. |
+
+Le lieu de 120 caractères des maquettes et de E1.5 : « Complexe sportif intercommunal
+Colette-Besson, entrée par le parking nord, 12 boulevard Albert-Ier, 35200 Rennes, France ».
+
+La phrase F, ajoutée à l’entrée **Leg** de `docs/agents/glossary.md`. Elle s’écrit avec des
+apostrophes droites ('), comme le reste de `glossary.md`, et non typographiques comme
+`messages/fr.json`. Elle se place après « Jamais
+« trajet » tout court, qui prête à confusion avec Ride. » :
+
+> Un leg se lit du côté de l'événement et des passagers : l'aller va vers l'événement, le
+> retour en part. Le chemin à vide d'un conducteur (rentrer après avoir déposé, venir
+> chercher) n'est pas un leg, et l'interface n'en parle jamais.
+
+### Les états de la v4.5
+
+| état | ce que montre le groupe de l’autre leg | critère |
+|---|---|---|
+| depuis l’Aller, une nouvelle personne conduit | « Au retour », la ligne du retour, puis « Je ramène aussi des passagers », « Je cherche une place », « Je ne fais pas le retour » (coché) | E1.1 |
+| depuis le Retour | « À l’aller », la ligne de l’aller, puis « J’emmène aussi des passagers »… | E1.2 |
+| « Je ramène aussi des passagers » coché, heure changée en 18:30 | la ligne reste au-dessus des choix et dit toujours 18:00 ; le lieu de dépose et l’heure se déplient dessous, comme avant | E1.3 |
+| en anglais | « On the return trip », « The return trip leaves… », « I bring people back too » ; à l’aller, « I take people there too » | E1.4 |
+| un lieu de 120 caractères, à 360 px | la ligne passe sur plusieurs lignes, le lieu entier, sans débordement | E1.5 |
+| le retour un autre jour | la date entière du retour, « dimanche 13 décembre 2026 à 17:00 » | E1.6 |
+| qui conduit est passagère sur l’autre leg | la ligne, puis les quatre choix et leurs « Quittera la voiture de… » | E1.1, seconde scène (choix inchangés, C4.5) |
+| sans retour ; qui conduit conduit déjà sur l’autre leg ; « Modifier la voiture » | pas de groupe, donc pas de ligne | E1.7 |
+| le retour supprimé pendant que la feuille est ouverte | le groupe et sa ligne partent ensemble (M7.6, inchangé) | M7.6 |
+
+### Critères de la v4.5
+
+Prouvés par Playwright, dans `e2e/offer-other-leg.spec.ts`, avec ses aides : `form`,
+`otherLeg(page, title)`, `radio`, et l’ouverture de « Proposer une voiture » depuis un onglet.
+L’événement amorcé (`seededEvent`, `src/db/test-events.ts`) est « Tournoi de Rennes », au
+« Gymnase des Gayeulles », avec un aller le samedi 12 décembre 2026 à 07:30 et un retour le
+même jour à 18:00. `eventFields` change son lieu, ou la date de son retour, quand un critère
+le demande. La seconde moitié de E1.4 est un test unitaire (Vitest).
+
+**H8. Savoir de quel retour on parle.** En tant que parent qui dépose les enfants puis rentre
+chez moi, quand je propose ma voiture pour l’aller, je lis que le retour part de l’événement,
+à l’heure de la fin, avec des passagers. Je ne propose pas une voiture que je ne conduirai
+pas.
+
+- **E1.1** Depuis l’onglet Aller, sans personne sur l’appareil, on ouvre « Proposer une
+  voiture ».
+  - Le groupe `otherLeg(page, "Au retour")` a exactement pour description accessible « Le
+    retour part du lieu de l’événement, Gymnase des Gayeulles, le samedi 12 décembre 2026 à
+    18:00. » (`toHaveAccessibleDescription`).
+  - Ses boutons radio sont, dans l’ordre, « Je ramène aussi des passagers », « Je cherche
+    une place » et « Je ne fais pas le retour », le troisième coché.
+  - La ligne est visible. Sa boîte englobante est sous celle du titre « Au retour » et
+    au-dessus de celle du premier bouton radio.
+  - Aucun bouton radio ne s’appelle exactement « Je ramène aussi ».
+  - Seconde scène : Claire, personne de l’appareil, est passagère de la voiture de Marc au
+    retour (`seedRide`, leg `retour`, puis `seedPlacement`). On choisit Claire dans « Qui
+    conduit ? ». Le groupe a la même description. Ses boutons radio sont, dans l’ordre, « Je
+    ramène aussi des passagers », « Je reste dans la voiture de Marc » (coché), « Je cherche
+    une place » et « Je ne fais pas le retour ». Les trois autres que « Je reste… » sont
+    décrits par « Quittera la voiture de Marc » (C4.5).
+
+  Sur `main`, le groupe n’a pas de description : le test échoue.
+- **E1.2** Depuis l’onglet Retour, la même ouverture.
+  - Le groupe `otherLeg(page, "À l’aller")` a exactement pour description « L’aller va
+    jusqu’au lieu de l’événement, Gymnase des Gayeulles, le samedi 12 décembre 2026 à 07:30. ».
+  - Son premier bouton radio est « J’emmène aussi des passagers ».
+- **E1.3** Depuis l’onglet Aller, une nouvelle personne, Marc, conduit.
+  - On coche « Je ramène aussi des passagers ». « Lieu de dépose » et « Heure de départ du
+    retour » se déplient, comme avant (C4.11).
+  - On met cette heure à 18:30. La description du groupe reste celle de E1.1, à 18:00.
+  - Après « Valider », la base a une voiture de Marc au retour, qui part à 18:30.
+- **E1.4** En anglais (`locale: "en-US"`).
+  - Depuis l’onglet Aller, la description du groupe `otherLeg(page, "On the return trip")`
+    correspond à `/^The return trip leaves Gymnase des Gayeulles on Saturday, December 12,
+    2026 at 6:00\sPM\.$/`, et son premier bouton radio est « I bring people back too ».
+  - Depuis l’onglet Retour, celle du groupe `otherLeg(page, "On the outbound trip")`
+    correspond à `/^The outbound trip goes to Gymnase des Gayeulles on Saturday, December 12,
+    2026 at 7:30\sAM\.$/`, et son premier bouton radio est « I take people there too ».
+  - `\s` : l’espace avant AM et PM peut être insécable, comme dans D1.5.
+  - En test unitaire, aucune des valeurs de `messages/en.json`, parcourues à toute
+    profondeur, ne contient « drive back », casse ignorée.
+- **E1.5** À 360 × 780, l’événement amorcé avec le lieu de 120 caractères
+  (`eventFields.location`). Depuis l’onglet Aller :
+  - la description du groupe contient le lieu entier, et pas de « … » ;
+  - la ligne fait au moins 36 px de haut, soit au moins deux lignes de 18 px ;
+  - `document.documentElement.scrollWidth` vaut au plus 360 ;
+  - pour le dialogue comme pour le groupe, `scrollWidth` vaut au plus `clientWidth` ;
+  - pour la ligne, `scrollHeight` vaut au plus `clientHeight` : une ligne coupée échoue.
+
+  La même chose en anglais.
+- **E1.6** Le retour un autre jour (`eventFields.retourAt` = `2026-12-13 17:00:00`). Depuis
+  l’onglet Aller, la description du groupe est « Le retour part du lieu de l’événement,
+  Gymnase des Gayeulles, le dimanche 13 décembre 2026 à 17:00. ».
+- **E1.7** Pas de groupe, pas de ligne.
+  - Sur un événement sans retour, le dialogue n’a ni groupe « Au retour » ni texte « Le
+    retour part ».
+  - Léa conduit déjà au retour (`seedRide`, leg `retour`). Quand on choisit Léa dans « Qui
+    conduit ? », le groupe et la ligne disparaissent. Quand on choisit une autre personne,
+    ils reviennent, avec la même description que E1.1.
+  - « Modifier la voiture » n’a ni groupe « Au retour » ni texte « Le retour part ».
+
+  Ce sont des gardes : sur `main`, les deux premiers points passent déjà.
+
+**Non prouvable par un test** : que la phrase soit bien comprise. On le vérifie à la revue,
+et de nouveau avec un parent qui dépose et repart. Depuis l’onglet Aller, sans aide, il dit ce
+que crée « Je ramène aussi des passagers ».
+
+### Les tests à mettre aux nouveaux libellés
+
+Les tests qui citent l’ancien libellé, tel quel, sur `main` :
+- `e2e/offer-other-leg.spec.ts` (`FR.drive`) ;
+- `e2e/aller-sheets.spec.ts`, `e2e/bar-rides.spec.ts`, `e2e/bar-subjects.spec.ts` ;
+- `e2e/offer-passengers.spec.ts`, `e2e/offer-places.spec.ts`, `e2e/event.shot.ts` ;
+- `src/app/e/[id]/offer-ride.test.ts`, `src/components/event/failure-words.test.ts`.
+
+Le titre d’un test qui cite le libellé change avec lui. Ses ids de critère, C4.11 ou B1.7,
+restent.
+
+### Pour le développement de la v4.5
+
+- **Une tâche**, sur `main`.
+  - E1.1, E1.2 et E1.4 à E1.6 échouent aujourd’hui ; E1.3 échoue sur son libellé ; E1.7 est
+    une garde.
+  - Aucune donnée, aucune route, aucun appel serveur ne change.
+- **Le formulaire n’a aujourd’hui que la position de l’événement** (`near`). Il lui faut aussi
+  le texte de son lieu, par exemple dans `other`, à côté de `at`. Le chemin revient à
+  l’architecte.
+- **La date se met en forme comme `LegTime`**, avec `format.dateTime(wallClockAsUtc(other.at),
+  { dateStyle: "full", timeStyle: "short" })`, passée en paramètre à la clé. Pas de
+  concaténation.
+- **La phrase du glossaire** va dans la même PR que le code. Sur `main`, `docs/agents/glossary.md`
+  n’est pas un chemin sensible : seul `docs/agents/review-checklist.md` l’est, sous `docs/agents/`
+  (`merge.sensitive_paths` de `.claude/workflow.json`).
 
 ## Ce qui change en v4.4.6 : une ligne d’échec réduite à l’aller (#372)
 
@@ -41,7 +752,7 @@ Issue : https://github.com/olaurendeau/fullcar/issues/372.
 ### Le cas
 
 Claire, personne de l’appareil, propose sa voiture sur les deux legs : depuis l’onglet Aller
-avec « Je ramène aussi », ou depuis l’onglet Retour avec « J’emmène aussi ». L’envoi échoue
+avec « Je ramène aussi des passagers », ou depuis l’onglet Retour avec « J’emmène aussi des passagers ». L’envoi échoue
 hors ligne, ou sur une erreur. La barre dit « Les voitures de Claire pour l’aller et le retour
 n’ont pas été proposées. Vérifiez la connexion, puis réessayez. », et la région `alert`
 l’annonce. Puis l’organisateur supprime le retour. La page l’apprend par la réponse d’une
@@ -139,7 +850,7 @@ offered. » suivi de la même raison.
 Prouvés par Playwright, dans `e2e/aller-sheets.spec.ts`, avec la scène des tests de PR #371 :
 
 - Claire, personne de l’appareil (`seedClaire`) ;
-- « Proposer une voiture » depuis l’onglet Aller, Claire conduit, « Je ramène aussi » ;
+- « Proposer une voiture » depuis l’onglet Aller, Claire conduit, « Je ramène aussi des passagers » ;
   « Valider », puis Échap ferme la feuille avant la réponse ;
 - l’échec : hors ligne (`loseFirst`, `context.setOffline`) ou sur une erreur
   (`holdFirst(page, PLACE, true)`, `failHeld`) ;
@@ -216,7 +927,7 @@ viens de faire.
   C’est une garde.
 - **N1.6** Les deux autres tests de PR #371, sans changement. Proposer de nouveau la voiture
   de Claire pour l’aller retire la ligne réduite dès l’envoi, avant la réponse. Depuis l’onglet
-  Retour, avec « J’emmène aussi », « Fermer » donne le focus au bouton « Proposer une voiture »
+  Retour, avec « J’emmène aussi des passagers », « Fermer » donne le focus au bouton « Proposer une voiture »
   de l’aller. Ce sont des gardes.
 
 **Non prouvable par un test** : ce que prononce un lecteur d’écran. On vérifie en revue,
@@ -272,7 +983,7 @@ d’**au moins une de ses personnes, sur son leg**. « Envoyée après » se lit
    « Sortir de la voiture ») ; « Modifier » la voiture de ce leg, avec cette personne dans
    « Qui sort de la voiture ? » ; un placement ou un « Annuler » qui la porte sur ce leg ;
    « Proposer une voiture » qui la fait conduire ou monter sur ce leg, ou qui règle ce leg
-   comme l’autre leg de qui conduit (« J’emmène aussi », « Je cherche une place », « Je ne
+   comme l’autre leg de qui conduit (« J’emmène aussi des passagers », « Je cherche une place », « Je ne
    fais pas l’aller »…, sauf « Je reste dans la voiture de… », qui ne change rien).
    « Retirer la voiture » est déjà réglé par la règle 5. « Modifier » une personne (prénom,
    téléphone) ne change pas son état sur un leg : il n’en fait pas partie.
@@ -763,7 +1474,7 @@ jamais un bouton qui ne peut qu’échouer.
   `messages(page)` = [« Aucune place libre à l’aller pour l’instant. »]. L’information de
   l’aller reste (v4.4.2-1).
 - **B1.7** #267 le construit. C’est la scène de M7.6 (organizer-view). Claire, depuis
-  l’onglet Aller, avec « Je ramène aussi » ; le retour est supprimé en base, et la feuille
+  l’onglet Aller, avec « Je ramène aussi des passagers » ; le retour est supprimé en base, et la feuille
   est fermée avant la réponse. La barre dit « Les voitures de Claire pour l’aller et le retour
   n’ont pas été proposées. Il n’y a plus de retour pour cet événement : proposez de nouveau
   la voiture, pour l’aller seulement. ». La page n’a plus d’onglets. Puis « Proposer une
@@ -930,7 +1641,7 @@ lignes déjà dans la barre restent, mêmes textes, même ordre, sans écriture 
 Relevé à la revue de la v4.4 ; la maquette organizer-view n’est pas changée ici.
 
 Décision v4.4.4-5 (#341, pour #267). M7.6, et la ligne « Proposer une voiture » depuis
-l’Aller avec « Je ramène aussi », feuille fermée, de sa table « mot pour mot », devraient
+l’Aller avec « Je ramène aussi des passagers », feuille fermée, de sa table « mot pour mot », devraient
 dire que cet échec `noRetourAgain` a pour sujet sa seule partie aller
 (`offer:aller:{personId}` ou `offer:aller:new:{prénom}`). La voiture proposée de nouveau
 pour l’aller seul le retire donc dès l’envoi (B1.7 ici). Les mots ne changent pas. La
@@ -1353,12 +2064,14 @@ indisponible garde son avertissement en tête (C1.14, D5).
   `FormErrors.chooseDriver`.
 - **L’autre leg**, seulement si l’événement a un retour et si la personne qui conduit ne
   conduit pas déjà sur l’autre leg. Titre « Au retour » sur l’onglet Aller, « À l’aller »
-  sur l’onglet Retour. Boutons radio :
-  - « Je ramène aussi » / « J’emmène aussi » : déplie le **lieu** de l’autre leg (« Lieu de
+  sur l’onglet Retour. Sous le titre, la ligne d’aide de la v4.5 (`RideForm.otherLeg.hint.*`),
+  qui dit où et quand part l’autre leg, et décrit le groupe (`aria-describedby`). Boutons
+  radio :
+  - « Je ramène aussi des passagers » / « J’emmène aussi des passagers » : déplie le **lieu** de l’autre leg (« Lieu de
     dépose » au retour, « Lieu de départ » à l’aller, prérempli avec le lieu saisi et qui le
     suit tant qu’on ne le change pas, comme la date de retour de la création d’événement)
     et son **heure** (préremplie avec l’heure de l’autre leg dans l’événement : 18:00 pour
-    « Je ramène aussi » depuis l’Aller du Tournoi de Rennes, 07:30 pour « J’emmène aussi »
+    « Je ramène aussi des passagers » depuis l’Aller du Tournoi de Rennes, 07:30 pour « J’emmène aussi des passagers »
     depuis le Retour), puis la phrase
     `RideForm.otherLeg.same`. Places et note valent pour les deux voitures. Mêmes règles
     de champ (R4).
@@ -1606,7 +2319,7 @@ tests Playwright (C11.10) :
 | une action de cellule (« Ne fait pas l’aller / le retour », « Je cherche une place », « Sortir de la voiture ») | la cellule (`cell:{personId}:{leg}`) | après l’échec de « Ne fait pas l’aller » pour Tom · Aller, « Ne fait pas l’aller » depuis la même cellule, rouverte | une action depuis Tom · Retour ; une place prise pour Tom par un tap |
 | « Ajouter une personne » (depuis le tableau, une place ou la feuille) | le prénom envoyé, espaces de début et de fin retirés (`person:new:{prénom}`) | « Inès » échoue depuis le bouton de l’onglet Aller ; « Inès » (avec des espaces autour) est renvoyé depuis la feuille d’une place de l’onglet Retour | « Hugo » envoyé depuis le même bouton |
 | « Modifier » une personne | la personne et chaque champ envoyé (`person:{personId}` + champs) | après l’échec du prénom et du téléphone de Tom, un « Modifier » de Tom qui envoie les deux | un « Modifier » de Tom qui n’envoie que le téléphone ; un « Modifier » de Léa ; un « Valider » sans changement de Tom, qui n’envoie rien (v4.4, V1.5) |
-| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi » depuis l’onglet Aller, Marc avec « J’emmène aussi » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs (hors ligne ou erreur, avec un retour qui existe). Exception, un échec `noRetourAgain` : son sujet est la seule partie aller, et Claire à l’aller seul le retire (v4.4.4, B1.7). De même pour un échec sur les deux legs réduit à l’aller par la transition (v4.4.6, N1.6) |
+| « Proposer une voiture » | chaque leg de l’offre, et la personne qui conduit (`offer:{leg}:{personId}` ou `offer:{leg}:new:{prénom}`, une clé par leg : deux avec « Je ramène aussi des passagers ») | après l’échec de Marc, nouvelle personne, à l’aller, Marc à l’aller depuis le formulaire rouvert ; après l’échec de Marc avec « Je ramène aussi des passagers » depuis l’onglet Aller, Marc avec « J’emmène aussi des passagers » depuis l’onglet Retour | Marc au retour ; Claire à l’aller ; Marc à l’aller seul, après l’échec de Marc sur les deux legs (hors ligne ou erreur, avec un retour qui existe). Exception, un échec `noRetourAgain` : son sujet est la seule partie aller, et Claire à l’aller seul le retire (v4.4.4, B1.7). De même pour un échec sur les deux legs réduit à l’aller par la transition (v4.4.6, N1.6) |
 | « Modifier » la voiture (#93) | la modification de cette voiture (`ride:{rideId}:edit`, comme PR #218) | un nouveau « Modifier » de la même voiture | « Retirer la voiture » de cette voiture, **qui échoue** (`ride-remove.spec.ts:350`) ; « Modifier » d’une autre voiture ; un « Valider » sans changement de cette voiture, qui n’envoie rien (v4.4.5, W1.6). Un retrait **réussi** retire l’échec (règle 5, v4.4.1) |
 | « Retirer la voiture » | le retrait de cette voiture (`ride:{rideId}`, comme PR #213) | un nouveau « Retirer la voiture » de la même voiture | « Modifier » de cette voiture |
 | « Réessayer » de « Vos inscriptions » | la lecture de « Vos inscriptions » (`device:read`) | le « Réessayer » suivant | le retour du réseau (`setOffline(false)`, évènement `online`) |
@@ -1874,10 +2587,13 @@ v4.2, dans la barre, « hors ligne » et « erreur serveur » nomment ce qui n�
 | première inscription, depuis une place, erreurs et stockage | Ajouter une personne | C1.2 à C1.14, C5.4 |
 | feuille des passagers | La feuille | C6.1 à C6.9 |
 | proposer, appareil sans personne (4 actions) | Proposer une voiture | C4.1, C4.4 |
-| proposer, « Je ramène aussi » et « Qui monte avec vous ? » | Proposer une voiture | revue, C4.5 |
+| proposer, « Je ramène aussi des passagers » et « Qui monte avec vous ? » | Proposer une voiture | revue, C4.5 |
 | proposer, erreurs | Proposer une voiture | C4.7 |
 | proposer, passagère au retour : « Je reste… », « Quittera la voiture de… » | Proposer une voiture | C3.5, C4.5 |
-| proposer depuis l’onglet Retour : « À l’aller », « J’emmène aussi » | Proposer une voiture | revue, R4 |
+| proposer depuis l’onglet Retour : « À l’aller », « J’emmène aussi des passagers » | Proposer une voiture | revue, R4, E1.2 |
+| l’autre leg : la ligne d’aide, depuis l’Aller et depuis le Retour | L’autre leg, lu depuis l’événement (v4.5) | E1.1, E1.2 |
+| l’autre leg : un lieu de 120 caractères à 360 px ; en anglais ; le retour un autre jour | L’autre leg, lu depuis l’événement (v4.5) | E1.4, E1.5, E1.6 |
+| l’autre leg absent : pas de ligne | L’autre leg, lu depuis l’événement (v4.5) | E1.7 |
 | un tap, « Annuler », après « Annuler », place prise | Un tap et « Annuler » | C5.2, C5.7, C7.4 |
 | « qui sort », confirmation de retrait, après confirmation (section repliée, section dépliée) | Modifier, retirer | C8.4, C8.6 |
 | hors ligne, 15 voitures avec la barre | Erreurs et chargement | C11.4 |
@@ -1977,8 +2693,10 @@ ou changé dans cette version.
 | `RideForm.leavesCar` | Quittera la voiture de {driver} | Will leave {driver}’s car | nouveau (C4.5) | #90 |
 | `RideForm.otherLeg.title.retour` | Au retour | On the return trip | revue — v4 | #90 |
 | `RideForm.otherLeg.title.aller` | À l’aller | On the outbound trip | symétrique de la revue — v4 | #90 |
-| `RideForm.otherLeg.drive.retour` | Je ramène aussi | I drive back too | revue — v4 | #90 |
-| `RideForm.otherLeg.drive.aller` | J’emmène aussi | I drive there too | symétrique de la revue — v4 | #90 |
+| `RideForm.otherLeg.drive.retour` | Je ramène aussi des passagers | I bring people back too | revue — v4 ; « des passagers », #649 — v4.5 | #90, #649 |
+| `RideForm.otherLeg.drive.aller` | J’emmène aussi des passagers | I take people there too | symétrique de la revue — v4 ; « des passagers », #649 — v4.5 | #90, #649 |
+| `RideForm.otherLeg.hint.retour` | Le retour part du lieu de l’événement, {location}, le {date}. | The return trip leaves {location} on {date}. | nouveau (E1.1) — v4.5 | #649 |
+| `RideForm.otherLeg.hint.aller` | L’aller va jusqu’au lieu de l’événement, {location}, le {date}. | The outbound trip goes to {location} on {date}. | nouveau (E1.2) — v4.5 | #649 |
 | `RideForm.otherLeg.stay` | Je reste dans la voiture de {driver} | I stay in {driver}’s car | nouveau — v4 | #90 |
 | `RideForm.otherLeg.withoutCar` | Je cherche une place | I need a seat | revue, C3.2 — v4 | #90 |
 | `RideForm.otherLeg.notConcerned.retour` | Je ne fais pas le retour | I’m not doing the return trip | revue — v4 | #90 |
@@ -2035,7 +2753,7 @@ ou changé dans cette version.
 | `Actions.notDone.choice` | {person} : « {choice} » n’a pas été enregistré. | {person}: “{choice}” was not saved. | « Ne fait pas l’aller / le retour », « Je cherche une place » ; {person} = `DevicePersons.sheetTitle`, {choice} = le libellé du bouton (C3.1, C3.2, C11.11) — v4.2 | #216 |
 | `Actions.notDone.addPerson` | {firstName} n’a pas pu rejoindre vos inscriptions. | {firstName} could not be added to your sign-ups. | « Ajouter une personne » (C1.10, C6.6, C11.11) — v4.2 | #216 |
 | `Actions.notDone.editPerson` | {fields, select, firstName {Le prénom de {firstName} n’a pas été enregistré.} phone {Le téléphone de {firstName} n’a pas été enregistré.} other {Le prénom et le téléphone de {firstName} n’ont pas été enregistrés.}} | {fields, select, firstName {{firstName}’s first name was not saved.} phone {{firstName}’s phone number was not saved.} other {{firstName}’s first name and phone number were not saved.}} | « Modifier » une personne ; {fields} = les champs envoyés (`firstName`, `phone`, `both`) ; {firstName} = le prénom d’avant (C2.3, C11.11) — v4.2, champs en v4.2.2 | #216 |
-| `Actions.notDone.offerRide` | {legs, select, both {Les voitures de {driver} pour l’aller et le retour n’ont pas été proposées.} aller {La voiture de {driver} pour l’aller n’a pas été proposée.} other {La voiture de {driver} pour le retour n’a pas été proposée.}} | {legs, select, both {{driver}’s cars for the outbound and return trips were not offered.} aller {{driver}’s car for the outbound trip was not offered.} other {{driver}’s car for the return trip was not offered.}} | « Proposer une voiture » ; `both` avec « Je ramène aussi » / « J’emmène aussi » (C4.1, C4.11, C11.11) — v4.2 | #216 |
+| `Actions.notDone.offerRide` | {legs, select, both {Les voitures de {driver} pour l’aller et le retour n’ont pas été proposées.} aller {La voiture de {driver} pour l’aller n’a pas été proposée.} other {La voiture de {driver} pour le retour n’a pas été proposée.}} | {legs, select, both {{driver}’s cars for the outbound and return trips were not offered.} aller {{driver}’s car for the outbound trip was not offered.} other {{driver}’s car for the return trip was not offered.}} | « Proposer une voiture » ; `both` avec « Je ramène aussi des passagers » / « J’emmène aussi des passagers » (C4.1, C4.11, C11.11) — v4.2 | #216 |
 | `Actions.notDone.removeRide` | {leg, select, aller {La voiture de {driver} pour l’aller n’a pas été retirée.} other {La voiture de {driver} pour le retour n’a pas été retirée.}} | {leg, select, aller {{driver}’s car for the outbound trip was not removed.} other {{driver}’s car for the return trip was not removed.}} | « Retirer la voiture » (C8.6, C11.11) — v4.2 | #216 |
 | `Actions.notDone.editRide` | {leg, select, aller {Les changements de la voiture de {driver} pour l’aller n’ont pas été enregistrés.} other {Les changements de la voiture de {driver} pour le retour n’ont pas été enregistrés.}} | {leg, select, aller {The changes to {driver}’s car for the outbound trip were not saved.} other {The changes to {driver}’s car for the return trip were not saved.}} | « Modifier » la voiture, #93 (C8.2, C11.11) — v4.2 | #216 |
 | `Actions.notDone.readDevice` | Vos inscriptions n’ont pas pu être chargées. | Your sign-ups could not be loaded. | « Réessayer » de « Vos inscriptions » (C5.9, C11.11) — v4.2.1 | #216 |
@@ -2114,12 +2832,12 @@ ouverts qui ont envoyé, les messages restent ceux de v4.1.
 | « Proposer une voiture », ce leg seulement : Marc, aller | `alreadyInCar` (passagers cochés) | La voiture de Marc pour l’aller n’a pas été proposée. Parmi Inès et Hugo, une personne au moins est déjà dans une voiture. | Marc’s car for the outbound trip was not offered. Of Inès and Hugo, at least one is already in a car. | `Actions.notDone.offerRide` + `Actions.why.passengerInCar` | C4.1, C4.6, C4.13, C11.11 |
 | « Proposer une voiture », ce leg seulement : Marc, aller | `forbidden` | La voiture de Marc pour l’aller n’a pas été proposée. Cet appareil ne peut pas faire ce changement : rechargez la page. | Marc’s car for the outbound trip was not offered. This device cannot make this change: reload the page. | `Actions.notDone.offerRide` + `Actions.why.forbidden` | C4.1, C4.6, C4.13, C11.11 |
 | « Proposer une voiture », ce leg seulement : Marc, aller | `eventNotFound` | La voiture de Marc pour l’aller n’a pas été proposée. Cet événement est introuvable : il a peut-être été supprimé. | Marc’s car for the outbound trip was not offered. This event can no longer be found: it may have been deleted. | `Actions.notDone.offerRide` + `Actions.why.eventNotFound` | C4.1, C4.6, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi » : Claire | hors ligne | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Vérifiez la connexion, puis réessayez. | Claire’s cars for the outbound and return trips were not offered. Check your connection, then try again. | `Actions.notDone.offerRide` + `Actions.why.offline` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi » : Claire | erreur serveur (500, réseau), `invalid`, `idTaken` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Une erreur est survenue : réessayez dans un instant. | Claire’s cars for the outbound and return trips were not offered. Something went wrong: try again in a moment. | `Actions.notDone.offerRide` + `Actions.why.failed` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi » : Claire | `alreadyDriving` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture. | Claire’s cars for the outbound and return trips were not offered. Claire is already driving a car. | `Actions.notDone.offerRide` + `Actions.why.alreadyDriving` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi » : Claire | `alreadyInCar` (passagers cochés) | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Léa est déjà dans une voiture. | Claire’s cars for the outbound and return trips were not offered. Léa is already in a car. | `Actions.notDone.offerRide` + `Actions.why.passengerInCar` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi » : Claire | `forbidden` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet appareil ne peut pas faire ce changement : rechargez la page. | Claire’s cars for the outbound and return trips were not offered. This device cannot make this change: reload the page. | `Actions.notDone.offerRide` + `Actions.why.forbidden` | C4.11, C4.12, C4.13, C11.11 |
-| « Proposer une voiture » avec « Je ramène aussi » : Claire | `eventNotFound` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet événement est introuvable : il a peut-être été supprimé. | Claire’s cars for the outbound and return trips were not offered. This event can no longer be found: it may have been deleted. | `Actions.notDone.offerRide` + `Actions.why.eventNotFound` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | hors ligne | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Vérifiez la connexion, puis réessayez. | Claire’s cars for the outbound and return trips were not offered. Check your connection, then try again. | `Actions.notDone.offerRide` + `Actions.why.offline` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | erreur serveur (500, réseau), `invalid`, `idTaken` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Une erreur est survenue : réessayez dans un instant. | Claire’s cars for the outbound and return trips were not offered. Something went wrong: try again in a moment. | `Actions.notDone.offerRide` + `Actions.why.failed` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | `alreadyDriving` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Claire conduit déjà une voiture. | Claire’s cars for the outbound and return trips were not offered. Claire is already driving a car. | `Actions.notDone.offerRide` + `Actions.why.alreadyDriving` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | `alreadyInCar` (passagers cochés) | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Léa est déjà dans une voiture. | Claire’s cars for the outbound and return trips were not offered. Léa is already in a car. | `Actions.notDone.offerRide` + `Actions.why.passengerInCar` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | `forbidden` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet appareil ne peut pas faire ce changement : rechargez la page. | Claire’s cars for the outbound and return trips were not offered. This device cannot make this change: reload the page. | `Actions.notDone.offerRide` + `Actions.why.forbidden` | C4.11, C4.12, C4.13, C11.11 |
+| « Proposer une voiture » avec « Je ramène aussi des passagers » : Claire | `eventNotFound` | Les voitures de Claire pour l’aller et le retour n’ont pas été proposées. Cet événement est introuvable : il a peut-être été supprimé. | Claire’s cars for the outbound and return trips were not offered. This event can no longer be found: it may have been deleted. | `Actions.notDone.offerRide` + `Actions.why.eventNotFound` | C4.11, C4.12, C4.13, C11.11 |
 | « Réessayer » de « Vos inscriptions » | hors ligne | Vos inscriptions n’ont pas pu être chargées. Vérifiez la connexion, puis réessayez. | Your sign-ups could not be loaded. Check your connection, then try again. | `Actions.notDone.readDevice` + `Actions.why.offline` | C5.9, C11.11 |
 | « Réessayer » de « Vos inscriptions » | erreur serveur (500, réseau), `invalid`, `idTaken` | Vos inscriptions n’ont pas pu être chargées. Une erreur est survenue : réessayez dans un instant. | Your sign-ups could not be loaded. Something went wrong: try again in a moment. | `Actions.notDone.readDevice` + `Actions.why.failed` | C5.9, C11.11 |
 | « Retirer la voiture » : Claire, aller | hors ligne | La voiture de Claire pour l’aller n’a pas été retirée. Vérifiez la connexion, puis réessayez. | Claire’s car for the outbound trip was not removed. Check your connection, then try again. | `Actions.notDone.removeRide` + `Actions.why.offline` | C8.6, C11.11 |
@@ -2229,7 +2947,7 @@ ne fais pas… », comme C4.4) ; « Je reste dans la voiture de {conducteur} » 
 cas ; absent si elle conduit déjà sur l’autre leg. — Raison : ne rien changer qu’on n’a pas
 choisi ; C4.1 garde ses quatre actions.
 
-v4-9. Décision : « Je ramène aussi » déplie le lieu (prérempli, qui suit le lieu de ce leg
+v4-9. Décision : « Je ramène aussi des passagers » déplie le lieu (prérempli, qui suit le lieu de ce leg
 tant qu’on ne le change pas) et l’heure (préremplie) de l’autre leg ; places et note
 communes. — Raison : au retour le lieu est celui de la dépose (glossaire) ; zéro saisie dans
 le cas courant.
@@ -2393,6 +3111,35 @@ v4.4.6-2. Décision : réduire une ligne n’est pas l’écrire. Rien n’est a
 
 v4.4.6-3. Décision : si l’écriture de cet échec est encore en attente, elle écrit le texte réduit, à son heure. — Raison : la réduction ne doit pas faire taire un échec qui n’a pas encore été annoncé. Il l’est donc dans les mots que la barre montre, et jamais dans le texte entier, que la barre ne montre plus. Seule exception, inchangée : une écriture plus récente dans la région `alert` annule l’écriture en attente (point 3), et seul ce nouvel échec est annoncé, comme pour deux échecs du même passage ; la ligne réduite se relit alors dans la liste.
 
+### Nouvelles en v4.6 (les feuilles sur téléphone et le clavier, #650)
+
+v4.6-1 à v4.6-16, écrites en entier dans « Décisions de la v4.6 » : pleine hauteur pour les
+feuilles à champ de saisie (décision du propriétaire) ; en-tête et barre d’actions fixes ;
+messages dans la barre ; `visualViewport` sans `interactive-widget` ; la liste des
+propositions par-dessus la barre ; tout défile sous 240 px ; ordinateur inchangé ; K2 après
+le déploiement, sans bloquer (décision du propriétaire) ; les autres maquettes gardent leur
+dessin. En v4.6 (suite) : « Qui sort de la voiture ? » garde la pleine hauteur, et une seule
+zone défile (décisions du coordinateur) ; `RegisterSheet` est dans la liste ; tout élément
+qui a le focus reste au-dessus de la barre ; la règle 8 vaut à toute largeur ; `scrollY` est
+rendu à la fermeture ; la zone des messages est nommée.
+
+### Nouvelles en v4.5 (l’autre leg, lu depuis l’événement, #649)
+
+v4.5-1. Décision du propriétaire sur #649, inscrite ici : les choix « conduire » de l’autre leg nomment leurs passagers (« Je ramène aussi des passagers », « J’emmène aussi des passagers » ; « I bring people back too », « I take people there too »), et une ligne dit où et quand part l’autre leg. — Raison : une conductrice qui dépose puis rentre lisait « le retour » comme son propre chemin à vide. « Ramener » avec un complément ne se lit qu’avec des passagers, et la ligne donne une heure que son chemin à vide n’a pas. L’anglais « I drive back too » disait cette lecture mot pour mot.
+
+v4.5-2. Décision : la ligne décrit le leg, pas la voiture. Elle donne l’heure de l’autre leg dans l’événement, et ne suit pas l’heure saisie avec « Je ramène aussi des passagers ». — Raison : elle répond à « de quel retour parle-t-on ? », pas à « quand part ma voiture ? », que le champ « Heure de départ du retour » montre juste dessous. Une ligne qui suivrait le champ répéterait le champ et perdrait le repère.
+
+v4.5-3. Décision : la date est toujours écrite en entier, même le jour de ce leg. — Raison : la phrase dit « le {date} », et « le 18:00 » ne se dit pas. La ligne se lit seule, au lecteur d’écran aussi, loin de l’en-tête.
+
+v4.5-4. Décision : la ligne est sous le titre du groupe, avant les choix, et elle décrit le groupe (`aria-describedby` sur le `radiogroup`), pas un bouton radio. — Raison : elle se lit une fois, avant de choisir. Posée sur un bouton, elle ne serait lue qu’avec lui, ou serait répétée sur chacun.
+
+v4.5-5. Décision : les titres « Au retour » et « À l’aller » ne changent pas. — Raison : la ligne porte déjà le repère de l’événement, et le propriétaire a retenu les deux libellés « conduire » de l’option A, pas ses titres. Cela évite aussi de récrire quinze citations de « Au retour » dans les tests.
+
+v4.5-6. Décision : le lieu est le texte du lieu de l’événement, entier, et la ligne passe à la ligne. — Raison : un lieu tronqué ne repère plus rien. La Position n’est pas toujours là, et elle ne se lit pas.
+
+v4.5-7. Décision du coordinateur sur #649 : en français, la ligne dit « Le retour part du lieu de l’événement, {location}, le {date}. » et « L’aller va jusqu’au lieu de l’événement, {location}, le {date}. ». L’anglais ne change pas. — Raison : le lieu est un texte libre, et une préposition placée juste devant lui ne s’accorde pas avec un lieu qui commence par un article ou un nom commun. « Le lieu de l’événement », les mots de la Carte, porte la préposition, et la phrase se lit avec n’importe quel lieu. Note, la forme écartée : « Le retour part de {location} le {date}. » et « L’aller va vers {location} le {date}. », retenue d’abord sur #649. Elle donnait « part de Les Saisies » au lieu de « part des Saisies », « va vers Le Liberté » au lieu de « vers le Liberté », et « part de Gymnase des Gayeulles » au lieu de « part du gymnase des Gayeulles ».
+
+
 ## Écarts par rapport à la revue
 
 1. « Chaque personne sur une ligne (prénom, état, menu) » : dans la matrice, le « menu » est
@@ -2482,7 +3229,7 @@ v4.4.6-3. Décision : si l’écriture de cet échec est encore en attente, elle
 - **R4** : « Conducteur » devient « Qui conduit ? » et « conducteur non compris » devient
   « sans compter qui conduit » ; plus l’autre leg et « Qui monte avec vous ? ».
 - **C4.2** : « La voiture n’apparaît que sur le leg où elle a été proposée » devient « … sauf
-  avec “Je ramène aussi” / “J’emmène aussi”, qui crée aussi une voiture sur l’autre leg ».
+  avec “Je ramène aussi des passagers” / “J’emmène aussi des passagers”, qui crée aussi une voiture sur l’autre leg ».
   Un test de C4.2 écrit sur l’ancien texte échouerait.
 - **C4.4** devient le comportement par défaut ; **C4.5** : la seule écriture couvre aussi
   l’autre leg et les passagers de « Qui monte avec vous ? » ; **C4.10** couvre aussi le
@@ -2593,6 +3340,46 @@ v4.4.6-3. Décision : si l’écriture de cet échec est encore en attente, elle
   une réussite de placement abandonnée selon la règle 2 n’est jamais écrite ».
 - **Nouveaux** : S1.1 à S1.5 et W1.1 à W1.7, dans « Critères de la v4.4.5 ».
 
+### v4.6 (#650), les feuilles sur téléphone
+
+- Aucun critère de #66 n’est amendé : leurs mots, leurs boutons et l’ordre du focus ne
+  changent pas. « Utilisable sur 360 px » (`product.md`) et M9.1 d’organizer-view restent
+  vrais, K1.15 les reprend pour les feuilles.
+- **Nouveaux** : K1.1 à K1.16 (Playwright, avant la fusion) et K2.1 à K2.7 (iPhone, après le
+  déploiement, sans bloquer), dans « Critères de la v4.6 ».
+- **AL1.11** de place-autocomplete reste vrai ; sa prochaine révision ajoute que la liste peut
+  couvrir la barre d’actions (v4.6-5).
+
+### v4.5 (#649), l’autre leg lu depuis l’événement
+
+- **C4.2** : l’amendement de la v4 cite les nouveaux libellés, « … sauf avec “Je ramène aussi
+  des passagers” / “J’emmène aussi des passagers”, qui crée aussi une voiture sur l’autre
+  leg ».
+- **C4.11**, et tout critère de #66 qui cite « Je ramène aussi » ou « J’emmène aussi » :
+  le nouveau libellé, sans autre changement.
+- **Les maquettes voisines sur `main`** dessinent ou citent le même groupe « Au retour », avec
+  les libellés que la v4.5 remplace et sans la ligne d’aide. Les tests trouvent un bouton radio
+  par son nom exact : un critère qui cite l’ancien libellé chercherait un bouton qui n’existe
+  plus. Jusqu’à leur prochaine révision, la v4.5 fait foi. Chaque citation de « Je ramène
+  aussi » devient « Je ramène aussi des passagers », chaque « J’emmène aussi » devient
+  « J’emmène aussi des passagers », et chaque « I drive back too » devient « I bring people
+  back too ». Une maquette du groupe montre aussi la ligne d’aide, sous son titre.
+  - `docs/design/place-autocomplete/` :
+    - les critères **AL3.5** (`index.html:597`) et **AL4.2** (`index.html:602`), qui nomment
+      le bouton radio ;
+    - les maquettes `index.html:322` (« Je ramène aussi ») et `index.html:449` (« I drive back
+      too », le libellé que E1.4 interdit) ;
+    - les textes `index.html:298`, `:315` et `:403`, et le README, lignes 25, 41 et 55.
+  - `docs/design/organizer-view/` :
+    - le critère **M7.6** (`README.md:746`, recopié dans `index.html:369`) ;
+    - la table des échecs, mot pour mot (`README.md:822`, et `index.html:369`) ;
+    - la table des états couverts (`README.md:906`) ;
+    - « Ce que voient les participants » (`README.md:507`, `:512`, `:515` et `:520`) ;
+    - la maquette « Participant : depuis l’Aller, avec « Je ramène aussi » » (`index.html:368`).
+
+    Son journal des révisions (`README.md:1224`) dit une version passée : il ne change pas.
+- **Nouveaux** : E1.1 à E1.7, dans « Critères de la v4.5 ».
+
 ### v4.4.6 (#372), une ligne d’échec réduite à l’aller
 
 - **C11.10** : ajouter, à la puce de la transition : « sauf l’échec hors ligne ou en erreur
@@ -2635,6 +3422,25 @@ v4.4.6-3. Décision : si l’écriture de cet échec est encore en attente, elle
 - **Nouveaux** : D1.1 à D1.8 et D2.1 à D2.5, dans « Critères de la v4.3 ».
 
 ## Hors périmètre
+
+En v4.6 :
+
+- Le geste « retour » du navigateur sur une feuille ouverte : issue #656.
+- Fermer une feuille en la glissant vers le bas ; les boîtes de confirmation centrées ; le
+  formulaire de création et les pages du compte ; `viewport-fit=cover`.
+
+En v4.5 :
+
+- Un repère sur le tableau lui-même, par exemple « Vers {lieu} · {date} » en tête de chaque
+  leg (option C de #649). Les onglets, et le tableau d’un leg, ne changent pas. Il est à
+  reprendre si un autre testeur bute sur les onglets.
+- Renommer les legs à l’écran, avec « Vers l’événement » / « Depuis l’événement » ou
+  « Trajet aller » / « Trajet retour » (options D et E de #649, écartées).
+- Montrer ou compter le chemin à vide d’un conducteur : ce n’est pas un leg (phrase F).
+- La matrice « Vos inscriptions » : la cellule d’une conductrice dit toujours « Ne fait pas
+  le retour » sur le leg qu’elle ne fait pas.
+- « Ajouter une personne » et sa case « Aller et retour » : inchangés.
+- Accorder une préposition avec le lieu saisi : la phrase l’évite (v4.5-7).
 
 En v4.4.6 :
 
@@ -3103,3 +3909,80 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
 - v4.4.6 (suite, 2) : relecture : **approuvée**. Corrections de texte, sans nouvelle revue :
   les critères deviennent N1.1 à N1.6 (K1 est celui de « Nous contacter », #69), et « la
   scène de N1.1 » remplace l’élision. Republiée à la même URL.
+- v4.5 (2026-10-25) : #649, décision du propriétaire (options A, B et F, « des passagers »).
+  - « Je ramène aussi des passagers » et « J’emmène aussi des passagers » ; en anglais,
+    « I bring people back too » et « I take people there too ».
+  - Une ligne d’aide sous le titre du groupe de l’autre leg, qui le décrit : « Le retour part
+    de {location} le {date}. » et « L’aller va vers {location} le {date}. » (v4.5-1 à v4.5-6).
+  - La phrase F pour l’entrée Leg du glossaire, que l’humain fusionne.
+  - Critères H8 et E1.1 à E1.7. C4.2 et C4.11 sont amendés. Les citations des anciens
+    libellés sont mises à jour, sauf celles qui disent une version passée ou une décision
+    datée : « Ce qui change en v4 », les clés retirées en v4.1, les écarts, la décision de
+    l’humain du 18 octobre et ce journal.
+  - La page ajoute la section « L’autre leg, lu depuis l’événement (v4.5) », avec sept
+    maquettes depuis la v4.5 (suite), huit à cette première publication. Les maquettes de « Proposer une voiture » ont la ligne et les nouveaux
+    libellés. Republiée à la même URL.
+- v4.5 (suite) : décision du coordinateur sur #649, sans changer de numéro, puisque la v4.5
+  n’a pas été copiée dans le dépôt.
+  - La ligne française devient « Le retour part du lieu de l’événement, {location}, le
+    {date}. » et « L’aller va jusqu’au lieu de l’événement, {location}, le {date}. »
+    (v4.5-7). La forme d’abord retenue ne reste qu’en note de cette décision. L’anglais ne
+    change pas.
+  - Mots, E1.1, E1.2, E1.6 et E1.7, maquettes alignés. Le point ouvert est retiré.
+  - La note de développement est corrigée. Sur `main`, `docs/agents/glossary.md` n’est pas un
+    chemin sensible, seul `docs/agents/review-checklist.md` l’est. La phrase du glossaire va
+    donc dans la PR du code.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.5 (suite, 2) : relecture de la maquette : **changements demandés**, un bloquant.
+  - Bloquant : les maquettes voisines `place-autocomplete` et `organizer-view` citent et
+    dessinent encore les anciens libellés, sans la ligne d’aide. Elles sont listées, ligne par
+    ligne, dans « Critères de l’epic à amender », v4.5. Leurs fichiers ne sont pas modifiés ici :
+    organizer-view est en cours de révision par un autre designer.
+  - Suggestions appliquées :
+    - E1.5 vérifie que la ligne n’est pas coupée (`scrollHeight` au plus `clientHeight`) ;
+    - E1.1 a une seconde scène, avec la personne qui conduit passagère sur l’autre leg ;
+    - la phrase F s’écrit avec des apostrophes droites, comme `glossary.md` ;
+    - ce journal compte sept maquettes.
+  - Pas encore relue de nouveau. Republiée à la même URL.
+- v4.6 (2026-10-26) : #650, sur la v4.5 approuvée (artifact, version 30).
+  - Sur téléphone, une feuille à champ de saisie prend toute la hauteur visible. Toute
+    feuille a un en-tête et une barre d’actions fixes, et seul son corps défile. La barre
+    suit le haut du clavier (`visualViewport`), et ses messages sont au-dessus du bouton
+    principal. La liste des propositions peut couvrir la barre, et rien ne fait défiler la
+    page derrière. Aucun mot nouveau.
+  - Réponses du propriétaire sur #650 (26/10) : pleine hauteur pour les feuilles à champ de
+    saisie seulement (v4.6-1) ; K2 après le déploiement, sans bloquer, et le risque de la
+    barre de remplissage accepté (v4.6-8) ; le geste « retour » est #656.
+  - Critères K1.1 à K1.15 (Playwright) et K2.1 à K2.7 (iPhone, à la main).
+  - La page ajoute la section « Les feuilles sur téléphone (v4.6) », avec treize maquettes.
+    Les maquettes de « Proposer une voiture » de la v4.5 gardent leur ligne d’aide et leurs
+    libellés ; une note y renvoie à la nouvelle section pour la hauteur. Préparée en
+    brouillon pendant la v4.5, puis fusionnée sur elle.
+  - Pas encore relue en revue de design. Republiée à la même URL.
+- v4.6 (suite) (2026-10-26) : revue de design de la v4.6, **changements demandés**, cinq
+  bloquants, tous appliqués. Le numéro ne change pas, puisque la v4.6 n’a pas été copiée dans
+  le dépôt. Les parties de la v4.5 ne changent pas.
+  - Bloquant 1 : `RegisterSheet` (première inscription depuis une place libre, C5.4) est dans
+    le tableau des feuilles, la règle 2, la barre d’actions, K1.1 et la maquette 15 (v4.6-11).
+  - Bloquant 2, décision du coordinateur : « Qui sort de la voiture ? » garde la pleine
+    hauteur (règles 2 et 3, v4.6-10). L’étape est dessinée (maquette 14) et testée (K1.5).
+  - Bloquant 3 : la règle 5 vaut pour tout élément qui prend le focus (WCAG 2.4.11,
+    v4.6-12). Nouveaux : K1.16 et la maquette 16.
+  - Bloquant 4 : la règle 8 vaut à toute largeur et se lit sur `visualViewport` (règle 9,
+    v4.6-13). K1.13 a une étape avec l’objet de K1.7.
+  - Bloquant 5, décision du coordinateur : une seule zone qui défile. Glisser sur l’en-tête
+    ou la barre peut faire défiler la feuille, jamais la page (règle 7, K1.10, K2.4,
+    v4.6-14).
+  - Suggestions appliquées :
+    - K1.8 passe sur « Modifier la voiture », et vérifie d’abord le débordement ;
+    - K1.4 passe à 360 × 480 et vérifie d’abord le débordement ; la maquette 9 n’a plus
+      d’espace vide ;
+    - la maquette 1b retrouve la ligne d’aide du téléphone, et la maquette 7 le champ
+      « Téléphone » ;
+    - sur iPhone, `scrollY` est gardé à l’ouverture et rendu à la fermeture (règle 10,
+      v4.6-15, K2.5) ;
+    - la tâche nomme les composants hôtes ;
+    - l’alerte de « Qui sort de la voiture ? » passe dans la barre, ce qui se voit aussi sur
+      ordinateur (règle 9) ;
+    - la zone des messages qui déborde est nommée « Messages » et focalisable (v4.6-16).
+  - Pas encore relue de nouveau. Republiée à la même URL.

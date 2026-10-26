@@ -560,6 +560,11 @@ describe("account tables", () => {
     it.each([
       ["a token", { admin_token_hash: hash(9), location_lat: null, location_lng: null }],
       ["a position", { admin_token_hash: null, location_lat: 48.1173, location_lng: -1.67779 }],
+      // #706: since 0005, the description too, erased on day 30 like the position.
+      [
+        "a description",
+        { admin_token_hash: null, location_lat: null, location_lng: null, description: "Rendez-vous au parking" },
+      ],
     ])("refuses an anonymised event with %s", async (_, fields) => {
       await expectRefusedBy(async (trx) => {
         const { eventId } = await aConfirmedEvent(trx);
