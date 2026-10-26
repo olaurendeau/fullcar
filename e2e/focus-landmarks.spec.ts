@@ -3,14 +3,14 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { failActions, holdActions, holdFirst, holdToken, messages, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { expectRing, press, pressUntil } from "./focus-ring";
-import { holdActionsWith, oneCharOff, organiserPath, seedCrowd, seedOrganiserScene, test as organiserTest } from "./organiser";
+import { holdActionsWith, oneCharOff, organiserPath, seedCrowd, test as organiserTest, unfoldLegs } from "./organiser";
 
 /*
  * #321, #314, epic #236: F1.17 of the language-switch design (v3.3.1). The landmarks that had
  * no ring at all focused by the action that focuses them in the application, from the
  * keyboard, pass the focus-ring measure: « Chargement de vos inscriptions… », the event's
- * title, and on the organiser's page the alert « lien non valide », a leg's title and a
- * list's title. There, the fixture `organiserTraffic` checks every test for the admin token
+ * title, and on the organiser's page the alert « lien non valide » and a list's title (a leg's
+ * title, focused by a tile, went with the tiles: organizer-view v3.5, Q1 = a). There, the fixture `organiserTraffic` checks every test for the admin token
  * (O6.1) and the storage (O2.10). Nothing here prints the token, the admin link or a number.
  */
 
@@ -121,17 +121,6 @@ organiserTest.describe("on the organiser's page", () => {
     await expectRing(invalid);
   });
 
-  organiserTest("F1.17: a leg's title, after Enter on its tile (goToLeg)", async ({ db, page, seededEvent }) => {
-    await seedOrganiserScene(db, seededEvent.id);
-    await page.goto(organiserPath(seededEvent));
-    const tile = panel(page).getByRole("button", { name: /sans voiture|place/ }).first();
-    await pressUntil(page, "Tab", tile);
-    await press(page, "Enter");
-    const title = section(page, "Aller").getByRole("heading", { level: 3, name: "Aller" });
-    await expect(title).toBeFocused();
-    await expectRing(title);
-  });
-
   organiserTest("F1.17: a list's title, when a read removes the line with the focus (noteFocus)", async ({
     db,
     page,
@@ -139,6 +128,7 @@ organiserTest.describe("on the organiser's page", () => {
   }) => {
     await seedCrowd(db, seededEvent.id);
     await page.goto(organiserPath(seededEvent));
+    await unfoldLegs(page, ["aller"]);
     const aller = section(page, "Aller");
     const list = aller.getByRole("list", { name: /^Sans voiture/ });
     const refresh = panel(page).getByRole("button", { name: FR.refresh });

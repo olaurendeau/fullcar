@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Lock, Pencil, TriangleAlert } from "lucide-reac
 import { useTranslations } from "next-intl";
 import { useId, useRef, type ReactNode, type Ref, type RefObject } from "react";
 import type { Said } from "@/app/e/[id]/admin/screen-state";
+import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
 import type { WallClock } from "@/domain/wall-clock";
 import { Button } from "@/components/ui/button";
@@ -11,24 +12,25 @@ import { cn } from "@/lib/utils";
 import { CopyableLink, ShareButton } from "./copyable-link";
 import { OrganiserLegs } from "./organiser-leg";
 import { OrganiserSummary } from "./organiser-summary";
-import { OrganiserTiles } from "./organiser-tiles";
 import { ReadButton } from "./read-button";
 
 /**
  * The organiser's panel (#3, R4), the same at every visit (C4.7), in the order of C4.1:
  * the link to share, the organiser's own link as personal, then why to keep it; under it, a
- * section per leg (#179). Under 1024 px, a tile per leg comes first (#180); from 1024 px,
- * the panel widens, the links take two columns and the sections two more (O4.1). It
- * receives the organiser's link ready-made: reading the token is admin-link.ts's alone. Its
- * title is the button that folds it (#204, O8.1), `titleRef`, the focus's place after
- * « Réessayer » (O5.8). Folded, all but the title line and its alert is `hidden`, still
- * mounted, and a line per leg sums it up, or the withdrawal's sentence does (O8.2). Which
- * lists are unfolded, `expanded`, the screen keeps, by leg and list (O5.6, O5.7). « Actualiser », right
- * of the title, reads the screen again (O1.8); `said` is what the title line's live regions say
- * of it (O1.9, O5.4), and `shown` what the alert's frame shows meanwhile. Withdrawn (`legs`
- * null), the tiles and the sections go, the links stay, and a sentence says why, not live,
- * unless the alert shows in its place (O1.10, O5.4). « Modifier l’événement » follows « Gardez
- * ce lien », with the links: it stays when the panel is withdrawn, and folds with them (v3.3).
+ * section per leg (#179), folded at every appearance, its title the button that unfolds it
+ * (organizer-view v3.5, O9), and no tiles any more (O9.7). From 1024 px, the panel widens,
+ * the links take two columns and the sections two more (O4.1). It receives the organiser's
+ * link ready-made: reading the token is admin-link.ts's alone. Its title is the button that
+ * folds it (#204, O8.1), `titleRef`, the focus's place after « Réessayer » (O5.8). Folded,
+ * all but the title line and its alert is `hidden`, still mounted, and a line per leg sums it
+ * up, or the withdrawal's sentence does (O8.2). Which lists are unfolded, `expanded`, the
+ * screen keeps, by leg and list (O5.6, O5.7), and which legs, `unfolded` (O9.5).
+ * « Actualiser », right of the title, reads the screen again (O1.8); `said` is what the title
+ * line's live regions say of it (O1.9, O5.4), and `shown` what the alert's frame shows
+ * meanwhile. Withdrawn (`legs` null), the sections go, the links stay, and a sentence says
+ * why, not live, unless the alert shows in its place (O1.10, O5.4). « Modifier l’événement »
+ * follows « Gardez ce lien », with the links: it stays when the panel is withdrawn, and folds
+ * with them (v3.3).
  */
 export function AdminPanel({
   publicUrl,
@@ -43,6 +45,8 @@ export function AdminPanel({
   onRefresh,
   expanded,
   onToggle,
+  unfolded,
+  onToggleLeg,
   folded,
   onToggleFolded,
   editRef,
@@ -61,6 +65,8 @@ export function AdminPanel({
   onRefresh: () => void;
   expanded: ReadonlySet<string>;
   onToggle: (key: string) => void;
+  unfolded: ReadonlySet<Leg>;
+  onToggleLeg: (leg: Leg) => void;
   folded: boolean;
   onToggleFolded: () => void;
   /** « Modifier l’événement », which opens the sheet (epic #250): the focus's place once it closes. */
@@ -130,7 +136,6 @@ export function AdminPanel({
       </div>
       {folded && (legs ? <OrganiserSummary legs={legs} /> : !framed && <Stale />)}
       <div ref={content} id={contentId} hidden={folded} className="flex flex-col gap-4">
-        {legs && <OrganiserTiles legs={legs} />}
         <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
           <LinkGroup label={t("shareLink.label")} hint={t("shareLink.hint")}>
             <CopyableLink url={publicUrl}>
@@ -170,7 +175,15 @@ export function AdminPanel({
         </Button>
         {(legs || !framed) && <hr className="hidden lg:block" />}
         {legs ? (
-          <OrganiserLegs legs={legs} allerAt={allerAt} retourAt={retourAt} expanded={expanded} onToggle={onToggle} />
+          <OrganiserLegs
+            legs={legs}
+            allerAt={allerAt}
+            retourAt={retourAt}
+            expanded={expanded}
+            onToggle={onToggle}
+            unfolded={unfolded}
+            onToggleLeg={onToggleLeg}
+          />
         ) : (
           !framed && !folded && <Stale />
         )}

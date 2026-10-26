@@ -5,7 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { expect, holdActionsWith, organiserPath, seedCrowd, seedOrganiserScene, test } from "./organiser";
+import { expect, holdActionsWith, legButton, organiserPath, seedCrowd, seedOrganiserScene, test, unfoldLegs } from "./organiser";
 
 /*
  * #183, epic #154: after an action of the board, the panel alone is read again; withdrawn
@@ -37,7 +37,6 @@ const refresh = (page: Page) => panel(page).getByRole("button", { name: FR.refre
 const regions = (page: Page) => panel(page).locator("[role=status], [role=alert]");
 const alertRegion = (page: Page) => panel(page).getByRole("alert", { includeHidden: true });
 const section = (page: Page, leg: "Aller" | "Retour") => panel(page).getByRole("region", { name: leg, exact: true });
-const tiles = (page: Page) => panel(page).getByRole("button", { name: /sans voiture|place/ });
 const stale = (page: Page) => panel(page).getByText(FR.stale);
 const board = (page: Page) => page.getByRole("tabpanel");
 const carTitle = (page: Page, driver: string) => board(page).getByRole("heading", { name: `Voiture de ${driver}` });
@@ -67,12 +66,13 @@ async function organiserDevice(page: Page, db: Kysely<Database>, event: SeededEv
 
 const ownPersons = (page: Page) => page.getByRole("region", { name: "Vos inscriptions" });
 
-/** The organiser's device, then the organiser's page, its board's device known. */
+/** The organiser's device, then the organiser's page, its board's device known, both legs unfolded (O9). */
 async function openAsOrganiser(page: Page, db: Kysely<Database>, event: SeededEvent) {
   const id = await organiserDevice(page, db, event);
   await page.goto(organiserPath(event));
   await expect(refresh(page)).toBeVisible();
   await expect(ownPersons(page).getByText(ORGANISER)).toBeVisible();
+  await unfoldLegs(page);
   return id;
 }
 
@@ -101,10 +101,10 @@ async function markFocus(page: Page): Promise<() => Promise<boolean>> {
     page.evaluate(() => document.activeElement !== document.body && document.activeElement === (window as unknown as { markedFocus: Element }).markedFocus);
 }
 
-/** The panel withdrawn: no tile, no section, the links still there. */
+/** The panel withdrawn: no section, so no leg's button, the links still there. */
 async function expectWithdrawn(page: Page) {
   await expect(panel(page).getByRole("region", { name: /^(Aller|Retour)$/ })).toHaveCount(0);
-  await expect(tiles(page)).toHaveCount(0);
+  await expect(panel(page).getByRole("button", { name: /^(Aller|Retour)$/ })).toHaveCount(0);
   await expect(panel(page).getByRole("group", { name: FR.share })).toBeVisible();
 }
 
@@ -174,14 +174,14 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     await expectWithdrawn(page);
   });
 
-  test("O5.8: the panel withdrawn while its tile has the focus: the focus goes to the button of the panel's title, never to <body>", async ({
+  test("O5.8: the panel withdrawn while a leg's button has the focus: the focus goes to the button of the panel's title, never to <body>", async ({
     page,
     seededEvent,
   }) => {
     const reads = await holdPanelReads(page, seededEvent);
     await takeSeat(page, "Anaïs");
     await expect.poll(reads.held).toBe(1);
-    await tiles(page).first().focus();
+    await legButton(page, "retour").focus();
     await reads.fail();
     await expectWithdrawn(page);
     await expect(panel(page).getByRole("button", { name: FR.panel, exact: true })).toBeFocused();
@@ -547,6 +547,7 @@ test("O1.10: a seat taken while the area loads, answered once it is there, reads
 
   // The area read before the seat is taken; the seat's answer comes once it is shown.
   await reads.release();
+  await unfoldLegs(page, ["aller"]);
   await expect(section(page, "Aller").getByText(ORGANISER)).toBeVisible();
   await expect.poll(seat.held).toBe(1);
   await seat.release();
@@ -636,6 +637,6 @@ test.describe("the crowd of O5.9, and Oriane on the organiser's device", () => {
     await list(page, "Retour", cars).getByRole("listitem").last().locator("[tabindex='-1']").focus();
     await reads.release();
     await expect(listTitle(page, "Retour", cars)).toHaveCount(0);
-    await expect(section(page, "Retour").getByRole("heading", { level: 3 })).toBeFocused();
+    await expect(legButton(page, "retour")).toBeFocused();
   });
 });

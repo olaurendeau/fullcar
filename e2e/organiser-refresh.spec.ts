@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import { leaveNoToken } from "./fixtures";
-import { digitsOf, expect, organiserPath, SCENE_PHONES, seedOrganiserScene, test } from "./organiser";
+import { digitsOf, expect, organiserPath, SCENE_PHONES, seedOrganiserScene, test, unfoldLegs } from "./organiser";
 
 /*
  * #182, epic #154: « Actualiser » reads the panel and the board again, and applies both or
@@ -134,6 +134,7 @@ test.use({ locale: "fr-FR" });
 test.beforeEach(async ({ db, page, seededEvent }) => {
   await seedOrganiserScene(db, seededEvent.id);
   await page.goto(organiserPath(seededEvent));
+  await unfoldLegs(page);
   await expect(refresh(page)).toBeVisible();
 });
 

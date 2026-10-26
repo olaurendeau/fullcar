@@ -13,6 +13,7 @@ import {
   hideToken,
   holdActionsWith,
   isAction,
+  legButton,
   oneCharOff,
   organiserPath,
   seedCrowd,
@@ -20,6 +21,7 @@ import {
   seedWorstSummary,
   test,
   type BrokenStorage,
+  unfoldLegs,
 } from "./organiser";
 
 /*
@@ -53,7 +55,8 @@ const summary = (page: Page) => panel(page).locator(":scope > ul");
 /** The summary anywhere in the page, by its structure alone: a list of lines that hold a leg's glance. */
 const SUMMARY = "section > ul > li > span.font-semibold:first-child";
 const lines = (page: Page) => summary(page).locator(":scope > li");
-const tiles = (page: Page) => panel(page).getByRole("button", { name: /^(Aller|Retour)\b/ });
+/** The buttons of the legs' titles (O9.1). */
+const legButtons = (page: Page) => panel(page).getByRole("button", { name: /^(Aller|Retour)$/ });
 const alertText = (page: Page) => page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ });
 const stale = (page: Page) => panel(page).getByText(FR.stale);
 const board = (page: Page) => page.getByRole("tabpanel");
@@ -162,7 +165,7 @@ test.describe("the scene of O2.5", () => {
       for (const key of ["x", "y", "width", "height"] as const) expect(Math.abs(now[key] - at[key]), key).toBeLessThanOrEqual(1);
       // Out of the accessibility tree: no role finds them.
       for (const hidden of [
-        tiles(page),
+        legButtons(page),
         panel(page).getByRole("group"),
         panel(page).getByRole("button", { name: /^(Copier|Partager)$/ }),
         panel(page).getByRole("note"),
@@ -219,16 +222,18 @@ test.describe("the scene of O2.5", () => {
     await expect(toggle(page)).toBeFocused();
   });
 
-  test("O8.3: each folded line reads as its tile; the pill is the tab's, nothing else amber; no button, link nor status", async ({
+  test("O8.3 (amended by v3.5): each folded line reads as its leg's button then its folded section's summary; the pill is the tab's, nothing else amber; no button, link nor status", async ({
     page,
     seededEvent,
   }) => {
     await page.goto(organiserPath(seededEvent));
-    await expect(tiles(page)).toHaveCount(2);
-    const tileTexts = await tiles(page).evaluateAll((all) => all.map((each) => each.textContent));
+    await expect(legButtons(page)).toHaveCount(2);
+    const sectionTexts = await legButtons(page).evaluateAll((all) =>
+      all.map((each) => `${each.textContent}${document.getElementById(each.getAttribute("aria-describedby")!)!.textContent}`),
+    );
     await setFolded(page, true);
-    expect(await lines(page).evaluateAll((all) => all.map((each) => each.textContent))).toEqual(tileTexts);
-    expect(tileTexts).toEqual(["Aller2 sans voitureIl manque 1 place", "Retour1 sans voitureIl manque 1 place"]);
+    expect(await lines(page).evaluateAll((all) => all.map((each) => each.textContent))).toEqual(sectionTexts);
+    expect(sectionTexts).toEqual(["Aller2 sans voitureIl manque 1 place", "Retour1 sans voitureIl manque 1 place"]);
 
     const tabPill = page.getByRole("tab").getByText(/sans voiture/).first();
     const amber = await tabPill.evaluate((element) => getComputedStyle(element).backgroundColor);
@@ -287,7 +292,7 @@ test.describe("the scene of O2.5", () => {
     expect((await elsewhere()) === before, "sessionStorage and the cookies, as before folding").toBe(true);
   });
 
-  test("O8.5, O4.2: on a device where an event is folded, one created from /nouveau arrives unfolded, its links and warning shown", async ({
+  test("O8.5, O4.2, O9.2: on a device where an event is folded, one created from /nouveau arrives unfolded, its links and warning shown, its legs folded", async ({
     page,
     db,
     seededEvent,
@@ -306,6 +311,7 @@ test.describe("the scene of O2.5", () => {
     try {
       await expect(panel(page).getByTestId("link").first()).toBeVisible();
       await expect(panel(page).getByRole("note")).toBeVisible();
+      for (const leg of ["aller", "retour"] as const) await expect(legButton(page, leg)).toHaveAttribute("aria-expanded", "false");
       expect(await foldKeys(page)).toEqual([[foldKey(seededEvent.id), "1"]]);
     } finally {
       await db.deleteFrom("event").where("id", "=", created).execute();
@@ -518,6 +524,7 @@ test("O8.4: a list unfolded by « Afficher les 9 autres » is still unfolded aft
 }) => {
   await seedCrowd(db, seededEvent.id);
   await page.goto(organiserPath(seededEvent));
+  await unfoldLegs(page, ["aller"]);
   const aller = panel(page).getByRole("region", { name: "Aller", exact: true });
   const list = aller.getByRole("list", { name: "Sans voiture (14)", exact: true }).getByRole("listitem");
   await aller.getByRole("button", { name: "Afficher les 9 autres", exact: true }).click();
@@ -553,7 +560,7 @@ test.describe("O8.3: the summary's forms", () => {
     ],
   ];
   for (const [name, seed, expected] of scenes) {
-    test(`${name}: a line per leg, as its tile reads`, async ({ page, db, seededEvent }) => {
+    test(`${name}: a line per leg, as its folded section reads`, async ({ page, db, seededEvent }) => {
       await seed(db, seededEvent.id);
       await keepKey(page, seededEvent.id);
       await page.goto(organiserPath(seededEvent));

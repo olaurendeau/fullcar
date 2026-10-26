@@ -72,6 +72,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           aller={legOf(board, "aller")}
           retour={legOf(board, "retour")}
           device={device}
+          location={location}
           near={locationPosition}
           tab={tab}
           onTab={onTab}

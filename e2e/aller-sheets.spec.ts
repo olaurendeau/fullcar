@@ -10,7 +10,7 @@ leaveNoToken();
 
 /*
  * #266, epic #250 (organizer-view v3.3.6, decisions 41 and 47, M7.6, M7.8): a sheet opened on
- * the Aller that sends on the retour too (« Je ramène aussi », « Je cherche une place » au
+ * the Aller that sends on the retour too (« Je ramène aussi des personnes », « Je cherche une place » au
  * retour, « Aller et retour »), refused by `noRetour`, stays open without its retour part, says
  * `Actions.noRetour` above « Valider », which takes the focus, and a second « Valider » records the
  * aller alone. Closed before the answer, the bar says what to do again. A sheet keeps the legs
@@ -26,7 +26,7 @@ const FR = {
   add: "Ajouter une personne",
   both: "Aller et retour",
   retour: "Au retour",
-  drive: "Je ramène aussi",
+  drive: "Je ramène aussi des personnes",
   withoutCar: "Je cherche une place",
   notConcerned: "Je ne fais pas le retour",
   noRetour: "Il n’y a plus de retour pour cet événement : rien n’a changé.",
@@ -43,7 +43,7 @@ const EN: Words = {
   add: "Add a person",
   both: "Outbound and return",
   retour: "On the return trip",
-  drive: "I drive back too",
+  drive: "I bring people back too",
   withoutCar: "I need a seat",
   notConcerned: "I’m not doing the return trip",
   submit: "Confirm",
@@ -154,7 +154,7 @@ const legsOf = async (db: Db, eventId: string, firstName: string) =>
 test.describe("a sheet of the Aller that sends on the retour, the retour removed meanwhile", () => {
   test.use({ locale: "fr-FR" });
 
-  test("M7.6: « Je ramène aussi » is refused; the sheet stays without « Au retour », and a second « Valider » offers the aller", async ({
+  test("M7.6: « Je ramène aussi des personnes » is refused; the sheet stays without « Au retour », and a second « Valider » offers the aller", async ({
     page,
     db,
     seededEvent,
@@ -306,7 +306,7 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
 
   // The owner's decision on #267 (review of #371): an offer on both legs failed while the retour
   // was there stays once it goes, cut to its aller part, which the aller sent again withdraws.
-  test("N1.6: « Je ramène aussi » failed offline, then the retour removed: the line stays, about the aller alone", async ({ page, context, db, seededEvent }) => {
+  test("N1.6: « Je ramène aussi des personnes » failed offline, then the retour removed: the line stays, about the aller alone", async ({ page, context, db, seededEvent }) => {
     const offline = "Vérifiez la connexion, puis réessayez.";
     await seedClaire(db, page, seededEvent.id);
     const scope = await open(page, seededEvent.id);
@@ -340,7 +340,7 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
 
   // Offline or an error alone keeps the aller part: a refusal's reason may hold only with the
   // retour. Claire drives there meanwhile; the retour gone, she drives nothing (decision 44).
-  test("N1.5: « Je ramène aussi » refused by `alreadyDriving`, then the retour removed: the line goes with it, and `alert` is emptied", async ({
+  test("N1.5: « Je ramène aussi des personnes » refused by `alreadyDriving`, then the retour removed: the line goes with it, and `alert` is emptied", async ({
     page,
     db,
     seededEvent,
@@ -372,7 +372,7 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
 
   // Offered from the Retour tab, the line cut to the aller has the aller's « Proposer une voiture »
   // for landmark: the Retour's is gone with the tabs (rule 8).
-  test("N1.6: « J’emmène aussi » from the Retour failed offline, then the retour removed: « Fermer » gives the focus to the aller's « Proposer une voiture »", async ({
+  test("N1.6: « J’emmène aussi des personnes » from the Retour failed offline, then the retour removed: « Fermer » gives the focus to the aller's « Proposer une voiture »", async ({
     page,
     context,
     db,
@@ -388,7 +388,7 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     const lose = await loseFirst(page, PLACE);
     await scope.getByRole("button", { name: FR.offer, exact: true }).click();
     await dialog(page, FR.offer).getByLabel("Lieu de dépose", { exact: true }).fill(PLACE);
-    await dialog(page, FR.offer).getByRole("radiogroup", { name: "À l’aller" }).getByRole("radio", { name: "J’emmène aussi", exact: true }).check();
+    await dialog(page, FR.offer).getByRole("radiogroup", { name: "À l’aller" }).getByRole("radio", { name: "J’emmène aussi des personnes", exact: true }).check();
     await submit(page, FR.offer).click();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
