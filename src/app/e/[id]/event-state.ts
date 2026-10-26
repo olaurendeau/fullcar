@@ -1,5 +1,4 @@
 import type { Kysely } from "kysely";
-import { isAnonymised } from "@/db/day-thirty";
 import { readEventRows } from "@/db/event-rows";
 import type { PublicEvent } from "@/db/events";
 import { readTokenHolders } from "@/db/persons";
@@ -71,6 +70,11 @@ export interface EndedEvent {
   allerAt: WallClock;
 }
 
+/** What is left of `event` once anonymised, nothing before. */
+function endedOf(event: PublicEvent): EndedEvent | undefined {
+  return event.anonymised_at === null ? undefined : { ended: true, title: event.title, allerAt: event.aller_at };
+}
+
 /**
  * What a device reads of the event once its page is open (#799): its state as `readEventState`
  * reads it, or, once anonymised, the event ended and nothing else. The event and its legs on
@@ -87,7 +91,26 @@ export async function readDeviceState(
   return onOneSnapshot(db, async (trx): Promise<EventState | EndedEvent | undefined> => {
     const event = await findPublicEvent(trx, eventId);
     if (event === undefined) return undefined;
-    if (await isAnonymised(trx, eventId)) return { ended: true, title: event.title, allerAt: event.aller_at };
-    return stateOf(trx, event, token);
+    return endedOf(event) ?? stateOf(trx, event, token);
+  });
+}
+
+/**
+ * What `/e/{id}` shows: the event as anyone holding the link sees it, or, once it is
+ * anonymised, « Événement terminé » with its title and its start only (OA8.3, #590).
+ */
+export type EventPage = { ended: false; state: EventState } | EndedEvent;
+
+/**
+ * The page's read, without a device: the server never has one (C10.2). The event and its
+ * legs on one snapshot, so that an event anonymised meanwhile never shows its place with an
+ * empty board. Nothing for an unknown event; a malformed id is never looked up.
+ */
+export async function readEventPage(db: Kysely<Database>, eventId: string): Promise<EventPage | undefined> {
+  if (!isPublicId(eventId)) return undefined;
+  return onOneSnapshot(db, async (trx): Promise<EventPage | undefined> => {
+    const event = await findPublicEvent(trx, eventId);
+    if (event === undefined) return undefined;
+    return endedOf(event) ?? { ended: false, state: await stateOf(trx, event, undefined) };
   });
 }

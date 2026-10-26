@@ -385,7 +385,12 @@
   "EventNotFound": {
     "title": "Event not found",
     "checkLink": "Check the link: it may have been copied wrong. Upper and lower case matter.",
-    "deleted": "Events are deleted 30 days after their date.",
+    "deleted": "It may have been deleted.",
+    "create": "Create an event"
+  },
+  "EventEnded": {
+    "title": "Event over",
+    "body": "Sign-ups were erased 30 days after the event.",
     "create": "Create an event"
   },
   "LanguageSwitch": {

@@ -45,6 +45,7 @@ describe("findPublicEvent", () => {
         boosters_enabled: false,
         participation_enabled: false,
         stops_enabled: false,
+        anonymised_at: null,
       });
     });
   });

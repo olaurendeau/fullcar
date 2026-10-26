@@ -37,7 +37,9 @@ async function expectEnded(page: Page, answers: string[]) {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Événement terminé");
   await expect(page.getByRole("main").getByText("Tournoi de Rennes", { exact: true })).toBeVisible();
   await expect(page.getByRole("tab")).toHaveCount(0);
-  expect(await page.content()).not.toContain(PLACE);
+  // What the page shows: its HTML still holds the data of its first render, before day 30.
+  await expect(page.getByText(PLACE)).toHaveCount(0);
+  expect(await page.locator("body").innerText()).not.toContain(PLACE);
   expect(answers.length, "loadEventState was answered").toBeGreaterThan(0);
   for (const answer of answers) expect(answer).not.toContain(PLACE);
 }

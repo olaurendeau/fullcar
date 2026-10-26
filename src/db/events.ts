@@ -59,6 +59,7 @@ export async function readAdminTokenHash(db: Kysely<Database>, id: string): Prom
 /**
  * What anyone holding the public link may read, listed one by one: a column added to the
  * table stays private until it is added here. Never `admin_token_hash`.
+ * `anonymised_at` is: the link of an anonymised event says « Événement terminé » to anyone (#590).
  */
 const PUBLIC_EVENT_COLUMNS = [
   "id",
@@ -72,6 +73,7 @@ const PUBLIC_EVENT_COLUMNS = [
   "boosters_enabled",
   "participation_enabled",
   "stops_enabled",
+  "anonymised_at",
 ] as const;
 
 export type PublicEvent = Pick<Selectable<EventTable>, (typeof PUBLIC_EVENT_COLUMNS)[number]>;
@@ -89,7 +91,7 @@ export async function findEventById(db: Kysely<Database>, id: string): Promise<P
 export type EventLock = "share" | "noKeyUpdate";
 
 /** The event as `lockEvent` gives it. */
-export type LockedEvent = PublicEvent & Pick<Selectable<EventTable>, "account_id" | "anonymised_at">;
+export type LockedEvent = PublicEvent & Pick<Selectable<EventTable>, "account_id">;
 
 /**
  * `SELECT … FOR SHARE`, or `FOR NO KEY UPDATE`, on the event, held until the transaction
@@ -103,7 +105,7 @@ export type LockedEvent = PublicEvent & Pick<Selectable<EventTable>, "account_id
 export async function lockEvent(db: Kysely<Database>, id: string, lock: EventLock): Promise<LockedEvent | undefined> {
   const query = db
     .selectFrom("event")
-    .select([...PUBLIC_EVENT_COLUMNS, "account_id", "anonymised_at"])
+    .select([...PUBLIC_EVENT_COLUMNS, "account_id"])
     .where("id", "=", id);
   return (lock === "share" ? query.forShare() : query.forNoKeyUpdate()).executeTakeFirst();
 }

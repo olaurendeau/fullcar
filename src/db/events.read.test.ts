@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { hashAdminToken } from "@/domain/admin-token";
 import type { NewEvent } from "@/domain/event";
+import { anonymiseEvent } from "./day-thirty";
 import { findEventById, insertEvent } from "./events";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
 
-/** What anyone with the public link may read: no hash, no bookkeeping. */
+/** What anyone with the public link may read: no hash, no account; whether it ended, which its page says (#590). */
 const PUBLIC_FIELDS = [
   "id",
   "title",
@@ -18,6 +19,7 @@ const PUBLIC_FIELDS = [
   "boosters_enabled",
   "participation_enabled",
   "stops_enabled",
+  "anonymised_at",
 ];
 
 const EVENT: NewEvent = {
@@ -50,7 +52,18 @@ describe("findEventById", () => {
       boosters_enabled: true,
       participation_enabled: false,
       stops_enabled: true,
+      anonymised_at: null,
     });
+  });
+
+  // #590: the page says « Événement terminé » to anyone holding the link.
+  it("gives when the event was anonymised", async () => {
+    const found = await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx);
+      await anonymiseEvent(trx, id);
+      return findEventById(trx, id);
+    });
+    expect(found?.anonymised_at).toBeInstanceOf(Date);
   });
 
   // D5: the position is shown to anyone holding the link, as the location is.
