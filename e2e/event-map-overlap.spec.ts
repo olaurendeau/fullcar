@@ -226,7 +226,7 @@ test.describe("with a mouse", () => {
 
     await group.focus();
     await page.keyboard.press("Enter");
-    const bubble = map.getByRole("group", { name, exact: true });
+    const bubble = map.getByRole("group", { name: "2 voitures, 3 places libres", exact: true });
     await expect(bubble).toBeVisible();
     expect(overlap((await bubble.boundingBox())!, (await seatsOf(group).boundingBox())!)).toBe(false);
     // Amendment 3: on each of its buttons, the group's badge on top.
@@ -255,7 +255,7 @@ test.describe("with a mouse", () => {
     const group = map.getByRole("button", { name, exact: true });
     const longPoint = pointOf(map, long);
     const flag = map.getByRole("img", { name: FLAG, exact: true });
-    const bubble = map.getByRole("group", { name, exact: true });
+    const bubble = map.getByRole("group", { name: "2 voitures, 6 places libres", exact: true });
 
     // Where the bubble's buttons are: it opens at the map's top right corner, whatever the view.
     await openBubble(page, group, bubble);

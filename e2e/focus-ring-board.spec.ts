@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
+import { DRIVER_PHONE } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { expectRing, noteUnfocused, press, pressUntil, walk, type Ring } from "./focus-ring";
 import { withoutNumbers } from "./without-numbers";
@@ -188,7 +189,8 @@ test.describe("the focus ring on the event's page", () => {
       seededEvent,
     }) => {
       // Tom, of the device, without a car at the aller: « Qui monte avec vous ? » has his box (#171).
-      const tom = await seedPerson(db, seededEvent.id, { firstName: "Tom" }, token);
+      // Chosen to drive on the way, he has a number (#775).
+      const tom = await seedPerson(db, seededEvent.id, { firstName: "Tom", phone: DRIVER_PHONE }, token);
       await seedPlacement(db, { personId: tom.id, eventId: seededEvent.id, leg: "aller", rideId: null });
       await open(page, seededEvent.id);
       await pressUntil(page, "Tab", button(panel(page), "Proposer une voiture"), 60);

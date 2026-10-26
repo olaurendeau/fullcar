@@ -6,6 +6,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { isPersonalToken } from "@/domain/personal-token";
 import { bar, failActions, holdActions, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { DRIVER_PHONE, fillDriver, numbersHidden } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -95,7 +96,7 @@ async function fillPlace(page: Page, label: string, text: string) {
 /** Opens the form, and fills it for Marc's car from the Mairie de Vitré. */
 async function fillOffer(page: Page) {
   await openForm(page);
-  await field(page, FR.firstName).fill("Marc");
+  await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
   await fillPlace(page, FR.location.aller, "Mairie de Vitré");
 }
 
@@ -110,11 +111,11 @@ function offers(page: Page, marker: string): Request[] {
 
 const rides = async (db: Db, eventId: string) => db.selectFrom("ride").select(["leg", "location"]).where("event_id", "=", eventId).execute();
 
-/** The device holds `names`, with their token in the page's `localStorage`. */
+/** The device holds `names`, each with a number to drive, with their token in the page's `localStorage`. */
 async function device(db: Db, page: Page, eventId: string, names: string[]) {
   const token = newToken();
   const ids: Record<string, string> = {};
-  for (const firstName of names) ids[firstName] = (await seedPerson(db, eventId, { firstName }, token)).id;
+  for (const firstName of names) ids[firstName] = (await seedPerson(db, eventId, { firstName, phone: DRIVER_PHONE }, token)).id;
   await holdToken(page, eventId, token);
   return ids;
 }
@@ -167,7 +168,7 @@ test.describe("offer a car", () => {
     await expect(form(page).getByRole("radiogroup", { name: FR.driver })).toHaveCount(0);
     await expect(form(page).getByRole("group", { name: FR.driver })).toBeVisible();
     await expect(form(page)).not.toContainText(FR.storageTitle);
-    await field(page, FR.firstName).fill("Marc");
+    await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
     await fillPlace(page, FR.location.aller, "Mairie de Vitré");
     await submit(page).click();
 
@@ -209,7 +210,7 @@ test.describe("offer a car", () => {
     await expect(field(page, FR.seats)).toHaveAccessibleDescription(FR.seatsHint);
     await expect(field(page, FR.note)).toHaveAccessibleDescription(FR.noteHint);
 
-    await field(page, FR.firstName).fill("Karim");
+    await fillDriver(form(page), { firstName: "Karim", phone: DRIVER_PHONE });
     await fillPlace(page, FR.location.retour, "Place des Lices");
     await field(page, FR.time).fill("18:30");
     await field(page, FR.seats).fill("2");
@@ -218,9 +219,9 @@ test.describe("offer a car", () => {
     await expect(form(page)).toHaveCount(0);
 
     const karim = car(panel(page), "Karim");
-    await expect(karim).toContainText("Place des Lices");
+    await numbersHidden(() => expect(karim).toContainText("Place des Lices"));
     await expect(karim.locator("time")).toHaveText("18:30");
-    await expect(karim).toContainText("Coffre plein, pas de gros sac.");
+    await numbersHidden(() => expect(karim).toContainText("Coffre plein, pas de gros sac."));
     await expect(freeSeats(karim)).toHaveCount(2);
     // For this page only: Karim is the device's until it closes.
     await unfold(page, "Karim");
@@ -284,10 +285,10 @@ test.describe("offer a car", () => {
     await expect(submit(page)).toBeFocused();
     // Nobody else can drive: a new person, and her fields.
     await expect(form(page).getByRole("radiogroup", { name: FR.driver })).toHaveCount(0);
-    await field(page, FR.firstName).fill("Marc");
+    await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
     await submit(page).click();
     await expect(form(page)).toHaveCount(0);
-    await expect(car(panel(page), "Marc")).toContainText("Gare");
+    await numbersHidden(() => expect(car(panel(page), "Marc")).toContainText("Gare"));
   });
 
   test("Léa, chosen, drives on this leg from another tab while Tom can still: nobody is chosen, as on opening", async ({ db, page, seededEvent }) => {
@@ -347,7 +348,7 @@ test.describe("offer a car", () => {
     await form(page).getByRole("heading", { name: FR.offer }).scrollIntoViewIfNeeded();
     await expect(form(page).getByRole("heading", { name: FR.offer })).toBeInViewport();
 
-    await field(page, FR.firstName).fill("Marc");
+    await fillDriver(form(page), { firstName: "Marc", phone: DRIVER_PHONE });
     await submit(page).click();
     await expect(field(page, FR.seats)).toBeFocused();
     await expect(field(page, FR.firstName)).toHaveValue("Marc");
@@ -452,7 +453,7 @@ test.describe("offer a car", () => {
         // The new form says nothing and keeps its own values; Léa's car, offered from it, closes it.
         await expect(failure(page)).toHaveCount(0);
         await expect(field(page, FR.location.aller)).toHaveValue("");
-        await field(page, FR.firstName).fill("Léa");
+        await fillDriver(form(page), { firstName: "Léa", phone: DRIVER_PHONE });
         await fillPlace(page, FR.location.aller, "Gare");
         await submit(page).click();
       } else if (when.startsWith("reopened")) {
@@ -489,7 +490,7 @@ test.describe("offer a car", () => {
     await expect(form(page)).toHaveCount(0);
     await openForm(page);
     const second = await holdFirst(page, "Gare", false);
-    await field(page, FR.firstName).fill("Léa");
+    await fillDriver(form(page), { firstName: "Léa", phone: DRIVER_PHONE });
     await fillPlace(page, FR.location.aller, "Gare");
     await submit(page).click();
     await expect(submit(page)).toBeDisabled(); // Sent after the first, not dropped (#208).

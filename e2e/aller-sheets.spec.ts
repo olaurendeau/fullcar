@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, failHeld, holdFirst, holdToken, loseFirst, messages, newToken, recordBar, said, watchAlerts } from "./device";
+import { DRIVER_PHONE } from "./driver";
 import { editEventInDb, removeRetourInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -78,13 +79,13 @@ async function open(page: Page, eventId: string, scope: (page: Page) => Locator 
 }
 
 /**
- * Claire, on the device, without a car at the aller; at the retour, without a car too, or not
- * concerned. She alone can drive, chosen as the sheet opens, and a choice au retour other than
+ * Claire, on the device, with a number, without a car at the aller; at the retour, without a car
+ * too, or not concerned. She alone can drive, chosen as the sheet opens, and a choice au retour other than
  * where she stands is sent (`otherLegKind`).
  */
 async function seedClaire(db: Db, page: Page, eventId: string, retour: "withoutCar" | "notConcerned" = "notConcerned") {
   const token = newToken();
-  const claire = (await seedPerson(db, eventId, { firstName: "Claire" }, token)).id;
+  const claire = (await seedPerson(db, eventId, { firstName: "Claire", phone: DRIVER_PHONE }, token)).id;
   await seedPlacement(db, { personId: claire, eventId, leg: "aller", rideId: null });
   if (retour === "withoutCar") await seedPlacement(db, { personId: claire, eventId, leg: "retour", rideId: null });
   await holdToken(page, eventId, token);

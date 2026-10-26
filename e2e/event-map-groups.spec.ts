@@ -1,11 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
-import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, OSM_LINK, overlap, points, seedCar, test } from "./event-map-points";
+import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, OSM_LINK, overlap, points, seedCar, seedParking, test } from "./event-map-points";
 import { expect } from "./fixtures";
 
 /*
  * #481, event-map v18: cars less than 25 m apart make one point, its number on its label and
  * its name « N voitures : {prénoms}, {places} » (#655), and activated it opens our bubble, inserted in the DOM
- * just after it. The flag first: cars less than 25 m from the flag are its one point. The
+ * just after it, titled and named « N voitures, {places} » (v30, #723). The flag first: cars less than 25 m from the flag are its one point. The
  * cards follow the departure times, which the cars get here. The fake tile provider answers its default
  * tile: no test here sets one. The project `e2e` is a Pixel 7, touch-enabled.
  */
@@ -14,6 +14,24 @@ test.use({ locale: "fr-FR" });
 
 /** The bubble of a grouped point, by its title. */
 const bubbleOf = (map: Locator, name: string) => map.getByRole("group", { name, exact: true });
+
+/** Whether nothing in `bubble` scrolls but the list of its cars: its own box, its title and its « Fermer » never. */
+function scrolling(bubble: Locator) {
+  return bubble.evaluate((element) => {
+    const scrolls = (part: Element) => part.scrollHeight > part.clientHeight;
+    const list = element.querySelector("button")!.parentElement!;
+    const others = [element, ...element.querySelectorAll("*")].filter((part) => part !== list && part instanceof HTMLElement && getComputedStyle(part).overflowY !== "visible");
+    return { list: scrolls(list), others: others.some(scrolls) };
+  });
+}
+
+/** `close` whole in `bubble`, in the map, and on top at its centre: neither cut nor covered. */
+async function wholeIn(page: Page, close: Locator, bubble: Locator, map: Locator) {
+  const box = (await close.boundingBox())!;
+  expect(inside(box, (await bubble.boundingBox())!)).toBe(true);
+  expect(inside(box, (await map.boundingBox())!)).toBe(true);
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.textContent ?? null, centre(box))).toBe("Fermer");
+}
 
 /** What a press at the centre of `box` reaches: the name of the point or the flag there. */
 function topAt(page: Page, box: { x: number; y: number; width: number; height: number }) {
@@ -57,11 +75,12 @@ test("CA1.6, CA1.8: the bubble of two cars at the same position, its buttons, Es
   const zoe = "Voiture de Zoé, départ : 12 rue des Lilas, 3 places libres";
   const marc = "Voiture de Marc, départ : Place de la mairie, 3 places libres";
   const name = "2 voitures : Nina, Paul, 3 places libres";
+  const title = "2 voitures, 3 places libres";
   // The grouped point takes the place of its first car, Nina, in the Tab order.
   expect(await focusableIn(map)).toEqual([zoe, name, marc, "Zoom avant", "Zoom arrière", OSM_LINK]);
 
   const group = map.getByRole("button", { name, exact: true });
-  const bubble = bubbleOf(map, name);
+  const bubble = bubbleOf(map, title);
   const cars = bubble.getByRole("button");
   const nina = bubble.getByRole("button", { name: "Voiture de Nina, départ : Parking du marché, 1 place libre", exact: true });
   const close = bubble.getByRole("button", { name: "Fermer", exact: true });
@@ -71,13 +90,13 @@ test("CA1.6, CA1.8: the bubble of two cars at the same position, its buttons, Es
   await page.keyboard.press("Enter");
   await expect(bubble).toBeVisible();
   await expect(group).toHaveAttribute("aria-expanded", "true");
-  await expect(bubble.getByText(name, { exact: true })).toBeVisible();
+  await expect(bubble.getByText(title, { exact: true })).toBeVisible();
   await expect(cars).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
   await expect(nina).toBeFocused();
   // Just after its point in the DOM: the same marker's next element.
   const next = group.locator("xpath=following-sibling::*[1]");
   await expect(next).toHaveAttribute("role", "group");
-  await expect(next).toHaveAccessibleName(name);
+  await expect(next).toHaveAccessibleName(title);
   // CA1.8, the bubble's part: targets of 44 px at least, and nothing of the bubble outside the map.
   const view = (await map.boundingBox())!;
   for (const button of await cars.all()) {
@@ -139,6 +158,72 @@ test("CA1.6, CA1.8: the bubble of two cars at the same position, its buttons, Es
   await expect(bubble).toHaveCount(0);
 });
 
+test("CA1.6, CA1.22: at 360 × 780, the bubble of Nina (1) and Paul (2), « 2 voitures, 3 places libres », named so, on one line: nothing scrolls, off the credits", async ({ db, page, placed }) => {
+  await seedParking(db, placed.id, placed.place);
+  await page.goto(`/e/${placed.id}`);
+  const map = await openMap(page, mapName("aller", "3 voitures"));
+  await map.getByRole("button", { name: "2 voitures : Nina, Paul, 3 places libres", exact: true }).click();
+  const bubble = bubbleOf(map, "2 voitures, 3 places libres");
+  await expect(bubble.getByRole("button")).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
+  const title = bubble.getByText("2 voitures, 3 places libres", { exact: true });
+  await expect(title).toBeVisible();
+  // One line of 13 px text: the names of the drivers are on the buttons.
+  expect((await title.boundingBox())!.height).toBeLessThan(26);
+  const shown = (await bubble.boundingBox())!;
+  expect(Math.round(shown.width)).toBe(210);
+  expect(await scrolling(bubble)).toEqual({ list: false, others: false });
+  expect(overlap(shown, (await map.locator("[data-map-credits]").boundingBox())!)).toBe(false);
+  await wholeIn(page, bubble.getByRole("button", { name: "Fermer", exact: true }), bubble, map);
+});
+
+test("CA1.6: « 2 voitures, 12 places libres » keeps « Fermer » whole; of three cars, only the list scrolls, « Fermer » whole, and a car focused comes into its view", async ({ db, page, placed }) => {
+  const east = around(placed.place, { east: 350 });
+  await seedCar(db, placed.id, "Nina", { position: east, departureTime: "08:00:00", seats: 6 });
+  await seedCar(db, placed.id, "Paul", { position: { ...east }, departureTime: "09:00:00", seats: 6 });
+  const west = around(placed.place, { east: -350 });
+  for (const [firstName, departureTime] of [
+    ["Léa", "10:00:00"],
+    ["Hugo", "11:00:00"],
+    ["Lou", "12:00:00"],
+  ] as const) {
+    await seedCar(db, placed.id, firstName, { position: { ...west }, departureTime });
+  }
+  await page.goto(`/e/${placed.id}`);
+  const map = await openMap(page, mapName("aller", "5 voitures"));
+
+  // Ten free seats and more: the title may take two lines, without harm.
+  const twelve = map.getByRole("button", { name: "2 voitures : Nina, Paul, 12 places libres", exact: true });
+  await twelve.click();
+  const wide = bubbleOf(map, "2 voitures, 12 places libres");
+  await expect(wide.getByText("2 voitures, 12 places libres", { exact: true })).toBeVisible();
+  expect((await scrolling(wide)).others).toBe(false);
+  await wholeIn(page, wide.getByRole("button", { name: "Fermer", exact: true }), wide, map);
+  await page.keyboard.press("Escape");
+  await expect(wide).toHaveCount(0);
+
+  const three = map.getByRole("button", { name: "3 voitures : Léa, Hugo, Lou, 9 places libres", exact: true });
+  await three.click();
+  const bubble = bubbleOf(map, "3 voitures, 9 places libres");
+  await expect(bubble.getByRole("button")).toHaveText(["Voiture de Léa3", "Voiture de Hugo3", "Voiture de Lou3", "Fermer"]);
+  // Its title stays at its top, whole.
+  expect(inside((await bubble.getByText("3 voitures, 9 places libres", { exact: true }).boundingBox())!, (await bubble.boundingBox())!)).toBe(true);
+  expect(await scrolling(bubble)).toEqual({ list: true, others: false });
+  const close = bubble.getByRole("button", { name: "Fermer", exact: true });
+  await wholeIn(page, close, bubble, map);
+
+  // Tab to Lou's car, the last: it comes into the visible part of the list; « Fermer » stays whole.
+  const list = bubble.getByRole("button").first().locator("xpath=..");
+  await expect(bubble.getByRole("button").first()).toBeFocused();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  const lou = bubble.getByRole("button", { name: /^Voiture de Lou, / });
+  await expect(lou).toBeFocused();
+  await expect.poll(async () => inside((await lou.boundingBox())!, (await list.boundingBox())!)).toBe(true);
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await wholeIn(page, close, bubble, map);
+});
+
 test("CA1.15: 20 m north and 20 m south of the flag, one point under it, « 2 voitures : Sophie, Nina, 3 places libres », with its bubble; no line, no label hiding another", async ({ db, page, placed }) => {
   await seedCar(db, placed.id, "Sophie", { position: around(placed.place, { north: 20 }), location: "Parking du gymnase", departureTime: "08:00:00", seats: 1 });
   await seedCar(db, placed.id, "Nina", { position: around(placed.place, { north: -20 }), location: "Entrée sud", departureTime: "09:00:00", seats: 2 });
@@ -167,7 +252,7 @@ test("CA1.15: 20 m north and 20 m south of the flag, one point under it, « 2 vo
   expect(await topAt(page, groupBox)).toBe(name);
 
   await group.tap();
-  const bubble = bubbleOf(map, name);
+  const bubble = bubbleOf(map, "2 voitures, 3 places libres");
   await expect(bubble.getByRole("button")).toHaveText(["Voiture de Sophie1", "Voiture de Nina2", "Fermer"]);
   await expect(bubble.getByRole("button").first()).toBeFocused();
 });

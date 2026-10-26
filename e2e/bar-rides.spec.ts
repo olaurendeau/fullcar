@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, failHeld, holdFirst, holdToken, loseFirst, messages, newToken, watchAlerts } from "./device";
+import { DRIVER_PHONE, fillDriver } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -39,11 +40,11 @@ async function sendThenClose(page: Page) {
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
-/** Opens « Proposer une voiture » on the active tab, for Marc, a new person, from `location`. */
+/** Opens « Proposer une voiture » on the active tab, for Marc, a new person with a number, from `location`. */
 async function offerAsMarc(page: Page, location: string) {
   await offerButton(panel(page)).click();
   // The bar names her without the spaces typed around.
-  await form(page).getByLabel("Prénom", { exact: true }).fill("  Marc  ");
+  await fillDriver(form(page), { firstName: "  Marc  ", phone: DRIVER_PHONE });
   // A combobox since its places propose suggestions (place-autocomplete, AL1.2).
   await form(page).getByRole("combobox", { name: /^Lieu de/ }).fill(location);
 }
@@ -94,7 +95,7 @@ test.describe("an offer's failure in the bar", () => {
     seededEvent,
   }) => {
     const token = newToken();
-    const claire = (await seedPerson(db, seededEvent.id, { firstName: "Claire" }, token)).id;
+    const claire = (await seedPerson(db, seededEvent.id, { firstName: "Claire", phone: DRIVER_PHONE }, token)).id;
     await holdToken(page, seededEvent.id, token);
     const answer = await holdFirst(page, "Mairie de Vitré", false);
     await page.goto(`/e/${seededEvent.id}`);
