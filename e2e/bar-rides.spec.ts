@@ -87,8 +87,8 @@ test.describe("an offer's failure in the bar", () => {
     });
   }
 
-  // `alreadyDriving`: Claire drives on the retour, from another page, before « Je ramène aussi des passagers » arrives.
-  test("C11.11, « Proposer une voiture » with « Je ramène aussi des passagers », Claire driving meanwhile: both legs, and who drives", async ({
+  // `alreadyDriving`: Claire drives on the retour, from another page, before « Je ramène aussi des personnes » arrives.
+  test("C11.11, « Proposer une voiture » with « Je ramène aussi des personnes », Claire driving meanwhile: both legs, and who drives", async ({
     db,
     page,
     seededEvent,
@@ -99,7 +99,7 @@ test.describe("an offer's failure in the bar", () => {
     const answer = await holdFirst(page, "Mairie de Vitré", false);
     await page.goto(`/e/${seededEvent.id}`);
     await offerButton(panel(page)).click();
-    await form(page).getByRole("radiogroup", { name: "Au retour" }).getByRole("radio", { name: "Je ramène aussi des passagers", exact: true }).check();
+    await form(page).getByRole("radiogroup", { name: "Au retour" }).getByRole("radio", { name: "Je ramène aussi des personnes", exact: true }).check();
     await form(page).getByLabel("Lieu de départ", { exact: true }).fill("Mairie de Vitré");
     await sendThenClose(page);
     await seedRide(db, seededEvent.id, claire, { leg: "retour" });

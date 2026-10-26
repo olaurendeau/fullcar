@@ -30,7 +30,7 @@ function aNewDriver(firstName = "Ana") {
   return { kind: "new" as const, personId: randomUUID(), firstName, phone: "06 44 44 44 44" };
 }
 
-/** « Je ramène aussi des passagers » / « J'emmène aussi des passagers »: a second car on the other leg. */
+/** « Je ramène aussi des personnes » / « J'emmène aussi des personnes »: a second car on the other leg. */
 function aDrive(fields: Record<string, unknown> = {}) {
   return { kind: "drive" as const, rideId: randomUUID(), location: "Salle Paul Bert", time: "18:30", ...fields };
 }

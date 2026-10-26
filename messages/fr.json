@@ -169,8 +169,8 @@
         "aller": "À l’aller"
       },
       "drive": {
-        "retour": "Je ramène aussi des passagers",
-        "aller": "J’emmène aussi des passagers"
+        "retour": "Je ramène aussi des personnes",
+        "aller": "J’emmène aussi des personnes"
       },
       "stay": "Je reste dans la voiture de {driver}",
       "withoutCar": "Je cherche une place",

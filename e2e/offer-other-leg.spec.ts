@@ -19,7 +19,7 @@ const FR = {
   location: { aller: "Lieu de départ", retour: "Lieu de dépose" },
   time: "Heure de départ",
   title: { aller: "À l’aller", retour: "Au retour" },
-  drive: { aller: "J’emmène aussi des passagers", retour: "Je ramène aussi des passagers" },
+  drive: { aller: "J’emmène aussi des personnes", retour: "Je ramène aussi des personnes" },
   withoutCar: "Je cherche une place",
   notConcerned: { aller: "Je ne fais pas l’aller", retour: "Je ne fais pas le retour" },
   otherTime: { aller: "Heure de départ de l’aller", retour: "Heure de départ du retour" },
@@ -83,7 +83,7 @@ async function radios(group: Locator) {
 test.describe("the other leg in « Proposer une voiture »", () => {
   test.use({ locale: "fr-FR" });
 
-  test("C4.11, C4.2, C4.4: « Je ramène aussi des passagers » makes the retour's car where and when unfolded; the place follows until changed", async ({ db, page, seededEvent }) => {
+  test("C4.11, C4.2, C4.4: « Je ramène aussi des personnes » makes the retour's car where and when unfolded; the place follows until changed", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     await page.goto(`/e/${id}`);
     await openForm(page);
@@ -121,7 +121,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     await expect(freeSeats(car(page, "Marc"))).toHaveCount(2);
   });
 
-  test("C4.2: « J’emmène aussi des passagers » from the Retour tab, from her state there by default", async ({ db, page, seededEvent }) => {
+  test("C4.2: « J’emmène aussi des personnes » from the Retour tab, from her state there by default", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     const { Léa: lea } = await device(db, page, id, ["Léa"]);
     await place(db, id, lea, "aller", null);
@@ -171,7 +171,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     expect((await rides(db, id)).map((ride) => ride.leg)).toEqual(["aller", "aller"]);
   });
 
-  test("C4.11: « Je ramène aussi des passagers » checked before anyone drives is kept once someone does (review of #212)", async ({ db, page, seededEvent }) => {
+  test("C4.11: « Je ramène aussi des personnes » checked before anyone drives is kept once someone does (review of #212)", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     await device(db, page, id, ["Léa", "Tom"]);
     await page.goto(`/e/${id}`);
@@ -223,7 +223,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     ]);
   });
 
-  test("C4.12, C3.5: a passenger of Marc stays by default; « Je ramène aussi des passagers » leaves his car, which frees a seat", async ({ db, page, seededEvent }) => {
+  test("C4.12, C3.5: a passenger of Marc stays by default; « Je ramène aussi des personnes » leaves his car, which frees a seat", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     const marc = await seedPerson(db, id, { firstName: "Marc" });
     const marcsCar = await seedRide(db, id, marc.id, { leg: "retour" });
@@ -240,7 +240,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
       await expect(radio(group, leaving)).toHaveAccessibleDescription("Quittera la voiture de Marc");
     }
     await expect(radio(group, stay)).toHaveAccessibleDescription("");
-    // C3.5: without « Je ramène aussi des passagers », the retour does not change.
+    // C3.5: without « Je ramène aussi des personnes », the retour does not change.
     await field(page, FR.location.aller).fill("Gare");
     await submit(page).click();
     await expect(form(page)).toHaveCount(0);
@@ -256,7 +256,7 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     await expect(car(page, "Tom")).toContainText("Église");
   });
 
-  test("C4.10: a response lost, then sent again with « Je ramène aussi des passagers »: exactly two cars", async ({ db, page, seededEvent }) => {
+  test("C4.10: a response lost, then sent again with « Je ramène aussi des personnes »: exactly two cars", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     let lost = false;
     await page.route("**/e/**", async (route) => {
