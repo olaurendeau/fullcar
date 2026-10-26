@@ -143,6 +143,22 @@ describe("a link", () => {
       expect(await linkExists(trx, gone)).toBe(false);
     });
   });
+
+  // #802: confirmed, its account deleted, the event keeps `confirmed_at` without `account_id`.
+  it("of confirmation goes for an event confirmed whose account is deleted: confirmed_at decides, not account_id", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const accountId = await confirmSeededEvent(trx, id);
+      await trx.deleteFrom("account").where("id", "=", accountId).execute();
+      const event = await trx.selectFrom("event").select(["account_id", "confirmed_at"]).where("id", "=", id).executeTakeFirstOrThrow();
+      expect(event.account_id).toBeNull();
+      expect(event.confirmed_at).not.toBeNull();
+      const gone = await seedLink(trx, { kind: "confirmation", eventId: id }, { createdAt: ago(37 * DAY) });
+
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 1, sends: 0 });
+      expect(await linkExists(trx, gone)).toBe(false);
+    });
+  });
 });
 
 describe("a run", () => {
