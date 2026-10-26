@@ -19,11 +19,14 @@ export interface PointCar {
   title: string;
   /** « Voiture de {prénom}, départ : {lieu}, {places} ». */
   name: string;
+  /** Its free seats, formatted (`format.number`): its button's badge. */
+  seats: string;
 }
 
 /**
- * A point of `mapOf`: where it is, its label and its name; one car, the driver's first name and
- * the car's name; more, their number and « N voitures : {prénoms} », and a bubble (CA1.6).
+ * A point of `mapOf`: where it is, its label, its name and its free seats; one car, the driver's
+ * first name and the car's name; more, their number and « N voitures : {prénoms}, {places} »,
+ * and a bubble (CA1.6).
  */
 export interface CarPoint {
   position: Position;
@@ -31,6 +34,8 @@ export interface CarPoint {
   atFlag: boolean;
   label: string;
   name: string;
+  /** Its car's free seats, or the sum of its cars', formatted (`format.number`): the label's badge (#655). */
+  seats: string;
   /** In the order of the cards. */
   cars: PointCar[];
 }
@@ -152,7 +157,7 @@ function holdPress(element: HTMLElement): () => void {
   };
 }
 
-/** Lucide's « flag », as the design draws it, white on a black square; its name is the state's. */
+/** Lucide's « flag », as the design draws it, white on a --primary square; its name is the state's. */
 function flagIcon(flag: HTMLSpanElement): L.DivIcon {
   flag.setAttribute("role", "img");
   // On top, it also takes the touch there: a point's button under it does not (CA1.15).
@@ -167,16 +172,40 @@ function flagIcon(flag: HTMLSpanElement): L.DivIcon {
 const CAR_SVG =
   '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>';
 
+/** Lucide's « armchair », the seat of the free seats' badge, 12 px, #737373 on the label's white (4.74:1). */
+const ARMCHAIR_SVG =
+  '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-muted-foreground"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3"/><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v1.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V11a2 2 0 0 0-4 0z"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>';
+
+/**
+ * The free seats' badge (#655, CA1.21), the label's last part or a bubble button's: a 1 px rule,
+ * the seat, `aria-hidden`, then the number, which the name already says. One style for every
+ * number, « 0 » included, never amber: the number says it, not a colour. Never cut. Gives the
+ * badge and the element whose text is its number.
+ */
+function seatsBadge(className: string): { badge: HTMLSpanElement; number: HTMLSpanElement } {
+  const badge = document.createElement("span");
+  badge.dataset.mapSeats = "";
+  badge.className = `inline-flex shrink-0 items-center gap-0.5 border-l border-border pl-[5px] font-semibold text-foreground tabular-nums ${className}`;
+  badge.innerHTML = ARMCHAIR_SVG;
+  const number = document.createElement("span");
+  badge.append(number);
+  return { badge, number };
+}
+
+/** What `drawPoint` draws on: a point's button, the text of its label, and its badge's number. */
+type PointElements = { button: HTMLButtonElement; text: HTMLSpanElement; seats: HTMLSpanElement };
+
 /**
  * A point: a real `<button>`, so Enter and Space need no code of ours, 44 × 44 px at least
- * around its label: the driver's first name, cut at 120 px, or the number of its cars, in a
- * 12 px text. Its name is the whole one. The icon Leaflet places has no size, and the button sits around its point:
- * centred on the car's place, or, at the flag, from the flag's lower edge, its label 24 px under
- * the flag's place, where the flag does not cover it (CA1.15). Without a `z-index` of their own,
+ * around its label: the driver's first name, cut at 120 px, or the number of its cars, then the
+ * badge of its free seats, whole (#655), in a 12 px text. Its name is the whole one. The icon
+ * Leaflet places has no size, and the button sits around its point: centred on the car's place,
+ * or, at the flag, from the flag's lower edge, its label 24 px under the flag's place, where the
+ * flag does not cover it (CA1.15). Without a `z-index` of their own,
  * the labels stack in the DOM's order, the cards' one: the last on top.
  * Made once per point, and drawn again at each state (`drawPoint`): the same element.
  */
-function pointButton(onPress: () => void): { button: HTMLButtonElement; text: HTMLSpanElement } {
+function pointButton(onPress: () => void): PointElements {
   const button = document.createElement("button");
   button.type = "button";
   const label = document.createElement("span");
@@ -185,16 +214,17 @@ function pointButton(onPress: () => void): { button: HTMLButtonElement; text: HT
   label.innerHTML = CAR_SVG;
   const text = document.createElement("span");
   text.className = "max-w-30 truncate";
-  label.append(text);
+  const { badge, number } = seatsBadge("ml-px");
+  label.append(text, badge);
   button.append(label);
   // Gone with its marker: nothing to undo.
   holdPress(button);
   button.addEventListener("click", onPress);
-  return { button, text };
+  return { button, text, seats: number };
 }
 
-/** `point` on its button: its name, its label, where it sits; a grouped one, whether its bubble is `open`. */
-function drawPoint({ button, text }: { button: HTMLButtonElement; text: HTMLSpanElement }, point: CarPoint, open: boolean) {
+/** `point` on its button: its name, its label, its badge, where it sits; a grouped one, whether its bubble is `open`. */
+function drawPoint({ button, text, seats }: PointElements, point: CarPoint, open: boolean) {
   button.setAttribute("aria-label", point.name);
   if (point.cars.length > 1) button.setAttribute("aria-expanded", String(open));
   else button.removeAttribute("aria-expanded");
@@ -203,14 +233,23 @@ function drawPoint({ button, text }: { button: HTMLButtonElement; text: HTMLSpan
     point.atFlag ? "top-4" : "top-0 -translate-y-1/2",
   ].join(" ");
   text.textContent = point.label;
+  seats.textContent = point.seats;
 }
 
-/** A button of the bubble, as the design's outline buttons: 44 px high at least (CA1.8). */
-function bubbleButton(text: string, name?: string): HTMLButtonElement {
+/**
+ * A button of the bubble, as the design's outline buttons: 44 px high at least (CA1.8). A car's
+ * has its name and, after its text, its car's badge (#655).
+ */
+function bubbleButton(text: string, car?: { name: string; seats: string }): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = text;
-  if (name) button.setAttribute("aria-label", name);
+  if (car) {
+    button.setAttribute("aria-label", car.name);
+    const { badge, number } = seatsBadge("ml-1 text-[13px]");
+    number.textContent = car.seats;
+    button.append(badge);
+  }
   button.className =
     "flex min-h-11 w-full items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted focus-visible:focus-ring";
   return button;
@@ -246,7 +285,7 @@ function bubbleOf(): { bubble: HTMLDivElement; title: HTMLParagraphElement } {
  * The map of a leg in `container`: our tiles, the flag, the points of `mapOf` as they are, each
  * with its line to the flag (none at the flag), a grouped one with its bubble, the zoom, and
  * our credits last. The view frames them all (`framing`): the flag alone at zoom 14, else every
- * point, 32 px around, the credits' height more at the bottom, zoom 15 at most. The container is a region, focusable (arrows, + and −);
+ * point, 32 px around (half the widest label on the sides when more, #655), the credits' height more at the bottom, zoom 15 at most. The container is a region, focusable (arrows, + and −);
  * the flag is not a button and stays out of the Tab order.
  * Nothing moves by degrees (CA1.10, decision 24 of organizer-view): no zoom, fade or marker
  * animation, no inertia, every framing `{ animate: false }`, and the arrow keys' pans at once
@@ -312,7 +351,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   const spot = (point: CarPoint): L.LatLngTuple => (point.atFlag ? flagAt() : [point.position.lat, point.position.lng]);
 
   /** A point on the map, named by its key (`pointKey`): its marker, its button, its line to the flag (none at the flag). */
-  type Drawn = { key: string; point: CarPoint; marker: L.Marker; button: HTMLButtonElement; text: HTMLSpanElement; line: L.Polyline | null };
+  type Drawn = PointElements & { key: string; point: CarPoint; marker: L.Marker; line: L.Polyline | null };
   /** The open bubble, of `entry`'s point: its buttons by car, then « Fermer ». */
   type Open = { entry: Drawn; bubble: HTMLDivElement; title: HTMLParagraphElement; cars: Map<string, HTMLButtonElement>; close: HTMLButtonElement };
 
@@ -355,7 +394,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     shown.title.textContent = point.name;
     shown.cars = new Map(
       point.cars.map((car) => {
-        const button = bubbleButton(car.title, car.name);
+        const button = bubbleButton(car.title, car);
         button.addEventListener("click", () => {
           options.onCar(car.id);
           // Its card has the focus now, and the bubble closed with it; otherwise, back to the point.
@@ -404,9 +443,9 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   };
   // Added last: in the marker pane's order, the Tab order (CA1.4), after the points already there.
   const add = (key: string, point: CarPoint): Drawn => {
-    const { button, text } = pointButton(() => (entry.point.cars.length > 1 ? openBubble(entry) : options.onCar(entry.point.cars[0].id)));
+    const { button, text, seats } = pointButton(() => (entry.point.cars.length > 1 ? openBubble(entry) : options.onCar(entry.point.cars[0].id)));
     const icon = L.divIcon({ html: button, className: "z-auto!", iconSize: [0, 0] });
-    const entry: Drawn = { key, point, button, text, line: null, marker: L.marker(spot(point), { icon, keyboard: false, interactive: false }).addTo(map) };
+    const entry: Drawn = { key, point, button, text, seats, line: null, marker: L.marker(spot(point), { icon, keyboard: false, interactive: false }).addTo(map) };
     redraw(entry, point);
     return entry;
   };
@@ -455,10 +494,10 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   // points into 0 × 0 px, and showing it again only resizes it (CA1.3). Until then, a first
   // map has no view, and Leaflet holds its layers back; a new state's framing waits as well.
   let unframed = true;
-  const frame = () => {
-    if (!unframed || container.clientWidth === 0 || container.clientHeight === 0) return;
-    unframed = false;
-    const view = framing(state.flag, state.points, creditsHeight());
+  /** Half the widest point's button, its label, as laid out now: 0 for one not in the page yet. */
+  const halfLabel = () => Math.max(0, ...drawn.map(({ button }) => button.offsetWidth / 2));
+  const fit = () => {
+    const view = framing(state.flag, state.points, creditsHeight(), halfLabel());
     still(() => {
       if (view.kind === "flag") map.setView([view.center.lat, view.center.lng], view.zoom, { animate: false });
       else {
@@ -470,6 +509,15 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
         map.fitBounds(box, { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom], maxZoom: view.maxZoom, animate: false });
       }
     });
+  };
+  const frame = () => {
+    if (!unframed || container.clientWidth === 0 || container.clientHeight === 0) return;
+    unframed = false;
+    const before = halfLabel();
+    fit();
+    // A first view puts the labels in the page (#655): framed again with their width, in the
+    // same task, nothing painted in between.
+    if (halfLabel() !== before) fit();
   };
   frame();
 

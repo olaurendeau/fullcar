@@ -40,6 +40,15 @@ async function schemaOf(db: Kysely<Database>) {
   return { columns, constraints, indexes };
 }
 
+/** The definition of a constraint of the event table, as Postgres writes it back. */
+async function constraintDefinition(db: Kysely<Database>, name: string) {
+  const { rows } = await sql<{ definition: string }>`
+    select pg_get_constraintdef(oid) as definition from pg_constraint
+    where conrelid = 'event'::regclass and conname = ${name}`.execute(db);
+  expect(rows).toHaveLength(1);
+  return rows[0]?.definition;
+}
+
 describe("migrations", () => {
   let db: Kysely<Database>;
 
@@ -76,6 +85,23 @@ describe("migrations", () => {
     expectSuccess(await migrator.migrateTo("0004_accounts"));
     expect(await schemaOf(db)).not.toEqual(before);
     expectSuccess(await migrator.migrateTo("0003_positions"));
+    expect(await schemaOf(db)).toEqual(before);
+    expectSuccess(await migrator.migrateToLatest());
+  });
+
+  // #706: the down of 0005 gives back exactly what 0004 left: columns, constraints, indexes,
+  // the definition of event_anonymised_bare among them, which 0005 extends to the description.
+  it("0005 goes down to the schema 0004 left", async () => {
+    const migrator = createMigrator(db);
+    expectSuccess(await migrator.migrateTo("0004_accounts"));
+    const before = await schemaOf(db);
+    const bare = await constraintDefinition(db, "event_anonymised_bare");
+    expect(bare).not.toContain("description");
+    expectSuccess(await migrator.migrateTo("0005_event_description"));
+    expect(await schemaOf(db)).not.toEqual(before);
+    expect(await constraintDefinition(db, "event_anonymised_bare")).toContain("description IS NULL");
+    expectSuccess(await migrator.migrateTo("0004_accounts"));
+    expect(await constraintDefinition(db, "event_anonymised_bare")).toBe(bare);
     expect(await schemaOf(db)).toEqual(before);
     expectSuccess(await migrator.migrateToLatest());
   });

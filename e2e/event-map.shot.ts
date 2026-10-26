@@ -18,7 +18,7 @@ test.use({ locale: "fr-FR", ...(desk ? { isMobile: false, hasTouch: false } : { 
 /** The zoom of `seedParking`'s view. */
 const ZOOM = 15;
 const NAME = mapName("aller", "3 voitures");
-const GROUP = "2 voitures : Nina, Paul";
+const GROUP = "2 voitures : Nina, Paul, 3 places libres";
 
 /**
  * With a mouse, the whole page. At touch, the screen, from « Carte » unless the map is folded:
@@ -60,7 +60,7 @@ test("the map, folded, open, then its bubble", async ({ page, placed }, testInfo
   await shoot(page, testInfo, "carte-ouverte");
 
   await map.getByRole("button", { name: GROUP, exact: true }).click();
-  await expect(map.getByRole("group", { name: GROUP, exact: true }).getByRole("button")).toHaveText(["Voiture de Nina", "Voiture de Paul", "Fermer"]);
+  await expect(map.getByRole("group", { name: GROUP, exact: true }).getByRole("button")).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
   await shoot(page, testInfo, "carte-bulle");
 });
 

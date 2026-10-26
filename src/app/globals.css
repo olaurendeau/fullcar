@@ -38,6 +38,9 @@
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
     --color-primary: var(--primary);
+    --color-inverse-foreground: var(--inverse-foreground);
+    --color-inverse: var(--inverse);
+    --color-brand-soft: var(--brand-soft);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -60,8 +63,14 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
+    --primary: oklch(0.42 0.08 195);
     --primary-foreground: oklch(0.985 0 0);
+    /* The success bar's own dark (#651): the ring #737373 at 0 px keeps 3,78:1 on it,
+       which no colour as light as --primary allows. */
+    --inverse: oklch(0.205 0 0);
+    --inverse-foreground: oklch(0.985 0 0);
+    /* The light tint of --primary (#651): home steps, empty-state and not-found tiles. */
+    --brand-soft: oklch(0.965 0.02 195);
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
     --muted: oklch(0.97 0 0);
@@ -123,7 +132,7 @@
 }
 
 /* The focus ring (language-switch v3.3.1, #236): 2 px of #737373, 2 px out, so that it only
-   touches the background around the element, 3:1 at least on white, `muted` and `primary`.
+   touches the background around the element, 3:1 at least on white, `muted` and `inverse`.
    An outline, not a box-shadow: it stays in forced colours. `focus-visible:outline-offset-0`
    and `focus-visible:-outline-offset-2` come after it in the stylesheet, and win. */
 @utility focus-ring {

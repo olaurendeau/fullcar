@@ -366,6 +366,32 @@ describe("free seats change", () => {
   });
 });
 
+describe("only the free seats change: a seat taken or freed (#655, CA1.7)", () => {
+  const before = map([car("sophie", north(FLAG, 10), 2), car("nina", BRINDAS, 1), car("paul", north(BRINDAS, 10), 2), car("lea", ECULLY, 1)]);
+  const after = map([car("sophie", north(FLAG, 10), 1), car("nina", BRINDAS, 0), car("paul", north(BRINDAS, 10), 2), car("lea", ECULLY, 0)]);
+
+  it("gives every point, the flag's too, the same element, and never reframes, even untouched", () => {
+    const update = mapUpdate(before, after, UNTOUCHED);
+    expect(changes(update)).toEqual([
+      ["sophie", "kept"],
+      ["nina paul", "kept"],
+      ["lea", "kept"],
+    ]);
+    expect(update.points.map(({ point }) => point.cars.map(({ free }) => free))).toEqual([[1], [0, 2], [0]]);
+    expect(update.removed).toEqual([]);
+    expect(update.reorder).toBe(false);
+    expect(update.reframe).toBe(false);
+  });
+
+  it("keeps the open bubble open, the focus on its car's button or its « Fermer »", () => {
+    for (const focus of [{ kind: "bubble", car: "nina" }, { kind: "close" }] as const) {
+      const update = mapUpdate(before, after, focused(focus, { bubble: "nina paul" }));
+      expect(update.closeBubble).toBe(false);
+      expect(update.focus).toEqual(focus);
+    }
+  });
+});
+
 describe("the position of the event changes", () => {
   const cars = [car("nina", BRINDAS), car("lea", ECULLY)];
   const before = map(cars);

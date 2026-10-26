@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BUBBLE_INSET, bubbleMaxHeight, distanceMetres, framing, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "./event-map";
+import { BUBBLE_INSET, bubbleMaxHeight, distanceMetres, framing, freeSeatsOf, mapOf, SAME_POSITION_METRES, type EventMapPoints } from "./event-map";
 import type { Position } from "./place";
 import { browserUnsafe } from "./test-browser-safe";
 
@@ -209,6 +209,40 @@ describe("mapOf: counting the cars on the map and the others (CA2.2, CA2.3)", ()
   });
 });
 
+describe("freeSeatsOf: the free seats a point shows (#655, CA1.21)", () => {
+  /** A car with `freeSeats` free seats, at `position`. */
+  const seated = (id: string, position: Position | null, freeSeats: number) => ({ id, position, freeSeats });
+
+  it("is its car's free seats for a point of one car, 0 for a full one", () => {
+    expect(freeSeatsOf({ cars: [seated("claire", BRINDAS, 2)] })).toBe(2);
+    expect(freeSeatsOf({ cars: [seated("ines", BRINDAS, 0)] })).toBe(0);
+  });
+
+  it("is the sum of its cars' free seats for a grouped point: Nina 1 and Paul 2, 3", () => {
+    expect(freeSeatsOf({ cars: [seated("nina", BRINDAS, 1), seated("paul", BRINDAS, 2)] })).toBe(3);
+  });
+
+  it("is 0 for a grouped point whose cars are all full", () => {
+    expect(freeSeatsOf({ cars: [seated("nina", BRINDAS, 0), seated("paul", BRINDAS, 0)] })).toBe(0);
+  });
+
+  it("sums each point of mapOf on its own, the flag's point too", () => {
+    const { points } = mapOf(FLAG, [
+      seated("sophie", north(FLAG, 20), 1),
+      seated("nina", BRINDAS, 1),
+      seated("lou", north(FLAG, -20), 2),
+      seated("paul", north(BRINDAS, 10), 2),
+      seated("lea", ECULLY, 4),
+      seated("marc", null, 3),
+    ]);
+    expect(points.map((point) => [point.atFlag, freeSeatsOf(point)])).toEqual([
+      [true, 3],
+      [false, 3],
+      [false, 4],
+    ]);
+  });
+});
+
 describe("framing", () => {
   /** One line of credits, 24 px high (CA3.7). */
   const ONE_LINE = 24;
@@ -243,6 +277,16 @@ describe("framing", () => {
 
     expect(framing(FLAG, points, ONE_LINE)).toMatchObject({ padding: { top: 32, right: 32, bottom: 88, left: 32 } });
     expect(framing(FLAG, points, 48)).toMatchObject({ padding: { bottom: 112 } });
+  });
+
+  it("keeps half the widest label clear on the left and right, 32 px at least, its badge with it (#655)", () => {
+    const points = [away(BRINDAS)];
+
+    // « Marc » and his badge, 96 px wide, centred on his place: 48 px on each side of it.
+    expect(framing(FLAG, points, ONE_LINE, 48)).toMatchObject({ padding: { top: 32, right: 48, bottom: 56, left: 48 } });
+    expect(framing(FLAG, points, ONE_LINE, 47.2)).toMatchObject({ padding: { right: 48, left: 48 } });
+    expect(framing(FLAG, points, ONE_LINE, 20)).toMatchObject({ padding: { right: 32, left: 32 } });
+    expect(framing(FLAG, points, ONE_LINE)).toMatchObject({ padding: { right: 32, left: 32 } });
   });
 
   it("takes the flag as the edge it is, on any side", () => {
