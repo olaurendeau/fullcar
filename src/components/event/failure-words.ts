@@ -143,6 +143,24 @@ export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personG
   return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
 }
 
+/** A refusal of « Retirer de l’événement » that sending it again would not change (remove-person v2, « Refus et échecs »). */
+export type FinalRefusal = "forbidden" | "eventNotFound" | "eventEnded";
+
+/** What a removal that failed says in its confirmation while it is open (`removalProblem`). */
+export type RemovalProblem = { problem: "offline" | "failed"; final: false } | { problem: FinalRefusal; final: true };
+
+/**
+ * What a removal that failed says (remove-person v2, « Refus et échecs »): offline or on an
+ * error, the problem, and its confirmation keeps its red button; a refusal that sending again
+ * would not change, its reason, `final`: the confirmation keeps « Fermer » alone. `invalid`,
+ * which no page sends, takes the generic failure. In the bar, `whyOf` its problem.
+ */
+export function removalProblem(error: "offline" | "failed" | "invalid" | FinalRefusal): RemovalProblem {
+  if (error === "offline") return { problem: error, final: false };
+  if (error === "failed" || error === "invalid") return { problem: "failed", final: false };
+  return { problem: error, final: true };
+}
+
 /**
  * What « Modifier » a person sent (v4.2.2): its one field changed, or both. Nothing changed sends
  * nothing (v4.4): the form closes before, and a failure never names fields that did not go.

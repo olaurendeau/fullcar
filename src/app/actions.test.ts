@@ -5,7 +5,7 @@ import { DESCRIPTION_MAX } from "@/domain/description";
 import type { EventFields } from "@/domain/event";
 import { isPublicId } from "@/domain/public-id";
 import type { Database } from "@/db/schema";
-import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
+import { anAddress, seedAccount, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
 import { localeCookieOptions } from "@/i18n/locales";
 import { createEvent, setLocale, visit } from "./actions";
@@ -32,8 +32,23 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-function inTransaction<T>(fn: (trx: Transaction<Database>) => Promise<T>): Promise<T> {
-  return withRollback(async (trx) => {
+// The page's language, as next-intl reads it from the request.
+const page = vi.hoisted(() => ({ locale: "fr" }));
+vi.mock("next-intl/server", () => ({ getLocale: async () => page.locale }));
+
+// Next's after(): the tasks it would run once the answer has gone, run here by the test.
+const deferred = vi.hoisted(() => ({ tasks: [] as (() => Promise<unknown>)[] }));
+vi.mock("next/server", () => ({ after: (task: () => Promise<unknown>) => void deferred.tasks.push(task) }));
+
+// Brevo, which no test reaches: the emails it is given.
+const mailbox = vi.hoisted(() => ({ sent: [] as { to: string; subject: string }[] }));
+vi.mock("@/email/brevo", () => ({
+  serverBrevo: () => ({ send: async (email: { to: string; subject: string }) => (mailbox.sent.push(email), { state: "sent" }) }),
+}));
+
+/** `rollback` is withRollbackRecordingSends for a test that records a send. */
+function inTransaction<T>(fn: (trx: Transaction<Database>) => Promise<T>, rollback = withRollback): Promise<T> {
+  return rollback(async (trx) => {
     connection.current = trx;
     try {
       return await fn(trx);
@@ -366,6 +381,34 @@ describe("createEvent", () => {
       connection.current = undefined;
       log.mockRestore();
     }
+  });
+});
+
+describe("createEvent, with an address (#599)", () => {
+  beforeEach(() => {
+    // The database writes its own now(): the server's clock is the real one here, and the send
+    // is recorded under WINDOW_LOCK (withRollbackRecordingSends).
+    vi.useRealTimers();
+    deferred.tasks = [];
+    mailbox.sent = [];
+  });
+
+  it("OA1.6, OA1.7: answers first, then sends the confirmation in the page's language, and keeps its result", async () => {
+    page.locale = "en";
+    const date = new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+    const email = anAddress();
+    await inTransaction(async (trx) => {
+      const result = await createEvent({ ...valid, allerDate: date, retourDate: date, email });
+      if (!result.ok) throw new Error("expected an event");
+      const status = () =>
+        trx.selectFrom("event").select(["pending_email", "send_status"]).where("id", "=", result.id).executeTakeFirstOrThrow();
+      expect(await status()).toEqual({ pending_email: email, send_status: "sending" });
+      expect(mailbox.sent).toEqual([]);
+      expect(deferred.tasks).toHaveLength(1);
+      await deferred.tasks[0]!();
+      expect(mailbox.sent).toEqual([expect.objectContaining({ to: email, subject: "Confirm your email address for Fullcar" })]);
+      expect(await status()).toEqual({ pending_email: email, send_status: "sent" });
+    }, withRollbackRecordingSends);
   });
 });
 

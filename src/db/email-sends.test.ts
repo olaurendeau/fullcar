@@ -9,9 +9,8 @@ import {
 } from "@/domain/send-limits";
 import { SEND_LOCK_CLASS, lockAddress, lockGlobalSends, recordSend } from "./email-sends";
 import type { Database } from "./schema";
-import { anAddress, seedSends, withCommittedAddresses } from "./test-accounts";
+import { anAddress, seedSends, withCommittedAddresses, withRollbackRecordingSends } from "./test-accounts";
 import { whileHeld, withCommittedEvent } from "./test-committed";
-import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
 
 const MINUTE = 60_000;
@@ -27,15 +26,20 @@ async function sendsInWindow(db: Kysely<Database>) {
   return rows[0]!.count;
 }
 
-/** Sends to as many addresses as needed for the window to hold `count` sends, all kinds together. */
+/**
+ * Sends to as many addresses as needed for the window to hold `count` sends, all kinds
+ * together. Committed, only under withCommittedAddresses(…, { fillsTheWindow: true }): the
+ * rule of WINDOW_LOCK (test-accounts.ts).
+ */
 async function fillWindowTo(db: Kysely<Database>, count: number, address: () => string = anAddress) {
   const missing = count - (await sendsInWindow(db));
+  if (missing < 0) throw new Error("fillWindowTo: the window already holds more sends");
   await seedSends(db, missing, { kind: "login", email: address });
 }
 
 describe("recordSend", () => {
   it("records a confirmation email with its event, and the answer to a sign-in request without one", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       const email = anAddress();
       expect(await recordSend(trx, { kind: "confirmation", eventId, email })).toBe("recorded");
@@ -49,7 +53,7 @@ describe("recordSend", () => {
 
   // OA2.4: 3 confirmation emails per hour for an event, creation, resends and corrections included.
   it("lets the 3rd confirmation of an event go, then stops the next one, and records nothing for an event gone", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       await seedSends(trx, CONFIRMATIONS_PER_EVENT - 1, { kind: "confirmation", eventId, email: () => anAddress() });
       expect(await recordSend(trx, { kind: "confirmation", eventId, email: anAddress() })).toBe("recorded");
@@ -61,7 +65,7 @@ describe("recordSend", () => {
   });
 
   it("no longer counts a send of an hour ago", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       const email = anAddress();
       await seedSends(trx, CONFIRMATIONS_PER_EVENT, { kind: "confirmation", eventId, email, sentAt: ago(61 * MINUTE) });
@@ -71,7 +75,7 @@ describe("recordSend", () => {
 
   // OA1.9: 5 confirmation emails per hour to one address, all events together, a deleted one included.
   it("stops the 6th confirmation to an address, whatever the event", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       await seedSends(trx, CONFIRMATIONS_PER_ADDRESS - 1, { kind: "confirmation", eventId: null, email });
       const { id: fifth } = await seedEvent(trx);
@@ -84,7 +88,7 @@ describe("recordSend", () => {
 
   // OA4.5: the 6th sign-in request in an hour for an address, with or without an account (OA3.5).
   it("stops the 6th sign-in request to an address, counted apart from its confirmation emails", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       const { id: eventId } = await seedEvent(trx);
       await seedSends(trx, CONFIRMATIONS_PER_ADDRESS, { kind: "confirmation", email });
@@ -100,7 +104,7 @@ describe("recordSend", () => {
 
   // Coordinator decision 2 on #581: every email of the hour, whatever its kind and its address.
   it("lets the 50th email of the hour go, then stops every kind, whatever the address", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       await fillWindowTo(trx, GLOBAL_SENDS_PER_HOUR - 1);
       expect(await recordSend(trx, { kind: "confirmation", eventId, email: anAddress() })).toBe("recorded");
@@ -119,7 +123,7 @@ describe("recordSend", () => {
           const second = await whileHeld(
             db,
             async (trx) => expect(await recordSend(trx, { kind: "confirmation", eventId, email: address() })).toBe("recorded"),
-            () => recordSend(db, { kind: "confirmation", eventId, email: address() }),
+            (own) => recordSend(own, { kind: "confirmation", eventId, email: address() }),
           );
           expect(second).toBe("event");
           const sent = await db.selectFrom("email_send").select("id").where("event_id", "=", eventId).execute();
@@ -137,7 +141,7 @@ describe("recordSend", () => {
             const outcome = await whileHeld(
               db,
               async (trx) => expect(await recordSend(trx, { kind: "confirmation", eventId: first, email })).toBe("recorded"),
-              () => recordSend(db, { kind: "confirmation", eventId: second, email }),
+              (own) => recordSend(own, { kind: "confirmation", eventId: second, email }),
             );
             expect(outcome).toBe("address");
             expect(await sendsTo(db, email)).toHaveLength(CONFIRMATIONS_PER_ADDRESS);
@@ -152,11 +156,11 @@ describe("recordSend", () => {
         const outcome = await whileHeld(
           db,
           async (trx) => expect(await recordSend(trx, { kind: "login", email: address() })).toBe("recorded"),
-          () => recordSend(db, { kind: "login", email: address() }),
+          (own) => recordSend(own, { kind: "login", email: address() }),
         );
         expect(outcome).toBe("global");
         expect(await sendsInWindow(db)).toBe(GLOBAL_SENDS_PER_HOUR);
-      });
+      }, { fillsTheWindow: true });
     });
   });
 
@@ -168,7 +172,7 @@ describe("recordSend", () => {
           const outcome = await whileHeld(
             db,
             (trx) => lockAddress(trx, email),
-            () => recordSend(db, { kind: "confirmation", eventId, email }),
+            (own) => recordSend(own, { kind: "confirmation", eventId, email }),
             async () => {
               const takeEvent = db.selectFrom("event").select("id").where("id", "=", eventId).forNoKeyUpdate().noWait();
               await expect(takeEvent.execute()).rejects.toMatchObject({ code: "55P03" });
@@ -185,7 +189,7 @@ describe("recordSend", () => {
           const outcome = await whileHeld(
             db,
             (trx) => lockGlobalSends(trx),
-            () => recordSend(db, { kind: "confirmation", eventId, email: address() }),
+            (own) => recordSend(own, { kind: "confirmation", eventId, email: address() }),
             async (waiting) => {
               const { rows } = await sql<{ classid: number; granted: boolean }>`
                 select classid::int, granted from pg_locks

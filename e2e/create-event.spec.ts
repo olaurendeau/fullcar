@@ -1,5 +1,6 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
 import { expect, expectUrl, leaveNoToken, test } from "./fixtures";
+import { adminTokenKey } from "./organiser";
 
 leaveNoToken();
 
@@ -31,8 +32,8 @@ const FR = {
 /** Where the form is (#245, A2.1): `/` is to be the home page. */
 const NEW_EVENT = "/nouveau";
 
-/** Where a new event lands: its organiser's link, the secret in the fragment only (C1.5). */
-const ARRIVAL = /\/e\/[2-9A-HJ-NP-Za-km-z]{8}\/admin#[A-Za-z0-9_-]{22}$/;
+/** Where a new event lands: its organiser area, without a fragment (OA1.6); the token is kept by the browser (#597). */
+const ARRIVAL = /\/e\/([2-9A-HJ-NP-Za-km-z]{8})\/admin$/;
 
 const field = (page: Page, label: string) => page.getByLabel(label, { exact: true });
 const createButton = (page: Page, name = FR.create) => page.getByRole("button", { name });
@@ -216,7 +217,11 @@ test.describe("creating an event from /nouveau", () => {
     await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
 
-    const token = new URL(page.url()).hash.slice(1);
+    // OA1.6: no fragment; the browser keeps the token under its event's key.
+    const id = ARRIVAL.exec(page.url())![1];
+    expect(new URL(page.url()).hash, "the arrival's fragment").toBe("");
+    const token = (await page.evaluate((key) => localStorage.getItem(key), adminTokenKey(id))) ?? "";
+    expect(/^[A-Za-z0-9_-]{22}$/.test(token), "the kept token is well formed").toBe(true);
     expect((await Promise.all(creationBodies)).filter((body) => body.includes(token)).length, "creation answers holding the token").toBe(1);
     const texts = await Promise.all(seen);
     // The arrival itself was watched: the App Router's fetch of the organiser's page.

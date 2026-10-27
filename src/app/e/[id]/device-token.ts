@@ -5,7 +5,7 @@ import { afterRegistration, type DeviceStatus } from "@/domain/tap";
 
 /*
  * The only browser code that touches the personal token (docs/agents/architecture.md,
- * "Jetons"), as admin-link.ts is for the organiser's. The browser draws it with
+ * "Jetons"), as admin-token-store.ts is for the organiser's. The browser draws it with
  * `crypto.getRandomValues` and stores it under a key of its event before the request that
  * creates a person leaves (D1, D4); without `localStorage`, the page's memory keeps it (D5).
  * It travels in the body of a request only: never in a URL, a log, an error or the page.

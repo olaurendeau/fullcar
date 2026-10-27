@@ -1,37 +1,39 @@
 import type { Page, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { expect, expectText, leaveNoToken, test } from "./fixtures";
-import { hideToken } from "./organiser";
+import { creatorTest as test, expect, expectText, leaveNoToken } from "./fixtures";
+import { areaRefused, hideToken, keepAdminToken, oneCharOff } from "./organiser";
 
 leaveNoToken();
 
 const FR = {
   panel: "Espace organisateur",
   shareLink: "Lien à partager",
-  adminLink: "Lien d’organisateur",
-  keep: "Gardez ce lien",
-  keepWhy: "C’est le seul moyen de modifier l’événement. Sans compte ni e-mail, nous ne pouvons pas vous le renvoyer.",
-  doNotShare: "Ne le partagez pas : il montre des numéros de téléphone et permet de tout modifier.",
   copy: "Copier",
   copied: "Copié",
   copyFailed: "Copie impossible : sélectionnez le lien et copiez-le à la main.",
   share: "Partager",
-  invalid: "Ce lien d’organisateur n’est pas valide.",
-  invalidWhy: "Vérifiez qu’il a été copié en entier.",
-  checkFailed: "Le lien d’organisateur n’a pas pu être vérifié.",
+  checkFailed: "L’espace organisateur n’a pas pu être chargé.",
   checkFailedWhy: "Vérifiez la connexion, puis réessayez.",
 };
+
+/** Words of the organiser's link, gone with it (OA7.3). */
+const GONE = /Lien d’organisateur|Gardez ce lien|n’est pas valide/;
 
 /** A well-formed id that no test stores. */
 const UNKNOWN_ID = "Zz9yXw8v";
 
-/** The organiser's link of a seeded event, as a path: the token in the fragment only. */
-function adminPath({ id, token }: SeededEvent): string {
-  return `/e/${id}/admin#${token}`;
+/** The organiser area of a seeded event, as a path: nothing after it (OA1.6); this browser keeps the token (#597). */
+function adminPath({ id }: SeededEvent): string {
+  return `/e/${id}/admin`;
 }
 
-function oneCharOff(token: string): string {
-  return `${token.slice(0, -1)}${token.at(-1) === "A" ? "B" : "A"}`;
+/** The bodies of the actions posted to the organiser's page of `id`, from now on. */
+function actionBodies(page: Page, id: string): string[] {
+  const bodies: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === `/e/${id}/admin`) bodies.push(request.postData() ?? "");
+  });
+  return bodies;
 }
 
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
@@ -47,7 +49,7 @@ async function horizontalOverflow(page: Page): Promise<number> {
 test.describe("organiser's arrival", () => {
   test.use({ locale: "fr-FR" });
 
-  test("C4.1, C4.3: the share link, then the organiser's link as personal, then the warning", async ({
+  test("C4.1, C4.3, OA7.3: the share link, and no organiser's link nor « Gardez ce lien »", async ({
     page,
     seededEvent,
     baseURL,
@@ -57,19 +59,10 @@ test.describe("organiser's arrival", () => {
 
     await expect(panel(page).getByRole("heading", { level: 2 })).toHaveText(FR.panel);
     const share = linkGroup(page, FR.shareLink);
-    const admin = linkGroup(page, FR.adminLink);
-    const warning = panel(page).getByRole("note");
     await expectText(share.getByTestId("link"), `${origin}/e/${seededEvent.id}`, "the share link is shown");
-    await expectText(admin.getByTestId("link"), `${origin}/e/${seededEvent.id}/admin#${seededEvent.token}`, "the organiser's link is shown");
-    await expect(admin).toContainText("Personnel");
-    // Its exact text: `toContainText` takes a non-breaking space for the README's plain one.
-    expect(await admin.getByText(/^Ne le partagez pas/).textContent()).toBe(FR.doNotShare);
-    await expect(warning).toContainText(FR.keep);
-    await expect(warning).toContainText(FR.keepWhy);
-
-    // In this order, top to bottom.
-    const tops = await Promise.all([share, admin, warning].map(async (part) => (await part.boundingBox())!.y));
-    expect(tops).toEqual([...tops].sort((a, b) => a - b));
+    await expect(panel(page).getByTestId("link")).toHaveCount(1);
+    await expect(panel(page).getByRole("note")).toHaveCount(0);
+    await expect(page.getByText(GONE)).toHaveCount(0);
 
     // Then the event, as its participants see it.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
@@ -84,7 +77,7 @@ test.describe("organiser's arrival", () => {
     await expect(panel(page)).toHaveCount(0);
   });
 
-  test("C4.2: both links and the warning are visible without scrolling at 360 × 780", async ({
+  test("C4.2: the share link is visible without scrolling at 360 × 780", async ({
     page,
     seededEvent,
   }) => {
@@ -92,21 +85,16 @@ test.describe("organiser's arrival", () => {
     await page.goto(adminPath(seededEvent));
     await expect(panel(page)).toBeVisible();
     await expect(linkGroup(page, FR.shareLink).getByTestId("link")).toBeInViewport({ ratio: 1 });
-    await expect(linkGroup(page, FR.adminLink).getByTestId("link")).toBeInViewport({ ratio: 1 });
-    await expect(panel(page).getByRole("note")).toBeInViewport({ ratio: 1 });
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     expect(await horizontalOverflow(page)).toBe(0);
   });
 
-  test("C4.4: each link is copied, and the button says so", async ({ page, context, seededEvent, baseURL }) => {
+  test("C4.4: the share link is copied, and the button says so", async ({ page, context, seededEvent, baseURL }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     const origin = new URL(baseURL!).origin;
     await page.goto(adminPath(seededEvent));
 
-    for (const [name, url] of [
-      [FR.shareLink, `${origin}/e/${seededEvent.id}`],
-      [FR.adminLink, `${origin}/e/${seededEvent.id}/admin#${seededEvent.token}`],
-    ]) {
+    for (const [name, url] of [[FR.shareLink, `${origin}/e/${seededEvent.id}`]]) {
       const button = linkGroup(page, name).getByRole("button", { name: FR.copy });
       await button.click();
       await expect(linkGroup(page, name).getByRole("button", { name: FR.copied })).toBeVisible();
@@ -128,13 +116,12 @@ test.describe("organiser's arrival", () => {
       });
     });
     await page.goto(adminPath(seededEvent));
-    const admin = linkGroup(page, FR.adminLink);
-    await admin.getByRole("button", { name: FR.copy }).click();
-    await expect(admin.getByText(FR.copyFailed)).toBeVisible();
-    await expect(admin.getByRole("button", { name: FR.copy })).toBeVisible();
-    await expect(linkGroup(page, FR.shareLink).getByText(FR.copyFailed)).toHaveCount(0);
+    const share = linkGroup(page, FR.shareLink);
+    await share.getByRole("button", { name: FR.copy }).click();
+    await expect(share.getByText(FR.copyFailed)).toBeVisible();
+    await expect(share.getByRole("button", { name: FR.copy })).toBeVisible();
 
-    const link = admin.getByTestId("link");
+    const link = share.getByTestId("link");
     await link.click();
     const selection = await page.evaluate(() => window.getSelection()?.toString());
     expect(selection === (await link.innerText()), "the whole link is selected").toBe(true);
@@ -180,20 +167,20 @@ test.describe("organiser's arrival", () => {
     expect(copy.width).toBeCloseTo(link.width, 0);
   });
 
-  test("C4.7: reloading, or opening the link again later, shows the same panel", async ({
+  test("C4.7: reloading, or opening the area again in another tab of this browser, shows the same panel", async ({
     page,
     context,
     seededEvent,
   }) => {
     await page.goto(adminPath(seededEvent));
-    const shown = await linkGroup(page, FR.adminLink).getByTestId("link").innerText();
+    const shown = await linkGroup(page, FR.shareLink).getByTestId("link").innerText();
     await page.reload();
-    await expectText(linkGroup(page, FR.adminLink).getByTestId("link"), shown, "the same link after a reload");
-    expect(new URL(page.url()).hash === `#${seededEvent.token}`, "the URL keeps the token in its fragment").toBe(true);
+    await expectText(linkGroup(page, FR.shareLink).getByTestId("link"), shown, "the same link after a reload");
+    expect(new URL(page.url()).hash, "OA1.6: the URL has no fragment").toBe("");
 
     const later = await context.newPage();
     await later.goto(adminPath(seededEvent));
-    await expectText(linkGroup(later, FR.adminLink).getByTestId("link"), shown, "the same link in another tab");
+    await expectText(linkGroup(later, FR.shareLink).getByTestId("link"), shown, "the same link in another tab");
   });
 
   test("C4.9: the panel appears only once the server has checked the token, sent in a request's body", async ({
@@ -261,58 +248,63 @@ test.describe("organiser's arrival", () => {
   });
 });
 
-test.describe("organiser's link, not valid", () => {
+test.describe("organiser area, refused", () => {
   test.use({ locale: "fr-FR" });
 
-  for (const [what, fragment] of [
-    ["a wrong token", () => "#q3Vx9kLmN2pR7sT1uW4yZa"],
-    ["a token one character off", (token: string) => `#${oneCharOff(token)}`],
-    ["no fragment", () => ""],
-    ["an empty fragment", () => "#"],
+  for (const [what, kept] of [
+    ["a wrong token", () => "q3Vx9kLmN2pR7sT1uW4yZQ"],
+    ["a token one character off", (token: string) => oneCharOff(token)],
+    ["no token", () => null],
   ] as const) {
-    test(`C6.5: with ${what}, the public page, preceded by the message, without any organiser's link`, async ({
+    test(`#596, #597: with ${what} kept, the public page, preceded by the area's title alone`, async ({
       page,
       seededEvent,
     }) => {
-      await page.goto(`/e/${seededEvent.id}/admin${fragment(seededEvent.token)}`);
-      const message = alert(page);
-      await expect(message).toContainText(FR.invalid);
-      await expect(message).toContainText(FR.invalidWhy);
+      await keepAdminToken(page, seededEvent.id, kept(seededEvent.token));
+      await page.goto(adminPath(seededEvent));
+      const title = areaRefused(page);
+      await expect(title).toBeVisible();
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
       await expect(page.getByRole("tab", { name: "Aller" })).toBeVisible();
       await expect(panel(page)).toHaveCount(0);
-      await expect(page.getByText(FR.adminLink, { exact: true })).toHaveCount(0);
+      await expect(page.getByText(GONE)).toHaveCount(0);
       await expect(page.getByText(/\/admin/)).toHaveCount(0);
-      // The message comes before the event.
-      expect((await message.boundingBox())!.y).toBeLessThan(
+      // The title comes before the event.
+      expect((await title.boundingBox())!.y).toBeLessThan(
         (await page.getByRole("heading", { level: 1 }).boundingBox())!.y,
       );
       expect(await horizontalOverflow(page)).toBe(0);
     });
   }
 
-  test("C6.5, C4.7: pasting the right link over a wrong one shows the panel, without a reload", async ({
-    page,
-    seededEvent,
-  }) => {
-    await page.goto(`/e/${seededEvent.id}/admin`);
-    await expect(alert(page)).toContainText(FR.invalid);
-    await page.evaluate(() => Object.assign(window, { sameDocument: true }));
-    await page.goto(adminPath(seededEvent));
-    await expect(panel(page)).toBeVisible();
-    await expect(page.getByText(FR.invalid)).toHaveCount(0);
-
-    await page.goto(`/e/${seededEvent.id}/admin#${oneCharOff(seededEvent.token)}`);
-    await expect(alert(page)).toContainText(FR.invalid);
+  // OA7.5, end to end: a browser that keeps no token, the old link's token in the fragment alone.
+  test("OA7.5: an old link /e/{id}/admin#{token} gives no access, its fragment never sent nor read", async ({ page, seededEvent }) => {
+    await keepAdminToken(page, seededEvent.id, null);
+    const bodies = actionBodies(page, seededEvent.id);
+    await page.goto(`${adminPath(seededEvent)}#${seededEvent.token}`, { waitUntil: "networkidle" });
+    await expect(areaRefused(page)).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
-    expect(await page.evaluate(() => "sameDocument" in window)).toBe(true);
+    // The check was made, without the token.
+    expect(bodies.length, "checks of the area").toBe(1);
+    expect(bodies.some((body) => body.includes(seededEvent.token)), "a check carrying the fragment's token").toBe(false);
+
+    // Pasting it again changes only the fragment: nothing is checked again, nothing opens.
+    await page.evaluate((token) => (window.location.hash = token), seededEvent.token);
+    await page.waitForLoadState("networkidle");
+    expect(bodies.length, "checks after the fragment changed").toBe(1);
+    await expect(panel(page)).toHaveCount(0);
+  });
+
+  test("OA7.5: in the browser that keeps the token, a wrong fragment changes nothing", async ({ page, seededEvent }) => {
+    await page.goto(`${adminPath(seededEvent)}#${oneCharOff(seededEvent.token)}`);
+    await expect(panel(page)).toBeVisible();
   });
 
   for (const [what, fail] of [
     ["the request fails", (route: Route) => route.abort()],
     ["the server answers 500", (route: Route) => route.fulfill({ status: 500, body: "Internal Server Error" })],
   ] as const) {
-    test(`when ${what}, says the check failed instead of calling the link invalid`, async ({
+    test(`OA7.3: when ${what}, says the area could not be loaded instead of refusing it`, async ({
       page,
       seededEvent,
     }) => {
@@ -322,7 +314,7 @@ test.describe("organiser's link, not valid", () => {
       await page.goto(adminPath(seededEvent));
       await expect(alert(page)).toContainText(FR.checkFailed);
       await expect(alert(page)).toContainText(FR.checkFailedWhy);
-      await expect(page.getByText(FR.invalid)).toHaveCount(0);
+      await expect(areaRefused(page)).toHaveCount(0);
       await expect(panel(page)).toHaveCount(0);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
     });
@@ -364,14 +356,11 @@ test.describe("organiser's arrival, in a browser set to English", () => {
     await page.goto(adminPath(seededEvent));
     const area = page.getByRole("region", { name: "Organiser area" });
     await expect(area.getByRole("group", { name: "Link to share" })).toBeVisible();
-    await expect(area.getByRole("group", { name: "Organiser link" })).toContainText("Personal");
-    await expect(area.getByRole("group", { name: "Organiser link" })).toContainText(
-      "Do not share it: it shows phone numbers and lets anyone change everything.",
-    );
-    await expect(area.getByRole("note")).toContainText("Keep this link");
-    await expect(area.getByRole("button", { name: "Copy" })).toHaveCount(2);
+    await expect(page.getByText(/Organiser link|Keep this link/)).toHaveCount(0);
+    await expect(area.getByRole("button", { name: "Copy" })).toHaveCount(1);
 
-    await page.goto(`/e/${seededEvent.id}/admin`);
-    await expect(alert(page)).toContainText("This organiser link is not valid.");
+    await keepAdminToken(page, seededEvent.id, null);
+    await page.goto(adminPath(seededEvent));
+    await expect(areaRefused(page, "Organiser area")).toBeVisible();
   });
 });

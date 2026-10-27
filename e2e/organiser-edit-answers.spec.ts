@@ -27,7 +27,7 @@ const WORDS = {
       "L’événement vient d’être modifié depuis un autre appareil.",
       "Rien n’a été enregistré. Les champs que vous n’aviez pas changés montrent maintenant la version enregistrée : vérifiez, puis validez de nouveau.",
     ],
-    invalid: ["Ce lien d’organisateur n’est pas valide.", "Vérifiez qu’il a été copié en entier."],
+    failed: "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
     gone: ["L’événement n’a pas été modifié.", "Cet événement est introuvable : il a peut-être été supprimé."],
     stale: "L’espace organisateur n’est plus à jour. Utilisez « Actualiser » pour le relire.",
   },
@@ -246,7 +246,7 @@ test.describe("M6: two devices", () => {
 });
 
 test.describe("M8: the failures", () => {
-  test("M8.2: the token altered on the way: the sheet says the link is not valid, the focus on « Valider »; nothing written, nothing answered", async ({
+  test("M8.2 amended (#597): the token altered on the way: the sheet says the generic failure, the focus on « Valider »; nothing written, nothing answered", async ({
     page,
     db,
     seededEvent,
@@ -265,7 +265,8 @@ test.describe("M8: the failures", () => {
     await field(page, "Titre").fill(U13);
     await submit(page).click();
 
-    await expect(notice(page)).toHaveText(FR.invalid);
+    await expect(sheet(page).getByRole("alert")).toHaveText(FR.failed);
+    await expect(notice(page)).toHaveCount(0);
     await expect(submit(page)).toBeFocused();
     await expect(submit(page)).toBeEnabled();
     await expect(field(page, "Titre")).toHaveValue(U13);

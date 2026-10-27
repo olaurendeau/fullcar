@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
-import { actionRunner, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
+import { actionRunner, devicePersonsGone, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -136,6 +136,31 @@ describe("withTabsHeld", () => {
   it("holds nothing when the tabs stay", () => {
     expect(withTabsHeld(shown, shown)).toBeUndefined();
     expect(withTabsHeld(next, next)).toBeUndefined();
+  });
+});
+
+// remove-person v2 (« Focus, barre, envoi »): the device's persons a state no longer has.
+describe("devicePersonsGone", () => {
+  const person = (id: string) => ({ id, firstName: id, phone: null, state: { kind: "withoutCar" as const } });
+  const shown = (aller: string[], retour?: string[]) =>
+    ({
+      event: header,
+      legs: [
+        { leg: "aller", cars: [], withoutCar: [], device: aller.map(person) },
+        ...(retour ? [{ leg: "retour", cars: [], withoutCar: [], device: retour.map(person) }] : []),
+      ],
+    }) as never as EventState;
+
+  it("those the state shown had and the next one has on no leg, in the order shown", () => {
+    expect(devicePersonsGone(shown(["marc", "lea", "tom"], ["marc", "lea", "tom"]), shown(["marc"], ["marc"]))).toEqual(["lea", "tom"]);
+    expect(devicePersonsGone(shown(["lea"], ["lea"]), shown([], []))).toEqual(["lea"]);
+  });
+
+  it("nobody: the same persons, a new one, the first read, or one still on the retour a sheet holds", () => {
+    expect(devicePersonsGone(shown(["marc", "lea"]), shown(["marc", "lea"]))).toEqual([]);
+    expect(devicePersonsGone(shown(["marc"]), shown(["marc", "zoe"]))).toEqual([]);
+    expect(devicePersonsGone(shown([]), shown(["marc"]))).toEqual([]);
+    expect(devicePersonsGone(shown(["marc", "lea"], ["marc", "lea"]), shown(["marc"], ["marc", "lea"]))).toEqual([]);
   });
 });
 

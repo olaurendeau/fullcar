@@ -161,6 +161,18 @@ en bout utilisent :
   d'un de leurs propres événements, ou un identifiant inconnu dont ils vérifient
   l'absence. Seule exception, un comptage de `events.test.ts`, comparé à un second
   comptage de la même transaction.
+
+  **Tests qui enregistrent un envoi**, depuis #841, une seule règle : le plafond global
+  compte tous les envois de l'heure, de quelque fichier de test qu'ils viennent. Un test
+  qui enregistre un envoi (`recordSend`, ou un cas d'usage qui l'appelle) ou en valide un
+  tourne donc sous le verrou de session 5949 (`WINDOW_LOCK`, `src/db/test-accounts.ts`) :
+  en partage, par `withRollbackRecordingSends` sous transaction annulée ou par
+  `withCommittedAddresses` sur données validées ; en exclusif, par
+  `withCommittedAddresses(…, { fillsTheWindow: true })`, pour un test qui remplit la
+  fenêtre jusqu'au plafond avec des envois validés. Jamais une horloge avancée hors de la
+  fenêtre à la place. `whileHeld` (`src/db/test-committed.ts`) passe à `second` une
+  connexion à lui, et n'attend que sa session : une session d'un autre fichier, bloquée sur
+  le même verrou du plafond global, ne prouve rien du test.
 - `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
   seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
   remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la
@@ -415,7 +427,12 @@ comptage se fait donc sous verrou, et l'ordre devient **Event, puis adresse** :
 - Un envoi pour un événement (création, « Renvoyer l'e-mail », « Corriger l'adresse »,
   nouveau lien après un lien de confirmation expiré) verrouille d'abord l'Event
   (`lockEvent`), puis l'adresse, puis compte la limite de l'événement et celle de l'adresse.
-- Une demande de connexion, qui n'a pas d'événement, ne verrouille que l'adresse.
+- Une demande de connexion, qui n'a pas d'événement, ne verrouille que l'adresse. Venue de
+  `/e/{id}/admin`, elle tient d'abord la clé de cet Event (`holdEventKey`, `FOR KEY SHARE`,
+  #603) : la purge ne le supprime pas avant que le lien, qui y mène (OA4.4), soit écrit, et
+  aucune écriture sur l'Event n'attend. Puis l'adresse, puis le plafond global, puis le
+  lien dans la même transaction ; l'e-mail part après la validation
+  (`src/app/connexion/request-link.ts`).
 - Le plafond global se compte dans la même transaction. S'il prend un verrou, ce verrou
   vient après celui de l'adresse. Deux décisions de la relecture de #623 :
   - les avertissements d'inactivité (#616) ne comptent pas dans le plafond global ; la
@@ -434,7 +451,13 @@ présentent ensemble : un test de concurrence le prouve aussi.
 À partir de #594, `recordSend` (`src/db/email-sends.ts`) prend l'Event en `noKeyUpdate` (#599
 et #602 écrivent sa ligne dans la même transaction : deux `share` s'interbloqueraient en
 passant à l'exclusif), puis l'adresse et le plafond global (`pg_advisory_xact_lock`), et
-l'e-mail part **après** la validation. `useLink` (`src/db/email-links.ts`) s'use en un
+l'e-mail part **après** la validation. À partir de #599, un lien de confirmation ne naît que
+par `claimConfirmation` (`src/db/email-links.ts`) : l'Event en `noKeyUpdate`, puis
+`recordSend`, puis le lien, si l'envoi est accepté, dans la même transaction. Sans ce
+verrou, l'insertion du lien ne prendrait l'Event qu'en `FOR KEY SHARE`, par sa clé
+étrangère, que le verrou de la purge n'attend pas : un lien inséré pendant l'anonymisation
+y survivrait. Un Event supprimé ou anonymisé pendant l'attente ne reçoit ni envoi ni lien.
+`useLink` (`src/db/email-links.ts`) s'use en un
 `update … where … and used_at is null … returning`, après l'Event pour une confirmation.
 Les deux ne sont justes qu'en `READ COMMITTED`, le niveau qu'ouvre `atomically`.
 
@@ -516,6 +539,9 @@ ci-dessus valent pour chacun.
   string, un en-tête ou un cookie. Le jeton de session ne revient dans une réponse qu'une
   fois, dans le corps de l'action qui ouvre la session. Le HTML d'une page ne dépend
   d'aucune session : ce qu'un jeton ouvre est lu après le chargement, comme le panneau.
+  Ainsi « Session ouverte avec {email}. » de `/connexion` (OA4.6, #604) : l'action
+  `signedInAs` (`src/app/connexion/actions.ts`) reçoit le jeton dans le corps et ne répond
+  que l'adresse de la session ouverte, ou rien ; elle ne compte pas comme une visite.
 - **Pas de cookie, pas de middleware.** Aucun cookie ne porte une session ni un jeton : le
   seul cookie reste celui de la langue. Aucun `middleware.ts` ni `src/proxy.ts` ne lit une
   session. Une session terminée entre l'affichage d'une page et son envoi se voit donc en
@@ -535,7 +561,9 @@ ci-dessus valent pour chacun.
 - **Le jeton d'admin dans le navigateur de création** : à partir de #597, il est rangé dans
   `localStorage` sous la clé `fullcar:admin-token:{id}`, au travers de
   `src/app/e/[id]/admin/admin-token-store.ts` seulement, qui remplace `admin-link.ts`. La
-  création mène à `/e/{id}/admin`, sans fragment. Le jeton est révoqué (son hash passe à
+  création mène à `/e/{id}/admin`, sans fragment. Si `localStorage` refuse le jeton, la
+  mémoire de la page le garde, le temps de la page : l'arrivée après la création ouvre
+  encore le panneau, un rechargement non. Le jeton est révoqué (son hash passe à
   nul) par « Se déconnecter » dans ce navigateur, qui envoie les jetons d'admin qu'il garde
   et les efface, par l'anonymisation, et par la suppression du compte.
 - **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et
@@ -551,11 +579,17 @@ ci-dessus valent pour chacun.
 - **Une seule règle d'accès** à l'espace organisateur : `src/domain/organiser-access.ts`
   (#596). Elle donne l'accès à la session du compte de l'événement, ou au jeton d'admin du
   navigateur de création. `withOrganiserPhones` n'accepte qu'une autorisation produite par
-  cette règle (voir « Visibilité du téléphone »).
+  cette règle (voir « Visibilité du téléphone »). Une écriture de l'organisateur décide
+  l'accès une première fois avant le verrou de l'Event, pour refuser sans l'attendre, puis
+  le décide de nouveau sous ce verrou, en lisant l'événement, la session et le compte dans
+  la même transaction (#836). Une déconnexion, une suppression de compte ou un jeton
+  révoqué validés pendant l'attente refusent alors l'écriture (`invalid`). C'est le cas
+  d'`editEvent` ; les autres écritures de l'organisateur (#672, #675) suivront ce chemin.
 - **Le retrait d'une personne par l'organisateur** (#645, `removeAsOrganiser`,
-  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin :
-  aujourd'hui par `adminTokenMatches`, comme `editEvent`, puis par `organiser-access.ts`
-  seul (#675). La requête porte aussi le jeton personnel de l'appareil, mais seulement pour
+  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin,
+  comparé par `adminTokenMatches` sous le verrou de l'Event ; il passera par
+  `organiser-access.ts` seul, comme `editEvent` aujourd'hui (#675). La requête porte
+  aussi le jeton personnel de l'appareil, mais seulement pour
   relire le tableau que la page montre (`readEventState`), dont « Vos inscriptions » et les
   numéros visibles dépendent de ce jeton. Ce jeton ne donne aucun droit sur ce chemin : un
   jeton personnel n'ouvre jamais le retrait par l'organisateur, pas même celui du navigateur
@@ -1087,7 +1121,15 @@ d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu,
 - **La création n'attend pas l'envoi** : l'envoi de la confirmation passe par `after()` de
   Next (#599), et son résultat s'écrit dans `event.send_status` (en cours, envoyé, échec,
   limite par adresse). L'avis le relit à chaque chargement ; un envoi « en cours » depuis
-  plus de 30 s se lit comme un échec (OA1.7).
+  plus de 30 s se lit comme un échec (OA1.7). `createEventFor` (`src/app/create-event.ts`)
+  crée l'événement dans une transaction : avec une session vivante, il est au compte et
+  confirmé, et rien ne part (OA1.3) ; avec une adresse, `claimConfirmation`
+  (`src/db/email-links.ts`) inscrit l'envoi et crée le lien, puis `send_status` passe à
+  `sending`, ou à `address_limit` si une limite l'arrête. Après la validation, sans aucun
+  verrou, `after()` appelle Brevo, puis `writeSendResult` écrit `sent` ou `failed`, mais
+  seulement sur le `sending` que cette création a écrit : un renvoi écrit depuis garde le
+  sien. Une session envoyée mais terminée, sans adresse, ne crée rien et répond
+  `sessionEnded` sur le champ e-mail (OA1.5).
 - **Les limites** se comptent sous verrou, Event puis adresse (voir « L'adresse après
   l'Event »).
 - **Journal** : en mots fixes seulement, `email: no key`, `email: no sender`,
@@ -1136,7 +1178,9 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   passent avant que `eventNotFound` et ce qu'elles vérifient avant la transaction, les
   erreurs de champs et, pour certaines, la requête mal formée (`invalid`). Un appel sans
   jeton, ou avec un faux, apprend donc que l'événement est anonymisé, ce que `/e/{id}` dit
-  déjà à tout le monde. `removePerson` ne répond pas encore `eventEnded` (RP2.9, #674).
+  déjà à tout le monde. L'état que ces refus joignent est celui de l'événement terminé, son
+  titre et son début, sans le lieu ni personne : `readEventState` le rend pour tout
+  événement anonymisé (OA8.3, #806). `removePerson` ne répond pas encore `eventEnded` (RP2.9, #674).
 - **Les sessions, les envois et les liens** (`session`, `email_send`, `email_link`) sont
   nettoyés par âge, par la même tâche (#589, `src/db/expired-rows.ts`) : une ligne part quand
   aucune règle ne la lit plus. Une ligne effacée plus tôt changerait la réponse d'une règle.
@@ -1259,7 +1303,8 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | accès à l'espace organisateur | `src/domain/organiser-access.ts`, à partir de #596 | la seule règle d'accès : session du compte de l'événement, ou jeton d'admin du navigateur de création ; seule à produire l'autorisation que `withOrganiserPhones` accepte |
 | retrait d'une personne | `src/app/e/[id]/remove-person.ts` et `src/domain/person-removal.ts`, à partir de #665 | le cas d'usage, sans server action exportée : `removeFromDevice` (le droit par `devicePersonIds`) et `removeAsOrganiser` (le droit par le seul jeton d'admin, puis `organiser-access.ts`, #675), l'ordre des réponses (RP3.4) et celui des verrous (voir « Retirer une personne ») ; le domaine, en fonctions pures : ce que devient chaque leg, et les lignes de la confirmation, lues dans l'état que la page montre |
 | compte dans la base | `src/db/accounts.ts`, `sessions.ts`, `email-links.ts`, `email-sends.ts`, à partir de #594 ; `src/db/my-events.ts`, à partir de #606 | les comptes, les sessions, les liens (un seul usage, même en concurrence) et les envois (limites sous verrou, Event puis adresse) ; Mes événements en agrégats, sans aucun téléphone |
-| connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/`, à partir de #607 | les pages et actions de connexion et des liens ; la page Mes événements |
+| connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/` : `actions.ts` et `my-events.ts`, à partir de #606, la page à partir de #607 | les pages et actions de connexion et des liens ; Mes événements : l'action `myEvents`, qui reçoit le jeton de session dans le corps et lit la session et ses événements sur un seul instantané, sans rien écrire, et la page |
+| Mes événements | `src/domain/my-events.ts`, à partir de #606 | les deux sections et leur ordre (« À venir » par début croissant, « Passés » par début décroissant), « passé » et le jour 30 par `day-thirty.ts` ; une ligne n'est listée que si `organiser-access.ts`, avec la session seule, l'ouvre ou la dit terminée : jamais un événement en attente (OA2.3) |
 | création | `src/app/create-event.ts`, à partir de #599 | le cas d'usage de la création, avec une adresse ou une session ; l'envoi de la confirmation par `after()` |
 | e-mails | `src/email/brevo.ts`, à partir de #591 ; `src/email/messages.ts`, à partir de #592 | seul `brevo.ts` lit `BREVO_URL`, `BREVO_API_KEY` et `EMAIL_FROM` et appelle Brevo ; `messages.ts` écrit les quatre e-mails, sans aucun texte saisi (voir « Les e-mails ») |
 | jour 30 et « passé » | `src/domain/day-thirty.ts`, à partir de #587 | le seul calcul de « aujourd'hui », « passé » et du jour 30, à l'heure de Paris (voir « Heures sans fuseau ») |

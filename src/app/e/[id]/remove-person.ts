@@ -11,7 +11,7 @@ import { devicePersonIds, type TokenHolder } from "@/domain/device";
 import { LEGS } from "@/domain/leg";
 import { isPersonalToken } from "@/domain/personal-token";
 import { isPublicId } from "@/domain/public-id";
-import { readEventState, type EventState } from "./event-state";
+import { readEventState, type DeviceState } from "./event-state";
 
 /*
  * Removing a person from an event (epic #645, remove-person v2, RP2 and RP3): her row, her
@@ -36,7 +36,7 @@ export type RemovalRefusal = "invalid" | "eventNotFound" | "forbidden" | "noOrga
  * which wrote nothing. Either way, the board the device now sees, read after the commit.
  */
 export type RemovePersonOutcome =
-  | { ok: true; removal: "removed" | "alreadyRemoved"; state: EventState }
+  | { ok: true; removal: "removed" | "alreadyRemoved"; state: DeviceState }
   | { ok: false; error: RemovalRefusal };
 
 type Removal = { ok: true; removal: "removed" | "alreadyRemoved" } | { ok: false; error: RemovalRefusal };
@@ -89,10 +89,10 @@ export function removeFromDevice(
 
 /**
  * Anyone removed by the organiser (RP3.2): today the event's admin token alone, compared
- * by `adminTokenMatches` as `editEvent` does, then `organiser-access.ts` alone (#675). A
- * revoked token (#586) is no stored hash, which no token matches. `deviceToken`, the
- * page's personal token, only chooses the board read afterwards: it gives no right here,
- * and no personal token opens this path (RP3.3).
+ * by `adminTokenMatches` under the Event's lock, then `organiser-access.ts` alone, as
+ * `editEvent` already does (#675). A revoked token (#586) is no stored hash, which no
+ * token matches. `deviceToken`, the page's personal token, only chooses the board read
+ * afterwards: it gives no right here, and no personal token opens this path (RP3.3).
  */
 export function removeAsOrganiser(
   db: Kysely<Database>,

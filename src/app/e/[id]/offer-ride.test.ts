@@ -13,6 +13,7 @@ import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-
 import { offerRide as offerRideAction } from "./actions";
 import { readEventState } from "./event-state";
 import { offerRide, type RideOffer } from "./offer-ride";
+import { stillOpen } from "./test-state";
 
 type Db = Kysely<Database>;
 
@@ -145,7 +146,7 @@ async function aDeviceScene(db: Db, eventId: string) {
 }
 
 function legOf(state: Awaited<ReturnType<typeof readEventState>>, leg: Leg) {
-  const found = state?.legs.find((board) => board.leg === leg);
+  const found = stillOpen(state)?.legs.find((board) => board.leg === leg);
   if (found === undefined) throw new Error(`no ${leg} in the state`);
   return found;
 }
@@ -733,7 +734,7 @@ describe("offerRide", () => {
         const result = await whileHeld(
           db,
           (trx) => deleteSeededPerson(trx, eventId, gone.id),
-          () => offerRide(db, eventId, scene.token, offer),
+          (own) => offerRide(own, eventId, scene.token, offer),
         );
         expect(result).toEqual({ ok: false, error: "personGone", goneIds: [gone.id] });
         expect((await rowsOf(db, eventId)).rides).toEqual(before.rides);
@@ -803,6 +804,7 @@ describe("offerRide", () => {
     it.each([
       ["absent", undefined],
       ["empty", ""],
+      ["blank", "   "],
     ])("T4.7: a driver of the device without a number, the one sent %s, is refused by driverWithoutPhone, and nothing is written", async (_, phone) => {
       await withRollback(async (trx) => {
         const { id: eventId } = await seedEvent(trx);

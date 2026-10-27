@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 import type { ErrorEvent } from "@sentry/nextjs";
-import { organiserLinks } from "@/app/e/[id]/admin/admin-link";
 import { newAdminToken } from "@/domain/admin-token";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
 import { generatePublicId, type RandomBytes } from "@/domain/public-id";
@@ -48,7 +47,9 @@ export function drawSecrets(random?: RandomBytes) {
   const id = generatePublicId(random);
   const adminToken = newAdminToken(random);
   const personalToken = personalTokenFromBytes(new Uint8Array((random ?? randomBytes)(PERSONAL_TOKEN_BYTES)));
-  const { publicUrl, adminUrl } = organiserLinks(ORIGIN, id, adminToken);
+  const publicUrl = `${ORIGIN}/e/${id}`;
+  // The organiser's link as it was until #597: one still pasted somewhere must not reach Sentry either.
+  const adminUrl = `${publicUrl}/admin#${adminToken}`;
   return { id, adminToken, personalToken, publicUrl, adminUrl, personalUrl: `${publicUrl}/moi#${personalToken}` };
 }
 

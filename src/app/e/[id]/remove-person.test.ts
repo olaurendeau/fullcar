@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from "node:crypto";
 import { sql, type Kysely, type KyselyPlugin } from "kysely";
 import { describe, expect, it } from "vitest";
 import { getDb } from "@/db/client";
+import { anonymiseEvent } from "@/db/day-thirty";
 import { lockPersons } from "@/db/persons";
 import { deletePlacement } from "@/db/placements";
 import type { Database } from "@/db/schema";
@@ -14,24 +15,25 @@ import { coverage } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
 import { removalConfirmation } from "@/domain/person-removal";
 import { hashToken } from "@/domain/token-hash";
-import { readEventState, type EventState } from "./event-state";
+import { readEventState, type DeviceState, type EventState } from "./event-state";
 import { setPersonLeg, updatePerson } from "./persons";
 import { removeAsOrganiser, removeFromDevice, type RemovePersonOutcome } from "./remove-person";
+import { stillOpen } from "./test-state";
 
 type Db = Kysely<Database>;
 
 /** Well-formed (22 base64url characters, the last one canonical), and held by nobody. */
 const NOBODYS_TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
 
-function legOf(state: EventState | undefined, leg: Leg) {
-  const found = state?.legs.find((board) => board.leg === leg);
+function legOf(state: DeviceState | undefined, leg: Leg) {
+  const found = stillOpen(state)?.legs.find((board) => board.leg === leg);
   if (found === undefined) throw new Error(`no ${leg} in the state`);
   return found;
 }
 
 function stateOf(outcome: RemovePersonOutcome): EventState {
   if (!outcome.ok) throw new Error(`refused: ${JSON.stringify(outcome)}`);
-  return outcome.state;
+  return stillOpen(outcome.state);
 }
 
 /** Every row of the event's persons, Rides and Placements, as stored. */
@@ -189,7 +191,7 @@ describe("removeFromDevice: what is erased (RP2)", () => {
           await deletePlacement(offer, { personId: tom.id, eventId, leg: "aller" });
           await seedRide(offer, eventId, tom.id, { leg: "aller" });
         },
-        () => removeFromDevice(db, eventId, tom.token, { personId: tom.id }),
+        (own) => removeFromDevice(own, eventId, tom.token, { personId: tom.id }),
       );
       expect(outcome).toMatchObject({ ok: true, removal: "removed" });
       expect(await rowsOf(db, eventId)).toEqual({ persons: [], rides: [], placements: [] });
@@ -232,6 +234,27 @@ describe("removeFromDevice: privacy (RP6.1)", () => {
         .orderBy("id")
         .execute();
       expect(hashed.map((row) => row.id)).toEqual([persons.marc.id, persons.lea.id, persons.tom.id].sort());
+    });
+  });
+});
+
+// #806, OA8.3: the place stays in the row of an anonymised event, and may be someone's address.
+describe("an anonymised event (#806)", () => {
+  it.each<[string, (db: Db, example: RemovalExample) => Promise<RemovePersonOutcome>]>([
+    ["removeFromDevice", (db, { eventId, martins, persons }) => removeFromDevice(db, eventId, martins, { personId: persons.marc.id })],
+    [
+      "removeAsOrganiser",
+      (db, { eventId, adminToken, martins, persons }) => removeAsOrganiser(db, eventId, adminToken, martins, { personId: persons.marc.id }),
+    ],
+  ])("OA8.3: %s answers the event ended at most, neither its place nor anyone", async (_, remove) => {
+    await withRollback(async (trx) => {
+      const example = await seedExample(trx);
+      await anonymiseEvent(trx, example.eventId);
+      const outcome = await remove(trx, example);
+      expect(JSON.stringify(outcome)).not.toContain("Gymnase des Gayeulles");
+      if ("state" in outcome) {
+        expect(outcome.state).toStrictEqual({ ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" });
+      }
     });
   });
 });
@@ -362,7 +385,7 @@ describe("the confirmation counted on the state the page shows (RP1.2, RP4.5)", 
   it("gives the lines of the mock-ups for Marc, Léa, Tom and the duplicate, from the board and the organiser's", async () => {
     await withRollback(async (trx) => {
       const { eventId, martins, persons } = await seedExample(trx);
-      const board = (await readEventState(trx, eventId, martins))?.legs ?? [];
+      const board = stillOpen(await readEventState(trx, eventId, martins))?.legs ?? [];
       expect(removalConfirmation(board, persons.marc.id)).toEqual({
         lines: [
           { key: "drives", leg: "aller", passengers: 3 },

@@ -16,7 +16,7 @@ import {
 } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import { cn } from "@/lib/utils";
-import { BottomSheet } from "./bottom-sheet";
+import { BottomSheet, SheetBar } from "./bottom-sheet";
 import { carTimesKept, EventFormFields, eventFieldsChanged, loadedEventFields, withSavedFields } from "./event-fields";
 import { RemoveRetourDialog, type RemovalSaid, type RetourCounts } from "./remove-retour-dialog";
 
@@ -34,7 +34,8 @@ type LateRemoval = { kind: "offline" | "failed" | "eventNotFound" } | { kind: "r
 
 /**
  * « Modifier l’événement » (organizer-view v3.3.6, « Le formulaire »): a sheet with the fields of
- * the creation and no option, loaded with `event`, the values the page shows as it opens. Neither
+ * the creation and no option, loaded with `event`, the values the page shows as it opens. On a
+ * phone, it fills the visible height, its messages and buttons in its bar (event-board v4.6). Neither
  * « Fermer »: « Annuler » and Escape close it. Closed, by them or once saved, the focus goes back
  * to `onClosed`'s place, « Modifier l’événement ». While open, `lateSavedRef` gives it the values a
  * change sent from an earlier sheet saved (decision 51). Each `opening` mounts a form of its own,
@@ -66,6 +67,7 @@ export function EditEventSheet({
       open={open}
       onOpenChange={onOpenChange}
       title={t("title")}
+      fullHeight
       closable={false}
       onCloseAutoFocus={(focus) => {
         focus.preventDefault();
@@ -85,7 +87,7 @@ export function EditEventSheet({
 }
 
 /** What the sheet says above « Valider » after an answer (« Enregistrer », feuille ouverte). */
-type Said = ActionProblem | "changed" | "invalid" | "eventNotFound";
+type Said = ActionProblem | "changed" | "eventNotFound";
 
 /**
  * The form, mounted with each opening: what it loaded is what the page showed then. Nothing
@@ -97,7 +99,7 @@ type Said = ActionProblem | "changed" | "invalid" | "eventNotFound";
  * among the values; while sending, it is read-only, asks nothing and its « Retirer » does nothing
  * (AL5.4). Saved, the sheet closes; a field refused shows under it, the focus on the first. Otherwise
  * the sheet says why above « Valider », which gets the focus, and what was typed stays:
- * offline, a failure, or the link refused (M8.2). Changed on another device (M6.1, M6.2), the
+ * offline, or a failure, a request refused included (M8.2 amended, #597). Changed on another device (M6.1, M6.2), the
  * fields not changed take the saved values, which become the ones loaded and `before`. The event
  * gone (M8.3), « Valider » is `disabled` for good, and the focus goes to « Annuler ». The retour
  * unchecked still holding cars or persons, « Supprimer le retour ? » asks first (M3.2): its
@@ -212,7 +214,8 @@ function EditEventForm({
       setBefore(answer.event);
       setSaid("changed");
     } else {
-      setSaid(answer.kind === "problem" ? answer.problem : answer.reason);
+      // Refused (`invalid`): the generic failure, as the confirmation says it; there is no organiser's link to check (#597).
+      setSaid(answer.kind === "problem" ? answer.problem : "failed");
     }
     submitButton.current?.focus();
   }
@@ -298,35 +301,44 @@ function EditEventForm({
     notes[leg] = tEdit(`carTimes.${leg}`, { count });
   }
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
+    <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} notes={notes} locked={sending} suggestions />
-      {(said === "offline" || said === "failed") && (
-        <p role="alert" className="text-sm text-destructive">
-          {tActions(said)}
-        </p>
-      )}
-      {late && <SheetNotice said={late} destructive />}
-      {said === "changed" && <SheetNotice said={said} />}
-      {(said === "invalid" || (gone && !late)) && <SheetNotice said={said} destructive />}
-      {/* No live region: the focus stays on « Valider », which it describes (M2.6). */}
-      {sending && (
-        <p id={idOf("sending")} className="text-sm text-muted-foreground">
-          {tEdit("sending")}
-        </p>
-      )}
-      <Button
-        ref={submitButton}
-        type="submit"
-        className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
-        aria-disabled={sending || undefined}
-        aria-describedby={sending ? idOf("sending") : undefined}
-        disabled={gone}
+      {/* In the sheet's bar, out of the form: « Valider » is its submit button by `form` (v4.6, rule 1). */}
+      <SheetBar
+        messages={
+          <>
+            {(said === "offline" || said === "failed") && (
+              <p role="alert" className="text-sm text-destructive">
+                {tActions(said)}
+              </p>
+            )}
+            {late && <SheetNotice said={late} destructive />}
+            {said === "changed" && <SheetNotice said={said} />}
+            {gone && !late && <SheetNotice said={said} destructive />}
+            {/* No live region: the focus stays on « Valider », which it describes (M2.6). */}
+            {sending && (
+              <p id={idOf("sending")} className="text-sm text-muted-foreground">
+                {tEdit("sending")}
+              </p>
+            )}
+          </>
+        }
       >
-        {tActions("submit")}
-      </Button>
-      <Button ref={cancelButton} type="button" variant="outline" className="h-11 w-full" onClick={onDone}>
-        {tActions("cancel")}
-      </Button>
+        <Button
+          ref={submitButton}
+          type="submit"
+          form={idOf("form")}
+          className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
+          aria-disabled={sending || undefined}
+          aria-describedby={sending ? idOf("sending") : undefined}
+          disabled={gone}
+        >
+          {tActions("submit")}
+        </Button>
+        <Button ref={cancelButton} type="button" variant="outline" className="h-11 w-full" onClick={onDone}>
+          {tActions("cancel")}
+        </Button>
+      </SheetBar>
       {/* In a portal: out of the form in the document, its buttons submit nothing. */}
       {confirmation && (
         <RemoveRetourDialog
@@ -349,10 +361,10 @@ function EditEventForm({
 
 /**
  * An answer said with a title and a body, above « Valider »: changed on another device (M6.1),
- * or, in the destructive colour, the link refused (M8.2), the event gone (M8.3), and a removal
+ * or, in the destructive colour, the event gone (M8.3), and a removal
  * answered once its confirmation was closed (M3.7).
  */
-function SheetNotice({ said, destructive = false }: { said: "changed" | "invalid" | "eventNotFound" | LateRemoval; destructive?: boolean }) {
+function SheetNotice({ said, destructive = false }: { said: "changed" | "eventNotFound" | LateRemoval; destructive?: boolean }) {
   const t = useTranslations();
   const [title, body] =
     typeof said === "object"
@@ -362,7 +374,6 @@ function SheetNotice({ said, destructive = false }: { said: "changed" | "invalid
         ]
       : {
           changed: [t("EditEvent.changed.title"), t("EditEvent.changed.body")],
-          invalid: [t("Admin.invalid.title"), t("Admin.invalid.body")],
           eventNotFound: [t("Actions.notDone.editEvent"), t("Actions.why.eventNotFound")],
         }[said];
   return (

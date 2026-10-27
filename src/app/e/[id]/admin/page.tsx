@@ -14,9 +14,9 @@ export async function generateMetadata({ params }: PageProps<"/e/[id]/admin">): 
 }
 
 /**
- * `/e/{id}/admin#{token}`: the organiser's panel, then the event as its participants see
- * it (#3, R4). The server never sees the token: the fragment is not sent, the page is the
- * same for every visitor, and the client checks the token through the action.
+ * `/e/{id}/admin`: the organiser's panel, then the event as its participants see it (#3, R4).
+ * The page is the same for every visitor: the client sends the session or the admin token this
+ * browser keeps through the action, which decides (#596). A fragment is ignored (OA7.5).
  */
 export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) {
   const { id } = await params;

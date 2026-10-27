@@ -7,7 +7,7 @@ import { positionOf } from "@/domain/place";
 import { isWallClock } from "@/domain/wall-clock";
 import type { EventState } from "../event-state";
 import { stateRead, type ActionProblem, type Sent } from "../run-action";
-import type { AdminLinkCheck } from "./admin-link";
+import type { OrganiserCheck } from "./admin-token-store";
 
 /*
  * The organiser area's state (epic #154, #182), pure: the first read of the panel and its
@@ -17,12 +17,11 @@ import type { AdminLinkCheck } from "./admin-link";
  */
 
 /**
- * The panel as last read: the two links, and its legs, or `null` once withdrawn (O1.10): the
- * links stay, the sections go.
+ * The panel as last read: the link to share, and its legs, or `null` once withdrawn (O1.10):
+ * the link stays, the sections go. There is no organiser's link any more (OA7.3).
  */
 export interface Panel {
   publicUrl: string;
-  adminUrl: string;
   legs: OrganiserLeg[] | null;
 }
 
@@ -37,7 +36,7 @@ export const FOLDED_LINES = 5;
 
 export type ScreenState =
   | { state: "loading" }
-  | { state: "invalid" }
+  | { state: "refused" }
   | { state: "failed"; retrying: boolean }
   | {
       state: "ready";
@@ -61,10 +60,10 @@ export type ScreenState =
 
 export type ScreenEvent =
   /**
-   * The first read, a « Réessayer » starting (failed, retrying) or ending: what `useAdminLinkCheck`
+   * The first read, a « Réessayer » starting (failed, retrying) or ending: what `useOrganiserCheck`
    * says. With the panel, whether the card was left folded on the device (O8.5).
    */
-  | { type: "checked"; check: AdminLinkCheck; folded?: boolean }
+  | { type: "checked"; check: OrganiserCheck; folded?: boolean }
   | { type: "toggleFolded" }
   | { type: "refreshStarted"; read: number }
   /** With the panel's legs on a success; without, a failure. */
@@ -74,17 +73,17 @@ export type ScreenEvent =
   | { type: "listToggled"; key: string }
   | { type: "legToggled"; leg: Leg };
 
-function fromCheck(check: AdminLinkCheck, folded = false): ScreenState {
+function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
   switch (check.state) {
     case "checking":
       return { state: "loading" };
-    case "invalid":
-      return { state: "invalid" };
+    case "refused":
+      return { state: "refused" };
     case "failed":
       return { state: "failed", retrying: check.retrying ?? false };
     case "valid": {
-      const { publicUrl, adminUrl, legs } = check;
-      const panel = { publicUrl, adminUrl, legs };
+      const { publicUrl, legs } = check;
+      const panel = { publicUrl, legs };
       return { state: "ready", panel, refreshing: null, refreshFailed: 0, refreshed: false, expanded: new Set(), folded, unfolded: new Set() };
     }
   }
