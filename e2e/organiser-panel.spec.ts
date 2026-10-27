@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
+import { numbersHidden } from "./driver";
 import { leaveNoToken } from "./fixtures";
 import { expectRing, press, pressUntil } from "./focus-ring";
 import { digitsOf, expect, organiserPath, type ScenePhones, seedOrganiserScene, test, unfoldLegs } from "./organiser";
@@ -31,6 +32,7 @@ const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
 const section = (page: Page, name: "Aller" | "Retour") => panel(page).getByRole("region", { name, exact: true });
 const list = (scope: Locator, title: string) => scope.getByRole("list", { name: title, exact: true });
 const rows = (scope: Locator) => scope.getByRole("listitem");
+/** A failing read or check of one prints the link, its number included: it goes through `numbersHidden` (#873). */
 const tel = 'a[href^="tel:"]';
 
 /** `actual` is `expected`, named by `what`: neither is printed. */
@@ -123,12 +125,14 @@ test.describe("the scene of O2.5", () => {
 
     const link = rows(persons).first().locator(tel);
     await expect(link).toHaveCount(1);
-    same(await link.innerText(), phones.c, "C's link shows her number as typed");
-    same(await link.getAttribute("aria-label"), `Appeler Chloé au ${phones.c}`, "C's link's name");
-    const linkBox = await box(link);
+    await numbersHidden(async () => {
+      same(await link.innerText(), phones.c, "C's link shows her number as typed");
+      same(await link.getAttribute("aria-label"), `Appeler Chloé au ${phones.c}`, "C's link's name");
+    });
+    const linkBox = await numbersHidden(() => box(link));
     expect(linkBox.height).toBeGreaterThanOrEqual(44);
     expect(linkBox.height).toBeLessThan(48);
-    await expect(link).toHaveCSS("white-space", "nowrap");
+    await numbersHidden(() => expect(link).toHaveCSS("white-space", "nowrap"));
 
     await expect(rows(persons).nth(1).locator(tel)).toHaveCount(0);
     await expect(rows(persons).nth(1).getByText(FR.noPhone, { exact: true })).toBeVisible();
@@ -142,7 +146,7 @@ test.describe("the scene of O2.5", () => {
     const retour = list(section(page, "Retour"), "Sans voiture (1)");
     await expect(rows(retour)).toHaveCount(1);
     await expect(rows(retour)).toContainText("Bastien");
-    same(await rows(retour).locator(tel).innerText(), phones.b, "B's link shows his number");
+    await numbersHidden(async () => same(await rows(retour).locator(tel).innerText(), phones.b, "B's link shows his number"));
   });
 
   test("O2.8: under the panel, the board has no tel: link, and its « Sans voiture » carries no number", async ({
@@ -176,7 +180,7 @@ test("O2.3: a person without a car on both legs is in both sections, with her nu
   for (const leg of ["Aller", "Retour"] as const) {
     const persons = list(section(page, leg), "Sans voiture (1)");
     await expect(rows(persons)).toContainText("Tom");
-    same(await rows(persons).locator(tel).innerText(), phone, `Tom's number at the ${leg}`);
+    await numbersHidden(async () => same(await rows(persons).locator(tel).innerText(), phone, `Tom's number at the ${leg}`));
   }
 });
 
@@ -341,7 +345,7 @@ test("O7.3: a first name of 40 and a place of 120 characters do not overflow at 
 
   // The first name's cell and the link start on the same line, the link on its right.
   const name = await box(row.getByText(long, { exact: true }).locator(".."));
-  const link = await box(row.locator(tel));
+  const link = await numbersHidden(() => box(row.locator(tel)));
   const own = await box(row);
   expect(name.height).toBeGreaterThan(link.height);
   expect(Math.abs(name.y - link.y)).toBeLessThanOrEqual(1);
