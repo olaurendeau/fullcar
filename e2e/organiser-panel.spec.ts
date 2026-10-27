@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { leaveNoToken } from "./fixtures";
 import { expectRing, press, pressUntil } from "./focus-ring";
-import { digitsOf, expect, organiserPath, type ScenePhones, seedOrganiserScene, test, unfoldLegs } from "./organiser";
+import { digitsOf, expect, LEG_HEADINGS, organiserPath, type ScenePhones, seedOrganiserScene, test, unfoldLegs } from "./organiser";
 
 /*
  * #179, epic #154: the organiser area's sections, one per leg, under the warning. Each test
@@ -70,7 +70,7 @@ test.describe("the scene of O2.5", () => {
   }) => {
     await page.goto(organiserPath(seededEvent));
     await unfoldLegs(page);
-    await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
+    await expect(panel(page).locator(LEG_HEADINGS)).toHaveText(["Aller", "Retour"]);
 
     for (const [leg, time, banner] of [
       ["Aller", /^samedi 12 décembre 2026 à 07:30$/, "2 sans voiture · il manque 1 place"],
@@ -204,7 +204,7 @@ test.describe("without a retour", () => {
     await withoutCar(db, seededEvent.id, "Tom", null, ["aller"]);
     await page.goto(organiserPath(seededEvent));
     await unfoldLegs(page);
-    await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller"]);
+    await expect(panel(page).locator(LEG_HEADINGS)).toHaveText(["Aller"]);
     await expect(section(page, "Aller")).toContainText("Sans voiture (1)");
     await expect(panel(page)).not.toContainText("Retour");
   });

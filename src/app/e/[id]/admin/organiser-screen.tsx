@@ -9,7 +9,7 @@ import { failureText, wordsOf, type RemovalProblem } from "@/components/event/fa
 import { focusLandmark, focusMapHint, focusMapToggle } from "@/components/event/focus";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import { legHeadingId } from "@/components/event/organiser-leg";
-import { focusPersonRemoval, OrganiserPersons } from "@/components/event/organiser-persons";
+import { focusPersonRemoval, OrganiserPersons, personName } from "@/components/event/organiser-persons";
 import type { RemovePerson } from "@/components/event/remove-person-dialog";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
@@ -65,7 +65,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const [shown, setShown] = useState(state);
   const { event } = shown;
   const carsOn = (leg: Leg) => shown.legs.find((each) => each.leg === leg)?.cars.length ?? 0;
-  const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null)[] } | null>(null);
+  const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null | (() => HTMLElement | null))[] } | null>(null);
   useKeepBoardInPlace(frame);
 
   const { check } = link;
@@ -86,7 +86,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   useLayoutEffect(() => {
     const noted = focused.current;
     focused.current = null;
-    if (noted && !noted.element.isConnected) noted.fallbacks.find((each) => each?.isConnected)?.focus();
+    if (noted && !noted.element.isConnected) noted.fallbacks.map((each) => (typeof each === "function" ? each() : each)).find((each) => each?.isConnected)?.focus();
   }, [screen]);
 
   /**
@@ -100,7 +100,9 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     const list = element.closest("[data-organiser-list]")?.querySelector("h4");
     const section = element.closest('section[aria-labelledby^="organiser-"]')?.querySelector<HTMLElement>("h3 > button");
     const aller = section && document.getElementById(legHeadingId("aller"))?.querySelector<HTMLElement>("button");
-    focused.current = { element, fallbacks: [list ?? null, section ?? null, aller ?? null, title.current] };
+    // A line of « Personnes inscrites »: the first names around it, as the panel applied shows them (RP4.6).
+    const around = (element.closest<HTMLElement>("[data-around]")?.dataset.around ?? "").split(" ").filter(Boolean).map((id) => () => personName(id));
+    focused.current = { element, fallbacks: [...around, list ?? null, section ?? null, aller ?? null, title.current] };
   }
 
   // The screen now, not when the action left: one sent during « Chargement » may end after it.

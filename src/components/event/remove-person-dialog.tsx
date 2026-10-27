@@ -35,12 +35,12 @@ interface Person {
  * From the organiser area (#672, RP4.5): `state`, her state on each leg, in a box under the title;
  * whom to tell is always « pas même {prénom} ». `refused`, a refusal that sending again would not
  * change, kept for her until the page reloads (decision 17): each opening shows it, and sends
- * nothing. `onRemoved`: where the focus goes once a success closes the confirmation.
+ * nothing. `onRemoved`, once a success closes the confirmation: whether it moved the focus itself.
  */
 export interface FromPanel {
   state: readonly string[];
   refused?: RemovalProblem;
-  onRemoved: () => void;
+  onRemoved: () => boolean;
 }
 
 /**
@@ -90,9 +90,7 @@ export function RemovePersonButton({
       </AlertDialogTrigger>
       <AlertDialogContent
         onCloseAutoFocus={(event) => {
-          if (!panel || !removed.current) return;
-          event.preventDefault();
-          panel.onRemoved();
+          if (panel && removed.current && panel.onRemoved()) event.preventDefault();
         }}
       >
         <HidesPage />

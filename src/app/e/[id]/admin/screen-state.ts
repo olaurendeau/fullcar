@@ -98,10 +98,7 @@ function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
   }
 }
 
-/**
- * The lists still unfolded once `legs` and `persons` are applied: one of 5 lines or fewer has no
- * button, and folds for what follows (O5.7); « Personnes inscrites » too (RP4.3).
- */
+/** The lists still unfolded once `legs` are applied: one of 5 lines or fewer has no button, and folds for what follows (O5.7, RP4.3). */
 function stillExpanded(expanded: ReadonlySet<string>, legs: OrganiserLeg[], persons: OrganiserPerson[]): ReadonlySet<string> {
   const lists = ["withoutCar", "carsWithoutPhone"] as const;
   const long = expanded.has(PERSONS_LIST) && persons.length > FOLDED_LINES ? [PERSONS_LIST] : [];
@@ -121,9 +118,8 @@ function stillUnfolded(unfolded: ReadonlySet<Leg>, legs: OrganiserLeg[]): Readon
 }
 
 /**
- * `legs` and `persons` applied, the alert and the announcement gone, no read running: the panel,
- * its persons, its unfolded lists and legs. Withdrawn (`legs` null), all are kept for the read that
- * gives the panel back (decision 58).
+ * `legs` applied, the alert and the announcement gone, no read running: the panel, its unfolded
+ * lists and legs. Withdrawn (`legs` null), all, persons too, are kept for the read that gives the panel back (decision 58).
  */
 function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean, read: OrganiserPerson[] = []): Ready {
   const persons = legs ? read : state.persons;

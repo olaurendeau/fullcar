@@ -1,5 +1,4 @@
 import { useLocale, useTranslations } from "next-intl";
-import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { byFirstName, type OrganiserPerson } from "@/domain/organiser-panel";
 import { removalConfirmation, type ShownLeg } from "@/domain/person-removal";
@@ -17,6 +16,9 @@ function focus(target: HTMLElement | null | undefined): boolean {
   target?.focus();
   return !!target && document.activeElement === target;
 }
+
+/** The first name of person `id` in the section, when her line is shown. */
+export const personName = (id: string) => document.querySelector<HTMLElement>(`[data-person-row="${CSS.escape(id)}"] [data-line-focus]`);
 
 /**
  * The landmark of a removal from the panel (remove-person v2, « Focus, barre, envoi »): the
@@ -66,8 +68,9 @@ export function OrganiserPersons({
   const tEvent = useTranslations("Event");
   const tCell = useTranslations("DevicePersons");
   const sorted = byFirstName(persons, useLocale());
-  // The lines as they were when a removal was confirmed: the focus goes to the next one (RP4.6).
-  const removedFrom = useRef<string[]>([]);
+  const ids = sorted.map(({ id }) => id);
+  // Of each line, the first names after it, then those before it: where the focus goes once it is gone (RP4.6).
+  const around = (at: number) => [...ids.slice(at + 1), ...ids.slice(0, at).reverse()];
 
   const states = (person: OrganiserPerson) =>
     person.cells.map((cell) =>
@@ -75,13 +78,15 @@ export function OrganiserPersons({
       person.cells.length === 1 ? cellText(tCell, cell) : t("persons.leg", { leg: tEvent(`legs.${cell.leg}`), state: cellText(tCell, cell) }),
     );
 
-  /** After a removal: the next first name, else the one before, else the section's button (O5.8 amended by O9.9). */
-  const focusAfter = (removedId: string) => {
-    const order = removedFrom.current;
-    const at = order.indexOf(removedId);
-    const around = [...order.slice(at + 1), ...order.slice(0, Math.max(at, 0)).reverse()];
-    const name = (id: string) => document.querySelector<HTMLElement>(`[data-person-row="${CSS.escape(id)}"] [data-line-focus]`);
-    if (!around.some((id) => focus(name(id)))) focusPersonRemoval(removedId);
+  /**
+   * A success closes the confirmation: while her line is still shown, Radix gives the focus back to
+   * its « Retirer », and the screen moves it once the panel read again takes the line away. Gone
+   * already: the next first name, else the one before, else the section's button (O5.8 amended by O9.9).
+   */
+  const focusAfter = (removedId: string, others: string[]) => {
+    if (document.querySelector(`[data-remove-person="${CSS.escape(removedId)}"]`)) return false;
+    if (!others.some((id) => focus(personName(id)))) focusPersonRemoval(removedId);
+    return true;
   };
 
   return (
@@ -96,10 +101,11 @@ export function OrganiserPersons({
             hint={t("persons.hint")}
             empty={tEvent("nobody")}
             fold={fold}
-            lines={sorted.map((person) => (
+            lines={sorted.map((person, at) => (
               <li
                 key={person.id}
                 data-person-row={person.id}
+                data-around={around(at).join(" ")}
                 className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 border-t py-1.5 first:border-t-0"
               >
                 <span className="flex min-w-0 flex-col gap-0.5 py-1">
@@ -115,11 +121,8 @@ export function OrganiserPersons({
                 <RemovePersonButton
                   person={person}
                   removal={removalConfirmation(legs, person.id)}
-                  removePerson={(removal, confirmation) => {
-                    removedFrom.current = sorted.map(({ id }) => id);
-                    return removePerson(removal, confirmation);
-                  }}
-                  panel={{ state: states(person), refused: refused(person.id), onRemoved: () => focusAfter(person.id) }}
+                  removePerson={removePerson}
+                  panel={{ state: states(person), refused: refused(person.id), onRemoved: () => focusAfter(person.id, around(at)) }}
                   trigger={
                     <Button
                       type="button"

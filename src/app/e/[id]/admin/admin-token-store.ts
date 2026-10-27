@@ -95,10 +95,10 @@ export type OrganiserCheck =
 const REFUSED = new Set(["invalid", "signIn", "notYours", "pending", "orphan", "ended"]);
 
 /**
- * What the server's answer means: the panel with its legs, its persons (RP4.1, none from a server
- * before #671) and the link to share (C4.9 amended, OA7.3), or refused for every state the access
- * rule refuses with (#596). Anything else, such as the `undefined` Next resolves an action with on
- * an `x-action-redirect` response, is a failed check: the organiser is never refused for it.
+ * What the server's answer means: the panel with its legs and the link to share (C4.9 amended,
+ * OA7.3), or refused for every state the access rule refuses with (#596). Anything else, such
+ * as the `undefined` Next resolves an action with on an `x-action-redirect` response, is a
+ * failed check: the organiser is never refused for it.
  */
 export function checkFromAnswer(answer: unknown, origin: string, id: string): OrganiserCheck {
   if (typeof answer !== "object" || answer === null) return { state: "failed" };

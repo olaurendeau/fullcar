@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, messages, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { areaEditButton, expect, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, LEG_HEADINGS, organiserPath, test } from "./organiser";
 
 /*
  * #271, epic #250 (organizer-view v3.3.8): what « Modifier l’événement » does to the legs. A retour
@@ -70,7 +70,7 @@ test("M3.1: a retour with no car and no Placement, unchecked: saved with no conf
   await expect(header(page).locator("dt")).toHaveText(["Début"]);
   await expect(page.getByRole("tab")).toHaveCount(0);
   await expect(panel(page).getByRole("button", { name: /^(Aller|Retour)\b/ })).toHaveCount(1);
-  await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller"]);
+  await expect(panel(page).locator(LEG_HEADINGS)).toHaveText(["Aller"]);
   await expect(panel(page).getByText("Retour", { exact: true })).toHaveCount(0);
   // Without a retour, the board is the aller's section, not a tab panel.
   const onlyLeg = page.locator('main section[aria-labelledby="leg-aller"]');
@@ -103,7 +103,7 @@ test.describe("without a retour", () => {
     await expect(header(page).locator("dd").nth(1)).toHaveText("18:00");
     await expect(page.getByRole("tab")).toHaveCount(2);
     await expect(tab(page, "Aller")).toHaveAttribute("aria-selected", "true");
-    await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
+    await expect(panel(page).locator(LEG_HEADINGS)).toHaveText(["Aller", "Retour"]);
     await tab(page, "Retour").click();
     await expect(board(page).getByText(FR.nobody, { exact: true })).toBeVisible();
 
