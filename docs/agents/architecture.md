@@ -478,7 +478,10 @@ deviné l'est aussi.
   `{ adminToken, session }`, et la réponse est le panneau ou l'état que décide
   `organiser-access.ts`, sans aucune autre donnée : `invalid` pour un événement inconnu,
   `signIn`, `notYours` avec l'adresse de la session du visiteur, `pending`, `orphan` ou
-  `ended`. Le panneau n'est jamais dans le HTML.
+  `ended`, qui porte, pour la seule session de l'organisateur, le titre, le lieu, les dates et
+  la date du jour 30 (OA8.4, #598). Le panneau n'est jamais dans le HTML. Chaque refus a son
+  écran (`src/components/event/admin-states.tsx`), à la place du panneau et du tableau ; un
+  événement anonymisé n'a pas de tableau, et son lieu n'est pas dans le HTML.
   À partir de #263, c'est aussi celui d'`updateEvent`, la modification de l'événement : un
   jeton refusé répond `invalid` sans rien écrire, et aucune réponse ne porte le jeton.
   - lien admin : `/e/{id}/admin#{token}`, jusqu'à #597 ; ensuite il n'y a plus de lien

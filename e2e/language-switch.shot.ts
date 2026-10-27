@@ -17,8 +17,8 @@ leaveNoToken();
 const UNKNOWN_ID = "Zz9yXw8v";
 const WRONG_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZQ";
 
-const FR = { switch: "English", panel: "Espace organisateur" };
-const EN = { switch: "Français", panel: "Organiser area" };
+const FR = { switch: "English", panel: "Espace organisateur", refused: "Adresse pas encore confirmée" };
+const EN = { switch: "Français", panel: "Organiser area", refused: "Email address not confirmed yet" };
 type Words = typeof FR;
 
 /** What the organiser's page shows once the client has had the server's answer. */
@@ -34,8 +34,8 @@ const PAGES: [string, string, (event: SeededEvent) => string, string, Arrival, (
   ["the event not found", "introuvable", () => `/e/${UNKNOWN_ID}`, "Événement introuvable", null],
   ["the event's page", "event", ({ id }) => `/e/${id}`, "Tournoi de Rennes", null],
   ["the organiser's page", "admin", organiserPath, "Tournoi de Rennes", "panel", ({ token }) => token],
-  ["the organiser's page, wrong token", "admin-invalide", organiserPath, "Tournoi de Rennes", "refused", () => WRONG_TOKEN],
-  ["the organiser's page, no token", "admin-sans-jeton", organiserPath, "Tournoi de Rennes", "refused"],
+  ["the organiser's page, wrong token", "admin-invalide", organiserPath, "Adresse pas encore confirmée", "refused", () => WRONG_TOKEN],
+  ["the organiser's page, no token", "admin-sans-jeton", organiserPath, "Adresse pas encore confirmée", "refused"],
 ];
 
 test.use({ locale: "fr-FR" });
@@ -46,7 +46,7 @@ async function settled(page: Page, words: Words, arrival: Arrival) {
   await expect(page.getByRole("button", { name: words.switch, exact: true })).toBeEnabled({ timeout: 15_000 });
   if (arrival === "panel") await expect(page.getByRole("region", { name: words.panel })).toBeVisible();
   if (arrival === "refused") {
-    await expect(areaRefused(page, words.panel)).toBeVisible();
+    await expect(areaRefused(page, words.refused)).toBeVisible();
   }
 }
 

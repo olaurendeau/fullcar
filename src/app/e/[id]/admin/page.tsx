@@ -3,9 +3,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { ContactFooter } from "@/components/contact/contact-footer";
-import { EventEnded } from "@/components/event/event-ended";
 import { eventMetadata, loadEventPage } from "../load-event";
-import { OrganiserScreen } from "./organiser-screen";
+import { EndedOrganiserScreen, OrganiserScreen } from "./organiser-screen";
 
 // No loading.tsx here either: an unknown id answers a real 404 (C6.4).
 
@@ -16,16 +15,15 @@ export async function generateMetadata({ params }: PageProps<"/e/[id]/admin">): 
 /**
  * `/e/{id}/admin`: the organiser's panel, then the event as its participants see it (#3, R4).
  * The page is the same for every visitor: the client sends the session or the admin token this
- * browser keeps through the action, which decides (#596). A fragment is ignored (OA7.5).
+ * browser keeps through the action, which decides (#596), and a refusal shows its own screen
+ * (#598). An anonymised event has no board: its HTML carries neither its place nor anyone, and
+ * only its organiser's session reads what is left (OA8.4). A fragment is ignored (OA7.5).
  */
 export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) {
   const { id } = await params;
   // The header comes with the legs, from one snapshot (epic #250).
   const [page, t] = await Promise.all([loadEventPage(id), getTranslations("Admin")]);
   if (!page) notFound();
-  // Anonymised: the page of /e/{id}, until the organiser's screens come (OA8.4).
-  if (page.ended) return <EventEnded title={page.title} allerAt={page.allerAt} />;
-  const { state } = page;
 
   // The page's whole width, for the panel's 1024 px (O7.5); the rest keeps the column of
   // /e/{id}, centred. While the bar of messages shows, room below for it as measured, and its 12 px: nothing stays under it (C11.4).
@@ -46,9 +44,16 @@ export default async function AdminPage({ params }: PageProps<"/e/[id]/admin">) 
           {t("needsJavaScript")}
         </p>
       </noscript>
-      <OrganiserScreen id={id} state={state}>
-        <ContactFooter />
-      </OrganiserScreen>
+      {/* Anonymised, no board is left: the check alone, which the organiser's screen of it needs (OA8.4). */}
+      {page.ended ? (
+        <EndedOrganiserScreen id={id}>
+          <ContactFooter />
+        </EndedOrganiserScreen>
+      ) : (
+        <OrganiserScreen id={id} state={page.state}>
+          <ContactFooter />
+        </OrganiserScreen>
+      )}
     </main>
   );
 }
