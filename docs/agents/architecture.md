@@ -439,7 +439,13 @@ présentent ensemble : un test de concurrence le prouve aussi.
 À partir de #594, `recordSend` (`src/db/email-sends.ts`) prend l'Event en `noKeyUpdate` (#599
 et #602 écrivent sa ligne dans la même transaction : deux `share` s'interbloqueraient en
 passant à l'exclusif), puis l'adresse et le plafond global (`pg_advisory_xact_lock`), et
-l'e-mail part **après** la validation. `useLink` (`src/db/email-links.ts`) s'use en un
+l'e-mail part **après** la validation. À partir de #599, un lien de confirmation ne naît que
+par `claimConfirmation` (`src/db/email-links.ts`) : l'Event en `noKeyUpdate`, puis
+`recordSend`, puis le lien, si l'envoi est accepté, dans la même transaction. Sans ce
+verrou, l'insertion du lien ne prendrait l'Event qu'en `FOR KEY SHARE`, par sa clé
+étrangère, que le verrou de la purge n'attend pas : un lien inséré pendant l'anonymisation
+y survivrait. Un Event supprimé ou anonymisé pendant l'attente ne reçoit ni envoi ni lien.
+`useLink` (`src/db/email-links.ts`) s'use en un
 `update … where … and used_at is null … returning`, après l'Event pour une confirmation.
 Les deux ne sont justes qu'en `READ COMMITTED`, le niveau qu'ouvre `atomically`.
 
@@ -1092,7 +1098,15 @@ d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu,
 - **La création n'attend pas l'envoi** : l'envoi de la confirmation passe par `after()` de
   Next (#599), et son résultat s'écrit dans `event.send_status` (en cours, envoyé, échec,
   limite par adresse). L'avis le relit à chaque chargement ; un envoi « en cours » depuis
-  plus de 30 s se lit comme un échec (OA1.7).
+  plus de 30 s se lit comme un échec (OA1.7). `createEventFor` (`src/app/create-event.ts`)
+  crée l'événement dans une transaction : avec une session vivante, il est au compte et
+  confirmé, et rien ne part (OA1.3) ; avec une adresse, `claimConfirmation`
+  (`src/db/email-links.ts`) inscrit l'envoi et crée le lien, puis `send_status` passe à
+  `sending`, ou à `address_limit` si une limite l'arrête. Après la validation, sans aucun
+  verrou, `after()` appelle Brevo, puis `writeSendResult` écrit `sent` ou `failed`, mais
+  seulement sur le `sending` que cette création a écrit : un renvoi écrit depuis garde le
+  sien. Une session envoyée mais terminée, sans adresse, ne crée rien et répond
+  `sessionEnded` sur le champ e-mail (OA1.5).
 - **Les limites** se comptent sous verrou, Event puis adresse (voir « L'adresse après
   l'Event »).
 - **Journal** : en mots fixes seulement, `email: no key`, `email: no sender`,
