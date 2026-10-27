@@ -123,6 +123,34 @@ test("CA1.20 (1), (3): on /e/{id}, nothing while the device's read is held; read
   await expect(region(page)).toHaveClass(/\bleaflet-container\b/);
 });
 
+// #788: a box whose top is at the screen's bottom edge is in the screen for the observer (its
+// threshold 0 counts a box touching the edge). Refused there, a scroll of 1 px into the screen
+// changes nothing the observer tells: the map would wait for good.
+test("CA1.20: on /e/{id}, the box's top at the bottom edge of the screen, then 1 px into it: it starts", async ({ db, page, placed }) => {
+  const settle = await twelveOnTheDevice(db, page, placed);
+  const watch = watchMap(page);
+  const read = page.waitForRequest(isAction);
+  await page.goto(`/e/${placed.id}`);
+  await read;
+  settle();
+  await expect(page.getByRole("button", { name: /^Vos inscriptions/ })).toHaveAttribute("aria-expanded", "true");
+  await expect(region(page)).not.toBeInViewport();
+  await expectNothingAsked(page, watch);
+
+  const edge = await box(page).evaluate((element) => {
+    window.scrollTo(0, window.scrollY + element.getBoundingClientRect().top - window.innerHeight);
+    return element.getBoundingClientRect().top - window.innerHeight;
+  });
+  expect(edge).toBe(0);
+  // The observer has looked at the box on the edge.
+  await idle(page);
+  await page.evaluate(() => window.scrollBy(0, 1));
+  await expect.poll(() => watch.leaflet()).toBeGreaterThan(0);
+  await expect.poll(() => watch.tiles()).toBeGreaterThan(0);
+  await expect(region(page).locator(".leaflet-tile-loaded").first()).toBeVisible();
+  await tilesLoaded(page);
+});
+
 test.describe("CA1.20 (2): on /e/{id}/admin", () => {
   test("the organiser area unfolded: nothing while the link is checked, nor once it is valid, the box under the fold; a scroll starts it", async ({ page, placed }) => {
     const check = await holdActionsWith(page, placed.token);

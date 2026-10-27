@@ -138,8 +138,8 @@ function Credits({ ref }: { ref: Ref<HTMLParagraphElement> }) {
  * whole without JavaScript: the « Carte » button as its header, a fixed label whose chevron says
  * the state; then the part it folds, `hidden` while folded, with the map's box, edge to edge,
  * 240 px high, 280 px from a 448 px window. The map starts (#653, v29), and for good, once it is
- * open, the page settled, and its box at least 1 px in the screen with a width, a hidden tab
- * having none (CA1.13); folded by the person before, it asks for nothing. Starting imports
+ * open, the page settled, and its box in the screen or touching its edge, as the observer counts
+ * it (#788), with a width, a hidden tab having none (CA1.13); folded by the person before, it asks for nothing. Starting imports
  * Leaflet, once for the page and both legs (CA2.10, `leaflet-import`). Before, the box waits,
  * without text, `aria-busy` or `tabindex` (CA1.14); started, until Leaflet is there,
  * « Chargement de la carte… » in the box, `aria-busy`, and no `status` region of its own: the
@@ -190,7 +190,9 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
     const element = box.current;
     if (started || !map.open || !map.settled || !element || element.offsetWidth === 0) return;
     const { top, bottom } = element.getBoundingClientRect();
-    if (bottom <= 0 || top >= window.innerHeight) return;
+    // A box touching the screen's edge is in it, as for the observer (threshold 0): refused, a
+    // scroll of 1 px into the screen would change nothing it tells, and the map wait for good (#788).
+    if (bottom < 0 || top > window.innerHeight) return;
     setStarted(true);
     leafletImport.open();
   });
