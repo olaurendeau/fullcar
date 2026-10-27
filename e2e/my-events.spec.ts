@@ -99,6 +99,13 @@ async function withoutCar(db: Kysely<Database>, eventId: string, leg: "aller" | 
   }
 }
 
+/** The id of the `visit` action, which each page load sends with a session: the only action of `/`. */
+async function visitActionId(page: Page): Promise<string> {
+  const visit = page.waitForRequest((request) => isAction(request) && new URL(request.url()).pathname === "/");
+  await page.goto("/");
+  return (await visit).headers()["next-action"]!;
+}
+
 const rows = (page: Page) => page.getByRole("main").getByRole("listitem");
 const rowOf = (page: Page, title: string) => rows(page).filter({ hasText: title });
 
@@ -160,11 +167,14 @@ test.describe("Mes événements", () => {
       true,
     );
 
+    // Every request of the page, whatever its method or path.
     const sent: Request[] = [];
-    page.on("request", (request) => {
-      if (isPageAction(request)) sent.push(request);
-    });
+    page.on("request", (request) => sent.push(request));
+    // `myEvents`, told from the load's `visit`, whose body holds the token too, by its action id.
+    const visitId = await visitActionId(page);
+    const read = page.waitForRequest((request) => isPageAction(request) && request.headers()["next-action"] !== visitId);
     await page.goto("/mes-evenements");
+    expect((await read).postData()?.includes(token), "myEvents carries the token in its body").toBe(true);
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(FR.title);
     await expect(page.getByText(FR.signedInAs(email), { exact: true })).toBeVisible();
@@ -204,10 +214,10 @@ test.describe("Mes événements", () => {
     await expect(anonymised).not.toContainText("inscrit");
     await expect(anonymised.getByText(/sans voiture/)).toHaveCount(0);
 
-    // The token in the body only.
+    // Checked once the page has sent all it sends: no URL nor header holds the token.
     expect(sent.length).toBeGreaterThan(0);
-    expect(sent.some((request) => request.postData()?.includes(token))).toBe(true);
-    expect(sent.some((request) => request.url().includes(token))).toBe(false);
+    const leaks = sent.filter((request) => [request.url(), ...Object.values(request.headers())].some((text) => text.includes(token)));
+    expect(leaks.length, "requests with the token in their URL or a header").toBe(0);
   });
 
   test("OA6.5: no event, MyEvents.empty and no section title; none upcoming, « À venir (0) »", async ({ page, db }) => {
