@@ -244,7 +244,7 @@ describe("an anonymised event (#806)", () => {
     ["removeFromDevice", (db, { eventId, martins, persons }) => removeFromDevice(db, eventId, martins, { personId: persons.marc.id })],
     [
       "removeAsOrganiser",
-      (db, { eventId, adminToken, martins, persons }) => removeAsOrganiser(db, eventId, adminToken, martins, { personId: persons.marc.id }),
+      (db, { eventId, adminToken, martins, persons }) => removeAsOrganiser(db, eventId, { adminToken }, martins, { personId: persons.marc.id }),
     ],
   ])("OA8.3: %s answers the event ended at most, neither its place nor anyone", async (_, remove) => {
     await withRollback(async (trx) => {
@@ -315,15 +315,15 @@ describe("removeFromDevice: who may remove whom (RP3)", () => {
   });
 });
 
-describe("removeAsOrganiser (RP3.2 today's gate: the admin token)", () => {
+describe("removeAsOrganiser (RP3.2: organiser-access.ts, here by the creation browser's token)", () => {
   it("RP3.2: the admin token removes anyone, and the answer is the board of the device token sent", async () => {
     await withRollback(async (trx) => {
       const { eventId, adminToken, martins, persons } = await seedExample(trx);
-      const outcome = await removeAsOrganiser(trx, eventId, adminToken, martins, { personId: persons.doublon.id });
+      const outcome = await removeAsOrganiser(trx, eventId, { adminToken }, martins, { personId: persons.doublon.id });
       expect(outcome).toEqual({ ok: true, removal: "removed", state: await readEventState(trx, eventId, martins) });
       expect(coverage(legOf(stateOf(outcome), "aller"))).toEqual({ withoutCar: 1, freeSeats: 1 });
       expect(coverage(legOf(stateOf(outcome), "retour"))).toEqual({ withoutCar: 2, freeSeats: 4 });
-      const again = await removeAsOrganiser(trx, eventId, adminToken, undefined, { personId: persons.doublon.id });
+      const again = await removeAsOrganiser(trx, eventId, { adminToken }, undefined, { personId: persons.doublon.id });
       expect(again).toMatchObject({ ok: true, removal: "alreadyRemoved" });
     });
   });
@@ -336,10 +336,10 @@ describe("removeAsOrganiser (RP3.2 today's gate: the admin token)", () => {
       const before = await rowsOf(trx, eventId);
       const sent = { personId: persons.marc.id };
       for (const token of [othersAdmin, undefined, 42, NOBODYS_TOKEN]) {
-        expect(await removeAsOrganiser(trx, eventId, token, undefined, sent)).toEqual({ ok: false, error: "noOrganiserAccess" });
+        expect(await removeAsOrganiser(trx, eventId, { adminToken: token }, undefined, sent)).toEqual({ ok: false, error: "noOrganiserAccess" });
       }
       await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", eventId).execute();
-      expect(await removeAsOrganiser(trx, eventId, adminToken, undefined, sent)).toEqual({
+      expect(await removeAsOrganiser(trx, eventId, { adminToken }, undefined, sent)).toEqual({
         ok: false,
         error: "noOrganiserAccess",
       });
@@ -352,7 +352,7 @@ describe("removeAsOrganiser (RP3.2 today's gate: the admin token)", () => {
       const { eventId, martins, persons } = await seedExample(trx);
       const before = await rowsOf(trx, eventId);
       for (const token of [martins, persons.marc.token, persons.doublon.token]) {
-        const refused = await removeAsOrganiser(trx, eventId, token, martins, { personId: persons.marc.id });
+        const refused = await removeAsOrganiser(trx, eventId, { adminToken: token }, martins, { personId: persons.marc.id });
         expect(refused).toEqual({ ok: false, error: "noOrganiserAccess" });
       }
       expect(await rowsOf(trx, eventId)).toEqual(before);
@@ -364,11 +364,11 @@ describe("removeAsOrganiser (RP3.2 today's gate: the admin token)", () => {
       const { eventId, adminToken, persons } = await seedExample(trx);
       const unknown = { personId: randomUUID() };
       const answers = {
-        malformedOnUnknownEvent: await removeAsOrganiser(trx, "zzzzzzzz", "bad", undefined, { personId: 7 }),
-        unknownEvent: await removeAsOrganiser(trx, "zzzzzzzz", "bad", undefined, unknown),
-        knownWithoutAccess: await removeAsOrganiser(trx, eventId, "bad", undefined, { personId: persons.marc.id }),
-        unknownWithoutAccess: await removeAsOrganiser(trx, eventId, "bad", undefined, unknown),
-        unknownWithAccess: await removeAsOrganiser(trx, eventId, adminToken, undefined, unknown),
+        malformedOnUnknownEvent: await removeAsOrganiser(trx, "zzzzzzzz", { adminToken: "bad" }, undefined, { personId: 7 }),
+        unknownEvent: await removeAsOrganiser(trx, "zzzzzzzz", { adminToken: "bad" }, undefined, unknown),
+        knownWithoutAccess: await removeAsOrganiser(trx, eventId, { adminToken: "bad" }, undefined, { personId: persons.marc.id }),
+        unknownWithoutAccess: await removeAsOrganiser(trx, eventId, { adminToken: "bad" }, undefined, unknown),
+        unknownWithAccess: await removeAsOrganiser(trx, eventId, { adminToken }, undefined, unknown),
       };
       expect(answers).toMatchObject({
         malformedOnUnknownEvent: { ok: false, error: "invalid" },
