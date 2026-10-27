@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useSyncExternalStore } from "react";
-import { covers, madeUntrue, type Change, type Sent, type Withdrawal } from "./bar-state";
+import { covers, madeUntrue, personOfLeg, type Change, type Sent, type Withdrawal } from "./bar-state";
 
 /*
  * Whether a sheet hides the rest of the page (#193, #195). Radix hides it from screen readers
@@ -144,10 +144,11 @@ export function sendAbout(about: readonly string[]): Send {
   const seq = (sends += 1);
   withdraw({ about });
   const sent = { about, sent: seq };
-  const whenClosed: Send["whenClosed"] = (then, failure = false) => {
+  // A placement's success is about the persons it seats (`persons`), not about its car.
+  const wait = (then: () => void, failure: boolean, persons?: readonly string[]) => {
     if ((gone.get(about[0]) ?? 0) > seq) return;
     if (failure && [...made].some((since) => since.sent > seq && covers({ about: since.about }, sent))) return;
-    const entry = { about, sent: seq, withdraw: () => {} };
+    const entry = { about, sent: seq, persons, withdraw: () => {} };
     left.add(entry);
     entry.withdraw = whenPageShown(() => {
       left.delete(entry);
@@ -159,13 +160,17 @@ export function sendAbout(about: readonly string[]): Send {
     seq,
     leaves: () => void made.add(sent),
     answered: () => withdraw({ about, before: seq }),
-    whenClosed,
+    whenClosed: (then, failure = false) => wait(then, failure),
     changed: (persons) => void changes.add({ persons, sent: seq }),
     // Decided as it would be written, once no sheet hides the page: a send answered meanwhile counts.
     whenStillTrue: (persons, then) =>
-      whenClosed(() => {
-        if (!madeUntrue({ persons, sent: seq }, changes)) then();
-      }),
+      wait(
+        () => {
+          if (!madeUntrue({ persons, sent: seq }, changes)) then();
+        },
+        false,
+        persons.map(personOfLeg),
+      ),
   };
 }
 
@@ -175,6 +180,16 @@ export function sendAbout(about: readonly string[]): Send {
  */
 export function forget(subjects: readonly string[]) {
   withdraw({ gone: subjects, before: sends + 1 });
+}
+
+/**
+ * The device's persons gone from the state the page now shows (remove-person v2, « Focus, barre,
+ * envoi »): what was answered about them alone, waiting or in the bar, goes and is never said, a
+ * placement's success that seats them alone too. What is still on its way is not: its answer, which
+ * comes with a state of its own, says what came of it (`personGone`, RP5.4).
+ */
+export function personsGone(personIds: readonly string[]) {
+  if (personIds.length > 0) withdraw({ persons: personIds });
 }
 
 /**

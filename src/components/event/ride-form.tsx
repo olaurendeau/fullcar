@@ -11,8 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import type { BoardPerson, DevicePerson } from "@/domain/board";
 import { otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import { otherLegField, otherLegKind, type OtherLegChoice } from "@/domain/offer";
-import { validatePerson } from "@/domain/person";
-import type { VisibleCar } from "@/domain/phone-visibility";
+import { validateDriver, validateDriverPhone } from "@/domain/person";
+import type { VisibleCar, VisibleDevicePerson } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
 import { passengersFit, RIDE_SEATS_DEFAULT, validateRide, validSeats } from "@/domain/ride";
 import { currentDriver, driverChoice, NEW_DRIVER, passengerCandidates } from "@/domain/tap";
@@ -25,7 +25,7 @@ import type { NotDone } from "./failure-words";
 import { focusCar, focusFirstShown, focusOffer } from "./focus";
 import { useSends, type FromSheet } from "./hidden-page";
 import { LeavingStep } from "./leaving-step";
-import { personErrorMessage } from "./person-error";
+import { driverPhoneMessage, personErrorMessage } from "./person-error";
 import { StorageNotice, type Registering, type Registration } from "./person-form";
 import { PlaceField } from "./place-field";
 import type { PlaceValue } from "./place-field-state";
@@ -35,12 +35,13 @@ import { rideErrorMessage } from "./ride-error";
 /**
  * What the form sends, before its creation ids: who drives, the car on the tab's leg (R4),
  * and what becomes of her on the other leg, unchanged when absent (C4.11). Each place goes
- * with its position, `null` without one (« Un lieu, une valeur »).
+ * with its position, `null` without one (« Un lieu, une valeur »). A person of the device
+ * without a number gives one, written with the car (v4.8 rule 7).
  */
 export interface RideDraft extends Record<"location" | "time" | "seats" | "note", string> {
   leg: Leg;
   position: Position | null;
-  driver: { kind: "device"; personId: string } | { kind: "new"; firstName: string; phone: string };
+  driver: { kind: "device"; personId: string; phone?: string } | { kind: "new"; firstName: string; phone: string };
   otherLeg?: { kind: "keep" | "withoutCar" | "notConcerned" } | { kind: "drive"; location: string; position: Position | null; time: string };
 }
 
@@ -59,8 +60,15 @@ export interface Offering extends FromSheet, Pick<Registering, "sending"> {
 
 type CreationIds = Record<"rideId" | "personId" | "otherRideId", string>;
 
-/** What became of an offer, for its form, as for a registration but with the errors of R4. */
-export type Offered = Exclude<Registration, { kind: "errors" }> | { kind: "errors"; errors: OfferErrors; first: OfferField };
+/**
+ * What became of an offer, for its form, as for a registration but with the errors of R4;
+ * `driverWithoutPhone`, its driver of the device without a number, emptied elsewhere since
+ * the page showed it: the state it carries shows her without one (v4.8 rule 7).
+ */
+export type Offered =
+  | Exclude<Registration, { kind: "errors" }>
+  | { kind: "errors"; errors: OfferErrors; first: OfferField }
+  | { kind: "driverWithoutPhone" };
 
 /** Offers a car (R4): the device's token if the driver is new, then the form's creation ids, then the request. */
 export type OfferRide = (offering: Offering) => Promise<Offered | undefined>;
@@ -80,8 +88,11 @@ export interface Changing extends FromSheet, Pick<Registering, "sending"> {
   notDone: NotDone;
 }
 
-/** What became of a change, as for an offer; `passengersChanged` gives how many passengers there are now (C8.5). */
-export type Changed = Offered | { kind: "passengersChanged"; passengers: number };
+/**
+ * What became of a change, as for an offer, which changes no driver; `passengersChanged` gives
+ * how many passengers there are now (C8.5).
+ */
+export type Changed = Exclude<Offered, { kind: "driverWithoutPhone" }> | { kind: "passengersChanged"; passengers: number };
 
 /** Changes one of the device's cars (R8), with the device's token. */
 export type UpdateRide = (changing: Changing) => Promise<Changed | undefined>;
@@ -98,8 +109,8 @@ interface FormProps {
   leg: Leg;
   /** The leg's date and time: the car's date, and its time before it is changed. */
   at: WallClock;
-  /** The device's persons and where they stand on the leg. */
-  persons: readonly DevicePerson[];
+  /** The device's persons, their numbers (C10.1), and where they stand on the leg. */
+  persons: readonly VisibleDevicePerson[];
   /**
    * The other leg's date and time, the event's place as typed, and where the device's persons
    * stand there; none without a retour.
@@ -115,7 +126,8 @@ type FormMode =
   | ({ kind: "offer" } & Pick<FormProps, "persons" | "other" | "offerRide" | "near">)
   | ({ kind: "edit"; car: VisibleCar; updateRide: UpdateRide } & Pick<FormProps, "near">);
 
-type FieldName = Exclude<OfferField, "passengers">;
+/** `driverPhone`, the number a person of the device without one gives to drive (v4.8 rule 7): its errors are `phone`'s. */
+type FieldName = Exclude<OfferField, "passengers"> | "driverPhone";
 type Values = Record<FieldName, string>;
 
 /** The places of an offer, which propose suggestions; their texts are in `Values`, their positions beside. */
@@ -126,12 +138,10 @@ const UNMARKED: PlaceMark = { position: null, label: null };
 /** A field's control: an input of a type, or the note's text area. */
 type Control = { type: "text" | "tel" | "time"; autoComplete?: string; inputMode?: "numeric" } | "textarea";
 
-/** The message of a field's error, under `FormErrors`, if it has one. */
+/** The message of a field's error, under `FormErrors`, if it has one; a number is who drives' (v4.8 rules 6 and 7). */
 function messageOf(errors: OfferErrors, name: FieldName) {
-  if (name === "firstName" || name === "phone") {
-    const error = errors[name];
-    return error && personErrorMessage(name, error);
-  }
+  if (name === "firstName") return errors.firstName && personErrorMessage(name, errors.firstName);
+  if (name === "phone" || name === "driverPhone") return errors.phone && driverPhoneMessage(errors.phone);
   const error = errors[name];
   return error && rideErrorMessage(name === "otherLocation" ? "location" : name === "otherTime" ? "time" : name, error);
 }
@@ -300,7 +310,7 @@ function RideForm({
   // A choice the page's state no longer allows is none (review of #200).
   const driver = currentDriver(candidates, picked);
   const [typed, setValues] = useState<Values>(() => {
-    const blank = { firstName: "", phone: "", location: "", note: "", otherLocation: "" };
+    const blank = { firstName: "", phone: "", driverPhone: "", location: "", note: "", otherLocation: "" };
     const times = { time: wallClockParts(at).time, otherTime: other ? wallClockParts(other.at).time : "" };
     return { ...blank, ...times, seats: String(RIDE_SEATS_DEFAULT), ...(shown && { location: shown.location, time: shown.time, seats: shown.seats, note: shown.note }) };
   });
@@ -344,8 +354,20 @@ function RideForm({
   // car, whichever form sends it, apart from its removal (`ride:{id}`, #213): neither withdraws the other's failure.
   const sends = useSends(open, editing && `ride:${editing.car.id}:edit`);
   const isNew = !editing && driver === NEW_DRIVER;
+  // A person of the device without a number, chosen to drive, gives one here (v4.8 rule 7).
+  const driving = editing ? undefined : persons.find((person) => person.id === driver);
+  const asksPhone = driving !== undefined && driving.phone === null;
+  // The field to focus once it shows: the one of a refusal comes with the state that shows it.
+  const focusing = useRef<string | null>(null);
 
   useEffect(() => onStep?.(step !== null), [step, onStep]);
+
+  useEffect(() => {
+    const target = focusing.current && document.getElementById(`${ids}-${focusing.current}`);
+    if (!target) return;
+    focusing.current = null;
+    target.focus();
+  });
 
   // What had the focus is gone or inactive (« Valider » while it sent, the step left): « Valider »
   // after a refusal, the seats once back from the step. Not as the form mounts: a browser that
@@ -425,19 +447,22 @@ function RideForm({
       setChanged(false);
       return setStep((round) => (round ?? 0) + 1);
     }
-    const person = isNew ? validatePerson(values) : undefined;
+    // A number is required of who drives: a new person (v4.8 rule 6), or one of the device without one (rule 7).
+    const person = isNew ? validateDriver(values) : undefined;
+    const given = asksPhone ? validateDriverPhone(values.driverPhone) : undefined;
     const ride = validateRide(values);
     const otherErrors = drivesThere ? otherLegErrors(values) : {};
     // More ticked than seats, counted as the server does (C4.13): the last field of the form.
     const seats = validSeats(values.seats);
     const tooMany: OfferErrors = seats !== undefined && !passengersFit(boarding.length, seats) ? { passengers: "tooMany" } : {};
     const lastFirst = otherErrors.otherLocation ? "otherLocation" : otherErrors.otherTime ? "otherTime" : tooMany.passengers && "passengers";
-    if (driver === undefined || person?.ok === false || !ride.ok || lastFirst) {
-      const found = { ...(person?.ok === false && person.errors), ...(!ride.ok && ride.errors), ...otherErrors, ...tooMany };
-      return showErrors(found, driver === undefined, person?.ok === false ? person.first : !ride.ok ? ride.first : lastFirst);
+    if (driver === undefined || person?.ok === false || given?.ok === false || !ride.ok || lastFirst) {
+      const found = { ...(person?.ok === false && person.errors), ...(given?.ok === false && given.errors), ...(!ride.ok && ride.errors), ...otherErrors, ...tooMany };
+      const first = person?.ok === false ? person.first : given?.ok === false ? given.first : !ride.ok ? ride.first : lastFirst;
+      return showErrors(found, driver === undefined, first);
     }
     showErrors({}, false, undefined);
-    const { firstName, phone, otherLocation, otherTime, ...car } = values;
+    const { firstName, phone, driverPhone, otherLocation, otherTime, ...car } = values;
     const kind = otherField && otherChoice && otherLegKind(otherField, otherChoice);
     const otherLeg = kind === "drive" ? { kind, location: otherLocation, position: placeOf("otherLocation").position, time: otherTime } : kind && { kind };
     // As the form names her: the first name typed, its spaces trimmed, or the one chosen.
@@ -449,7 +474,7 @@ function RideForm({
         leg,
         ...car,
         position: placeOf("location").position,
-        driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver },
+        driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver, ...(asksPhone && { phone: driverPhone }) },
         otherLeg,
       },
       passengers: boarding,
@@ -466,6 +491,14 @@ function RideForm({
       if (sheet.inSheet()) onDone(boarding.length > 0 && rideId ? () => focusFirstShown([focusCar(leg, rideId)]) : undefined);
     } else if (answer?.kind === "errors") showErrors(answer.errors, false, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
+    // Her number emptied elsewhere: the state shows her without one, and her field, empty, in
+    // error, the focus in it once it shows (v4.8 rule 7, state 18). The rest is kept.
+    else if (answer?.kind === "driverWithoutPhone" && sheet.inSheet()) {
+      // State 18 draws it empty: nothing typed for anyone before may show in it.
+      setValues((current) => ({ ...current, driverPhone: "" }));
+      showErrors({ phone: "required" }, false, undefined);
+      focusing.current = "phone";
+    }
     // The retour is gone. Offered on it, the sheet closes (rule 9); from the aller, it stays without
     // the other leg, what was typed kept, and a second « Valider » offers the aller alone (M7.6).
     else if (answer?.kind === "noRetour" && sheet.inSheet()) {
@@ -477,9 +510,11 @@ function RideForm({
 
   const field = (name: FieldName, label: string, control: Control, hint?: string) => {
     const message = messageOf(errors, name);
-    const describedBy = [message && idOf(`${name}-error`), hint && idOf(`${name}-hint`)].filter(Boolean).join(" ");
+    // Never both shown: a number is who drives', and its errors, its id and its focus are `phone`'s.
+    const id = name === "driverPhone" ? "phone" : name;
+    const describedBy = [message && idOf(`${id}-error`), hint && idOf(`${id}-hint`)].filter(Boolean).join(" ");
     const props = {
-      id: idOf(name),
+      id: idOf(id),
       value: values[name],
       onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { value } = e.target;
@@ -491,7 +526,7 @@ function RideForm({
     };
     return (
       <div className="flex min-w-0 flex-col gap-1.5">
-        <Label htmlFor={idOf(name)} className={cn(message && "text-destructive")}>
+        <Label htmlFor={idOf(id)} className={cn(message && "text-destructive")}>
           {label}
         </Label>
         {control === "textarea" ? (
@@ -501,12 +536,12 @@ function RideForm({
           <Input {...control} {...props} className={cn("h-10", control.type === "time" && "appearance-none")} />
         )}
         {message && (
-          <p id={idOf(`${name}-error`)} className="text-[13px] leading-[18px] text-destructive">
+          <p id={idOf(`${id}-error`)} className="text-[13px] leading-[18px] text-destructive">
             {tErrors(message.key, message.values)}
           </p>
         )}
         {hint && (
-          <p id={idOf(`${name}-hint`)} className="text-[13px] leading-[18px] text-muted-foreground">
+          <p id={idOf(`${id}-hint`)} className="text-[13px] leading-[18px] text-muted-foreground">
             {hint}
           </p>
         )}
@@ -583,6 +618,11 @@ function RideForm({
               onValueChange={(next) => {
                 setDriver(next);
                 setNoDriver(false);
+                // Another person without a number: her field, empty, without the error of the one before (v4.8 rule 7).
+                setValues((current) => ({ ...current, driverPhone: "" }));
+                setErrors((current) => ({ ...current, phone: undefined }));
+                // A refusal's field the state did not show (her number back, or she is gone) is no longer awaited.
+                focusing.current = null;
                 // Who drives leaves « Qui monte avec vous ? », and her tick with her.
                 setTicked((current) => ({ ...current, [next]: false }));
                 setOtherPick((pick) => (pick && pick.driver === undefined ? { ...pick, driver: next } : pick));
@@ -610,7 +650,12 @@ function RideForm({
           {isNew && (
             <div className="flex flex-col gap-3.5 pt-1 pb-2">
               {field("firstName", tPerson("firstName"), { type: "text", autoComplete: "given-name" })}
-              {field("phone", tPerson("phone"), { type: "tel", autoComplete: "tel" }, tPerson("phoneHint"))}
+              {field("phone", t("phone"), { type: "tel", autoComplete: "tel" }, t("phoneHint"))}
+            </div>
+          )}
+          {asksPhone && (
+            <div className="flex flex-col pt-1 pb-2">
+              {field("driverPhone", t("driverPhone", { firstName: driving?.firstName ?? "" }), { type: "tel", autoComplete: "tel" }, t("phoneHint"))}
             </div>
           )}
         </div>
