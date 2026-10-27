@@ -10,6 +10,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import {
   addPerson,
   loadEventState,
+  offerRide,
   removePerson,
   removeRide,
   setPersonLeg,
@@ -19,6 +20,7 @@ import {
   updateRide,
 } from "./actions";
 import { readEventState, type EndedEvent, type EventState } from "./event-state";
+import { stillOpen } from "./test-state";
 
 // The action reaches the database through getDb(): here, the test's transaction,
 // so that nothing it reads comes from another test.
@@ -66,17 +68,11 @@ async function seedScene(trx: Transaction<Database>) {
   return { eventId, marc, lea, tom, r1 };
 }
 
-/** The state `loadEventState` gave, failing the test had it said the event ended. */
-function notEnded(answer: EventState | EndedEvent | undefined): EventState | undefined {
-  if (answer && "ended" in answer) throw new Error("loadEventState said the event ended");
-  return answer;
-}
-
 describe("loadEventState", () => {
   it("gives the state the device sees, as readEventState reads it, in plain data", async () => {
     await inTransaction(async (trx) => {
       const { eventId, lea } = await seedScene(trx);
-      const state = notEnded(await loadEventState(eventId, lea.token));
+      const state = stillOpen(await loadEventState(eventId, lea.token));
       expect(state).toEqual(await readEventState(trx, eventId, lea.token));
       expect(JSON.parse(JSON.stringify(state))).toStrictEqual(state);
       const [aller] = state?.legs ?? [];
@@ -102,7 +98,7 @@ describe("loadEventState", () => {
   ])("C10.6: with %s, the device has no person and no number is sent", async (_, token) => {
     await inTransaction(async (trx) => {
       const { eventId } = await seedScene(trx);
-      const state = notEnded(await loadEventState(eventId, token));
+      const state = stillOpen(await loadEventState(eventId, token));
       expect(state?.legs.flatMap((leg) => leg.device)).toEqual([]);
       expect(JSON.stringify(state)).not.toMatch(/06 \d\d/);
     });
@@ -584,5 +580,61 @@ describe("undoSeats", () => {
     } finally {
       log.mockRestore();
     }
+  });
+});
+
+/** The event of `seedScene` once anonymised, as anyone holding its link may read it (OA8.3). */
+const ENDED: EndedEvent = { ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" };
+
+type Scene = Awaited<ReturnType<typeof seedScene>>;
+
+// #806, OA8.3: anyone holding the link may call these actions; the place, which stays in the row, may be someone's address.
+describe.each<[string, (scene: Scene) => Promise<unknown>]>([
+  ["takeSeats", ({ eventId, tom, r1 }) => takeSeats(eventId, tom.token, r1, "aller", [tom.id])],
+  ["undoSeats", ({ eventId, lea, r1 }) => undoSeats(eventId, lea.token, r1, "aller", [{ personId: lea.id, before: "withoutCar" }])],
+  [
+    "addPerson",
+    ({ eventId }) =>
+      addPerson(eventId, "q3Vx9kLmN2pR7sT1uW4yZQ", { id: randomUUID(), firstName: "Zoé", phone: "", bothLegs: true, leg: "aller" }),
+  ],
+  ["updatePerson", ({ eventId, lea }) => updatePerson(eventId, lea.token, { personId: lea.id, firstName: "Léonie", phone: "" })],
+  ["setPersonLeg", ({ eventId, tom }) => setPersonLeg(eventId, tom.token, { personId: tom.id, leg: "aller", kind: "notConcerned" })],
+  [
+    "offerRide",
+    ({ eventId, tom }) =>
+      offerRide(eventId, tom.token, {
+        rideId: randomUUID(),
+        leg: "aller",
+        driver: { kind: "device", personId: tom.id },
+        location: "Salle Paul Bert",
+        time: "07:00",
+        seats: "3",
+        note: "",
+      }),
+  ],
+  ["updateRide", ({ eventId, marc, r1 }) => updateRide(eventId, marc.token, r1, "aller", rideForm())],
+  ["removeRide", ({ eventId, marc, r1 }) => removeRide(eventId, marc.token, r1, "aller")],
+])("%s on an anonymised event (#806)", (_, action) => {
+  it("OA8.3: refuses it by eventEnded, with the event ended, neither its place nor anyone", async () => {
+    await inTransaction(async (trx) => {
+      const scene = await seedScene(trx);
+      await anonymiseEvent(trx, scene.eventId);
+      const answer = await action(scene);
+      expect(answer).toStrictEqual({ ok: false, error: "eventEnded", state: ENDED });
+      expect(JSON.stringify(answer)).not.toContain("Gymnase des Gayeulles");
+    });
+  });
+});
+
+// #806: its refusal by eventEnded (RP2.9) comes with #674; meanwhile, what it answers carries no place either.
+describe("removePerson on an anonymised event (#806)", () => {
+  it("OA8.3: answers the event ended at most, neither its place nor anyone", async () => {
+    await inTransaction(async (trx) => {
+      const scene = await seedScene(trx);
+      await anonymiseEvent(trx, scene.eventId);
+      const answer = await removePerson(scene.eventId, scene.lea.token, scene.lea.id);
+      expect(JSON.stringify(answer)).not.toContain("Gymnase des Gayeulles");
+      if ("state" in answer) expect(answer.state).toStrictEqual(ENDED);
+    });
   });
 });

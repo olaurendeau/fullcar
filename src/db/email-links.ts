@@ -8,8 +8,11 @@ import {
   type StoredLink,
 } from "@/domain/account-rules";
 import { newServerToken } from "@/domain/server-token";
+import { recordSend, type SendClaim } from "./email-sends";
+import { lockEvent } from "./events";
 import type { Database, EmailLinkTable } from "./schema";
 import { isTokenOf, tokenKey } from "./token-key";
+import { atomically } from "./transaction";
 
 /*
  * The links sent by email (« Session, liens et jeton d'admin » in architecture.md), kept
@@ -58,11 +61,46 @@ export function linkRow(link: NewLink, token: string) {
   };
 }
 
-/** Stores a new link, and gives its token: the only time it is anywhere but in the email. */
+/**
+ * Stores a new link, and gives its token: the only time it is anywhere but in the email.
+ * A confirmation link goes through `claimConfirmation` only: under `lockEvent(…,
+ * "noKeyUpdate")`, after an accepted `recordSend`, in the same transaction. The insert alone
+ * takes the Event `FOR KEY SHARE`, by its foreign key, which the purge's lock does not wait
+ * for: a link inserted while its event is anonymised would outlive the anonymisation.
+ */
 export async function createLink(db: Kysely<Database>, link: NewLink): Promise<string> {
   const token = newServerToken();
   await db.insertInto("email_link").values(linkRow(link, token)).execute();
   return token;
+}
+
+/** What claiming a confirmation email gives: the token of its new link, or why nothing goes out. */
+export type ConfirmationClaim =
+  | { claim: "recorded"; token: string }
+  | { claim: Exclude<SendClaim, "recorded"> | "eventEnded" };
+
+/**
+ * Claims a confirmation email for the event, to `email`, in one READ COMMITTED transaction,
+ * the caller's if given (#599, then the resend and the correction). The Event first,
+ * `noKeyUpdate`: one that waited for the purge is gone (`eventGone`) or anonymised
+ * (`eventEnded`), and gets neither a send nor a link. Then `recordSend`, and the link only
+ * once the send is recorded: a send that a limit stops leaves no link, so a pending event
+ * holds no more links than it had sends. Send the email once committed, never inside.
+ */
+export async function claimConfirmation(
+  db: Kysely<Database>,
+  eventId: string,
+  email: string,
+  now = new Date(),
+): Promise<ConfirmationClaim> {
+  return atomically(db, async (trx) => {
+    const event = await lockEvent(trx, eventId, "noKeyUpdate");
+    if (!event) return { claim: "eventGone" };
+    if (event.anonymised_at !== null) return { claim: "eventEnded" };
+    const claim = await recordSend(trx, { kind: "confirmation", eventId, email }, now);
+    if (claim !== "recorded") return { claim };
+    return { claim, token: await createLink(trx, { kind: "confirmation", eventId }) };
+  });
 }
 
 /** The token's link, used or not, expired or not; `null` for an unknown token or a value that is not a string. */

@@ -1,35 +1,35 @@
 "use server";
 
+import { getLocale } from "next-intl/server";
 import { cookies, headers } from "next/headers";
+import { after } from "next/server";
 import { getDb } from "@/db/client";
-import { insertEvent } from "@/db/events";
 import { databaseFailure } from "@/db/failure";
 import { visitSession } from "@/db/sessions";
-import { hashAdminToken, newAdminToken } from "@/domain/admin-token";
-import { eventFieldsOf, serverBounds, validateEvent, type EventErrors } from "@/domain/event";
-import { isLocale, localeCookie, localeCookieOptions } from "@/i18n/locales";
+import { serverBrevo } from "@/email/brevo";
+import { defaultLocale, isLocale, localeCookie, localeCookieOptions } from "@/i18n/locales";
 import { negotiateLocale } from "@/i18n/negotiate";
+import { createEventFor, type CreateEventResult } from "./create-event";
+import { siteOrigin } from "./site";
 
-export type CreateEventResult = { ok: true; id: string; token: string } | { ok: false; errors: EventErrors };
+export type { CreateEventResult } from "./create-event";
 
 /**
- * Creates an event (epic #3, R1 to R3), checked against the server's own date bounds.
- * The organiser's token leaves the server only here, in the result's body: never in a
- * header nor a URL, never logged. The database keeps its hash.
+ * Creates an event (epic #3, R1 to R3; #599), with the session or the address its body
+ * carries (`session`, `email`), as create-event.ts says. The organiser's token leaves the
+ * server only here, in the result's body: never in a header nor a URL, never logged. The
+ * database keeps its hash. The confirmation email goes out after the answer, by `after()`.
  */
 export async function createEvent(fields: unknown): Promise<CreateEventResult> {
-  const validation = validateEvent(eventFieldsOf(fields), serverBounds(new Date()));
-  if (!validation.ok) return validation;
-
-  const token = newAdminToken();
-  let id: string;
-  try {
-    id = await insertEvent(getDb(), validation.event, hashAdminToken(token));
-  } catch (error) {
-    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
-    throw databaseFailure("createEvent: the event could not be stored", error);
-  }
-  return { ok: true, id, token };
+  const locale = await getLocale();
+  return createEventFor(fields, {
+    db: getDb(),
+    now: new Date(),
+    locale: isLocale(locale) ? locale : defaultLocale,
+    origin: siteOrigin(),
+    brevo: serverBrevo(),
+    later: (task) => after(task),
+  });
 }
 
 /**

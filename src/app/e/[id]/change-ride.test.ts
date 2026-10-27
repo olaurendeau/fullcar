@@ -10,7 +10,8 @@ import { removeSeededRetour, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { removeRide, updateRide } from "./change-ride";
-import { readEventState, type EventState } from "./event-state";
+import { readEventState, type DeviceState, type EventState } from "./event-state";
+import { stillOpen } from "./test-state";
 
 type Db = Kysely<Database>;
 
@@ -90,12 +91,12 @@ function stateOf(result: object): EventState | undefined {
   return "state" in result ? (result.state as EventState) : undefined;
 }
 
-function carOf(state: EventState | undefined, leg: Leg, rideId: string) {
-  return state?.legs.find((board) => board.leg === leg)?.cars.find((car) => car.id === rideId);
+function carOf(state: DeviceState | undefined, leg: Leg, rideId: string) {
+  return stillOpen(state)?.legs.find((board) => board.leg === leg)?.cars.find((car) => car.id === rideId);
 }
 
-function legOf(state: EventState | undefined, leg: Leg) {
-  const board = state?.legs.find((found) => found.leg === leg);
+function legOf(state: DeviceState | undefined, leg: Leg) {
+  const board = stillOpen(state)?.legs.find((found) => found.leg === leg);
   if (board === undefined) throw new Error(`no ${leg} in the state`);
   return board;
 }
