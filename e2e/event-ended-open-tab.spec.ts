@@ -45,8 +45,19 @@ async function serverActions(page: Page, { failing, record = true }: { failing: 
   return actions;
 }
 
-/** Shown, the alerts that say something: the bar's and the panel's regions are there empty. */
-const saidAlerts = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
+/**
+ * Next's route announcer, an `alert` of its own (#866): the page read again, it says its
+ * `document.title` if it changed, or, when the read's `<title>` is not there yet as the page
+ * shows, its h1, « Événement terminé ». A page that changes, not a failure.
+ */
+const ROUTE_ANNOUNCER = "#__next-route-announcer__";
+
+/** Shown, the alerts of the page that say something: the bar's and the panel's regions are there empty. */
+const saidAlerts = (page: Page) =>
+  page
+    .getByRole("alert")
+    .filter({ hasText: /\S/ })
+    .and(page.locator(`:not(${ROUTE_ANNOUNCER})`));
 
 /** While the page is read again: the read still under way, no failure said, no « Réessayer ». */
 async function expectNoFailure(page: Page, actions: { refreshes: number }, underWay: string) {
@@ -64,6 +75,8 @@ async function expectEnded(page: Page, answers?: string[]) {
   await expect(page.getByText(PLACE)).toHaveCount(0);
   expect(await page.locator("body").innerText()).not.toContain(PLACE);
   await expect(saidAlerts(page)).toHaveCount(0);
+  // Nothing, or the page that came: never a failure, nor the place.
+  await expect(page.locator(ROUTE_ANNOUNCER)).toHaveText(/^(|Événement terminé|Tournoi de Rennes)$/);
   if (!answers) return;
   expect(answers.length, "loadEventState was answered").toBeGreaterThan(0);
   for (const answer of answers) expect(answer).not.toContain(PLACE);
@@ -98,6 +111,8 @@ test.describe("OA8.3: a tab open while the event is anonymised", () => {
     await page.goto(`/e/${seededEvent.id}`);
     const retry = page.getByRole("button", { name: "Réessayer" });
     await expect(retry).toBeVisible();
+    // The section's failure, which `saidAlerts` sees: only the route announcer is left out.
+    await expect(saidAlerts(page)).toHaveCount(1);
     await expect(page.getByText(PLACE).first()).toBeVisible();
 
     await anonymiseEvent(db, seededEvent.id);
