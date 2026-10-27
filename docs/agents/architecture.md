@@ -521,6 +521,9 @@ ci-dessus valent pour chacun.
   string, un en-tête ou un cookie. Le jeton de session ne revient dans une réponse qu'une
   fois, dans le corps de l'action qui ouvre la session. Le HTML d'une page ne dépend
   d'aucune session : ce qu'un jeton ouvre est lu après le chargement, comme le panneau.
+  Ainsi « Session ouverte avec {email}. » de `/connexion` (OA4.6, #604) : l'action
+  `signedInAs` (`src/app/connexion/actions.ts`) reçoit le jeton dans le corps et ne répond
+  que l'adresse de la session ouverte, ou rien ; elle ne compte pas comme une visite.
 - **Pas de cookie, pas de middleware.** Aucun cookie ne porte une session ni un jeton : le
   seul cookie reste celui de la langue. Aucun `middleware.ts` ni `src/proxy.ts` ne lit une
   session. Une session terminée entre l'affichage d'une page et son envoi se voit donc en
