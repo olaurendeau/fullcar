@@ -1,4 +1,4 @@
-import type { Page, Response } from "@playwright/test";
+import type { Page, Request, Response } from "@playwright/test";
 import { seedAccount, seedSends, seedSession } from "@/db/test-accounts";
 import { LOGINS_PER_ADDRESS } from "@/domain/send-limits";
 import { expect, leaveNoToken, test } from "./fixtures";
@@ -42,8 +42,18 @@ const field = (page: Page) => page.getByLabel(FR.email, { exact: true });
 const sendButton = (page: Page) => page.getByRole("button", { name: FR.send });
 const heading = (page: Page) => page.getByRole("heading", { level: 1 });
 const alert = (page: Page) => page.getByRole("main").getByRole("alert");
+const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
 const isRequest = (response: Response) =>
   response.request().method() === "POST" && new URL(response.url()).pathname === "/connexion";
+
+/** Every server action the page sends from now on: `requestLink`, and `signedInAs` with a session. */
+function actionsOf(page: Page): Request[] {
+  const sent: Request[] = [];
+  page.on("request", (request) => {
+    if (isAction(request)) sent.push(request);
+  });
+  return sent;
+}
 
 test.use({ locale: "fr-FR" });
 
@@ -92,6 +102,7 @@ test.describe("/connexion", () => {
     const email = address();
     await answerMail([email], { kind: "hold" });
     await open(page);
+    const actions = actionsOf(page);
     await ask(page, email);
     const button = page.getByRole("button", { name: FR.sending });
     await expect(button).toHaveAttribute("aria-disabled", "true");
@@ -101,6 +112,11 @@ test.describe("/connexion", () => {
     await page.keyboard.press("Enter");
     expect(await releaseMail([email])).toBe(1);
     await expect(heading(page)).toHaveText(FR.check);
+    // Next sends server actions one at a time: a second request would leave only now, once the
+    // first is answered, and Brevo, still told to hold, would keep it. Time for it to leave and arrive.
+    await page.waitForTimeout(1_000);
+    expect(actions.length, "one request").toBe(1);
+    expect(await releaseMail([email]), "nothing more held").toBe(0);
     expect((await mailTo(email)).length).toBe(1);
   });
 
@@ -158,6 +174,7 @@ test.describe("/connexion", () => {
 
   test("an empty or unreadable address: its error under the field, the focus on it, and nothing sent", async ({ page }) => {
     await open(page);
+    const actions = actionsOf(page);
     await sendButton(page).click();
     await expect(field(page)).toHaveAccessibleDescription(FR.required);
     await expect(field(page)).toHaveAttribute("aria-invalid", "true");
@@ -167,6 +184,25 @@ test.describe("/connexion", () => {
     await expect(field(page)).toHaveAccessibleDescription(FR.invalid);
     await expect(field(page)).toHaveValue("abc");
     await expect(heading(page)).toHaveText(FR.title);
+    expect(actions.length, "no request").toBe(0);
+  });
+
+  test("a resend Brevo refuses: Login.failed in place of « E-mail renvoyé. », the focus kept on the button", async ({ page }) => {
+    const email = address();
+    await open(page);
+    await ask(page, email);
+    await expect(heading(page)).toHaveText(FR.check);
+    const resend = page.getByRole("button", { name: FR.resend });
+    const status = page.getByRole("main").getByRole("status");
+    await resend.click();
+    await expect(status).toHaveText(FR.resent);
+
+    await answerMail([email], { kind: "error" });
+    await resend.click();
+    await expect(alert(page)).toHaveText(FR.failed);
+    await expect(status).toHaveText("");
+    await expect(resend).toBeFocused();
+    expect((await mailTo(email)).length).toBe(3);
   });
 
   test.describe("OA4.5: the alert above the button, the address kept", () => {
