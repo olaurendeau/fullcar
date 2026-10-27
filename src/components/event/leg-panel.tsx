@@ -13,6 +13,7 @@ import { EmptyLeg } from "./empty-leg";
 import { EventMap, OrganiserHint, type LegMap, type MapHint } from "./event-map";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
+import type { RemovePerson } from "./remove-person-dialog";
 import type { RemoveRide } from "./remove-ride-dialog";
 import { OfferRideButton, type OfferRide, type OtherLegOf, type UpdateRide } from "./ride-form";
 import { useSeatSheet, type TakeSeats } from "./seat-sheet";
@@ -43,6 +44,8 @@ export interface BoardDevice {
   updateRide: UpdateRide;
   /** Removes a car driven by one of the device's persons (C8.6), with the device's token. */
   removeRide: RemoveRide;
+  /** Removes one of the device's persons from the event (RP1), with the device's token. */
+  removePerson: RemovePerson;
 }
 
 /**

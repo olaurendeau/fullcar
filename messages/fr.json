@@ -121,6 +121,7 @@
     },
     "sheetTitle": "{firstName} · {leg}",
     "edit": "Modifier",
+    "remove": "Retirer de l’événement",
     "seeCar": "Voir la voiture",
     "findSeat": "Trouver une place",
     "noFreeSeat": {
@@ -240,7 +241,8 @@
       "editRide": "{leg, select, aller {Les changements de la voiture de {driver} pour l’aller n’ont pas été enregistrés.} other {Les changements de la voiture de {driver} pour le retour n’ont pas été enregistrés.}}",
       "readDevice": "Vos inscriptions n’ont pas pu être chargées.",
       "editEvent": "L’événement n’a pas été modifié.",
-      "removeRetour": "L’événement n’a pas été modifié et le retour n’a pas été supprimé."
+      "removeRetour": "L’événement n’a pas été modifié et le retour n’a pas été supprimé.",
+      "removePerson": "{firstName} fait toujours partie de l’événement."
     },
     "why": {
       "offline": "Vérifiez la connexion, puis réessayez.",
@@ -305,6 +307,17 @@
       "body": "{passengers, plural, =0 {Personne ne redeviendra sans voiture.} one {# personne redeviendra sans voiture.} other {# personnes redeviendront sans voiture.}}",
       "notified": "Personne n’est prévenu : pensez à le leur dire."
     }
+  },
+  "PersonRemoval": {
+    "title": "Retirer {firstName} de l’événement ?",
+    "drives": "{leg, select, aller {Sa voiture pour l’aller sera retirée.} other {Sa voiture pour le retour sera retirée.}} {passengers, plural, =0 {} one {# personne redeviendra sans voiture.} other {# personnes redeviendront sans voiture.}}",
+    "passenger": "{leg, select, aller {Sa place dans la voiture de {driver} à l’aller sera libérée.} other {Sa place dans la voiture de {driver} au retour sera libérée.}}",
+    "notified": "{cars, plural, one {Personne n’est prévenu : pensez à le dire aux personnes de cette voiture.} other {Personne n’est prévenu : pensez à le dire aux personnes de ces voitures.}}",
+    "erased": "Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.",
+    "final": "C’est définitif.",
+    "confirm": "Retirer de l’événement",
+    "removed": "{firstName} ne fait plus partie de l’événement",
+    "alreadyRemoved": "{firstName} ne faisait déjà plus partie de l’événement"
   },
   "Admin": {
     "title": "Espace organisateur",

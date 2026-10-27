@@ -36,6 +36,7 @@ import {
 } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
+import type { RemovePerson } from "@/components/event/remove-person-dialog";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
@@ -45,6 +46,7 @@ import {
   addPerson as storePerson,
   loadEventState,
   offerRide as storeRideOffer,
+  removePerson as storePersonRemoval,
   removeRide as storeRideRemoval,
   setPersonLeg as storePersonLeg,
   takeSeats as storeSeats,
@@ -461,6 +463,28 @@ export function ParticipantBoard({
     return sent.ok ? "failed" : sent.problem;
   };
 
+  // « Retirer de l’événement » (RP1): the person's id and the device's token in the body, once per
+  // person, as removeRide is once per car. The state answered shows her gone, her sheet with her; the
+  // bar says it once nothing hides the page, `alreadyRemoved` as a success too (RP1.8), without
+  // « Annuler ». A failure names her, then why; the confirmation keeps the generic words.
+  const removePerson: RemovePerson = async ({ personId, firstName, sending }, confirmation) => {
+    const remove = () => storePersonRemoval(id, readDeviceToken(id), personId);
+    const sent = await runAction(`removePerson:${personId}`, remove, sending, confirmation.leaves);
+    if (sent === undefined) return undefined;
+    confirmation.answered();
+    const outcome = sent.ok ? sent.value : undefined;
+    const landmark = () => focusName(personId);
+    if (outcome?.ok) {
+      const text = words.t(outcome.removal === "removed" ? "PersonRemoval.removed" : "PersonRemoval.alreadyRemoved", { firstName });
+      confirmation.whenClosed(() => messages.succeed({ text, landmark }));
+      return null;
+    }
+    // `noOrganiserAccess` is the organiser's path alone: here, what no page gets.
+    const error = !outcome ? (sent.ok ? "failed" : sent.problem) : outcome.error === "noOrganiserAccess" ? "invalid" : outcome.error;
+    failedIn(confirmation, { notDone: { kind: "removePerson", firstName }, why: whyOf(error), landmark });
+    return sent.ok ? "failed" : sent.problem;
+  };
+
   // Once per sheet, as offerRide: only the fields the form changed, its passengers and who leaves.
   const updateRide: UpdateRide = async ({ rideId, leg, ride, seenPassengerIds, leaving, sending, notDone, ...sheet }) => {
     const change = { ...ride, seenPassengerIds, leaving };
@@ -517,6 +541,7 @@ export function ParticipantBoard({
         takeSeats,
         updateRide,
         removeRide,
+        removePerson,
       }}
       messageBar={<MessageBar messages={messages} />}
     />

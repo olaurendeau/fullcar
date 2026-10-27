@@ -3,8 +3,8 @@ import fr from "../../messages/fr.json";
 
 type Messages = { [key: string]: string | Messages };
 
-/** The namespaces of epic #66: the event's screen. */
-const NAMESPACES = ["Board", "DevicePersons", "PersonForm", "RideForm", "FormErrors", "Sheet", "Seat", "RideChanges", "Actions"];
+/** The namespaces of epic #66: the event's screen; and removing a person (epic #645, RP7.2). */
+const NAMESPACES = ["Board", "DevicePersons", "PersonForm", "RideForm", "FormErrors", "Sheet", "Seat", "RideChanges", "Actions", "PersonRemoval"];
 
 /** The words of C11.9: they agree with a person's gender, or name a role by a gendered noun (D7). */
 const WORDS = ["concerné", "concernée", "Elle prendra", "conducteur", "Conducteur", "passager"];
@@ -25,6 +25,6 @@ describe("C11.9: the screen's French words are epicene", () => {
   });
 
   it("reads the namespaces of the screen that exist", () => {
-    expect(Object.keys(messages)).toEqual(expect.arrayContaining(["Board", "DevicePersons", "PersonForm", "RideForm", "FormErrors", "Actions"]));
+    expect(Object.keys(messages)).toEqual(expect.arrayContaining(["Board", "DevicePersons", "PersonForm", "RideForm", "FormErrors", "Actions", "PersonRemoval"]));
   });
 });
