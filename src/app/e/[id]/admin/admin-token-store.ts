@@ -95,9 +95,10 @@ const REFUSED = new Set(["invalid", "signIn", "notYours", "pending", "orphan", "
 
 /**
  * What the server's answer means: the panel with its legs and the link to share (C4.9 amended,
- * OA7.3), with the notice of a pending event (OA1.7), or refused for every state the access rule refuses with (#596). Anything else, such
- * as the `undefined` Next resolves an action with on an `x-action-redirect` response, is a
- * failed check: the organiser is never refused for it.
+ * OA7.3), with the notice of a pending event (OA1.7), or refused for every state the access
+ * rule refuses with (#596). Anything else, such as the `undefined` Next resolves an action
+ * with on an `x-action-redirect` response, is a failed check: the organiser is never refused
+ * for it.
  */
 export function checkFromAnswer(answer: unknown, origin: string, id: string): OrganiserCheck {
   if (typeof answer !== "object" || answer === null) return { state: "failed" };
