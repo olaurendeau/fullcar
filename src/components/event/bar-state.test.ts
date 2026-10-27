@@ -371,3 +371,60 @@ describe("offerChanges", () => {
     expect(offerChanges({ ...offer, passengerIds: [] })).toEqual(["marc:aller"]);
   });
 });
+
+// remove-person v2 (« Focus, barre, envoi », RP7.3): the page applies a state that no longer has
+// one of the device's persons. Every line whose subject is she alone goes; one that names others stays.
+describe("a person gone from the state the page shows", () => {
+  const gone = { persons: ["lea"] };
+
+  it("the failures about her alone go: « Modifier », a cell's choice, a removal, an offer she drives", () => {
+    for (const about of [
+      ["person:lea", "person:lea:firstName", "person:lea:phone"],
+      ["cell:lea:aller"],
+      ["removePerson:lea"],
+      ["offer:aller:lea", "offer:retour:lea"],
+    ]) {
+      expect(covers(gone, { about, sent: 1 }), about.join()).toBe(true);
+    }
+  });
+
+  it("the failures about someone else, a car, a new person, or her with others stay", () => {
+    for (const about of [
+      ["person:tom"],
+      ["cell:tom:retour"],
+      ["removePerson:tom"],
+      ["seats:sophie", "seats:sophie:lea"],
+      ["undo:sophie", "undo:sophie:lea"],
+      ["ride:marc", "ride:marc:edit"],
+      ["person:new:Léa"],
+      ["offer:aller:new:Léa"],
+      ["cell:lea:aller", "cell:tom:aller"],
+      ["device:read"],
+      ["event:edit"],
+    ]) {
+      expect(covers(gone, { about, sent: 1 }), about.join()).toBe(false);
+    }
+  });
+
+  it("the success of a placement that names her alone goes, with its « Annuler »; one that names others too stays", () => {
+    const placed = (text: string, persons: string[]) => ({ ...success(text), persons, undo: { run: () => {} } });
+    expect(texts(withdraw(succeed(emptyBar, placed("Léa est dans la voiture de Sophie", ["lea"])), gone))).toEqual([]);
+    const both = succeed(emptyBar, placed("Léa et Tom sont dans la voiture de Sophie", ["lea", "tom"]));
+    expect(texts(withdraw(both, gone))).toEqual(["Léa et Tom sont dans la voiture de Sophie"]);
+  });
+
+  it("the other lines stay: another failure, a success that names nobody, the information", () => {
+    let state = fail(emptyBar, failure("Léa", ["person:lea", "person:lea:phone"], 1));
+    state = fail(state, failure("Tom", ["cell:tom:aller"], 2));
+    state = inform(state, info("Léa ne fait pas le retour"));
+    state = succeed(state, success("Marc ne fait plus partie de l’événement"));
+    expect(texts(withdraw(state, gone))).toEqual(["Tom", "Léa ne fait pas le retour", "Marc ne fait plus partie de l’événement"]);
+    expect(texts(withdraw(state, { persons: ["lea", "tom"] }))).toEqual(["Léa ne fait pas le retour", "Marc ne fait plus partie de l’événement"]);
+  });
+
+  it("the region that said a line gone empties", () => {
+    const state = fail(emptyBar, failure("Léa fait toujours partie de l’événement.", ["removePerson:lea"], 1));
+    expect(regions(state).alert).toBe("Léa fait toujours partie de l’événement.");
+    expect(regions(withdraw(state, gone)).alert).toBe("");
+  });
+});

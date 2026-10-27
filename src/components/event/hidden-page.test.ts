@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { covers, personLeg, type Withdrawal } from "./bar-state";
-import { aboutOf, allerPart, coverPage, forget, offersRetour, onWithdraw, sendAbout, whenPageShown } from "./hidden-page";
+import { aboutOf, allerPart, coverPage, forget, offersRetour, onWithdraw, personsGone, sendAbout, whenPageShown } from "./hidden-page";
 
 /** Once the microtask a sheet leaves at its unmount has run. */
 const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -308,5 +308,40 @@ describe("whenStillTrue", () => {
     before.changed([zoe]);
     placed.whenStillTrue([zoe], () => said.push("Zoé"));
     expect(said).toEqual(["Zoé"]);
+  });
+});
+
+// remove-person v2 (« Focus, barre, envoi »): a state without one of the device's persons takes
+// what waits about her alone, answered already; an answer still to come says what came of it.
+describe("personsGone", () => {
+  it("what waits about her alone is never said, a placement's success that names her alone neither; the rest is", async () => {
+    const lea = personLeg("lea-9", "aller");
+    const uncover = coverPage();
+    const said: string[] = [];
+    sendAbout(["person:lea-9", "person:lea-9:phone"]).whenClosed(() => said.push("Modifier Léa"), true);
+    sendAbout(["cell:lea-9:aller"]).whenClosed(() => said.push("Léa · Aller"), true);
+    sendAbout(["cell:tom-9:aller"]).whenClosed(() => said.push("Tom · Aller"), true);
+    sendAbout(["seats:sophie-9", "seats:sophie-9:lea-9"]).whenStillTrue([lea], () => said.push("Léa placée"));
+    const both = [lea, personLeg("tom-9", "aller")];
+    sendAbout(["seats:sophie-9", "seats:sophie-9:lea-9", "seats:sophie-9:tom-9"]).whenStillTrue(both, () => said.push("Léa et Tom placés"));
+    const onItsWay = sendAbout(["cell:lea-9:retour"]);
+    const told: Withdrawal[] = [];
+    const stop = onWithdraw((withdrawal) => told.push(withdrawal));
+    personsGone(["lea-9"]);
+    stop();
+    // Answered after the state without her: its answer says what came of it (`personGone`, RP5.4).
+    onItsWay.whenClosed(() => said.push("Léa · Retour"), true);
+    uncover();
+    await settled();
+    expect(said).toEqual(["Tom · Aller", "Léa · Retour", "Léa et Tom placés"]);
+    expect(told).toEqual([{ persons: ["lea-9"] }]);
+  });
+
+  it("nobody gone: nothing is withdrawn, and the bar is told nothing", () => {
+    const told: Withdrawal[] = [];
+    const stop = onWithdraw((withdrawal) => told.push(withdrawal));
+    personsGone([]);
+    stop();
+    expect(told).toEqual([]);
   });
 });
