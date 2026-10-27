@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { sql, type ControlledTransaction, type Insertable, type Kysely, type Selectable, type Transaction } from "kysely";
+import { sql, type Insertable, type Kysely, type Selectable, type Transaction } from "kysely";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { Database, PersonTable, PlacementTable, RideTable } from "./schema";
-import { withCommittedEvent } from "./test-committed";
+import { whileHeld, withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
 
@@ -594,35 +594,6 @@ describe("participant tables", () => {
   // Two sessions, on committed data, since a rolled-back transaction cannot show another
   // one waiting.
   describe("locks, on committed data", () => {
-    async function backendPid(trx: ControlledTransaction<Database>) {
-      const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx);
-      return rows[0]!.pid;
-    }
-
-    /** Resolves once the session `pid` waits for a lock that another one holds. */
-    async function waitingForLock(db: Db, pid: number) {
-      for (let attempt = 0; attempt < 200; attempt++) {
-        const { rows } = await sql<{ wait: string | null }>`
-          select wait_event_type as wait from pg_stat_activity where pid = ${pid}`.execute(db);
-        if (rows[0]?.wait === "Lock") return;
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      throw new Error("the session never waited for a lock");
-    }
-
-    /**
-     * Rolls back a transaction that may already be committed or rolled back, and gives its
-     * connection back to the pool. Kysely throws synchronously on a finished transaction:
-     * inside this try, that cannot hide the error the test is about.
-     */
-    async function release(trx: ControlledTransaction<Database>) {
-      try {
-        await trx.rollback().execute();
-      } catch {
-        // Already finished: nothing to give back.
-      }
-    }
-
     // C12.8 under READ COMMITTED, the level of the application's writes: a trigger reads
     // only what is committed. The second writer's trigger sees the first write only because
     // its `FOR UPDATE` waits for the Person that the first one locked, then reads again.
@@ -640,25 +611,20 @@ describe("participant tables", () => {
         };
         const second = first === "placement" ? "ride" : "placement";
 
-        const one = await db.startTransaction().setIsolationLevel("read committed").execute();
-        const other = await db.startTransaction().setIsolationLevel("read committed").execute();
-        let outcome: { code?: string; constraint?: string } | "accepted";
-        // `one` is released first, so that `other` stops waiting for its lock.
-        try {
-          await writes[first](one);
-          const pid = await backendPid(other);
-          const written = writes[second](other).then(
-            () => "accepted" as const,
-            (error: { code?: string; constraint?: string }) => ({ code: error.code, constraint: error.constraint }),
-          );
-          await waitingForLock(db, pid);
-          await one.commit().execute();
-          outcome = await written;
-          if (outcome === "accepted") await other.commit().execute();
-        } finally {
-          await release(one);
-          await release(other);
-        }
+        // The second writer in its own transaction, at that level, committed if it is accepted.
+        const outcome = await whileHeld(
+          db,
+          (one) => writes[first](one),
+          (own) =>
+            own
+              .transaction()
+              .setIsolationLevel("read committed")
+              .execute(async (other) => void (await writes[second](other)))
+              .then(
+                () => "accepted" as const,
+                (error: { code?: string; constraint?: string }) => ({ code: error.code, constraint: error.constraint }),
+              ),
+        );
 
         expect(outcome).toEqual({ code: "23514", constraint });
         const committed = {
@@ -678,28 +644,16 @@ describe("participant tables", () => {
         const personId = await addPerson(db, eventId);
         const rideId = await addRide(db, eventId, driverId);
 
-        // `taker` follows the rule and locks the Ride first; `forgetful` does not.
-        const taker = await db.startTransaction().execute();
-        const forgetful = await db.startTransaction().execute();
-        // `finally`, not `catch`: the error that failed the test is the one reported.
-        // `taker` first, so that `forgetful` stops waiting for its lock.
-        try {
-          await sql`select 1 from ride where id = ${rideId} for update`.execute(taker);
-          const pid = await backendPid(forgetful);
-          const placed = place(forgetful, eventId, personId, "aller", rideId);
-          placed.catch(() => {});
-          await waitingForLock(db, pid);
-
-          // The taker now locks the same Person: if `forgetful` held it, each would wait
-          // for the other.
-          await place(taker, eventId, personId, "retour", null);
-          await taker.commit().execute();
-          await placed;
-          await forgetful.commit().execute();
-        } finally {
-          await release(taker);
-          await release(forgetful);
-        }
+        // `taker` follows the rule and locks the Ride first; `forgetful`, the second, does not.
+        await whileHeld(
+          db,
+          (taker) => sql`select 1 from ride where id = ${rideId} for update`.execute(taker),
+          (own) => own.transaction().execute((forgetful) => place(forgetful, eventId, personId, "aller", rideId)),
+          // The taker now locks the same Person: if `forgetful` held it, each would wait for the other.
+          async (_, taker) => {
+            await place(taker, eventId, personId, "retour", null);
+          },
+        );
 
         const placements = await db
           .selectFrom("placement")

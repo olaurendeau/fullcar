@@ -4,13 +4,12 @@ import { describe, expect, it } from "vitest";
 import { readTokenHolders } from "@/db/persons";
 import { findPlacement, setPlacement } from "@/db/placements";
 import type { Database } from "@/db/schema";
-import { whileHeld, withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, whileHeldInTurn, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
-import { offerRide as offerRideAction } from "./actions";
 import { readEventState } from "./event-state";
 import { offerRide, type RideOffer } from "./offer-ride";
 import { stillOpen } from "./test-state";
@@ -78,27 +77,6 @@ function retourAfter(choice: Choice, start: Start, r2: string, drive: string) {
   if (choice !== "keep") return { kind: choice };
   if (start === "passenger") return { kind: "passenger", rideId: r2 };
   return { kind: start === "new" ? "notConcerned" : start };
-}
-
-/**
- * Resolves once `sessions` sessions wait for a lock the session `pid` holds, within 3 s,
- * under Vitest's 5 s. A session queued behind another for the same row waits for that one
- * (its tuple lock), not for `pid`: it counts too.
- */
-async function blockedBy(db: Db, pid: number, sessions = 1) {
-  for (let attempt = 0; attempt < 120; attempt++) {
-    const { rows } = await sql<{ pid: number }>`
-      with recursive waiting(pid) as (
-        select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))
-        union
-        select activity.pid from pg_stat_activity activity, waiting
-        where waiting.pid = any(pg_blocking_pids(activity.pid))
-      )
-      select pid from waiting`.execute(db);
-    if (rows.length >= sessions) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`fewer than ${sessions} sessions waited for that lock`);
 }
 
 /**
@@ -975,27 +953,16 @@ describe("offerRide", () => {
         const { token, bea, r1, driver } = await aDeviceScene(db, eventId);
         const before = await rowsOf(db, eventId);
 
-        const taker = await db.startTransaction().setIsolationLevel("read committed").execute();
-        let offered: ReturnType<typeof offerRideAction> | undefined;
         const offer = anOffer("aller", driver, { passengerIds: [bea.id] });
-        try {
-          await setPlacement(taker, { personId: bea.id, eventId, leg: "aller", rideId: r1 });
-          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(taker);
-          offered = offerRideAction(eventId, token, offer);
-          offered.catch(() => {});
-          await blockedBy(db, rows[0].pid);
-          await taker.commit().execute();
-        } finally {
-          try {
-            await taker.rollback().execute();
-          } catch {
-            // Committed.
-          }
-        }
+        const result = await whileHeld(
+          db,
+          (taker) => setPlacement(taker, { personId: bea.id, eventId, leg: "aller", rideId: r1 }),
+          (own) => offerRide(own, eventId, token, offer),
+        );
 
-        const result = await offered;
         expect(result).toMatchObject({ ok: false, error: "alreadyInCar" });
-        const aller = legOf(result && "state" in result ? result.state : undefined, "aller");
+        // The state the action gives with the refusal, read once the offer is over (actions.ts).
+        const aller = legOf(await readEventState(db, eventId, token), "aller");
         expect(aller.cars.find((car) => car.id === r1)?.passengers.map((person) => person.id)).toContain(bea.id);
         const after = await rowsOf(db, eventId);
         expect(after.rides).toEqual(before.rides);
@@ -1020,36 +987,27 @@ describe("offerRide", () => {
           await seedPlacement(db, { personId: lea.id, eventId, leg: "retour", rideId: b });
           await seedPlacement(db, { personId: tom.id, eventId, leg: "aller", rideId: null });
 
-          const holder = await db.startTransaction().setIsolationLevel("read committed").execute();
-          let offered: ReturnType<typeof offerRide> | undefined;
           let personsFree: boolean | undefined;
-          try {
-            await sql`select id from ride where id = ${b} for update`.execute(holder);
-            const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
-            const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
-            const offer = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg, passengerIds: [tom.id] });
-            offered = offerRide(db, eventId, lea.token, offer);
-            offered.catch(() => {});
-            await blockedBy(db, rows[0].pid);
-            const persons = sql`select id from person where id in (${lea.id}, ${tom.id}) for update nowait`.execute(db);
-            // Locked is false; any other failure is no answer, and fails the test.
-            personsFree = await persons.then(
-              () => true,
-              (error: { code?: string }) => {
-                if (error.code === "55P03") return false;
-                throw error;
-              },
-            );
-            await holder.commit().execute();
-          } finally {
-            try {
-              await holder.rollback().execute();
-            } catch {
-              // Committed.
-            }
-          }
+          const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
+          const offer = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg, passengerIds: [tom.id] });
+          const offered = await whileHeld(
+            db,
+            (holder) => sql`select id from ride where id = ${b} for update`.execute(holder),
+            (own) => offerRide(own, eventId, lea.token, offer),
+            async () => {
+              const persons = sql`select id from person where id in (${lea.id}, ${tom.id}) for update nowait`.execute(db);
+              // Locked is false; any other failure is no answer, and fails the test.
+              personsFree = await persons.then(
+                () => true,
+                (error: { code?: string }) => {
+                  if (error.code === "55P03") return false;
+                  throw error;
+                },
+              );
+            },
+          );
 
-          expect(await offered).toMatchObject({ ok: true });
+          expect(offered).toMatchObject({ ok: true });
           expect(personsFree).toBe(true);
           const retour = legOf(await readEventState(db, eventId, lea.token), "retour");
           expect(retour.cars.find((car) => car.id === b)?.passengers).toEqual([]);
@@ -1123,26 +1081,14 @@ describe("offerRide", () => {
           },
         };
 
-        const taker = await db.startTransaction().setIsolationLevel("read committed").execute();
-        let offered: ReturnType<typeof offerRide> | undefined;
-        try {
-          await setPlacement(taker, { personId: tom.id, eventId, leg: "aller", rideId: r1 });
-          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(taker);
-          const offer = anOffer("aller", { kind: "device", personId: tom.id });
-          offered = offerRide(db.withPlugin(watch), eventId, tom.token, offer);
-          offered.catch(() => {});
-          await blockedBy(db, rows[0].pid);
-          await taker.commit().execute();
-        } finally {
-          // Kysely throws on a transaction already committed: nothing is left to give back.
-          try {
-            await taker.rollback().execute();
-          } catch {
-            // Committed.
-          }
-        }
+        const offer = anOffer("aller", { kind: "device", personId: tom.id });
+        const offered = await whileHeld(
+          db,
+          (taker) => setPlacement(taker, { personId: tom.id, eventId, leg: "aller", rideId: r1 }),
+          (own) => offerRide(own.withPlugin(watch), eventId, tom.token, offer),
+        );
 
-        expect(await offered).toMatchObject({ ok: true });
+        expect(offered).toMatchObject({ ok: true });
         expect(lockedAtDelete).toEqual([true]);
         const aller = legOf(await readEventState(db, eventId, tom.token), "aller");
         expect(aller.cars.find((car) => car.id === r1)?.passengers.map((person) => person.id)).not.toContain(tom.id);
@@ -1166,30 +1112,18 @@ describe("offerRide", () => {
           await seedPlacement(db, { personId: person.id, eventId, leg: "retour", rideId: b });
         }
 
-        // Both Rides held, so that both offers wait at their first lock, then start together.
-        const holder = await db.startTransaction().setIsolationLevel("read committed").execute();
-        let offers: Promise<PromiseSettledResult<unknown>[]> | undefined;
-        try {
-          await sql`select id from ride where id in (${a}, ${b}) for update`.execute(holder);
-          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
-          const fromAller = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg: aDrive() });
-          const fromRetour = anOffer("retour", { kind: "device", personId: tom.id }, { otherLeg: aDrive({ time: "08:00" }) });
-          offers = Promise.allSettled([
-            offerRide(db, eventId, lea.token, fromAller),
-            offerRide(db, eventId, tom.token, fromRetour),
-          ]);
-          await blockedBy(db, rows[0].pid, 2);
-          await holder.commit().execute();
-        } finally {
-          try {
-            await holder.rollback().execute();
-          } catch {
-            // Committed.
-          }
-        }
+        // Both Rides held, so that both offers wait at their first lock, then start together:
+        // Tom's, started once Léa's waits, queues behind hers for the same Ride.
+        const fromAller = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg: aDrive() });
+        const fromRetour = anOffer("retour", { kind: "device", personId: tom.id }, { otherLeg: aDrive({ time: "08:00" }) });
+        const offers = await whileHeldInTurn(
+          db,
+          (holder) => sql`select id from ride where id in (${a}, ${b}) for update`.execute(holder),
+          [(own) => offerRide(own, eventId, lea.token, fromAller), (own) => offerRide(own, eventId, tom.token, fromRetour)],
+        );
 
-        const ok = { status: "fulfilled", value: expect.objectContaining({ ok: true }) };
-        expect(await offers).toEqual([ok, ok]);
+        const ok = expect.objectContaining({ ok: true });
+        expect(offers).toEqual([ok, ok]);
         const state = await readEventState(db, eventId, lea.token);
         for (const leg of ["aller", "retour"] as const) {
           const { cars } = legOf(state, leg);

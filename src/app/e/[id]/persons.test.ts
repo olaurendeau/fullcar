@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { sql, type Kysely } from "kysely";
+import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { getDb } from "@/db/client";
 import { lockPersons, readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
-import { whileHeld, withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, whileHeldInTurn, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
@@ -430,46 +430,24 @@ describe("setPersonLeg", () => {
 });
 
 describe("C12.4: the same creation sent twice at once", () => {
-  /**
-   * Resolves once a session waits on a lock (`wait_event_type = 'Lock'`) that the session
-   * `pid` holds. Within 3 s, under Vitest's 5 s: a send that never waits fails on this
-   * message, and `first` is rolled back before the test ends.
-   */
-  async function waitingForLockOf(db: Db, pid: number) {
-    for (let attempt = 0; attempt < 120; attempt++) {
-      const { rows } = await sql<{ pid: number }>`
-        select pid from pg_stat_activity
-        where wait_event_type = 'Lock' and ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
-      if (rows.length > 0) return;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    throw new Error("the second send never waited for the first");
-  }
-
   it("the second waits for the first's insert, then writes nothing: she stays in the car she boarded", async () => {
     await withCommittedEvent(async (db, eventId) => {
       const marc = await seedPerson(db, eventId, { firstName: "Marc" });
       const ride = await seedRide(db, eventId, marc.id, { leg: "aller" });
       const sent = registration();
-      // The first send, not committed yet: she is stored, and boards Marc's car.
-      const first = await db.startTransaction().execute();
-      let second: Promise<PersonOutcome>;
-      try {
-        await seedPerson(first, eventId, { id: sent.id, firstName: sent.firstName }, NEW_TOKEN);
-        await seedPlacement(first, { personId: sent.id, eventId, leg: "aller", rideId: ride });
-        await seedPlacement(first, { personId: sent.id, eventId, leg: "retour", rideId: null });
-        const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(first);
-        second = addPerson(db, eventId, NEW_TOKEN, sent);
-        second.catch(() => {});
-        // The second has reached its insert, which waits on the first's id until it commits.
-        await waitingForLockOf(db, rows[0].pid);
-        await first.commit().execute();
-      } catch (error) {
-        await first.rollback().execute();
-        throw error;
-      }
+      const second = await whileHeld(
+        db,
+        // The first send, not committed yet: she is stored, and boards Marc's car.
+        async (first) => {
+          await seedPerson(first, eventId, { id: sent.id, firstName: sent.firstName }, NEW_TOKEN);
+          await seedPlacement(first, { personId: sent.id, eventId, leg: "aller", rideId: ride });
+          await seedPlacement(first, { personId: sent.id, eventId, leg: "retour", rideId: null });
+        },
+        // The second reaches its insert, which waits on the first's id until it commits.
+        (own) => addPerson(own, eventId, NEW_TOKEN, sent),
+      );
 
-      const state = stateOf(await second);
+      const state = stateOf(second);
       expect(standing(state, sent.id)).toEqual({ aller: "passenger", retour: "withoutCar" });
       expect((await personIds(db, eventId)).sort()).toEqual([marc.id, sent.id].sort());
     });
@@ -655,23 +633,6 @@ describe("T5.5: updatePerson, the number of who drives", () => {
 // Her Person is held first; each send then waits for it, in the order they arrive, and the
 // second sees what the first committed: exactly one of them is done (v4.8-18).
 describe("T5.6: an offer and the removal of the driver's number, at once", () => {
-  /** Resolves once `sessions` sessions wait, directly or behind another waiter, for a lock `pid` holds. */
-  async function waiting(db: Db, pid: number, sessions: number) {
-    for (let attempt = 0; attempt < 120; attempt++) {
-      const { rows } = await sql<{ pid: number }>`
-        with recursive waiting(pid) as (
-          select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))
-          union
-          select activity.pid from pg_stat_activity activity, waiting
-          where waiting.pid = any(pg_blocking_pids(activity.pid))
-        )
-        select pid from waiting`.execute(db);
-      if (rows.length >= sessions) return;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    throw new Error(`fewer than ${sessions} sessions waited for Claire's Person`);
-  }
-
   it.each(["the offer", "the removal"] as const)("T5.6: %s first, exactly one of them is done", async (first) => {
     await withCommittedEvent(async (db, eventId) => {
       const claire = await seedPerson(db, eventId, { firstName: "Claire", phone: CLAIRE_PHONE });
@@ -685,33 +646,20 @@ describe("T5.6: an offer and the removal of the driver's number, at once", () =>
         seats: "3",
         note: "",
       };
-      const sends = {
-        offer: () => offerRide(db, eventId, claire.token, offer),
-        removal: () => updatePerson(db, eventId, claire.token, { personId: claire.id, phone: "" }),
+      const sends: Record<"offer" | "removal", (own: Db) => Promise<{ ok: boolean; error?: string }>> = {
+        offer: (own) => offerRide(own, eventId, claire.token, offer),
+        removal: (own) => updatePerson(own, eventId, claire.token, { personId: claire.id, phone: "" }),
       };
       const order = first === "the offer" ? (["offer", "removal"] as const) : (["removal", "offer"] as const);
 
-      const holder = await db.startTransaction().execute();
-      const answers: Promise<{ ok: boolean; error?: string }>[] = [];
-      try {
-        await lockPersons(holder, eventId, [claire.id]);
-        const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
-        for (const [at, name] of order.entries()) {
-          const answer = sends[name]();
-          answer.catch(() => {});
-          answers.push(answer);
-          await waiting(db, rows[0].pid, at + 1);
-        }
-        await holder.commit().execute();
-      } finally {
-        try {
-          await holder.rollback().execute();
-        } catch {
-          // Committed.
-        }
-      }
+      // The later send waits behind the earlier one, for Claire's Person.
+      const answers = await whileHeldInTurn(
+        db,
+        (holder) => lockPersons(holder, eventId, [claire.id]),
+        order.map((name) => sends[name]),
+      );
 
-      const [offered, removed] = first === "the offer" ? await Promise.all(answers) : (await Promise.all(answers)).reverse();
+      const [offered, removed] = first === "the offer" ? answers : answers.reverse();
       const rides = await db.selectFrom("ride").select("id").where("event_id", "=", eventId).execute();
       if (first === "the offer") {
         expect(offered).toMatchObject({ ok: true });
