@@ -14,10 +14,16 @@ celui qui écrit le code.
   le corps d'une requête. Un jeton dans un chemin finit dans les journaux de Vercel.
 - Comparaison à temps constant.
 - À partir de #154, le jeton d'admin n'entre que dans le corps de `loadOrganiserPanel`, et,
-  à partir de #263, dans celui d'`updateEvent`. Pour un jeton d'admin faux, absent ou mal
-  formé, la réponse ne contient que `{ state: "invalid" }` pour `loadOrganiserPanel`, et,
-  sur un événement qui n'est pas anonymisé, que `{ ok: false, error: "invalid" }` pour
-  `updateEvent`, qui n'écrit alors rien. Avant la vérification du jeton, `updateEvent` répond
+  à partir de #263, dans celui d'`updateEvent` ; à partir de #596, la session y entre avec
+  lui (`{ adminToken, session }`). Seul `src/domain/organiser-access.ts` décide qui
+  administre (épique #581) : la session du compte de l'événement suffit, sans lien admin,
+  comme le jeton d'admin du navigateur qui l'a créé. Sans cette autorisation (jeton d'admin
+  faux, absent ou mal formé, et aucune session du compte de l'événement), la réponse de
+  `loadOrganiserPanel` ne contient que l'état que la règle décide (`orphan`, `ended`,
+  `pending`, `notYours`, `signIn`) et aucune donnée du panneau ; `notYours` n'ajoute que
+  l'adresse de la session du visiteur. `{ state: "invalid" }` ne veut plus dire qu'un
+  événement inconnu. Sur un événement qui n'est pas anonymisé, `updateEvent` ne répond alors
+  que `{ ok: false, error: "invalid" }` et n'écrit rien. Avant la règle, `updateEvent` répond
   `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement inconnu ou mal formé,
   puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un événement anonymisé,
   quel que soit le jeton, sans rien écrire : l'anonymisation a effacé le hash du jeton
@@ -61,8 +67,9 @@ celui qui écrit le code.
   l'un ni l'autre.
 - La réponse de l'espace organisateur ne porte aucun numéro de conducteur, de passager
   placé ni de personne pas concernée. Du numéro de son conducteur, une voiture ne dit que
-  s'il existe. Pour un jeton d'admin faux, absent ou mal formé, elle ne porte ni numéro ni
-  donnée du panneau : `withOrganiserPhones` ne rend rien. Un booléen « vérifié » passé à la
+  s'il existe. Sans l'autorisation d'`organiser-access.ts` (jeton d'admin faux, absent ou mal
+  formé, et aucune session du compte de l'événement), elle ne porte ni numéro ni donnée du
+  panneau : `withOrganiserPhones` ne rend rien. Un booléen « vérifié » passé à la
   règle est bloquant. Jusqu'à #596, elle reçoit le jeton et le vérifie elle-même ; à partir
   de #596, elle ne reçoit qu'une autorisation, d'un type que seul
   `src/domain/organiser-access.ts` produit, et une autorisation fabriquée ailleurs est
