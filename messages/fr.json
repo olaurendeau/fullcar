@@ -373,6 +373,28 @@
     },
     "edit": "Modifier l’événement"
   },
+  "AdminLogin": {
+    "body": "Connectez-vous avec l’adresse e-mail de la personne qui organise cet événement."
+  },
+  "AdminPending": {
+    "title": "Adresse pas encore confirmée",
+    "body": "Cet événement attend que la personne qui l’a créé confirme son adresse e-mail. Si c’est vous, ouvrez le lien de confirmation reçu par e-mail : l’événement rejoindra Mes événements, et l’espace organisateur s’ouvrira dans le navigateur qui l’ouvre.",
+    "expired": "Lien expiré ? Ouvrez-le quand même : la page proposera d’en envoyer un nouveau."
+  },
+  "AdminNotYours": {
+    "title": "Cet espace organisateur n’est pas le vôtre",
+    "body": "La session est ouverte avec {email}, qui n’organise pas cet événement.",
+    "see": "Voir l’événement",
+    "switch": "Se connecter avec une autre adresse"
+  },
+  "AdminOrphan": {
+    "title": "Cet événement n’a plus d’organisateur",
+    "body": "Le compte qui l’organisait a été supprimé. L’événement reste ouvert aux participants jusqu’à sa suppression, 30 jours après sa date."
+  },
+  "Anonymized": {
+    "title": "Inscriptions effacées",
+    "body": "Le {date}, 30 jours après l’événement, les prénoms, les numéros, les voitures et les inscriptions ont été effacés. Il reste le titre, le lieu et les dates."
+  },
   "EditEvent": {
     "title": "Modifier l’événement",
     "saved": "Événement modifié. Personne n’est prévenu : pensez à le dire au groupe.",

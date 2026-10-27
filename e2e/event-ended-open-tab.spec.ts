@@ -112,8 +112,10 @@ test.describe("OA8.3: a tab open while the event is anonymised", () => {
 organiserTest.describe("OA8.3: the organiser's screen open while the event is anonymised", () => {
   organiserTest.use({ locale: "fr-FR" });
 
-  // `BoardHandle.read`: « Actualiser » reads the board again, and it says the event ended.
-  organiserTest("« Actualiser », after the anonymisation, shows « Événement terminé »", async ({ db, page, seededEvent }) => {
+  // `BoardHandle.read`: « Actualiser » reads the board again, and it says the event ended. The
+  // page read again checks the access anew (#598): the creation browser's token, revoked by the
+  // anonymisation, opens nothing, and the sign-in screen says nothing of the place.
+  organiserTest("« Actualiser », after the anonymisation, shows the sign-in screen, without the place", async ({ db, page, seededEvent }) => {
     const actions = await serverActions(page, { failing: false, record: false });
     actions.release();
     await page.goto(organiserPath(seededEvent));
@@ -125,6 +127,9 @@ organiserTest.describe("OA8.3: the organiser's screen open while the event is an
     await refresh.click();
     await expectNoFailure(page, actions, "Actualisation…");
     actions.releaseRefresh();
-    await expectEnded(page);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Espace organisateur");
+    await expect(page.getByRole("tab")).toHaveCount(0);
+    expect(await page.locator("body").innerText()).not.toContain(PLACE);
+    await expect(saidAlerts(page)).toHaveCount(0);
   });
 });

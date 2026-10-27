@@ -373,6 +373,28 @@
     },
     "edit": "Edit the event"
   },
+  "AdminLogin": {
+    "body": "Sign in with the email address of the person who organises this event."
+  },
+  "AdminPending": {
+    "title": "Email address not confirmed yet",
+    "body": "This event is waiting for the person who created it to confirm their email address. If that is you, open the confirmation link you received by email: the event will join My events, and the organiser area will open in the browser that opens it.",
+    "expired": "Link expired? Open it anyway: the page will offer to send a new one."
+  },
+  "AdminNotYours": {
+    "title": "This organiser area is not yours",
+    "body": "You are signed in as {email}, who does not organise this event.",
+    "see": "See the event",
+    "switch": "Sign in with another address"
+  },
+  "AdminOrphan": {
+    "title": "This event no longer has an organiser",
+    "body": "The account that organised it has been deleted. The event stays open to participants until it is deleted, 30 days after its date."
+  },
+  "Anonymized": {
+    "title": "Sign-ups erased",
+    "body": "On {date}, 30 days after the event, first names, phone numbers, cars and sign-ups were erased. The title, place and dates remain."
+  },
   "EditEvent": {
     "title": "Edit the event",
     "saved": "Event updated. Nobody is notified: remember to tell the group.",

@@ -5,7 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { hideToken, htmlByLegSection, keepAdminToken, organiserPath } from "./organiser";
+import { areaRefused, hideToken, htmlByLegSection, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -351,8 +351,12 @@ for (const javaScriptEnabled of [true, false]) {
         if (javaScriptEnabled && organiser) {
           await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
         }
+        // Refused, the screen of a pending event takes the board's place (#598): the HTML had the board.
+        const refused = javaScriptEnabled && !organiser && path(seededEvent).endsWith("/admin");
+        if (refused) await expect(areaRefused(page)).toBeVisible();
 
         const dom = await page.content();
+        // Refused or not, the HTML had the board, and its payload stays in the DOM.
         expect(dom.includes("Marc"), "the DOM holds Marc").toBe(true);
         if (javaScriptEnabled && organiser) {
           // The panel's sections list Tom's and Léa's numbers (#179, DO1), each in its own leg's

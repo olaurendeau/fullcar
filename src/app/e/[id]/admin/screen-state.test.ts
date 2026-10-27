@@ -51,7 +51,12 @@ describe("screenReducer", () => {
   it.each<[string, ScreenState, ScreenEvent, ScreenState]>([
     // The first read (O5.1, O5.2, O5.3).
     ["loading, the panel", { state: "loading" }, { type: "checked", check: valid }, ready()],
-    ["loading, the area refused", { state: "loading" }, { type: "checked", check: { state: "refused" } }, { state: "refused" }],
+    [
+      "loading, the area refused, with its screen (#598)",
+      { state: "loading" },
+      { type: "checked", check: { state: "refused", refusal: { kind: "notYours", email: "a@b.fr" } } },
+      { state: "refused", refusal: { kind: "notYours", email: "a@b.fr" } },
+    ],
     [
       "loading, a failed check",
       { state: "loading" },
@@ -107,7 +112,7 @@ describe("screenReducer", () => {
     ],
     ["the end of a read after the link was checked again", ready(), { type: "refreshEnded", read: 1, legs: after }, ready()],
     ["a refresh while one runs", ready({ refreshing: 1 }), { type: "refreshStarted", read: 2 }, ready({ refreshing: 1 })],
-    ["a refresh without the panel", { state: "refused" }, { type: "refreshStarted", read: 1 }, { state: "refused" }],
+    ["a refresh without the panel", { state: "refused", refusal: { kind: "pending" } }, { type: "refreshStarted", read: 1 }, { state: "refused", refusal: { kind: "pending" } }],
     // The panel read again after an action of the board (O1.10): no announcement either way.
     [
       "a read after an action replaces the panel, and says nothing",
@@ -186,7 +191,8 @@ describe("screenReducer, the folded card", () => {
   });
 
   it("does nothing without the panel", () => {
-    expect(screenReducer({ state: "refused" }, { type: "toggleFolded" })).toStrictEqual({ state: "refused" });
+    const refused = { state: "refused", refusal: { kind: "orphan" } } as const;
+    expect(screenReducer(refused, { type: "toggleFolded" })).toStrictEqual(refused);
   });
 });
 
@@ -485,7 +491,7 @@ describe("alertShown", () => {
     ["the body still while the next read runs", ready({ refreshFailed: 1, refreshing: 2 }), "body"],
     ["the withdrawn body, the panel withdrawn", ready({ panel: withdrawn, refreshFailed: 1, refreshing: 2 }), "bodyWithdrawn"],
     ["nothing withdrawn without a failure: the sentence instead", ready({ panel: withdrawn }), ""],
-    ["nothing without the panel", { state: "refused" }, ""],
+    ["nothing without the panel", { state: "refused", refusal: { kind: "signIn" } }, ""],
   ])("%s", (_, state, shown) => {
     expect(alertShown(state)).toBe(shown);
   });
