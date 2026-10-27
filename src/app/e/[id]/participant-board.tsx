@@ -442,7 +442,7 @@ export function ParticipantBoard({
     // Its driver, or someone ticked, removed meanwhile: the bar names her at once (RP5.4).
     const named = [...(driver.kind === "device" ? [{ id: driver.personId, firstName: notDone.driver }] : []), ...passengers];
     const why =
-      outcome?.error === "personGone" ? personGone(named, outcome.goneIds) : outcome ? offerWhy(outcome.error, notDone.driver, names) : whyOf(problem);
+      outcome?.error === "personGone" ? personGone(named, outcome.goneIds) : outcome ? offerWhy(outcome.error === "stopsOff" ? "invalid" : outcome.error, notDone.driver, names) : whyOf(problem);
     const gone = why.kind === "personGone" ? { closes: true } : {};
     // Offered from the retour's tab once it is gone, the sheet closes (rule 9). From the aller's,
     // the retour goes from the sheet; closed, the bar says to offer the car again (decision 47).
@@ -599,7 +599,9 @@ export function ParticipantBoard({
     // `passengersChanged` is said in the step while it is open (C8.5). In the bar, the failure
     // names the car and its leg, then why, a refusal included.
     const problem = sent.ok ? "failed" : sent.problem;
-    const why = outcome ? whyOf(outcome.error) : whyOf(problem);
+    // The refusals of the Stops have no word yet, and no form sends Stops (#889): the generic reason.
+    const said = outcome?.error === "stopsOff" || outcome?.error === "stopErrors" || outcome?.error === "afterStop" ? "invalid" : outcome?.error;
+    const why = said ? whyOf(said) : whyOf(problem);
     // A car of the retour once it is gone: the sheet closes (rule 9).
     failedIn(sheet, { notDone, why, landmark: focusCar(leg, rideId), closes: why.kind === "noRetour", leg });
     if (outcome?.error === "passengersChanged") return { kind: "passengersChanged", passengers: outcome.passengerIds.length };
