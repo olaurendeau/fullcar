@@ -5,7 +5,7 @@ import { DESCRIPTION_MAX } from "@/domain/description";
 import type { EventFields } from "@/domain/event";
 import { isPublicId } from "@/domain/public-id";
 import type { Database } from "@/db/schema";
-import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
+import { anAddress, seedAccount, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
 import { localeCookieOptions } from "@/i18n/locales";
 import { createEvent, setLocale, visit } from "./actions";
@@ -49,8 +49,9 @@ vi.mock("@/email/brevo", () => ({
 /** The real clock, read before the tests fake it. */
 const REAL_NOW = Date.now();
 
-function inTransaction<T>(fn: (trx: Transaction<Database>) => Promise<T>): Promise<T> {
-  return withRollback(async (trx) => {
+/** `rollback` is withRollbackRecordingSends for a test that records a send. */
+function inTransaction<T>(fn: (trx: Transaction<Database>) => Promise<T>, rollback = withRollback): Promise<T> {
+  return rollback(async (trx) => {
     connection.current = trx;
     try {
       return await fn(trx);
@@ -409,7 +410,7 @@ describe("createEvent, with an address (#599)", () => {
       await deferred.tasks[0]!();
       expect(mailbox.sent).toEqual([expect.objectContaining({ to: email, subject: "Confirm your email address for Fullcar" })]);
       expect(await status()).toEqual({ pending_email: email, send_status: "sent" });
-    });
+    }, withRollbackRecordingSends);
   });
 });
 

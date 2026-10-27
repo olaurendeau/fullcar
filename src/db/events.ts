@@ -133,6 +133,16 @@ export async function lockEvent(db: Kysely<Database>, id: string, lock: EventLoc
 }
 
 /**
+ * `SELECT … FOR KEY SHARE` on the event, until the transaction ends: it cannot be deleted
+ * before a row that refers to it is written, and no write on it waits (a sign-in link's
+ * return target, OA4.4). Whether the event exists. Taken before the address, like lockEvent.
+ */
+export async function holdEventKey(db: Kysely<Database>, id: string): Promise<boolean> {
+  const row = await db.selectFrom("event").select("id").where("id", "=", id).forKeyShare().executeTakeFirst();
+  return row !== undefined;
+}
+
+/**
  * What the organiser changes: the options and the token are not among them. Without
  * `locationPosition`, the position stored stays as it is; without `description`, the
  * description stored does.

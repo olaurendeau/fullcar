@@ -2,8 +2,7 @@ import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { findLink } from "@/db/email-links";
 import type { Database } from "@/db/schema";
-import { anAddress, seedAccount, seedSends, seedSession } from "@/db/test-accounts";
-import { withRollback } from "@/db/test-db";
+import { anAddress, seedAccount, seedSends, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
 import { SESSION_LIFETIME_MS } from "@/domain/account-rules";
 import { hashToken } from "@/domain/token-hash";
 import { CONFIRMATIONS_PER_ADDRESS, GLOBAL_SENDS_PER_HOUR, SEND_WINDOW_MS } from "@/domain/send-limits";
@@ -85,7 +84,7 @@ async function created(db: Kysely<Database>, input: unknown, deps: Creation) {
 describe("createEventFor, without an address nor a session", () => {
   // Until « adresse obligatoire » (#614), the form that sends neither still creates.
   it("creates the event without an organiser, and sends nothing", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, sent, later } = creation(trx);
       const { id } = await created(trx, fields(), deps);
       expect(await eventRow(trx, id)).toEqual({
@@ -110,7 +109,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
     ["of 255 characters", `${"a".repeat(244)}@exemple.fr`, "tooLong"],
     ["not a string", 42, "invalid"],
   ])("OA1.4: refuses an address %s with the same rule as the form, and creates nothing", async (_, email, error) => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, later } = creation(trx);
       const result = await createEventFor(fields({ email }), deps);
       expect(result).toEqual({ ok: false, errors: { email: error } });
@@ -120,14 +119,14 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
   });
 
   it("OA1.4: gives the address's error with the event's, in one answer", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const result = await createEventFor(fields({ title: "", email: "abc" }), creation(trx).deps);
       expect(result).toEqual({ ok: false, errors: { title: "required", email: "invalid" } });
     });
   });
 
   it("OA1.7: keeps the address pending, records the send and its link, and answers before the email goes", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, sent, later } = creation(trx);
       const email = anAddress();
       const { id } = await created(trx, fields({ email: `  ${email.toUpperCase()} ` }), deps);
@@ -146,7 +145,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
   });
 
   it("OA1.6: once the answer has gone, sends one email to the address, in the page's language, with a link to its event", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, sent, runLater } = creation(trx, undefined, "en");
       const email = anAddress();
       const { id, token } = await created(trx, fields({ email }), deps);
@@ -165,7 +164,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
     ["sent", { state: "sent" }, "sent"],
     ["failed, or past its 10 s", { state: "failed" }, "failed"],
   ])("OA1.7: keeps the result with the event when Brevo has %s", async (_, answer, status) => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, runLater } = creation(trx, async () => answer);
       const { id } = await created(trx, fields({ email: anAddress() }), deps);
       await runLater();
@@ -176,7 +175,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
   });
 
   it("OA1.2: answers while Brevo has not answered, the email still sending", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, sent, runLater } = creation(trx, () => new Promise<SendAnswer>(() => {}));
       const { id } = await created(trx, fields({ email: anAddress() }), deps);
       void runLater();
@@ -186,7 +185,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
   });
 
   it("OA1.10: leaves a status written since by another send as it is", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, runLater } = creation(trx, async () => ({ state: "failed" }));
       const { id } = await created(trx, fields({ email: anAddress() }), deps);
       const resentAt = new Date(deps.now.getTime() + 60_000);
@@ -197,7 +196,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
   });
 
   it("OA1.9: the 6th creation in the hour with an address creates the event, sends nothing, and keeps address_limit", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, sent, later } = creation(trx);
       const email = anAddress();
       await seedSends(trx, CONFIRMATIONS_PER_ADDRESS, { kind: "confirmation", email, sentAt: deps.now });
@@ -212,7 +211,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
 
   // Decision of the review of #623: nothing went out, as at the limit of an address.
   it("keeps address_limit when the global cap stops the email, and sends nothing", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, later } = creation(trx);
       await seedSends(trx, GLOBAL_SENDS_PER_HOUR, { kind: "login", email: () => anAddress(), sentAt: deps.now });
       const email = anAddress();
@@ -225,7 +224,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
   });
 
   it("OA11.1: keeps the link's token out of the answer, the database and the logs", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { deps, sent, runLater } = creation(trx);
       const email = anAddress();
       const result = await created(trx, fields({ email }), deps);
@@ -240,7 +239,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
   });
 
   it("OA11.1: logs fixed words only when the result cannot be stored", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       let broken = false;
       const db = new Proxy(trx, {
         get(target, property) {
@@ -260,7 +259,7 @@ describe("createEventFor, with an address (OA1.4, OA1.6, OA1.7, OA1.9)", () => {
 
 describe("createEventFor, with a session (OA1.3, OA1.5)", () => {
   it("OA1.3: makes the event its account's, confirmed, and sends nothing", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       const accountId = await seedAccount(trx, { email });
       const session = await seedSession(trx, accountId);
@@ -281,7 +280,7 @@ describe("createEventFor, with a session (OA1.3, OA1.5)", () => {
   });
 
   it("OA1.3: takes the live session over an address sent with it", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const accountId = await seedAccount(trx);
       const session = await seedSession(trx, accountId);
       const { deps, later } = creation(trx);
@@ -304,7 +303,7 @@ describe("createEventFor, with a session (OA1.3, OA1.5)", () => {
     ["unknown", async () => "AAAAAAAAAAAAAAAAAAAAAA"],
     ["not a string", async () => 42],
   ])("OA1.5: creates nothing for a session %s, and asks for the address", async (_, sessionOf) => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const session = await sessionOf(trx);
       const { deps, later } = creation(trx);
       expect(await createEventFor(fields({ session }), deps)).toEqual({ ok: false, errors: { email: "sessionEnded" } });
@@ -318,7 +317,7 @@ describe("createEventFor, with a session (OA1.3, OA1.5)", () => {
   });
 
   it("OA1.5: with the address typed after the session ended, creates the event pending on it", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       const { deps, later } = creation(trx);
       const { id } = await created(trx, fields({ session: "AAAAAAAAAAAAAAAAAAAAAA", email }), deps);

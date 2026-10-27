@@ -7,7 +7,7 @@ import { anonymiseEvent, deleteEvent } from "./day-thirty";
 import { claimConfirmation, createLink, findLink, useLink } from "./email-links";
 import { lockEvent } from "./events";
 import type { Database } from "./schema";
-import { anAddress, seedAccount, seedLink, seedSends, withCommittedAddresses } from "./test-accounts";
+import { anAddress, seedAccount, seedLink, seedSends, withCommittedAddresses, withRollbackRecordingSends } from "./test-accounts";
 import { whileHeld, withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
@@ -44,7 +44,7 @@ const sendsTo = (db: Kysely<Database>, email: string) =>
 
 describe("claimConfirmation", () => {
   it("records the send and gives the token of a new confirmation link of the event", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       const email = anAddress();
       // Counted two hours ahead: the global cap's concurrency test (email-sends.test.ts) may hold 50 sends in the hour.
@@ -62,7 +62,7 @@ describe("claimConfirmation", () => {
     ["the event", "event", (trx: Kysely<Database>, _: string, eventId: string) =>
       seedSends(trx, CONFIRMATIONS_PER_EVENT, { kind: "confirmation", eventId, email: () => anAddress() })],
   ] as const)("creates no link when the limit of %s stops the send", async (_, limit, fill) => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       const email = anAddress();
       await fill(trx, email, eventId);
@@ -74,7 +74,7 @@ describe("claimConfirmation", () => {
   });
 
   it("records nothing for an unknown event", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       expect(await claimConfirmation(trx, "zzzzzzzz", email)).toEqual({ claim: "eventGone" });
       expect(await sendsTo(trx, email)).toEqual([]);
