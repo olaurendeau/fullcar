@@ -20,6 +20,7 @@ import {
   updateRide,
 } from "./actions";
 import { readEventState, type EndedEvent, type EventState } from "./event-state";
+import { stillOpen } from "./test-state";
 
 // The action reaches the database through getDb(): here, the test's transaction,
 // so that nothing it reads comes from another test.
@@ -67,17 +68,11 @@ async function seedScene(trx: Transaction<Database>) {
   return { eventId, marc, lea, tom, r1 };
 }
 
-/** The state `loadEventState` gave, failing the test had it said the event ended. */
-function notEnded(answer: EventState | EndedEvent | undefined): EventState | undefined {
-  if (answer && "ended" in answer) throw new Error("loadEventState said the event ended");
-  return answer;
-}
-
 describe("loadEventState", () => {
   it("gives the state the device sees, as readEventState reads it, in plain data", async () => {
     await inTransaction(async (trx) => {
       const { eventId, lea } = await seedScene(trx);
-      const state = notEnded(await loadEventState(eventId, lea.token));
+      const state = stillOpen(await loadEventState(eventId, lea.token));
       expect(state).toEqual(await readEventState(trx, eventId, lea.token));
       expect(JSON.parse(JSON.stringify(state))).toStrictEqual(state);
       const [aller] = state?.legs ?? [];
@@ -103,7 +98,7 @@ describe("loadEventState", () => {
   ])("C10.6: with %s, the device has no person and no number is sent", async (_, token) => {
     await inTransaction(async (trx) => {
       const { eventId } = await seedScene(trx);
-      const state = notEnded(await loadEventState(eventId, token));
+      const state = stillOpen(await loadEventState(eventId, token));
       expect(state?.legs.flatMap((leg) => leg.device)).toEqual([]);
       expect(JSON.stringify(state)).not.toMatch(/06 \d\d/);
     });

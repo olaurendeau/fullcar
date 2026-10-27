@@ -107,7 +107,7 @@ describe("offerRide (action)", () => {
 
       const state = await readEventState(trx, eventId, claire.token);
       expect(result).toEqual({ ok: false, error: "driverWithoutPhone", state });
-      const aller = state?.legs.find((leg) => leg.leg === "aller");
+      const aller = stillOpen(state)?.legs.find((leg) => leg.leg === "aller");
       expect(aller?.device).toEqual([{ id: claire.id, firstName: "Claire", phone: null, state: { kind: "withoutCar" } }]);
       // C10.1: Marc's car is not hers, and his number is not hers to see.
       expect(JSON.stringify(result)).not.toContain("06 11");
