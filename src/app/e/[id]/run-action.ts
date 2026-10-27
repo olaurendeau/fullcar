@@ -97,6 +97,16 @@ export function stateShown(before: EventState, next: unknown): { state: EventSta
 }
 
 /**
+ * The device's persons `shown` had and `next` has on no leg (remove-person v2, « Focus, barre,
+ * envoi »): removed, here or elsewhere. Their lines in the bar no longer have a subject.
+ */
+export function devicePersonsGone(shown: EventState, next: EventState): string[] {
+  const ids = (state: EventState) => new Set(state.legs.flatMap((leg) => leg.device.map((person) => person.id)));
+  const kept = ids(next);
+  return [...ids(shown)].filter((id) => !kept.has(id));
+}
+
+/**
  * What the page shows of `next` while a sheet hides it, when `next` makes the tabs go or come
  * (epic #250, § 5): `next`, with `shown`'s end and retour leg, or none. A sheet on the retour
  * closes over it rather than going with it (rule 9); one on the aller is not mounted anew with

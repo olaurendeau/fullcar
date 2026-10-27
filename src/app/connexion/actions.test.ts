@@ -1,8 +1,9 @@
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db/schema";
-import { anAddress, seedAccount, withRollbackRecordingSends } from "@/db/test-accounts";
-import { requestLink } from "./actions";
+import { anAddress, seedAccount, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
+import { withRollback } from "@/db/test-db";
+import { requestLink, signedInAs } from "./actions";
 
 // The action reaches the database through getDb(): here, the test's transaction.
 const connection = vi.hoisted(() => ({ current: undefined as Kysely<Database> | undefined }));
@@ -47,8 +48,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function inTransaction<T>(fn: (trx: Kysely<Database>) => Promise<T>): Promise<T> {
-  return withRollbackRecordingSends(async (trx) => {
+/**
+ * Runs `fn` in a transaction rolled back after it, which the action reaches through getDb():
+ * under the sends' window lock for a test that records sends, or a plain one for a test that records none.
+ */
+function inTransaction<T>(
+  fn: (trx: Kysely<Database>) => Promise<T>,
+  rollback: typeof withRollback<T> = withRollbackRecordingSends,
+): Promise<T> {
+  return rollback(async (trx) => {
     connection.current = trx;
     try {
       return await fn(trx);
@@ -101,5 +109,57 @@ describe("requestLink", () => {
     }
     expect(logs).toEqual(["requestLink: the sign-in request failed (SQLSTATE 57P01)"]);
     expect(brevo).toEqual([]);
+  });
+});
+
+// OA4.6: « Session ouverte avec {email}. » above the form, read after the load, never in the HTML.
+describe("signedInAs", () => {
+  const DAY = 24 * 60 * 60_000;
+
+  it("answers the address of the token's open session, and nothing else", async () => {
+    await inTransaction(async (trx) => {
+      const email = anAddress();
+      const token = await seedSession(trx, await seedAccount(trx, { email }));
+      expect(await signedInAs(token)).toEqual({ email });
+    }, withRollback);
+  });
+
+  it("answers no address for a session ended 90 days after its last visit, an unknown token or no token", async () => {
+    await inTransaction(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const ended = await seedSession(trx, accountId, { lastVisitAt: new Date(Date.now() - 91 * DAY) });
+      const unknown = "AAAAAAAAAAAAAAAAAAAAAA";
+      for (const token of [ended, unknown, "", 42, null, undefined, { token: ended }]) {
+        expect(await signedInAs(token)).toEqual({ email: null });
+      }
+    }, withRollback);
+  });
+
+  it("does not count as a visit: the session and the account keep their dates", async () => {
+    await inTransaction(async (trx) => {
+      const lastVisitAt = new Date(Date.now() - 10 * DAY);
+      const accountId = await seedAccount(trx, { last_visit_at: lastVisitAt });
+      const token = await seedSession(trx, accountId, { lastVisitAt });
+      await signedInAs(token);
+      const session = await trx.selectFrom("session").select("last_visit_at").where("account_id", "=", accountId).executeTakeFirstOrThrow();
+      const account = await trx.selectFrom("account").select("last_visit_at").where("id", "=", accountId).executeTakeFirstOrThrow();
+      expect(session.last_visit_at).toEqual(lastVisitAt);
+      expect(account.last_visit_at).toEqual(lastVisitAt);
+    }, withRollback);
+  });
+
+  it("throws a fixed error, with the database's code alone in the log, when the database fails", async () => {
+    const token = "AAAAAAAAAAAAAAAAAAAAAA";
+    connection.current = new Proxy({} as Kysely<Database>, {
+      get() {
+        throw Object.assign(new Error(`Failing row contains (${token})`), { code: "57P01" });
+      },
+    });
+    try {
+      await expect(signedInAs(token)).rejects.toThrow(new Error("signedInAs: the session could not be read"));
+    } finally {
+      connection.current = undefined;
+    }
+    expect(logs).toEqual(["signedInAs: the session could not be read (SQLSTATE 57P01)"]);
   });
 });

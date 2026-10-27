@@ -503,5 +503,28 @@
       "nothingToDo": "Pour qu’il soit supprimé, il n’y a rien à faire.",
       "leadsTo": "Le bouton mène à {url} : il n’ouvre aucune session tout seul."
     }
+  },
+  "Login": {
+    "title": "Se connecter",
+    "intro": "Pas de mot de passe : nous vous envoyons un lien de connexion par e-mail.",
+    "email": "Adresse e-mail",
+    "send": "Recevoir le lien",
+    "sending": "Envoi en cours…",
+    "noAccount": "Pas encore de compte ? Il se crée avec votre premier événement.",
+    "already": "Session ouverte avec {email}.",
+    "myEvents": "Mes événements",
+    "offline": "Le lien n’a pas été envoyé. Vérifiez la connexion, puis réessayez.",
+    "failed": "Le lien n’a peut-être pas été envoyé. Une erreur est survenue : réessayez dans quelques minutes.",
+    "tooMany": "Trop de demandes pour cette adresse. Réessayez dans une heure.",
+    "needsJavaScript": "Se connecter nécessite JavaScript : activez-le, puis rechargez la page.",
+    "invalid": "Adresse e-mail non valide."
+  },
+  "Check": {
+    "title": "Regardez vos e-mails",
+    "body": "Nous avons envoyé un e-mail à {email}. Ouvrez le lien qu’il contient : la session s’ouvrira dans le navigateur qui l’ouvre. Il est valable 1 heure.",
+    "spam": "Rien reçu ? Regardez dans les indésirables.",
+    "resend": "Renvoyer l’e-mail",
+    "change": "Changer d’adresse",
+    "resent": "E-mail renvoyé."
   }
 }
