@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import { colour, css, expectColour, gap, ratio } from "./colour";
 import { contrast } from "./contrast";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { creatorTest as test, expect, leaveNoToken } from "./fixtures";
 import { legButton, organiserPath } from "./organiser";
 
 // VI4.4 opens the organiser area with its token.

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { BrowserContext, Page, Response } from "@playwright/test";
 import { formatDate } from "@/i18n/format-date";
 import { expect, expectText, expectUrl, leaveNoToken, test } from "./fixtures";
+import { adminTokenKey, keepAdminToken } from "./organiser";
 
 leaveNoToken();
 
@@ -68,8 +69,8 @@ const WORDS = {
   },
 };
 
-/** Where a new event lands: its organiser's link, the secret in the fragment only (C1.5). */
-const ARRIVAL = /\/e\/([2-9A-HJ-NP-Za-km-z]{8})\/admin#[A-Za-z0-9_-]{22}$/;
+/** Where a new event lands: its organiser area, without a fragment (OA1.6). */
+const ARRIVAL = /\/e\/([2-9A-HJ-NP-Za-km-z]{8})\/admin$/;
 
 const field = (page: Page, label: string) => page.getByLabel(label, { exact: true });
 
@@ -286,11 +287,13 @@ test.describe("the organiser's token on the network", () => {
     await checked;
     await expect(page.getByRole("region", { name: words.panel })).toBeVisible();
 
+    // OA1.6: no fragment; the browser keeps the token under its event's key (#597).
     const { pathname, hash } = new URL(page.url());
-    const token = hash.slice(1);
-    expect(/^[A-Za-z0-9_-]{22}$/.test(token), "the fragment is a well-formed token").toBe(true);
+    expect(hash, "the arrival's fragment").toBe("");
     const admin = pathname;
     expect(admin).toMatch(/^\/e\/\w{8}\/admin$/);
+    const token = (await page.evaluate((key) => localStorage.getItem(key), adminTokenKey(admin.split("/")[2]))) ?? "";
+    expect(/^[A-Za-z0-9_-]{22}$/.test(token), "the kept token is well formed").toBe(true);
 
     // Wherever the token is, by request, the query string included, and by part.
     const where = traffic.flatMap(({ at, ...parts }) =>
@@ -320,7 +323,8 @@ test.describe("the organiser's token on the network", () => {
     // The check and the language switch are both a POST to the page: told apart by their body.
     const checks = () => traffic.filter(({ at, requestBody }) => at === `POST ${admin}` && requestBody.includes(token));
 
-    await page.goto(`${admin}#${token}`, { waitUntil: "networkidle" });
+    await keepAdminToken(page, id, token);
+    await page.goto(admin, { waitUntil: "networkidle" });
     await expect(page.getByRole("region", { name: WORDS.fr.panel })).toBeVisible();
     expect(checks().length, "checks carrying the token").toBe(1);
     const before = traffic.length;
@@ -420,21 +424,19 @@ test.describe("an event with its three options", () => {
   ];
 
   /**
-   * The page's markup on each tab, its event's id and token replaced, the organiser's page
+   * The page's markup on each tab, its event's id replaced, the organiser's page
    * first. On the event's page, the DOM is compared in full without its scripts, and without its
    * metadata, which lands in `<body>` when it streams late (`lateBoundary`); then its metadata
    * wherever it is, its other scripts and its flight rows, the last two sorted.
    */
   async function markup(page: Page, adminUrl: string): Promise<string[]> {
-    const { pathname, hash } = new URL(adminUrl);
-    const id = pathname.split("/")[2];
+    const id = new URL(adminUrl).pathname.split("/")[2];
     // React's generated ids too: the panel mounts after `router.push`, and its ids follow
     // whatever was rendered on `/` before, ticking the options included.
     // Radix's mounted tab panel too: it holds `animation-duration: 0s` until a render after
     // the next frame, which may or may not have come yet. It shows nothing.
     const normalise = (html: string) =>
       html
-        .replaceAll(hash.slice(1), "{token}")
         .replaceAll(id, "{id}")
         .replace(/_r_\w+_/g, "{useId}")
         .replaceAll('style="animation-duration: 0s;"', 'style=""');

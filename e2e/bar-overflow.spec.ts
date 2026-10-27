@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, messages, newToken } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { creatorTest as test, expect, leaveNoToken } from "./fixtures";
 import { expectRing, press, pressUntil, rgba } from "./focus-ring";
 import { organiserPath } from "./organiser";
 

@@ -1,7 +1,7 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { expectRing, press, pressUntil, rgba } from "./focus-ring";
-import { hideToken } from "./organiser";
+import { hideToken, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -171,7 +171,7 @@ test.describe("the home link, in a browser set to French", () => {
     await expect(contactLink(page, FR)).toBeFocused();
   });
 
-  test("A3.7: from the organiser's link, the home page in the same tab, without the token, and Back brings the panel again", async ({
+  test("A3.7: from the organiser area, the home page in the same tab, without the token, and Back brings the panel again", async ({
     page,
     context,
     seededEvent,
@@ -179,7 +179,8 @@ test.describe("the home link, in a browser set to French", () => {
   }) => {
     const { id, token } = seededEvent;
     const origin = new URL(baseURL!).origin;
-    const adminPath = `/e/${id}/admin#${token}`;
+    const adminPath = organiserPath(seededEvent);
+    await keepAdminToken(page, id, token);
 
     // Every request of the test, searched for the token and for a Referer, named by its path, token hidden.
     const phase = { name: "organiser" as "organiser" | "home" | "back" };
@@ -228,7 +229,7 @@ test.describe("the home link, in a browser set to French", () => {
     phase.name = "back";
     await page.goBack();
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
-    expect(page.url() === `${origin}${adminPath}`, "Back is on the organiser's link").toBe(true);
+    expect(page.url() === `${origin}${adminPath}`, "Back is on the organiser area").toBe(true);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
 
     context.off("request", watch);

@@ -1,7 +1,7 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import { expect, leaveNoToken, test as base } from "./fixtures";
 import { expectRing, press, pressUntil, rgba } from "./focus-ring";
-import { hideToken } from "./organiser";
+import { hideToken, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -180,7 +180,7 @@ test.describe("the source code link, in a browser set to French", () => {
     });
   }
 
-  test("G7: from the organiser's link, the repository alone in a new tab, and the organiser's tab stays", async ({
+  test("G7: from the organiser area, the repository alone in a new tab, and the organiser's tab stays", async ({
     page,
     context,
     github,
@@ -188,7 +188,8 @@ test.describe("the source code link, in a browser set to French", () => {
     baseURL,
   }) => {
     const { id, token } = seededEvent;
-    const path = `/e/${id}/admin#${token}`;
+    const path = organiserPath(seededEvent);
+    await keepAdminToken(page, id, token);
     await open(page, path, "Tournoi de Rennes", token);
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
 
@@ -205,8 +206,8 @@ test.describe("the source code link, in a browser set to French", () => {
     expect(sent.includes(token), "what GitHub receives holds the token").toBe(false);
     expect(sent.includes(id), "what GitHub receives holds the event's id").toBe(false);
 
-    // The organiser's tab has not moved, its fragment included.
-    expect(page.url() === `${new URL(baseURL!).origin}${path}`, "the organiser's tab is still on the organiser's link").toBe(
+    // The organiser's tab has not moved.
+    expect(page.url() === `${new URL(baseURL!).origin}${path}`, "the organiser's tab is still on the organiser area").toBe(
       true,
     );
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();

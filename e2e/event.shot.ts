@@ -5,6 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { DRIVER_PHONE } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { areaRefused, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -48,7 +49,8 @@ test("the creation form, every error shown", async ({ page }, testInfo) => {
 });
 
 test("organiser's page, with a retour", async ({ page, seededEvent }, testInfo) => {
-  await page.goto(`/e/${seededEvent.id}/admin#${seededEvent.token}`);
+  await keepAdminToken(page, seededEvent.id, seededEvent.token);
+  await page.goto(organiserPath(seededEvent));
   // Shown once the client has checked the token with the server.
   await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
   await shoot(page, testInfo, "event-admin");
@@ -209,9 +211,9 @@ test("event ended", async ({ db, page, seededEvent }, testInfo) => {
   }
 });
 
-test("organiser's link, not valid", async ({ page, seededEvent }, testInfo) => {
-  await page.goto(`/e/${seededEvent.id}/admin#q3Vx9kLmN2pR7sT1uW4yZa`);
-  // Shown once the client has had the server's answer.
-  await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText("Ce lien d’organisateur n’est pas valide.");
-  await shoot(page, testInfo, "event-admin-invalide");
+test("organiser area, refused", async ({ page, seededEvent }, testInfo) => {
+  await page.goto(organiserPath(seededEvent));
+  // Shown once the client has had the server's answer: the area's title alone (#597, until #598).
+  await expect(areaRefused(page)).toBeVisible();
+  await shoot(page, testInfo, "event-admin-refuse");
 });

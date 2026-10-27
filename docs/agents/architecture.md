@@ -563,7 +563,9 @@ ci-dessus valent pour chacun.
 - **Le jeton d'admin dans le navigateur de création** : à partir de #597, il est rangé dans
   `localStorage` sous la clé `fullcar:admin-token:{id}`, au travers de
   `src/app/e/[id]/admin/admin-token-store.ts` seulement, qui remplace `admin-link.ts`. La
-  création mène à `/e/{id}/admin`, sans fragment. Le jeton est révoqué (son hash passe à
+  création mène à `/e/{id}/admin`, sans fragment. Si `localStorage` refuse le jeton, la
+  mémoire de la page le garde, le temps de la page : l'arrivée après la création ouvre
+  encore le panneau, un rechargement non. Le jeton est révoqué (son hash passe à
   nul) par « Se déconnecter » dans ce navigateur, qui envoie les jetons d'admin qu'il garde
   et les efface, par l'anonymisation, et par la suppression du compte.
 - **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et
@@ -579,11 +581,17 @@ ci-dessus valent pour chacun.
 - **Une seule règle d'accès** à l'espace organisateur : `src/domain/organiser-access.ts`
   (#596). Elle donne l'accès à la session du compte de l'événement, ou au jeton d'admin du
   navigateur de création. `withOrganiserPhones` n'accepte qu'une autorisation produite par
-  cette règle (voir « Visibilité du téléphone »).
+  cette règle (voir « Visibilité du téléphone »). Une écriture de l'organisateur décide
+  l'accès une première fois avant le verrou de l'Event, pour refuser sans l'attendre, puis
+  le décide de nouveau sous ce verrou, en lisant l'événement, la session et le compte dans
+  la même transaction (#836). Une déconnexion, une suppression de compte ou un jeton
+  révoqué validés pendant l'attente refusent alors l'écriture (`invalid`). C'est le cas
+  d'`editEvent` ; les autres écritures de l'organisateur (#672, #675) suivront ce chemin.
 - **Le retrait d'une personne par l'organisateur** (#645, `removeAsOrganiser`,
-  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin :
-  aujourd'hui par `adminTokenMatches`, comme `editEvent`, puis par `organiser-access.ts`
-  seul (#675). La requête porte aussi le jeton personnel de l'appareil, mais seulement pour
+  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin,
+  comparé par `adminTokenMatches` sous le verrou de l'Event ; il passera par
+  `organiser-access.ts` seul, comme `editEvent` aujourd'hui (#675). La requête porte
+  aussi le jeton personnel de l'appareil, mais seulement pour
   relire le tableau que la page montre (`readEventState`), dont « Vos inscriptions » et les
   numéros visibles dépendent de ce jeton. Ce jeton ne donne aucun droit sur ce chemin : un
   jeton personnel n'ouvre jamais le retrait par l'organisateur, pas même celui du navigateur
@@ -1297,7 +1305,8 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | accès à l'espace organisateur | `src/domain/organiser-access.ts`, à partir de #596 | la seule règle d'accès : session du compte de l'événement, ou jeton d'admin du navigateur de création ; seule à produire l'autorisation que `withOrganiserPhones` accepte |
 | retrait d'une personne | `src/app/e/[id]/remove-person.ts` et `src/domain/person-removal.ts`, à partir de #665 | le cas d'usage, sans server action exportée : `removeFromDevice` (le droit par `devicePersonIds`) et `removeAsOrganiser` (le droit par le seul jeton d'admin, puis `organiser-access.ts`, #675), l'ordre des réponses (RP3.4) et celui des verrous (voir « Retirer une personne ») ; le domaine, en fonctions pures : ce que devient chaque leg, et les lignes de la confirmation, lues dans l'état que la page montre |
 | compte dans la base | `src/db/accounts.ts`, `sessions.ts`, `email-links.ts`, `email-sends.ts`, à partir de #594 ; `src/db/my-events.ts`, à partir de #606 | les comptes, les sessions, les liens (un seul usage, même en concurrence) et les envois (limites sous verrou, Event puis adresse) ; Mes événements en agrégats, sans aucun téléphone |
-| connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/`, à partir de #607 | les pages et actions de connexion et des liens ; la page Mes événements |
+| connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/` : `actions.ts` et `my-events.ts`, à partir de #606, la page à partir de #607 | les pages et actions de connexion et des liens ; Mes événements : l'action `myEvents`, qui reçoit le jeton de session dans le corps et lit la session et ses événements sur un seul instantané, sans rien écrire, et la page |
+| Mes événements | `src/domain/my-events.ts`, à partir de #606 | les deux sections et leur ordre (« À venir » par début croissant, « Passés » par début décroissant), « passé » et le jour 30 par `day-thirty.ts` ; une ligne n'est listée que si `organiser-access.ts`, avec la session seule, l'ouvre ou la dit terminée : jamais un événement en attente (OA2.3) |
 | création | `src/app/create-event.ts`, à partir de #599 | le cas d'usage de la création, avec une adresse ou une session ; l'envoi de la confirmation par `after()` |
 | e-mails | `src/email/brevo.ts`, à partir de #591 ; `src/email/messages.ts`, à partir de #592 | seul `brevo.ts` lit `BREVO_URL`, `BREVO_API_KEY` et `EMAIL_FROM` et appelle Brevo ; `messages.ts` écrit les quatre e-mails, sans aucun texte saisi (voir « Les e-mails ») |
 | jour 30 et « passé » | `src/domain/day-thirty.ts`, à partir de #587 | le seul calcul de « aujourd'hui », « passé » et du jour 30, à l'heure de Paris (voir « Heures sans fuseau ») |

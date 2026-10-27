@@ -57,6 +57,20 @@ export const test = base.extend<
   },
 });
 
+/** Where the browser that created event `id` keeps its admin token (admin-token-store.ts, #597). */
+export const adminTokenKey = (id: string) => `fullcar:admin-token:${id}`;
+
+/**
+ * `test`, in the browser that created `seededEvent`: its context is created keeping the
+ * event's admin token under its key (`storageState`), as admin-token-store.ts does (#597).
+ */
+export const creatorTest = test.extend({
+  storageState: async ({ seededEvent, baseURL }, provide) => {
+    const localStorage = [{ name: adminTokenKey(seededEvent.id), value: seededEvent.token }];
+    await provide({ cookies: [], origins: [{ origin: new URL(baseURL!).origin, localStorage }] });
+  },
+});
+
 /**
  * The page reaches a URL that `url` matches, checked without printing it (#365): the URL a
  * failure would show may be the organiser's link, which `toHaveURL` prints whole.

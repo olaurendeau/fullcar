@@ -28,8 +28,8 @@ export const FR = {
 };
 
 export const NEW_EVENT = "/nouveau";
-/** Where a new event lands: its id, then the organiser's token in the fragment. */
-export const ARRIVAL = /\/e\/([2-9A-HJ-NP-Za-km-z]{8})\/admin#[A-Za-z0-9_-]{22}$/;
+/** Where a new event lands: its organiser area, by its id, without a fragment (OA1.6). */
+export const ARRIVAL = /\/e\/([2-9A-HJ-NP-Za-km-z]{8})\/admin$/;
 
 /** A text of this test's own: the fake keeps its answers an hour, and the app its cache. */
 export function textOf(label: string) {

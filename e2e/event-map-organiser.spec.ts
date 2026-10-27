@@ -2,7 +2,7 @@ import type { Locator, Page, Route } from "@playwright/test";
 import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
 import { placeOf } from "./tiles";
-import { expect, holdActionsWith, isAction, oneCharOff, organiserPath, test } from "./organiser";
+import { areaRefused, expect, holdActionsWith, isAction, keepAdminToken, oneCharOff, organiserPath, test } from "./organiser";
 import { answerFor } from "./photon";
 import { namedPlace, textOf } from "./place-field";
 
@@ -111,10 +111,11 @@ test.describe("CA2.1: the organiser's sentence, an event without a position", ()
     await expect(hintButton(page)).toHaveCount(0);
   });
 
-  test("on /admin with a link not valid, neither the sentence nor its button", async ({ page, seededEvent }) => {
-    await page.goto(organiserPath({ ...seededEvent, token: oneCharOff(seededEvent.token) }));
+  test("on /admin, the area refused, neither the sentence nor its button", async ({ page, seededEvent }) => {
+    await keepAdminToken(page, seededEvent.id, oneCharOff(seededEvent.token));
+    await page.goto(organiserPath(seededEvent));
     await expect(page.getByRole("button", { name: "Proposer une voiture" })).toBeVisible();
-    await expect(page.getByText("Ce lien d’organisateur n’est pas valide.", { exact: true })).toBeVisible();
+    await expect(areaRefused(page)).toBeVisible();
     await expect(hint(page)).toHaveCount(0);
     await expect(hintButton(page)).toHaveCount(0);
   });
@@ -249,7 +250,7 @@ test.describe("CA2.1: the organiser's sentence, an event without a position", ()
     await page.goto(organiserPath(seededEvent));
     await expect.poll(held.held).toBe(1);
     await held.fail();
-    await expect(page.getByText("Le lien d’organisateur n’a pas pu être vérifié.")).toBeVisible();
+    await expect(page.getByText("L’espace organisateur n’a pas pu être chargé.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Proposer une voiture" })).toBeVisible();
     await expect(hint(page)).toHaveCount(0);
     await expect(hintButton(page)).toHaveCount(0);

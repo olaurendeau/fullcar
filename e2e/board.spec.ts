@@ -5,7 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { hideToken, htmlByLegSection } from "./organiser";
+import { hideToken, htmlByLegSection, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -314,12 +314,8 @@ function readText({ url, text, unreadable }: Body): string {
 
 const PAGES = [
   { name: "/e/{id}", path: ({ id }: SeededEvent) => `/e/${id}`, organiser: false },
-  { name: "/e/{id}/admin, without its fragment", path: ({ id }: SeededEvent) => `/e/${id}/admin`, organiser: false },
-  {
-    name: "/e/{id}/admin, with a valid organiser's link",
-    path: (event: SeededEvent) => `/e/${event.id}/admin#${event.token}`,
-    organiser: true,
-  },
+  { name: "/e/{id}/admin, in a browser without the admin token", path: organiserPath, organiser: false },
+  { name: "/e/{id}/admin, in the browser that keeps the admin token", path: organiserPath, organiser: true },
 ];
 
 for (const javaScriptEnabled of [true, false]) {
@@ -349,8 +345,9 @@ for (const javaScriptEnabled of [true, false]) {
         page.on("response", (response) => {
           if (!isPanelRead(response.request(), id)) bodies.push(body(hideToken(response.url(), seededEvent.token), response.text()));
         });
+        if (organiser) await keepAdminToken(page, id, seededEvent.token);
         await page.goto(path(seededEvent), { waitUntil: "networkidle" });
-        // With JavaScript, the link's check answered: its panel shows.
+        // With JavaScript, the token's check answered: its panel shows.
         if (javaScriptEnabled && organiser) {
           await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
         }
@@ -381,9 +378,14 @@ for (const javaScriptEnabled of [true, false]) {
         for (const read of received) expectNoNumber(read.url, readText(read));
 
         const panels = await Promise.all(panelReads);
-        expect(panels.length, "reads of the panel").toBe(javaScriptEnabled && organiser ? 1 : 0);
+        // #597: on /admin, the area is always checked, with the token this browser keeps or none.
+        expect(panels.length, "reads of the panel").toBe(javaScriptEnabled && path(seededEvent).endsWith("/admin") ? 1 : 0);
         for (const read of panels) {
           const text = readText(read);
+          if (!organiser) {
+            expectNoNumber(`the refusal at ${read.url}`, text);
+            continue;
+          }
           expect(text.includes(PHONES.tom), "the panel holds Tom's number").toBe(true);
           expect(text.includes(PHONES.lea), "the panel holds Léa's number").toBe(true);
           expectNoNumber(`the panel at ${read.url}`, text, DRIVERS_NUMBERS);

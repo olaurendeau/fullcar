@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
+import { areaRefused } from "./organiser";
 
 /*
  * #113, #131: after a tap on the language switch, what the page computes follows the new
@@ -16,7 +17,7 @@ const LANGUAGES = {
     switch: "English",
     legs: { aller: "Aller", retour: "Retour" },
     dates: { aller: /^samedi 12 décembre 2026 à 07:30$/, retour: /^18:00$/ },
-    invalid: "Ce lien d’organisateur n’est pas valide.",
+    panel: "Espace organisateur",
   },
   en: {
     switch: "Français",
@@ -25,15 +26,15 @@ const LANGUAGES = {
       aller: /^Saturday, December 12, 2026 at 7:30\sAM$/,
       retour: /^6:00\sPM$/,
     },
-    invalid: "This organiser link is not valid.",
+    panel: "Organiser area",
   },
 } as const;
 type Lang = keyof typeof LANGUAGES;
 
-/** The event's view, on its own page and on the organiser's page with nothing after the `#`. */
+/** The event's view, on its own page and on the organiser's page of a browser without its token. */
 const VIEWS: [string, (id: string) => string][] = [
   ["the event's page", (id) => `/e/${id}`],
-  ["the organiser's page, without a fragment", (id) => `/e/${id}/admin`],
+  ["the organiser's page, without the token", (id) => `/e/${id}/admin`],
 ];
 
 /** Clicks a tab until it is selected: a click before hydration does nothing. */
@@ -80,7 +81,7 @@ async function openView(page: Page, path: string, lang: Lang) {
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(TITLE);
   if (path.endsWith("/admin")) {
-    await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(LANGUAGES[lang].invalid);
+    await expect(areaRefused(page, LANGUAGES[lang].panel)).toBeVisible();
   }
 }
 
