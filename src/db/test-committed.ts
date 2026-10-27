@@ -58,6 +58,9 @@ async function waitsFor(db: Kysely<Database>, waiter: number, holder: number, en
  * its locks, then committed. `second` must run on that connection: whileHeld waits for its
  * session, no other. `whileWaiting`, given the pid of that session, looks at what it holds
  * before the commit. Gives what `second` gives; when `second` fails before waiting, its error.
+ * `own` is one connection: a `second` that opens a transaction on it, then queries `own`
+ * itself instead of that transaction, waits for itself until Vitest's timeout. Whatever
+ * fails, whileHeld gives `own` back only once `second` is over, the holder rolled back.
  */
 export async function whileHeld<T>(
   db: Kysely<Database>,
@@ -66,6 +69,13 @@ export async function whileHeld<T>(
   whileWaiting?: (waitingPid: number) => Promise<void>,
 ): Promise<T> {
   const holder = await db.startTransaction().setIsolationLevel("repeatable read").execute();
+  const release = async () => {
+    try {
+      await holder.rollback().execute();
+    } catch {
+      // Already committed or rolled back: nothing to give back.
+    }
+  };
   try {
     await first(holder);
     const pid = await backendPid(holder);
@@ -75,20 +85,22 @@ export async function whileHeld<T>(
       const pending = second(own).finally(() => void (ended = true));
       pending.catch(() => {});
       try {
-        await waitsFor(db, waiter, pid, () => ended);
-      } catch (error) {
-        if (ended) await pending;
-        throw error;
+        try {
+          await waitsFor(db, waiter, pid, () => ended);
+        } catch (error) {
+          if (ended) await pending;
+          throw error;
+        }
+        await whileWaiting?.(waiter);
+        await holder.commit().execute();
+        return await pending;
+      } finally {
+        // Still waiting, `second` would carry on after the rollback on a connection the pool lent again.
+        await release();
+        await pending.catch(() => {});
       }
-      await whileWaiting?.(waiter);
-      await holder.commit().execute();
-      return await pending;
     });
   } finally {
-    try {
-      await holder.rollback().execute();
-    } catch {
-      // Already committed: nothing to give back.
-    }
+    await release();
   }
 }
