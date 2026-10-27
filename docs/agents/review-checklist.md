@@ -16,19 +16,32 @@ celui qui écrit le code.
 - À partir de #154, le jeton d'admin n'entre que dans le corps de `loadOrganiserPanel`, et,
   à partir de #263, dans celui d'`updateEvent` ; à partir de #596, la session y entre avec
   lui (`{ adminToken, session }`). Seul `src/domain/organiser-access.ts` décide qui
-  administre (épique #581) : la session du compte de l'événement suffit, sans lien admin,
-  comme le jeton d'admin du navigateur qui l'a créé. Sans cette autorisation (jeton d'admin
-  faux, absent ou mal formé, et aucune session du compte de l'événement), la réponse de
-  `loadOrganiserPanel` ne contient que l'état que la règle décide (`orphan`, `ended`,
-  `pending`, `notYours`, `signIn`) et aucune donnée du panneau ; `notYours` n'ajoute que
-  l'adresse de la session du visiteur. `{ state: "invalid" }` ne veut plus dire qu'un
-  événement inconnu. Sur un événement qui n'est pas anonymisé, `updateEvent` ne répond alors
-  que `{ ok: false, error: "invalid" }` et n'écrit rien. Avant la règle, `updateEvent` répond
-  `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement inconnu ou mal formé,
-  puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un événement anonymisé,
-  quel que soit le jeton, sans rien écrire : l'anonymisation a effacé le hash du jeton
-  (« La purge » dans `architecture.md`). La réponse du panneau n'est ni stockée dans le
-  navigateur, ni journalisée (O6.4).
+  administre (épique #581). La règle n'ouvre le panneau qu'à la session du compte de
+  l'événement ou au jeton d'admin du navigateur qui l'a créé, et jamais sur un événement
+  orphelin (`orphan`) ni anonymisé, quel que soit le jeton : sur un événement anonymisé, la
+  session du compte lit `ended`, une autre session `notYours`, personne `signIn`. Hors du
+  panneau, la réponse de `loadOrganiserPanel` ne contient que l'état que la règle décide
+  (`orphan`, `ended`, `pending`, `notYours`, `signIn`) et aucune donnée du panneau ;
+  `notYours` n'ajoute que l'adresse de la session du visiteur. `loadOrganiserPanel` ne
+  répond `{ state: "invalid" }` qu'à un identifiant inconnu ou mal formé. `updateEvent`
+  répond `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement inconnu ou mal
+  formé, puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un événement
+  anonymisé, quels que soient le jeton et la session : l'anonymisation a effacé le hash du
+  jeton (« La purge » dans `architecture.md`) ; puis `{ ok: false, error: "invalid" }` quand
+  la règle n'ouvre rien. Ces refus n'écrivent rien. À partir de #843, `updateEvent` décide
+  l'accès une seconde fois sous `lockEvent(trx, id, "noKeyUpdate")`, avant toute écriture :
+  une session fermée, un compte supprimé ou un jeton révoqué pendant l'attente du verrou y
+  est vu. Une écriture de l'organisateur qui ne décide l'accès qu'avant le verrou est
+  bloquante. La réponse du panneau n'est ni stockée dans le navigateur, ni journalisée
+  (O6.4).
+- À partir de #855, il n'y a plus de lien d'organisateur. Seul
+  `src/app/e/[id]/admin/admin-token-store.ts` touche au jeton d'admin dans le navigateur :
+  celui qui a créé l'événement le garde dans `localStorage` sous `fullcar:admin-token:{id}`
+  et nulle part ailleurs (sans `localStorage`, dans la mémoire de la page). Il n'est jamais
+  lu dans l'URL, et un fragment sur `/e/{id}/admin` est ignoré (OA7.5). Un jeton d'admin lu
+  dans l'URL, fragment compris, ou rangé sous une autre clé, est bloquant. Ce point ne vaut
+  que pour le jeton d'admin : les liens de connexion et de confirmation
+  (`src/email/messages.ts`) portent toujours leur jeton dans le fragment.
 - À partir de #66, le jeton personnel est tiré **par le navigateur** avec
   `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
   avant l'envoi. Un jeton personnel tiré
@@ -67,9 +80,8 @@ celui qui écrit le code.
   l'un ni l'autre.
 - La réponse de l'espace organisateur ne porte aucun numéro de conducteur, de passager
   placé ni de personne pas concernée. Du numéro de son conducteur, une voiture ne dit que
-  s'il existe. Sans l'autorisation d'`organiser-access.ts` (jeton d'admin faux, absent ou mal
-  formé, et aucune session du compte de l'événement), elle ne porte ni numéro ni donnée du
-  panneau : `withOrganiserPhones` ne rend rien. Un booléen « vérifié » passé à la
+  s'il existe. Quand `organiser-access.ts` n'accorde pas l'accès, elle ne porte ni numéro
+  ni donnée du panneau : `withOrganiserPhones` ne rend rien. Un booléen « vérifié » passé à la
   règle est bloquant. Jusqu'à #596, elle reçoit le jeton et le vérifie elle-même ; à partir
   de #596, elle ne reçoit qu'une autorisation, d'un type que seul
   `src/domain/organiser-access.ts` produit, et une autorisation fabriquée ailleurs est
@@ -285,12 +297,13 @@ celui qui écrit le code.
   87 % du temps de la CI, mesuré avant #652.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.
-- À partir de #365, aucune vérification de bout en bout n'affiche un jeton, un lien
-  administrateur ou un numéro en échouant, ni par ce qu'elle compare, ni par le message
+- À partir de #365, aucune vérification de bout en bout n'affiche un jeton, un lien qui en
+  porte un (de connexion ou de confirmation ; depuis #855, il n'y a plus de lien
+  d'organisateur) ou un numéro en échouant, ni par ce qu'elle compare, ni par le message
   qu'elle passe à `expect`. Un tableau rempli depuis le réseau (`Request`, corps, en-têtes,
-  ou textes filtrés sur un jeton) qui peut porter un jeton, un lien administrateur ou un
+  ou textes filtrés sur un jeton) qui peut porter un jeton, un lien qui en porte un ou un
   numéro ne s'affirme que par son nombre (`.length`), jamais par `toHaveLength` ni
-  `toEqual`. Une chaîne qui peut contenir un jeton, un lien administrateur ou un numéro ne
+  `toEqual`. Une chaîne qui peut contenir un jeton, un lien qui en porte un ou un numéro ne
   s'affirme que par un booléen. Un texte dont chaque jeton a d'abord été remplacé
   (`hideToken`, `hide`) et qui ne porte aucun numéro n'est plus concerné. Seule exception
   pour un numéro semé : celui qu'on attend à l'écran (`toHaveText`, `href="tel:…"`) ou
