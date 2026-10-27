@@ -112,12 +112,13 @@ test.describe("/connexion", () => {
     await page.keyboard.press("Enter");
     expect(await releaseMail([email])).toBe(1);
     await expect(heading(page)).toHaveText(FR.check);
-    // Next sends server actions one at a time: a second request would leave only now, once the
-    // first is answered, and Brevo, still told to hold, would keep it. Time for it to leave and arrive.
-    await page.waitForTimeout(1_000);
-    expect(actions.length, "one request").toBe(1);
-    expect(await releaseMail([email]), "nothing more held").toBe(0);
-    expect((await mailTo(email)).length).toBe(1);
+    // Next sends server actions one at a time, in order: a resend answered is one that left after
+    // any second request, and a second request held by Brevo would keep « E-mail renvoyé. » unsaid.
+    await answerMail([email], { kind: "ok" });
+    await page.getByRole("button", { name: FR.resend }).click();
+    await expect(page.getByRole("status")).toHaveText(FR.resent);
+    expect(actions.length, "the request and the resend").toBe(2);
+    expect((await mailTo(email)).length).toBe(2);
   });
 
   test("OA4.2: an address with an account and one without give the same screen, and the focus goes to its title", async ({
@@ -170,6 +171,35 @@ test.describe("/connexion", () => {
     await expect(heading(page)).toHaveText(FR.title);
     await expect(field(page)).toHaveValue(email);
     await expect(field(page)).toBeFocused();
+  });
+
+  test("OA4.3: while a resend is held, a second tap on « Renvoyer l’e-mail » sends nothing", async ({ page }) => {
+    const email = address();
+    await open(page);
+    await ask(page, email);
+    await expect(heading(page)).toHaveText(FR.check);
+
+    await answerMail([email], { kind: "hold" });
+    const actions = actionsOf(page);
+    const resend = page.getByRole("button", { name: FR.resend });
+    await resend.click();
+    await expect(resend).toHaveAttribute("aria-disabled", "true");
+    await expect.poll(async () => (await mailTo(email)).length).toBe(2);
+    // Forced: Playwright waits for an aria-disabled button to be enabled, as long as Brevo would.
+    await resend.click({ force: true });
+    await page.keyboard.press("Enter");
+    await answerMail([email], { kind: "ok" });
+    expect(await releaseMail([email])).toBe(1);
+    await expect(page.getByRole("status")).toHaveText(FR.resent);
+
+    // Next sends server actions one at a time, in order: the form's request, answered, left after
+    // any second resend, and is the only one to show « Regardez vos e-mails » again.
+    await page.getByRole("button", { name: FR.change }).click();
+    await expect(heading(page)).toHaveText(FR.title);
+    await sendButton(page).click();
+    await expect(heading(page)).toHaveText(FR.check);
+    expect(actions.length, "the resend and the request").toBe(2);
+    expect((await mailTo(email)).length).toBe(3);
   });
 
   test("an empty or unreadable address: its error under the field, the focus on it, and nothing sent", async ({ page }) => {
