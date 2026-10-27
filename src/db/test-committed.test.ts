@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql, type Kysely } from "kysely";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createDb, getDb } from "./client";
+import { createDb, getDb, POOL_SIZE } from "./client";
 import type { Database } from "./schema";
 import { whileHeld, whileHeldInTurn, withCommittedEvent } from "./test-committed";
 
@@ -260,11 +260,13 @@ describe("whileHeld", () => {
       expect(answers).toEqual(["earlier", "later"]);
     });
 
-    it("refuses more than 3 seconds before anything starts, the pool being of 5 connections", async () => {
+    it("refuses more seconds than the pool leaves room for, before anything starts", async () => {
       const first = vi.fn(async (trx: Kysely<Database>) => takeKey(trx));
       const second = vi.fn(async (own: Kysely<Database>) => takeKey(own));
-      await expect(whileHeldInTurn(getDb(), first, [second, second, second, second])).rejects.toThrow(
-        "whileHeldInTurn: at most 3 seconds, the pool has 5 connections (4 given)",
+      // One for the holder, one to look at the waiting sessions: one second too many.
+      const seconds = Array.from({ length: POOL_SIZE - 1 }, () => second);
+      await expect(whileHeldInTurn(getDb(), first, seconds)).rejects.toThrow(
+        `whileHeldInTurn: at most ${POOL_SIZE - 2} seconds, the pool has ${POOL_SIZE} connections (${POOL_SIZE - 1} given)`,
       );
       expect(first).not.toHaveBeenCalled();
       expect(second).not.toHaveBeenCalled();

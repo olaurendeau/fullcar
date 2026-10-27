@@ -1,5 +1,5 @@
 import { sql, type Kysely } from "kysely";
-import { getDb } from "./client";
+import { getDb, POOL_SIZE } from "./client";
 import type { Database } from "./schema";
 import { seedEvent } from "./test-events";
 
@@ -79,18 +79,18 @@ export async function whileHeld<T>(
 }
 
 /**
- * The pool has 5 connections (client.ts): the holder takes one, each second one, and each
- * look at the waiting sessions one more. With more seconds, that look would wait for the
- * pool until Vitest's timeout, the holder never rolled back.
+ * The pool has POOL_SIZE connections (client.ts): the holder takes one, each second one, and
+ * each look at the waiting sessions one more. With more seconds, that look would wait for
+ * the pool until Vitest's timeout, the holder never rolled back.
  */
-const MOST_SECONDS = 3;
+const MOST_SECONDS = POOL_SIZE - 2;
 
 /**
- * whileHeld for several sessions, at most 3: each of `seconds`, on a connection of its own,
- * starts once the one before it waits, and must wait in turn, for first or behind one before
- * it (queued for the same lock, or for one it holds). Then first is committed. Gives what
- * each gives, in order; when one fails before waiting, its error. Each connection is given
- * back as whileHeld does.
+ * whileHeld for several sessions, at most MOST_SECONDS: each of `seconds`, on a connection
+ * of its own, starts once the one before it waits, and must wait in turn, for first or
+ * behind one before it (queued for the same lock, or for one it holds). Then first is
+ * committed. Gives what each gives, in order; when one fails before waiting, its error.
+ * Each connection is given back as whileHeld does.
  */
 export async function whileHeldInTurn<T>(
   db: Kysely<Database>,
@@ -107,7 +107,7 @@ async function held<T>(
   whileWaiting: (waitingPids: number[], trx: Kysely<Database>) => Promise<void>,
 ): Promise<T[]> {
   if (seconds.length > MOST_SECONDS) {
-    throw new Error(`whileHeldInTurn: at most ${MOST_SECONDS} seconds, the pool has 5 connections (${seconds.length} given)`);
+    throw new Error(`whileHeldInTurn: at most ${MOST_SECONDS} seconds, the pool has ${POOL_SIZE} connections (${seconds.length} given)`);
   }
   const holder = await db.startTransaction().setIsolationLevel("repeatable read").execute();
   const release = async () => {
