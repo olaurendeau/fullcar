@@ -191,6 +191,16 @@ function clockCases() {
       ];
       expect(ids(listMyEvents(rows, ACCOUNT, NOW).upcoming)).toEqual(["mine"]);
     });
+
+    it("lists no anonymised event of another account, while its own is among the past", () => {
+      const rows = [
+        row({ id: "someone-else-erased", allerAt: "2026-10-01 07:30:00", retourAt: null, accountId: OTHER_ACCOUNT_ID, anonymised: true }),
+        row({ id: "mine-erased", allerAt: "2026-10-02 07:30:00", retourAt: null, anonymised: true }),
+      ];
+      const list = listMyEvents(rows, ACCOUNT, NOW);
+      expect(ids(list.past)).toEqual(["mine-erased"]);
+      expect(list.upcoming).toEqual([]);
+    });
   });
 }
 

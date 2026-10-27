@@ -1,11 +1,13 @@
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
+import { getDb } from "@/db/client";
 import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
 import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
+import { atomically } from "@/db/transaction";
 import { readMyEvents } from "./my-events";
 
 /** 2026-12-12 13:00:00 in Paris. */
@@ -111,6 +113,13 @@ describe("readMyEvents", () => {
     await withRollback(async (trx) => {
       expect(await readMyEvents(trx, token, NOW)).toEqual({ state: "signIn" });
     });
+  });
+
+  // The session and its events on one snapshot: never a session read before a sign-out and events after it.
+  it("refuses to read in a READ COMMITTED transaction, rather than mixing snapshots", async () => {
+    await expect(atomically(getDb(), (trx) => readMyEvents(trx, "AAAAAAAAAAAAAAAAAAAAAA", NOW))).rejects.toThrow(
+      "onOneSnapshot: the transaction given is in read committed, not repeatable read",
+    );
   });
 
   it("answers nothing of the token, and writes nothing: the visit is session-visit.tsx's", async () => {
