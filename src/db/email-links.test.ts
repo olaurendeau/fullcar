@@ -1,10 +1,13 @@
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { CONFIRMATION_LINK_LIFETIME_MS, LOGIN_LINK_LIFETIME_MS } from "@/domain/account-rules";
+import { CONFIRMATIONS_PER_ADDRESS, CONFIRMATIONS_PER_EVENT, SEND_WINDOW_MS } from "@/domain/send-limits";
 import { hashToken } from "@/domain/token-hash";
-import { createLink, findLink, useLink } from "./email-links";
+import { anonymiseEvent, deleteEvent } from "./day-thirty";
+import { claimConfirmation, createLink, findLink, useLink } from "./email-links";
+import { lockEvent } from "./events";
 import type { Database } from "./schema";
-import { seedAccount, seedLink, withCommittedAddresses } from "./test-accounts";
+import { anAddress, seedAccount, seedLink, seedSends, withCommittedAddresses } from "./test-accounts";
 import { whileHeld, withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
@@ -29,6 +32,94 @@ describe("createLink", () => {
       expect(JSON.stringify(rows)).not.toContain(login);
       expect(await findLink(trx, login)).toMatchObject({ kind: "login", accountId, eventId: null, returnEventId: eventId });
       expect(await findLink(trx, confirmation)).toMatchObject({ kind: "confirmation", accountId: null, eventId });
+    });
+  });
+});
+
+const linksOf = (db: Kysely<Database>, eventId: string) =>
+  db.selectFrom("email_link").select("token_hash").where("event_id", "=", eventId).execute();
+
+const sendsTo = (db: Kysely<Database>, email: string) =>
+  db.selectFrom("email_send").select(["kind", "event_id"]).where("email", "=", email).execute();
+
+describe("claimConfirmation", () => {
+  it("records the send and gives the token of a new confirmation link of the event", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const email = anAddress();
+      // Counted two hours ahead: the global cap's concurrency test (email-sends.test.ts) may hold 50 sends in the hour.
+      const claimed = await claimConfirmation(trx, eventId, email, new Date(Date.now() + 2 * SEND_WINDOW_MS));
+      if (claimed.claim !== "recorded") throw new Error(`expected a link, got ${claimed.claim}`);
+      expect(await findLink(trx, claimed.token)).toMatchObject({ kind: "confirmation", eventId, usedAt: null });
+      expect(await linksOf(trx, eventId)).toHaveLength(1);
+      expect(await sendsTo(trx, email)).toEqual([{ kind: "confirmation", event_id: eventId }]);
+    });
+  });
+
+  // #599, review of #795: a link only after an accepted send, so the links of a pending event stay bounded.
+  it.each([
+    ["the address", "address", (trx: Kysely<Database>, email: string) => seedSends(trx, CONFIRMATIONS_PER_ADDRESS, { kind: "confirmation", email })],
+    ["the event", "event", (trx: Kysely<Database>, _: string, eventId: string) =>
+      seedSends(trx, CONFIRMATIONS_PER_EVENT, { kind: "confirmation", eventId, email: () => anAddress() })],
+  ] as const)("creates no link when the limit of %s stops the send", async (_, limit, fill) => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const email = anAddress();
+      await fill(trx, email, eventId);
+      const sendsBefore = (await sendsTo(trx, email)).length;
+      expect(await claimConfirmation(trx, eventId, email)).toEqual({ claim: limit });
+      expect(await linksOf(trx, eventId)).toEqual([]);
+      expect(await sendsTo(trx, email)).toHaveLength(sendsBefore);
+    });
+  });
+
+  it("records nothing for an unknown event", async () => {
+    await withRollback(async (trx) => {
+      const email = anAddress();
+      expect(await claimConfirmation(trx, "zzzzzzzz", email)).toEqual({ claim: "eventGone" });
+      expect(await sendsTo(trx, email)).toEqual([]);
+    });
+  });
+
+  // Review of #782: under the purge's lock, the claim waits, and then neither sends nor links.
+  describe("while the purge holds the event, on committed data", () => {
+    it("waits for its deletion, then records no send", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        await withCommittedAddresses(async (_, address) => {
+          const email = address();
+          const claimed = await whileHeld(
+            db,
+            async (trx) => {
+              await lockEvent(trx, eventId, "noKeyUpdate");
+              await deleteEvent(trx, eventId);
+            },
+            () => claimConfirmation(db, eventId, email),
+          );
+          expect(claimed).toEqual({ claim: "eventGone" });
+          expect(await sendsTo(db, email)).toEqual([]);
+        });
+      });
+    });
+
+    it("waits for its anonymisation, then neither sends nor leaves a link behind it", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        await withCommittedAddresses(async (_, address) => {
+          const accountId = await seedAccount(db, { email: address() });
+          await db.updateTable("event").set({ account_id: accountId, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+          const email = address();
+          const claimed = await whileHeld(
+            db,
+            async (trx) => {
+              await lockEvent(trx, eventId, "noKeyUpdate");
+              await anonymiseEvent(trx, eventId);
+            },
+            () => claimConfirmation(db, eventId, email),
+          );
+          expect(claimed).toEqual({ claim: "eventEnded" });
+          expect(await linksOf(db, eventId)).toEqual([]);
+          expect(await sendsTo(db, email)).toEqual([]);
+        });
+      });
     });
   });
 });

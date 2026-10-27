@@ -27,10 +27,17 @@ async function sendsInWindow(db: Kysely<Database>) {
   return rows[0]!.count;
 }
 
-/** Sends to as many addresses as needed for the window to hold `count` sends, all kinds together. */
+/**
+ * Sends to as many addresses as needed for the window to hold `count` sends, all kinds
+ * together. A window that already holds more is a send committed by another test file,
+ * which only this one may do: said here, rather than as a wrong count of the global cap.
+ */
 async function fillWindowTo(db: Kysely<Database>, count: number, address: () => string = anAddress) {
-  const missing = count - (await sendsInWindow(db));
-  await seedSends(db, missing, { kind: "login", email: address });
+  const inWindow = await sendsInWindow(db);
+  if (inWindow > count) {
+    throw new Error(`fillWindowTo: the window already holds ${inWindow} sends, more than ${count}: a test committed sends`);
+  }
+  await seedSends(db, count - inWindow, { kind: "login", email: address });
 }
 
 describe("recordSend", () => {

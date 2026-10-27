@@ -136,3 +136,42 @@ export async function writeEventFields(db: Kysely<Database>, id: string, fields:
     .executeTakeFirst();
   return Number(result.numUpdatedRows) > 0;
 }
+
+/**
+ * Who a new event is for (#599), written in the transaction that creates it: the account of
+ * a live session, confirmed at once (OA1.3); or an address awaiting confirmation, with the
+ * first result of its email: `sending` once the send is recorded, `address_limit` when the
+ * limit of the address or the global cap stopped it (OA1.9, decision of the review of #623).
+ */
+export type EventOwner =
+  | { accountId: string; confirmedAt: Date }
+  | { pendingEmail: string; sendStatus: "sending" | "address_limit"; sendStatusAt: Date };
+
+export async function writeEventOwner(db: Kysely<Database>, id: string, owner: EventOwner): Promise<void> {
+  const columns =
+    "accountId" in owner
+      ? { account_id: owner.accountId, confirmed_at: owner.confirmedAt }
+      : { pending_email: owner.pendingEmail, send_status: owner.sendStatus, send_status_at: owner.sendStatusAt };
+  await db.updateTable("event").set(columns).where("id", "=", id).execute();
+}
+
+/**
+ * The result of the confirmation email once Brevo has answered (OA1.7), written only over
+ * the `sending` this send wrote at `since`: a status written since, by a resend or a
+ * confirmation, is left as it is. Says whether it was written.
+ */
+export async function writeSendResult(
+  db: Kysely<Database>,
+  id: string,
+  since: Date,
+  result: "sent" | "failed",
+): Promise<boolean> {
+  const written = await db
+    .updateTable("event")
+    .set({ send_status: result, send_status_at: new Date() })
+    .where("id", "=", id)
+    .where("send_status", "=", "sending")
+    .where("send_status_at", "=", since)
+    .executeTakeFirst();
+  return Number(written.numUpdatedRows) > 0;
+}
