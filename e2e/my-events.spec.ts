@@ -45,6 +45,7 @@ const FR = {
   retry: "Réessayer",
   login: "Se connecter",
   loginLink: "Mes événements",
+  account: "Mon compte",
 };
 
 const KEY = "fullcar:session";
@@ -185,7 +186,7 @@ test.describe("Mes événements", () => {
     const create = page.getByRole("link", { name: FR.create });
     await expect(create).toHaveAttribute("href", "/nouveau");
     const sections = page.getByRole("main").getByRole("heading", { level: 2 });
-    await expect(sections).toHaveText([FR.upcoming(2), FR.past(3)]);
+    await expect(sections).toHaveText([FR.upcoming(2), FR.past(3), FR.account]);
     expect((await create.boundingBox())!.y).toBeLessThan((await sections.first().boundingBox())!.y);
 
     // In their order, each row a link to its organiser area, 44 px at least (OA6.2).
@@ -233,7 +234,7 @@ test.describe("Mes événements", () => {
 
     await eventOf(db, accountId, { title: "Sortie scouts", allerAt: dayFromToday(-60), retourAt: null }, true);
     await page.reload();
-    await expect(page.getByRole("main").getByRole("heading", { level: 2 })).toHaveText([FR.upcoming(0), FR.past(1)]);
+    await expect(page.getByRole("main").getByRole("heading", { level: 2 })).toHaveText([FR.upcoming(0), FR.past(1), FR.account]);
     await expect(page.getByText(FR.noUpcoming, { exact: true })).toBeVisible();
     await expect(page.getByText(FR.emptyTitle)).toHaveCount(0);
   });
@@ -366,7 +367,7 @@ test.describe("My events, in English", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("My events");
     await expect(page.getByText(`Signed in as ${email}`, { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Create an event" })).toBeVisible();
-    await expect(page.getByRole("main").getByRole("heading", { level: 2 })).toHaveText(["Upcoming (1)", "Past (3)"]);
+    await expect(page.getByRole("main").getByRole("heading", { level: 2 })).toHaveText(["Upcoming (1)", "Past (3)", "My account"]);
     await expect(rowOf(page, "Rennes tournament")).toContainText("2 people signed up");
     await expect(rowOf(page, "Rennes tournament")).toContainText("Return: 2 without a car");
     await expect(rowOf(page, "Vitré match")).toContainText("Nobody has signed up yet.");

@@ -69,7 +69,10 @@ export function sessionTokens({ storage }: { storage: () => TokenStorage }) {
     return session === "open" || session === "ended" ? session : "failed";
   }
 
-  return { readSessionToken, sendVisit };
+  /** « Se déconnecter » (OA9.1): the browser forgets the token it sent, unless another tab has replaced it. */
+  const forgetSessionToken = forget;
+
+  return { readSessionToken, sendVisit, forgetSessionToken };
 }
 
-export const { readSessionToken, sendVisit } = sessionTokens({ storage: () => window.localStorage });
+export const { readSessionToken, sendVisit, forgetSessionToken } = sessionTokens({ storage: () => window.localStorage });

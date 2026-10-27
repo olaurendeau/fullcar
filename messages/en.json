@@ -550,6 +550,7 @@
   "Login": {
     "title": "Sign in",
     "intro": "No password: we email you a sign-in link.",
+    "signedOut": "Signed out.",
     "email": "Email address",
     "send": "Send me the link",
     "sending": "Sending…",
@@ -590,5 +591,10 @@
       "title": "Your events could not be loaded",
       "body": "Check your connection, then try again."
     }
+  },
+  "Account": {
+    "title": "My account",
+    "signOut": "Sign out",
+    "signOutFailed": "You were not signed out. Check your connection, then try again."
   }
 }
