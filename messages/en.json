@@ -540,7 +540,6 @@
     "sending": "Sending…",
     "noAccount": "No account yet? It is created with your first event.",
     "already": "Signed in as {email}.",
-    "myEvents": "My events",
     "offline": "The link was not sent. Check your connection, then try again.",
     "failed": "The link may not have been sent. Something went wrong: try again in a few minutes.",
     "tooMany": "Too many requests for this address. Try again in an hour.",
@@ -554,5 +553,27 @@
     "resend": "Resend the email",
     "change": "Use another address",
     "resent": "Email sent again."
+  },
+  "MyEvents": {
+    "title": "My events",
+    "signedInAs": "Signed in as {email}",
+    "upcoming": "Upcoming ({count})",
+    "past": "Past ({count})",
+    "noUpcoming": "No upcoming events.",
+    "empty": {
+      "title": "No events yet",
+      "body": "Create an event: it will show up here."
+    },
+    "persons": "{count, plural, =0 {Nobody has signed up yet.} one {# person signed up} other {# people signed up}}",
+    "withoutCar": "{leg}: {count} without a car",
+    "erasedOn": "Sign-ups will be erased on {date}.",
+    "erasedSoon": "Sign-ups will be erased shortly.",
+    "erased": "Sign-ups erased",
+    "more": "{count, plural, one {Show the other one} other {Show the # others}}",
+    "loading": "Loading your events…",
+    "failed": {
+      "title": "Your events could not be loaded",
+      "body": "Check your connection, then try again."
+    }
   }
 }
