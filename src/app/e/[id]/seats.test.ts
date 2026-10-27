@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { sql, TableNode, type ControlledTransaction, type Kysely, type KyselyPlugin } from "kysely";
+import { sql, TableNode, type Kysely, type KyselyPlugin } from "kysely";
 import { describe, expect, it } from "vitest";
 import { removePassengers } from "@/db/placements";
 import { deleteRide, lockRide, ridePassengers } from "@/db/rides";
 import type { Database } from "@/db/schema";
-import { withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { removeSeededRetour, seedEvent } from "@/db/test-events";
 import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
@@ -64,44 +64,6 @@ function passengersOf(result: object, leg: Leg, rideId: string): string[] {
   const car = state?.find((board) => board.leg === leg)?.cars.find((found) => found.id === rideId);
   if (car === undefined) throw new Error(`no car ${rideId} on the ${leg} in the state`);
   return car.passengers.map((person) => person.firstName);
-}
-
-// Two sessions on committed data: the first holds its transaction open, the second goes
-// through the use case on the connection, as the application does, and must wait for it.
-async function backendPid(trx: ControlledTransaction<Database>) {
-  const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx);
-  return rows[0]!.pid;
-}
-
-/** Resolves once some session waits for a lock that the session `pid` holds. */
-async function someoneBlockedBy(db: Db, pid: number) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const { rows } = await sql<{ pid: number }>`
-      select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
-    if (rows.length > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error("no session ever waited for the first one");
-}
-
-/** `first` in a transaction held open until `second` waits for it, then committed. */
-async function whileHeld<T>(db: Db, first: (trx: Db) => Promise<unknown>, second: () => Promise<T>): Promise<T> {
-  const holder = await db.startTransaction().setIsolationLevel("repeatable read").execute();
-  try {
-    await first(holder);
-    const pid = await backendPid(holder);
-    const pending = second();
-    pending.catch(() => {});
-    await someoneBlockedBy(db, pid);
-    await holder.commit().execute();
-    return await pending;
-  } finally {
-    try {
-      await holder.rollback().execute();
-    } catch {
-      // Already committed: nothing to give back.
-    }
-  }
 }
 
 describe("takeSeats", () => {
@@ -345,7 +307,7 @@ describe("takeSeats", () => {
         const second = await whileHeld(
           db,
           (trx) => takeSeats(trx, eventId, lea.token, rideId, "aller", [lea.id]),
-          () => takeSeats(db, eventId, tom.token, rideId, "aller", [tom.id]),
+          (own) => takeSeats(own, eventId, tom.token, rideId, "aller", [tom.id]),
         );
 
         expect(second).toMatchObject({ ok: false, error: "seatTaken" });
@@ -366,7 +328,7 @@ describe("takeSeats", () => {
         const second = await whileHeld(
           db,
           (trx) => takeSeats(trx, eventId, tom.token, rideId, "aller", [tom.id]),
-          () => takeSeats(db, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
+          (own) => takeSeats(own, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
         );
 
         expect(second).toMatchObject({ ok: false, error: "notEnoughSeats", freeSeats: 1 });
@@ -383,7 +345,7 @@ describe("takeSeats", () => {
         const second = await whileHeld(
           db,
           (trx) => deleteRide(trx, { id: rideId, eventId, leg: "aller" }),
-          () => takeSeats(db, eventId, lea.token, rideId, "aller", [lea.id]),
+          (own) => takeSeats(own, eventId, lea.token, rideId, "aller", [lea.id]),
         );
 
         expect(second).toMatchObject({ ok: false, error: "rideGone" });
@@ -400,7 +362,7 @@ describe("takeSeats", () => {
         const second = await whileHeld(
           db,
           (trx) => takeSeats(trx, eventId, lea.token, first, "aller", [lea.id]),
-          () => takeSeats(db, eventId, lea.token, other, "aller", [lea.id]),
+          (own) => takeSeats(own, eventId, lea.token, other, "aller", [lea.id]),
         );
 
         expect(second).toMatchObject({ ok: false, error: "alreadyInCar" });
@@ -648,7 +610,7 @@ describe("undoSeats", () => {
             await lockRide(trx, { id: r1, eventId, leg: "aller" });
             await seedPlacement(trx, { personId: lea.id, eventId, leg: "aller", rideId: r2 });
           },
-          () => undoSeats(db, eventId, lea.token, r1, "aller", undo),
+          (own) => undoSeats(own, eventId, lea.token, r1, "aller", undo),
         );
 
         expect(result).toMatchObject({ ok: true, undoneIds: [ines.id] });
@@ -664,7 +626,7 @@ describe("undoSeats", () => {
         const result = await whileHeld(
           db,
           (trx) => lockRide(trx, { id: r1, eventId, leg: "aller" }),
-          () => undoSeats(db, eventId, lea.token, r1, "aller", undo),
+          (own) => undoSeats(own, eventId, lea.token, r1, "aller", undo),
         );
 
         expect(result).toMatchObject({ ok: true, undoneIds: [lea.id, ines.id] });
@@ -750,7 +712,7 @@ describe("on a person removed meanwhile", () => {
       const result = await whileHeld(
         db,
         (trx) => deleteSeededPerson(trx, eventId, hugo.id),
-        () => takeSeats(db, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
+        (own) => takeSeats(own, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
       );
 
       expect(result).toMatchObject({ ok: false, error: "personGone", goneIds: [hugo.id] });

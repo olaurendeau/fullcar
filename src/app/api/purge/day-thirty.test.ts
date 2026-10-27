@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { getDb } from "@/db/client";
 import { readAdminTokenHash } from "@/db/events";
 import type { Database } from "@/db/schema";
+import { whileHeld } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { confirmSeededEvent, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
@@ -198,17 +199,6 @@ describe("OA8.2, DS4.2", () => {
     });
   });
 
-  /** The sessions waiting for a lock that the session `pid` holds. */
-  async function blockedBy(db: Db, pid: number): Promise<number[]> {
-    for (let attempt = 0; attempt < 120; attempt++) {
-      const { rows } = await sql<{ pid: number }>`
-        select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
-      if (rows.length > 0) return rows.map((row) => row.pid);
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    throw new Error("the run never waited");
-  }
-
   it("a run interrupted in the middle of an event leaves each event intact or anonymised whole (committed data)", async () => {
     const db = getDb();
     const seeded = [await seedFullEvent(db), await seedFullEvent(db), await seedFullEvent(db)];
@@ -216,18 +206,20 @@ describe("OA8.2, DS4.2", () => {
     for (const { id } of seeded) accounts.push(await confirmSeededEvent(db, id));
     // The run takes the events in the order of their ids: the first is done, the second interrupted.
     const [first, second, third] = seeded.map(({ id }) => id).sort();
-    const holder = await db.startTransaction().execute();
     try {
       const before = { second: await everythingOf(db, second!), third: await everythingOf(db, third!) };
-      // The second event's confirmation link, held: its anonymisation waits there, its persons already deleted.
-      await holder.selectFrom("email_link").select("event_id").where("event_id", "=", second!).forUpdate().execute();
-      const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
 
-      const run = purgeDayThirty(db, DAY_THIRTY);
-      run.catch(() => {});
-      for (const pid of await blockedBy(db, rows[0]!.pid)) await sql`select pg_cancel_backend(${pid}::int)`.execute(db);
-      await expect(run).rejects.toThrow();
-      await holder.rollback().execute();
+      const run = whileHeld(
+        db,
+        // The second event's confirmation link, held: its anonymisation waits there, its persons already deleted.
+        (trx) => trx.selectFrom("email_link").select("event_id").where("event_id", "=", second!).forUpdate().execute(),
+        (own) => purgeDayThirty(own, DAY_THIRTY),
+        // Interrupted while it waits, before the holder, which wrote nothing, is committed.
+        async (waiting) => {
+          await sql`select pg_cancel_backend(${waiting}::int)`.execute(db);
+        },
+      );
+      await expect(run).rejects.toThrow("canceling statement due to user request");
 
       const firstAfter = await everythingOf(db, first!);
       expect(firstAfter.event).toMatchObject({
@@ -241,11 +233,6 @@ describe("OA8.2, DS4.2", () => {
       expect(await everythingOf(db, second!)).toEqual(before.second);
       expect(await everythingOf(db, third!)).toEqual(before.third);
     } finally {
-      try {
-        await holder.rollback().execute();
-      } catch {
-        // Already rolled back: nothing to give back.
-      }
       await db.deleteFrom("event").where("id", "in", seeded.map(({ id }) => id)).execute();
       await db.deleteFrom("account").where("id", "in", accounts).execute();
     }
