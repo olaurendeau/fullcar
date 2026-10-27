@@ -7,7 +7,7 @@ import type { Database } from "@/db/schema";
 import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
 import { confirmSeededEvent, seedEvent, seedPendingSend } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import type { Leg } from "@/domain/leg";
 import { legIsEmpty, organiserPersons, type OrganiserPanelAnswer } from "@/domain/organiser-panel";
@@ -131,6 +131,21 @@ describe("readOrganiserState", () => {
       expect(await options()).toEqual({ stops: false });
       await trx.updateTable("event").set({ stops_enabled: true }).where("id", "=", scene.eventId).execute();
       expect(await options()).toEqual({ stops: true });
+    });
+  });
+
+  it("with the option on, the panel carries no Stop: the organiser's answer is the same as without them", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      await trx.updateTable("event").set({ stops_enabled: true }).where("id", "=", scene.eventId).execute();
+      const before = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
+      await seedStop(trx, scene.eventId, scene.ride, { location: "Gare de Rennes", time: "07:20:00" });
+
+      const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
+
+      expect(answer).toStrictEqual(before);
+      expect(answer).not.toHaveProperty("stops");
+      expect(JSON.stringify(answer)).not.toContain("Gare de Rennes");
     });
   });
 

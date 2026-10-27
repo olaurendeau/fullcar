@@ -179,6 +179,23 @@ describe("readEventRows", () => {
       });
     });
 
+    it("reads two Stops at the same time by rank, whatever their ids (RV1.5)", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+        const driverId = await addPerson(trx, eventId, "Léa");
+        const rideId = await addRide(trx, eventId, driverId, "aller");
+        // The ids run against the ranks: ordered by id, the second Stop would come first.
+        const firstId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+        const secondId = "00000000-0000-4000-8000-000000000000";
+        await seedStop(trx, eventId, rideId, { id: secondId, location: "Gare", time: "07:20:00", rank: 1 });
+        await seedStop(trx, eventId, rideId, { id: firstId, location: "Mairie de Pacé", time: "07:20:00", rank: 0 });
+
+        const read = await readEventRows(trx, eventId, { stops: true });
+
+        expect(read.stops.map((stop) => stop.id)).toEqual([firstId, secondId]);
+      });
+    });
+
     it("reads no Stop of another event", async () => {
       await withRollback(async (trx) => {
         const { eventId } = await seedBoarding(trx);

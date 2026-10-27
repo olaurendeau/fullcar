@@ -64,6 +64,7 @@ export async function readEventRows(
         .selectFrom("stop")
         .select(["id", "ride_id", "location", "location_lat", "location_lng", "stop_time"])
         .where("event_id", "=", eventId)
+        .where("leg", "=", "aller")
         .orderBy("stop_time")
         .orderBy("rank")
         .orderBy("id")
