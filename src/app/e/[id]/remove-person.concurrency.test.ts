@@ -1,11 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findEventById } from "@/db/events";
+import { findEventById, lockEvent } from "@/db/events";
 import { countLegRows } from "@/db/legs";
 import { findPlacement } from "@/db/placements";
 import { ridePassengers } from "@/db/rides";
 import type { Database } from "@/db/schema";
+import { closeSession } from "@/db/sessions";
+import { seedAccount, seedSession, withCommittedAddresses } from "@/db/test-accounts";
 import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { seedPerson, seedPlacement, seedRide, type SeededPerson } from "@/db/test-participants";
 import type { EventHeader } from "@/domain/event";
@@ -336,7 +338,7 @@ describe("RP2.8 (5): the device and the organiser removing the same person at on
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc, martins),
-        (own) => removeAsOrganiser(own, eventId, adminToken, undefined, { personId: marc.id }),
+        (own) => removeAsOrganiser(own, eventId, { adminToken }, undefined, { personId: marc.id }),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: true, removal: "alreadyRemoved" });
@@ -350,7 +352,7 @@ describe("RP2.8 (5): the device and the organiser removing the same person at on
       const { martins, marc } = await seedScene(db, eventId);
       const answers = await inOrder(
         db,
-        (trx) => removeAsOrganiser(trx, eventId, adminToken, undefined, { personId: marc.id }),
+        (trx) => removeAsOrganiser(trx, eventId, { adminToken }, undefined, { personId: marc.id }),
         (own) => remove(own, eventId, marc, martins),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
@@ -365,7 +367,7 @@ describe("RP2.8 (5): the device and the organiser removing the same person at on
       const { martins, marc } = await seedScene(db, eventId);
       const answers = await Promise.all([
         answerOf(() => remove(db, eventId, marc, martins)),
-        answerOf(() => removeAsOrganiser(db, eventId, adminToken, undefined, { personId: marc.id })),
+        answerOf(() => removeAsOrganiser(db, eventId, { adminToken }, undefined, { personId: marc.id })),
       ]);
       const removals = answers.map((answer) => ("removal" in answer ? answer.removal : answer));
       expect(removals.sort()).toEqual(["alreadyRemoved", "removed"]);
@@ -517,7 +519,7 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       const { marc, lea, ines } = await seedScene(db, eventId);
       const answers = await inOrder(
         db,
-        (trx) => editEvent(trx, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
+        (trx) => editEvent(trx, eventId, { adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
         (own) => remove(own, eventId, marc),
       );
       expect(answers.first).toMatchObject({ ok: true });
@@ -541,7 +543,7 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc),
-        (own) => editEvent(own, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
+        (own) => editEvent(own, eventId, { adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toEqual({ ok: false, error: "confirmRetour", cars: 1, persons: 2 });
@@ -550,5 +552,36 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       await expectGone(db, eventId, marc.id);
       await expectInvariants(db, eventId, [answers.first, answers.second]);
     });
+  });
+});
+
+/*
+ * #672, as #836 for editEvent: the organiser's access decided again under the Event's lock, from
+ * what was committed while the removal waited for it.
+ */
+describe("the organiser's access decided again under the Event's lock (#672)", () => {
+  it.each([
+    ["removes, for a session still open once the lock is obtained", false, { ok: true, removal: "removed" }, []],
+    ["answers noOrganiserAccess for a session closed while the removal waited, and removes nobody", true, { ok: false, error: "noOrganiserAccess" }, [1]],
+  ])("%s", async (_, closes, expected, left) => {
+    await withCommittedAddresses((_, address) =>
+      withCommittedEvent(async (db, eventId) => {
+        const { marc } = await seedScene(db, eventId);
+        const accountId = await seedAccount(db, { email: address() });
+        await db.updateTable("event").set({ account_id: accountId, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+        const session = await seedSession(db, accountId);
+        const answer = await whileHeld(
+          db,
+          (trx) => lockEvent(trx, eventId, "noKeyUpdate"),
+          (own) => removeAsOrganiser(own, eventId, { session }, undefined, { personId: marc.id }),
+          async () => {
+            if (closes) expect(await closeSession(db, session)).toBe(true);
+          },
+        );
+        expect(answer).toMatchObject(expected);
+        const stored = await db.selectFrom("person").select("id").where("id", "=", marc.id).execute();
+        expect(stored.map(() => 1)).toEqual(left);
+      }),
+    );
   });
 });

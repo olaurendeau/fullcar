@@ -6,13 +6,14 @@ import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import {
   addPerson,
   loadEventState,
   offerRide,
   removePerson,
   removeRide,
+  setBoardingStop,
   setPersonLeg,
   takeSeats,
   undoSeats,
@@ -172,6 +173,16 @@ describe("takeSeats", () => {
     });
   });
 
+  it("RV3.3: passes the point on, and the person boards there", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, tom, r1 } = await seedScene(trx);
+      const stopId = await seedStop(trx, eventId, r1);
+      expect(await takeSeats(eventId, tom.token, r1, "aller", [tom.id], stopId)).toMatchObject({ ok: true });
+      const row = await trx.selectFrom("placement").select("stop_id").where("person_id", "=", tom.id).where("leg", "=", "aller").executeTakeFirst();
+      expect(row?.stop_id).toBe(stopId);
+    });
+  });
+
   it("C2.4: a refusal gives the state too, and places nobody", async () => {
     await inTransaction(async (trx) => {
       const { eventId, lea, tom, r1 } = await seedScene(trx);
@@ -215,6 +226,48 @@ describe("takeSeats", () => {
       }
       expect(cause).toBeUndefined();
       expect(log.mock.calls).toEqual([["takeSeats: the seats could not be taken (SQLSTATE 57P01)"]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe("setBoardingStop", () => {
+  it("RV4.2: changes the point of a passenger and gives the state the device now sees, in plain data", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const stopId = await seedStop(trx, eventId, r1);
+      const result = await setBoardingStop(eventId, lea.token, r1, lea.id, stopId);
+      expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
+      expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
+      const row = await trx.selectFrom("placement").select("stop_id").where("person_id", "=", lea.id).where("leg", "=", "aller").executeTakeFirst();
+      expect(row?.stop_id).toBe(stopId);
+    });
+  });
+
+  it("refuses an unknown event as eventNotFound", async () => {
+    await inTransaction(async (trx) => {
+      const { lea, r1 } = await seedScene(trx);
+      expect(await setBoardingStop("Zz9yXw8v", lea.token, r1, lea.id, null)).toEqual(EVENT_NOT_FOUND);
+    });
+  });
+
+  it("refuses a malformed event id as eventNotFound, and reads and writes nothing", async () => {
+    connection.current = untouchable;
+    await expect(setBoardingStop("Ab3dEf70", undefined, undefined, undefined, undefined)).resolves.toEqual(EVENT_NOT_FOUND);
+  });
+
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await setBoardingStop("Ab3dEf7h", "AAAAAAAAAAAAAAAAAAAAAA", randomUUID(), randomUUID(), null).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).not.toContain("06 22");
+      expect(log.mock.calls).toEqual([["setBoardingStop: the boarding point could not be changed (SQLSTATE 57P01)"]]);
     } finally {
       log.mockRestore();
     }
@@ -591,6 +644,7 @@ type Scene = Awaited<ReturnType<typeof seedScene>>;
 // #806, OA8.3: anyone holding the link may call these actions; the place, which stays in the row, may be someone's address.
 describe.each<[string, (scene: Scene) => Promise<unknown>]>([
   ["takeSeats", ({ eventId, tom, r1 }) => takeSeats(eventId, tom.token, r1, "aller", [tom.id])],
+  ["setBoardingStop", ({ eventId, lea, r1 }) => setBoardingStop(eventId, lea.token, r1, lea.id, null)],
   ["undoSeats", ({ eventId, lea, r1 }) => undoSeats(eventId, lea.token, r1, "aller", [{ personId: lea.id, before: "withoutCar" }])],
   [
     "addPerson",

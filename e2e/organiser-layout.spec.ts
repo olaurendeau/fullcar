@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { contrast } from "./contrast";
 import { leaveNoToken } from "./fixtures";
-import { expect, legButton, organiserPath, seedCrowd, test, unfoldLegs } from "./organiser";
+import { expect, LEG_HEADINGS, legButton, organiserPath, seedCrowd, test, unfoldLegs } from "./organiser";
 
 /*
  * #180, epic #154: the organiser area's sections under 1024 px, folded at first (v3.5, O9),
@@ -122,7 +122,7 @@ test.describe("the README's example", () => {
         seededEvent,
       }) => {
         await page.goto(organiserPath(seededEvent));
-        await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
+        await expect(panel(page).locator(LEG_HEADINGS)).toHaveText(["Aller", "Retour"]);
         const [share, aller, retour] = await Promise.all(
           [linkGroup(page, FR.shareLink), section(page, "Aller"), section(page, "Retour")].map(box),
         );
@@ -193,7 +193,7 @@ test.describe("without a retour", () => {
     await withoutCar(db, seededEvent.id, "Tom", ["aller"]);
     await page.goto(organiserPath(seededEvent));
     await expect(legButton(page, "aller")).toBeVisible();
-    await expect(panel(page).getByRole("region")).toHaveCount(1);
+    await expect(panel(page).getByRole("region").filter({ has: page.locator(LEG_HEADINGS) })).toHaveCount(1);
     await expect(panel(page).getByText(/Retour/)).toHaveCount(0);
 
     for (const width of [1024, 1280]) {
@@ -201,7 +201,7 @@ test.describe("without a retour", () => {
       const [aller, left] = await Promise.all([section(page, "Aller"), linkGroup(page, FR.shareLink)].map(box));
       expect(Math.abs(aller.x - left.x), `at ${width} px, the section's left edge`).toBeLessThanOrEqual(1);
       expect(Math.abs(aller.x + aller.width - (left.x + left.width)), `at ${width} px, the section's right edge`).toBeLessThanOrEqual(1);
-      await expect(panel(page).getByRole("region")).toHaveCount(1);
+      await expect(panel(page).getByRole("region").filter({ has: page.locator(LEG_HEADINGS) })).toHaveCount(1);
     }
   });
 });

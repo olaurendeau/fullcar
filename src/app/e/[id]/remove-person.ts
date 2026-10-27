@@ -1,14 +1,15 @@
 import type { Kysely } from "kysely";
-import { lockEvent, readAdminTokenHash, type EventLock } from "@/db/events";
+import { lockEvent, readOrganiserAccessEvent, type EventLock } from "@/db/events";
 import { deletePerson, lockPersons, readTokenHolders } from "@/db/persons";
 import { deletePlacement } from "@/db/placements";
 import { deleteRide, findDrivenRides, lockRides } from "@/db/rides";
 import type { Database } from "@/db/schema";
+import { findSession } from "@/db/sessions";
 import { atomically } from "@/db/transaction";
-import { adminTokenMatches } from "@/domain/admin-token";
 import { isCreationId } from "@/domain/creation-id";
 import { devicePersonIds, type TokenHolder } from "@/domain/device";
 import { LEGS } from "@/domain/leg";
+import { decideOrganiserAccess, organiserProofOf } from "@/domain/organiser-access";
 import { isPersonalToken } from "@/domain/personal-token";
 import { isPublicId } from "@/domain/public-id";
 import { readEventState, type DeviceState } from "./event-state";
@@ -19,7 +20,7 @@ import { readEventState, type DeviceState } from "./event-state";
  * transaction. Nothing is kept, and nothing can be undone. Every input is `unknown`: a
  * forged request gets a refusal, never an exception. No token is logged nor answered, and
  * a refusal carries nothing of the person (RP3.1). The device's path is the server action
- * `removePerson` (#668); the organiser's comes with #672.
+ * `removePerson` (#668); the organiser's, `removePersonAsOrganiser` (#672).
  */
 
 /**
@@ -27,7 +28,7 @@ import { readEventState, type DeviceState } from "./event-state";
  * - `invalid`: what no page sends, a person id that is not one;
  * - `eventNotFound`: no such event, or a malformed id, never looked up;
  * - `forbidden`: on the device path, a token absent or malformed, or the person of another token;
- * - `noOrganiserAccess`: on the organiser's path, the admin token is not the event's.
+ * - `noOrganiserAccess`: on the organiser's path, organiser-access.ts grants no access.
  */
 export type RemovalRefusal = "invalid" | "eventNotFound" | "forbidden" | "noOrganiserAccess";
 
@@ -49,6 +50,8 @@ const ALREADY_REMOVED = { ok: true, removal: "alreadyRemoved" } as const;
 
 /** What a path checks: the right to remove from this event at all, then this person. */
 interface Gate {
+  /** The right decided once before the Event's lock, to refuse without waiting for it: a refusal, or nothing. */
+  before?: (eventId: string) => Promise<"noOrganiserAccess" | undefined>;
   /** Read under the Event's lock: a refusal, or nothing when the right is there. */
   right(trx: Kysely<Database>, eventId: string): Promise<"forbidden" | "noOrganiserAccess" | undefined>;
   /** Whether this person, who is one of the event's, may be removed on this path. */
@@ -88,21 +91,36 @@ export function removeFromDevice(
 }
 
 /**
- * Anyone removed by the organiser (RP3.2): today the event's admin token alone, compared
- * by `adminTokenMatches` under the Event's lock, then `organiser-access.ts` alone, as
- * `editEvent` already does (#675). A revoked token (#586) is no stored hash, which no
- * token matches. `deviceToken`, the page's personal token, only chooses the board read
- * afterwards: it gives no right here, and no personal token opens this path (RP3.3).
+ * Why `proof` (`{ adminToken, session }`) opens no organiser area on the event, as `db` reads it
+ * now: `organiser-access.ts` alone decides (RP3.2), as for `editEvent`. Nothing for an unknown
+ * event, which the Event's lock answers `eventNotFound`.
+ */
+async function organiserRefusal(db: Kysely<Database>, eventId: string, proof: unknown): Promise<"noOrganiserAccess" | undefined> {
+  const event = await readOrganiserAccessEvent(db, eventId);
+  if (event === undefined) return undefined;
+  const { adminToken, session } = organiserProofOf(proof);
+  const decision = decideOrganiserAccess(event, { adminToken, account: await findSession(db, session) });
+  return decision.state === "organiser" ? undefined : "noOrganiserAccess";
+}
+
+/**
+ * Anyone removed by the organiser (RP3.2): `proof` is the request's body, `{ adminToken,
+ * session }`, and `organiser-access.ts` alone decides, before the Event's lock, to refuse
+ * without waiting for it, then again under it, from what was committed meanwhile (#836, as
+ * `editEvent`). `deviceToken`, the page's personal token, only chooses the board read
+ * afterwards: it gives no right here, and no personal token opens this path (RP3.3). The
+ * marked authorisation that only this rule makes, as `withOrganiserPhones` takes, is #675's.
  */
 export function removeAsOrganiser(
   db: Kysely<Database>,
   eventId: string,
-  adminToken: unknown,
+  proof: unknown,
   deviceToken: unknown,
   input: unknown,
 ): Promise<RemovePersonOutcome> {
   const gate: Gate = {
-    right: async (trx, id) => (adminTokenMatches(adminToken, await readAdminTokenHash(trx, id)) ? undefined : "noOrganiserAccess"),
+    before: (id) => organiserRefusal(db, id, proof),
+    right: (trx, id) => organiserRefusal(trx, id, proof),
     mayRemove: () => true,
   };
   return removePerson(db, eventId, input, gate, deviceToken);
@@ -128,6 +146,8 @@ async function removePerson(
   const personId = personIdOf(input);
   if (personId === undefined) return INVALID;
   if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
+  const refused = await gate.before?.(eventId);
+  if (refused !== undefined) return { ok: false, error: refused };
   const removal = await removeWithRestart(db, eventId, personId, gate);
   if (!removal.ok) return removal;
   const state = await readEventState(db, eventId, deviceToken);

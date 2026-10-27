@@ -127,7 +127,7 @@ type FormMode =
   | ({ kind: "edit"; car: VisibleCar; updateRide: UpdateRide } & Pick<FormProps, "near">);
 
 /** `driverPhone`, the number a person of the device without one gives to drive (v4.8 rule 7): its errors are `phone`'s. */
-type FieldName = Exclude<OfferField, "passengers"> | "driverPhone";
+type FieldName = Exclude<OfferField, "passengers" | "stops"> | "driverPhone";
 type Values = Record<FieldName, string>;
 
 /** The places of an offer, which propose suggestions; their texts are in `Values`, their positions beside. */

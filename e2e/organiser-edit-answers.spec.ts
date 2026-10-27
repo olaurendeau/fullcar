@@ -1,7 +1,7 @@
 import type { Page, Request } from "@playwright/test";
 import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { areaEditButton, expect, isAction, oneCharOff, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, isAction, LEG_HEADINGS, oneCharOff, organiserPath, test } from "./organiser";
 
 /*
  * #269, epic #250 (organizer-view v3.3.6, « Modifier l’événement »): what the sheet does with the
@@ -207,7 +207,7 @@ test.describe("M6: two devices", () => {
     await expect(sheet(other)).toHaveCount(0);
     await expect(other.getByRole("tab")).toHaveCount(0);
     await expect(header(other).locator("dt")).toHaveText(["Début"]);
-    await expect(panel(other).getByRole("heading", { level: 3 })).toHaveCount(1);
+    await expect(panel(other).locator(LEG_HEADINGS)).toHaveCount(1);
     expect(await stored()).toEqual({ title: U13, retour_at: null });
   });
 
@@ -240,7 +240,7 @@ test.describe("M6: two devices", () => {
       await expect(sheet(other)).toHaveCount(0);
       await expect(other.getByRole("tab")).toHaveCount(2);
       await expect(header(other).locator("dt")).toHaveText(["Début", "Fin"]);
-      await expect(panel(other).getByRole("heading", { level: 3 })).toHaveCount(2);
+      await expect(panel(other).locator(LEG_HEADINGS)).toHaveCount(2);
     });
   });
 });
@@ -321,7 +321,7 @@ test.describe("M8: the failures", () => {
     await expect(page).toHaveTitle(U13);
     await expect(messages(page)).toHaveText([FR.saved]);
     await expect(panel(page).getByText(FR.stale, { exact: true })).toBeVisible();
-    await expect(panel(page).getByRole("heading", { level: 3 })).toHaveCount(0);
+    await expect(panel(page).locator(LEG_HEADINGS)).toHaveCount(0);
     await expect(editButton(page)).toBeFocused();
   });
 });
