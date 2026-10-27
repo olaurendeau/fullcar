@@ -4,6 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedRide } from "@/db/test-participants";
 import { isPersonalToken } from "@/domain/personal-token";
 import { animationsDone, bar, failActions, holdActions, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
+import { numbersHidden } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -135,7 +136,7 @@ test.describe("add a person", () => {
     await expect(sheet).toContainText(FR.remember);
     const firstName = sheet.getByLabel(FR.firstName);
     await expect(firstName).toBeFocused();
-    await expect(sheet.getByLabel(FR.phone)).toHaveAccessibleDescription(FR.phoneHint);
+    await numbersHidden(() => expect(sheet.getByLabel(FR.phone)).toHaveAccessibleDescription(FR.phoneHint));
     const both = sheet.getByLabel(FR.both);
     await expect(both).toBeChecked();
     await expect(both).toHaveAccessibleDescription(FR.bothHint.aller);
@@ -261,15 +262,15 @@ test.describe("add a person", () => {
     await submit(page).click();
 
     await expect(firstName).toHaveAccessibleDescription(FR.required);
-    await expect(phone).toHaveAccessibleDescription(`${FR.invalidPhone} ${FR.phoneHint}`);
+    await numbersHidden(() => expect(phone).toHaveAccessibleDescription(`${FR.invalidPhone} ${FR.phoneHint}`));
     await expect(firstName).toHaveAttribute("aria-invalid", "true");
     await expect(firstName).toBeFocused();
-    await expect(phone).toHaveValue("06 12");
+    await numbersHidden(() => expect(phone).toHaveValue("06 12"));
 
     // The first name right, the number still wrong: the focus goes to it.
     await firstName.fill("Léa");
     await submit(page).click();
-    await expect(phone).toBeFocused();
+    await numbersHidden(() => expect(phone).toBeFocused());
     await expect(firstName).not.toHaveAttribute("aria-invalid");
     await expect(firstName).toHaveValue("Léa");
     expect(sent.length).toBe(0);

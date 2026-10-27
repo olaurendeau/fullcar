@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, failHeld, holdClose, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
+import { numbersHidden } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
@@ -116,8 +117,8 @@ test.describe("edit a person", () => {
 
     const form = dialog(page, "Modifier Claire");
     await expect(form.getByLabel("Prénom")).toHaveValue("Claire");
-    await expect(drivingPhone(form)).toHaveValue(CLAIRE_PHONE);
-    await expect(drivingPhone(form)).toHaveAccessibleDescription(DRIVING_HINT);
+    await numbersHidden(() => expect(drivingPhone(form)).toHaveValue(CLAIRE_PHONE));
+    await numbersHidden(() => expect(drivingPhone(form)).toHaveAccessibleDescription(DRIVING_HINT));
     await expect(form.getByRole("checkbox")).toHaveCount(0);
     await expect(form.getByText("cet appareil s’en souviendra")).toHaveCount(0);
     await expect(form.getByRole("link")).toHaveCount(0);
@@ -148,7 +149,7 @@ test.describe("edit a person", () => {
   test("C2.3, C10.1: the new number in the first name's sheet; emptied, it is removed", async ({ db, page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     let form = await openForm(page, "Léa");
-    await expect(form.getByLabel("Téléphone (facultatif)")).toHaveValue("");
+    await numbersHidden(() => expect(form.getByLabel("Téléphone (facultatif)")).toHaveValue(""));
     await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
     await form.getByRole("button", { name: "Valider" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -158,7 +159,7 @@ test.describe("edit a person", () => {
     await expect(call(dialog(page, "Léa"), "Léa")).toHaveAttribute("href", "tel:0712121212");
     await dialog(page, "Léa").getByRole("button", { name: "Modifier", exact: true }).click();
     form = dialog(page, "Modifier Léa");
-    await expect(form.getByLabel("Téléphone (facultatif)")).toHaveValue(NEW_PHONE);
+    await numbersHidden(() => expect(form.getByLabel("Téléphone (facultatif)")).toHaveValue(NEW_PHONE));
     await form.getByLabel("Téléphone (facultatif)").clear();
     await form.getByRole("button", { name: "Valider" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -180,13 +181,13 @@ test.describe("edit a person", () => {
     await form.getByRole("button", { name: "Valider" }).click();
 
     await expect(firstName).toHaveAccessibleDescription(REQUIRED);
-    await expect(phone).toHaveAccessibleDescription(`${INVALID_PHONE} ${DRIVING_HINT}`);
+    await numbersHidden(() => expect(phone).toHaveAccessibleDescription(`${INVALID_PHONE} ${DRIVING_HINT}`));
     await expect(firstName).toBeFocused();
-    await expect(phone).toHaveValue("06 12");
+    await numbersHidden(() => expect(phone).toHaveValue("06 12"));
 
     await firstName.fill("Clara");
     await form.getByRole("button", { name: "Valider" }).click();
-    await expect(phone).toBeFocused();
+    await numbersHidden(() => expect(phone).toBeFocused());
     await expect(firstName).not.toHaveAttribute("aria-invalid");
     await expect(firstName).toHaveValue("Clara");
     await expect(form).toBeVisible();
