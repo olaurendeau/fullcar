@@ -871,9 +871,14 @@ chaque placement de la bulle (24 px sur une ligne, 48 sur deux). Les 64 px valen
 de 16 px : avec un texte agrandi, le bouton du point du drapeau grandit, pas cette marge.
 À gauche et à droite, la marge est la moitié de l'étiquette la plus large quand elle dépasse
 32 px (#655) : une étiquette est centrée sur son point, et sa pastille, à son bout droit, ne
-doit pas être coupée par le bord de la carte (CA1.3). `leaflet-map.ts` mesure les boutons
-(`offsetWidth`) ; à la première vue, ils n'entrent dans la page qu'une fois la carte cadrée :
-elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les deux.
+doit pas être coupée par le bord de la carte (CA1.3). `leaflet-map.ts` mesure les boutons à la
+fraction de pixel près (`getBoundingClientRect().width`, #829), et `framing` arrondit la marge
+vers le haut ; à la première vue, ils n'entrent dans la page qu'une fois la carte cadrée :
+elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les deux. Le zoom de
+l'emprise est choisi par `fittingZoom` (#820) : le plus haut zoom entier, 15 au plus, où elle
+tient dans ses marges, en EPSG:3857, donné à `fitBounds` comme `maxZoom`. Le zoom de Leaflet
+seul (`getBoundsZoom`) prend le zoom suivant quand l'emprise n'a besoin que de moins de 1 %
+de zoom en moins, et dépasse alors sa marge.
 
 ### Dans le navigateur (#478 à #485)
 
@@ -920,8 +925,10 @@ elle est cadrée de nouveau, dans la même tâche, sans rien peindre entre les d
   avant les fiches. Tenu par la page, il survit au remontage du panneau de l'aller quand le
   retour part (CA2.7).
 - **Le démarrage** (#653, v29) : Leaflet ne démarre que carte ouverte, **page posée**, et
-  boîte d'au moins 1 px dans l'écran et d'une largeur non nulle, puisqu'un onglet caché n'a pas
-  de taille (CA1.13). La page est posée (`pageSettled`, `event-map-state.ts`) quand le statut
+  boîte dans l'écran ou touchant son bord et d'une largeur non nulle, puisqu'un onglet caché n'a
+  pas de taille (CA1.13). Le bord compte, comme pour l'`IntersectionObserver` (seuil 0) : une
+  boîte au ras du bas refusée, un défilement d'un pixel ne changerait rien de ce qu'il dit, et
+  la carte attendrait pour toujours (#788). La page est posée (`pageSettled`, `event-map-state.ts`) quand le statut
   de l'appareil est `none`, `ready` ou `failed`, et, sur `/e/{id}/admin`, quand la première
   vérification du lien est finie : `OrganiserScreen` passe `linkChecking`
   (`screen.state === "loading"`, pas `link.check.state`, que le réducteur applique dans un
