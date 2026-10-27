@@ -4,7 +4,7 @@ import { getDb } from "@/db/client";
 import { databaseFailure } from "@/db/failure";
 import { isPublicId } from "@/domain/public-id";
 import * as changeRide from "./change-ride";
-import { readDeviceState, readEventState, type EndedEvent, type EventState } from "./event-state";
+import { readEventState, type DeviceState } from "./event-state";
 import { offerRide as storeRideOffer, type OfferRideOutcome } from "./offer-ride";
 import * as persons from "./persons";
 import { removeFromDevice, type RemovePersonOutcome } from "./remove-person";
@@ -22,10 +22,10 @@ import {
  * the URL; it is only compared, never logged. Nothing for an unknown event, and a malformed
  * id reads nothing.
  */
-export async function loadEventState(id: unknown, token: unknown): Promise<EventState | EndedEvent | undefined> {
+export async function loadEventState(id: unknown, token: unknown): Promise<DeviceState | undefined> {
   if (!isPublicId(id)) return undefined;
   try {
-    return await readDeviceState(getDb(), id, token);
+    return await readEventState(getDb(), id, token);
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("loadEventState: the event could not be read", error);

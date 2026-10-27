@@ -62,6 +62,11 @@ export function brevoSettings(env: Record<string, string | undefined>): Omit<Bre
   };
 }
 
+/** The application's Brevo (#599): its settings read from the environment, through the global `fetch`. */
+export function serverBrevo(env: Record<string, string | undefined> = process.env): Brevo {
+  return createBrevo({ fetch: (input, init) => fetch(input, init), ...brevoSettings(env) });
+}
+
 /** Why a send failed, as it is logged: a fixed word, or the HTTP status. */
 type Failure = { status: number } | "timeout" | "no answer";
 

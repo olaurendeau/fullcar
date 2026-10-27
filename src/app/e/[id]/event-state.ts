@@ -24,26 +24,43 @@ export interface EventState {
 }
 
 /**
+ * An event anonymised at day 30, as anyone holding its link sees it: « Événement terminé »,
+ * its title and its start (OA8.3). Neither its place, which may be someone's address, nor
+ * anyone: nobody is left.
+ */
+export interface EndedEvent {
+  ended: true;
+  title: string;
+  allerAt: WallClock;
+}
+
+/** What a device is given of the event: its state, or, once anonymised, the event ended. */
+export type DeviceState = EventState | EndedEvent;
+
+/**
  * The only read of an event's participants (epic #66): its rows, the device's persons,
  * the board, then the numbers this device may see (C10.1), with the event's header taken from
- * the row read first: never a leg the header no longer has. Nothing for an unknown event; a
+ * the row read first: never a leg the header no longer has. Once anonymised, the event ended
+ * and nothing else (OA8.3, #806): every action that answers with a state reads it here, its
+ * refusal by `eventEnded` included, so none gives the place. Nothing for an unknown event; a
  * malformed id is never looked up.
  *
  * Without a token, or with a malformed one, the device has no person and no number leaves
  * the server (C10.6, C12.3). Everything is read on one snapshot, so that a passenger who
- * boards between two reads is not shown without a car. The token is only compared, never
- * logged nor kept.
+ * boards between two reads is not shown without a car, and an event anonymised meanwhile
+ * never gives its place with empty legs (#799). The token is only compared, never logged
+ * nor kept.
  */
 export async function readEventState(
   db: Kysely<Database>,
   eventId: string,
   token?: unknown,
-): Promise<EventState | undefined> {
+): Promise<DeviceState | undefined> {
   if (!isPublicId(eventId)) return undefined;
-  return onOneSnapshot(db, async (trx) => {
+  return onOneSnapshot(db, async (trx): Promise<DeviceState | undefined> => {
     const event = await findPublicEvent(trx, eventId);
     if (event === undefined) return undefined;
-    return stateOf(trx, event, token);
+    return endedOf(event) ?? stateOf(trx, event, token);
   });
 }
 
@@ -59,40 +76,9 @@ async function stateOf(trx: Kysely<Database>, event: PublicEvent, token: unknown
   };
 }
 
-/**
- * An event anonymised at day 30, as anyone holding its link sees it: « Événement terminé »,
- * its title and its start (OA8.3). Neither its place, which may be someone's address, nor
- * anyone: nobody is left.
- */
-export interface EndedEvent {
-  ended: true;
-  title: string;
-  allerAt: WallClock;
-}
-
 /** What is left of `event` once anonymised, nothing before. */
 function endedOf(event: PublicEvent): EndedEvent | undefined {
   return event.anonymised_at === null ? undefined : { ended: true, title: event.title, allerAt: event.aller_at };
-}
-
-/**
- * What a device reads of the event once its page is open (#799): its state as `readEventState`
- * reads it, or, once anonymised, the event ended and nothing else. The event and its legs on
- * one snapshot, so that an event anonymised meanwhile never gives its place with empty legs.
- * Nothing for an unknown event; a malformed id is never looked up. The token is only
- * compared, never logged nor kept.
- */
-export async function readDeviceState(
-  db: Kysely<Database>,
-  eventId: string,
-  token?: unknown,
-): Promise<EventState | EndedEvent | undefined> {
-  if (!isPublicId(eventId)) return undefined;
-  return onOneSnapshot(db, async (trx): Promise<EventState | EndedEvent | undefined> => {
-    const event = await findPublicEvent(trx, eventId);
-    if (event === undefined) return undefined;
-    return endedOf(event) ?? stateOf(trx, event, token);
-  });
 }
 
 /**

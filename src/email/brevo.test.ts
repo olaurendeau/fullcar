@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { brevoSettings, createBrevo, type Email, type SendAnswer } from "./brevo";
+import { brevoSettings, createBrevo, serverBrevo, type Email, type SendAnswer } from "./brevo";
 
 const BREVO = "https://api.brevo.com/v3/smtp/email";
 /** A key nothing else in a log could be mistaken for. */
@@ -242,5 +242,24 @@ describe("brevoSettings", () => {
     ["<bonjour@fullcar.test>", { email: "bonjour@fullcar.test" }],
   ])("reads EMAIL_FROM %j as the sender", (from, sender) => {
     expect(brevoSettings({ EMAIL_FROM: from }).from).toEqual(sender);
+  });
+});
+
+describe("serverBrevo", () => {
+  it("sends with the global fetch, to BREVO_URL, with BREVO_API_KEY and EMAIL_FROM of its environment", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(created());
+    const env = { BREVO_URL: "http://brevo:2326/v3/smtp/email", BREVO_API_KEY: KEY, EMAIL_FROM: "bonjour@fullcar.test" };
+    expect(await serverBrevo(env).send(EMAIL)).toEqual(SENT);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe("http://brevo:2326/v3/smtp/email");
+    expect(new Headers(init?.headers).get("api-key")).toBe(KEY);
+  });
+
+  it("calls nothing without a key, and says so in fixed words", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    expect(await serverBrevo({ EMAIL_FROM: "bonjour@fullcar.test" }).send(EMAIL)).toEqual(FAILED);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(logs).toEqual([["email: no key"]]);
   });
 });

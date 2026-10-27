@@ -102,6 +102,49 @@ export function SheetBar({ messages, children }: { messages?: ReactNode; childre
   );
 }
 
+/** The most of the visible height the bar's messages take before they scroll (v4.6, rule 1). */
+const MESSAGES_SHARE = 0.3;
+
+/**
+ * The bar's messages, above its buttons: the sheet's own, then those of `SheetBar`, each in an
+ * element of its own, so that their order is the document's, not the order they mounted in. They
+ * stop at `most` px, 30 % of the visible height, and scroll beyond. Overflowing, they are a group
+ * named « Messages » that takes the focus, to scroll from the keyboard, and keep it while they have
+ * it, even once they no longer overflow, lest the focus fall on <body> (v4.6-16, as `MessageList`).
+ */
+function BarMessages({ most, own, onTarget }: { most: number | null; own: ReactNode; onTarget: (target: HTMLDivElement | null) => void }) {
+  const t = useTranslations("Actions");
+  const zone = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [focused, setFocused] = useState(false);
+  useLayoutEffect(() => {
+    const element = zone.current;
+    if (!element) return;
+    // Capped, the zone keeps its size as a message grows: the elements of the messages say it.
+    const observer = new ResizeObserver(() => setOverflows(element.scrollHeight > element.clientHeight));
+    for (const watched of [element, ...element.children]) observer.observe(watched);
+    return () => observer.disconnect();
+  }, []);
+  const named = overflows || focused;
+  return (
+    <div
+      ref={zone}
+      data-bar-messages=""
+      role={named ? "group" : undefined}
+      aria-label={named ? t("messages") : undefined}
+      tabIndex={named ? 0 : undefined}
+      onFocus={(event) => event.target === event.currentTarget && setFocused(true)}
+      // The window left (Alt+Tab): the zone is still the active element, and gets the focus back with the window.
+      onBlur={(event) => event.target === event.currentTarget && document.hasFocus() && setFocused(false)}
+      className="flex flex-col gap-2 overflow-y-auto rounded-md focus-visible:focus-ring focus-visible:outline-offset-0 [&:not(:has(>:not(:empty)))]:hidden"
+      style={{ maxHeight: most ?? `${MESSAGES_SHARE * 100}dvh` }}
+    >
+      <div className="flex flex-col gap-2 empty:hidden">{own}</div>
+      <div ref={onTarget} className="flex flex-col gap-2 empty:hidden" />
+    </div>
+  );
+}
+
 type VisibleArea = Omit<SheetFrameInput, "fullHeight">;
 
 const sameArea = (one: VisibleArea, other: VisibleArea) =>
@@ -290,15 +333,14 @@ export function BottomSheet({
         <SheetFooter
           ref={setBar}
           className={cn(
-            "bottom-0 z-10 hidden border-t bg-popover pt-3 [&:has(>:not(:empty))]:flex",
+            "bottom-0 z-10 hidden border-t bg-popover pt-3",
+            "[&:has(>:not(:empty):not([data-bar-messages]))]:flex [&:has(>[data-bar-messages]>:not(:empty))]:flex",
             fixedParts,
             // The phone's safe area, but not above a keyboard (rule 4).
             frame?.keyboard ? "pb-4" : "pb-[calc(1rem+env(safe-area-inset-bottom))]",
           )}
         >
-          <div ref={setMessagesTarget} className="flex flex-col gap-2 empty:hidden">
-            {messages}
-          </div>
+          <BarMessages most={frame && frame.height * MESSAGES_SHARE} own={messages} onTarget={setMessagesTarget} />
           <div ref={setActionsTarget} className="contents" />
           {actions}
           {closable && (

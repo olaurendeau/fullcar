@@ -9,8 +9,9 @@ import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { readEventState, type EventState } from "./event-state";
+import { readEventState, type DeviceState, type EventState } from "./event-state";
 import { addPerson, setPersonLeg, updatePerson, type PersonOutcome } from "./persons";
+import { stillOpen } from "./test-state";
 
 type Db = Kysely<Database>;
 
@@ -18,16 +19,16 @@ type Db = Kysely<Database>;
 const NOBODYS_TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
 const NEW_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZQ";
 
-function legOf(state: EventState | undefined, leg: Leg) {
-  const found = state?.legs.find((board) => board.leg === leg);
+function legOf(state: DeviceState | undefined, leg: Leg) {
+  const found = stillOpen(state)?.legs.find((board) => board.leg === leg);
   if (found === undefined) throw new Error(`no ${leg} in the state`);
   return found;
 }
 
 /** Where the person stands on each leg of the state, as her device sees it. */
-function standing(state: EventState | undefined, personId: string): Partial<Record<Leg, string>> {
+function standing(state: DeviceState | undefined, personId: string): Partial<Record<Leg, string>> {
   const legs: Partial<Record<Leg, string>> = {};
-  for (const board of state?.legs ?? []) {
+  for (const board of stillOpen(state)?.legs ?? []) {
     const person = board.device.find((device) => device.id === personId);
     if (person) legs[board.leg] = person.state.kind;
   }
@@ -36,7 +37,7 @@ function standing(state: EventState | undefined, personId: string): Partial<Reco
 
 function stateOf(outcome: PersonOutcome): EventState {
   if (!outcome.ok) throw new Error(`refused: ${JSON.stringify(outcome)}`);
-  return outcome.state;
+  return stillOpen(outcome.state);
 }
 
 async function personIds(db: Db, eventId: string): Promise<string[]> {

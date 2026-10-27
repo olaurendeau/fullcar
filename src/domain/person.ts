@@ -93,6 +93,19 @@ export function validateDriver(fields: PersonFields): PersonValidation {
 }
 
 /**
+ * The number a person of the device without one gives to drive (R4, v4.8 rule 7): the rules
+ * of `validateDriver`, for the number alone.
+ */
+export function validateDriverPhone(
+  value: unknown,
+): { ok: true; phone: string } | { ok: false; errors: Pick<PersonErrors, "phone">; first: "phone" } {
+  const read = phone(value);
+  if ("error" in read) return { ok: false, errors: { phone: read.error }, first: "phone" };
+  if (read.value === null) return { ok: false, errors: { phone: "required" }, first: "phone" };
+  return { ok: true, phone: read.value };
+}
+
+/**
  * A change of a person (C2.3): a field left out (`undefined`) stays as it is, so that a form
  * filled before another change landed does not undo it; the others follow `validatePerson`.
  */
