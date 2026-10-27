@@ -33,7 +33,8 @@ reproduire, dans cet ordre.
   personnes sans voiture. Pas de navigation à apprendre.
 - **Un geste.** Après la première inscription, rejoindre une voiture est un seul tap quand
   l'appareil a exactement une personne « sans voiture » sur ce leg ; sinon le tap ouvre la
-  feuille pour choisir qui monte.
+  feuille pour choisir qui monte. Exception : sur une voiture qui a des Arrêts, le tap ouvre
+  toujours la feuille, départ coché par défaut, même pour une seule personne.
 - **Aller et retour indépendants**, dans le même événement, sous deux onglets.
 - **Effacé à 30 jours.** 30 jours après le dernier leg (heure de Paris), tout ce qui concerne
   les participants est effacé : prénoms, téléphones, voitures, lieux de départ, notes,
@@ -47,7 +48,9 @@ reproduire, dans cet ordre.
 ## Règles d'interaction
 
 - **Prendre une place.** Un tap sur une place libre place directement la personne de
-  l'appareil si elle est la seule « sans voiture » sur ce leg. Sinon une feuille s'ouvre avec
+  l'appareil si elle est la seule « sans voiture » sur ce leg et si la voiture n'a aucun
+  Arrêt. Sinon (plusieurs personnes, ou une voiture à Arrêts : la feuille s'ouvre alors toujours,
+  départ coché par défaut) une feuille s'ouvre avec
   les personnes de l'appareil qui ne sont pas dans une voiture : celles « sans voiture »
   précochées, celles « pas concernées » décochées. On ajuste, on valide. Une personne peut
   ainsi placer plusieurs personnes d'un coup, dans la limite des places libres. Sans aucune
@@ -62,8 +65,14 @@ reproduire, dans cet ordre.
 - **Rehausseurs** (option) : une personne qui a besoin d'un rehausseur peut prendre une place
   dans une voiture qui n'en a plus de libre. On l'avertit (« plus de rehausseur dans cette
   voiture ») sans bloquer : le parent peut fournir le sien.
-- **Arrêts** (option points de RDV) : le tap sur une place libre place la personne au lieu du
-  Ride ; elle choisit ensuite son arrêt sur la fiche de la voiture. Le geste reste unique.
+- **Arrêts** (option points de RDV, « Points de RDV » à l'écran, à l'aller seulement, six au
+  plus par voiture, strictement après le départ) :
+  - sur une voiture qui a des Arrêts, le tap sur une place libre ouvre toujours la feuille
+    « Point de montée », le départ coché par défaut (D2, épic #881) ; sur une voiture sans
+    Arrêt, le geste reste unique et place directement ;
+  - l'option s'active à la création, et aussi dans « Modifier l'événement » (D1) ; elle ne se
+    désactive jamais tant que des Arrêts existent ;
+  - un Arrêt retiré laisse ses passagers dans la voiture, qui montent au départ.
 - **Le conducteur retire sa voiture** : ses passagers repassent « sans voiture » sur ce leg,
   et le bandeau de couverture le reflète.
 - **Le conducteur réduit ses places** sous le nombre d'occupants : il choisit qui sort ; les
@@ -83,7 +92,7 @@ Un critère n'est tenu que s'il est **prouvé par un test**, pas constaté à l'
 | critère | preuve attendue |
 |---|---|
 | créer un événement en moins de 30 s | test de bout en bout depuis `/` : 8 actions pour un nouvel organisateur (l'adresse comprise), 7 avec une session ; aucun e-mail ni aucune réponse du fournisseur attendus sur ce chemin |
-| rejoindre une voiture en 1 tap après la 1re inscription, quand l'appareil a exactement une personne « sans voiture » sur ce leg | test de bout en bout, un seul clic sur la place libre ; avec deux personnes « sans voiture », le clic ouvre la feuille |
+| rejoindre une voiture en 1 tap après la 1re inscription, quand l'appareil a exactement une personne « sans voiture » sur ce leg et que la voiture n'a aucun Arrêt | test de bout en bout, un seul clic sur la place libre ; avec deux personnes « sans voiture », ou sur une voiture à Arrêts, le clic ouvre la feuille |
 | un appareil gère plusieurs personnes | test : deux personnes créées avec le même jeton, les deux modifiables |
 | aller et retour indépendants | test : placer quelqu'un à l'aller ne le place pas au retour |
 | utilisable sur 360 px | capture à 360 px, aucun débordement horizontal |

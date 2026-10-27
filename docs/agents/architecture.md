@@ -303,6 +303,15 @@ avec une prise de place. Ces verrous se prouvent par des tests de concurrence (v
 de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts`,
 `src/db/participant-tables.test.ts` et `src/app/e/[id]/offer-ride.test.ts`.
 
+**Les Arrêts** (épic #881) suivent la même règle : un Arrêt ne s'écrit que sous le verrou de son
+Ride (`lockRide`), après l'Event et avant les Persons ; la clé `placement.stop_id` ne prend
+l'Arrêt (`FOR KEY SHARE`) que sous ce même verrou, donc aucune attente nouvelle. `editEvent`
+(`FOR NO KEY UPDATE`) recompte les Arrêts de l'événement (`countStopRides`) sous son verrou de
+l'Event : désactiver l'option alors que des Arrêts existent est refusé (`stopsLocked`). Toute
+écriture qui porte un Arrêt lit `stops_enabled` sur la ligne que rend `lockLegs` : option
+désactivée, refus `stopsOff` et rien n'est écrit. Ces écritures arrivent avec les tâches
+suivantes de l'épic ; la base, elle, les accepte dès `0006_stops`.
+
 ### L'Event d'abord (#260)
 
 À partir de #260 (epic #250), l'organisateur peut supprimer le retour pendant qu'un
@@ -1166,7 +1175,9 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   chaque événement dont le jour 30 a commencé à Paris (`purgeCutoff`, voir « Heures sans
   fuseau ») est traité dans **sa propre transaction**, sous `lockEvent(trx, id,
   "noKeyUpdate")`. Avec un compte, il est **anonymisé** : ses Persons, Rides, Placements,
-  Arrêts et liens de confirmation sont supprimés, sa position, sa description et le hash de
+  Arrêts et liens de confirmation sont supprimés (les Arrêts partent avec leurs Rides
+  par la cascade `stop_ride_fk` / `stop_event_fk`, #883 ; `deleteEvent` les emporte par
+  la cascade de `stop.event_id`), sa position, sa description et le hash de
   son jeton d'admin passent à nul, et `anonymised_at` est écrit. Sans compte, en attente ou laissé par un
   compte supprimé, il est **supprimé**, et la cascade emporte le reste. Une exécution
   interrompue laisse chaque événement intact ou traité en entier, et une deuxième exécution
@@ -1317,6 +1328,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | jour 30 et « passé » | `src/domain/day-thirty.ts`, à partir de #587 | le seul calcul de « aujourd'hui », « passé » et du jour 30, à l'heure de Paris (voir « Heures sans fuseau ») |
 | purge | `src/app/api/purge/` (`route.ts`, `handle.ts`, `day-thirty.ts`, `inactive-accounts.ts`), à partir de #589 ; `src/db/day-thirty.ts`, à partir de #588 ; `src/db/expired-rows.ts`, à partir de #589 | la route n'exporte que `GET` et vérifie `CRON_SECRET` ; l'anonymisation et la suppression au jour 30, le nettoyage par âge, les comptes inactifs (voir « La purge ») |
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones ; à partir de #776, `hasPhone` (`src/db/persons.ts`) n'en lit que la présence, un booléen, sous le verrou de la Person |
+| Arrêts | `src/db/stops.ts`, à partir de #883 ; `src/domain/stop.ts`, à venir dans l'épic #881 | `stops.ts` lit les Arrêts d'un Ride (`rideStops`, par heure puis rang) et en compte les Rides (`countStopRides`) ; l'écriture s'y ajoute avec #885. `stop.ts` portera les règles (6 au plus, strictement après le départ, aller seulement), vérifiées sous le verrou du Ride |
 | lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position ; `samePlace` compare deux lieux (texte et position) |
 | description | `src/domain/description.ts`, à partir de #707 | `DESCRIPTION_MAX` (1000 points de code) ; `normalizeDescription`, la seule normalisation, partagée par le serveur (`description`, les règles de `text()`) et le compteur (`descriptionCount`) ; `guessFolds`, la devinette du pli que rend le serveur |
 | propositions de lieux | `src/domain/suggestion.ts` ; `src/app/api/lieux/` (`route.ts`, `handle.ts`, `photon.ts`), à partir de #425 | le domaine lit la requête, écrit l'URL de Photon et les libellés ; la route n'exporte que `POST` ; seul `photon.ts` appelle Photon, avec son cache, son plafond et son disjoncteur (voir « Auto-complétion des lieux ») |
@@ -1410,10 +1422,11 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
 
   | clé | `ON DELETE` | pourquoi |
   |---|---|---|
-  | `stop.ride_id` | `CASCADE` | un Arrêt appartient à son Ride |
+  | `stop (ride_id, event_id, leg)` → `ride (id, event_id, leg)` (`stop_ride_fk`) | `CASCADE` | un Arrêt appartient à son Ride, qui est sur l'aller (`stop_leg`) et dans le même événement ; supprimer le Ride emporte ses Arrêts (#883) |
+  | `stop.event_id` → `event` (`stop_event_fk`) | `CASCADE` | la règle de la purge : supprimer l'événement emporte ses Arrêts, quel que soit le chemin |
   | `placement (person_id, event_id)` → `person (id, event_id)` | `CASCADE` | un Placement appartient à sa Person, du même événement |
   | `placement (ride_id, event_id, leg)` → `ride (id, event_id, leg)` | `SET NULL (ride_id)` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » ; seule `ride_id` est remise à `null`, `event_id` et `leg` restent |
-  | `placement.stop_id` | `SET NULL` | quand un Arrêt est supprimé, le passager monte (ou descend) au lieu du Ride |
+  | `placement.stop_id` → `stop (id)` (`placement_stop_fk`) | `SET NULL` | quand un Arrêt est supprimé, le passager reste dans le Ride et monte à son départ (`stop_id` à `null`) ; le déclencheur `placement_stop_on_ride` accompagne cette clé (voir plus bas) |
   | `ride (driver_id, event_id)` → `person (id, event_id)` | `CASCADE` | supprimer le conducteur retire sa voiture, et ses passagers repassent « sans voiture » par la clé `placement → ride` ; à partir de #645, le retrait d'une personne supprime sa Person, mais verrouille et supprime d'abord ses Rides, pour garder l'ordre Ride, puis Person (voir « Retirer une personne ») |
   | `event.account_id` | `SET NULL` | un événement survit à son compte : il reste ouvert aux participants, sans organisateur, jusqu'à son jour 30 (OA9.5) ; il garde `confirmed_at` (#586) |
   | `session.account_id` | `CASCADE` | une session appartient à son compte : le supprimer ferme toutes ses sessions (#586) |
@@ -1421,7 +1434,8 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   | `email_link.return_event_id` | `SET NULL` | la page d'arrivée d'un lien de connexion, `/e/{id}/admin` de cet Event (OA4.4) ; l'Event supprimé, le lien sert encore et mène à `/mes-evenements`, l'arrivée par défaut. Un lien de confirmation n'en a pas : il mène à son propre Event (OA5.3) (#586) |
   | `email_send.event_id` | `SET NULL` | un envoi ne tient pas à son événement : supprimé, l'Event laisse l'envoi compté dans la limite de son adresse et dans le plafond global, jusqu'à son nettoyage par âge (#586) |
 
-  Les clés de `ride` et de `placement`, hors `stop_id`, arrivent avec #66. Les clés
+  Les clés de `ride` et de `placement`, hors `stop_id`, arrivent avec #66, celles de `stop`
+  et `placement.stop_id` avec la migration `0006_stops` (#883). Les clés
   composites empêchent un Placement de pointer vers un Ride d'un autre événement ou d'un
   autre leg (C12.7), et un Ride ou un Placement de pointer vers une Person d'un autre
   événement. Leurs cibles sont `unique (id, event_id)`
@@ -1444,6 +1458,17 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   toutes les deux, et lève `23514` avec un nom de contrainte. Quand `ride_id` est
   renseigné, `placement_driver_on_leg` verrouille d'abord le Ride (`FOR KEY SHARE`) :
   l'ordre reste Ride, puis Person (voir « Concurrence »).
+
+  Un troisième déclencheur, `placement_stop_on_ride` (#883, avant insertion, ou mise à jour de
+  `ride_id` ou de `stop_id`), ne verrouille rien : (a) si `ride_id` change sans que `stop_id`
+  change, il remet `stop_id` à `null` ; (b) si `stop_id` n'est pas un Arrêt de `ride_id`, il lève
+  `23514` avec la contrainte `placement_stop_on_ride`. Sans Ride, c'est le `check`
+  `placement_stop_in_car` (`stop_id is null or ride_id is not null`) qui refuse. Une clé composite
+  `(stop_id, ride_id)` est écartée : avec le `SET NULL (ride_id)` de `placement_ride_fk`, l'ordre
+  des deux actions de clé déciderait si `stop_id` reste sur un Arrêt disparu ; le déclencheur le
+  rend indifférent. Un Arrêt a au plus 6 rangs par Ride (`rank` de 0 à 5, `stop_ride_rank_unique`
+  différée, pour qu'un reclassement ne se heurte pas à lui-même). Il ne porte ni numéro ni
+  prénom : lieu, position, heure, rang (RV8.2).
 - **Mesure d'audience** : à partir de #346, Vercel Web Analytics, sur le déploiement de
   production seulement, sans cookie, et une page vue ne porte que son origine et sa route
   (voir « Emplacement du code »). Speed Insights reste désactivé.

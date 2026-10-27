@@ -3,6 +3,8 @@ import type { Kysely } from "kysely";
 import type { Leg } from "@/domain/leg";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
 import { hashToken } from "@/domain/token-hash";
+import type { Position } from "@/domain/place";
+import type { WallTime } from "@/domain/wall-clock";
 import { insertPerson, type NewPerson } from "./persons";
 import { setPlacement, type NewPlacement } from "./placements";
 import { insertRide, type RideFields } from "./rides";
@@ -61,6 +63,57 @@ export async function seedRide(
   });
   if (!ride) throw new Error("seedRide: the id is taken by another event or leg");
   return ride.id;
+}
+
+export interface SeededStop {
+  id: string;
+  location: string;
+  /** `HH:MM:SS` on the date of the aller. */
+  time: WallTime;
+  position: Position | null;
+  /** From 0 to 5; the next free one in the Ride unless the test gives one. */
+  rank: number;
+}
+
+/**
+ * Stores a Stop of an aller Ride, "Mairie de Pacé" at 07:30 without a position unless `fields`
+ * says otherwise, with a new id (drawn like a Ride's) and the next free rank in the Ride. The
+ * row is written as it is, without the domain's rules: a test of the rules writes its own.
+ * For Vitest and the Playwright fixtures.
+ */
+export async function seedStop(
+  db: Kysely<Database>,
+  eventId: string,
+  rideId: string,
+  fields: Partial<SeededStop> = {},
+): Promise<string> {
+  const rank =
+    fields.rank ??
+    Number(
+      (
+        await db
+          .selectFrom("stop")
+          .select((eb) => eb.fn.countAll<string>().as("n"))
+          .where("ride_id", "=", rideId)
+          .executeTakeFirstOrThrow()
+      ).n,
+    );
+  const stop = { id: randomUUID(), location: "Mairie de Pacé", time: "07:30:00", position: null, ...fields };
+  await db
+    .insertInto("stop")
+    .values({
+      id: stop.id,
+      event_id: eventId,
+      ride_id: rideId,
+      leg: "aller",
+      location: stop.location,
+      location_lat: stop.position?.lat ?? null,
+      location_lng: stop.position?.lng ?? null,
+      stop_time: stop.time,
+      rank,
+    })
+    .execute();
+  return stop.id;
 }
 
 /** Places a person on a leg: in a Ride, or without a car when `rideId` is null. */
