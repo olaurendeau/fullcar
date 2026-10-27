@@ -6,7 +6,7 @@ import type { Database } from "@/db/schema";
 import { withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import { buildBoard } from "@/domain/board";
 import type { NewEvent } from "@/domain/event";
@@ -96,6 +96,45 @@ function legOf(state: DeviceState | undefined, leg: Leg) {
   if (found === undefined) throw new Error(`no ${leg} in the state`);
   return found;
 }
+
+describe("the Stops in the state (RV8.3)", () => {
+  async function sceneWithStop(db: Db, stopsEnabled: boolean) {
+    const scene = await seedScene(db);
+    // The option is stored with the event: the Stop and the boarding point exist either way.
+    await db.updateTable("event").set({ stops_enabled: stopsEnabled }).where("id", "=", scene.eventId).execute();
+    const stopId = await seedStop(db, scene.eventId, scene.r1, { location: "Gare", time: "07:05:00" });
+    await db
+      .updateTable("placement")
+      .set({ stop_id: stopId })
+      .where("person_id", "=", scene.lea.id)
+      .where("leg", "=", "aller")
+      .execute();
+    return { ...scene, stopId };
+  }
+
+  it("with the option on, options.stops is true and the car carries its Stops and who boards there", async () => {
+    await withRollback(async (trx) => {
+      const scene = await sceneWithStop(trx, true);
+      const state = await readEventState(trx, scene.eventId);
+      expect(stillOpen(state)?.options).toEqual({ stops: true });
+      expect(legOf(state, "aller").cars[0].stops).toEqual([
+        { id: scene.stopId, location: "Gare", time: "07:05:00", position: null, passengerIds: [scene.lea.id] },
+      ]);
+      const page = await readEventPage(trx, scene.eventId);
+      expect(page && !page.ended && page.state.options).toEqual({ stops: true });
+    });
+  });
+
+  it("with the option off, options.stops is false and no Stop leaves, though the rows exist", async () => {
+    await withRollback(async (trx) => {
+      const scene = await sceneWithStop(trx, false);
+      const state = await readEventState(trx, scene.eventId);
+      expect(stillOpen(state)?.options).toEqual({ stops: false });
+      expect(legOf(state, "aller").cars[0].stops).toEqual([]);
+      expect(JSON.stringify(state)).not.toContain(scene.stopId);
+    });
+  });
+});
 
 describe("readEventState", () => {
   describe("C10.1, C10.3: a number leaves the server only for the device's persons and their car mates", () => {
