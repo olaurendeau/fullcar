@@ -37,7 +37,7 @@ test("/robots.txt keeps crawlers out of /monitoring only, not of the events, and
 
 test("/sitemap.xml lists the home page and the creation form, and no event", async ({ request, seededEvent }) => {
   const urls = await sitemapUrls(request);
-  expect(urls.map((url) => new URL(url).pathname)).toEqual(["/", "/nouveau"]);
+  expect(urls.map((url) => new URL(url).pathname)).toEqual(["/", "/nouveau", "/confidentialite"]);
   // An event exists while the sitemap is read: none of its pages is listed.
   expect(urls.filter((url) => url.includes("/e/") || url.includes(seededEvent.id)).length).toBe(0);
 });
