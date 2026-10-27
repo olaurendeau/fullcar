@@ -8,15 +8,17 @@ import { noteSignedOut } from "@/app/connexion/signed-out";
 import { sendAction } from "@/app/e/[id]/run-action";
 import { Button } from "@/components/ui/button";
 import { signOut } from "./actions";
+import { DeleteAccountDialog } from "./delete-account-dialog";
 import { signOutBrowser } from "./sign-out-browser";
 
 /**
  * « Mon compte », at the bottom of Mes événements (OA9.1): the session's address and « Se
  * déconnecter », without a confirmation. Signed out, the page leads to /connexion, which says
  * « Session fermée. ». A failure says `Account.signOutFailed` in the bar, the session open
- * (OA9.2); « Fermer » takes the bar away and gives the focus back to the button.
+ * (OA9.2); « Fermer » takes the bar away and gives the focus back to the button. Then « Supprimer
+ * mon compte » (OA9.3 to OA9.5), whose confirmation counts the `openEvents` that stay open.
  */
-export function MyAccount({ email }: { email: string }) {
+export function MyAccount({ email, openEvents }: { email: string; openEvents: number }) {
   const t = useTranslations("Account");
   const tActions = useTranslations("Actions");
   const router = useRouter();
@@ -61,6 +63,7 @@ export function MyAccount({ email }: { email: string }) {
           <LogOut aria-hidden />
           {t("signOut")}
         </Button>
+        <DeleteAccountDialog openEvents={openEvents} />
       </section>
       {failures > 0 && (
         <>

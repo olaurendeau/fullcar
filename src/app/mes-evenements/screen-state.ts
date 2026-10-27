@@ -7,6 +7,14 @@ export type MyEventsShown = Extract<MyEventsAnswer, { state: "events" }>;
 /** What a read of « Mes événements » comes to: the list, the way to /connexion (OA6.8), or a failure (OA6.7). */
 export type MyEventsRead = { state: "events"; list: MyEventsShown } | { state: "signIn" } | { state: "failed" };
 
+/**
+ * The events whose sign-ups are not erased yet, which stay open to participants once the
+ * account is deleted (`DeleteAccount.open`, OA9.3): the upcoming and the past, not the erased.
+ */
+export function openEventCount(list: Pick<MyEventsShown, "upcoming" | "past">): number {
+  return list.upcoming.length + list.past.filter((event) => event.state === "past").length;
+}
+
 /** How many past events show before « Afficher les autres » (OA6.6). */
 export const PAST_SHOWN = 10;
 

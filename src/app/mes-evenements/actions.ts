@@ -2,6 +2,7 @@
 
 import { getDb } from "@/db/client";
 import { databaseFailure } from "@/db/failure";
+import { deleteAccountOf, type DeleteAccountAnswer } from "./delete-account";
 import { readMyEvents, type MyEventsAnswer } from "./my-events";
 import { signOutBrowser, type SignOutAnswer } from "./sign-out";
 
@@ -31,5 +32,19 @@ export async function signOut(session: unknown, adminTokens: unknown): Promise<S
   } catch (error) {
     // A Postgres error may carry a row: only its code is logged, none of it is thrown.
     throw databaseFailure("signOut: the session could not be closed", error);
+  }
+}
+
+/**
+ * « Supprimer mon compte » in « Mon compte » (OA9.3 to OA9.5): the session's token and the admin
+ * tokens this browser keeps arrive in the request's body, never in a URL, a header or a cookie.
+ * The answer carries no token nor address; nothing logged carries one.
+ */
+export async function deleteAccount(session: unknown, adminTokens: unknown): Promise<DeleteAccountAnswer> {
+  try {
+    return await deleteAccountOf(getDb(), session, adminTokens);
+  } catch (error) {
+    // A Postgres error may carry a row: only its code is logged, none of it is thrown.
+    throw databaseFailure("deleteAccount: the account could not be deleted", error);
   }
 }

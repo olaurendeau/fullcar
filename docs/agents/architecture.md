@@ -581,6 +581,13 @@ ci-dessus valent pour chacun.
   encore le panneau, un rechargement non. Le jeton est révoqué (son hash passe à
   nul) par « Se déconnecter » dans ce navigateur, qui envoie les jetons d'admin qu'il garde
   et les efface, par l'anonymisation, et par la suppression du compte.
+- **La suppression du compte** (`deleteAccount` et `eraseAccount`, `src/db/accounts.ts`, #610) :
+  une seule transaction, tout ou rien. Ordre des verrous, celui de « Se déconnecter » et
+  d'`editEvent` : les sessions du compte par clé, ses événements par identifiant, ses liens
+  par clé, l'adresse, puis le compte. Ses événements anonymisés sont supprimés, les autres
+  restent ouverts sans compte ni jeton ; les événements en attente créés avec son adresse la
+  perdent : elle n'est plus dans aucune table (OA9.5). Une impasse (40P01) avec le nettoyage
+  des liens est reprise une fois.
 - **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et
   celui-ci ne rattache que son propre événement. Chacun ne sert qu'une fois, et plusieurs
   liens non utilisés restent valables ensemble. La page du lien lit le jeton dans
