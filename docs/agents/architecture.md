@@ -1175,8 +1175,8 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   chaque événement dont le jour 30 a commencé à Paris (`purgeCutoff`, voir « Heures sans
   fuseau ») est traité dans **sa propre transaction**, sous `lockEvent(trx, id,
   "noKeyUpdate")`. Avec un compte, il est **anonymisé** : ses Persons, Rides, Placements,
-  Arrêts et liens de confirmation sont supprimés (`anonymiseEvent` supprime les Arrêts
-  explicitement, après les Placements et avant les Rides, #883 ; `deleteEvent` les emporte par
+  Arrêts et liens de confirmation sont supprimés (les Arrêts partent avec leurs Rides
+  par la cascade `stop_ride_fk` / `stop_event_fk`, #883 ; `deleteEvent` les emporte par
   la cascade de `stop.event_id`), sa position, sa description et le hash de
   son jeton d'admin passent à nul, et `anonymised_at` est écrit. Sans compte, en attente ou laissé par un
   compte supprimé, il est **supprimé**, et la cascade emporte le reste. Une exécution

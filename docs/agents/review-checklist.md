@@ -275,7 +275,7 @@ celui qui écrit le code.
   comme fait » de `product.md` restent de bout en bout, chaque cas compris : « créer un
   événement en moins de 30 s » (8 actions pour un nouvel organisateur, 7 avec une session)
   et « rejoindre une voiture en 1 tap » (un seul clic sur la place libre ; avec deux
-  personnes « sans voiture », le clic ouvre la feuille). Raison : le bout en bout faisait
+  personnes « sans voiture », ou sur une voiture à Arrêts, le clic ouvre la feuille). Raison : le bout en bout faisait
   87 % du temps de la CI, mesuré avant #652.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.
