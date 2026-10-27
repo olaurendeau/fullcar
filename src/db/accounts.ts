@@ -128,8 +128,8 @@ export async function eraseAccount(db: Kysely<Database>, accountId: string, admi
  *
  * Lock order, as « Se déconnecter » and `editEvent` take it: the sessions (caller), then the
  * events by id, then the links by key, then the address, then the account. An event confirmed
- * meanwhile is left by the account's `SET NULL`, orphan; one created with a session meanwhile
- * (#904) is revoked under the account's lock, just before it goes.
+ * meanwhile is left by the account's `SET NULL`, orphan, and its admin token is revoked under the
+ * account's lock, just before it goes; so is one created with a session meanwhile (#904).
  */
 async function eraseHeld(db: Kysely<Database>, accountId: string, adminTokens: readonly unknown[]): Promise<boolean> {
   const account = await db.selectFrom("account").select("email").where("id", "=", accountId).executeTakeFirst();
