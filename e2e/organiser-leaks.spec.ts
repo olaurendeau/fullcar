@@ -2,11 +2,14 @@ import type { Page } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
 import { leaveNoToken } from "./fixtures";
 import {
+  adminTokenKey,
+  areaRefused,
   digitsOf,
   expect,
   type Exchange,
   hideToken,
   htmlByLegSection,
+  keepAdminToken,
   oneCharOff,
   organiserPath,
   type ScenePhones,
@@ -25,7 +28,7 @@ import {
 
 leaveNoToken();
 
-const FR = { panel: "Espace organisateur", invalid: "Ce lien d’organisateur n’est pas valide." };
+const FR = { panel: "Espace organisateur" };
 
 type Letter = keyof ScenePhones;
 const WITH_A_NUMBER: Letter[] = ["a", "b", "c", "e"];
@@ -128,17 +131,24 @@ test("O2.5, O6.1, O6.3: with the right link, B's and C's numbers in the panel's 
   expect(page.url() === arrival, "the URL is still the one arrived at").toBe(true);
 });
 
-for (const [name, link, checks] of [
-  ["a token one character off", ({ id, token }: SeededEvent) => `/e/${id}/admin#${oneCharOff(token)}`, 1],
-  ["no fragment", ({ id }: SeededEvent) => `/e/${id}/admin`, 0],
-] as const) {
-  test(`O2.6: with ${name}, no number of the scene in any answer`, async ({ page, seededEvent, organiserTraffic }) => {
-    await page.goto(link(seededEvent), { waitUntil: "networkidle" });
-    await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(FR.invalid);
+const REFUSALS: [string, (event: SeededEvent) => string | null, number, ((event: SeededEvent) => string)?][] = [
+  ["a token one character off kept", ({ token }) => oneCharOff(token), 1],
+  ["no token kept", () => null, 0],
+  // OA7.5: an old organiser's link, in a browser that keeps no token, opens nothing.
+  ["no token kept, by the old organiser's link", () => null, 0, ({ token }) => `#${token}`],
+];
+for (const [name, kept, checks, fragment] of REFUSALS) {
+  test(`O2.6, OA7.5: with ${name}, the area refused, and no number of the scene in any answer`, async ({ page, seededEvent, organiserTraffic }) => {
+    await keepAdminToken(page, seededEvent.id, kept(seededEvent));
+    await page.goto(`${organiserPath(seededEvent)}${fragment?.(seededEvent) ?? ""}`, { waitUntil: "networkidle" });
+    await expect(areaRefused(page)).toBeVisible();
+    await expect(page.getByRole("region", { name: FR.panel })).toHaveCount(0);
 
     const exchanges = await organiserTraffic.exchanges();
     // The witness: the wrong token's check was answered, and its answer recorded.
     expect(carrying(exchanges, oneCharOff(seededEvent.token)).length, "checks of the wrong token").toBe(checks);
+    // OA7.5: the right token in no request, a fragment holding it included: it is never read.
+    expect(carrying(exchanges, seededEvent.token).length, "requests carrying the right token").toBe(0);
     expect(numbersIn([...answers(exchanges, seededEvent), await dom(page)], phones, WITH_A_NUMBER)).toEqual([]);
   });
 }
@@ -180,7 +190,8 @@ test("O7.6, O2.8: /e/{id} sends no number of the scene, and shows nothing of the
 // #436, review of #450: with no page left at its teardown, `organiserTraffic` opens one to read the
 // origin's `localStorage` (O2.10). Its reader, called with every page closed, finds a token left
 // there. The token goes to the page as an argument and is checked as a boolean, never shown.
-test("O2.10: the admin token in `localStorage`, every page closed: the storage read opens a page and finds it", async ({ page, seededEvent }) => {
+// O2.10 amended (#597): the browser keeps the admin token under its event's key, and there only.
+test("O2.10: the admin token in `localStorage` under another key, every page closed: the storage read opens a page and finds it", async ({ page, seededEvent }) => {
   await page.goto("/icon.svg");
   const origin = new URL(page.url()).origin;
   await page.evaluate((token) => localStorage.setItem("fullcar:probe", token), seededEvent.token);
@@ -188,9 +199,12 @@ test("O2.10: the admin token in `localStorage`, every page closed: the storage r
   for (const each of context.pages()) await each.close();
   expect(context.pages().length).toBe(0);
 
-  const places = await storageOf(context, origin);
-  const found = places.some(([where, text]) => where === "localStorage" && text.includes(seededEvent.token));
-  expect(found, "the token found in localStorage, with no page left").toBe(true);
+  const kept: [string, string] = [adminTokenKey(seededEvent.id), seededEvent.token];
+  const holds = (places: [string, string][]) => places.some(([where, text]) => where === "localStorage" && text.includes(seededEvent.token));
+  expect(holds(await storageOf(context, origin, kept)), "the token found under another key, with no page left").toBe(true);
   // Taken away again, so that the fixture's own check, once the test is over, passes.
   for (const each of context.pages()) await each.evaluate(() => localStorage.removeItem("fullcar:probe"));
+  // Under its event's key alone, the token is no finding; the witness: it is there.
+  expect(holds(await storageOf(context, origin, kept)), "the token found under its event's key").toBe(false);
+  expect(holds(await storageOf(context, origin)), "the token kept under its event's key").toBe(true);
 });

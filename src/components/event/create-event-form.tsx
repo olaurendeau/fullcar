@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { createEvent } from "@/app/actions";
-import { goToAdminLink } from "@/app/e/[id]/admin/admin-link";
+import { goToOrganiserArea, keepAdminToken } from "@/app/e/[id]/admin/admin-token-store";
 import { Button } from "@/components/ui/button";
 import { deviceBounds, firstInvalidField, validateEvent, type EventErrors, type EventFields } from "@/domain/event";
 import { BLANK_EVENT_FIELDS, Box, EventFormFields } from "./event-fields";
@@ -21,8 +21,8 @@ const noSubscription = () => () => {};
 /**
  * The creation form of the home page (#3, R1 to R3), its place with suggestions (#428). The
  * browser checks the fields against the device's date, the server checks them again, and
- * either way the errors show by their field. On success, the action's answer goes to
- * `goToAdminLink`, and nowhere else.
+ * either way the errors show by their field. On success, the action's token goes to
+ * `keepAdminToken`, and nowhere else.
  */
 export function CreateEventForm() {
   const t = useTranslations("CreateEvent");
@@ -66,7 +66,11 @@ export function CreateEventForm() {
     setSending(true);
     try {
       const result = await createEvent(fields);
-      if (result.ok) return goToAdminLink(router, result);
+      if (result.ok) {
+        // This browser created it: it keeps the token, then goes to the area, no fragment (OA1.6).
+        keepAdminToken(result.id, result.token);
+        return goToOrganiserArea(router, result.id);
+      }
       showErrors(result.errors);
     } catch {
       // Offline, or the server failed: one message, no detail (#3, decision 7).

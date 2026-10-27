@@ -79,15 +79,15 @@ async function answerOf<T>(write: () => Promise<T>): Promise<T | { failed: strin
   }
 }
 
-/** `first`, held until `second` waits for it, then committed; both answers, each one or `failed`. */
-async function inOrder<A, B>(db: Db, first: (trx: Db) => Promise<A>, second: () => Promise<B>) {
+/** `first`, held until `second`, on the connection it is given, waits for it, then committed; both answers, each one or `failed`. */
+async function inOrder<A, B>(db: Db, first: (trx: Db) => Promise<A>, second: (own: Db) => Promise<B>) {
   let firstAnswer: A | { failed: string } | undefined;
   const secondAnswer = await whileHeld(
     db,
     async (trx) => {
       firstAnswer = await answerOf(() => first(trx));
     },
-    () => answerOf(second),
+    (own) => answerOf(() => second(own)),
   );
   return { first: firstAnswer, second: secondAnswer };
 }
@@ -154,7 +154,7 @@ describe("RP2.8 (1): a seat taken in her car while the driver is removed", () =>
       const answers = await inOrder(
         db,
         (trx) => takeSeats(trx, eventId, tom.token, rides.marcAller, "aller", [tom.id]),
-        () => remove(db, eventId, marc),
+        (own) => remove(own, eventId, marc),
       );
       expect(answers.first).toMatchObject({ ok: true });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -170,7 +170,7 @@ describe("RP2.8 (1): a seat taken in her car while the driver is removed", () =>
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc),
-        () => takeSeats(db, eventId, tom.token, rides.marcAller, "aller", [tom.id]),
+        (own) => takeSeats(own, eventId, tom.token, rides.marcAller, "aller", [tom.id]),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: false, error: "rideGone" });
@@ -188,7 +188,7 @@ describe("RP2.8 (2): the removed person's own seat-taking, personGone and never 
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, tom),
-        () => takeSeats(db, eventId, tom.token, rides.claireAller, "aller", [tom.id]),
+        (own) => takeSeats(own, eventId, tom.token, rides.claireAller, "aller", [tom.id]),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: false, error: "personGone", goneIds: [tom.id] });
@@ -204,7 +204,7 @@ describe("RP2.8 (2): the removed person's own seat-taking, personGone and never 
       const answers = await inOrder(
         db,
         (trx) => takeSeats(trx, eventId, tom.token, rides.claireAller, "aller", [tom.id]),
-        () => remove(db, eventId, tom),
+        (own) => remove(own, eventId, tom),
       );
       expect(answers.first).toMatchObject({ ok: true });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -223,7 +223,7 @@ describe("RP2.8 (3): setPersonLeg while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc),
-        () => setPersonLeg(db, eventId, martins, { personId: marc.id, leg: "retour", kind: "withoutCar" }),
+        (own) => setPersonLeg(own, eventId, martins, { personId: marc.id, leg: "retour", kind: "withoutCar" }),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: false, error: "personGone" });
@@ -239,7 +239,7 @@ describe("RP2.8 (3): setPersonLeg while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => setPersonLeg(trx, eventId, martins, { personId: marc.id, leg: "retour", kind: "withoutCar" }),
-        () => remove(db, eventId, marc),
+        (own) => remove(own, eventId, marc),
       );
       expect(answers.first).toMatchObject({ ok: true });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -269,7 +269,7 @@ describe("RP2.8 (4): a car offered while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, tom),
-        () => offerRide(db, eventId, tom.token, offerBy(tom, "aller")),
+        (own) => offerRide(own, eventId, tom.token, offerBy(tom, "aller")),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toEqual({ ok: false, error: "personGone", goneIds: [tom.id] });
@@ -285,7 +285,7 @@ describe("RP2.8 (4): a car offered while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => offerRide(trx, eventId, tom.token, offerBy(tom, "aller")),
-        () => remove(db, eventId, tom),
+        (own) => remove(own, eventId, tom),
       );
       expect(answers.first).toMatchObject({ ok: true, driverId: tom.id });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -300,7 +300,7 @@ describe("RP2.8 (4): a car offered while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, lea),
-        () => offerRide(db, eventId, martins, offerBy(marc, "retour", [lea.id])),
+        (own) => offerRide(own, eventId, martins, offerBy(marc, "retour", [lea.id])),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toEqual({ ok: false, error: "personGone", goneIds: [lea.id] });
@@ -318,7 +318,7 @@ describe("RP2.8 (4): a car offered while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => offerRide(trx, eventId, martins, offer),
-        () => remove(db, eventId, lea),
+        (own) => remove(own, eventId, lea),
       );
       expect(answers.first).toMatchObject({ ok: true, rideId: offer.rideId });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -336,7 +336,7 @@ describe("RP2.8 (5): the device and the organiser removing the same person at on
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc, martins),
-        () => removeAsOrganiser(db, eventId, adminToken, undefined, { personId: marc.id }),
+        (own) => removeAsOrganiser(own, eventId, adminToken, undefined, { personId: marc.id }),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: true, removal: "alreadyRemoved" });
@@ -351,7 +351,7 @@ describe("RP2.8 (5): the device and the organiser removing the same person at on
       const answers = await inOrder(
         db,
         (trx) => removeAsOrganiser(trx, eventId, adminToken, undefined, { personId: marc.id }),
-        () => remove(db, eventId, marc, martins),
+        (own) => remove(own, eventId, marc, martins),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: true, removal: "alreadyRemoved" });
@@ -382,7 +382,7 @@ describe("RP2.8 (6): a driver and their passenger removed together", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc, martins),
-        () => remove(db, eventId, lea, martins),
+        (own) => remove(own, eventId, lea, martins),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -399,7 +399,7 @@ describe("RP2.8 (6): a driver and their passenger removed together", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, lea, martins),
-        () => remove(db, eventId, marc, martins),
+        (own) => remove(own, eventId, marc, martins),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -451,7 +451,7 @@ describe("RP2.8 (7): a seat reduction that picks a passenger being removed", () 
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, lea),
-        () => updateRide(db, eventId, martins, rides.marcAller, "aller", reduction(scene)),
+        (own) => updateRide(own, eventId, martins, rides.marcAller, "aller", reduction(scene)),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toMatchObject({ ok: true });
@@ -469,7 +469,7 @@ describe("RP2.8 (7): a seat reduction that picks a passenger being removed", () 
       const answers = await inOrder(
         db,
         (trx) => updateRide(trx, eventId, martins, rides.marcAller, "aller", reduction(scene)),
-        () => remove(db, eventId, lea),
+        (own) => remove(own, eventId, lea),
       );
       expect(answers.first).toMatchObject({ ok: true });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -518,7 +518,7 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => editEvent(trx, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
-        () => remove(db, eventId, marc),
+        (own) => remove(own, eventId, marc),
       );
       expect(answers.first).toMatchObject({ ok: true });
       expect(answers.second).toMatchObject({ ok: true, removal: "removed" });
@@ -541,7 +541,7 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc),
-        () => editEvent(db, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
+        (own) => editEvent(own, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toEqual({ ok: false, error: "confirmRetour", cars: 1, persons: 2 });

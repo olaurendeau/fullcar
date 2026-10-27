@@ -25,12 +25,18 @@ export interface Message {
   landmark: () => boolean;
   undo?: Undo;
   leg?: Leg;
+  /** The persons a placement's success seats: it is about them alone (`persons` withdrawal). */
+  persons?: readonly string[];
 }
 
-/** What a send was about: its subjects, each subject's fields after it (#208), and its number. */
+/**
+ * What a send was about: its subjects, each subject's fields after it (#208), and its number;
+ * for a placement's success, the persons it seats, whom it is about instead.
+ */
 export interface Sent {
   about: readonly string[];
   sent: number;
+  persons?: readonly string[];
 }
 
 /**
@@ -68,18 +74,43 @@ export const emptyBar: BarState = { lines: [], next: 1 };
 /**
  * What takes failures away (rule 5). A send takes those whose subjects and fields it all
  * carries; its answer, only those of earlier sends (`before`). A car removed takes all those
- * about its subjects (`gone`), whatever fields they carried, sent before its removal.
+ * about its subjects (`gone`), whatever fields they carried, sent before its removal. Persons
+ * gone from the state the page shows take what is about them alone (`persons`, remove-person v2).
  */
-export type Withdrawal = { about: readonly string[]; before?: number } | { gone: readonly string[]; before: number };
+export type Withdrawal =
+  | { about: readonly string[]; before?: number }
+  | { gone: readonly string[]; before: number }
+  | { persons: readonly string[] };
 
-export function covers(withdrawal: Withdrawal, { about, sent }: Sent): boolean {
+export function covers(withdrawal: Withdrawal, { about, sent, persons }: Sent): boolean {
+  if ("persons" in withdrawal) {
+    const named = persons ?? about.map(personOf);
+    return named.length > 0 && named.every((person) => person !== undefined && withdrawal.persons.includes(person));
+  }
   if (withdrawal.before !== undefined && sent >= withdrawal.before) return false;
   if ("gone" in withdrawal) return withdrawal.gone.includes(about[0]);
   return about.every((subject) => withdrawal.about.includes(subject));
 }
 
+/**
+ * The one person a subject is about, if it is about one of the device's persons alone: her
+ * « Modifier » (`person:{id}`, and its fields), a cell of hers (`cell:{id}:{leg}`), her removal
+ * (`removePerson:{id}`), or an offer she drives (`offer:{leg}:{id}`). Nobody for a car, a seat,
+ * the page, or a person not created yet (`person:new:…`, `offer:{leg}:new:…`).
+ */
+function personOf(subject: string): string | undefined {
+  const [kind, first, second] = subject.split(":");
+  if (kind === "cell" || kind === "removePerson") return first;
+  if (kind === "person") return first === "new" ? undefined : first;
+  if (kind === "offer") return second === "new" ? undefined : second;
+  return undefined;
+}
+
 /** A person's state on a leg, the key of what a placement's success says (rule 2, v4.4.5). */
 export const personLeg = (personId: string, leg: Leg): string => `${personId}:${leg}`;
+
+/** The person of a `personLeg` key. */
+export const personOfLeg = (key: string): string => key.slice(0, key.lastIndexOf(":"));
 
 /**
  * What « Proposer une voiture » changes once it succeeds (rule 2, v4.4.5, item 1): who drives, the
@@ -153,9 +184,17 @@ export const inform = (state: BarState, information: Information): BarState =>
  */
 export const ended = (state: BarState, began: number): BarState => keep(state, (line) => line.kind !== "info" || line.at > began);
 
-/** Rule 5: the failures `withdrawal` covers go; nothing else. */
+/**
+ * Rule 5: the failures `withdrawal` covers go; nothing else. Persons gone from the state the page
+ * shows also take the success of a placement that seats them alone, with its « Annuler »: a line
+ * that names others too stays, still true for them (remove-person v2, « Focus, barre, envoi »).
+ */
 export const withdraw = (state: BarState, withdrawal: Withdrawal): BarState =>
-  keep(state, (line) => line.kind !== "failure" || !covers(withdrawal, line));
+  keep(state, (line) => {
+    if (line.kind === "failure") return !covers(withdrawal, line);
+    const seated = line.kind === "success" && line.persons;
+    return !("persons" in withdrawal && seated && covers(withdrawal, { about: [], sent: line.id, persons: seated }));
+  });
 
 /**
  * Rule 6: an « Annuler » sent shows on no line any more: the success keeps its words without it,

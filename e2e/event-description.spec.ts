@@ -1,6 +1,6 @@
 import type { Page, Request } from "@playwright/test";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { creatorTest as test, expect, leaveNoToken } from "./fixtures";
 import { expectRing, pressUntil } from "./focus-ring";
 import { organiserPath } from "./organiser";
 

@@ -1,7 +1,7 @@
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { CONFIRMATION_LINK_LIFETIME_MS, LOGIN_LINK_LIFETIME_MS } from "@/domain/account-rules";
-import { CONFIRMATIONS_PER_ADDRESS, CONFIRMATIONS_PER_EVENT, SEND_WINDOW_MS } from "@/domain/send-limits";
+import { CONFIRMATIONS_PER_ADDRESS, CONFIRMATIONS_PER_EVENT } from "@/domain/send-limits";
 import { hashToken } from "@/domain/token-hash";
 import { anonymiseEvent, deleteEvent } from "./day-thirty";
 import { claimConfirmation, createLink, findLink, useLink } from "./email-links";
@@ -47,8 +47,7 @@ describe("claimConfirmation", () => {
     await withRollbackRecordingSends(async (trx) => {
       const { id: eventId } = await seedEvent(trx);
       const email = anAddress();
-      // Counted two hours ahead: the global cap's concurrency test (email-sends.test.ts) may hold 50 sends in the hour.
-      const claimed = await claimConfirmation(trx, eventId, email, new Date(Date.now() + 2 * SEND_WINDOW_MS));
+      const claimed = await claimConfirmation(trx, eventId, email);
       if (claimed.claim !== "recorded") throw new Error(`expected a link, got ${claimed.claim}`);
       expect(await findLink(trx, claimed.token)).toMatchObject({ kind: "confirmation", eventId, usedAt: null });
       expect(await linksOf(trx, eventId)).toHaveLength(1);
@@ -93,7 +92,7 @@ describe("claimConfirmation", () => {
               await lockEvent(trx, eventId, "noKeyUpdate");
               await deleteEvent(trx, eventId);
             },
-            () => claimConfirmation(db, eventId, email),
+            (own) => claimConfirmation(own, eventId, email),
           );
           expect(claimed).toEqual({ claim: "eventGone" });
           expect(await sendsTo(db, email)).toEqual([]);
@@ -113,7 +112,7 @@ describe("claimConfirmation", () => {
               await lockEvent(trx, eventId, "noKeyUpdate");
               await anonymiseEvent(trx, eventId);
             },
-            () => claimConfirmation(db, eventId, email),
+            (own) => claimConfirmation(own, eventId, email),
           );
           expect(claimed).toEqual({ claim: "eventEnded" });
           expect(await linksOf(db, eventId)).toEqual([]);
@@ -211,7 +210,7 @@ describe("useLink", () => {
       const second = await whileHeld(
         db,
         async (trx) => expect(await useLink(trx, token, "login")).toMatchObject({ outcome: "valid" }),
-        () => useLink(db, token, "login"),
+        (own) => useLink(own, token, "login"),
       );
       expect(second).toEqual({ outcome: "used" });
     });
@@ -223,7 +222,7 @@ describe("useLink", () => {
       const second = await whileHeld(
         db,
         async (trx) => expect(await useLink(trx, token, "confirmation")).toMatchObject({ outcome: "valid" }),
-        () => useLink(db, token, "confirmation"),
+        (own) => useLink(own, token, "confirmation"),
       );
       expect(second).toEqual({ outcome: "used" });
     });

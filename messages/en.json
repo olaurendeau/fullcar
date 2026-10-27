@@ -332,25 +332,12 @@
       "label": "Link to share",
       "hint": "Send it to the group."
     },
-    "adminLink": {
-      "label": "Organiser link",
-      "badge": "Personal",
-      "hint": "Do not share it: it shows phone numbers and lets anyone change everything."
-    },
-    "keep": {
-      "title": "Keep this link",
-      "body": "It is the only way to change the event. With no account and no e-mail, we cannot send it to you again."
-    },
     "copy": "Copy",
     "copied": "Copied",
     "copyFailed": "Copy failed: select the link and copy it by hand.",
     "share": "Share",
-    "invalid": {
-      "title": "This organiser link is not valid.",
-      "body": "Check that it was copied in full."
-    },
     "failed": {
-      "title": "The organiser link could not be checked.",
+      "title": "The organiser area could not be loaded.",
       "body": "Check your connection, then try again."
     },
     "loading": "Loading the organiser area…",

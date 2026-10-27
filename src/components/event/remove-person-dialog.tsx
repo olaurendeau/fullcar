@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import type { RemovalConfirmation } from "@/domain/person-removal";
+import type { RemovalProblem } from "./failure-words";
 import { HidesPage, useSends, type FromSheet } from "./hidden-page";
-import type { BarProblem } from "./message-bar";
 
 /**
  * Removes one of the device's persons from the event (`removePerson`, remove-person v2, RP1):
@@ -24,7 +24,7 @@ import type { BarProblem } from "./message-bar";
 export type RemovePerson = (
   removal: { personId: string; firstName: string; sending: (sending: boolean) => void },
   confirmation: FromSheet,
-) => Promise<BarProblem | null | undefined>;
+) => Promise<RemovalProblem | null | undefined>;
 
 interface Person {
   id: string;
@@ -89,7 +89,9 @@ export function RemovePersonButton({
  * in a car, in the order of the legs; whom to tell, when a car changes; what is erased, and that
  * it is final. Then the removal in red, and « Annuler », which sends nothing (RP1.3). Confirmed, it
  * stays open, its button inactive, until the answer: a failure is said there while it is open, the
- * one that sent; in the bar otherwise, once nothing hides the page.
+ * one that sent; in the bar otherwise, once nothing hides the page. Offline or on an error, the red
+ * button gets the focus back; a refusal that sending again would not change says why, and the red
+ * button goes: « Annuler » becomes « Fermer », which takes the focus (« Refus et échecs », decision 12).
  */
 function Confirmation({
   person,
@@ -103,17 +105,20 @@ function Confirmation({
   removal: RemovalConfirmation;
   isOpen: () => boolean;
   sending: boolean;
-  send: (confirmation: FromSheet) => Promise<BarProblem | null | undefined>;
+  send: (confirmation: FromSheet) => Promise<RemovalProblem | null | undefined>;
   close: () => void;
 }) {
   const t = useTranslations();
-  const [problem, setProblem] = useState<BarProblem | null>(null);
+  const [problem, setProblem] = useState<RemovalProblem | null>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
   const sends = useSends(isOpen, `removePerson:${person.id}`);
 
   // The confirmation button lost the focus while it was inactive: after a failure, it gets it back.
+  // After a refusal it is gone, and « Fermer » takes the focus.
   useEffect(() => {
-    if (problem && !sending && document.activeElement === document.body) confirmButton.current?.focus();
+    if (problem?.final) cancelButton.current?.focus();
+    else if (problem && !sending && document.activeElement === document.body) confirmButton.current?.focus();
   }, [problem, sending]);
 
   async function confirm() {
@@ -146,25 +151,29 @@ function Confirmation({
       </AlertDialogHeader>
       {problem && (
         <p role="alert" className="text-sm text-destructive">
-          {t(`Actions.${problem}`)}
+          {problem.final ? t(`Actions.why.${problem.problem}`) : t(`Actions.${problem.problem}`)}
         </p>
       )}
       <div className="flex flex-col gap-2">
-        <AlertDialogPrimitive.Action asChild>
-          <Button
-            ref={confirmButton}
-            disabled={sending}
-            className="h-11 w-full bg-destructive text-white hover:bg-destructive/90"
-            onClick={(event) => {
-              // Closed by the answer, not by the press.
-              event.preventDefault();
-              void confirm();
-            }}
-          >
-            {t("PersonRemoval.confirm")}
-          </Button>
-        </AlertDialogPrimitive.Action>
-        <AlertDialogCancel className="h-11 w-full">{t("Actions.cancel")}</AlertDialogCancel>
+        {!problem?.final && (
+          <AlertDialogPrimitive.Action asChild>
+            <Button
+              ref={confirmButton}
+              disabled={sending}
+              className="h-11 w-full bg-destructive text-white hover:bg-destructive/90"
+              onClick={(event) => {
+                // Closed by the answer, not by the press.
+                event.preventDefault();
+                void confirm();
+              }}
+            >
+              {t("PersonRemoval.confirm")}
+            </Button>
+          </AlertDialogPrimitive.Action>
+        )}
+        <AlertDialogCancel ref={cancelButton} className="h-11 w-full">
+          {problem?.final ? t("Actions.close") : t("Actions.cancel")}
+        </AlertDialogCancel>
       </div>
     </>
   );
