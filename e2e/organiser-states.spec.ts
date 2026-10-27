@@ -227,6 +227,7 @@ test.describe("the screens of a refusal, in French", () => {
     expect(response?.status()).toBe(200);
     expect(response?.headers()["x-robots-tag"]).toBe("noindex, nofollow");
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+    await expect(page).toHaveTitle("Tournoi de Rennes");
     expect((await response!.text()).includes(PLACE), "the place in the HTML").toBe(false);
     await expect(title(page)).toHaveText(FR.panel);
     await expect(main(page).getByText(FR.login, { exact: true })).toBeVisible();

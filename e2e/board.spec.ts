@@ -189,7 +189,10 @@ test.describe("board, with a retour", () => {
   });
 
   test("C11.7: the organiser's page shows the same board", async ({ page, seededEvent }) => {
+    // The creation browser's: refused, the page shows no board once the check answers (#598).
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
     await page.goto(`/e/${seededEvent.id}/admin`);
+    await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
     const panel = page.getByRole("tabpanel");
     await expect(car(panel, "Marc").getByRole("listitem")).toHaveText(["Léa", "Place libre", "Place libre"]);
     await expect(withoutCar(panel).getByRole("listitem")).toHaveText(["Tom"]);
