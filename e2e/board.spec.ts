@@ -378,9 +378,14 @@ for (const javaScriptEnabled of [true, false]) {
         for (const read of received) expectNoNumber(read.url, readText(read));
 
         const panels = await Promise.all(panelReads);
-        expect(panels.length, "reads of the panel").toBe(javaScriptEnabled && organiser ? 1 : 0);
+        // #597: on /admin, the area is always checked, with the token this browser keeps or none.
+        expect(panels.length, "reads of the panel").toBe(javaScriptEnabled && path(seededEvent).endsWith("/admin") ? 1 : 0);
         for (const read of panels) {
           const text = readText(read);
+          if (!organiser) {
+            expectNoNumber(`the refusal at ${read.url}`, text);
+            continue;
+          }
           expect(text.includes(PHONES.tom), "the panel holds Tom's number").toBe(true);
           expect(text.includes(PHONES.lea), "the panel holds Léa's number").toBe(true);
           expectNoNumber(`the panel at ${read.url}`, text, DRIVERS_NUMBERS);

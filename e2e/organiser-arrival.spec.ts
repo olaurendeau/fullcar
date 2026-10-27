@@ -27,7 +27,7 @@ const loading = (page: Page) => page.getByRole("main").getByRole("status").filte
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
 /** The area's title alone, in the panel's place, once the access is refused (#597, until #598). */
 const refused = (page: Page) => areaRefused(page);
-const retry =(page: Page) => page.getByRole("button", { name: FR.retry });
+const retry = (page: Page) => page.getByRole("button", { name: FR.retry });
 /** The failed check's frame: its alert region, then « Réessayer », next to it. */
 const failedFrame = (page: Page) => page.getByRole("main").locator("div", { has: retry(page) }).last();
 /** Playwright's text and role engines skip `<noscript>`: found by its markup. */
