@@ -11,6 +11,8 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import type { Leg } from "@/domain/leg";
 import { legIsEmpty, organiserPersons, type OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import type { Brevo } from "@/email/brevo";
+import { createEventFor } from "@/app/create-event";
 import { readOrganiserState } from "./organiser-state";
 
 // The same function, watched: the persons are built after the access check, not before.
@@ -407,6 +409,27 @@ describe("readOrganiserState: the notice « Confirmez votre adresse » (OA1.7, O
         expect(answer.state).toBe("panel");
         expect(answer).not.toHaveProperty("pending");
       }
+    });
+  });
+});
+
+describe("readOrganiserState: an event created with a session (OA1.3, OA7.6, review of #840)", () => {
+  it("a real creation, read through the access rule: organiser for its session and for its admin token, not for another session", async () => {
+    await withRollback(async (trx) => {
+      const session = await seedSession(trx, await seedAccount(trx));
+      const date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const brevo: Brevo = { send: () => Promise.reject(new Error("OA1.3: no email goes with a session")) };
+      const created = await createEventFor(
+        { title: "Tournoi", location: "Gymnase", allerDate: date, allerTime: "07:30", session },
+        { db: trx, now: new Date(), locale: "fr", origin: "https://fullcar.test", brevo, later: () => {} },
+      );
+      if (!created.ok) throw new Error(`expected an event, got ${JSON.stringify(created.errors)}`);
+
+      expect((await readOrganiserState(trx, created.id, { session })).state).toBe("panel");
+      expect((await readOrganiserState(trx, created.id, { adminToken: created.token })).state).toBe("panel");
+      const email = anAddress();
+      const other = await seedSession(trx, await seedAccount(trx, { email }));
+      expect(await readOrganiserState(trx, created.id, { session: other })).toStrictEqual({ state: "notYours", email });
     });
   });
 });
