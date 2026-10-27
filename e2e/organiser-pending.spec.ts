@@ -1,9 +1,12 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import { POLL_MS } from "@/app/e/[id]/admin/screen-state";
 import type { SendStatusColumn } from "@/db/schema";
+import { seedSends } from "@/db/test-accounts";
 import { seedPendingSend } from "@/db/test-events";
+import { CONFIRMATIONS_PER_EVENT } from "@/domain/send-limits";
+import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { newAddress } from "./mailbox";
+import { answerMail, mailTo, newAddress } from "./mailbox";
 import { areaEditButton, expect, organiserPath, test } from "./organiser";
 
 /*
@@ -33,6 +36,9 @@ const FR = {
     `Votre événement est créé, mais trop d’e-mails sont partis vers ${email} cette heure-ci. Dans une heure, utilisez « Renvoyer l’e-mail ». D’ici là, l’espace organisateur ne s’ouvre que dans ce navigateur.`,
   resend: "Renvoyer l’e-mail",
   fix: "Corriger l’adresse",
+  resent: (email: string) => `E-mail renvoyé à ${email}.`,
+  offline: "L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
+  tooMany: "Trop d’envois. Réessayez dans une heure.",
 };
 
 const HOUR = 60 * 60_000;
@@ -213,3 +219,72 @@ for (const width of [1024, 1280]) {
     });
   });
 }
+
+test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
+  test("one more email to the address, the bar says so, the notice says it was sent, the focus stays on the button", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = newAddress();
+    await seedPendingSend(db, seededEvent.id, { email, status: "failed", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email));
+
+    await button(page, FR.resend).click();
+    await expect(messages(page)).toHaveText([FR.resent(email)]);
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    await expect(button(page, FR.resend)).toBeFocused();
+    expect(await mailTo(email)).toHaveLength(1);
+    // The result kept is the new one: it is the same after a reload.
+    await page.reload();
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+  });
+
+  test("a failure of Brevo is the notice's alert: no « E-mail renvoyé »", async ({ page, db, seededEvent }) => {
+    const email = newAddress();
+    await answerMail([email], { kind: "error" });
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.resend).click();
+    await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email));
+    await expect(messages(page)).toHaveCount(0);
+    expect(await mailTo(email)).toHaveLength(1);
+  });
+
+  test("past 3 emails in the hour for the event, the bar says « Trop d’envois », nothing goes, the notice is as it was", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = newAddress();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await seedSends(db, CONFIRMATIONS_PER_EVENT, { kind: "confirmation", email, eventId: seededEvent.id });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.resend).click();
+    await expect(messages(page)).toHaveText([FR.tooMany]);
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    expect(await mailTo(email)).toEqual([]);
+  });
+
+  test("offline, the bar says the email was not sent again, nothing is sent, the notice is as it was", async ({
+    page,
+    context,
+    db,
+    seededEvent,
+  }) => {
+    const email = newAddress();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    await context.setOffline(true);
+    try {
+      await button(page, FR.resend).click();
+      await expect(messages(page)).toHaveText([FR.offline]);
+    } finally {
+      await context.setOffline(false);
+    }
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    expect(await mailTo(email)).toEqual([]);
+  });
+});

@@ -18,8 +18,8 @@ import { usePageHidden } from "./hidden-page";
  * (OA1.7), both always there, so that a change is announced; a change while a sheet hides
  * the page waits for it to show. While the email is on its way,
  * both buttons are inactive (`aria-disabled`, they keep the focus). Decision: without
- * `onResend` or `onFix`, its button is inactive too. — Reason: their actions come with #601
- * and #602; a button that would do nothing is not shown as active.
+ * `onResend` or `onFix`, its button is inactive too. — Reason: « Renvoyer l’e-mail » (#601) is
+ * given, « Corriger l’adresse » comes with #602; a button that would do nothing is not shown as active.
  */
 export function PendingNotice({ pending, onResend, onFix }: { pending: Notice; onResend?: () => void; onFix?: () => void }) {
   const t = useTranslations("Admin.pending");
@@ -43,12 +43,13 @@ export function PendingNotice({ pending, onResend, onFix }: { pending: Notice; o
       <p className="max-w-prose text-muted-foreground wrap-anywhere">{body}</p>
     </>
   );
-  const action = (label: string, Glyph: typeof Mail, onPress: (() => void) | undefined) => {
+  const action = (name: "resend" | "fix", label: string, Glyph: typeof Mail, onPress: (() => void) | undefined) => {
     const inactive = send === "sending" || !onPress;
     return (
       <Button
         type="button"
         variant="outline"
+        data-pending-action={name}
         aria-disabled={inactive || undefined}
         onClick={() => {
           if (!inactive) onPress();
@@ -77,8 +78,8 @@ export function PendingNotice({ pending, onResend, onFix }: { pending: Notice; o
         {failure && text}
       </div>
       <div className="col-start-2 row-start-2 mt-2 flex flex-wrap gap-2">
-        {action(t("resend"), Mail, onResend)}
-        {action(t("fix"), Pencil, onFix)}
+        {action("resend", t("resend"), Mail, onResend)}
+        {action("fix", t("fix"), Pencil, onFix)}
       </div>
     </div>
   );

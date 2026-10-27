@@ -20,7 +20,17 @@ import { useOrganiserCheck } from "./admin-token-store";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
 import { keepFolded, readFolded } from "./organiser-fold";
 import { usePendingPoll } from "./pending-poll";
-import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
+import {
+  alertShown,
+  announcement,
+  editAnswer,
+  editFailure,
+  panelRead,
+  resendAnswer,
+  screenRead,
+  screenReducer,
+  type EditAnswer,
+} from "./screen-state";
 
 /**
  * The organiser's screen (epic #154): the organiser area, then the event's board, with
@@ -210,6 +220,41 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     return answer;
   }
 
+  /**
+   * « Renvoyer l’e-mail » (OA2.4): the notice says « Envoi du lien… » while the email is on its
+   * way, then what the server kept; the bar says `resent`, or why nothing went (`tooMany`,
+   * `offline`) once no sheet hides the page, and the focus stays on the button. A failure of
+   * Brevo is the notice's alert alone. Decision: a refusal or a server error takes the words of
+   * `offline`, and the notice is as it was. — Reason: the design has no other sentence for an
+   * email not sent again, and the organiser can only try again. An event no longer awaiting
+   * confirmation loses its notice.
+   */
+  async function resend() {
+    const handle = boardRef.current;
+    const before = current.current.state === "ready" ? current.current.panel.pending : undefined;
+    if (!handle || !before) return;
+    const send = sendAbout(["pending:resend"]);
+    send.leaves();
+    dispatch({ type: "pendingRead", pending: { ...before, send: "sending" } });
+    const answer = resendAnswer(await link.resend());
+    send.answered();
+    const kept = answer.kind === "answered" ? answer.pending : answer.kind === "notPending" ? undefined : before;
+    dispatch({ type: "pendingRead", ...(kept && { pending: kept }) });
+    const landmark = () => {
+      const button = document.querySelector<HTMLElement>("[data-pending-action=resend]");
+      button?.focus();
+      return !!button && document.activeElement === button;
+    };
+    if (answer.kind === "answered" && answer.pending.send === "sent") {
+      const email = answer.pending.email;
+      send.whenClosed(() => handle.succeed({ text: t("pending.resent", { email }), landmark }));
+    } else if (answer.kind === "tooMany" || answer.kind === "notResent") {
+      const text = answer.kind === "tooMany" ? t("pending.tooMany") : t("pending.offline");
+      const offline = answer.kind === "notResent" && answer.offline;
+      send.whenClosed(() => handle.fail({ text, landmark, offline, about: send.about, sent: send.seq }), true);
+    }
+  }
+
   async function readScreen(handle: BoardHandle) {
     if (current.current.state !== "ready") return;
     const read = ++latest.current;
@@ -261,6 +306,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         editRef={editButton}
         editSending={editSending}
         onEdit={() => openEdit(null)}
+        onResend={resend}
       />
     );
   } else if (screen.state === "loading") {

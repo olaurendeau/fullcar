@@ -6,8 +6,9 @@ import type { EndedHeader, OrganiserLeg, OrganiserPanelAnswer } from "@/domain/o
 import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { isWallClock, isWallDate, type WallDate } from "@/domain/wall-clock";
 import type { EditEventOutcome } from "../edit-event";
+import type { ResendOutcome } from "../pending-email";
 import { sendAction, type Sent } from "../run-action";
-import { loadOrganiserPanel, updateEvent } from "./actions";
+import { loadOrganiserPanel, resendEmail, updateEvent } from "./actions";
 
 /*
  * The only browser code that touches the organiser's admin token (docs/agents/architecture.md,
@@ -156,13 +157,15 @@ export function retryFrom(check: OrganiserCheck): OrganiserCheck | undefined {
  * page (O5.3). `read()` reads the panel again, and applies nothing (#182). `edit()` sends the
  * organiser's change of the event (epic #250) with the same proof, `before`, the values the
  * form loaded, and `removal`, the numbers a confirmation of the retour's removal showed (#270).
- * Without one, the argument is omitted, never `null`.
+ * Without one, the argument is omitted, never `null`. `resend()` sends the pending event's
+ * confirmation email again (OA2.4), with the same proof.
  */
 export function useOrganiserCheck(id: string): {
   check: OrganiserCheck;
   retry: () => void;
   read: () => Promise<Sent<OrganiserPanelAnswer>>;
   edit: (fields: EventFields, before: EventHeader, removal?: LegCounts) => Promise<Sent<EditEventOutcome>>;
+  resend: () => Promise<Sent<ResendOutcome>>;
 } {
   const [check, setCheck] = useState<OrganiserCheck>({ state: "checking" });
   const verifyAgain = useRef(() => {});
@@ -207,5 +210,7 @@ export function useOrganiserCheck(id: string): {
     [id],
   );
 
-  return { check, retry, read, edit };
+  const resend = useCallback(() => sendAction<ResendOutcome>(() => resendEmail(id, organiserProof(id))), [id]);
+
+  return { check, retry, read, edit, resend };
 }

@@ -121,20 +121,21 @@ export async function createEventFor(input: unknown, creation: Creation): Promis
   const { id, link } = stored;
   if (link !== null && organiser !== null && "email" in organiser) {
     const email = organiser.email;
-    creation.later(() => sendConfirmation(creation, { id, email, token: link, since: now }));
+    creation.later(async () => void (await sendConfirmation(creation, { id, email, token: link, since: now })));
   }
   return { ok: true, id, token };
 }
 
 /**
  * The confirmation email, after the answer (OA1.7): Brevo answers within 10 s, sent or
- * failed, and its answer replaces the `sending` the creation wrote. Throws nothing: there is
- * nobody left to answer.
+ * failed, and its answer replaces the `sending` the creation wrote at `since`; a resend
+ * (#601) sends it the same way, and has the answer. Throws nothing: there is nobody left to
+ * answer.
  */
-async function sendConfirmation(
-  { db, brevo, locale, origin }: Creation,
+export async function sendConfirmation(
+  { db, brevo, locale, origin }: Pick<Creation, "db" | "brevo" | "locale" | "origin">,
   { id, email, token, since }: { id: string; email: string; token: string; since: Date },
-): Promise<void> {
+): Promise<SendAnswer["state"]> {
   let answer: SendAnswer = { state: "failed" };
   try {
     answer = await brevo.send({ to: email, ...renderEmail({ kind: "confirmation", locale, origin, token }) });
@@ -147,4 +148,5 @@ async function sendConfirmation(
   } catch (error) {
     databaseFailure("createEvent: the result of the email could not be stored", error);
   }
+  return answer.state;
 }

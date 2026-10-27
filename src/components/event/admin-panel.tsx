@@ -55,10 +55,13 @@ export function AdminPanel({
   editRef,
   editSending = false,
   onEdit,
+  onResend,
 }: {
   publicUrl: string;
   /** The notice « Confirmez votre adresse » of an event awaiting confirmation, after the link to share (OA2.1). */
   pending?: Notice;
+  /** « Renvoyer l’e-mail » of that notice (OA2.4); without it, the button is inactive. */
+  onResend?: () => void;
   titleRef: RefObject<HTMLButtonElement | null>;
   legs: OrganiserLeg[] | null;
   allerAt: WallClock;
@@ -147,7 +150,7 @@ export function AdminPanel({
               <ShareButton url={publicUrl} />
             </CopyableLink>
           </LinkGroup>
-          {pending && <PendingNotice pending={pending} />}
+          {pending && <PendingNotice pending={pending} onResend={onResend} />}
         </div>
         {/* After the link to share, before the sections; from 1024 px, under both columns, at its width (v3.3). */}
         <Button
