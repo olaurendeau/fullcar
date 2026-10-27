@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { BoardPerson } from "@/domain/board";
+import { SheetBar } from "./bottom-sheet";
 
 /**
  * « Qui sort de la voiture ? » (C8.4), in place of the form « Modifier la voiture » once its
@@ -10,7 +11,9 @@ import type { BoardPerson } from "@/domain/board";
  * until exactly passengers − seats are. « Annuler » goes back to the form. After a refusal, a
  * new step says it (`RideChanges.leaving.changed`, C8.5), with the passengers then. Whenever
  * the focus is on nothing (the form's « Valider » gone, this one inactive while it sent), it
- * goes to « Valider » if it can be pressed, to the first box otherwise.
+ * goes to « Valider » if it can be pressed, to the first box otherwise. Its alert, « Valider » and
+ * « Annuler » are in the sheet's bar, on a computer too; the line « n cochée(s) sur m » stays
+ * under the boxes (v4.6, rules 1 and 9).
  */
 export function LeavingStep({
   passengers,
@@ -22,7 +25,7 @@ export function LeavingStep({
 }: {
   passengers: readonly BoardPerson[];
   seats: number;
-  /** A refusal or a failure, said above the boxes. */
+  /** A refusal or a failure, said in the bar, just above « Valider ». */
   alert: string | null;
   sending: boolean;
   /** The passengers it showed, and who leaves among them. */
@@ -50,11 +53,6 @@ export function LeavingStep({
         <p>{t("RideChanges.leaving.body", { passengers: passengers.length, seats, leaving })}</p>
         <p>{t("RideChanges.leaving.rule")}</p>
       </div>
-      {alert && (
-        <p role="alert" className="text-sm text-destructive">
-          {alert}
-        </p>
-      )}
       <div role="group" aria-labelledby={`${ids}-body`} className="flex flex-col">
         {passengers.map(({ id, firstName }) => (
           <label key={id} htmlFor={`${ids}-${id}`} className="flex min-h-11 cursor-pointer items-center gap-2.5">
@@ -70,17 +68,27 @@ export function LeavingStep({
       <p aria-live="polite" className="text-sm text-muted-foreground">
         {t("RideChanges.leaving.count", { chosen: chosen.length, leaving })}
       </p>
-      <Button
-        ref={submitButton}
-        className="h-11 w-full"
-        disabled={sending || !ready}
-        onClick={() => onSubmit(passengers.map(({ id }) => id), [...chosen])}
+      <SheetBar
+        messages={
+          alert && (
+            <p role="alert" className="text-sm text-destructive">
+              {alert}
+            </p>
+          )
+        }
       >
-        {t("Actions.submit")}
-      </Button>
-      <Button variant="outline" className="h-11 w-full" onClick={onCancel}>
-        {t("Actions.cancel")}
-      </Button>
+        <Button
+          ref={submitButton}
+          className="h-11 w-full"
+          disabled={sending || !ready}
+          onClick={() => onSubmit(passengers.map(({ id }) => id), [...chosen])}
+        >
+          {t("Actions.submit")}
+        </Button>
+        <Button variant="outline" className="h-11 w-full" onClick={onCancel}>
+          {t("Actions.cancel")}
+        </Button>
+      </SheetBar>
     </div>
   );
 }
