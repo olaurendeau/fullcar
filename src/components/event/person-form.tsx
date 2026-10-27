@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Leg } from "@/domain/leg";
-import { PERSON_FIELDS, validatePerson, type PersonErrors, type PersonField } from "@/domain/person";
+import { PERSON_FIELDS, validateDriverPhone, validatePerson, type PersonError, type PersonErrors, type PersonField } from "@/domain/person";
 import { cn } from "@/lib/utils";
 import { BottomSheet, SheetBar } from "./bottom-sheet";
 import { Box } from "./create-event-form";
@@ -61,13 +61,23 @@ export interface Updating extends FromSheet {
   sending: (sending: boolean) => void;
 }
 
+/**
+ * What became of a change, as of a registration; `phoneWhileDriving`, her number sent empty while
+ * she drives, which she began elsewhere since the form showed: the state it carries shows her
+ * driving (v4.8 rule 8).
+ */
+export type PersonChange = Registration | { kind: "phoneWhileDriving" };
+
 /** Changes the first name and the number of one of the device's persons, with the device's token. */
-export type UpdatePerson = (updating: Updating) => Promise<Registration | undefined>;
+export type UpdatePerson = (updating: Updating) => Promise<PersonChange | undefined>;
 
 /** What the form does: register a person on a leg, or change one of the device's persons. */
 export type PersonFormMode =
   | { kind: "add"; leg: Leg; hasRetour: boolean; addPerson: AddPerson; landmark: () => boolean }
-  | { kind: "edit"; person: { id: string; firstName: string; phone: string | null }; updatePerson: UpdatePerson };
+  | { kind: "edit"; person: { id: string; firstName: string; phone: string | null; drives: boolean }; updatePerson: UpdatePerson };
+
+/** The errors the form shows: those of R1, and a number emptied while she drives (v4.8 rule 8). */
+type FormErrors = Omit<PersonErrors, "phone"> & { phone?: PersonError | "phoneWhileDriving" };
 
 /** Before « Valider », when this device cannot keep what it registers (C1.14, D5). */
 export function StorageNotice({ title, body }: { title: string; body: string }) {
@@ -146,7 +156,9 @@ export function AddPersonButton({
  * a lost answer, the same creation creates nothing more (C1.12).
  *
  * In `edit` mode (C2.3), the first name and the number are filled with the person's, under the
- * same rules, without « Aller et retour »; the first name has the focus as the form shows.
+ * same rules, without « Aller et retour »; the first name has the focus as the form shows. For a
+ * person who drives, the number is « Téléphone », with the help for who drives, and emptied, it is
+ * refused, here as on the server (v4.8 rule 8); left as it was, it is not sent, and nothing refuses it.
  * Opened from the sheet of a free seat, « Annuler » under « Valider » goes back to its list (C6.6).
  * Sent on the retour once it is gone, `onGone` closes its sheet (rule 9); sent from the aller with
  * « Aller et retour », the form stays without it (decision 41).
@@ -175,7 +187,7 @@ export function PersonForm({
   );
   const [values, setValues] = useState(shown);
   const [bothLegs, setBothLegs] = useState(true);
-  const [errors, setErrors] = useState<PersonErrors>({});
+  const [errors, setErrors] = useState<FormErrors>({});
   const [sending, setSending] = useState(false);
   const [problem, setProblem] = useState<"offline" | "failed" | "noRetour" | null>(null);
   // « Aller et retour » as the sheet opened with it (the page holds the retour while the sheet
@@ -188,6 +200,7 @@ export function PersonForm({
   // sends, whichever form, tab or seat's sheet sends it (`person:new:{prénom}`, #228).
   const sends = useSends(open, mode.kind === "edit" ? `person:${mode.person.id}` : undefined);
   const editing = mode.kind === "edit";
+  const drives = mode.kind === "edit" && mode.person.drives;
   const { leg, hasRetour } = mode.kind === "add" ? { leg: mode.leg, hasRetour: mode.hasRetour && !gone } : { leg: "aller" as const, hasRetour: false };
 
   // « Modifier » is gone as the form takes its place: the focus goes to the first name.
@@ -201,7 +214,7 @@ export function PersonForm({
     if (problem && !sending && (problem === "noRetour" || document.activeElement === document.body)) submitButton.current?.focus();
   }, [problem, sending]);
 
-  function showErrors(found: PersonErrors, first: PersonField) {
+  function showErrors(found: FormErrors, first: PersonField) {
     setProblem(null);
     setErrors(found);
     document.getElementById(idOf(first))?.focus();
@@ -216,7 +229,13 @@ export function PersonForm({
     // and the bar keeps what it holds (v4.4, #298).
     if (mode.kind === "edit" && changed.length === 0) return onDone(mode.person.id);
     const checked = validatePerson(values);
-    if (!checked.ok) return showErrors(checked.errors, checked.first);
+    // Emptied while she drives: refused before it is sent, as the server would (v4.8 rule 8).
+    const given = drives && changed.includes("phone") ? validateDriverPhone(values.phone) : undefined;
+    const emptied = given?.ok === false && given.errors.phone === "required";
+    if (!checked.ok || emptied) {
+      const found: FormErrors = { ...(!checked.ok && checked.errors), ...(emptied && { phone: "phoneWhileDriving" as const }) };
+      return showErrors(found, found.firstName ? "firstName" : "phone");
+    }
     setErrors({});
     setProblem(null);
     // Withdraws a failure any form about this person left for the bar, if this send carries all its
@@ -248,6 +267,8 @@ export function PersonForm({
       if (sheet.inSheet() && personId) onDone(personId);
     } else if (answer?.kind === "errors") showErrors(answer.errors, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
+    // She drives since the form showed: the state shows it, and her number's field, in error (rule 8).
+    else if (answer?.kind === "phoneWhileDriving" && sheet.inSheet()) showErrors({ phone: "phoneWhileDriving" }, "phone");
     // The retour is gone. Sent on it, the sheet closes (rule 9); from the aller, it stays without
     // « Aller et retour », and a second « Valider » registers the person at the aller alone (M7.8).
     else if (answer?.kind === "noRetour" && sheet.inSheet()) {
@@ -257,14 +278,21 @@ export function PersonForm({
     }
   }
 
-  const field = (name: PersonField, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {
+  // `phoneWhileDriving` names her by the first name the form showed, before the change (v4.8 rule 8).
+  const messageOf = (name: PersonField, error: PersonError | "phoneWhileDriving") => {
+    if (error === "phoneWhileDriving") return tErrors("phoneWhileDriving", { firstName: shown.firstName });
+    const message = personErrorMessage(name, error);
+    return tErrors(message.key, message.values);
+  };
+
+  const field = (name: PersonField, label: string, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {
     const error = errors[name];
-    const message = error && personErrorMessage(name, error);
+    const message = error && messageOf(name, error);
     const describedBy = [message && idOf(`${name}-error`), hint && idOf(`${name}-hint`)].filter(Boolean).join(" ");
     return (
       <div className="flex min-w-0 flex-col gap-1.5">
         <Label htmlFor={idOf(name)} className={cn(error && "text-destructive")}>
-          {t(name)}
+          {label}
         </Label>
         <Input
           id={idOf(name)}
@@ -277,7 +305,7 @@ export function PersonForm({
         />
         {message && (
           <p id={idOf(`${name}-error`)} className="text-[13px] leading-[18px] text-destructive">
-            {tErrors(message.key, message.values)}
+            {message}
           </p>
         )}
         {hint && (
@@ -291,8 +319,10 @@ export function PersonForm({
 
   return (
     <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-      {field("firstName", { type: "text", autoComplete: "given-name" })}
-      {field("phone", { type: "tel", autoComplete: "tel" }, t("phoneHint"))}
+      {field("firstName", t("firstName"), { type: "text", autoComplete: "given-name" })}
+      {drives
+        ? field("phone", t("phoneDriving"), { type: "tel", autoComplete: "tel" }, t("phoneHintDriving"))
+        : field("phone", t("phone"), { type: "tel", autoComplete: "tel" }, t("phoneHint"))}
       {hasRetour && (
         <Box id={idOf("both")} label={t("both")} hint={t(`bothHint.${leg}`)} checked={bothLegs} onChange={setBothLegs} />
       )}

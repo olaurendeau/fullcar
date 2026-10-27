@@ -25,7 +25,7 @@ export function PersonSheet({
   removePerson,
   refocus,
 }: {
-  person: { id: string; firstName: string; phone: string | null };
+  person: { id: string; firstName: string; phone: string | null; drives: boolean };
   open: boolean;
   onOpenChange: (open: boolean) => void;
   updatePerson: UpdatePerson;
