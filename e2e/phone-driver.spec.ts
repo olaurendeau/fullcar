@@ -189,6 +189,16 @@ test.describe("a number to offer a car", () => {
     await expect(field(page, FR.driverPhone("Léa"))).toHaveValue("");
     await expect(field(page, FR.driverPhone("Claire"))).toHaveCount(0);
 
+    // Léa's field left empty, « Valider »: her error. Claire chosen again: her field, empty, without it.
+    const leas = field(page, FR.driverPhone("Léa"));
+    await submit(page).click();
+    await expect(leas).toHaveAttribute("aria-invalid", "true");
+    await expect(leas).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`);
+    await radio(page, "Claire").check();
+    await expect(claires).toHaveValue("");
+    await expect(claires).not.toHaveAttribute("aria-invalid");
+    await expect(claires).toHaveAccessibleDescription(FR.hint);
+
     await radio(page, "Tom").check();
     await expect(phoneFields(page)).toHaveCount(0);
 

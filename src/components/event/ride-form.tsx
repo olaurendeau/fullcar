@@ -494,6 +494,7 @@ function RideForm({
     // Her number emptied elsewhere: the state shows her without one, and her field, empty, in
     // error, the focus in it once it shows (v4.8 rule 7, state 18). The rest is kept.
     else if (answer?.kind === "driverWithoutPhone" && sheet.inSheet()) {
+      // State 18 draws it empty: nothing typed for anyone before may show in it.
       setValues((current) => ({ ...current, driverPhone: "" }));
       showErrors({ phone: "required" }, false, undefined);
       focusing.current = "phone";
@@ -615,6 +616,8 @@ function RideForm({
                 // Another person without a number: her field, empty, without the error of the one before (v4.8 rule 7).
                 setValues((current) => ({ ...current, driverPhone: "" }));
                 setErrors((current) => ({ ...current, phone: undefined }));
+                // A refusal's field the state did not show (her number back, or she is gone) is no longer awaited.
+                focusing.current = null;
                 // Who drives leaves « Qui monte avec vous ? », and her tick with her.
                 setTicked((current) => ({ ...current, [next]: false }));
                 setOtherPick((pick) => (pick && pick.driver === undefined ? { ...pick, driver: next } : pick));
