@@ -128,7 +128,7 @@ test.describe("« Ajouter une personne » takes the device's number", () => {
     await expect(section(page)).toBeVisible();
     await openForm(page);
     const phone = phoneField(form(page));
-    await expect(phone).toHaveValue("");
+    await numbersHidden(() => expect(phone).toHaveValue(""));
     await numbersHidden(() => expect(phone).toHaveAccessibleDescription(FR.hint));
   });
 
@@ -141,7 +141,7 @@ test.describe("« Ajouter une personne » takes the device's number", () => {
     const offer = page.getByRole("dialog", { name: FR.offer });
     await offer.getByRole("radio", { name: FR.newDriver, exact: true }).check();
     const driverPhone = offer.getByLabel(FR.driverPhone, { exact: true });
-    await expect(driverPhone).toHaveValue("");
+    await numbersHidden(() => expect(driverPhone).toHaveValue(""));
     await numbersHidden(() => expect(driverPhone).not.toHaveAccessibleDescription(/Même numéro/));
     await page.keyboard.press("Escape");
     await expect(offer).toHaveCount(0);
@@ -151,8 +151,8 @@ test.describe("« Ajouter une personne » takes the device's number", () => {
     await section(page).getByRole("button", { name: "Léa", exact: true }).click();
     await page.getByRole("dialog", { name: "Léa", exact: true }).getByRole("button", { name: "Modifier", exact: true }).click();
     const edit = page.getByRole("dialog", { name: "Modifier Léa" });
-    await expect(phoneField(edit)).toHaveValue("");
-    await expect(phoneField(edit)).not.toHaveAccessibleDescription(/Même numéro/);
+    await numbersHidden(() => expect(phoneField(edit)).toHaveValue(""));
+    await numbersHidden(() => expect(phoneField(edit)).not.toHaveAccessibleDescription(/Même numéro/));
   });
 
   test("T2.5: from a seat's sheet, the number and the help for Marc's car", async ({ db, page, seededEvent }) => {
@@ -197,7 +197,7 @@ test.describe("the help from a free seat", () => {
 
     await seat(page, "Marc").click();
     const phone = phoneField(form(page));
-    await expect(phone).toHaveValue("");
+    await numbersHidden(() => expect(phone).toHaveValue(""));
     await numbersHidden(() => expect(phone).toHaveAccessibleDescription(FR.forSeat("Marc")));
     await form(page).getByLabel(FR.firstName).fill("Inès");
     await submit(page);
@@ -211,6 +211,6 @@ test.describe("the help from a free seat", () => {
   test("T3.2: from the leg's button, a device without a person keeps today's help", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await openForm(page);
-    await expect(phoneField(form(page))).toHaveAccessibleDescription(FR.hint);
+    await numbersHidden(() => expect(phoneField(form(page))).toHaveAccessibleDescription(FR.hint));
   });
 });
