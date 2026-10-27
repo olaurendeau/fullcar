@@ -547,11 +547,20 @@ describe("the notice « Confirmez votre adresse » (OA1.7)", () => {
   });
 
   it("a read while sending replaces it, and only it; without one, the notice goes (OA2.6)", () => {
-    const shown = ready({ panel: { ...links, legs: before, pending: sending }, expanded: new Set(["aller:withoutCar"]) });
-    expect(screenReducer(shown, { type: "pendingRead", pending: sent })).toStrictEqual({
-      ...shown,
-      panel: { ...links, legs: before, pending: sent },
+    const registered = [
+      { id: "p0", firstName: "Guest 0", cells: [] },
+      { id: "p1", firstName: "Guest 1", cells: [] },
+    ];
+    const shown = ready({
+      panel: { ...links, legs: before, pending: sending },
+      persons: registered,
+      personsOpen: true,
+      expanded: new Set(["aller:withoutCar"]),
     });
+    const replaced = screenReducer(shown, { type: "pendingRead", pending: sent });
+    expect(replaced).toStrictEqual({ ...shown, panel: { ...links, legs: before, pending: sent } });
+    // The persons of « Personnes inscrites » are not the notice's business: kept, and still unfolded.
+    expect(replaced).toMatchObject({ persons: registered, personsOpen: true });
     expect(screenReducer(shown, { type: "pendingRead" })).toStrictEqual({ ...shown, panel: { ...links, legs: before } });
     // Withdrawn, the sections stay withdrawn.
     const away = ready({ panel: { ...withdrawn, pending: sending } });

@@ -5,7 +5,7 @@ import { leaveNoToken } from "./fixtures";
 import { expect, holdActionsWith, isAction, LEG_HEADINGS, legButton, organiserPath, test } from "./organiser";
 
 /*
- * #672 (docs/design/remove-person/, v2.1, RP4; organizer-view v3.5, O5.8 and O9.4 for this
+ * #672 (docs/design/remove-person/, v2.2, RP4; organizer-view v3.5, O5.8 and O9.4 for this
  * section): « Personnes inscrites » in the organiser area, and « Retirer » there, on the example of
  * the mock-ups (`seedRemovalExample`). Each test runs under the fixture `organiserTraffic`.
  */
