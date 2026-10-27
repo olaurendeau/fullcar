@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Leg } from "@/domain/leg";
 import { PERSON_FIELDS, validateDriverPhone, validatePerson, type PersonError, type PersonErrors, type PersonField } from "@/domain/person";
+import type { PhonePrefill } from "@/domain/phone-prefill";
 import { cn } from "@/lib/utils";
 import { BottomSheet, SheetBar } from "./bottom-sheet";
 import { Box } from "./create-event-form";
@@ -71,9 +72,13 @@ export type PersonChange = Registration | { kind: "phoneWhileDriving" };
 /** Changes the first name and the number of one of the device's persons, with the device's token. */
 export type UpdatePerson = (updating: Updating) => Promise<PersonChange | undefined>;
 
-/** What the form does: register a person on a leg, or change one of the device's persons. */
+/**
+ * What the form does: register a person on a leg, or change one of the device's persons. A
+ * registration opens with `prefill`, the device's last number (v4.8 rule 4); from a free seat of
+ * `driver`'s car, the number's help says why (rule 5).
+ */
 export type PersonFormMode =
-  | { kind: "add"; leg: Leg; hasRetour: boolean; addPerson: AddPerson; landmark: () => boolean }
+  | { kind: "add"; leg: Leg; hasRetour: boolean; addPerson: AddPerson; landmark: () => boolean; prefill?: PhonePrefill | null; driver?: string }
   | { kind: "edit"; person: { id: string; firstName: string; phone: string | null; drives: boolean }; updatePerson: UpdatePerson };
 
 /** The errors the form shows: those of R1, and a number emptied while she drives (v4.8 rule 8). */
@@ -100,11 +105,14 @@ export function AddPersonButton({
   hasRetour,
   disabled,
   addPerson,
+  prefill,
 }: {
   leg: Leg;
   hasRetour: boolean;
   disabled: boolean;
   addPerson: AddPerson;
+  /** The device's last number, which the form opens with (v4.8 rule 4). */
+  prefill: PhonePrefill | null;
 }) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
@@ -137,7 +145,7 @@ export function AddPersonButton({
     >
       {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
       <PersonForm
-        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: () => focusAddPerson(leg) }}
+        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: () => focusAddPerson(leg), prefill }}
         open={() => isOpen.current}
         onDone={() => toggle(false)}
         onGone={() => toggle(false)}
@@ -181,9 +189,11 @@ export function PersonForm({
   const tActions = useTranslations("Actions");
   const ids = useId();
   const idOf = (name: string) => `${ids}-${name}`;
+  // The number a registration opens with, as the form first showed it: what « Même numéro que… » is about.
+  const [prefill] = useState(() => (mode.kind === "add" ? mode.prefill : undefined));
   // What the form showed: in `edit` mode, a field the user left as it was is not sent.
   const [shown] = useState<Record<PersonField, string>>(() =>
-    mode.kind === "edit" ? { firstName: mode.person.firstName, phone: mode.person.phone ?? "" } : { firstName: "", phone: "" },
+    mode.kind === "edit" ? { firstName: mode.person.firstName, phone: mode.person.phone ?? "" } : { firstName: "", phone: prefill?.phone ?? "" },
   );
   const [values, setValues] = useState(shown);
   const [bothLegs, setBothLegs] = useState(true);
@@ -285,10 +295,11 @@ export function PersonForm({
     return tErrors(message.key, message.values);
   };
 
-  const field = (name: PersonField, label: string, input: { type: "text" | "tel"; autoComplete: string }, hint?: string) => {
+  // `note`, between the error and the help: « Même numéro que… » (v4.8 rule 4).
+  const field = (name: PersonField, label: string, input: { type: "text" | "tel"; autoComplete: string }, hint?: string, note?: string) => {
     const error = errors[name];
     const message = error && messageOf(name, error);
-    const describedBy = [message && idOf(`${name}-error`), hint && idOf(`${name}-hint`)].filter(Boolean).join(" ");
+    const describedBy = [message && idOf(`${name}-error`), note && idOf(`${name}-note`), hint && idOf(`${name}-hint`)].filter(Boolean).join(" ");
     return (
       <div className="flex min-w-0 flex-col gap-1.5">
         <Label htmlFor={idOf(name)} className={cn(error && "text-destructive")}>
@@ -308,6 +319,11 @@ export function PersonForm({
             {message}
           </p>
         )}
+        {note && (
+          <p id={idOf(`${name}-note`)} className="text-[13px] leading-[18px] text-muted-foreground">
+            {note}
+          </p>
+        )}
         {hint && (
           <p id={idOf(`${name}-hint`)} className="text-[13px] leading-[18px] text-muted-foreground">
             {hint}
@@ -317,12 +333,19 @@ export function PersonForm({
     );
   };
 
+  // As long as the field holds exactly the number taken: changed or emptied, it would be wrong (v4.8-10).
+  const same = prefill && values.phone === prefill.phone ? t("samePhone", { firstName: prefill.firstName }) : undefined;
+  // Who drives gets the driver's words (v4.8 rule 8); from a free seat, the help names the car's driver (rule 5).
+  const phoneHint = drives
+    ? t("phoneHintDriving")
+    : mode.kind === "add" && mode.driver
+      ? t("phoneHintForSeat", { driver: mode.driver })
+      : t("phoneHint");
+
   return (
     <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       {field("firstName", t("firstName"), { type: "text", autoComplete: "given-name" })}
-      {drives
-        ? field("phone", t("phoneDriving"), { type: "tel", autoComplete: "tel" }, t("phoneHintDriving"))
-        : field("phone", t("phone"), { type: "tel", autoComplete: "tel" }, t("phoneHint"))}
+      {field("phone", drives ? t("phoneDriving") : t("phone"), { type: "tel", autoComplete: "tel" }, phoneHint, same)}
       {hasRetour && (
         <Box id={idOf("both")} label={t("both")} hint={t(`bothHint.${leg}`)} checked={bothLegs} onChange={setBothLegs} />
       )}
