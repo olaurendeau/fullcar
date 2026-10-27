@@ -520,9 +520,14 @@ ci-dessus valent pour chacun.
   au travers de `src/app/session-token.ts` seulement (#595). Une session dure 90 jours après
   la dernière **visite**. La visite s'enregistre à chaque chargement de page :
   `src/components/account/session-visit.tsx`, monté par `src/app/layout.tsx`, envoie le
-  jeton à l'action `visit`, qui prolonge la session et note la date et la langue de la
-  visite sur le compte (`last_visit_at`, `locale`). C'est cette date, jamais l'ouverture de
-  la session, qui mesure l'inactivité du compte (OA9.7).
+  jeton à l'action `visit` (`src/app/actions.ts`), qui prolonge la session et note la date
+  et la langue de la visite sur le compte (`last_visit_at`, `locale`). C'est cette date,
+  jamais l'ouverture de la session, qui mesure l'inactivité du compte (OA9.7). La visite
+  part une fois par document chargé, pas à chaque navigation dans l'application, et rien ne
+  part sans jeton. Elle ne répond que `open` ou `ended` : ni le compte, ni son adresse. Une
+  session terminée ne revient pas, et le navigateur oublie alors son jeton, seulement s'il
+  n'a pas changé entre-temps (un autre onglet a pu ouvrir une session). Une visite en échec
+  garde le jeton.
 - **Le jeton d'admin dans le navigateur de création** : à partir de #597, il est rangé dans
   `localStorage` sous la clé `fullcar:admin-token:{id}`, au travers de
   `src/app/e/[id]/admin/admin-token-store.ts` seulement, qui remplace `admin-link.ts`. La
