@@ -1,12 +1,15 @@
-import { sql, type Transaction } from "kysely";
+import { sql, type Kysely, type Transaction } from "kysely";
 import { describe, expect, it } from "vitest";
+import { signOutBrowser } from "@/app/mes-evenements/sign-out";
 import { SESSION_LIFETIME_MS } from "@/domain/account-rules";
 import { decideOrganiserAccess } from "@/domain/organiser-access";
 import { accountForEmail, deleteAccount, eraseAccount, findAccount, findAccountByEmail } from "./accounts";
-import { readAdminTokenHash, readOrganiserAccessEvent } from "./events";
+import { recordSend } from "./email-sends";
+import { readAdminTokenHash, readOrganiserAccessEvent, writeEventOwner } from "./events";
 import type { Database } from "./schema";
-import { closeSession, findSession } from "./sessions";
+import { findSession } from "./sessions";
 import { anAddress, seedAccount, seedLink, seedSends, seedSession, withCommittedAddresses, withRollbackRecordingSends } from "./test-accounts";
+import { whileHeld, withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent, seedPendingSend } from "./test-events";
 import { seedPerson } from "./test-participants";
@@ -208,28 +211,118 @@ describe("eraseAccount", () => {
   });
 });
 
+/** The sends recorded for the address. */
+const sendsTo = (db: Kysely<Database>, email: string) => db.selectFrom("email_send").select("id").where("email", "=", email).execute();
+
+// Each test holds the first transaction open until the second waits for one of its locks (whileHeld),
+// so that the order is forced and each lock of eraseHeld has a test that fails without it.
 describe("deleteAccount, concurrently", () => {
-  // Two tabs, two sessions of one account: one deletes it, the other finds it gone, and none deadlocks (40P01).
-  it("lets two deletions of one account run together: one deletes, the other finds nothing to delete", async () => {
+  // Two tabs, two sessions of one account: one deletes it, the other finds it gone.
+  it("lets a deletion wait for another of the same account, which then finds nothing to delete", async () => {
     await withCommittedAddresses(async (db, address) => {
       const accountId = await seedAccount(db, { email: address() });
       const first = await seedSession(db, accountId);
       const second = await seedSession(db, accountId);
-      const results = await Promise.all([deleteAccount(db, first, []), deleteAccount(db, second, [])]);
-      expect(results.filter(Boolean)).toHaveLength(1);
+      const deleted = await whileHeld(
+        db,
+        async (trx) => expect(await deleteAccount(trx, first, [])).toBe(true),
+        (own) => deleteAccount(own, second, []),
+      );
+      expect(deleted).toBe(false);
       expect(await findAccount(db, accountId)).toBeUndefined();
     });
   });
 
-  // The sign-out of a session and the deletion of its account both take the session first, then the events.
-  it("lets the sign-out of another session run beside it", async () => {
+  // Another tab closes the session while this one waits for the sessions' locks: nothing is deleted.
+  it("deletes nothing for a session closed by « Se déconnecter » while it waited, and leaves the account and its other sessions", async () => {
     await withCommittedAddresses(async (db, address) => {
       const accountId = await seedAccount(db, { email: address() });
-      const first = await seedSession(db, accountId);
-      const second = await seedSession(db, accountId);
-      const results = await Promise.all([deleteAccount(db, first, []), closeSession(db, second)]);
-      expect(results[0]).toBe(true);
+      const closing = await seedSession(db, accountId);
+      const other = await seedSession(db, accountId);
+      const deleted = await whileHeld(
+        db,
+        (trx) => signOutBrowser(trx, closing, []),
+        (own) => deleteAccount(own, closing, []),
+      );
+      expect(deleted).toBe(false);
+      expect(await findAccount(db, accountId)).toBeDefined();
+      expect(await findSession(db, other)).toBeDefined();
+    });
+  });
+
+  // The sign-out takes a session, then the events; the deletion takes the sessions, then the events: one order.
+  it.each([
+    ["another session", "other"],
+    ["the same session", "same"],
+  ] as const)(
+    "lets « Se déconnecter » of %s, with the admin token of an event of the account, wait for the deletion: signed out, no deadlock, the account gone",
+    async (_, which) => {
+      await withCommittedEvent(async (db, eventId, token) => {
+        await withCommittedAddresses(async (_db, address) => {
+          const accountId = await seedAccount(db, { email: address() });
+          const deleting = await seedSession(db, accountId);
+          const other = await seedSession(db, accountId);
+          await db.updateTable("event").set({ account_id: accountId, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+          const answer = await whileHeld(
+            db,
+            async (trx) => expect(await deleteAccount(trx, deleting, [])).toBe(true),
+            (own) => signOutBrowser(own, which === "same" ? deleting : other, [token]),
+          );
+          expect(answer).toEqual({ signedOut: true });
+          expect(await findAccount(db, accountId)).toBeUndefined();
+          expect(await readAdminTokenHash(db, eventId)).toBeNull();
+        });
+      });
+    },
+  );
+
+  // WINDOW_LOCK (#848): a send recorded for the address and not yet committed is erased with the rest, or the address stays in email_send.
+  it("erases the sends of the address, including one recorded and committed while it waited for the address", async () => {
+    await withCommittedAddresses(async (db, address) => {
+      const email = address();
+      const accountId = await seedAccount(db, { email });
+      const session = await seedSession(db, accountId);
+      const deleted = await whileHeld(
+        db,
+        async (trx) => expect(await recordSend(trx, { kind: "login", email })).toBe("recorded"),
+        (own) => deleteAccount(own, session, []),
+      );
+      expect(deleted).toBe(true);
+      expect(await sendsTo(db, email)).toEqual([]);
       expect(await findAccount(db, accountId)).toBeUndefined();
+    });
+  });
+
+  it("lets a send to the address wait for the deletion: recorded after it, with no deadlock", async () => {
+    await withCommittedAddresses(async (db, address) => {
+      const email = address();
+      const accountId = await seedAccount(db, { email });
+      const session = await seedSession(db, accountId);
+      const claim = await whileHeld(
+        db,
+        async (trx) => expect(await deleteAccount(trx, session, [])).toBe(true),
+        (own) => recordSend(own, { kind: "login", email }),
+      );
+      expect(claim).toBe("recorded");
+      expect(await sendsTo(db, email)).toHaveLength(1);
+    });
+  });
+
+  // #904: an event created with the session sets its account_id after the deletion read the account's events.
+  it("revokes the admin token of an event created with the session while it ran, which the account's SET NULL leaves open", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      await withCommittedAddresses(async (_db, address) => {
+        const accountId = await seedAccount(db, { email: address() });
+        const session = await seedSession(db, accountId);
+        const deleted = await whileHeld(
+          db,
+          (trx) => writeEventOwner(trx, eventId, { accountId, confirmedAt: new Date() }),
+          (own) => deleteAccount(own, session, []),
+        );
+        expect(deleted).toBe(true);
+        const row = await db.selectFrom("event").select(["account_id", "admin_token_hash"]).where("id", "=", eventId).executeTakeFirstOrThrow();
+        expect(row).toEqual({ account_id: null, admin_token_hash: null });
+      });
     });
   });
 });

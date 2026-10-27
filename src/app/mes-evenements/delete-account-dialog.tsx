@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
 import { useRef, useState } from "react";
 import { noteAccountDeleted } from "@/app/account-deleted";
+import { noteSignedOut } from "@/app/connexion/signed-out";
 import { sendAction } from "@/app/e/[id]/run-action";
 import {
   AlertDialog,
@@ -24,7 +25,8 @@ import { deleteAccountBrowser } from "./delete-account-browser";
  * « Supprimer mon compte » and its confirmation (OA9.3 to OA9.5): what is erased, what becomes
  * of the `openEvents` (only if there are some), and that it is final. The focus starts on
  * « Annuler »; it and Escape change nothing. Deleted, the page leads to `/`, which says so once.
- * A failure says `DeleteAccount.failed` in the confirmation, which stays open (OA9.4). While it
+ * A failure says `DeleteAccount.failed` in the confirmation, which stays open (OA9.4); a session
+ * already closed, or an account already gone, leads to /connexion instead: no retry could succeed. While it
  * is sent, a second tap sends nothing, and neither « Annuler » nor Escape closes it.
  */
 export function DeleteAccountDialog({ openEvents }: { openEvents: number }) {
@@ -52,6 +54,12 @@ export function DeleteAccountDialog({ openEvents }: { openEvents: number }) {
     if (run === "deleted") {
       noteAccountDeleted();
       router.push("/");
+      return;
+    }
+    if (run === "gone") {
+      // The session is closed, ended, or its account gone: « Session fermée. » on /connexion, as after « Se déconnecter ».
+      noteSignedOut();
+      router.push("/connexion");
       return;
     }
     inFlight.current = false;

@@ -128,7 +128,8 @@ export async function eraseAccount(db: Kysely<Database>, accountId: string, admi
  *
  * Lock order, as « Se déconnecter » and `editEvent` take it: the sessions (caller), then the
  * events by id, then the links by key, then the address, then the account. An event confirmed
- * meanwhile is left by the account's `SET NULL`, orphan.
+ * meanwhile is left by the account's `SET NULL`, orphan; one created with a session meanwhile
+ * (#904) is revoked under the account's lock, just before it goes.
  */
 async function eraseHeld(db: Kysely<Database>, accountId: string, adminTokens: readonly unknown[]): Promise<boolean> {
   const account = await db.selectFrom("account").select("email").where("id", "=", accountId).executeTakeFirst();
@@ -178,6 +179,12 @@ async function eraseHeld(db: Kysely<Database>, accountId: string, adminTokens: r
   await lockAddress(db, email);
   await db.deleteFrom("email_send").where("email", "=", email).execute();
   await db.deleteFrom("session").where("account_id", "=", accountId).execute();
+
+  // An event created with a session meanwhile (#904) writes its `account_id` under a key share of
+  // the account's row, after the read of the events above. The lock waits for it to commit, and
+  // it is revoked like the others; one that comes after is refused by the foreign key.
+  await db.selectFrom("account").select("id").where("id", "=", accountId).forUpdate().execute();
+  await db.updateTable("event").set({ admin_token_hash: null }).where("account_id", "=", accountId).execute();
   await db.deleteFrom("account").where("id", "=", accountId).execute();
   return true;
 }

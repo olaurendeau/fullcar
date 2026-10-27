@@ -212,6 +212,26 @@ test.describe("Supprimer mon compte", () => {
     await expectUrl(page, /\/$/, "the deletion leads to /");
     expect(await findAccount(db, accountId)).toBeUndefined();
   });
+
+  // A retry could never succeed: no « Vérifiez la connexion », the way out is /connexion, as after « Se déconnecter ».
+  test("a session closed by another tab leads to /connexion, saying « Session fermée. », and erases nothing", async ({ page, db }) => {
+    const { accountId, session, pending } = await signedIn(page, db);
+    await page.goto("/mes-evenements");
+    await page.getByRole("main").getByRole("button", { name: "Supprimer mon compte" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "Supprimer votre compte ?" });
+    // Closed elsewhere, after the page was loaded.
+    await db.deleteFrom("session").where("account_id", "=", accountId).execute();
+    await dialog.getByRole("button", { name: "Supprimer mon compte" }).click();
+
+    await expectUrl(page, /\/connexion$/, "a dead session leads to /connexion");
+    await expect(page.getByText("Session fermée.", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Vérifiez la connexion/)).toHaveCount(0);
+    // The dead session's token is forgotten; the admin token, which nothing revoked, is kept.
+    expect(await kept(page, pending.id)).toEqual({ session: false, admin: true });
+    expect(await findAccount(db, accountId)).toBeDefined();
+    expect(await readAdminTokenHash(db, pending.id)).not.toBeNull();
+    expect(await findSession(db, session)).toBeUndefined();
+  });
 });
 
 test.describe("Delete my account, in English", () => {
@@ -220,6 +240,10 @@ test.describe("Delete my account, in English", () => {
   test("the words of the confirmation, its failure, and of `/` after it", async ({ page, db }) => {
     const { accountId } = await signedIn(page, db);
     await confirmed(db, accountId);
+    let offline = false;
+    await page.route("**/mes-evenements", (route) =>
+      offline && isPageAction(route.request()) ? route.abort("internetdisconnected") : route.fallback(),
+    );
     await page.goto("/mes-evenements");
     await page.getByRole("region", { name: "My account" }).getByRole("button", { name: "Delete my account" }).click();
     const dialog = page.getByRole("alertdialog", { name: "Delete your account?" });
@@ -230,6 +254,12 @@ test.describe("Delete my account, in English", () => {
       }),
     ).toBeVisible();
     await expect(dialog.getByText("This cannot be undone.", { exact: true })).toBeVisible();
+    // The send fails: the failure's words, the confirmation stays open and the account stays.
+    offline = true;
+    await dialog.getByRole("button", { name: "Delete my account" }).click();
+    await expect(dialog.getByRole("alert")).toHaveText("The account was not deleted. Check your connection, then try again.");
+    expect(await findAccount(db, accountId)).toBeDefined();
+    offline = false;
     await dialog.getByRole("button", { name: "Delete my account" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Your account has been deleted." })).toBeFocused();
   });
