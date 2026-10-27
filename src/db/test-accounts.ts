@@ -69,10 +69,17 @@ export async function seedSends(
 }
 
 /**
- * The session lock of the tests whose sends meet in the window, apart from the application's
- * locks. A test that fills the window up to the global cap with committed sends holds it alone:
- * meanwhile, every other test that commits a send would be counted by it, and every other test
- * that records one would count those 49 or 50 sends and meet the cap. Those take it shared.
+ * The one rule of the tests that record a send (recordSend, or a use case that calls it) or
+ * commit one, in any test file: their sends meet in the hour the global cap counts, so each of
+ * them runs under this session lock, apart from the application's locks.
+ * - Shared, for all of them: withRollbackRecordingSends for a test in a rolled-back
+ *   transaction, withCommittedAddresses for a test on committed data.
+ * - Exclusive, for a test that fills the window up to the global cap with committed sends:
+ *   withCommittedAddresses(…, { fillsTheWindow: true }). Meanwhile, a test that commits a send
+ *   would be counted by it, and a test that records one would count those 49 or 50 sends and
+ *   meet the cap.
+ * Never a clock moved out of the window instead. A test that only seeds sends in a rolled-back
+ * transaction, and records none, needs no lock: nobody else sees them, and it counts nothing.
  */
 const WINDOW_LOCK = 5949;
 
@@ -94,9 +101,9 @@ async function underWindowLock<T>(mode: "shared" | "exclusive", fn: () => Promis
 }
 
 /**
- * withRollback, for a test that records sends (recordSend, or a use case that calls it)
- * outside email-sends.test.ts: it does not run while a test fills the window up to the global
- * cap, whose committed sends it would count.
+ * withRollback, for a test that records sends (recordSend, or a use case that calls it), in
+ * email-sends.test.ts as anywhere else: WINDOW_LOCK shared. It does not run while a test fills
+ * the window up to the global cap, whose committed sends it would count.
  */
 export function withRollbackRecordingSends<T>(fn: (trx: Transaction<Database>) => Promise<T>): Promise<T> {
   return underWindowLock("shared", () => withRollback(fn));
@@ -106,9 +113,9 @@ export function withRollbackRecordingSends<T>(fn: (trx: Transaction<Database>) =
  * For a concurrency test on accounts or sends, which no event takes with it: hands `fn` the
  * application's connection and a maker of new addresses, then deletes the accounts (their
  * sessions and sign-in links by cascade) and the sends of those addresses, even when `fn`
- * fails. When `fn` fails, its error is the one thrown. `fillsTheWindow` for a test that
- * commits sends up to the global cap: it runs while no other test records or commits a send
- * (WINDOW_LOCK). Never nested.
+ * fails. When `fn` fails, its error is the one thrown. WINDOW_LOCK shared; exclusive with
+ * `fillsTheWindow`, for a test that commits sends up to the global cap: it then runs while no
+ * other test records or commits a send. Never nested.
  */
 export async function withCommittedAddresses<T>(
   fn: (db: Kysely<Database>, address: () => string) => Promise<T>,

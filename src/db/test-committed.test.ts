@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDb, getDb } from "./client";
 import type { Database } from "./schema";
-import { withCommittedEvent } from "./test-committed";
+import { whileHeld, withCommittedEvent } from "./test-committed";
 
 // A pool of its own: a second connection, which only sees what was committed.
 let observer: Kysely<Database>;
@@ -117,5 +117,43 @@ describe("withCommittedEvent", () => {
       deleteFrom.mockRestore();
       await observer.deleteFrom("event").where("id", "=", id).execute();
     }
+  });
+});
+
+describe("whileHeld", () => {
+  // A key that neither the application nor WINDOW_LOCK (test-accounts.ts) takes.
+  const takeKey = (db: Kysely<Database>) => sql`select pg_advisory_xact_lock(5950, 0)`.execute(db);
+
+  it("lets second wait for first on a connection of its own, then gives what second gives", async () => {
+    let waiting = 0;
+    const answer = await whileHeld(
+      getDb(),
+      (trx) => takeKey(trx),
+      async (own) => {
+        await takeKey(own);
+        return "second";
+      },
+      async (pid) => void (waiting = pid),
+    );
+    expect(answer).toBe("second");
+    expect(waiting).toBeGreaterThan(0);
+  });
+
+  // #841: a session of another test file, waiting for the same lock (the global cap of the sends), proves nothing.
+  it("fails when another session waits for first, but second never does", async () => {
+    let stranger: Promise<unknown> | undefined;
+    await expect(
+      whileHeld(
+        getDb(),
+        (trx) => takeKey(trx),
+        async () => {
+          // Waits on a pool of its own, as a test of another file would; second itself waits for nothing.
+          stranger = takeKey(observer);
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          return "second";
+        },
+      ),
+    ).rejects.toThrow("whileHeld: second ended without waiting for first");
+    await stranger;
   });
 });

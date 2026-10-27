@@ -161,6 +161,18 @@ en bout utilisent :
   d'un de leurs propres événements, ou un identifiant inconnu dont ils vérifient
   l'absence. Seule exception, un comptage de `events.test.ts`, comparé à un second
   comptage de la même transaction.
+
+  **Tests qui enregistrent un envoi**, depuis #841, une seule règle : le plafond global
+  compte tous les envois de l'heure, de quelque fichier de test qu'ils viennent. Un test
+  qui enregistre un envoi (`recordSend`, ou un cas d'usage qui l'appelle) ou en valide un
+  tourne donc sous le verrou de session 5949 (`WINDOW_LOCK`, `src/db/test-accounts.ts`) :
+  en partage, par `withRollbackRecordingSends` sous transaction annulée ou par
+  `withCommittedAddresses` sur données validées ; en exclusif, par
+  `withCommittedAddresses(…, { fillsTheWindow: true })`, pour un test qui remplit la
+  fenêtre jusqu'au plafond avec des envois validés. Jamais une horloge avancée hors de la
+  fenêtre à la place. `whileHeld` (`src/db/test-committed.ts`) passe à `second` une
+  connexion à lui, et n'attend que sa session : une session d'un autre fichier, bloquée sur
+  le même verrou du plafond global, ne prouve rien du test.
 - `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
   seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
   remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la

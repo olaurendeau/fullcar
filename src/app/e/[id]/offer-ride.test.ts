@@ -733,7 +733,7 @@ describe("offerRide", () => {
         const result = await whileHeld(
           db,
           (trx) => deleteSeededPerson(trx, eventId, gone.id),
-          () => offerRide(db, eventId, scene.token, offer),
+          (own) => offerRide(own, eventId, scene.token, offer),
         );
         expect(result).toEqual({ ok: false, error: "personGone", goneIds: [gone.id] });
         expect((await rowsOf(db, eventId)).rides).toEqual(before.rides);

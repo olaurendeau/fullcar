@@ -178,7 +178,7 @@ describe("M3.6: the removal of the retour and a write on the retour, at the same
       const removed = await whileHeld(
         db,
         (trx) => write(trx, eventId, scene),
-        () => removal(db, eventId, SEEN),
+        (own) => removal(own, eventId, SEEN),
       );
 
       expect(removed).toEqual({ ok: false, error: "confirmRetour", ...after });
@@ -194,7 +194,7 @@ describe("M3.6: the removal of the retour and a write on the retour, at the same
       const written = await whileHeld(
         db,
         (trx) => removal(trx, eventId, SEEN),
-        () => write(db, eventId, scene),
+        (own) => write(own, eventId, scene),
       );
 
       expect(written).toMatchObject({ ok: false, error: "noRetour" });
@@ -258,7 +258,7 @@ describe("eventEnded: a write on an anonymised event (#588)", () => {
       const written = await whileHeld(
         db,
         (trx) => anonymisation(trx, eventId),
-        () => write(db, eventId, scene),
+        (own) => write(own, eventId, scene),
       );
 
       expect(written).toMatchObject({ ok: false, error: "eventEnded" });
