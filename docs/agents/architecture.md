@@ -599,11 +599,12 @@ ci-dessus valent pour chacun.
   le décide de nouveau sous ce verrou, en lisant l'événement, la session et le compte dans
   la même transaction (#836). Une déconnexion, une suppression de compte ou un jeton
   révoqué validés pendant l'attente refusent alors l'écriture (`invalid`). C'est le cas
-  d'`editEvent` ; les autres écritures de l'organisateur (#672, #675) suivront ce chemin.
+  d'`editEvent`, et du retrait par l'organisateur (#672), qui répond alors `noOrganiserAccess`.
 - **Le retrait d'une personne par l'organisateur** (#645, `removeAsOrganiser`,
-  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin,
-  comparé par `adminTokenMatches` sous le verrou de l'Event ; il passera par
-  `organiser-access.ts` seul, comme `editEvent` aujourd'hui (#675). La requête porte
+  `src/app/e/[id]/remove-person.ts`, server action `removePersonAsOrganiser`). Le droit de
+  retirer vient d'`organiser-access.ts` seul, décidé avant le verrou de l'Event puis sous lui,
+  comme `editEvent` (#672) ; l'autorisation marquée, que seule cette règle produit, est #675.
+  Le corps porte `{ adminToken, session }`. La requête porte
   aussi le jeton personnel de l'appareil, mais seulement pour
   relire le tableau que la page montre (`readEventState`), dont « Vos inscriptions » et les
   numéros visibles dépendent de ce jeton. Ce jeton ne donne aucun droit sur ce chemin : un
@@ -1318,7 +1319,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | jetons tirés par le serveur | `src/domain/server-token.ts`, à partir de #593 | seul tirage des jetons d'admin, de session et de lien, 128 bits de `randomBytes` ; `newAdminToken` s'en sert |
 | règles du compte | `src/domain/email-address.ts`, `account-rules.ts` et `send-limits.ts`, à partir de #593 | la lecture d'une adresse, les durées (lien de connexion 1 h, de confirmation 7 jours, session 90 jours, inactivité 3 ans) et le résultat d'un lien ; la limite par événement, la limite par adresse et le plafond global horaire, à partir de #623 ; la limite des demandes de connexion par adresse (OA4.5, `LOGINS_PER_ADDRESS`), à partir de #594 |
 | accès à l'espace organisateur | `src/domain/organiser-access.ts`, à partir de #596 | la seule règle d'accès : session du compte de l'événement, ou jeton d'admin du navigateur de création ; seule à produire l'autorisation que `withOrganiserPhones` accepte |
-| retrait d'une personne | `src/app/e/[id]/remove-person.ts` et `src/domain/person-removal.ts`, à partir de #665 | le cas d'usage, sans server action exportée : `removeFromDevice` (le droit par `devicePersonIds`) et `removeAsOrganiser` (le droit par le seul jeton d'admin, puis `organiser-access.ts`, #675), l'ordre des réponses (RP3.4) et celui des verrous (voir « Retirer une personne ») ; le domaine, en fonctions pures : ce que devient chaque leg, et les lignes de la confirmation, lues dans l'état que la page montre |
+| retrait d'une personne | `src/app/e/[id]/remove-person.ts` et `src/domain/person-removal.ts`, à partir de #665 | le cas d'usage, sans server action exportée : `removeFromDevice` (le droit par `devicePersonIds`) et `removeAsOrganiser` (le droit par `organiser-access.ts` seul, #672 ; l'autorisation marquée, #675), l'ordre des réponses (RP3.4) et celui des verrous (voir « Retirer une personne ») ; le domaine, en fonctions pures : ce que devient chaque leg, et les lignes de la confirmation, lues dans l'état que la page montre |
 | compte dans la base | `src/db/accounts.ts`, `sessions.ts`, `email-links.ts`, `email-sends.ts`, à partir de #594 ; `src/db/my-events.ts`, à partir de #606 | les comptes, les sessions, les liens (un seul usage, même en concurrence) et les envois (limites sous verrou, Event puis adresse) ; Mes événements en agrégats, sans aucun téléphone |
 | connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/` : `actions.ts` et `my-events.ts`, à partir de #606, la page à partir de #607 | les pages et actions de connexion et des liens ; Mes événements : l'action `myEvents`, qui reçoit le jeton de session dans le corps et lit la session et ses événements sur un seul instantané, sans rien écrire, et la page |
 | Mes événements | `src/domain/my-events.ts`, à partir de #606 | les deux sections et leur ordre (« À venir » par début croissant, « Passés » par début décroissant), « passé » et le jour 30 par `day-thirty.ts` ; une ligne n'est listée que si `organiser-access.ts`, avec la session seule, l'ouvre ou la dit terminée : jamais un événement en attente (OA2.3) |

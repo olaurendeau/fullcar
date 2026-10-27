@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Kysely } from "kysely";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
 import type { Database } from "./schema";
-import { seedEvent } from "./test-events";
+import { seedEvent, type SeededEvent } from "./test-events";
 import { seedPerson, seedPlacement, seedRide, type SeededPerson } from "./test-participants";
 
 /** The eight persons of the example; `doublon` is the second Léa, signed up from the tablet. */
@@ -35,7 +35,7 @@ export interface RemovalExample {
 
 /**
  * The « Tournoi de Rennes » of remove-person v2 (« L'exemple, et ses nombres »), every number
- * of its mock-ups derived from it. For Vitest and the Playwright fixtures.
+ * of its mock-ups derived from it, in `event` or a new one. For Vitest and the Playwright fixtures.
  *
  * | person  | aller                         | retour                       |
  * |---------|-------------------------------|------------------------------|
@@ -50,8 +50,8 @@ export interface RemovalExample {
  *
  * Aller: 2 without a car, 1 free seat. Retour: 3 without a car, 4 free seats.
  */
-export async function seedRemovalExample(db: Kysely<Database>): Promise<RemovalExample> {
-  const { id: eventId, token: adminToken } = await seedEvent(db);
+export async function seedRemovalExample(db: Kysely<Database>, event?: SeededEvent): Promise<RemovalExample> {
+  const { id: eventId, token: adminToken } = event ?? (await seedEvent(db));
   const martins = personalTokenFromBytes(randomBytes(PERSONAL_TOKEN_BYTES));
   const persons = {} as Record<ExamplePerson, SeededPerson>;
   for (const name of EXAMPLE_PERSONS) {
