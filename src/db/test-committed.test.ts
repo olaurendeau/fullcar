@@ -130,6 +130,7 @@ describe("whileHeld", () => {
     let holding = 0;
     let ownPid = 0;
     let waiting = 0;
+    let stillHolding = 0;
     const answer = await whileHeld(
       getDb(),
       async (trx) => {
@@ -141,10 +142,14 @@ describe("whileHeld", () => {
         await takeKey(own);
         return "second";
       },
-      async (pid) => void (waiting = pid),
+      async (pid, trx) => {
+        waiting = pid;
+        stillHolding = await pidOf(trx);
+      },
     );
     expect(answer).toBe("second");
     expect(waiting).toBe(ownPid);
+    expect(stillHolding).toBe(holding);
     expect(ownPid).not.toBe(holding);
   });
 
@@ -234,6 +239,35 @@ describe("whileHeld", () => {
         ]),
       ).rejects.toThrow("whileHeld: second ended without waiting for first");
       expect(earlierOver).toBe(true);
+    });
+
+    it("takes a later second blocked only by an earlier one, which holds what it waits for", async () => {
+      const takeOtherKey = (db: Kysely<Database>) => sql`select pg_advisory_xact_lock(5950, 1)`.execute(db);
+      const answers = await whileHeldInTurn(getDb(), (trx) => takeKey(trx), [
+        // Holds the other key, then waits for first's.
+        (own) =>
+          own.transaction().execute(async (trx) => {
+            await takeOtherKey(trx);
+            await takeKey(trx);
+            return "earlier";
+          }),
+        // Waits for the other key, which first does not hold.
+        async (own) => {
+          await takeOtherKey(own);
+          return "later";
+        },
+      ]);
+      expect(answers).toEqual(["earlier", "later"]);
+    });
+
+    it("refuses more than 3 seconds before anything starts, the pool being of 5 connections", async () => {
+      const first = vi.fn(async (trx: Kysely<Database>) => takeKey(trx));
+      const second = vi.fn(async (own: Kysely<Database>) => takeKey(own));
+      await expect(whileHeldInTurn(getDb(), first, [second, second, second, second])).rejects.toThrow(
+        "whileHeldInTurn: at most 3 seconds, the pool has 5 connections (4 given)",
+      );
+      expect(first).not.toHaveBeenCalled();
+      expect(second).not.toHaveBeenCalled();
     });
   });
 });

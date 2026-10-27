@@ -209,14 +209,16 @@ describe("OA8.2, DS4.2", () => {
     try {
       const before = { second: await everythingOf(db, second!), third: await everythingOf(db, third!) };
 
+      let purge: Promise<unknown> | undefined;
       const run = whileHeld(
         db,
         // The second event's confirmation link, held: its anonymisation waits there, its persons already deleted.
         (trx) => trx.selectFrom("email_link").select("event_id").where("event_id", "=", second!).forUpdate().execute(),
-        (own) => purgeDayThirty(own, DAY_THIRTY),
-        // Interrupted while it waits, before the holder, which wrote nothing, is committed.
+        (own) => (purge = purgeDayThirty(own, DAY_THIRTY)),
+        // Interrupted while it waits: the run has failed before the holder, which wrote nothing, is committed.
         async (waiting) => {
           await sql`select pg_cancel_backend(${waiting}::int)`.execute(db);
+          await expect(purge).rejects.toThrow("canceling statement due to user request");
         },
       );
       await expect(run).rejects.toThrow("canceling statement due to user request");

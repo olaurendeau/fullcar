@@ -56,33 +56,41 @@ async function waitsFor(db: Kysely<Database>, waiter: number, holders: number[],
  * For a concurrency test on committed data: `first` in a transaction (REPEATABLE READ)
  * held open until `second`, run on the connection it is given, of its own, waits for one of
  * its locks, then committed. `second` must run on that connection: whileHeld waits for its
- * session, no other. `whileWaiting`, given the pid of that session, looks at what it holds
- * before the commit. Gives what `second` gives; when `second` fails before waiting, its error.
+ * session, no other. `whileWaiting`, given the pid of that session and first's transaction,
+ * looks at what it holds, or writes in first, before the commit. Gives what `second` gives;
+ * when `second` fails before waiting, its error.
  * `own` is one connection: a `second` that opens a transaction on it, then queries `own`
  * itself instead of that transaction, waits for itself until Vitest's timeout. Whatever
  * fails, whileHeld gives `own` back only once `second` is over, the holder rolled back.
- * So a `second` that never ends (waiting for itself, or for a lock first does not hold)
- * keeps `own` past Vitest's timeout, on a test already failed (#856). Ending its session
- * would not give it back safely: Kysely cannot tell the pool to drop that connection, which
- * could be lent, dead, to the next test.
+ * So a `second` that never ends keeps `own` past Vitest's timeout, on a test already failed
+ * (#856). Ending its session would not end such a `second`: one that waits for itself waits
+ * in JavaScript, for its own connection, not in Postgres.
  */
 export async function whileHeld<T>(
   db: Kysely<Database>,
   first: (trx: Kysely<Database>) => Promise<unknown>,
   second: (own: Kysely<Database>) => Promise<T>,
-  whileWaiting?: (waitingPid: number) => Promise<void>,
+  whileWaiting?: (waitingPid: number, trx: Kysely<Database>) => Promise<void>,
 ): Promise<T> {
-  const [answer] = await held(db, first, [second], async ([pid]) => {
-    await whileWaiting?.(pid!);
+  const [answer] = await held(db, first, [second], async ([pid], trx) => {
+    await whileWaiting?.(pid!, trx);
   });
   return answer!;
 }
 
 /**
- * whileHeld for several sessions: each of `seconds`, on a connection of its own, starts
- * once the one before it waits, and must wait in turn, for first or behind one before it
- * (queued for the same lock). Then first is committed. Gives what each gives, in order;
- * when one fails before waiting, its error. Each connection is given back as whileHeld does.
+ * The pool has 5 connections (client.ts): the holder takes one, each second one, and each
+ * look at the waiting sessions one more. With more seconds, that look would wait for the
+ * pool until Vitest's timeout, the holder never rolled back.
+ */
+const MOST_SECONDS = 3;
+
+/**
+ * whileHeld for several sessions, at most 3: each of `seconds`, on a connection of its own,
+ * starts once the one before it waits, and must wait in turn, for first or behind one before
+ * it (queued for the same lock, or for one it holds). Then first is committed. Gives what
+ * each gives, in order; when one fails before waiting, its error. Each connection is given
+ * back as whileHeld does.
  */
 export async function whileHeldInTurn<T>(
   db: Kysely<Database>,
@@ -96,8 +104,11 @@ async function held<T>(
   db: Kysely<Database>,
   first: (trx: Kysely<Database>) => Promise<unknown>,
   seconds: ((own: Kysely<Database>) => Promise<T>)[],
-  whileWaiting: (waitingPids: number[]) => Promise<void>,
+  whileWaiting: (waitingPids: number[], trx: Kysely<Database>) => Promise<void>,
 ): Promise<T[]> {
+  if (seconds.length > MOST_SECONDS) {
+    throw new Error(`whileHeldInTurn: at most ${MOST_SECONDS} seconds, the pool has 5 connections (${seconds.length} given)`);
+  }
   const holder = await db.startTransaction().setIsolationLevel("repeatable read").execute();
   const release = async () => {
     try {
@@ -110,7 +121,7 @@ async function held<T>(
   const inTurn = async (rest: typeof seconds, sessions: number[]): Promise<T[]> => {
     const [second, ...later] = rest;
     if (second === undefined) {
-      await whileWaiting(sessions.slice(1));
+      await whileWaiting(sessions.slice(1), holder);
       await holder.commit().execute();
       return [];
     }
