@@ -18,8 +18,8 @@ import { readEventState, type EventState } from "./event-state";
  * Rides, whose passengers are without a car again on that leg, and her Placements, in one
  * transaction. Nothing is kept, and nothing can be undone. Every input is `unknown`: a
  * forged request gets a refusal, never an exception. No token is logged nor answered, and
- * a refusal carries nothing of the person (RP3.1). No server action calls this yet (#668,
- * #672).
+ * a refusal carries nothing of the person (RP3.1). The device's path is the server action
+ * `removePerson` (#668); the organiser's comes with #672.
  */
 
 /**

@@ -19,6 +19,8 @@ export type NotDone =
   | { kind: "editPerson"; firstName: string; fields: "firstName" | "phone" | "both" }
   | { kind: "offerRide"; driver: string; legs: Leg | "both" }
   | { kind: "removeRide"; driver: string; leg: Leg }
+  /** « Retirer de l’événement » (remove-person v2): the person, as her sheet showed her. */
+  | { kind: "removePerson"; firstName: string }
   | { kind: "editRide"; driver: string; leg: Leg }
   | { kind: "readDevice" }
   | { kind: "editEvent" }
@@ -161,7 +163,8 @@ export function personWhy(error: Parameters<typeof whyOf>[0] | "drives" | "perso
 }
 
 /**
- * Why « Proposer une voiture » was not done: as `whyOf`, and `alreadyDriving` names who drives.
+ * Why « Proposer une voiture » was not done: as `whyOf`, `driverWithoutPhone` included (v4.8 rule
+ * 7), and `alreadyDriving` names who drives.
  * `alreadyInCar` names the passengers ticked in « Qui monte avec vous ? » (#171), in the order of
  * « Vos inscriptions »; none ticked, only a forged request gets it: the generic reason.
  */

@@ -4,8 +4,11 @@ import { getLocale } from "next-intl/server";
 import { cookies, headers } from "next/headers";
 import { after } from "next/server";
 import { getDb } from "@/db/client";
+import { databaseFailure } from "@/db/failure";
+import { visitSession } from "@/db/sessions";
 import { serverBrevo } from "@/email/brevo";
 import { defaultLocale, isLocale, localeCookie, localeCookieOptions } from "@/i18n/locales";
+import { negotiateLocale } from "@/i18n/negotiate";
 import { createEventFor, type CreateEventResult } from "./create-event";
 import { siteOrigin } from "./site";
 
@@ -41,4 +44,24 @@ export async function setLocale(locale: unknown): Promise<boolean> {
   const secure = (await headers()).get("x-forwarded-proto") === "https";
   (await cookies()).set(localeCookie, locale, localeCookieOptions(secure));
   return true;
+}
+
+/** What a visit says of the session: still open, or ended (or never one), which no visit brings back. */
+export type VisitAnswer = { session: "open" } | { session: "ended" };
+
+/**
+ * A page load with the session's token (OA9.6, OA9.7), sent by session-visit.tsx in the
+ * request's body: the session slides 90 days more, and the account notes the visit and the
+ * page's language, negotiated as the page's own (src/i18n/request.ts). Nothing else is
+ * answered: neither the account nor its address. The token is never logged.
+ */
+export async function visit(token: unknown): Promise<VisitAnswer> {
+  const locale = negotiateLocale((await cookies()).get(localeCookie)?.value, (await headers()).get("accept-language"));
+  try {
+    const account = await visitSession(getDb(), token, locale);
+    return { session: account ? "open" : "ended" };
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure("visit: the visit could not be stored", error);
+  }
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Kysely, Transaction } from "kysely";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { anonymiseEvent } from "@/db/day-thirty";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
@@ -9,6 +10,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import {
   addPerson,
   loadEventState,
+  removePerson,
   removeRide,
   setPersonLeg,
   takeSeats,
@@ -16,7 +18,7 @@ import {
   updatePerson,
   updateRide,
 } from "./actions";
-import { readEventState, type EventState } from "./event-state";
+import { readEventState, type EndedEvent, type EventState } from "./event-state";
 
 // The action reaches the database through getDb(): here, the test's transaction,
 // so that nothing it reads comes from another test.
@@ -64,11 +66,17 @@ async function seedScene(trx: Transaction<Database>) {
   return { eventId, marc, lea, tom, r1 };
 }
 
+/** The state `loadEventState` gave, failing the test had it said the event ended. */
+function notEnded(answer: EventState | EndedEvent | undefined): EventState | undefined {
+  if (answer && "ended" in answer) throw new Error("loadEventState said the event ended");
+  return answer;
+}
+
 describe("loadEventState", () => {
   it("gives the state the device sees, as readEventState reads it, in plain data", async () => {
     await inTransaction(async (trx) => {
       const { eventId, lea } = await seedScene(trx);
-      const state = await loadEventState(eventId, lea.token);
+      const state = notEnded(await loadEventState(eventId, lea.token));
       expect(state).toEqual(await readEventState(trx, eventId, lea.token));
       expect(JSON.parse(JSON.stringify(state))).toStrictEqual(state);
       const [aller] = state?.legs ?? [];
@@ -94,9 +102,24 @@ describe("loadEventState", () => {
   ])("C10.6: with %s, the device has no person and no number is sent", async (_, token) => {
     await inTransaction(async (trx) => {
       const { eventId } = await seedScene(trx);
-      const state = await loadEventState(eventId, token);
+      const state = notEnded(await loadEventState(eventId, token));
       expect(state?.legs.flatMap((leg) => leg.device)).toEqual([]);
       expect(JSON.stringify(state)).not.toMatch(/06 \d\d/);
+    });
+  });
+
+  // #799, OA8.3: a tab opened before day 30 reads again after it, and anyone holding the link may call it.
+  it.each<[string, "lea" | "none"]>([
+    ["a device's token", "lea"],
+    ["no token", "none"],
+  ])("OA8.3: with %s, an anonymised event gives its title and its start, neither its place nor anyone", async (_, who) => {
+    await inTransaction(async (trx) => {
+      const scene = await seedScene(trx);
+      await anonymiseEvent(trx, scene.eventId);
+      const state = await loadEventState(scene.eventId, who === "lea" ? scene.lea.token : undefined);
+      // Nobody is left once anonymised: the place, which stays in the row, is what could leak.
+      expect(state).toStrictEqual({ ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" });
+      expect(JSON.stringify(state)).not.toContain("Gymnase des Gayeulles");
     });
   });
 
@@ -402,6 +425,64 @@ describe("removeRide", () => {
   it("gives eventNotFound for a malformed event id, without reading anything", async () => {
     connection.current = untouchable;
     await expect(removeRide({ id: "Ab3dEf7h" }, undefined, undefined, "aller")).resolves.toEqual(EVENT_NOT_FOUND);
+  });
+});
+
+describe("removePerson", () => {
+  it("RP1.5: removes Léa, her seat freed, and gives the state the device now sees, in plain data", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const result = await removePerson(eventId, lea.token, lea.id);
+      expect(result).toEqual({ ok: true, removal: "removed", state: await readEventState(trx, eventId, lea.token) });
+      expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
+      const [aller] = stateOf(result) ?? [];
+      expect(aller.cars.find((car) => car.id === r1)?.passengers).toEqual([]);
+      expect(aller.device).toEqual([]);
+      expect(await readTokenHolders(trx, eventId)).not.toContainEqual(expect.objectContaining({ id: lea.id }));
+    });
+  });
+
+  it("RP1.8: removing her again is alreadyRemoved, a success that writes nothing", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea } = await seedScene(trx);
+      await removePerson(eventId, lea.token, lea.id);
+      expect(await removePerson(eventId, lea.token, lea.id)).toMatchObject({ ok: true, removal: "alreadyRemoved" });
+    });
+  });
+
+  it("RP3.1: refuses the person of another token, and she stays", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea, tom } = await seedScene(trx);
+      expect(await removePerson(eventId, tom.token, lea.id)).toEqual({ ok: false, error: "forbidden" });
+      expect((await readTokenHolders(trx, eventId)).map((holder) => holder.id)).toContain(lea.id);
+    });
+  });
+
+  it("gives eventNotFound for a malformed event id, without reading anything", async () => {
+    connection.current = untouchable;
+    await expect(removePerson({ id: "Ab3dEf7h" }, undefined, undefined)).resolves.toEqual(EVENT_NOT_FOUND);
+  });
+
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    const token = "AAAAAAAAAAAAAAAAAAAAAA";
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await removePerson("Ab3dEf7h", token, "0b0b2a4e-6a8f-4c1d-9e2f-3a4b5c6d7e8f").then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack]) {
+        expect(text).not.toContain("06 22");
+        expect(text).not.toContain(token);
+      }
+      expect(cause).toBeUndefined();
+      expect(log.mock.calls).toEqual([["removePerson: the person could not be removed (SQLSTATE 57P01)"]]);
+    } finally {
+      log.mockRestore();
+    }
   });
 });
 

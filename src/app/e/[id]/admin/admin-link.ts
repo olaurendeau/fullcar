@@ -37,9 +37,12 @@ export type AdminLinkCheck =
   | { state: "invalid" }
   | { state: "failed"; retrying?: boolean };
 
+/** The states of the access rule (#596), each read « non valide » until its own screen comes (#598). */
+const REFUSED = new Set(["invalid", "signIn", "notYours", "pending", "orphan", "ended"]);
+
 /**
  * What the server's answer means: the panel with its legs (C4.9 amended), or "not valid"
- * (C6.5). Anything else, such as the `undefined` Next resolves an action with on an
+ * (C6.5) for every state the access rule refuses with (#596). Anything else, such as the `undefined` Next resolves an action with on an
  * `x-action-redirect` response, is a failed check: a good link never reads "not valid".
  */
 export function checkFromAnswer(answer: unknown, origin: string, id: string, token: string): AdminLinkCheck {
@@ -48,7 +51,7 @@ export function checkFromAnswer(answer: unknown, origin: string, id: string, tok
   if (state === "panel" && Array.isArray(legs) && token) {
     return { state: "valid", ...organiserLinks(origin, id, token), legs: legs as OrganiserLeg[] };
   }
-  if (state === "invalid") return { state: "invalid" };
+  if (typeof state === "string" && REFUSED.has(state)) return { state: "invalid" };
   return { state: "failed" };
 }
 
@@ -87,7 +90,7 @@ export function useAdminLinkCheck(id: string): {
       const run = ++latest;
       const token = tokenInFragment(window.location.hash);
       const read: Promise<OrganiserPanelAnswer> = token
-        ? loadOrganiserPanel(id, token)
+        ? loadOrganiserPanel(id, { adminToken: token })
         : Promise.resolve({ state: "invalid" });
       read.then(
         (answer) => {
@@ -118,7 +121,7 @@ export function useAdminLinkCheck(id: string): {
   const read = useCallback(() => {
     const token = tokenInFragment(window.location.hash);
     return sendAction<OrganiserPanelAnswer>(() =>
-      token ? loadOrganiserPanel(id, token) : Promise.resolve({ state: "invalid" }),
+      token ? loadOrganiserPanel(id, { adminToken: token }) : Promise.resolve({ state: "invalid" }),
     );
   }, [id]);
 
@@ -127,7 +130,8 @@ export function useAdminLinkCheck(id: string): {
       const token = tokenInFragment(window.location.hash);
       return sendAction<EditEventOutcome>(() => {
         if (!token) return Promise.resolve<EditEventOutcome>({ ok: false, error: "invalid" });
-        return removal ? updateEvent(id, token, fields, before, removal) : updateEvent(id, token, fields, before);
+        const proof = { adminToken: token };
+        return removal ? updateEvent(id, proof, fields, before, removal) : updateEvent(id, proof, fields, before);
       });
     },
     [id],

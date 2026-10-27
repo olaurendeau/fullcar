@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
-import { actionRunner, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
+import { actionRunner, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -27,6 +27,7 @@ describe("sendAction", () => {
 });
 
 const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: null, description: null };
+const ENDED = { ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" };
 
 describe("stateOf", () => {
   const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
@@ -66,9 +67,28 @@ describe("stateRead", () => {
     ["a failure", { ok: false, problem: "failed" }],
     ["an unknown event", { ok: true, value: undefined }],
     ["the legs alone", { ok: true, value: [] }],
+    ["an ended event", { ok: true, value: ENDED }],
     ["no read at all", undefined],
   ])("is nothing for %s", (_, sent) => {
     expect(stateRead(sent as never)).toBeUndefined();
+  });
+});
+
+// #799, OA8.3: a page still open once the event is anonymised.
+describe("readEnded", () => {
+  it("is true when the read answered an ended event", () => {
+    expect(readEnded({ ok: true, value: ENDED })).toBe(true);
+  });
+
+  it.each<[string, unknown]>([
+    ["a state", { ok: true, value: { event: header, legs: [] } }],
+    ["a failure", { ok: false, problem: "failed" }],
+    ["an unknown event", { ok: true, value: undefined }],
+    ["null", { ok: true, value: null }],
+    ["`ended` not true", { ok: true, value: { ...ENDED, ended: "true" } }],
+    ["no read at all", undefined],
+  ])("is false for %s", (_, sent) => {
+    expect(readEnded(sent as never)).toBe(false);
   });
 });
 

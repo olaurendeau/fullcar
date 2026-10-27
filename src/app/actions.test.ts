@@ -5,10 +5,10 @@ import { DESCRIPTION_MAX } from "@/domain/description";
 import type { EventFields } from "@/domain/event";
 import { isPublicId } from "@/domain/public-id";
 import type { Database } from "@/db/schema";
-import { anAddress } from "@/db/test-accounts";
+import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
 import { localeCookieOptions } from "@/i18n/locales";
-import { createEvent, setLocale } from "./actions";
+import { createEvent, setLocale, visit } from "./actions";
 
 // The action reaches the database through getDb(): here, the test's transaction,
 // so that nothing it writes outlives the test.
@@ -18,14 +18,18 @@ vi.mock("@/db/client", async (importOriginal) => {
   return { ...actual, getDb: () => connection.current ?? actual.getDb() };
 });
 
-// The request the action reads its headers from, and the cookies it sets on the response.
+// The request the action reads its headers and cookies from, and the cookies it sets on the response.
 const request = vi.hoisted(() => ({
   headers: new Headers(),
+  cookies: new Map<string, string>(),
   set: vi.fn(),
 }));
 vi.mock("next/headers", () => ({
   headers: async () => request.headers,
-  cookies: async () => ({ set: request.set }),
+  cookies: async () => ({
+    get: (name: string) => (request.cookies.has(name) ? { name, value: request.cookies.get(name)! } : undefined),
+    set: request.set,
+  }),
 }));
 
 // The page's language, as next-intl reads it from the request.
@@ -445,4 +449,122 @@ describe("setLocale", () => {
       expect(request.set).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("visit", () => {
+  const DAY = 24 * 60 * 60_000;
+  const daysAgo = (days: number) => new Date(Date.now() - days * DAY);
+  const datesOf = (trx: Kysely<Database>, accountId: string) =>
+    Promise.all([
+      trx
+        .selectFrom("account")
+        .select(["locale", "last_visit_at", "warned_at"])
+        .where("id", "=", accountId)
+        .executeTakeFirstOrThrow(),
+      trx
+        .selectFrom("session")
+        .select(["created_at", "last_visit_at"])
+        .where("account_id", "=", accountId)
+        .executeTakeFirstOrThrow(),
+    ]);
+
+  // The database writes its own now(): the server's clock is the real one here.
+  beforeEach(() => {
+    vi.useRealTimers();
+    request.headers = new Headers();
+    request.cookies = new Map();
+  });
+
+  // OA9.7: the inactivity is measured at the last visit with a session, never at its opening.
+  it("OA9.7: slides a session opened 3 years ago, and notes the visit and the page's language on the account", async () => {
+    request.cookies.set("NEXT_LOCALE", "en");
+    await inTransaction(async (trx) => {
+      const opened = daysAgo(3 * 365);
+      const accountId = await seedAccount(trx, { locale: "fr", last_visit_at: daysAgo(40), warned_at: daysAgo(10) });
+      const token = await seedSession(trx, accountId, { createdAt: opened, lastVisitAt: daysAgo(1) });
+      const before = Date.now();
+      expect(await visit(token)).toEqual({ session: "open" });
+      const [account, session] = await datesOf(trx, accountId);
+      expect(session.created_at).toEqual(opened);
+      expect(session.last_visit_at.getTime()).toBeGreaterThan(before - 60_000);
+      expect(account).toEqual({ locale: "en", last_visit_at: session.last_visit_at, warned_at: null });
+    });
+  });
+
+  // OA3.1: the language of the page, as the request negotiates it; a de-DE browser reads French.
+  it.each<[string, { cookie?: string; acceptLanguage: string }, "fr" | "en"]>([
+    ["the language cookie", { cookie: "fr", acceptLanguage: "en-US,en;q=0.9" }, "fr"],
+    ["Accept-Language, without a cookie", { acceptLanguage: "en-GB,en;q=0.9" }, "en"],
+    ["the default, for a language the site does not have", { acceptLanguage: "de-DE,de;q=0.9" }, "fr"],
+  ])("notes the language of %s", async (_, { cookie, acceptLanguage }, locale) => {
+    if (cookie) request.cookies.set("NEXT_LOCALE", cookie);
+    request.headers = new Headers({ "accept-language": acceptLanguage });
+    await inTransaction(async (trx) => {
+      const accountId = await seedAccount(trx, { locale: locale === "fr" ? "en" : "fr" });
+      expect(await visit(await seedSession(trx, accountId))).toEqual({ session: "open" });
+      const [account] = await datesOf(trx, accountId);
+      expect(account.locale).toBe(locale);
+    });
+  });
+
+  // OA9.6: a session lives 90 days after its last visit, and a visit does not bring it back.
+  it("OA9.6: answers ended for a session last visited 91 days ago, and writes nothing", async () => {
+    request.cookies.set("NEXT_LOCALE", "en");
+    await inTransaction(async (trx) => {
+      const accountId = await seedAccount(trx, { locale: "fr", last_visit_at: daysAgo(91) });
+      const token = await seedSession(trx, accountId, { createdAt: daysAgo(200), lastVisitAt: daysAgo(91) });
+      const seeded = await datesOf(trx, accountId);
+      expect(await visit(token)).toEqual({ session: "ended" });
+      expect(await datesOf(trx, accountId)).toEqual(seeded);
+    });
+  });
+
+  it.each([
+    ["an unknown token", "AAAAAAAAAAAAAAAAAAAAAA"],
+    ["nothing", undefined],
+    ["a number", 42],
+    ["an object", { token: "kP3x-Vb7_Zq9Lt2Wn8Rc4g" }],
+  ])("answers ended for %s", async (_, token) => {
+    await inTransaction(async () => {
+      expect(await visit(token)).toEqual({ session: "ended" });
+    });
+  });
+
+  // Architecture, « Jetons »: neither a token nor an address is ever logged.
+  it("logs nothing of a visit", async () => {
+    const spies = CONSOLE.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+    try {
+      await inTransaction(async (trx) => {
+        const token = await seedSession(trx, await seedAccount(trx, { email: anAddress() }));
+        expect(await visit(token)).toEqual({ session: "open" });
+      });
+      expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
+  it("fails with a fixed error when the database fails, and neither the log nor the error carries the token", async () => {
+    const token = "kP3x-Vb7_Zq9Lt2Wn8Rc4g";
+    connection.current = failingDb;
+    const spies = CONSOLE.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+    try {
+      const failure = await visit(token).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack, JSON.stringify(failure)]) {
+        expect(text?.includes(token)).toBe(false);
+        expect(text?.includes("secret")).toBe(false);
+      }
+      expect(cause).toBeUndefined();
+      const logged = spies.flatMap((spy) => spy.mock.calls);
+      expect(logged).toEqual([["visit: the visit could not be stored (SQLSTATE 23505)"]]);
+    } finally {
+      connection.current = undefined;
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
 });
