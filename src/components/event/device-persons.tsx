@@ -17,6 +17,8 @@ import { PersonsMatrix } from "./persons-matrix";
 const TITLE_ID = "device-persons-title";
 const MATRIX_ID = "device-persons-matrix";
 
+type SheetPerson = ReturnType<typeof personOf>;
+
 /** A person's own number: the one `withVisiblePhones` set in the device's section, and nowhere else. */
 function personOf(board: readonly VisibleLegBoard[], id: string) {
   const person = board.flatMap((leg) => leg.device).find((candidate) => candidate.id === id);
@@ -54,13 +56,21 @@ export function DevicePersons({
   const rows = deviceMatrix(board);
   const [expanded, setExpanded] = useState<boolean | null>(null);
   // `opened` counts the openings: each one is a new sheet, without the last one's message or form.
-  const [sheet, setSheet] = useState<{ id: string; open: boolean; opened: number } | null>(null);
+  // `person`, as she was at its opening: what it shows while it closes, once she is gone.
+  const [sheet, setSheet] = useState<{ id: string; open: boolean; opened: number; person: SheetPerson | undefined } | null>(null);
   const [cellSheet, setCellSheet] = useState<{ id: string; leg: Leg; open: boolean; opened: number } | null>(null);
   const retried = useRef(false);
   const focusTarget = useRef<HTMLElement>(null);
   const focused = useRef<HTMLElement>(null);
-  // The rows as they were when a removal was confirmed: the focus goes to the next one (RP1.5).
+  // The rows as they were last shown with the open sheet's person: removed here or elsewhere, the
+  // focus goes to the next one (RP1.5, RP5.3), never to a list left by an earlier removal.
   const removedFrom = useRef<string[]>([]);
+  const sheetId = sheet?.open ? sheet.id : null;
+  const rowIds = rows.map((row) => row.id).join(" ");
+  useEffect(() => {
+    const ids = rowIds.split(" ");
+    if (sheetId && ids.includes(sheetId)) removedFrom.current = ids;
+  }, [sheetId, rowIds]);
   // On whichever of the loading line, « Réessayer » or the section's button is shown.
   const target = (element: HTMLElement | null) => {
     focusTarget.current = element;
@@ -127,7 +137,10 @@ export function DevicePersons({
 
   const open = expanded ?? startsExpanded(rows);
   const Chevron = open ? ChevronUp : ChevronDown;
-  const person = sheet && personOf(board, sheet.id);
+  // Gone, removed here or elsewhere, her sheet closes over what it showed, rather than going with
+  // her (RP5.3): closed, it gives the focus where the removal says.
+  const shown = sheet && personOf(board, sheet.id);
+  const person = shown || sheet?.person;
   const cellRow = cellSheet && rows.find((row) => row.id === cellSheet.id);
   const cell = cellRow && cellRow.cells.find((candidate) => candidate.leg === cellSheet.leg);
 
@@ -158,25 +171,22 @@ export function DevicePersons({
         <PersonsMatrix
           legs={board.map((leg) => leg.leg)}
           rows={rows}
-          onName={(id) => setSheet({ id, open: true, opened: (sheet?.opened ?? 0) + 1 })}
+          onName={(id) => setSheet({ id, open: true, opened: (sheet?.opened ?? 0) + 1, person: personOf(board, id) })}
           onCell={(id, leg) => setCellSheet({ id, leg, open: true, opened: (cellSheet?.opened ?? 0) + 1 })}
         />
       </div>
-      {person && (
+      {sheet && person && (
         <PersonSheet
           key={sheet.opened}
           person={person}
-          open={sheet.open}
+          open={sheet.open && !!shown}
           // A success comes after the sheet that sent it: it closes that one, not one opened since.
           onOpenChange={(isOpen) =>
             setSheet((current) => (current?.opened === sheet.opened ? { ...current, open: isOpen } : current))
           }
           updatePerson={updatePerson}
           removal={removalConfirmation(board, person.id)}
-          removePerson={(removal, confirmation) => {
-            removedFrom.current = rows.map((row) => row.id);
-            return removePerson(removal, confirmation);
-          }}
+          removePerson={removePerson}
           refocus={() => focusName(person.id) || focusAfterRemoval(removedFrom.current, person.id)}
         />
       )}

@@ -321,7 +321,8 @@
     "final": "C’est définitif.",
     "confirm": "Retirer de l’événement",
     "removed": "{firstName} ne fait plus partie de l’événement",
-    "alreadyRemoved": "{firstName} ne faisait déjà plus partie de l’événement"
+    "alreadyRemoved": "{firstName} ne faisait déjà plus partie de l’événement",
+    "removedElsewhere": "{firstName} ne fait plus partie de vos inscriptions : la personne a été retirée de l’événement depuis un autre appareil."
   },
   "Admin": {
     "title": "Espace organisateur",

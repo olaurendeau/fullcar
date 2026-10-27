@@ -25,11 +25,12 @@ export async function sendAction<T>(
 }
 
 /**
- * What an action changes on the page: the board, and the bar's information, which goes once an
- * action that began after it ends (rule 4): `begins` is told as it leaves, what it returns once it ends.
+ * What an action changes on the page: the board, given with the answer it came in, and the bar's
+ * information, which goes once an action that began after it ends (rule 4): `begins` is told as it
+ * leaves, what it returns once it ends.
  */
 export interface ActionPage {
-  state: (state: EventState) => void;
+  state: (state: EventState, answer: unknown) => void;
   begins: () => () => void;
 }
 
@@ -56,7 +57,7 @@ export function actionRunner(page: ActionPage, online?: () => boolean) {
     try {
       const sent = await sendAction(action, online);
       const state = sent.ok && stateOf(sent.value);
-      if (state) page.state(state);
+      if (state) page.state(state, sent.value);
       return sent;
     } finally {
       inFlight.delete(key);
@@ -104,6 +105,37 @@ export function devicePersonsGone(shown: EventState, next: EventState): string[]
   const ids = (state: EventState) => new Set(state.legs.flatMap((leg) => leg.device.map((person) => person.id)));
   const kept = ids(next);
   return [...ids(shown)].filter((id) => !kept.has(id));
+}
+
+/**
+ * The cars `shown` had, on each leg `next` still has, whose driver `next` has nowhere: removed with
+ * her, here or elsewhere, whoever's device she was on. What the bar says about them has no subject
+ * any more, as when « Retirer la voiture » takes a car (#850's review).
+ */
+export function carsOfPersonsGone(shown: EventState, next: EventState): string[] {
+  const legs = new Set(next.legs.map(({ leg }) => leg));
+  const present = new Set(
+    next.legs.flatMap((leg) => [
+      ...leg.cars.flatMap((car) => [car.driver, ...car.passengers]),
+      ...leg.withoutCar,
+      ...leg.device,
+    ]).map((person) => person.id),
+  );
+  return shown.legs
+    .filter(({ leg }) => legs.has(leg))
+    .flatMap((leg) => leg.cars)
+    .filter((car) => !present.has(car.driver.id))
+    .map((car) => car.id);
+}
+
+/**
+ * The persons an answer refused by `personGone` names (RP5.4): its `goneIds`, or, from an action
+ * about one person, which carries none, those of `gone` (the device's persons gone with that
+ * answer). Its failure says they are no longer part of the event; nobody else does.
+ */
+export function goneNamed(answer: unknown, gone: readonly string[]): string[] {
+  if (typeof answer !== "object" || answer === null || !("error" in answer) || answer.error !== "personGone") return [];
+  return "goneIds" in answer && Array.isArray(answer.goneIds) ? answer.goneIds.filter((id) => typeof id === "string") : [...gone];
 }
 
 /**

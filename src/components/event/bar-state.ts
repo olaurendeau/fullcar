@@ -27,6 +27,8 @@ export interface Message {
   leg?: Leg;
   /** The persons a placement's success seats: it is about them alone (`persons` withdrawal). */
   persons?: readonly string[];
+  /** The car a placement's success seats them in: it goes with that car (`cars` withdrawal). */
+  car?: string;
 }
 
 /**
@@ -75,17 +77,23 @@ export const emptyBar: BarState = { lines: [], next: 1 };
  * What takes failures away (rule 5). A send takes those whose subjects and fields it all
  * carries; its answer, only those of earlier sends (`before`). A car removed takes all those
  * about its subjects (`gone`), whatever fields they carried, sent before its removal. Persons
- * gone from the state the page shows take what is about them alone (`persons`, remove-person v2).
+ * gone from the state the page shows take what is about them alone (`persons`, remove-person v2),
+ * and the cars they drove, what is about those cars (`cars`, #850's review).
  */
 export type Withdrawal =
   | { about: readonly string[]; before?: number }
   | { gone: readonly string[]; before: number }
-  | { persons: readonly string[] };
+  | { persons: readonly string[] }
+  | { cars: readonly string[] };
 
 export function covers(withdrawal: Withdrawal, { about, sent, persons }: Sent): boolean {
   if ("persons" in withdrawal) {
     const named = persons ?? about.map(personOf);
     return named.length > 0 && named.every((person) => person !== undefined && withdrawal.persons.includes(person));
+  }
+  if ("cars" in withdrawal) {
+    const car = carOf(about[0] ?? "");
+    return car !== undefined && withdrawal.cars.includes(car);
   }
   if (withdrawal.before !== undefined && sent >= withdrawal.before) return false;
   if ("gone" in withdrawal) return withdrawal.gone.includes(about[0]);
@@ -104,6 +112,15 @@ function personOf(subject: string): string | undefined {
   if (kind === "person") return first === "new" ? undefined : first;
   if (kind === "offer") return second === "new" ? undefined : second;
   return undefined;
+}
+
+/**
+ * The car a subject is about: its seats (`seats:{id}`), their « Annuler » (`undo:{id}`), its
+ * removal (`ride:{id}`) or its change (`ride:{id}:edit`), the subjects « Retirer la voiture » forgets.
+ */
+function carOf(subject: string): string | undefined {
+  const [kind, id] = subject.split(":");
+  return kind === "seats" || kind === "undo" || kind === "ride" ? id : undefined;
 }
 
 /** A person's state on a leg, the key of what a placement's success says (rule 2, v4.4.5). */
@@ -188,11 +205,14 @@ export const ended = (state: BarState, began: number): BarState => keep(state, (
  * Rule 5: the failures `withdrawal` covers go; nothing else. Persons gone from the state the page
  * shows also take the success of a placement that seats them alone, with its « Annuler »: a line
  * that names others too stays, still true for them (remove-person v2, « Focus, barre, envoi »).
+ * The cars of persons gone take the success of a placement in them, with its « Annuler » (#850's review).
  */
 export const withdraw = (state: BarState, withdrawal: Withdrawal): BarState =>
   keep(state, (line) => {
     if (line.kind === "failure") return !covers(withdrawal, line);
-    const seated = line.kind === "success" && line.persons;
+    if (line.kind !== "success") return true;
+    if ("cars" in withdrawal) return !(line.car && withdrawal.cars.includes(line.car));
+    const seated = line.persons;
     return !("persons" in withdrawal && seated && covers(withdrawal, { about: [], sent: line.id, persons: seated }));
   });
 
