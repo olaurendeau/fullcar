@@ -62,6 +62,7 @@ import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
 import { deviceRemovals, type DeviceRemovals } from "./removal-channel";
+import type { RemovePersonOutcome } from "./remove-person";
 import {
   aboutPerson,
   actionRunner,
@@ -82,7 +83,8 @@ import {
  * sees and applies nothing, `apply(state)` shows it. The personal token stays in this file.
  * `applyEvent(event)` shows the header the organiser just saved, on the legs it keeps (epic
  * #250), and `succeed(message)` and `fail(failure)` write the success or the failure of the
- * organiser's action in the bar.
+ * organiser's action in the bar. `removeAsOrganiser` is « Retirer » of « Personnes inscrites »
+ * (#672): the board's own removal, sent by the organiser's action, with this device's token.
  */
 export interface BoardHandle {
   read(): Promise<Sent<EventState | undefined>>;
@@ -90,6 +92,13 @@ export interface BoardHandle {
   applyEvent(event: EventHeader): void;
   succeed(message: Message): void;
   fail(failure: Failure): void;
+  removeAsOrganiser(...removal: [...Parameters<RemovePerson>, OrganiserRemoval]): ReturnType<RemovePerson>;
+}
+
+/** The organiser's removal: its request, given the device's token for the board answered, and her landmark. */
+export interface OrganiserRemoval {
+  send: (personId: string, deviceToken: string | undefined) => Promise<RemovePersonOutcome>;
+  landmark: (personId: string) => boolean;
 }
 
 /**
@@ -221,8 +230,9 @@ export function ParticipantBoard({
       applyEvent: (event) => setBoard({ event, legs: latest.current.legs.filter(({ leg }) => leg === "aller" || event.retourAt) }),
       succeed,
       fail,
+      removeAsOrganiser: (removal, confirmation, organiser) => removePerson(removal, confirmation, organiser),
     }),
-    [id, ending, setBoard, succeed, fail],
+    // None: the handle is this render's, its removal with the page's words and runner.
   );
 
   useLayoutEffect(() => {
@@ -432,7 +442,7 @@ export function ParticipantBoard({
     // Its driver, or someone ticked, removed meanwhile: the bar names her at once (RP5.4).
     const named = [...(driver.kind === "device" ? [{ id: driver.personId, firstName: notDone.driver }] : []), ...passengers];
     const why =
-      outcome?.error === "personGone" ? personGone(named, outcome.goneIds) : outcome ? offerWhy(outcome.error, notDone.driver, names) : whyOf(problem);
+      outcome?.error === "personGone" ? personGone(named, outcome.goneIds) : outcome ? offerWhy(outcome.error === "stopsOff" ? "invalid" : outcome.error, notDone.driver, names) : whyOf(problem);
     const gone = why.kind === "personGone" ? { closes: true } : {};
     // Offered from the retour's tab once it is gone, the sheet closes (rule 9). From the aller's,
     // the retour goes from the sheet; closed, the bar says to offer the car again (decision 47).
@@ -540,13 +550,15 @@ export function ParticipantBoard({
   // person, as removeRide is once per car. The state answered shows her gone, her sheet with her; the
   // bar says it once nothing hides the page, `alreadyRemoved` as a success too (RP1.8), without
   // « Annuler ». A failure names her, then why; the confirmation says the problem, or the reason
-  // of a refusal that sending again would not change (« Refus et échecs »).
-  const removePerson: RemovePerson = async ({ personId, firstName, sending }, confirmation) => {
-    // As it leaves, this device knows it sent it, its other tabs too: she gone is no news (RP5.3).
-    // Refused, she is still part of the event; an answer lost may have removed her all the same.
+  // of a refusal that sending again would not change (« Refus et échecs »). From « Personnes
+  // inscrites » (#672), `organiser` sends it with its proof, and names her landmark.
+  async function removePerson({ personId, firstName, sending }: Parameters<RemovePerson>[0], confirmation: FromSheet, organiser?: OrganiserRemoval) {
+    // As it leaves, this device knows it sent it, its other tabs too: she gone is no news (RP5.3),
+    // whichever path sends it. Refused, she is still part of the event; an answer lost may have removed her all the same.
     const remove = async () => {
       removals.current?.sending(personId);
-      const answer = await storePersonRemoval(id, readDeviceToken(id), personId);
+      const token = readDeviceToken(id);
+      const answer = await (organiser ? organiser.send(personId, token) : storePersonRemoval(id, token, personId));
       if (!answer.ok) removals.current?.refused(personId);
       return answer;
     };
@@ -554,18 +566,16 @@ export function ParticipantBoard({
     if (sent === undefined) return undefined;
     confirmation.answered();
     const outcome = sent.ok ? sent.value : undefined;
-    const landmark = () => focusName(personId);
+    const landmark = organiser ? () => organiser.landmark(personId) : () => focusName(personId);
     if (outcome?.ok) {
       const text = words.t(outcome.removal === "removed" ? "PersonRemoval.removed" : "PersonRemoval.alreadyRemoved", { firstName });
       confirmation.whenClosed(() => messages.succeed({ text, landmark }));
       return null;
     }
-    // `noOrganiserAccess` is the organiser's path alone: here, what no page gets.
-    const error = !outcome ? (sent.ok ? "failed" : sent.problem) : outcome.error === "noOrganiserAccess" ? "invalid" : outcome.error;
-    const said = removalProblem(error);
+    const said = removalProblem(!outcome ? (sent.ok ? "failed" : sent.problem) : outcome.error);
     failedIn(confirmation, { notDone: { kind: "removePerson", firstName }, why: whyOf(said.problem), landmark });
     return said;
-  };
+  }
 
   // Once per sheet, as offerRide: only the fields the form changed, its passengers and who leaves.
   const updateRide: UpdateRide = async ({ rideId, leg, ride, seenPassengerIds, leaving, sending, notDone, ...sheet }) => {
@@ -589,7 +599,9 @@ export function ParticipantBoard({
     // `passengersChanged` is said in the step while it is open (C8.5). In the bar, the failure
     // names the car and its leg, then why, a refusal included.
     const problem = sent.ok ? "failed" : sent.problem;
-    const why = outcome ? whyOf(outcome.error) : whyOf(problem);
+    // The refusals of the Stops have no word yet, and no form sends Stops (#889): the generic reason.
+    const said = outcome?.error === "stopsOff" || outcome?.error === "stopErrors" || outcome?.error === "afterStop" ? "invalid" : outcome?.error;
+    const why = said ? whyOf(said) : whyOf(problem);
     // A car of the retour once it is gone: the sheet closes (rule 9).
     failedIn(sheet, { notDone, why, landmark: focusCar(leg, rideId), closes: why.kind === "noRetour", leg });
     if (outcome?.error === "passengersChanged") return { kind: "passengersChanged", passengers: outcome.passengerIds.length };

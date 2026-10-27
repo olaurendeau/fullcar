@@ -2,20 +2,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { readSessionToken } from "@/app/session-token";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
-import type { EndedHeader, OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import type { EndedHeader, OrganiserLeg, OrganiserPanelAnswer, OrganiserPerson } from "@/domain/organiser-panel";
 import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { isWallClock, isWallDate, type WallDate } from "@/domain/wall-clock";
 import type { EditEventOutcome } from "../edit-event";
 import { sendAction, type Sent } from "../run-action";
-import { loadOrganiserPanel, updateEvent } from "./actions";
+import type { RemovePersonOutcome } from "../remove-person";
+import { loadOrganiserPanel, removePersonAsOrganiser, updateEvent } from "./actions";
 
 /*
  * The only browser code that touches the organiser's admin token (docs/agents/architecture.md,
  * « Session, liens et jeton d'admin », #597), as session-token.ts is for the session's. The
  * browser that created the event keeps the token the server drew, in `localStorage` under its
  * event's key, `fullcar:admin-token:{id}`; without `localStorage`, the page's memory keeps it.
- * It travels in the body of `loadOrganiserPanel`, `updateEvent` and `signOut` only, with the session's:
- * never in a URL, a header, a cookie, a log, an error or the page. There is no organiser's
+ * It travels in the body of `loadOrganiserPanel`, `updateEvent`, `removePersonAsOrganiser` and
+ * `signOut` only, with the session's: never in a URL, a header, a cookie, a log, an error or the
+ * page. There is no organiser's
  * link any more: a fragment on `/e/{id}/admin` is ignored (OA7.5). It is compared on the
  * server only.
  */
@@ -139,7 +141,7 @@ export type Refusal =
 
 export type OrganiserCheck =
   | { state: "checking" }
-  | { state: "valid"; publicUrl: string; legs: OrganiserLeg[]; pending?: PendingNotice }
+  | { state: "valid"; publicUrl: string; legs: OrganiserLeg[]; persons: OrganiserPerson[]; pending?: PendingNotice }
   | { state: "refused"; refusal: Refusal }
   | { state: "failed"; retrying?: boolean };
 
@@ -173,10 +175,11 @@ function refusalOf(answer: Record<string, unknown>): Refusal | undefined {
  */
 export function checkFromAnswer(answer: unknown, origin: string, id: string): OrganiserCheck {
   if (typeof answer !== "object" || answer === null) return { state: "failed" };
-  const { state, legs } = answer as { state?: unknown; legs?: unknown };
+  const { state, legs, persons } = answer as { state?: unknown; legs?: unknown; persons?: unknown };
   if (state === "panel" && Array.isArray(legs)) {
+    const all = Array.isArray(persons) ? (persons as OrganiserPerson[]) : [];
     const pending = pendingNoticeOf((answer as { pending?: unknown }).pending);
-    return { state: "valid", publicUrl: `${origin}/e/${id}`, legs: legs as OrganiserLeg[], ...(pending && { pending }) };
+    return { state: "valid", publicUrl: `${origin}/e/${id}`, legs: legs as OrganiserLeg[], persons: all, ...(pending && { pending }) };
   }
   const refusal = refusalOf(answer as Record<string, unknown>);
   return refusal ? { state: "refused", refusal } : { state: "failed" };
@@ -197,13 +200,16 @@ export function retryFrom(check: OrganiserCheck): OrganiserCheck | undefined {
  * page (O5.3). `read()` reads the panel again, and applies nothing (#182). `edit()` sends the
  * organiser's change of the event (epic #250) with the same proof, `before`, the values the
  * form loaded, and `removal`, the numbers a confirmation of the retour's removal showed (#270).
- * Without one, the argument is omitted, never `null`.
+ * Without one, the argument is omitted, never `null`. `remove()` sends « Retirer » of
+ * « Personnes inscrites » (#672) with the same proof, and the page's personal token, which only
+ * chooses the board answered; the board sends it, as its own actions (`sendAction`).
  */
 export function useOrganiserCheck(id: string): {
   check: OrganiserCheck;
   retry: () => void;
   read: () => Promise<Sent<OrganiserPanelAnswer>>;
   edit: (fields: EventFields, before: EventHeader, removal?: LegCounts) => Promise<Sent<EditEventOutcome>>;
+  remove: (personId: string, deviceToken: string | undefined) => Promise<RemovePersonOutcome>;
 } {
   const [check, setCheck] = useState<OrganiserCheck>({ state: "checking" });
   const verifyAgain = useRef(() => {});
@@ -248,5 +254,10 @@ export function useOrganiserCheck(id: string): {
     [id],
   );
 
-  return { check, retry, read, edit };
+  const remove = useCallback(
+    (personId: string, deviceToken: string | undefined) => removePersonAsOrganiser(id, organiserProof(id), deviceToken, personId),
+    [id],
+  );
+
+  return { check, retry, read, edit, remove };
 }

@@ -35,6 +35,8 @@ export interface LockedRide {
   seats: number;
   /** The place stored, for a change to compare the place it sends (AL5.6). */
   location: string;
+  /** `HH:MM:SS` on the date of the leg: what the Stops are checked against when it does not change. */
+  departureTime: WallTime;
 }
 
 export interface Passenger {
@@ -114,13 +116,15 @@ export async function insertRide(db: Kysely<Database>, ride: NewRide): Promise<S
 export async function lockRide(db: Kysely<Database>, ride: RideRef): Promise<LockedRide | undefined> {
   const row = await db
     .selectFrom("ride")
-    .select(["id", "driver_id", "seats", "location"])
+    .select(["id", "driver_id", "seats", "location", "departure_time"])
     .where("id", "=", ride.id)
     .where("event_id", "=", ride.eventId)
     .where("leg", "=", ride.leg)
     .forUpdate()
     .executeTakeFirst();
-  return row && { id: row.id, driverId: row.driver_id, seats: row.seats, location: row.location };
+  return (
+    row && { id: row.id, driverId: row.driver_id, seats: row.seats, location: row.location, departureTime: row.departure_time }
+  );
 }
 
 /**

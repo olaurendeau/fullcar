@@ -39,6 +39,7 @@ type Plain =
   | "forbidden"
   | "eventNotFound"
   | "eventEnded"
+  | "noOrganiserAccess"
   | "noRetour"
   | "driverWithoutPhone"
   | "editErrors"
@@ -145,8 +146,8 @@ export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personG
   return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
 }
 
-/** A refusal of « Retirer de l’événement » that sending it again would not change (remove-person v2, « Refus et échecs »). */
-export type FinalRefusal = "forbidden" | "eventNotFound" | "eventEnded";
+/** A refusal of « Retirer de l’événement » that sending it again would not change (remove-person v2.1, « Refus et échecs »): `noOrganiserAccess` from the panel (RP4.7). */
+export type FinalRefusal = "forbidden" | "eventNotFound" | "eventEnded" | "noOrganiserAccess";
 
 /** What a removal that failed says in its confirmation while it is open (`removalProblem`). */
 export type RemovalProblem = { problem: "offline" | "failed"; final: false } | { problem: FinalRefusal; final: true };
