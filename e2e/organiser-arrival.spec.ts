@@ -25,7 +25,7 @@ const FR = {
 const alert = (page: Page) => page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ });
 const loading = (page: Page) => page.getByRole("main").getByRole("status").filter({ hasText: FR.loading });
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
-/** The area's title alone, in the panel's place, once the access is refused (#597, until #598). */
+/** Refused to a browser without the seeded event's token: the screen of a pending event, in place of the panel and the board (#598). */
 const refused = (page: Page) => areaRefused(page);
 const retry = (page: Page) => page.getByRole("button", { name: FR.retry });
 /** The failed check's frame: its alert region, then « Réessayer », next to it. */

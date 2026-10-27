@@ -35,6 +35,8 @@ const FR = {
   orphanBody:
     "Le compte qui l’organisait a été supprimé. L’événement reste ouvert aux participants jusqu’à sa suppression, 30 jours après sa date.",
   erased: "Inscriptions effacées",
+  failed: "L’espace organisateur n’a pas pu être chargé.",
+  retry: "Réessayer",
   erasedBody:
     "Le 11 janvier 2027, 30 jours après l’événement, les prénoms, les numéros, les voitures et les inscriptions ont été effacés. Il reste le titre, le lieu et les dates.",
 };
@@ -48,6 +50,8 @@ const EN = {
   switch: "Sign in with another address",
   orphan: "This event no longer has an organiser",
   erased: "Sign-ups erased",
+  erasedBody:
+    "On January 11, 2027, 30 days after the event, first names, phone numbers, cars and sign-ups were erased. The title, place and dates remain.",
 };
 
 const PLACE = "Gymnase des Gayeulles";
@@ -182,6 +186,36 @@ test.describe("the screens of a refusal, in French", () => {
     expect(await horizontalOverflow(page)).toBe(0);
   });
 
+  // O5.3, O5.8 on the page of an anonymised event: a failure is never read as a refusal.
+  test("OA8.4: anonymised, the organiser's first read fails: « Réessayer », then « Inscriptions effacées », the focus on its title", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const { id } = seededEvent;
+    await holdSession(page, await seedSession(db, await confirmed(db, id)));
+    await anonymiseEvent(db, id);
+    // The first read of the area fails as offline; the visit, which carries no event id, goes through.
+    let reads = 0;
+    await page.route(`**/e/${id}/admin`, (route) => {
+      const request = route.request();
+      const isRead = request.method() === "POST" && request.headers()["next-action"] !== undefined && (request.postData() ?? "").includes(`"${id}"`);
+      if (isRead && ++reads === 1) return route.abort("internetdisconnected");
+      return route.fallback();
+    });
+    await page.goto(organiserPath(seededEvent));
+    await expect(main(page).getByRole("alert").filter({ hasText: /\S/ })).toContainText(FR.failed);
+    // Neither refused nor shown: no screen's title, no sign-in sentence.
+    await expect(title(page)).toHaveCount(0);
+    await expect(main(page).getByText(FR.login)).toHaveCount(0);
+
+    await main(page).getByRole("button", { name: FR.retry }).click();
+    await expect(main(page).getByRole("note").getByText(FR.erased, { exact: true })).toBeVisible();
+    await expect(title(page)).toHaveText("Tournoi de Rennes");
+    await expect(title(page)).toBeFocused();
+    expect(reads, "reads of the area").toBe(2);
+  });
+
   test("OA8.4: anonymised, nobody: the area's sign-in screen, and the place in neither the HTML nor the page", async ({
     page,
     db,
@@ -192,11 +226,13 @@ test.describe("the screens of a refusal, in French", () => {
     const response = await page.goto(organiserPath(seededEvent));
     expect(response?.status()).toBe(200);
     expect(response?.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
     expect((await response!.text()).includes(PLACE), "the place in the HTML").toBe(false);
     await expect(title(page)).toHaveText(FR.panel);
     await expect(main(page).getByText(FR.login, { exact: true })).toBeVisible();
     expect(await page.content()).not.toContain(PLACE);
     await expect(main(page).getByText(FR.erased)).toHaveCount(0);
+    await expect(page.getByRole("tab")).toHaveCount(0);
   });
 });
 
@@ -279,7 +315,7 @@ test.describe("the screens of a refusal, in English", () => {
     await anonymiseEvent(db, seededEvent.id);
     await page.reload();
     await expect(main(page).getByRole("note").getByText(EN.erased, { exact: true })).toBeVisible();
-    await expect(main(page).getByRole("note")).toContainText("On ");
+    await expect(main(page).getByRole("note").getByText(EN.erasedBody, { exact: true })).toBeVisible();
 
     // Its account deleted, the rule says « no organiser » first, anonymised or not.
     await db.deleteFrom("account").where("id", "=", organiser).execute();
