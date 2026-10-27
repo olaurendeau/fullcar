@@ -15,11 +15,14 @@ celui qui écrit le code.
 - Comparaison à temps constant.
 - À partir de #154, le jeton d'admin n'entre que dans le corps de `loadOrganiserPanel`, et,
   à partir de #263, dans celui d'`updateEvent`. Pour un jeton d'admin faux, absent ou mal
-  formé, la réponse ne contient que `{ state: "invalid" }` pour `loadOrganiserPanel`, et que
-  `{ ok: false, error: "invalid" }` pour `updateEvent`, qui n'écrit alors rien. Un
-  identifiant d'événement inconnu ou mal formé reçoit `{ ok: false, error: "eventNotFound" }`
-  d'`updateEvent`, avant la vérification du jeton. La réponse du panneau n'est ni stockée
-  dans le navigateur, ni journalisée (O6.4).
+  formé, la réponse ne contient que `{ state: "invalid" }` pour `loadOrganiserPanel`, et,
+  sur un événement qui n'est pas anonymisé, que `{ ok: false, error: "invalid" }` pour
+  `updateEvent`, qui n'écrit alors rien. Avant la vérification du jeton, `updateEvent` répond
+  `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement inconnu ou mal formé,
+  puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un événement anonymisé,
+  quel que soit le jeton, sans rien écrire : l'anonymisation a effacé le hash du jeton
+  (« La purge » dans `architecture.md`). La réponse du panneau n'est ni stockée dans le
+  navigateur, ni journalisée (O6.4).
 - À partir de #66, le jeton personnel est tiré **par le navigateur** avec
   `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
   avant l'envoi. Un jeton personnel tiré
