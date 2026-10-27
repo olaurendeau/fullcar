@@ -62,8 +62,14 @@ reproduire, dans cet ordre.
 - **Rehausseurs** (option) : une personne qui a besoin d'un rehausseur peut prendre une place
   dans une voiture qui n'en a plus de libre. On l'avertit (« plus de rehausseur dans cette
   voiture ») sans bloquer : le parent peut fournir le sien.
-- **Arrêts** (option points de RDV) : le tap sur une place libre place la personne au lieu du
-  Ride ; elle choisit ensuite son arrêt sur la fiche de la voiture. Le geste reste unique.
+- **Arrêts** (option points de RDV, « Points de RDV » à l'écran, à l'aller seulement, six au
+  plus par voiture, strictement après le départ) :
+  - sur une voiture qui a des Arrêts, le tap sur une place libre ouvre toujours la feuille
+    « Point de montée », le départ coché par défaut (D2, épic #881) ; sur une voiture sans
+    Arrêt, le geste reste unique et place directement ;
+  - l'option s'active à la création, et aussi dans « Modifier l'événement » (D1) ; elle ne se
+    désactive jamais tant que des Arrêts existent ;
+  - un Arrêt retiré laisse ses passagers dans la voiture, qui montent au départ.
 - **Le conducteur retire sa voiture** : ses passagers repassent « sans voiture » sur ce leg,
   et le bandeau de couverture le reflète.
 - **Le conducteur réduit ses places** sous le nombre d'occupants : il choisit qui sort ; les

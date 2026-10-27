@@ -25,15 +25,17 @@ export async function findDayThirtyEvents(db: Kysely<Database>, cutoff: WallDate
 }
 
 /**
- * Anonymises the event (OA8.1, DS4.1): its Placements, Rides, Persons (and their personal
+ * Anonymises the event (OA8.1, DS4.1): its Placements, Stops, Rides, Persons (and their personal
  * tokens) and confirmation links deleted, its position, admin token and description set to
  * null, `anonymised_at` written. The title, the place's text, the dates and the options stay.
- * The Placements before the Rides, which would otherwise set them without a car for nothing,
- * and the Rides before their drivers. The caller holds the Event's exclusive lock, in the
+ * The Placements before the Stops and the Rides, which would otherwise set them without a
+ * boarding Stop or a car for nothing, the Stops before their Rides, and the Rides before their
+ * drivers. The caller holds the Event's exclusive lock, in the
  * transaction that commits all of it.
  */
 export async function anonymiseEvent(db: Kysely<Database>, eventId: string): Promise<void> {
   await db.deleteFrom("placement").where("event_id", "=", eventId).execute();
+  await db.deleteFrom("stop").where("event_id", "=", eventId).execute();
   await db.deleteFrom("ride").where("event_id", "=", eventId).execute();
   await db.deleteFrom("person").where("event_id", "=", eventId).execute();
   await db.deleteFrom("email_link").where("event_id", "=", eventId).execute();
