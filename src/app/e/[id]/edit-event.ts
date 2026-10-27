@@ -25,7 +25,8 @@ import { removeRetour } from "./retour";
  * - `errors`: a field refused, by the rules of the creation (M2.3).
  * - `changed`: `before` is no longer what is stored, given in `event` (M6.1, M6.2).
  * - `confirmRetour`: the retour unchecked still holds these, and `removal` is not them (M3.5).
- * - `invalid`: organiser-access.ts grants no access (M8.2, OA7.1–OA7.9), or a request no page sends.
+ * - `invalid`: organiser-access.ts grants no access (M8.2, OA7.1–OA7.9), before the lock or under
+ *   it (#836), or a request no page sends.
  * - `eventNotFound`: no such event, or deleted since the page loaded (M8.3).
  * - `eventEnded`: the event is anonymised, or was while the change waited for its lock
  *   (#588): before the access, since anonymising revoked the token.
@@ -42,6 +43,24 @@ export type EditEventOutcome =
 const INVALID = { ok: false, error: "invalid" } as const;
 const EVENT_NOT_FOUND = { ok: false, error: "eventNotFound" } as const;
 const EVENT_ENDED = { ok: false, error: "eventEnded" } as const;
+
+type AccessRefusal = typeof INVALID | typeof EVENT_NOT_FOUND | typeof EVENT_ENDED;
+
+/**
+ * Why `proof` opens nothing on the event, as `db` reads it now; nothing when it is the
+ * organiser's. An event anonymised answers `eventEnded` before the access: anonymising revoked
+ * the token, and nobody may write any more (#588). Read before the lock, to refuse without
+ * waiting for it, and again under it (#836): a session closed, an account deleted or a token
+ * revoked while the change waited is then seen, as committed.
+ */
+async function accessRefusal(db: Kysely<Database>, eventId: string, proof: unknown): Promise<AccessRefusal | undefined> {
+  const accessEvent = await readOrganiserAccessEvent(db, eventId);
+  if (accessEvent === undefined) return EVENT_NOT_FOUND;
+  if (accessEvent.anonymised) return EVENT_ENDED;
+  const { adminToken, session } = organiserProofOf(proof);
+  const decision = decideOrganiserAccess(accessEvent, { adminToken, account: await findSession(db, session) });
+  return decision.state === "organiser" ? undefined : INVALID;
+}
 
 /**
  * `before` as a page sends it, the values it loaded, or nothing: `validateEventChange` throws on
@@ -95,7 +114,8 @@ function sameHeader(stored: EventHeader, loaded: EventChange): boolean {
  * the creation browser's token, compared in constant time), the shape of `before`, of
  * `removal` and of the position sent, the fields (`validateEventChange`, against the
  * server's bounds), then one transaction: the Event
- * under `lockEvent(…, "noKeyUpdate")`, `before` compared with that row (`changed`), the
+ * under `lockEvent(…, "noKeyUpdate")`, the access decided again under it (#836), `before`
+ * compared with that row (`changed`), the
  * retour removed when it is unchecked (`removeRetour`, `confirmRetour`), then the fields
  * written. A `before` forged with a past date makes the bounds skip that date, then is
  * refused as `changed` under the lock. A position not sent, by a page from before the
@@ -119,13 +139,8 @@ export async function editEvent(
   removal?: unknown,
 ): Promise<EditEventOutcome> {
   if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
-  const accessEvent = await readOrganiserAccessEvent(db, eventId);
-  if (accessEvent === undefined) return EVENT_NOT_FOUND;
-  // Before the access: anonymising revoked the token, and nobody may write any more (#588).
-  if (accessEvent.anonymised) return EVENT_ENDED;
-  const { adminToken, session } = organiserProofOf(proof);
-  const decision = decideOrganiserAccess(accessEvent, { adminToken, account: await findSession(db, session) });
-  if (decision.state !== "organiser") return INVALID;
+  const refused = await accessRefusal(db, eventId, proof);
+  if (refused) return refused;
   const loaded = headerOf(before);
   const confirmed = countsOf(removal);
   const sent = eventFieldsOf(fields);
@@ -138,6 +153,9 @@ export async function editEvent(
     const row = await lockEvent(trx, eventId, "noKeyUpdate");
     if (row === undefined) return EVENT_NOT_FOUND;
     if (row.anonymised_at !== null) return EVENT_ENDED;
+    // The access again, as committed once the lock is obtained (#836).
+    const refusedNow = await accessRefusal(trx, eventId, proof);
+    if (refusedNow) return refusedNow;
     const stored = headerFrom(row);
     if (!sameHeader(stored, loaded)) return { ok: false, error: "changed", event: stored };
     if (event.retourAt === null && stored.retourAt !== null) {

@@ -5,7 +5,7 @@ import type { Database } from "@/db/schema";
 import { anAddress, seedAccount, seedSends, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
 import { SESSION_LIFETIME_MS } from "@/domain/account-rules";
 import { hashToken } from "@/domain/token-hash";
-import { CONFIRMATIONS_PER_ADDRESS, GLOBAL_SENDS_PER_HOUR, SEND_WINDOW_MS } from "@/domain/send-limits";
+import { CONFIRMATIONS_PER_ADDRESS, GLOBAL_SENDS_PER_HOUR } from "@/domain/send-limits";
 import type { Brevo, Email, SendAnswer } from "@/email/brevo";
 import type { Locale } from "@/i18n/locales";
 import { createEventFor, type Creation } from "./create-event";
@@ -32,22 +32,15 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 /**
- * The creation's clock, two hours ahead: the hour the limits count then holds only the sends
- * a test seeds there, never those another test file commits meanwhile (the global cap's
- * concurrency test of email-sends.test.ts commits up to 50).
- */
-const AHEAD_MS = 2 * SEND_WINDOW_MS;
-
-/**
- * A creation on `db`, with a Brevo that answers `answer` (a promise left pending never
- * answers), and the tasks Next's `after()` would run once the answer has gone, kept to be
- * run by the test.
+ * A creation on `db`, at the real clock, with a Brevo that answers `answer` (a promise left
+ * pending never answers), and the tasks Next's `after()` would run once the answer has gone,
+ * kept to be run by the test. Under withRollbackRecordingSends: it may record a send.
  */
 function creation(db: Kysely<Database>, answer: () => Promise<SendAnswer> = async () => ({ state: "sent" }), locale: Locale = "fr") {
   const sent: Email[] = [];
   const brevo: Brevo = { send: (email) => (sent.push(email), answer()) };
   const later: (() => Promise<void>)[] = [];
-  const now = new Date(Date.now() + AHEAD_MS);
+  const now = new Date();
   const deps: Creation = { db, now, locale, origin: ORIGIN, brevo, later: (task) => void later.push(task) };
   return { deps, sent, later, runLater: () => Promise.all(later.map((task) => task())) };
 }

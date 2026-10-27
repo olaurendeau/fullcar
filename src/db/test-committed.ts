@@ -1,4 +1,4 @@
-import { sql, type ControlledTransaction, type Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { getDb } from "./client";
 import type { Database } from "./schema";
 import { seedEvent } from "./test-events";
@@ -31,49 +31,76 @@ export async function withCommittedEvent<T>(
   return result;
 }
 
-async function backendPid(trx: ControlledTransaction<Database>) {
-  const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx);
+async function backendPid(db: Kysely<Database>) {
+  const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(db);
   return rows[0]!.pid;
 }
 
-/** Resolves, with its pid, once some session waits for a lock that the session `pid` holds. */
-async function someoneBlockedBy(db: Kysely<Database>, pid: number): Promise<number> {
+/**
+ * Resolves once the session `waiter` waits for a lock that the session `holder` holds. That
+ * session only: one of another test file may wait for the same lock (the global cap of the
+ * sends), and would prove nothing of this test (#841). Throws once `ended()`.
+ */
+async function waitsFor(db: Kysely<Database>, waiter: number, holder: number, ended: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 120; attempt++) {
-    const { rows } = await sql<{ pid: number }>`
-      select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
-    if (rows.length > 0) return rows[0]!.pid;
+    const { rows } = await sql<{ waits: boolean }>`
+      select ${holder}::int = any(pg_blocking_pids(${waiter}::int)) as waits`.execute(db);
+    if (rows[0]!.waits) return;
+    if (ended()) throw new Error("whileHeld: second ended without waiting for first");
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error("no session ever waited for the first one");
+  throw new Error("whileHeld: second never waited for first");
 }
 
 /**
  * For a concurrency test on committed data: `first` in a transaction (REPEATABLE READ)
- * held open until `second`, run on `db`, waits for one of its locks, then committed.
- * `whileWaiting`, given the pid of the session that waits, looks at what it holds before
- * the commit. Gives what `second` gives.
+ * held open until `second`, run on the connection it is given, of its own, waits for one of
+ * its locks, then committed. `second` must run on that connection: whileHeld waits for its
+ * session, no other. `whileWaiting`, given the pid of that session, looks at what it holds
+ * before the commit. Gives what `second` gives; when `second` fails before waiting, its error.
+ * `own` is one connection: a `second` that opens a transaction on it, then queries `own`
+ * itself instead of that transaction, waits for itself until Vitest's timeout. Whatever
+ * fails, whileHeld gives `own` back only once `second` is over, the holder rolled back.
  */
 export async function whileHeld<T>(
   db: Kysely<Database>,
   first: (trx: Kysely<Database>) => Promise<unknown>,
-  second: () => Promise<T>,
+  second: (own: Kysely<Database>) => Promise<T>,
   whileWaiting?: (waitingPid: number) => Promise<void>,
 ): Promise<T> {
   const holder = await db.startTransaction().setIsolationLevel("repeatable read").execute();
-  try {
-    await first(holder);
-    const pid = await backendPid(holder);
-    const pending = second();
-    pending.catch(() => {});
-    const waiting = await someoneBlockedBy(db, pid);
-    await whileWaiting?.(waiting);
-    await holder.commit().execute();
-    return await pending;
-  } finally {
+  const release = async () => {
     try {
       await holder.rollback().execute();
     } catch {
-      // Already committed: nothing to give back.
+      // Already committed or rolled back: nothing to give back.
     }
+  };
+  try {
+    await first(holder);
+    const pid = await backendPid(holder);
+    return await db.connection().execute(async (own) => {
+      const waiter = await backendPid(own);
+      let ended = false;
+      const pending = second(own).finally(() => void (ended = true));
+      pending.catch(() => {});
+      try {
+        try {
+          await waitsFor(db, waiter, pid, () => ended);
+        } catch (error) {
+          if (ended) await pending;
+          throw error;
+        }
+        await whileWaiting?.(waiter);
+        await holder.commit().execute();
+        return await pending;
+      } finally {
+        // Still waiting, `second` would carry on after the rollback on a connection the pool lent again.
+        await release();
+        await pending.catch(() => {});
+      }
+    });
+  } finally {
+    await release();
   }
 }

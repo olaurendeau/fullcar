@@ -565,7 +565,7 @@ describe("on a person removed meanwhile", () => {
       const outcome = await whileHeld(
         db,
         (trx) => deleteSeededPerson(trx, eventId, tom.id),
-        () => updatePerson(db, eventId, tom.token, { personId: tom.id, firstName: "Thomas" }),
+        (own) => updatePerson(own, eventId, tom.token, { personId: tom.id, firstName: "Thomas" }),
       );
       expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "personGone" }));
     });
@@ -577,7 +577,7 @@ describe("on a person removed meanwhile", () => {
       const outcome = await whileHeld(
         db,
         (trx) => deleteSeededPerson(trx, eventId, tom.id),
-        () => setPersonLeg(db, eventId, tom.token, { personId: tom.id, leg: "aller", kind: "withoutCar" }),
+        (own) => setPersonLeg(own, eventId, tom.token, { personId: tom.id, leg: "aller", kind: "withoutCar" }),
       );
       expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "personGone" }));
       expect(await personIds(db, eventId)).toEqual([]);

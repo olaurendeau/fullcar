@@ -7,7 +7,7 @@ import type { Position } from "@/domain/place";
 import { holdToken, newToken } from "./device";
 import { idle, watchMap } from "./event-map-points";
 import { leaveNoToken } from "./fixtures";
-import { expect, foldKey, holdActionsWith, isAction, oneCharOff, organiserPath, test as organiserTest } from "./organiser";
+import { areaRefused, expect, foldKey, holdActionsWith, isAction, keepAdminToken, oneCharOff, organiserPath, test as organiserTest } from "./organiser";
 import { answerTiles, placeOf, tileAt } from "./tiles";
 
 /*
@@ -211,7 +211,8 @@ test.describe("CA1.20 (2): on /e/{id}/admin", () => {
       const check = await holdActionsWith(page, token);
       const watch = watchMap(page);
       const sent = page.waitForRequest(isAction);
-      await page.goto(organiserPath({ ...placed, token }));
+      await keepAdminToken(page, placed.id, token);
+      await page.goto(organiserPath(placed));
       await sent;
       await expect(region(page)).toBeInViewport();
       await expectWaiting(page);
@@ -223,7 +224,9 @@ test.describe("CA1.20 (2): on /e/{id}/admin", () => {
       await expect(region(page)).not.toBeInViewport();
       if (end === "failed") await check.fail();
       else await check.release();
-      await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
+      // Refused, the area's title alone (#597, until #598); failed, the alert.
+      if (end === "failed") await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
+      else await expect(areaRefused(page)).toBeVisible();
       await expect(region(page)).not.toBeInViewport();
       await expectNothingAsked(page, watch);
       await expectStartedByScroll(page, watch);

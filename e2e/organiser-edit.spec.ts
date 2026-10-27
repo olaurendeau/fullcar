@@ -2,7 +2,7 @@ import type { Locator, Page, Request, Route } from "@playwright/test";
 import { animationsDone, holdClose, messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
-import { areaEditButton, areaEditByText, expect, holdActionsWith, isAction, oneCharOff, organiserPath, seedOrganiserScene, test } from "./organiser";
+import { areaEditButton, areaEditByText, areaRefused, expect, holdActionsWith, isAction, keepAdminToken, oneCharOff, organiserPath, seedOrganiserScene, test } from "./organiser";
 
 /*
  * #268, epic #250 (organizer-view v3.3.6, « Modifier l’événement »): the button in the organiser's
@@ -59,7 +59,7 @@ function deviceDate(page: Page, days: number): Promise<string> {
 }
 
 for (const viewport of [{ width: 360, height: 780 }, { width: 1280, height: 800 }]) {
-  test(`M1.1, O4.1: at ${viewport.width} px, one « Modifier l’événement », after « Gardez ce lien » and before the sections`, async ({
+  test(`M1.1, O4.1, OA7.8: at ${viewport.width} px, one « Modifier l’événement », after the link to share and before the sections`, async ({
     page,
     db,
     seededEvent,
@@ -77,27 +77,27 @@ for (const viewport of [{ width: 360, height: 780 }, { width: 1280, height: 800 
       locator.evaluate((element, button) => !!(element.compareDocumentPosition(button!) & Node.DOCUMENT_POSITION_FOLLOWING), handle);
     const precedes = (locator: Locator) =>
       locator.evaluate((element, button) => !!(element.compareDocumentPosition(button!) & Node.DOCUMENT_POSITION_PRECEDING), handle);
-    expect(await follows(panel(page).getByRole("note"))).toBe(true);
+    expect(await follows(panel(page).getByRole("group", { name: "Lien à partager" }))).toBe(true);
     expect(await precedes(panel(page).getByRole("heading", { level: 3 }).first())).toBe(true);
 
     const share = await box(panel(page).getByRole("group", { name: "Lien à partager" }));
-    const admin = await box(panel(page).getByRole("group", { name: "Lien d’organisateur" }));
-    const note = await box(panel(page).getByRole("note"));
     const section = await box(panel(page).getByRole("heading", { level: 3 }).first());
-    // The panel's left edge, inside its padding: where the links start.
+    const inside = await box(panel(page));
+    // The panel's left edge, inside its padding: where the link starts.
     expect(Math.abs(button.x - share.x)).toBeLessThanOrEqual(1);
     expect(button.y + button.height).toBeLessThanOrEqual(section.y);
+    expect(button.y).toBeGreaterThanOrEqual(share.y + share.height);
     if (viewport.width === 360) {
       expect(Math.abs(button.width - share.width)).toBeLessThanOrEqual(1);
-      expect(button.y).toBeGreaterThanOrEqual(note.y + note.height);
     } else {
       expect(button.width).toBeLessThan(share.width);
-      expect(button.y).toBeGreaterThanOrEqual(Math.max(share.y + share.height, admin.y + admin.height, note.y + note.height));
+      // OA7.8: the link to share keeps its column, the right one empty: about half the panel.
+      expect(share.width).toBeLessThan(inside.width / 2);
     }
   });
 }
 
-test("M1.3: no « Modifier l’événement » while the panel loads, on an invalid link, after a failed check, nor on /e/{id}", async ({
+test("M1.3: no « Modifier l’événement » while the panel loads, with the area refused, after a failed check, nor on /e/{id}", async ({
   page,
   seededEvent,
 }) => {
@@ -109,12 +109,13 @@ test("M1.3: no « Modifier l’événement » while the panel loads, on an inval
   await expect.poll(held.held).toBe(1);
   await expect(anyEdit).toHaveCount(0);
   await held.fail();
-  await expect(page.getByText("Le lien d’organisateur n’a pas pu être vérifié.")).toBeVisible();
+  await expect(page.getByText("L’espace organisateur n’a pas pu être chargé.")).toBeVisible();
   await expect(anyEdit).toHaveCount(0);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 
-  await page.goto(`/e/${seededEvent.id}/admin#${oneCharOff(seededEvent.token)}`);
-  await expect(page.getByText("Ce lien d’organisateur n’est pas valide.")).toBeVisible();
+  await keepAdminToken(page, seededEvent.id, oneCharOff(seededEvent.token));
+  await page.goto(organiserPath(seededEvent));
+  await expect(areaRefused(page)).toBeVisible();
   await expect(anyEdit).toHaveCount(0);
 
   await page.goto(`/e/${seededEvent.id}`);
