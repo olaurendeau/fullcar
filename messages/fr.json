@@ -48,6 +48,14 @@
       "hint": "Des arrêts sur la route des voitures."
     },
     "create": "Créer",
+    "email": {
+      "label": "Votre adresse e-mail",
+      "invalid": "Adresse e-mail non valide.",
+      "sessionEnded": "Votre session a pris fin : saisissez votre adresse e-mail, puis « Créer »."
+    },
+    "signedIn": "Session ouverte avec {email} : l’événement sera dans Mes événements.",
+    "notYou": "Ce n’est pas vous ? <signOut>Se déconnecter</signOut>",
+    "signedOut": "Session fermée. Ce que vous avez saisi est gardé.",
     "needsJavaScript": "La création d’un événement nécessite JavaScript : activez-le, puis rechargez la page.",
     "failed": "Impossible de créer l’événement. Vérifiez la connexion, puis réessayez.",
     "errors": {

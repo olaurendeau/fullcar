@@ -48,6 +48,14 @@
       "hint": "Stops along the cars’ route."
     },
     "create": "Create",
+    "email": {
+      "label": "Your email address",
+      "invalid": "Invalid email address.",
+      "sessionEnded": "Your session has ended: enter your email address, then “Create”."
+    },
+    "signedIn": "Signed in as {email}: the event will be in My events.",
+    "notYou": "Not you? <signOut>Sign out</signOut>",
+    "signedOut": "Signed out. What you typed is kept.",
     "needsJavaScript": "Creating an event needs JavaScript: turn it on, then reload the page.",
     "failed": "The event could not be created. Check your connection, then try again.",
     "errors": {
