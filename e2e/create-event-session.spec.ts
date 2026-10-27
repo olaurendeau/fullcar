@@ -20,6 +20,9 @@ const NEW_EVENT = "/nouveau";
 const ARRIVAL = /\/e\/([2-9A-HJ-NP-Za-km-z]{8})\/admin$/;
 const SIGNED_IN = (email: string) => `Session ouverte avec ${email} : l’événement sera dans Mes événements.`;
 
+// Not « Sortie ski du club »: create-event.spec.ts creates anonymous events with it and never deletes them.
+const ENDED_TITLE = "Sortie de la session terminée";
+
 let accounts: string[] = [];
 test.afterEach(async ({ db }) => {
   // Its sessions and events go with it: events by `account_id`, below; sessions by ON DELETE CASCADE.
@@ -55,6 +58,13 @@ function creations(page: Page): Request[] {
   return sent;
 }
 
+/** Every request that finishes, to check where the token is not: headers and URL, in both directions. */
+function finished(page: Page): Request[] {
+  const done: Request[] = [];
+  page.on("requestfinished", (request) => done.push(request));
+  return done;
+}
+
 async function inDays(page: Page, days: number): Promise<string> {
   return page.evaluate((days) => {
     const at = new Date();
@@ -87,12 +97,14 @@ test.describe("Créer avec une session", () => {
   }) => {
     const { email, accountId, session } = await signedIn(page, db);
     const sent = creations(page);
+    const done = finished(page);
     const start = Date.now();
     await page.goto("/");
     await page.getByRole("link", { name: "Créer un événement" }).click(); // 1
     await expect(createButton(page)).toBeEnabled({ timeout: 15_000 });
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Créer un événement");
     await expect(page.getByText(SIGNED_IN(email), { exact: false })).toBeVisible();
+    await expect(page.getByText("Ce n’est pas vous ?", { exact: false })).toBeVisible();
     await expect(page.getByRole("button", { name: "Se déconnecter" })).toBeVisible();
     await expect(emailField(page)).toHaveCount(0);
     // Under the title, before the first field.
@@ -109,6 +121,11 @@ test.describe("Créer avec une session", () => {
     expect(sent.length).toBe(1);
     expect(sent[0]!.postData() ?? "", "the session's token goes in the body").toContain(session);
     expect(sent[0]!.url()).not.toContain(session);
+    expect(done.length, "requests were seen").toBeGreaterThan(0);
+    for (const request of done) {
+      expect(request.url(), "no URL carries the token").not.toContain(session);
+      expect(JSON.stringify(await request.allHeaders()), `no header of ${request.url()} carries the token`).not.toContain(session);
+    }
 
     const id = ARRIVAL.exec(new URL(page.url()).pathname)![1]!;
     const row = await db.selectFrom("event").select(["account_id", "confirmed_at", "pending_email", "send_status"]).where("id", "=", id).executeTakeFirstOrThrow();
@@ -126,10 +143,12 @@ test.describe("Créer avec une session", () => {
     page,
     db,
   }) => {
-    const { session, accountId } = await signedIn(page, db);
+    const { email, session, accountId } = await signedIn(page, db);
     await openForm(page);
+    // The line is the proof that `signedInAs` has answered: ended before, the form would forget the token.
+    await expect(page.getByText(SIGNED_IN(email), { exact: false })).toBeVisible();
     await expect(emailField(page)).toHaveCount(0);
-    await fillAller(page);
+    await fillAller(page, ENDED_TITLE);
     await field(page, "Heure de fin").fill("18:00");
     // As if the cookie were deleted: the session ends in the database.
     await db.deleteFrom("session").where("account_id", "=", accountId).execute();
@@ -142,11 +161,11 @@ test.describe("Créer avec une session", () => {
     const message = "Votre session a pris fin : saisissez votre adresse e-mail, puis « Créer ».";
     await expect(page.getByText(message, { exact: true })).toBeVisible();
     await expect(emailField(page)).toHaveAccessibleDescription(message);
-    await expect(field(page, "Titre")).toHaveValue("Sortie ski du club");
+    await expect(field(page, "Titre")).toHaveValue(ENDED_TITLE);
     await expect(field(page, "Heure de fin")).toHaveValue("18:00");
     expect(new URL(page.url()).pathname).toBe(NEW_EVENT);
-    await expect(page.getByText(SIGNED_IN("x"), { exact: false })).toHaveCount(0);
-    expect(await db.selectFrom("event").select("id").where("title", "=", "Sortie ski du club").execute()).toEqual([]);
+    await expect(page.getByText(SIGNED_IN(email), { exact: false })).toHaveCount(0);
+    expect(await db.selectFrom("event").select("id").where("title", "=", ENDED_TITLE).execute()).toEqual([]);
     expect(await page.evaluate((key) => localStorage.getItem(key), SESSION_KEY)).toBeNull();
   });
 
@@ -198,12 +217,32 @@ test.describe("Créer avec une session", () => {
 test.describe("Create with a session, in English", () => {
   test.use({ locale: "en-US" });
 
-  test("the words of the line, of the sign-out and of the ended session", async ({ page, db }) => {
+  test("the words of the line and of the sign-out", async ({ page, db }) => {
     const { email } = await signedIn(page, db);
     await page.goto(NEW_EVENT);
     await expect(page.getByText(`Signed in as ${email}: the event will be in My events.`, { exact: false })).toBeVisible();
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page.getByText("Signed out. What you typed is kept.", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Your email address", { exact: true })).toBeFocused();
+  });
+
+  test("the words of the ended session", async ({ page, db }) => {
+    const { email, accountId } = await signedIn(page, db);
+    await page.goto(NEW_EVENT);
+    await expect(page.getByRole("button", { name: "Create", exact: true })).toBeEnabled({ timeout: 15_000 });
+    // The line is the proof that `signedInAs` has answered.
+    await expect(page.getByText(`Signed in as ${email}: the event will be in My events.`, { exact: false })).toBeVisible();
+    await page.getByLabel("Title", { exact: true }).fill(ENDED_TITLE);
+    await page.getByLabel("Place", { exact: true }).fill("Chalet des Écureuils, La Clusaz");
+    await page.getByLabel("Start date", { exact: true }).fill(await inDays(page, 7));
+    await page.getByLabel("Start time", { exact: true }).fill("07:30");
+    await page.getByLabel("End time", { exact: true }).fill("18:00");
+    await db.deleteFrom("session").where("account_id", "=", accountId).execute();
+
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+    const message = "Your session has ended: enter your email address, then “Create”.";
+    await expect(page.getByText(message, { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Your email address", { exact: true })).toHaveAccessibleDescription(message);
+    await expect(page.getByText(`Signed in as ${email}`, { exact: false })).toHaveCount(0);
   });
 });
