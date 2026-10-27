@@ -5,7 +5,7 @@ import { anonymiseEvent, deleteEvent, findDayThirtyEvents } from "./day-thirty";
 import type { Database } from "./schema";
 import { withRollback } from "./test-db";
 import { confirmSeededEvent, seedEvent } from "./test-events";
-import { seedPerson, seedPlacement, seedRide } from "./test-participants";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "./test-participants";
 
 type Db = Kysely<Database>;
 
@@ -13,7 +13,7 @@ type Db = Kysely<Database>;
 // elsewhere, visible here, are never among those these tests count on.
 const LAST_LEG = "1998-03-14";
 
-/** An event with a person driving another on each leg, placed, and a confirmation link. */
+/** An event with a person driving another on each leg, placed, a Stop on the aller, and a confirmation link. */
 async function seedFullEvent(db: Db, fields: Parameters<typeof seedEvent>[1] = {}) {
   const { id } = await seedEvent(db, {
     allerAt: "1998-03-14 07:30:00",
@@ -26,7 +26,9 @@ async function seedFullEvent(db: Db, fields: Parameters<typeof seedEvent>[1] = {
   const lea = await seedPerson(db, id, { firstName: "Léa" });
   for (const leg of ["aller", "retour"] as const) {
     const rideId = await seedRide(db, id, marc.id, { leg });
-    await seedPlacement(db, { personId: lea.id, eventId: id, leg, rideId });
+    // Only the aller has Stops, and Léa boards at one.
+    const stopId = leg === "aller" ? await seedStop(db, id, rideId) : null;
+    await seedPlacement(db, { personId: lea.id, eventId: id, leg, rideId, stopId });
   }
   await db.insertInto("email_link").values({ token_hash: randomBytes(32), kind: "confirmation", event_id: id }).execute();
   return id;
@@ -34,7 +36,7 @@ async function seedFullEvent(db: Db, fields: Parameters<typeof seedEvent>[1] = {
 
 /** How many rows of each table hang off the event. */
 async function rowsOf(db: Db, eventId: string) {
-  const count = async (table: "person" | "ride" | "placement" | "email_link") => {
+  const count = async (table: "person" | "ride" | "placement" | "email_link" | "stop") => {
     const row = await db
       .selectFrom(table)
       .select((eb) => eb.fn.countAll<string>().as("n"))
@@ -42,7 +44,13 @@ async function rowsOf(db: Db, eventId: string) {
       .executeTakeFirstOrThrow();
     return Number(row.n);
   };
-  return { persons: await count("person"), rides: await count("ride"), placements: await count("placement"), links: await count("email_link") };
+  return {
+    persons: await count("person"),
+    rides: await count("ride"),
+    placements: await count("placement"),
+    links: await count("email_link"),
+    stops: await count("stop"),
+  };
 }
 
 const eventRow = (db: Db, id: string) => db.selectFrom("event").selectAll().where("id", "=", id).executeTakeFirst();
@@ -80,16 +88,16 @@ describe("findDayThirtyEvents", () => {
 });
 
 describe("anonymiseEvent", () => {
-  it("OA8.1, DS4.1: deletes the persons, rides, placements and confirmation links, and nulls the position, the token and the description", async () => {
+  it("OA8.1, DS4.1, RV8.1: deletes the persons, rides, stops, placements and confirmation links, and nulls the position, the token and the description", async () => {
     await withRollback(async (trx) => {
       const id = await seedFullEvent(trx);
       await confirmSeededEvent(trx, id);
       const before = await eventRow(trx, id);
-      expect(await rowsOf(trx, id)).toEqual({ persons: 2, rides: 2, placements: 2, links: 1 });
+      expect(await rowsOf(trx, id)).toEqual({ persons: 2, rides: 2, placements: 2, links: 1, stops: 1 });
 
       await anonymiseEvent(trx, id);
 
-      expect(await rowsOf(trx, id)).toEqual({ persons: 0, rides: 0, placements: 0, links: 0 });
+      expect(await rowsOf(trx, id)).toEqual({ persons: 0, rides: 0, placements: 0, links: 0, stops: 0 });
       const after = await eventRow(trx, id);
       expect(after).toEqual({
         ...before,
@@ -102,6 +110,27 @@ describe("anonymiseEvent", () => {
     });
   });
 
+  // RV8.1: the Stops and the boarding choices go with the car, nothing of them is kept.
+  it("RV8.1: leaves no Stop and no boarding Stop behind", async () => {
+    await withRollback(async (trx) => {
+      const id = await seedFullEvent(trx);
+      await confirmSeededEvent(trx, id);
+      const boarded = () =>
+        trx
+          .selectFrom("placement")
+          .select((eb) => eb.fn.countAll<string>().as("n"))
+          .where("event_id", "=", id)
+          .where("stop_id", "is not", null)
+          .executeTakeFirstOrThrow();
+      expect(Number((await boarded()).n)).toBe(1);
+
+      await anonymiseEvent(trx, id);
+
+      expect(await trx.selectFrom("stop").select("id").where("event_id", "=", id).execute()).toEqual([]);
+      expect(Number((await boarded()).n)).toBe(0);
+    });
+  });
+
   it("leaves the other events as they are", async () => {
     await withRollback(async (trx) => {
       const id = await seedFullEvent(trx);
@@ -111,14 +140,14 @@ describe("anonymiseEvent", () => {
 
       await anonymiseEvent(trx, id);
 
-      expect(await rowsOf(trx, other)).toEqual({ persons: 2, rides: 2, placements: 2, links: 1 });
+      expect(await rowsOf(trx, other)).toEqual({ persons: 2, rides: 2, placements: 2, links: 1, stops: 1 });
       expect(await eventRow(trx, other)).toEqual(before);
     });
   });
 });
 
 describe("deleteEvent", () => {
-  it("OA2.7, DS4.4: deletes the event, and its rows by cascade; the others stay", async () => {
+  it("OA2.7, DS4.4, RV8.1: deletes the event, and its rows by cascade, its Stops too; the others stay", async () => {
     await withRollback(async (trx) => {
       const id = await seedFullEvent(trx);
       const other = await seedFullEvent(trx);
@@ -126,8 +155,8 @@ describe("deleteEvent", () => {
       await deleteEvent(trx, id);
 
       expect(await eventRow(trx, id)).toBeUndefined();
-      expect(await rowsOf(trx, id)).toEqual({ persons: 0, rides: 0, placements: 0, links: 0 });
-      expect(await rowsOf(trx, other)).toEqual({ persons: 2, rides: 2, placements: 2, links: 1 });
+      expect(await rowsOf(trx, id)).toEqual({ persons: 0, rides: 0, placements: 0, links: 0, stops: 0 });
+      expect(await rowsOf(trx, other)).toEqual({ persons: 2, rides: 2, placements: 2, links: 1, stops: 1 });
     });
   });
 });

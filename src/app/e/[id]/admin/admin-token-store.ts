@@ -3,6 +3,7 @@ import { readSessionToken } from "@/app/session-token";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
 import type { EndedHeader, OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { isWallClock, isWallDate, type WallDate } from "@/domain/wall-clock";
 import type { EditEventOutcome } from "../edit-event";
 import { sendAction, type Sent } from "../run-action";
@@ -97,7 +98,7 @@ export type Refusal =
 
 export type OrganiserCheck =
   | { state: "checking" }
-  | { state: "valid"; publicUrl: string; legs: OrganiserLeg[] }
+  | { state: "valid"; publicUrl: string; legs: OrganiserLeg[]; pending?: PendingNotice }
   | { state: "refused"; refusal: Refusal }
   | { state: "failed"; retrying?: boolean };
 
@@ -125,14 +126,17 @@ function refusalOf(answer: Record<string, unknown>): Refusal | undefined {
 
 /**
  * What the server's answer means: the panel with its legs and the link to share (C4.9 amended,
- * OA7.3), or refused with the screen of the state the access rule decides (#596, #598).
+ * OA7.3), with the notice of a pending event (OA1.7), or refused with the screen of the state the access rule decides (#596, #598).
  * Anything else, such as the `undefined` Next resolves an action with on an
  * `x-action-redirect` response, is a failed check: the organiser is never refused for it.
  */
 export function checkFromAnswer(answer: unknown, origin: string, id: string): OrganiserCheck {
   if (typeof answer !== "object" || answer === null) return { state: "failed" };
   const { state, legs } = answer as { state?: unknown; legs?: unknown };
-  if (state === "panel" && Array.isArray(legs)) return { state: "valid", publicUrl: `${origin}/e/${id}`, legs: legs as OrganiserLeg[] };
+  if (state === "panel" && Array.isArray(legs)) {
+    const pending = pendingNoticeOf((answer as { pending?: unknown }).pending);
+    return { state: "valid", publicUrl: `${origin}/e/${id}`, legs: legs as OrganiserLeg[], ...(pending && { pending }) };
+  }
   const refusal = refusalOf(answer as Record<string, unknown>);
   return refusal ? { state: "refused", refusal } : { state: "failed" };
 }

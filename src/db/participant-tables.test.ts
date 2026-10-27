@@ -119,6 +119,7 @@ describe("participant tables", () => {
       { name: "leg", type: "text", nullable: "NO", default: null },
       { name: "ride_id", type: "uuid", nullable: "YES", default: null },
       { name: "placed_at", type: "timestamp with time zone", nullable: "NO", default: "now()" },
+      { name: "stop_id", type: "uuid", nullable: "YES", default: null },
     ]);
   });
 

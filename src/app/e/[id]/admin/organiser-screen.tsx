@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useOrganiserCheck } from "./admin-token-store";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
 import { keepFolded, readFolded } from "./organiser-fold";
+import { usePendingPoll } from "./pending-poll";
 import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
 
 /**
@@ -40,6 +41,8 @@ import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRea
  *   title, or to the button of its section's title when the list went too (O5.8 amended,
  *   decision 60); in a section gone, the retour's, to Aller's button (decision 57); never to
  *   `<body>`.
+ * - While the notice « Confirmez votre adresse » says « Envoi du lien… », it alone is read again,
+ *   every 2 s, until the email's result is kept, for 30 s at most (OA1.7).
  * - Its frame keeps the board in place on screen as it changes height (O1.11).
  * - While a sheet hides the page, the live regions keep what they said: their next words wait
  *   for it to show. The legs' dates are the page's, from the header of the state the board
@@ -67,6 +70,9 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const carsOn = (leg: Leg) => shown.legs.find((each) => each.leg === leg)?.cars.length ?? 0;
   const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null)[] } | null>(null);
   useKeepBoardInPlace(frame);
+
+  // « Envoi du lien… » is read again until the email's result is kept (OA1.7).
+  usePendingPoll(screen, link.read, dispatch);
 
   const { check } = link;
   useLayoutEffect(() => {
