@@ -17,7 +17,7 @@ import {
   type RideErrors,
   type RideField,
 } from "@/domain/ride";
-import { readEventState, type EventState } from "./event-state";
+import { readEventState, type DeviceState } from "./event-state";
 import { lockLegs } from "./retour";
 
 /**
@@ -42,7 +42,7 @@ export const EVENT_NOT_FOUND: EventNotFound = { ok: false, error: "eventNotFound
 
 /** The outcome and the state the device now sees; or field errors, and nothing read. */
 export type UpdateRideResult =
-  | (UpdateRideOutcome & { state: EventState })
+  | (UpdateRideOutcome & { state: DeviceState })
   | { ok: false; errors: RideErrors; first: RideField }
   | EventNotFound;
 
@@ -52,7 +52,7 @@ export type UpdateRideResult =
  */
 export type RemoveRideOutcome = { ok: true } | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" };
 
-export type RemoveRideResult = (RemoveRideOutcome & { state: EventState }) | EventNotFound;
+export type RemoveRideResult = (RemoveRideOutcome & { state: DeviceState }) | EventNotFound;
 
 const INVALID = { ok: false, error: "invalid" } as const;
 const FORBIDDEN = { ok: false, error: "forbidden" } as const;

@@ -1155,7 +1155,9 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   passent avant que `eventNotFound` et ce qu'elles vérifient avant la transaction, les
   erreurs de champs et, pour certaines, la requête mal formée (`invalid`). Un appel sans
   jeton, ou avec un faux, apprend donc que l'événement est anonymisé, ce que `/e/{id}` dit
-  déjà à tout le monde. `removePerson` ne répond pas encore `eventEnded` (RP2.9, #674).
+  déjà à tout le monde. L'état que ces refus joignent est celui de l'événement terminé, son
+  titre et son début, sans le lieu ni personne : `readEventState` le rend pour tout
+  événement anonymisé (OA8.3, #806). `removePerson` ne répond pas encore `eventEnded` (RP2.9, #674).
 - **Les sessions, les envois et les liens** (`session`, `email_send`, `email_link`) sont
   nettoyés par âge, par la même tâche (#589, `src/db/expired-rows.ts`) : une ligne part quand
   aucune règle ne la lit plus. Une ligne effacée plus tôt changerait la réponse d'une règle.
