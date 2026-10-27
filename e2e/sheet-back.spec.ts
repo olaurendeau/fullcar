@@ -131,7 +131,7 @@ async function editClaire(page: Page, firstName = "Claire") {
 
 /** A new number for `firstName`, in her open « Modifier » form, then « Valider ». */
 async function savePhone(page: Page, firstName: string, phone: string) {
-  await dialog(page, `Modifier ${firstName}`).getByLabel("Téléphone (facultatif)").fill(phone);
+  await dialog(page, `Modifier ${firstName}`).getByLabel("Téléphone", { exact: true }).fill(phone);
   await button(dialog(page, `Modifier ${firstName}`), "Valider").click();
 }
 
