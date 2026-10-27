@@ -3,6 +3,7 @@ import { readTokenHolders } from "@/db/persons";
 import { removePassengers } from "@/db/placements";
 import { deleteRide, lockRide, ridePassengers, updateRide as writeRide, type LockedRide, type RideRef } from "@/db/rides";
 import type { Database } from "@/db/schema";
+import { replaceStops, rideStops } from "@/db/stops";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
 import { devicePersonIds } from "@/domain/device";
@@ -17,6 +18,8 @@ import {
   type RideErrors,
   type RideField,
 } from "@/domain/ride";
+import { stopsOf, validateStops, type SentStop, type StopLineErrors, type ValidStop } from "@/domain/stop";
+import type { WallTime } from "@/domain/wall-clock";
 import { readEventState, type DeviceState } from "./event-state";
 import { lockLegs } from "./retour";
 
@@ -30,11 +33,20 @@ import { lockLegs } from "./retour";
  * - `passengersChanged`: the passengers are not those the driver chose among, or the
  *   number leaving is not right (C8.4, C8.5); `passengerIds` are the passengers now, read
  *   under the Ride's lock, for the step to reopen with them.
+ * - `stopsOff`: Stops are sent and the event's option « Points de RDV » is off, turned off
+ *   since the page showed it (RV1.9): nothing is written.
+ * - `stopErrors`: a line of the Stops sent is in error, against the departure the lock gives
+ *   (RV1.4): one entry per line, and the first line in error. Nothing is written.
+ * - `afterStop`: the departure moves to the time of the first Stop recorded, or after it, by a
+ *   page that does not send its Stops (RV1.10): the error of the field `time`, with that
+ *   Stop's time, `HH:MM`. Nothing is written, the Stops are not touched.
  */
 export type UpdateRideOutcome =
   | { ok: true }
-  | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" | "rideGone" }
-  | { ok: false; error: "passengersChanged"; passengerIds: string[] };
+  | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" | "rideGone" | "stopsOff" }
+  | { ok: false; error: "passengersChanged"; passengerIds: string[] }
+  | { ok: false; error: "stopErrors"; stopErrors: StopLineErrors[]; first: number }
+  | { ok: false; error: "afterStop"; firstStopTime: WallTime };
 
 /** An unknown event, or a malformed id: nothing to change, and no state to give. */
 export type EventNotFound = { ok: false; error: "eventNotFound" };
@@ -76,6 +88,8 @@ interface Change {
   /** The passengers the form showed while the driver chose who leaves, never read again. */
   seenPassengerIds: string[];
   leaving: string[];
+  /** The complete list of the Stops of the car, as sent; `undefined` when not sent: they stay as they are. */
+  stops?: SentStop[];
 }
 
 /** The fields, checked against R4, the place's position, and the step's lists, which the form always sends. */
@@ -85,11 +99,15 @@ function readChange(fields: unknown): Change | { errors: RideErrors; first: Ride
   const seenPassengerIds = ids(sent.seenPassengerIds);
   const leaving = ids(sent.leaving);
   const position = sent.position === undefined ? { value: undefined } : positionOf(sent.position);
-  if (seenPassengerIds === undefined || leaving === undefined || "error" in position) return undefined;
+  const stops = sent.stops === undefined ? { value: undefined } : stopsOf(sent.stops);
+  if (seenPassengerIds === undefined || leaving === undefined || "error" in position || "error" in stops) return undefined;
   const validation = validateRideChange({ location: sent.location, time: sent.time, seats: sent.seats, note: sent.note });
   if (!validation.ok) return { errors: validation.errors, first: validation.first };
-  return { ride: validation.change, position: position.value, seenPassengerIds, leaving };
+  return { ride: validation.change, position: position.value, seenPassengerIds, leaving, stops: stops.value };
 }
+
+/** A Ride under its lock, and whether the event's option « Points de RDV » is on, as the Event's lock reads it. */
+type DriversRide = LockedRide & { stopsEnabled: boolean };
 
 /**
  * The Ride under its lock, if a person of the device drives it. The Event is locked first,
@@ -101,7 +119,7 @@ async function lockDriversRide(
   trx: Kysely<Database>,
   token: unknown,
   ride: RideRef,
-): Promise<LockedRide | "eventEnded" | "noRetour" | "forbidden" | "gone"> {
+): Promise<DriversRide | "eventEnded" | "noRetour" | "forbidden" | "gone"> {
   const legs = await lockLegs(trx, ride.eventId, [ride.leg]);
   // An event deleted meanwhile has no state to give: the caller answers eventNotFound.
   if (!legs.ok) return legs.error === "eventNotFound" ? "gone" : legs.error;
@@ -109,7 +127,37 @@ async function lockDriversRide(
   if (device.size === 0) return "forbidden";
   const locked = await lockRide(trx, ride);
   if (locked === undefined) return "gone";
-  return device.has(locked.driverId) ? locked : "forbidden";
+  return device.has(locked.driverId) ? { ...locked, stopsEnabled: legs.stopsEnabled } : "forbidden";
+}
+
+/**
+ * The Stops of the change, under the Ride's lock: the list sent, valid against the departure
+ * (sent, or the one the lock gives), by time; or, when none is sent, the departure moved must
+ * stay strictly before the first Stop recorded. `list` is `undefined` when they stay.
+ */
+async function checkStops(
+  trx: Kysely<Database>,
+  ride: RideRef,
+  locked: DriversRide,
+  change: Change,
+): Promise<{ list: ValidStop[] | undefined } | Extract<UpdateRideOutcome, { ok: false }>> {
+  const departure = change.ride.time ?? locked.departureTime.slice(0, 5);
+  if (change.stops !== undefined) {
+    if (change.stops.length > 0 && !locked.stopsEnabled) return { ok: false, error: "stopsOff" };
+    // Option off (RV8.3): the page shows no Stop, and an empty list has none to remove.
+    if (!locked.stopsEnabled) return { list: undefined };
+    const checked = validateStops(change.stops, departure);
+    if (!checked.ok) return { ok: false, error: "stopErrors", stopErrors: checked.errors, first: checked.first };
+    return { list: checked.stops };
+  }
+  // Option off (RV8.3): the Stops recorded, if any, are not shown, and do not bound the departure.
+  if (change.ride.time === undefined || !locked.stopsEnabled) return { list: undefined };
+  const [first] = await rideStops(trx, ride);
+  const firstStopTime = first?.time.slice(0, 5);
+  if (firstStopTime !== undefined && change.ride.time >= firstStopTime) {
+    return { ok: false, error: "afterStop", firstStopTime };
+  }
+  return { list: undefined };
 }
 
 async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, change: Change): Promise<UpdateRideOutcome> {
@@ -122,6 +170,9 @@ async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, 
   const placed = ridePositionChange({ location: change.ride.location, position: change.position }, locked.location);
   if ("error" in placed) return INVALID;
   // Counted under the lock (C12.11): a seat taken meanwhile has committed, or waits.
+  // The departure and the Stops are checked together, against the Ride the lock gives (RV1.4, RV1.10).
+  const stops = await checkStops(trx, ride, locked, change);
+  if ("ok" in stops) return stops;
   const passengerIds = (await ridePassengers(trx, ride)).map((passenger) => passenger.personId);
   const decision = seatReduction({
     passengerIds,
@@ -131,6 +182,8 @@ async function changeRide(trx: Kysely<Database>, token: unknown, ride: RideRef, 
     leaving: change.leaving,
   });
   if (!decision.ok) return { ok: false, error: "passengersChanged", passengerIds };
+  // Before any other write: an id of another Ride is refused, and nothing was written.
+  if (stops.list !== undefined && !(await replaceStops(trx, ride, stops.list))) return INVALID;
   await removePassengers(trx, ride, decision.leaving);
   const { time, ...fields } = change.ride;
   const write = { ...fields, ...(time !== undefined && { departureTime: `${time}:00` }), ...placed };
@@ -165,8 +218,11 @@ export async function updateRide(
   const ride = rideRef(eventId, rideId, leg);
   const change = ride && readChange(fields);
   if (change && "errors" in change) return { ok: false, ...change };
+  // Stops are the aller's: sent for the retour, no form did it.
   const outcome: UpdateRideOutcome =
-    ride && change ? await atomically(db, (trx) => changeRide(trx, token, ride, change)) : INVALID;
+    ride && change && (change.stops === undefined || ride.leg === "aller")
+      ? await atomically(db, (trx) => changeRide(trx, token, ride, change))
+      : INVALID;
   const state = await readEventState(db, eventId, token);
   return state ? { ...outcome, state } : EVENT_NOT_FOUND;
 }

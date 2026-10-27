@@ -47,6 +47,14 @@
       "hint": "Stops along the cars’ route."
     },
     "create": "Create",
+    "email": {
+      "label": "Your email address",
+      "invalid": "Invalid email address.",
+      "sessionEnded": "Your session has ended: enter your email address, then “Create”."
+    },
+    "signedIn": "Signed in as {email}: the event will be in My events.",
+    "notYou": "Not you? <signOut>Sign out</signOut>",
+    "signedOut": "Signed out. What you typed is kept.",
     "needsJavaScript": "Creating an event needs JavaScript: turn it on, then reload the page.",
     "failed": "The event could not be created. Check your connection, then try again.",
     "errors": {
@@ -268,6 +276,7 @@
       "forbidden": "This device cannot make this change: reload the page.",
       "eventNotFound": "This event can no longer be found: it may have been deleted.",
       "eventEnded": "This event is over: its sign-ups have been erased.",
+      "noOrganiserAccess": "The organiser area is no longer open to you: reload the page.",
       "noRetour": "This event no longer has a return trip.",
       "editErrors": "A field was not accepted: use “Edit the event” again.",
       "eventChanged": "It had just been changed from another device: the page shows the saved version.",
@@ -322,6 +331,7 @@
     "drives": "{leg, select, aller {Their car for the outbound trip will be removed.} other {Their car for the return trip will be removed.}} {passengers, plural, =0 {} one {# passenger will be without a car again.} other {# passengers will be without a car again.}}",
     "passenger": "{leg, select, aller {Their seat in {driver}’s car on the outbound trip will be freed.} other {Their seat in {driver}’s car on the return trip will be freed.}}",
     "notified": "{cars, plural, one {Nobody is notified: remember to tell the people in that car.} other {Nobody is notified: remember to tell the people in those cars.}}",
+    "notifiedOrganiser": "Nobody is notified, not even {firstName}.",
     "erased": "Their first name, their number if any, and their sign-ups will be erased.",
     "final": "This cannot be undone.",
     "confirm": "Remove from the event",
@@ -372,6 +382,13 @@
     "list": {
       "more": "{count, plural, one {Show the other one} other {Show the # others}}",
       "less": "Show fewer"
+    },
+    "persons": {
+      "title": "Signed-up people ({count})",
+      "hint": "Removing a person erases them from the event, with their cars and seats. Nobody is notified.",
+      "leg": "{leg}: {state}",
+      "remove": "Remove",
+      "removeLabel": "Remove {firstName} from the event"
     },
     "tile": {
       "free": "{free, plural, one {# free seat} other {# free seats}}",

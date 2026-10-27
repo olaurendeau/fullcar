@@ -167,6 +167,9 @@ export async function seedCrowd(db: Kysely<Database>, eventId: string): Promise<
 /** The button of a leg's title in the organiser's panel (O9.1), in any language. */
 export const legButton = (page: Page, leg: Leg) => page.locator(`[id="organiser-leg-${leg}"] > button`);
 
+/** The legs' titles (h3), not « Personnes inscrites »', the panel's other section (#672). */
+export const LEG_HEADINGS = 'h3[id^="organiser-leg-"]';
+
 /**
  * Unfolds the panel's sections of `legs`, both by default, once the panel shows (O9.4): every
  * section arrives folded (O9.2), and what its lists say is read unfolded. A leg the event does
