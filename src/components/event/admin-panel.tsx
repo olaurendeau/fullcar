@@ -51,6 +51,7 @@ export function AdminPanel({
   editRef,
   editSending = false,
   onEdit,
+  persons,
 }: {
   publicUrl: string;
   titleRef: RefObject<HTMLButtonElement | null>;
@@ -72,6 +73,8 @@ export function AdminPanel({
   /** A change is on its way: the button is `aria-disabled`, its words the same (M2.11). */
   editSending?: boolean;
   onEdit: () => void;
+  /** « Personnes inscrites » (#672, RP4.1), after the legs' sections; withdrawn with them. */
+  persons?: ReactNode;
 }) {
   const t = useTranslations("Admin");
   const titleId = useId();
@@ -156,15 +159,18 @@ export function AdminPanel({
         </Button>
         {(legs || !framed) && <hr className="hidden lg:block" />}
         {legs ? (
-          <OrganiserLegs
-            legs={legs}
-            allerAt={allerAt}
-            retourAt={retourAt}
-            expanded={expanded}
-            onToggle={onToggle}
-            unfolded={unfolded}
-            onToggleLeg={onToggleLeg}
-          />
+          <>
+            <OrganiserLegs
+              legs={legs}
+              allerAt={allerAt}
+              retourAt={retourAt}
+              expanded={expanded}
+              onToggle={onToggle}
+              unfolded={unfolded}
+              onToggleLeg={onToggleLeg}
+            />
+            {persons}
+          </>
         ) : (
           !framed && !folded && <Stale />
         )}

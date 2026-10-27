@@ -1,7 +1,7 @@
 import { Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -32,20 +32,37 @@ interface Person {
 }
 
 /**
+ * From the organiser area (#672, RP4.5): `state`, her state on each leg, in a box under the title;
+ * whom to tell is always « pas même {prénom} ». `refused`, a refusal that sending again would not
+ * change, kept for her until the page reloads (decision 17): each opening shows it, and sends
+ * nothing. `onRemoved`: where the focus goes once a success closes the confirmation.
+ */
+export interface FromPanel {
+  state: readonly string[];
+  refused?: RemovalProblem;
+  onRemoved: () => void;
+}
+
+/**
  * « Retirer de l’événement » in the sheet of one of the device's persons, under « Modifier »
- * (RP1.1), and its confirmation (RP1.2). The removal stays inactive, on each opening, until its
- * answer (RP1.4). Removed, the person goes with her sheet, this button and its confirmation: the
- * sheet's closing gives the focus to the next first name (RP1.5).
+ * (RP1.1), and its confirmation (RP1.2); or `trigger`, « Retirer » of « Personnes inscrites »,
+ * `panel` (RP4.5). The removal stays inactive, on each opening, until its answer (RP1.4).
+ * Removed, the person goes with her sheet, this button and its confirmation: the sheet's closing
+ * gives the focus to the next first name (RP1.5); in the panel, `onRemoved` does.
  */
 export function RemovePersonButton({
   person,
   removal,
   removePerson,
+  trigger,
+  panel,
 }: {
   person: Person;
   /** What the confirmation says, counted on the state the page shows (decision 15). */
   removal: RemovalConfirmation;
   removePerson: RemovePerson;
+  trigger?: ReactNode;
+  panel?: FromPanel;
 }) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
@@ -53,6 +70,7 @@ export function RemovePersonButton({
   const [opened, setOpened] = useState(0);
   const [sending, setSending] = useState(false);
   const isOpen = useRef(false);
+  const removed = useRef(false);
 
   const toggle = (next: boolean) => {
     if (next) setOpened((count) => count + 1);
@@ -63,20 +81,33 @@ export function RemovePersonButton({
   return (
     <AlertDialog open={open} onOpenChange={toggle}>
       <AlertDialogTrigger asChild>
-        <Button variant="outline" className="h-11 w-full text-destructive hover:text-destructive aria-expanded:text-destructive">
-          <Trash2 aria-hidden />
-          {t("DevicePersons.remove")}
-        </Button>
+        {trigger ?? (
+          <Button variant="outline" className="h-11 w-full text-destructive hover:text-destructive aria-expanded:text-destructive">
+            <Trash2 aria-hidden />
+            {t("DevicePersons.remove")}
+          </Button>
+        )}
       </AlertDialogTrigger>
-      <AlertDialogContent>
+      <AlertDialogContent
+        onCloseAutoFocus={(event) => {
+          if (!panel || !removed.current) return;
+          event.preventDefault();
+          panel.onRemoved();
+        }}
+      >
         <HidesPage />
         <Confirmation
           key={opened}
           person={person}
           removal={removal}
+          panel={panel}
           isOpen={() => isOpen.current}
           sending={sending}
-          send={(confirmation) => removePerson({ personId: person.id, firstName: person.firstName, sending: setSending }, confirmation)}
+          send={async (confirmation) => {
+            const outcome = await removePerson({ personId: person.id, firstName: person.firstName, sending: setSending }, confirmation);
+            if (outcome === null) removed.current = true;
+            return outcome;
+          }}
           close={() => toggle(false)}
         />
       </AlertDialogContent>
@@ -92,10 +123,12 @@ export function RemovePersonButton({
  * one that sent; in the bar otherwise, once nothing hides the page. Offline or on an error, the red
  * button gets the focus back; a refusal that sending again would not change says why, and the red
  * button goes: « Annuler » becomes « Fermer », which takes the focus (« Refus et échecs », decision 12).
+ * From the panel, one kept or one that comes while it is open does the same (decision 17, RP1.10).
  */
 function Confirmation({
   person,
   removal: { lines, cars },
+  panel,
   isOpen,
   sending,
   send,
@@ -103,13 +136,16 @@ function Confirmation({
 }: {
   person: Person;
   removal: RemovalConfirmation;
+  panel?: FromPanel;
   isOpen: () => boolean;
   sending: boolean;
   send: (confirmation: FromSheet) => Promise<RemovalProblem | null | undefined>;
   close: () => void;
 }) {
   const t = useTranslations();
-  const [problem, setProblem] = useState<RemovalProblem | null>(null);
+  const [answered, setProblem] = useState<RemovalProblem | null>(null);
+  // A refusal kept from the panel wins, one another opening sent included, as this one is open (RP1.10).
+  const problem = panel?.refused ?? answered;
   const confirmButton = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const sends = useSends(isOpen, `removePerson:${person.id}`);
@@ -136,6 +172,15 @@ function Confirmation({
         <AlertDialogTitle className="wrap-anywhere">{t("PersonRemoval.title", { firstName: person.firstName })}</AlertDialogTitle>
         <AlertDialogDescription asChild>
           <div className="flex flex-col gap-1.5">
+            {panel && (
+              <p className="flex flex-col gap-0.5 rounded-[10px] bg-muted px-3 py-2 text-foreground">
+                {panel.state.map((line) => (
+                  <span key={line} className="wrap-anywhere">
+                    {line}
+                  </span>
+                ))}
+              </p>
+            )}
             {lines.map((line) => (
               <p key={line.leg}>
                 {line.key === "drives"
@@ -143,7 +188,11 @@ function Confirmation({
                   : t("PersonRemoval.passenger", { leg: line.leg, driver: line.driver })}
               </p>
             ))}
-            {cars > 0 && <p>{t("PersonRemoval.notified", { cars })}</p>}
+            {panel ? (
+              <p>{t("PersonRemoval.notifiedOrganiser", { firstName: person.firstName })}</p>
+            ) : (
+              cars > 0 && <p>{t("PersonRemoval.notified", { cars })}</p>
+            )}
             <p>{t("PersonRemoval.erased")}</p>
             <p>{t("PersonRemoval.final")}</p>
           </div>

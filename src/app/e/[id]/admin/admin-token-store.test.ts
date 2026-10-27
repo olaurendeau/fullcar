@@ -149,15 +149,19 @@ describe("checkFromAnswer", () => {
   ];
 
   // C4.9 as amended by #154: the panel only on the server's panel, with its legs; the link to share alone (OA7.3).
-  it("shows the panel, with its legs and the link to share, when the server answers the panel", () => {
-    expect(checkFromAnswer({ state: "panel", legs }, "https://fullcar.example", ID)).toStrictEqual({
+  // RP4.1: and every person of the event, for « Personnes inscrites »; none from a server before #671.
+  const persons = [{ id: "lea", firstName: "Léa", cells: [{ leg: "aller", state: { kind: "withoutCar" } }] }];
+  it("shows the panel, with its legs, its persons and the link to share, when the server answers the panel", () => {
+    expect(checkFromAnswer({ state: "panel", legs, persons }, "https://fullcar.example", ID)).toStrictEqual({
       state: "valid",
       publicUrl: `https://fullcar.example/e/${ID}`,
       legs,
+      persons,
     });
     expect(checkFromAnswer({ state: "panel", legs: [] }, "https://fullcar.example", ID)).toMatchObject({
       state: "valid",
       legs: [],
+      persons: [],
     });
   });
 
@@ -206,7 +210,7 @@ describe("retryFrom", () => {
   it.each<[string, OrganiserCheck]>([
     ["while the first check runs", { state: "checking" }],
     ["on a refused area", { state: "refused" }],
-    ["on the panel", { state: "valid", publicUrl: "", legs: [] }],
+    ["on the panel", { state: "valid", publicUrl: "", legs: [], persons: [] }],
   ])("starts nothing %s", (_, check) => {
     expect(retryFrom(check)).toBeUndefined();
   });

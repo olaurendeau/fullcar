@@ -13,6 +13,7 @@ import {
   editAnswer,
   editFailure,
   listKey,
+  PERSONS_LIST,
   panelRead,
   screenRead,
   screenReducer,
@@ -31,17 +32,19 @@ const leg = (withoutCar: number): OrganiserLeg => ({
 const before = [leg(2)];
 const after = [leg(3)];
 const links = { publicUrl: "https://fullcar.example/e/Ab3dEf7h" };
-const valid: OrganiserCheck = { state: "valid", ...links, legs: before };
+const valid: OrganiserCheck = { state: "valid", ...links, legs: before, persons: [] };
 
 const ready = (fields: Partial<Extract<ScreenState, { state: "ready" }>> = {}): ScreenState => ({
   state: "ready",
   panel: { ...links, legs: before },
+  persons: [],
   refreshing: null,
   refreshFailed: 0,
   refreshed: false,
   expanded: new Set(),
   folded: false,
   unfolded: new Set(),
+  personsOpen: false,
   ...fields,
 });
 /** A panel withdrawn after an action whose read failed (O1.10): the links stay. */
@@ -295,9 +298,41 @@ describe("screenReducer, the unfolded legs", () => {
   });
 });
 
+// #672 (remove-person v2, RP4.1): « Personnes inscrites », folded at every appearance, its persons those of the last read.
+describe("screenReducer, « Personnes inscrites »", () => {
+  const named = (n: number) => ({ id: `p${n}`, firstName: `Guest ${n}`, cells: [] });
+  const persons = (count: number) => Array.from({ length: count }, (_, n) => named(n));
+  const through = (state: ScreenState, ...events: ScreenEvent[]) => events.reduce(screenReducer, state);
+  const of = (state: ScreenState) => (state.state === "ready" ? { open: state.personsOpen, persons: state.persons, expanded: state.expanded } : undefined);
+
+  it("arrives folded with the panel's persons, unfolds and folds by its button alone, and nothing else changes", () => {
+    const shown = screenReducer({ state: "loading" }, { type: "checked", check: { ...valid, persons: persons(2) } });
+    expect(shown).toStrictEqual(ready({ persons: persons(2) }));
+    const open = screenReducer(shown, { type: "personsToggled" });
+    expect(open).toStrictEqual(ready({ persons: persons(2), personsOpen: true }));
+    expect(screenReducer(open, { type: "personsToggled" })).toStrictEqual(shown);
+    expect(of(through(open, { type: "legToggled", leg: "aller" }, { type: "toggleFolded" }))?.open).toBe(true);
+  });
+
+  it("stays unfolded through the reads, takes their persons, and keeps them while the panel is withdrawn", () => {
+    const open = ready({ persons: persons(3), personsOpen: true });
+    expect(of(through(open, { type: "reread", legs: after, persons: persons(2) }))).toStrictEqual({ open: true, persons: persons(2), expanded: new Set() });
+    expect(of(through(open, { type: "reread" }))).toMatchObject({ open: true, persons: persons(3) });
+    const refreshed = through(open, { type: "refreshStarted", read: 1 }, { type: "refreshEnded", read: 1, legs: after, persons: persons(1) });
+    expect(of(refreshed)).toMatchObject({ open: true, persons: persons(1) });
+    expect(of(screenReducer(open, { type: "checked", check: valid }))).toMatchObject({ open: false, persons: [] });
+  });
+
+  it("keeps its long list unfolded while it has more than 5 lines (O5.6, O5.7)", () => {
+    const long = ready({ persons: persons(8), expanded: new Set([PERSONS_LIST]) });
+    expect(of(through(long, { type: "reread", legs: after, persons: persons(6) }))?.expanded).toStrictEqual(new Set([PERSONS_LIST]));
+    expect(of(through(long, { type: "reread", legs: after, persons: persons(5) }))?.expanded).toStrictEqual(new Set());
+  });
+});
+
 describe("panelRead", () => {
-  it("is the panel's legs when it answered the panel", () => {
-    expect(panelRead({ ok: true, value: { state: "panel", legs: after } })).toStrictEqual(after);
+  it("is the panel's legs and persons when it answered the panel", () => {
+    expect(panelRead({ ok: true, value: { state: "panel", legs: after, persons: [] } })).toStrictEqual({ legs: after, persons: [] });
   });
 
   it.each<[string, unknown]>([
@@ -312,10 +347,10 @@ describe("panelRead", () => {
 describe("screenRead", () => {
   const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: null, description: null };
   const board: EventState = { event: header, legs: [] };
-  const panel = { state: "panel", legs: after };
+  const panel = { state: "panel", legs: after, persons: [] };
 
   it("is the panel's legs and the board's state when both reads answered", () => {
-    expect(screenRead({ ok: true, value: panel }, { ok: true, value: board })).toStrictEqual({ legs: after, board });
+    expect(screenRead({ ok: true, value: panel }, { ok: true, value: board })).toStrictEqual({ legs: after, persons: [], board });
   });
 
   // O1.9: one failure, and nothing is applied.

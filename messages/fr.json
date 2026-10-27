@@ -266,6 +266,7 @@
       "forbidden": "Cet appareil ne peut pas faire ce changement : rechargez la page.",
       "eventNotFound": "Cet événement est introuvable : il a peut-être été supprimé.",
       "eventEnded": "Cet événement est terminé : ses inscriptions ont été effacées.",
+      "noOrganiserAccess": "L’espace organisateur ne vous est plus ouvert : rechargez la page.",
       "noRetour": "Il n’y a plus de retour pour cet événement.",
       "editErrors": "Un champ n’a pas été accepté : utilisez de nouveau « Modifier l’événement ».",
       "eventChanged": "Il venait d’être modifié depuis un autre appareil : la page montre la version enregistrée.",
@@ -320,7 +321,8 @@
     "drives": "{leg, select, aller {Sa voiture pour l’aller sera retirée.} other {Sa voiture pour le retour sera retirée.}} {passengers, plural, =0 {} one {# personne redeviendra sans voiture.} other {# personnes redeviendront sans voiture.}}",
     "passenger": "{leg, select, aller {Sa place dans la voiture de {driver} à l’aller sera libérée.} other {Sa place dans la voiture de {driver} au retour sera libérée.}}",
     "notified": "{cars, plural, one {Personne n’est prévenu : pensez à le dire aux personnes de cette voiture.} other {Personne n’est prévenu : pensez à le dire aux personnes de ces voitures.}}",
-    "erased": "Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.",
+    "notifiedOrganiser": "Personne n’est prévenu, pas même {firstName}.",
+    "erased":"Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.",
     "final": "C’est définitif.",
     "confirm": "Retirer de l’événement",
     "removed": "{firstName} ne fait plus partie de l’événement",
@@ -369,6 +371,13 @@
     "list": {
       "more": "{count, plural, one {Afficher l’autre} other {Afficher les # autres}}",
       "less": "Réduire la liste"
+    },
+    "persons": {
+      "title": "Personnes inscrites ({count})",
+      "hint": "Retirer une personne l’efface de l’événement, avec ses voitures et ses places. Personne n’est prévenu.",
+      "leg": "{leg} : {state}",
+      "remove": "Retirer",
+      "removeLabel": "Retirer {firstName} de l’événement"
     },
     "tile": {
       "free": "{free, plural, one {# place libre} other {# places libres}}",

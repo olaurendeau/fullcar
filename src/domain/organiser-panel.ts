@@ -81,6 +81,16 @@ export function organiserPersons(rows: BoardRows, legs: readonly Leg[]): Organis
   return deviceMatrix(buildBoard(rows, legs, everybody));
 }
 
+/**
+ * « Personnes inscrites » in its order (RP4.1): by first name, by `Intl.Collator` in the page's
+ * language, case and accents aside, so that two namesakes are side by side; then in the order
+ * of sign-up, the event's, which a stable sort keeps. A copy: `persons` is left as it was.
+ */
+export function byFirstName<P extends { firstName: string }>(persons: readonly P[], locale: string): P[] {
+  const { compare } = new Intl.Collator(locale, { sensitivity: "base" });
+  return [...persons].sort((a, b) => compare(a.firstName, b.firstName));
+}
+
 /** No car and nobody without one: the leg shows the board's empty state (O1.5). */
 export function legIsEmpty(leg: OrganiserLeg): boolean {
   return leg.carCount === 0 && leg.withoutCar.length === 0;
