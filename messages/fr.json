@@ -146,9 +146,13 @@
     },
     "remember": "Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.",
     "forSeat": "Cette personne prendra une place dans la voiture de {driver}.",
+    "samePhone": "Même numéro que {firstName}. Modifiez-le si besoin.",
+    "phoneHintForSeat": "Pour que {driver} puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.",
     "firstName": "Prénom",
     "phone": "Téléphone (facultatif)",
     "phoneHint": "Visible seulement par l’organisateur et par les personnes de la même voiture.",
+    "phoneDriving": "Téléphone",
+    "phoneHintDriving": "Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.",
     "both": "Aller et retour",
     "bothHint": {
       "aller": "Décochez si cette personne ne fait que l’aller.",
@@ -221,6 +225,7 @@
     "seats": "De 1 à 8 places.",
     "chooseDriver": "Choisissez qui conduit.",
     "driverPhone": "Un numéro est requis pour proposer une voiture.",
+    "phoneWhileDriving": "Un numéro est requis tant que {firstName} conduit.",
     "tooManyPassengers": "{seats, plural, one {# place seulement} other {# places seulement}} : décochez quelqu’un ou ajoutez des places."
   },
   "Actions": {

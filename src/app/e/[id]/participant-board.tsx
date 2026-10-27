@@ -356,7 +356,11 @@ export function ParticipantBoard({
       sending,
       sheet.leaves,
     );
-    return personFormOutcome(sent, sheet, () => focusName(personId));
+    const outcome = personFormOutcome(sent, sheet, () => focusName(personId));
+    // Her number emptied while she drives (v4.8 rule 8): the bar says so, closed; in the sheet,
+    // the state shows her driving, and her number's field in error.
+    const refused = sent?.ok && !sent.value.ok && "error" in sent.value ? sent.value.error : undefined;
+    return refused === "phoneWhileDriving" ? { kind: "phoneWhileDriving" } : outcome;
   };
 
   // The page takes the state a refusal carries too (C11.6). In the bar, the failure names the
