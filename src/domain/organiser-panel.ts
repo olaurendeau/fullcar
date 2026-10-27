@@ -13,9 +13,15 @@ import type { Leg } from "./leg";
 import type { OrganiserLegBoard } from "./phone-visibility";
 import type { WallTime } from "./wall-clock";
 
-/** What the server answers to the organiser area: « invalid » and nothing else, or the panel (#3 C4.9, amended). */
+/**
+ * What the server answers to the organiser area (#3 C4.9, amended by #596): the panel, or a
+ * state and nothing else, as organiser-access.ts decides it. `invalid` for an unknown event;
+ * `signIn` (OA7.1), `notYours` with the address of the visitor's own session (OA7.2),
+ * `pending` (OA7.7), `orphan` (OA7.9), `ended` for the organiser of an anonymised event (OA8.4).
+ */
 export type OrganiserPanelAnswer =
-  | { state: "invalid" }
+  | { state: "invalid" | "signIn" | "pending" | "orphan" | "ended" }
+  | { state: "notYours"; email: string }
   | { state: "panel"; legs: OrganiserLeg[]; persons: OrganiserPerson[] };
 
 /**

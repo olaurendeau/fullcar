@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { hashAdminToken } from "./admin-token";
 import { buildBoard, type BoardPerson, type BoardRows, type PlacementRow, type RideRow } from "./board";
 import type { Leg } from "./leg";
+import { decideOrganiserAccess, type OrganiserAccess, type OrganiserVisitor } from "./organiser-access";
 import {
   phoneVisible,
   withOrganiserPhones,
   withVisiblePhones,
   type CarMembers,
   type OrganiserLegBoard,
-  type OrganiserProof,
   type PhonesById,
 } from "./phone-visibility";
 
@@ -205,9 +205,21 @@ describe("withVisiblePhones", () => {
  * below is a test value, not a real one, and no test title carries it nor any number.
  */
 const ADMIN_TOKEN = "Zm9yLXRoZS10ZXN0cy1vbm";
-const STORED_HASH = hashAdminToken(ADMIN_TOKEN);
-const ONE_CHARACTER_OFF = `${ADMIN_TOKEN.slice(0, -1)}${ADMIN_TOKEN.endsWith("A") ? "B" : "A"}`;
-const RIGHT: OrganiserProof = { token: ADMIN_TOKEN, storedHash: STORED_HASH };
+const EVENT_ID = "Ab3dEf7h";
+const ORGANISER = { id: "account-organiser", email: "camille@exemple.fr" };
+
+/** The access the one rule gives (organiser-access.ts) to this visitor of a confirmed event. */
+function accessOf(visitor: OrganiserVisitor): OrganiserAccess {
+  const event = { id: EVENT_ID, accountId: ORGANISER.id, confirmed: true, anonymised: false, adminTokenHash: hashAdminToken(ADMIN_TOKEN) };
+  const decision = decideOrganiserAccess(event, visitor);
+  if (decision.state !== "organiser") throw new Error(`the decision is ${decision.state}`);
+  return decision.access;
+}
+
+/** The creation browser's token (OA7.6). */
+const RIGHT = accessOf({ adminToken: ADMIN_TOKEN, account: undefined });
+/** The session of the event's account (OA7.6). */
+const SESSION = accessOf({ adminToken: undefined, account: ORGANISER });
 
 const ORGANISER_PHONES = new Map<string, string | null>([
   ["marc", "06 11 11 11 11"],
@@ -263,8 +275,8 @@ function sceneWithEve(eve: EveOnAller): BoardRows {
 }
 
 /** The board is built without a device, as the organiser area has none. */
-function organiserBoard(rows: BoardRows, proof: OrganiserProof, phones: PhonesById = ORGANISER_PHONES) {
-  return withOrganiserPhones(buildBoard(rows, ["aller", "retour"], new Set()), phones, proof);
+function organiserBoard(rows: BoardRows, access: OrganiserAccess, phones: PhonesById = ORGANISER_PHONES, eventId = EVENT_ID) {
+  return withOrganiserPhones(buildBoard(rows, ["aller", "retour"], new Set()), phones, access, eventId);
 }
 
 describe("withOrganiserPhones (DO1, O2.1)", () => {
@@ -275,32 +287,33 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
     ["not concerned", []],
     ["not concerned, and without a car on the retour", ["retour.withoutCar"]],
   ])("Eve, on the aller: %s", (eve, places) => {
-    it("the right token: her number is set only in the list without a car of the leg where she is", () => {
-      const board = organiserBoard(sceneWithEve(eve), RIGHT);
+    it.each<[string, OrganiserAccess]>([
+      ["the creation browser's token", RIGHT],
+      ["the organiser's session", SESSION],
+    ])("OA7.6, %s: her number is set only in the list without a car of the leg where she is", (_, access) => {
+      const board = organiserBoard(sceneWithEve(eve), access);
       expect(board).toBeDefined();
       expect(phonePlaces(board ?? [], EVE_PHONE)).toEqual(places);
     });
 
     it.each<[string, unknown]>([
-      ["a token one character off", ONE_CHARACTER_OFF],
-      ["no token", undefined],
-      ["an empty token", ""],
-      ["a number", 42],
-      ["null", null],
-      ["an object", { token: ADMIN_TOKEN }],
-      ["an array", [ADMIN_TOKEN]],
-    ])("%s: nothing at all", (_, token) => {
-      expect(organiserBoard(sceneWithEve(eve), { token, storedHash: STORED_HASH })).toBeUndefined();
+      ["a copy of a granted access", { ...RIGHT }],
+      ["an object of the same shape", { eventId: EVENT_ID, via: "adminToken" }],
+      ["true", true],
+      ["nothing", undefined],
+    ])("an access the rule did not give, %s: nothing at all", (_, forged) => {
+      expect(organiserBoard(sceneWithEve(eve), forged as OrganiserAccess)).toBeUndefined();
     });
 
-    it("the right token, but no stored hash: nothing at all", () => {
-      expect(organiserBoard(sceneWithEve(eve), { token: ADMIN_TOKEN, storedHash: undefined })).toBeUndefined();
+    it("an access granted for another event: nothing at all", () => {
+      expect(organiserBoard(sceneWithEve(eve), RIGHT, ORGANISER_PHONES, "Zz9yXw8v")).toBeUndefined();
     });
+  });
 
-    it("the right token, but a stored hash that is not a hash: nothing at all", () => {
-      expect(organiserBoard(sceneWithEve(eve), { token: ADMIN_TOKEN, storedHash: "" })).toBeUndefined();
-      expect(organiserBoard(sceneWithEve(eve), { token: ADMIN_TOKEN, storedHash: ADMIN_TOKEN })).toBeUndefined();
-    });
+  it("OA7.6: the session and the token see the very same thing", () => {
+    for (const eve of ["without a car", "a passenger", "a driver"] as const) {
+      expect(organiserBoard(sceneWithEve(eve), SESSION)).toStrictEqual(organiserBoard(sceneWithEve(eve), RIGHT));
+    }
   });
 
   it("O3.4: no number of a driver or a placed passenger, digits searched in the serialized output", () => {
@@ -359,7 +372,7 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
     const deviceIds = new Set(["lea", "tom"]);
     const visible = withVisiblePhones(buildBoard(sceneWithEve("a passenger"), ["aller", "retour"], deviceIds), ORGANISER_PHONES, deviceIds);
     expect(sentOrganiserNumbers(visible.map((leg) => leg.cars)).sort()).toEqual(["ana", "eve", "lea", "marc", "tom"]);
-    const board = withOrganiserPhones(visible, ORGANISER_PHONES, RIGHT) ?? [];
+    const board = withOrganiserPhones(visible, ORGANISER_PHONES, RIGHT, EVENT_ID) ?? [];
     expect(sentOrganiserNumbers(board.map((leg) => leg.cars))).toEqual([]);
     expect(board[0].cars[0]).toStrictEqual({
       id: "r1",
@@ -395,7 +408,7 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
 
   it("does not take the device's section: only the leg, its cars and its list without a car", () => {
     const board = buildBoard(sceneWithEve("without a car"), ["aller", "retour"], new Set(["tom"]));
-    const organiser = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT) ?? [];
+    const organiser = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT, EVENT_ID) ?? [];
     expect(organiser.map((leg) => Object.keys(leg).sort())).toEqual([
       ["cars", "leg", "withoutCar"],
       ["cars", "leg", "withoutCar"],
@@ -405,7 +418,7 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
   it("leaves the board it is given as it was", () => {
     const board = buildBoard(sceneWithEve("a passenger"), ["aller", "retour"], new Set());
     const before = structuredClone(board);
-    const organiser = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT) ?? [];
+    const organiser = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT, EVENT_ID) ?? [];
     organiser[0].cars[0].driver.firstName = "changed";
     organiser[0].cars[0].passengers[0].firstName = "changed";
     organiser[0].withoutCar[0].firstName = "changed";

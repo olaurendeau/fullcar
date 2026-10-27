@@ -57,6 +57,14 @@ describe("checkFromAnswer", () => {
     });
   });
 
+  // #596: each state of the access rule reads « non valide » until its own screen comes (#598).
+  it.each([{ state: "signIn" }, { state: "pending" }, { state: "orphan" }, { state: "ended" }, { state: "notYours", email: "a@b.fr" }])(
+    "calls the link invalid when the server answers $state",
+    (answer) => {
+      expect(checkFromAnswer(answer, "https://fullcar.example", "Ab3dEf7h", TOKEN)).toStrictEqual({ state: "invalid" });
+    },
+  );
+
   it("says the check failed on the panel without a token to make the links of", () => {
     expect(checkFromAnswer({ state: "panel", legs }, "https://fullcar.example", "Ab3dEf7h", "")).toEqual({
       state: "failed",

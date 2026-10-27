@@ -1,10 +1,9 @@
 import type { Kysely } from "kysely";
-import { isAnonymised } from "@/db/day-thirty";
-import { lockEvent, readAdminTokenHash, writeEventFields } from "@/db/events";
+import { lockEvent, readOrganiserAccessEvent, writeEventFields } from "@/db/events";
 import type { LegCounts } from "@/db/legs";
 import type { Database } from "@/db/schema";
+import { findSession } from "@/db/sessions";
 import { atomically } from "@/db/transaction";
-import { adminTokenMatches } from "@/domain/admin-token";
 import {
   eventFieldsOf,
   locationPositionOf,
@@ -14,6 +13,7 @@ import {
   type EventErrors,
   type EventHeader,
 } from "@/domain/event";
+import { decideOrganiserAccess, organiserProofOf } from "@/domain/organiser-access";
 import { positionOf, samePosition } from "@/domain/place";
 import { isPublicId } from "@/domain/public-id";
 import { isWallClock } from "@/domain/wall-clock";
@@ -25,10 +25,10 @@ import { removeRetour } from "./retour";
  * - `errors`: a field refused, by the rules of the creation (M2.3).
  * - `changed`: `before` is no longer what is stored, given in `event` (M6.1, M6.2).
  * - `confirmRetour`: the retour unchecked still holds these, and `removal` is not them (M3.5).
- * - `invalid`: the token is not the event's, or a request no page sends (M8.2).
+ * - `invalid`: organiser-access.ts grants no access (M8.2, OA7.1–OA7.9), or a request no page sends.
  * - `eventNotFound`: no such event, or deleted since the page loaded (M8.3).
  * - `eventEnded`: the event is anonymised, or was while the change waited for its lock
- *   (#588): before the token, which anonymising revoked.
+ *   (#588): before the access, since anonymising revoked the token.
  *
  * Nothing but `ok` has written anything, and no answer carries the token.
  */
@@ -90,9 +90,11 @@ function sameHeader(stored: EventHeader, loaded: EventChange): boolean {
 
 /**
  * The organiser changes the event (epic #250, §3): its title, its location and its position,
- * its start, and its end or none. In this order: the id, the token (`adminTokenMatches`,
- * constant time), the shape of `before`, of `removal` and of the position sent, the fields
- * (`validateEventChange`, against the server's bounds), then one transaction: the Event
+ * its start, and its end or none. `proof` is the request's body, `{ adminToken, session }`. In
+ * this order: the id, the access (organiser-access.ts: the session of the event's account, or
+ * the creation browser's token, compared in constant time), the shape of `before`, of
+ * `removal` and of the position sent, the fields (`validateEventChange`, against the
+ * server's bounds), then one transaction: the Event
  * under `lockEvent(…, "noKeyUpdate")`, `before` compared with that row (`changed`), the
  * retour removed when it is unchecked (`removeRetour`, `confirmRetour`), then the fields
  * written. A `before` forged with a past date makes the bounds skip that date, then is
@@ -105,23 +107,25 @@ function sameHeader(stored: EventHeader, loaded: EventChange): boolean {
  * change waited for it (M3.6). `before` is compared with the row the lock gives, never
  * with a snapshot taken before it. A transaction passed in is for tests only: in REPEATABLE
  * READ, as withRollback opens it, the count would miss such a write, and leave its row
- * under a `retour_at` null. The options are not touched. The token is only compared, never
+ * under a `retour_at` null. The options are not touched. The tokens are only compared, never
  * logged, kept nor answered.
  */
 export async function editEvent(
   db: Kysely<Database>,
   eventId: string,
-  token: unknown,
+  proof: unknown,
   fields: unknown,
   before: unknown,
   removal?: unknown,
 ): Promise<EditEventOutcome> {
   if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
-  const storedHash = await readAdminTokenHash(db, eventId);
-  if (storedHash === undefined) return EVENT_NOT_FOUND;
-  // Anonymised, the event has no token left (event_anonymised_bare): only then is it looked up.
-  if (storedHash === null && (await isAnonymised(db, eventId))) return EVENT_ENDED;
-  if (!adminTokenMatches(token, storedHash)) return INVALID;
+  const accessEvent = await readOrganiserAccessEvent(db, eventId);
+  if (accessEvent === undefined) return EVENT_NOT_FOUND;
+  // Before the access: anonymising revoked the token, and nobody may write any more (#588).
+  if (accessEvent.anonymised) return EVENT_ENDED;
+  const { adminToken, session } = organiserProofOf(proof);
+  const decision = decideOrganiserAccess(accessEvent, { adminToken, account: await findSession(db, session) });
+  if (decision.state !== "organiser") return INVALID;
   const loaded = headerOf(before);
   const confirmed = countsOf(removal);
   const sent = eventFieldsOf(fields);

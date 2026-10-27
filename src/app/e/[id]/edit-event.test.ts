@@ -6,9 +6,10 @@ import { findEventById, lockEvent, writeEventFields } from "@/db/events";
 import { countLegRows, type LegCounts } from "@/db/legs";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
+import { seedAccount, seedSession } from "@/db/test-accounts";
 import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
-import { removeSeededRetour, seedEvent } from "@/db/test-events";
+import { confirmSeededEvent, removeSeededRetour, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { hashAdminToken, newAdminToken } from "@/domain/admin-token";
 import { DESCRIPTION_MAX } from "@/domain/description";
@@ -126,7 +127,7 @@ describe("editEvent", () => {
         async (trx, eventId, token) => {
           const before = await findEventById(trx, eventId);
           const fields = { ...FORM, title: "Tournoi de Rennes U13", location: "Salle Carrel", allerTime: "14:00" };
-          const answer = await editEvent(trx, eventId, token, { ...fields, boosters: false, stops: true }, BEFORE);
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...fields, boosters: false, stops: true }, BEFORE);
 
           const event = { ...BEFORE, title: "Tournoi de Rennes U13", location: "Salle Carrel", allerAt: "2026-12-12 14:00:00" };
           expect(answer).toEqual({ ok: true, event });
@@ -162,7 +163,7 @@ describe("editEvent", () => {
     ])("%s, and writes nothing", async (_, fields, expected) => {
       await onSeeded(async (trx, eventId, token) => {
         const before = await rowsOf(trx, eventId);
-        const answer = await editEvent(trx, eventId, token, fields, BEFORE);
+        const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE);
         expect(answer).toEqual({ ok: false, errors: expected });
         const form = validateEventChange(eventFieldsOf(fields), serverBounds(NOW), BEFORE);
         expect(answer).toEqual(form);
@@ -178,7 +179,7 @@ describe("editEvent", () => {
     ])("accepts %s, kept, with another title", async (_, date) => {
       const saved = { ...BEFORE, allerAt: `${date} 07:30:00`, retourAt: `${date} 18:00:00` };
       const fields = { ...FORM, title: "Tournoi de Rennes U13", allerDate: date, retourDate: date };
-      const answer = await onSeeded((trx, eventId, token) => editEvent(trx, eventId, token, fields, saved), saved);
+      const answer = await onSeeded((trx, eventId, token) => editEvent(trx, eventId, { adminToken: token }, fields, saved), saved);
       expect(answer).toEqual({ ok: true, event: { ...saved, title: "Tournoi de Rennes U13" } });
     });
   });
@@ -198,8 +199,8 @@ describe("editEvent", () => {
     ])("answers invalid for a before %s, even with a field refused, and writes nothing", async (_, before) => {
       await onSeeded(async (trx, eventId, token) => {
         const rows = await rowsOf(trx, eventId);
-        expect(await editEvent(trx, eventId, token, FORM, before)).toEqual({ ok: false, error: "invalid" });
-        expect(await editEvent(trx, eventId, token, { ...FORM, title: "" }, before)).toEqual({
+        expect(await editEvent(trx, eventId, { adminToken: token }, FORM, before)).toEqual({ ok: false, error: "invalid" });
+        expect(await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "" }, before)).toEqual({
           ok: false,
           error: "invalid",
         });
@@ -220,7 +221,7 @@ describe("editEvent", () => {
         const { id: eventId, token } = await seedEvent(trx);
         await seedScene(trx, eventId);
         const rows = await rowsOf(trx, eventId);
-        expect(await editEvent(trx, eventId, token, WITHOUT_RETOUR, BEFORE, removal)).toEqual({
+        expect(await editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, removal)).toEqual({
           ok: false,
           error: "invalid",
         });
@@ -237,7 +238,7 @@ describe("editEvent", () => {
         const before = await rowsOf(trx, eventId);
         const fields = { ...WITHOUT_RETOUR, title: "Tournoi de Rennes U13" };
 
-        const answer = await editEvent(trx, eventId, token, fields, BEFORE, SEEN);
+        const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE, SEEN);
 
         const event = { ...BEFORE, title: "Tournoi de Rennes U13", retourAt: null };
         expect(answer).toEqual({ ok: true, event });
@@ -263,7 +264,7 @@ describe("editEvent", () => {
         const before = await rowsOf(trx, eventId);
         const fields = { ...WITHOUT_RETOUR, title: "Tournoi de Rennes U13" };
 
-        expect(await editEvent(trx, eventId, token, fields, BEFORE, removal)).toEqual({
+        expect(await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE, removal)).toEqual({
           ok: false,
           error: "confirmRetour",
           ...SEEN,
@@ -275,7 +276,7 @@ describe("editEvent", () => {
     it("an empty retour is removed without a confirmation", async () => {
       await onSeeded(async (trx, eventId, token) => {
         await seedPerson(trx, eventId);
-        expect(await editEvent(trx, eventId, token, WITHOUT_RETOUR, BEFORE)).toEqual({
+        expect(await editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE)).toEqual({
           ok: true,
           event: { ...BEFORE, retourAt: null },
         });
@@ -287,7 +288,7 @@ describe("editEvent", () => {
       await withRollback(async (trx) => {
         const { id: eventId, token } = await seedEvent(trx);
         await seedScene(trx, eventId);
-        expect(await editEvent(trx, eventId, token, FORM, BEFORE, SEEN)).toEqual({ ok: true, event: BEFORE });
+        expect(await editEvent(trx, eventId, { adminToken: token }, FORM, BEFORE, SEEN)).toEqual({ ok: true, event: BEFORE });
         expect(await countLegRows(trx, eventId, "retour")).toEqual(SEEN);
       });
     });
@@ -300,7 +301,7 @@ describe("editEvent", () => {
       const before = await rowsOf(trx, eventId);
       const fields = { ...FORM, allerDate: "2026-12-13", retourDate: "2026-12-13" };
 
-      expect(await editEvent(trx, eventId, token, fields, BEFORE)).toMatchObject({ ok: true });
+      expect(await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE)).toMatchObject({ ok: true });
 
       const after = await rowsOf(trx, eventId);
       expect(after.event).toMatchObject({ aller_at: "2026-12-13 07:30:00", retour_at: "2026-12-13 18:00:00" });
@@ -321,13 +322,13 @@ describe("editEvent", () => {
         const rows = await rowsOf(trx, eventId);
         const fields = { ...FORM, location: "Salle B" };
 
-        const answer = await editEvent(trx, eventId, token, fields, BEFORE);
+        const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE);
 
         expect(answer).toEqual({ ok: false, error: "changed", event: stored });
         expect(await rowsOf(trx, eventId)).toEqual(rows);
         // Sent again from what is stored, it is written.
         const again = { ...fields, title: stored.title };
-        expect(await editEvent(trx, eventId, token, again, stored)).toEqual({
+        expect(await editEvent(trx, eventId, { adminToken: token }, again, stored)).toEqual({
           ok: true,
           event: { ...BEFORE, title: stored.title, location: "Salle B" },
         });
@@ -339,12 +340,12 @@ describe("editEvent", () => {
         await removeSeededRetour(trx, eventId);
         const fields = { ...FORM, title: "Tournoi de Rennes U13" };
 
-        const answer = await editEvent(trx, eventId, token, fields, BEFORE);
+        const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE);
 
         const stored = { ...BEFORE, retourAt: null };
         expect(answer).toEqual({ ok: false, error: "changed", event: stored });
         expect(await findEventById(trx, eventId)).toMatchObject({ title: BEFORE.title, retour_at: null });
-        expect(await editEvent(trx, eventId, token, { ...fields, retour: false }, stored)).toEqual({
+        expect(await editEvent(trx, eventId, { adminToken: token }, { ...fields, retour: false }, stored)).toEqual({
           ok: true,
           event: { ...stored, title: "Tournoi de Rennes U13" },
         });
@@ -356,7 +357,7 @@ describe("editEvent", () => {
       await onSeeded(
         async (trx, eventId, token) => {
           await writeEventFields(trx, eventId, BEFORE);
-          const answer = await editEvent(trx, eventId, token, WITHOUT_RETOUR, { ...BEFORE, retourAt: null });
+          const answer = await editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, { ...BEFORE, retourAt: null });
           expect(answer).toEqual({ ok: false, error: "changed", event: BEFORE });
           expect((await findEventById(trx, eventId))?.retour_at).toBe(BEFORE.retourAt);
         },
@@ -370,7 +371,7 @@ describe("editEvent", () => {
       await onSeeded(async (trx, eventId, token) => {
         const fields = { ...FORM, location: "Salle Carrel", locationPosition: { lat: 48.117301, lng: -1.677794 } };
 
-        const answer = await editEvent(trx, eventId, token, fields, BEFORE);
+        const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE);
 
         const locationPosition = { lat: 48.1173, lng: -1.67779 };
         expect(answer).toEqual({ ok: true, event: { ...BEFORE, location: "Salle Carrel", locationPosition } });
@@ -383,7 +384,7 @@ describe("editEvent", () => {
         async (trx, eventId, token) => {
           const before = { ...BEFORE, locationPosition: LYON };
 
-          const answer = await editEvent(trx, eventId, token, { ...FORM, locationPosition: null }, before);
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, locationPosition: null }, before);
 
           expect(answer).toEqual({ ok: true, event: BEFORE });
           expect(await findEventById(trx, eventId)).toMatchObject({ location_lat: null, location_lng: null });
@@ -398,7 +399,7 @@ describe("editEvent", () => {
     ])("AL5.6: no position sent keeps the one stored, the text changed, %s", async (_, before) => {
       await onSeeded(
         async (trx, eventId, token) => {
-          const answer = await editEvent(trx, eventId, token, { ...FORM, location: "Salle Carrel" }, before);
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, location: "Salle Carrel" }, before);
 
           expect(answer).toEqual({ ok: true, event: { ...BEFORE, location: "Salle Carrel", locationPosition: LYON } });
           expect(await findEventById(trx, eventId)).toMatchObject({
@@ -421,7 +422,7 @@ describe("editEvent", () => {
           const rows = await rowsOf(trx, eventId);
           const fields = { ...FORM, title: "Tournoi de Rennes U13" };
 
-          const answer = await editEvent(trx, eventId, token, fields, { ...BEFORE, locationPosition: loaded });
+          const answer = await editEvent(trx, eventId, { adminToken: token }, fields, { ...BEFORE, locationPosition: loaded });
 
           expect(answer).toEqual({ ok: false, error: "changed", event: { ...BEFORE, locationPosition: stored } });
           expect(await rowsOf(trx, eventId)).toEqual(rows);
@@ -442,9 +443,9 @@ describe("editEvent", () => {
       await onSeeded(
         async (trx, eventId, token) => {
           const rows = await rowsOf(trx, eventId);
-          expect(await editEvent(trx, eventId, token, fields, before)).toEqual({ ok: false, error: "invalid" });
+          expect(await editEvent(trx, eventId, { adminToken: token }, fields, before)).toEqual({ ok: false, error: "invalid" });
           const refused = { ...(fields as object), title: "" };
-          expect(await editEvent(trx, eventId, token, refused, before)).toEqual({ ok: false, error: "invalid" });
+          expect(await editEvent(trx, eventId, { adminToken: token }, refused, before)).toEqual({ ok: false, error: "invalid" });
           expect(await rowsOf(trx, eventId)).toEqual(rows);
         },
         { locationPosition: LYON },
@@ -459,7 +460,7 @@ describe("editEvent", () => {
       await onSeeded(async (trx, eventId, token) => {
         const full = `${"🚗".repeat(10)}${"a".repeat(DESCRIPTION_MAX - 10)}`;
 
-        const answer = await editEvent(trx, eventId, token, { ...FORM, description: `  ${full}\r\n` }, BEFORE);
+        const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, description: `  ${full}\r\n` }, BEFORE);
 
         expect(answer).toEqual({ ok: true, event: { ...BEFORE, description: full } });
         expect((await findEventById(trx, eventId))?.description).toBe(full);
@@ -472,7 +473,7 @@ describe("editEvent", () => {
     ])("DS1.10: %s, the description is removed, and the answer has none", async (_, description) => {
       await onSeeded(
         async (trx, eventId, token) => {
-          const answer = await editEvent(trx, eventId, token, { ...FORM, description }, { ...BEFORE, description: SAVED });
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, description }, { ...BEFORE, description: SAVED });
 
           expect(answer).toEqual({ ok: true, event: BEFORE });
           expect((await findEventById(trx, eventId))?.description).toBeNull();
@@ -487,7 +488,7 @@ describe("editEvent", () => {
     ])("no description sent keeps the one stored, the title changed, %s", async (_, before) => {
       await onSeeded(
         async (trx, eventId, token) => {
-          const answer = await editEvent(trx, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, before);
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, before);
 
           expect(answer).toEqual({ ok: true, event: { ...BEFORE, title: "Tournoi de Rennes U13", description: SAVED } });
           expect(await findEventById(trx, eventId)).toMatchObject({ title: "Tournoi de Rennes U13", description: SAVED });
@@ -506,7 +507,7 @@ describe("editEvent", () => {
           const rows = await rowsOf(trx, eventId);
           const fields = { ...FORM, title: "Tournoi de Rennes U13", description: loaded ?? "" };
 
-          const answer = await editEvent(trx, eventId, token, fields, { ...BEFORE, description: loaded });
+          const answer = await editEvent(trx, eventId, { adminToken: token }, fields, { ...BEFORE, description: loaded });
 
           expect(answer).toEqual({ ok: false, error: "changed", event: { ...BEFORE, description: stored } });
           expect(await rowsOf(trx, eventId)).toEqual(rows);
@@ -521,11 +522,11 @@ describe("editEvent", () => {
       try {
         await onSeeded(async (trx, eventId, token) => {
           const written = `Le plan : ${link}`;
-          const answer = await editEvent(trx, eventId, token, { ...FORM, description: written }, BEFORE);
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, description: written }, BEFORE);
           expect(answer).toEqual({ ok: true, event: { ...BEFORE, description: written } });
 
           // Changed again without a description sent: the link is kept, and still not called.
-          const kept = await editEvent(trx, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, { ...BEFORE, description: written });
+          const kept = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, { ...BEFORE, description: written });
           expect(kept).toEqual({ ok: true, event: { ...BEFORE, title: "Tournoi de Rennes U13", description: written } });
         });
         expect(network).not.toHaveBeenCalled();
@@ -541,9 +542,9 @@ describe("editEvent", () => {
       try {
         await onSeeded(async (trx, eventId, token) => {
           const answers = [
-            await editEvent(trx, eventId, token, { ...FORM, description: marker }, BEFORE),
-            await editEvent(trx, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, { ...BEFORE, description: marker }),
-            await editEvent(trx, eventId, token, { ...FORM, description: `${marker}\u0000` }, { ...BEFORE, description: marker }),
+            await editEvent(trx, eventId, { adminToken: token }, { ...FORM, description: marker }, BEFORE),
+            await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, { ...BEFORE, description: marker }),
+            await editEvent(trx, eventId, { adminToken: token }, { ...FORM, description: `${marker}\u0000` }, { ...BEFORE, description: marker }),
           ];
           expect(answers.map((answer) => answer.ok)).toEqual([true, true, false]);
           expect(answers[2]).toEqual({ ok: false, errors: { description: "invalid" } });
@@ -569,8 +570,8 @@ describe("editEvent", () => {
       await onSeeded(async (trx, eventId, token) => {
         const rows = await rowsOf(trx, eventId);
         const fields = { ...FORM, title: "Tournoi de Rennes U13" };
-        expect(await editEvent(trx, eventId, forge(token), fields, BEFORE)).toEqual({ ok: false, error: "invalid" });
-        expect(await editEvent(trx, eventId, forge(token), { ...fields, title: "" }, BEFORE)).toEqual({
+        expect(await editEvent(trx, eventId, { adminToken: forge(token) }, fields, BEFORE)).toEqual({ ok: false, error: "invalid" });
+        expect(await editEvent(trx, eventId, { adminToken: forge(token) }, { ...fields, title: "" }, BEFORE)).toEqual({
           ok: false,
           error: "invalid",
         });
@@ -583,7 +584,7 @@ describe("editEvent", () => {
       await onSeeded(async (trx, eventId, token) => {
         await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", eventId).execute();
         const rows = await rowsOf(trx, eventId);
-        expect(await editEvent(trx, eventId, token, { ...FORM, title: "U13" }, BEFORE)).toEqual({
+        expect(await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "U13" }, BEFORE)).toEqual({
           ok: false,
           error: "invalid",
         });
@@ -596,11 +597,56 @@ describe("editEvent", () => {
         const first = await seedEvent(trx);
         const second = await seedEvent(trx);
         const rows = await rowsOf(trx, first.id);
-        expect(await editEvent(trx, first.id, second.token, { ...FORM, title: "U13" }, BEFORE)).toEqual({
+        expect(await editEvent(trx, first.id, { adminToken: second.token }, { ...FORM, title: "U13" }, BEFORE)).toEqual({
           ok: false,
           error: "invalid",
         });
         expect(await rowsOf(trx, first.id)).toEqual(rows);
+      });
+    });
+
+    it("OA7.6: the organiser's session changes the event, without the token", async () => {
+      await withRollback(async (trx) => {
+        const { id } = await seedEvent(trx);
+        const session = await seedSession(trx, await confirmSeededEvent(trx, id));
+        const answer = await editEvent(trx, id, { session }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE);
+        expect(answer).toMatchObject({ ok: true, event: { title: "Tournoi de Rennes U13" } });
+        expect((await findEventById(trx, id))?.title).toBe("Tournoi de Rennes U13");
+      });
+    });
+
+    it.each<[string, (trx: Db, eventId: string, token: string) => Promise<unknown>]>([
+      [
+        "OA7.2: another account's session",
+        async (trx, eventId) => {
+          await confirmSeededEvent(trx, eventId);
+          return { session: await seedSession(trx, await seedAccount(trx)) };
+        },
+      ],
+      ["OA7.7: any session on a pending event", async (trx) => ({ session: await seedSession(trx, await seedAccount(trx)) })],
+      [
+        "OA9.6: the organiser's session, ended 91 days after its last visit",
+        async (trx, eventId) => {
+          const lastVisitAt = new Date(NOW.getTime() - 91 * 24 * 60 * 60 * 1000);
+          return { session: await seedSession(trx, await confirmSeededEvent(trx, eventId), { lastVisitAt }) };
+        },
+      ],
+      [
+        "OA7.9: the creation browser's token and the former organiser's session, once the account is deleted",
+        async (trx, eventId, token) => {
+          const accountId = await confirmSeededEvent(trx, eventId);
+          const session = await seedSession(trx, accountId);
+          await trx.deleteFrom("account").where("id", "=", accountId).execute();
+          return { adminToken: token, session };
+        },
+      ],
+      ["OA7.5: the token alone, not in the body's field", async (_, __, token) => token],
+    ])("answers invalid for %s, and writes nothing", async (_, proofOf) => {
+      await onSeeded(async (trx, eventId, token) => {
+        const proof = await proofOf(trx, eventId, token);
+        const rows = await rowsOf(trx, eventId);
+        expect(await editEvent(trx, eventId, proof, { ...FORM, title: "U13" }, BEFORE)).toEqual({ ok: false, error: "invalid" });
+        expect(await rowsOf(trx, eventId)).toEqual(rows);
       });
     });
 
@@ -609,12 +655,12 @@ describe("editEvent", () => {
         const { id: eventId, token } = await seedEvent(trx);
         await seedScene(trx, eventId);
         const answers = [
-          await editEvent(trx, eventId, token, { ...FORM, title: "" }, BEFORE),
-          await editEvent(trx, eventId, token, FORM, { ...BEFORE, title: "Autre" }),
-          await editEvent(trx, eventId, token, WITHOUT_RETOUR, BEFORE),
-          await editEvent(trx, eventId, token, FORM, "x"),
-          await editEvent(trx, "Zz9yXw8v", token, FORM, BEFORE),
-          await editEvent(trx, eventId, token, WITHOUT_RETOUR, BEFORE, SEEN),
+          await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "" }, BEFORE),
+          await editEvent(trx, eventId, { adminToken: token }, FORM, { ...BEFORE, title: "Autre" }),
+          await editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE),
+          await editEvent(trx, eventId, { adminToken: token }, FORM, "x"),
+          await editEvent(trx, "Zz9yXw8v", { adminToken: token }, FORM, BEFORE),
+          await editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
         ];
         expect(answers.map((answer) => ("error" in answer ? answer.error : answer.ok))).toEqual([
           false,
@@ -636,9 +682,9 @@ describe("editEvent", () => {
     it("answers eventNotFound for an unknown id, or an event deleted since the page loaded", async () => {
       await withRollback(async (trx) => {
         const { id, token } = await seedEvent(trx);
-        expect(await editEvent(trx, "Zz9yXw8v", token, FORM, BEFORE)).toEqual({ ok: false, error: "eventNotFound" });
+        expect(await editEvent(trx, "Zz9yXw8v", { adminToken: token }, FORM, BEFORE)).toEqual({ ok: false, error: "eventNotFound" });
         await trx.deleteFrom("event").where("id", "=", id).execute();
-        expect(await editEvent(trx, id, token, FORM, BEFORE)).toEqual({ ok: false, error: "eventNotFound" });
+        expect(await editEvent(trx, id, { adminToken: token }, FORM, BEFORE)).toEqual({ ok: false, error: "eventNotFound" });
       });
     });
 
@@ -649,7 +695,7 @@ describe("editEvent", () => {
         },
       });
       for (const id of ["Ab3dEf7", "' or 1=1", "Ab3dEf7l"]) {
-        expect(await editEvent(unreachable, id, newAdminToken(), FORM, BEFORE)).toEqual({
+        expect(await editEvent(unreachable, id, { adminToken: newAdminToken() }, FORM, BEFORE)).toEqual({
           ok: false,
           error: "eventNotFound",
         });
@@ -661,7 +707,7 @@ describe("editEvent", () => {
         const answer = await whileHeld(
           db,
           (trx) => trx.deleteFrom("event").where("id", "=", eventId).execute(),
-          () => editEvent(db, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
+          () => editEvent(db, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
         );
         expect(answer).toEqual({ ok: false, error: "eventNotFound" });
       });
@@ -675,7 +721,7 @@ describe("editEvent", () => {
         await anonymiseEvent(trx, id);
         const before = await rowsOf(trx, id);
         for (const sent of [token, newAdminToken(), undefined]) {
-          expect(await editEvent(trx, id, sent, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE)).toEqual({
+          expect(await editEvent(trx, id, { adminToken: sent }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE)).toEqual({
             ok: false,
             error: "eventEnded",
           });
@@ -692,7 +738,7 @@ describe("editEvent", () => {
             await lockEvent(trx, eventId, "noKeyUpdate");
             await anonymiseEvent(trx, eventId);
           },
-          () => editEvent(db, eventId, token, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
+          () => editEvent(db, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
         );
         expect(answer).toEqual({ ok: false, error: "eventEnded" });
         expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
@@ -738,7 +784,7 @@ describe("M3.6: editEvent removing the retour while a write on the retour runs, 
       const answer = await whileHeld(
         db,
         (trx) => write(trx, eventId, scene),
-        () => editEvent(db, eventId, token, WITHOUT_RETOUR, BEFORE, SEEN),
+        () => editEvent(db, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
       );
 
       expect(answer).toEqual({ ok: false, error: "confirmRetour", ...after });
@@ -753,7 +799,7 @@ describe("M3.6: editEvent removing the retour while a write on the retour runs, 
 
       const written = await whileHeld(
         db,
-        (trx) => editEvent(trx, eventId, token, WITHOUT_RETOUR, BEFORE, SEEN),
+        (trx) => editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
         () => write(db, eventId, scene),
       );
 
