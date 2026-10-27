@@ -50,17 +50,6 @@ export async function anonymiseEvent(db: Kysely<Database>, eventId: string): Pro
     .execute();
 }
 
-/** Whether the event is anonymised; false for an unknown one. Without a lock: a write checks again under its own. */
-export async function isAnonymised(db: Kysely<Database>, eventId: string): Promise<boolean> {
-  const row = await db
-    .selectFrom("event")
-    .select("id")
-    .where("id", "=", eventId)
-    .where("anonymised_at", "is not", null)
-    .executeTakeFirst();
-  return row !== undefined;
-}
-
 /**
  * Deletes the event (OA2.7, DS4.4): every table that holds to it has its key in `ON DELETE
  * CASCADE`, and the others `SET NULL`. The caller holds the Event's exclusive lock, so no

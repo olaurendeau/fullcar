@@ -517,7 +517,7 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       const { marc, lea, ines } = await seedScene(db, eventId);
       const answers = await inOrder(
         db,
-        (trx) => editEvent(trx, eventId, adminToken, WITHOUT_RETOUR, BEFORE, SEEN),
+        (trx) => editEvent(trx, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
         () => remove(db, eventId, marc),
       );
       expect(answers.first).toMatchObject({ ok: true });
@@ -541,7 +541,7 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc),
-        () => editEvent(db, eventId, adminToken, WITHOUT_RETOUR, BEFORE, SEEN),
+        () => editEvent(db, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toEqual({ ok: false, error: "confirmRetour", cars: 1, persons: 2 });

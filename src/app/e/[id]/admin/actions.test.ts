@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { newAdminToken } from "@/domain/admin-token";
 import { generatePublicId } from "@/domain/public-id";
 import type { Database } from "@/db/schema";
+import { seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
-import { seedEvent } from "@/db/test-events";
+import { confirmSeededEvent, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import nextConfig from "../../../../../next.config";
 import { loadOrganiserPanel, updateEvent } from "./actions";
@@ -25,6 +26,8 @@ function using<T>(db: Kysely<Database>, fn: () => Promise<T>): Promise<T> {
 
 const PHONE = "06 33 33 33 33";
 const INVALID = { state: "invalid" };
+/** The seeded event is pending: without its token, anybody reads that it waits (OA7.7), and nothing else. */
+const PENDING = { state: "pending" };
 
 /**
  * Loads the panel with `token`, on a freshly seeded event where C, who has a number, is
@@ -36,7 +39,7 @@ function loadSeeded(token: (seeded: string) => unknown, id: (seeded: string) => 
       const seeded = await seedEvent(trx, {});
       const c = await seedPerson(trx, seeded.id, { firstName: "C", phone: PHONE });
       await seedPlacement(trx, { personId: c.id, eventId: seeded.id, leg: "aller", rideId: null });
-      return { c: c.id, answer: await loadOrganiserPanel(id(seeded.id), token(seeded.token)) };
+      return { c: c.id, answer: await loadOrganiserPanel(id(seeded.id), { adminToken: token(seeded.token) }) };
     }),
   );
 }
@@ -105,44 +108,44 @@ describe("loadOrganiserPanel", () => {
       ["a token one character off", oneCharOff],
       ["a token one character short", (token: string) => token.slice(0, -1)],
       ["a token one character longer", (token: string) => `${token}A`],
-    ])("answers invalid, and nothing else, for %s", async (_, token) => {
-      expect((await loadSeeded(token)).answer).toStrictEqual(INVALID);
+    ])("answers pending, and nothing else, for %s", async (_, token) => {
+      expect((await loadSeeded(token)).answer).toStrictEqual(PENDING);
     });
 
-    it("answers invalid for the token in another case", async () => {
+    it("answers pending for the token in another case", async () => {
       // Its first character is a lowercase letter, so that upper-casing it always changes it.
       const token = `a${newAdminToken().slice(1)}`;
       const answers = await withRollback((trx) =>
         using(trx, async () => {
           const { id } = await seedEvent(trx, { retourAt: null }, token);
-          return [await loadOrganiserPanel(id, token), await loadOrganiserPanel(id, token.toUpperCase())];
+          return [await loadOrganiserPanel(id, { adminToken: token }), await loadOrganiserPanel(id, { adminToken: token.toUpperCase() })];
         }),
       );
-      expect(answers).toStrictEqual([EMPTY_PANEL, INVALID]);
+      expect(answers).toStrictEqual([EMPTY_PANEL, PENDING]);
     });
 
-    it("answers invalid for the token of another event", async () => {
+    it("answers pending for the token of another event", async () => {
       const answer = await withRollback((trx) =>
         using(trx, async () => {
           const first = await seedEvent(trx);
           const second = await seedEvent(trx);
-          return loadOrganiserPanel(first.id, second.token);
+          return loadOrganiserPanel(first.id, { adminToken: second.token });
         }),
       );
-      expect(answer).toStrictEqual(INVALID);
+      expect(answer).toStrictEqual(PENDING);
     });
 
     it.each([
       ["undefined", undefined],
       ["null", null],
       ["a number", 42],
-    ])("answers invalid for a token that is %s", async (_, token) => {
-      expect((await loadSeeded(() => token)).answer).toStrictEqual(INVALID);
+    ])("answers pending for a token that is %s", async (_, token) => {
+      expect((await loadSeeded(() => token)).answer).toStrictEqual(PENDING);
     });
 
-    it("answers invalid for the token wrapped in an array or an object", async () => {
-      expect((await loadSeeded((token) => [token])).answer).toStrictEqual(INVALID);
-      expect((await loadSeeded((token) => ({ toString: () => token }))).answer).toStrictEqual(INVALID);
+    it("answers pending for the token wrapped in an array or an object", async () => {
+      expect((await loadSeeded((token) => [token])).answer).toStrictEqual(PENDING);
+      expect((await loadSeeded((token) => ({ toString: () => token }))).answer).toStrictEqual(PENDING);
     });
   });
 
@@ -154,7 +157,7 @@ describe("loadOrganiserPanel", () => {
       using(trx, async () => {
         const newId = () => `A${generatePublicId().slice(1)}`;
         const { id, token } = await seedEvent(trx, { retourAt: null }, undefined, newId);
-        return [await loadOrganiserPanel(id, token), await loadOrganiserPanel(`a${id.slice(1)}`, token)];
+        return [await loadOrganiserPanel(id, { adminToken: token }), await loadOrganiserPanel(`a${id.slice(1)}`, { adminToken: token })];
       }),
     );
     expect(answers).toStrictEqual([EMPTY_PANEL, INVALID]);
@@ -171,7 +174,7 @@ describe("loadOrganiserPanel", () => {
     ["missing", undefined],
   ])("answers invalid for an id %s without reading the database", async (_, id) => {
     reads = 0;
-    expect(await using(failingDb(), () => loadOrganiserPanel(id, newAdminToken()))).toStrictEqual(INVALID);
+    expect(await using(failingDb(), () => loadOrganiserPanel(id, { adminToken: newAdminToken() }))).toStrictEqual(INVALID);
     expect(reads).toBe(0);
   });
 
@@ -179,7 +182,7 @@ describe("loadOrganiserPanel", () => {
     const token = newAdminToken();
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const failure = await using(failingDb(token), () => loadOrganiserPanel("Ab3dEf7h", token)).then(
+      const failure = await using(failingDb(token), () => loadOrganiserPanel("Ab3dEf7h", { adminToken: token })).then(
         () => undefined,
         (error: unknown) => error,
       );
@@ -204,6 +207,24 @@ describe("loadOrganiserPanel", () => {
     try {
       await loadSeeded((token) => token);
       await loadSeeded(oneCharOff);
+      expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
+  it("OA7.6: gives the panel for the organiser's session, as for the token, and logs neither", async () => {
+    const methods = ["log", "info", "warn", "error", "debug", "trace"] as const;
+    const spies = methods.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+    try {
+      const answers = await withRollback((trx) =>
+        using(trx, async () => {
+          const { id, token } = await seedEvent(trx, { retourAt: null });
+          const session = await seedSession(trx, await confirmSeededEvent(trx, id));
+          return [await loadOrganiserPanel(id, { session }), await loadOrganiserPanel(id, { adminToken: token })];
+        }),
+      );
+      expect(answers).toStrictEqual([EMPTY_PANEL, EMPTY_PANEL]);
       expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
     } finally {
       for (const spy of spies) spy.mockRestore();
@@ -238,7 +259,7 @@ describe("updateEvent", () => {
     const { answer, token, title } = await withRollback((trx) =>
       using(trx, async () => {
         const { id, token } = await seedEvent(trx);
-        const answer = await updateEvent(id, token, FIELDS, BEFORE);
+        const answer = await updateEvent(id, { adminToken: token }, FIELDS, BEFORE);
         const row = await trx.selectFrom("event").select("title").where("id", "=", id).executeTakeFirstOrThrow();
         return { answer, token, title: row.title };
       }),
@@ -252,7 +273,7 @@ describe("updateEvent", () => {
     const { answer, title } = await withRollback((trx) =>
       using(trx, async () => {
         const { id, token } = await seedEvent(trx);
-        const answer = await updateEvent(id, oneCharOff(token), FIELDS, BEFORE);
+        const answer = await updateEvent(id, { adminToken: oneCharOff(token) }, FIELDS, BEFORE);
         const row = await trx.selectFrom("event").select("title").where("id", "=", id).executeTakeFirstOrThrow();
         return { answer, title: row.title };
       }),
@@ -271,7 +292,7 @@ describe("updateEvent", () => {
         const { id, token } = await seedEvent(trx, { description: "Rendez-vous à 7 h" });
         const { token: personToken } = await seedPerson(trx, id);
         const fields = { ...FIELDS, title: BEFORE.title, description: "Zorglub4729" };
-        const answer = await updateEvent(id, tokenOf({ token, personToken }), fields, BEFORE);
+        const answer = await updateEvent(id, { adminToken: tokenOf({ token, personToken }) }, fields, BEFORE);
         const row = await trx.selectFrom("event").select("description").where("id", "=", id).executeTakeFirstOrThrow();
         return { answer, row };
       }),
@@ -287,7 +308,7 @@ describe("updateEvent", () => {
     ["missing", undefined],
   ])("answers eventNotFound for an id %s without reading the database", async (_, id) => {
     reads = 0;
-    expect(await using(failingDb(), () => updateEvent(id, newAdminToken(), FIELDS, BEFORE))).toEqual({
+    expect(await using(failingDb(), () => updateEvent(id, { adminToken: newAdminToken() }, FIELDS, BEFORE))).toEqual({
       ok: false,
       error: "eventNotFound",
     });
@@ -298,7 +319,7 @@ describe("updateEvent", () => {
     const token = newAdminToken();
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const failure = await using(failingDb(token), () => updateEvent("Ab3dEf7h", token, FIELDS, BEFORE)).then(
+      const failure = await using(failingDb(token), () => updateEvent("Ab3dEf7h", { adminToken: token }, FIELDS, BEFORE)).then(
         () => undefined,
         (error: unknown) => error,
       );
@@ -321,7 +342,7 @@ describe("updateEvent", () => {
     const spies = methods.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
     try {
       const fields = { ...FIELDS, description: marker };
-      const failure = await using(failingDb(marker), () => updateEvent("Ab3dEf7h", newAdminToken(), fields, BEFORE)).then(
+      const failure = await using(failingDb(marker), () => updateEvent("Ab3dEf7h", { adminToken: newAdminToken() }, fields, BEFORE)).then(
         () => undefined,
         (error: unknown) => error,
       );
@@ -346,8 +367,8 @@ describe("updateEvent", () => {
       await withRollback((trx) =>
         using(trx, async () => {
           const { id, token } = await seedEvent(trx);
-          await updateEvent(id, oneCharOff(token), FIELDS, BEFORE);
-          await updateEvent(id, token, FIELDS, BEFORE);
+          await updateEvent(id, { adminToken: oneCharOff(token) }, FIELDS, BEFORE);
+          await updateEvent(id, { adminToken: token }, FIELDS, BEFORE);
         }),
       );
       expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);

@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 import { adminTokenMatches, hashAdminToken } from "@/domain/admin-token";
 import { LOCATION_MAX, TITLE_MAX, type NewEvent } from "@/domain/event";
 import { PUBLIC_ID_ALPHABET, isPublicId } from "@/domain/public-id";
-import { INSERT_ATTEMPTS, findEventById, insertEvent, lockEvent, readAdminTokenHash, writeEventFields } from "./events";
+import {
+  INSERT_ATTEMPTS,
+  findEventById,
+  insertEvent,
+  lockEvent,
+  readAdminTokenHash,
+  readOrganiserAccessEvent,
+  writeEventFields,
+} from "./events";
 import type { Database } from "./schema";
 import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
@@ -180,6 +188,44 @@ describe("readAdminTokenHash", () => {
     });
     expect(hash).toBeNull();
     expect(adminTokenMatches(token, hash)).toBe(false);
+  });
+});
+
+describe("readOrganiserAccessEvent", () => {
+  it("gives what the access rule reads, from pending to confirmed, then revoked and anonymised", async () => {
+    const reads = await withRollback(async (trx) => {
+      const id = await insertEvent(trx, event, HASH);
+      const pending = await readOrganiserAccessEvent(trx, id);
+      const accountId = await confirmSeededEvent(trx, id);
+      const confirmed = await readOrganiserAccessEvent(trx, id);
+      await trx.updateTable("event").set({ admin_token_hash: null, anonymised_at: new Date() }).where("id", "=", id).execute();
+      const anonymised = await readOrganiserAccessEvent(trx, id);
+      return { id, accountId, reads: [pending, confirmed, anonymised] };
+    });
+    const { id, accountId } = reads;
+    expect(reads.reads).toStrictEqual([
+      { id, accountId: null, confirmed: false, anonymised: false, adminTokenHash: HASH },
+      { id, accountId, confirmed: true, anonymised: false, adminTokenHash: HASH },
+      { id, accountId, confirmed: true, anonymised: true, adminTokenHash: null },
+    ]);
+  });
+
+  it("gives an event whose account was deleted as confirmed, without an account", async () => {
+    const read = await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const accountId = await confirmSeededEvent(trx, id);
+      await trx.deleteFrom("account").where("id", "=", accountId).execute();
+      return readOrganiserAccessEvent(trx, id);
+    });
+    expect(read).toMatchObject({ accountId: null, confirmed: true });
+  });
+
+  it("gives nothing for an unknown id, or a known one in another case", async () => {
+    const reads = await withRollback(async (trx) => {
+      await insertEvent(trx, event, HASH, () => "Ab3dEf7h");
+      return [await readOrganiserAccessEvent(trx, "Zz9yXw8v"), await readOrganiserAccessEvent(trx, "ab3dEf7h")];
+    });
+    expect(reads).toEqual([undefined, undefined]);
   });
 });
 

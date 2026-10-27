@@ -8,15 +8,16 @@
  * - the person is one of the device's persons.
  *
  * The organiser (DO1, decided by the human on 2026-10-18) also receives, in the answer of
- * the organiser area only, and only with the event's admin token, checked here, the number
+ * the organiser area only, and only with an access that organiser-access.ts granted for the
+ * event (the session of its account, or the creation browser's token, OA7.6), the number
  * of each person without a car on a leg, in that leg's list without a car. For a car, the
  * answer says only whether its driver has a number, never which. It carries no number of a
  * driver, of a placed passenger or of a person not concerned. Everywhere else, the
  * participants' board of `/e/{id}/admin` included, the devices' rule above stays.
  */
-import { adminTokenMatches } from "./admin-token";
 import type { Board, BoardCar, BoardPerson, DevicePerson, LegBoard } from "./board";
 import type { Leg } from "./leg";
+import { grantsAccessTo, type OrganiserAccess } from "./organiser-access";
 
 /**
  * The numbers of an event's persons, read apart from the rest of the rows: only
@@ -83,12 +84,6 @@ export function withVisiblePhones(board: Board, phonesById: PhonesById, deviceId
   }));
 }
 
-/** What the organiser presents: the token received in the request's body, and the hash the event keeps. */
-export interface OrganiserProof {
-  token: unknown;
-  storedHash: string | undefined;
-}
-
 /** A car as the organiser area sees it: whether its driver has a number, never the number. */
 export interface OrganiserCar extends BoardCar {
   driverHasPhone: boolean;
@@ -103,9 +98,10 @@ export interface OrganiserLegBoard {
 }
 
 /**
- * The organiser area's legs (DO1), or `undefined` when the token is not the event's one:
- * wrong, absent, not a string, or no stored hash. The rule checks the token itself, so that
- * no caller can tell it « checked » by mistake. A number is set only in the list without a
+ * The organiser area's legs (DO1), or `undefined` when `access` is not one organiser-access.ts
+ * granted for the event `eventId`: an object of the same shape made elsewhere, a copy, or
+ * an access to another event. No token and no boolean « checked » is taken, so that no
+ * caller can tell it « checked » by mistake (#596). A number is set only in the list without a
  * car of the leg where the person is without a car. The board given is built without a
  * device; its device section is not taken, and the board is left as it was. Only the known
  * fields are copied, one by one: TypeScript accepts a `VisibleBoard` for a `Board`, and a
@@ -114,9 +110,10 @@ export interface OrganiserLegBoard {
 export function withOrganiserPhones(
   board: Board,
   phonesById: PhonesById,
-  { token, storedHash }: OrganiserProof,
+  access: OrganiserAccess,
+  eventId: string,
 ): OrganiserLegBoard[] | undefined {
-  if (!adminTokenMatches(token, storedHash)) return undefined;
+  if (!grantsAccessTo(access, eventId)) return undefined;
   // An empty number is no number: no `tel:` link, and the driver counts as having none.
   const phoneOf = (subjectId: string): string | null => {
     const phone = phonesById.get(subjectId);

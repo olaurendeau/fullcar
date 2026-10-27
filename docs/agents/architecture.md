@@ -451,7 +451,11 @@ deviné l'est aussi.
   le fait dans le **fragment** (`#…`), que le navigateur n'envoie jamais au serveur : le
   client le lit et le transmet dans le corps de la requête. Pour le lien admin, ce corps est
   celui de `loadOrganiserPanel`, qui répond `{ state: "invalid" }` sans aucune donnée, ou le
-  panneau, et rien d'autre (amendement de #3 C4.9). Le panneau n'est jamais dans le HTML.
+  panneau, et rien d'autre (amendement de #3 C4.9). À partir de #596, ce corps est
+  `{ adminToken, session }`, et la réponse est le panneau ou l'état que décide
+  `organiser-access.ts`, sans aucune autre donnée : `invalid` pour un événement inconnu,
+  `signIn`, `notYours` avec l'adresse de la session du visiteur, `pending`, `orphan` ou
+  `ended`. Le panneau n'est jamais dans le HTML.
   À partir de #263, c'est aussi celui d'`updateEvent`, la modification de l'événement : un
   jeton refusé répond `invalid` sans rien écrire, et aucune réponse ne porte le jeton.
   - lien admin : `/e/{id}/admin#{token}`, jusqu'à #597 ; ensuite il n'y a plus de lien
@@ -608,10 +612,11 @@ permis (`phone IS NOT NULL`, qui rend un booléen, jamais la valeur, #766) ; lir
 hors de cette requête reste bloquant. `event-rows.ts` renvoie les téléphones **à part** des autres données
 (`phonesById`), et seuls `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`)
 les reçoivent et les posent : un `row.phone` recopié ailleurs, dans le board par exemple,
-re-dériverait la règle. `withOrganiserPhones` vérifie lui-même le jeton d'admin
-(`adminTokenMatches`) et ne rend rien s'il ne correspond pas. À partir de #596, il ne reçoit
-plus le jeton mais une autorisation, d'un type que seule `src/domain/organiser-access.ts`
-produit : la session de l'organisateur ou le jeton d'admin du navigateur de création (OA7.6). Une liste de colonnes qui
+re-dériverait la règle. Depuis #596, `withOrganiserPhones` ne reçoit plus le jeton mais une
+autorisation, que seule `src/domain/organiser-access.ts` produit : la session de
+l'organisateur ou le jeton d'admin du navigateur de création (OA7.6). Il ne rend rien pour
+une autorisation que la règle n'a pas donnée, pour cet événement : un objet de même forme,
+une copie, ou l'autorisation d'un autre événement. Une liste de colonnes qui
 contient `phone` reste privée à `event-rows.ts` (non exportée) : un `.select(cette liste)`
 ailleurs serait une nouvelle lecture.
 
