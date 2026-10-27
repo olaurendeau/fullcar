@@ -472,7 +472,8 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
       // the context's timeout is then 0. What bounds this wait is a timeout the size of the test's
       // (30 s), which Playwright grants afresh to afterEach hooks and fixture teardown. A search
       // (`/api/lieux`) is bounded by the app at about 3 s (`TIMEOUT_MS` in
-      // `src/app/api/lieux/photon.ts`).
+      // `src/app/api/lieux/photon.ts`), and a tile (`/tuiles/…`) at 5 s (`TIMEOUT_MS` in
+      // `src/app/tuiles/[z]/[x]/[y]/geoapify.ts`).
       await Promise.all(reading);
       await context.unrouteAll({ behavior: "ignoreErrors" });
     },
