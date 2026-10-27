@@ -191,7 +191,7 @@ describe("removeFromDevice: what is erased (RP2)", () => {
           await deletePlacement(offer, { personId: tom.id, eventId, leg: "aller" });
           await seedRide(offer, eventId, tom.id, { leg: "aller" });
         },
-        () => removeFromDevice(db, eventId, tom.token, { personId: tom.id }),
+        (own) => removeFromDevice(own, eventId, tom.token, { personId: tom.id }),
       );
       expect(outcome).toMatchObject({ ok: true, removal: "removed" });
       expect(await rowsOf(db, eventId)).toEqual({ persons: [], rides: [], placements: [] });

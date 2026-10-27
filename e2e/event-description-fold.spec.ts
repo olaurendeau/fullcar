@@ -3,7 +3,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import { holdFirst, holdToken, newToken } from "./device";
 import { editEventInDb } from "./event-db";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { creatorTest as test, expect, leaveNoToken } from "./fixtures";
 import { pressUntil } from "./focus-ring";
 import { organiserPath } from "./organiser";
 

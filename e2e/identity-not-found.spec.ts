@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { expectColour } from "./colour";
 import { contrast } from "./contrast";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { creatorTest as test, expect, leaveNoToken } from "./fixtures";
 import { legButton, organiserPath, unfoldLegs } from "./organiser";
 
 // VI2.4 opens the organiser area with its token.

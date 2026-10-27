@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { PUBLIC_ID_ALPHABET } from "@/domain/public-id";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { creatorTest as test, expect, leaveNoToken } from "./fixtures";
 import { organiserPath } from "./organiser";
 
 // D1.6 opens the organiser's page with its token.

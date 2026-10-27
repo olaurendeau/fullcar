@@ -6,7 +6,8 @@ import { findEventById, lockEvent, writeEventFields } from "@/db/events";
 import { countLegRows, type LegCounts } from "@/db/legs";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
-import { seedAccount, seedSession } from "@/db/test-accounts";
+import { closeSession } from "@/db/sessions";
+import { seedAccount, seedSession, withCommittedAddresses } from "@/db/test-accounts";
 import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { confirmSeededEvent, removeSeededRetour, seedEvent } from "@/db/test-events";
@@ -708,7 +709,7 @@ describe("editEvent", () => {
         const answer = await whileHeld(
           db,
           (trx) => trx.deleteFrom("event").where("id", "=", eventId).execute(),
-          () => editEvent(db, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
+          (own) => editEvent(own, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
         );
         expect(answer).toEqual({ ok: false, error: "eventNotFound" });
       });
@@ -739,11 +740,94 @@ describe("editEvent", () => {
             await lockEvent(trx, eventId, "noKeyUpdate");
             await anonymiseEvent(trx, eventId);
           },
-          () => editEvent(db, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
+          (own) => editEvent(own, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
         );
         expect(answer).toEqual({ ok: false, error: "eventEnded" });
         expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
       });
+    });
+  });
+
+  /*
+   * #836: the access granted before the lock no longer holds once the lock is obtained. The
+   * change reads its access again under the Event's lock, from what was committed while it
+   * waited: on committed data, through two connections.
+   */
+  describe("#836: the access decided again under the Event's lock (committed data)", () => {
+    /** The event confirmed by a committed account of `email`, and a session of it. */
+    async function organiserOf(db: Db, eventId: string, email: string) {
+      const accountId = await seedAccount(db, { email });
+      await db.updateTable("event").set({ account_id: accountId, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+      return { accountId, session: await seedSession(db, accountId) };
+    }
+
+    const U13 = { ...FORM, title: "Tournoi de Rennes U13" };
+
+    it("answers invalid for a session closed while the change waited behind a write on a leg, and writes nothing", async () => {
+      await withCommittedAddresses((_, address) =>
+        withCommittedEvent(async (db, eventId) => {
+          const { session } = await organiserOf(db, eventId, address());
+          const answer = await whileHeld(
+            db,
+            (trx) => lockEvent(trx, eventId, "share"),
+            () => editEvent(db, eventId, { session }, U13, BEFORE),
+            async () => {
+              expect(await closeSession(db, session)).toBe(true);
+            },
+          );
+          expect(answer).toEqual({ ok: false, error: "invalid" });
+          expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
+        }),
+      );
+    });
+
+    it("answers invalid for the organiser's session of an account deleted while the change waited for its lock, and writes nothing", async () => {
+      await withCommittedAddresses((_, address) =>
+        withCommittedEvent(async (db, eventId, token) => {
+          const { accountId, session } = await organiserOf(db, eventId, address());
+          const answer = await whileHeld(
+            db,
+            async (trx) => {
+              await lockEvent(trx, eventId, "noKeyUpdate");
+              await trx.deleteFrom("account").where("id", "=", accountId).execute();
+            },
+            // OA7.9: the creation browser's token, left behind, opens nothing either.
+            () => editEvent(db, eventId, { session, adminToken: token }, U13, BEFORE),
+          );
+          expect(answer).toEqual({ ok: false, error: "invalid" });
+          expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
+        }),
+      );
+    });
+
+    it("answers invalid for a token revoked while the change waited for its lock, and writes nothing", async () => {
+      await withCommittedEvent(async (db, eventId, token) => {
+        const answer = await whileHeld(
+          db,
+          async (trx) => {
+            await lockEvent(trx, eventId, "noKeyUpdate");
+            await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", eventId).execute();
+          },
+          () => editEvent(db, eventId, { adminToken: token }, U13, BEFORE),
+        );
+        expect(answer).toEqual({ ok: false, error: "invalid" });
+        expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
+      });
+    });
+
+    it("still writes for a session that stays open while the change waited behind a write on a leg", async () => {
+      await withCommittedAddresses((_, address) =>
+        withCommittedEvent(async (db, eventId) => {
+          const { session } = await organiserOf(db, eventId, address());
+          const answer = await whileHeld(
+            db,
+            (trx) => lockEvent(trx, eventId, "share"),
+            () => editEvent(db, eventId, { session }, U13, BEFORE),
+          );
+          expect(answer).toMatchObject({ ok: true, event: { title: U13.title } });
+          expect((await findEventById(db, eventId))?.title).toBe(U13.title);
+        }),
+      );
     });
   });
 });
@@ -785,7 +869,7 @@ describe("M3.6: editEvent removing the retour while a write on the retour runs, 
       const answer = await whileHeld(
         db,
         (trx) => write(trx, eventId, scene),
-        () => editEvent(db, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
+        (own) => editEvent(own, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
       );
 
       expect(answer).toEqual({ ok: false, error: "confirmRetour", ...after });
@@ -801,7 +885,7 @@ describe("M3.6: editEvent removing the retour while a write on the retour runs, 
       const written = await whileHeld(
         db,
         (trx) => editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
-        () => write(db, eventId, scene),
+        (own) => write(own, eventId, scene),
       );
 
       expect(written).toMatchObject({ ok: false, error: "noRetour" });
