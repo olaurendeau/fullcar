@@ -12,7 +12,7 @@ export function siteOrigin(env: Readonly<Record<string, string | undefined>> = p
 }
 
 /** The pages a search engine may list (#412). An event's are reached by their link only. */
-export const publicPaths = ["/", "/nouveau"] as const;
+export const publicPaths = ["/", "/nouveau", "/confidentialite"] as const;
 export type PublicPath = (typeof publicPaths)[number];
 
 /** A public page's own metadata: its canonical URL, against the root layout's `metadataBase`. */

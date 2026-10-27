@@ -12,16 +12,21 @@ export const CRISP_CHAT_URL = "https://go.crisp.chat/chat/embed/?website_id=3c4a
 /** The public repository of Fullcar (#489): a fixed address, nothing of the page taken along. */
 export const SOURCE_CODE_URL = "https://github.com/olaurendeau/fullcar";
 
+const inLink =
+  "inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-muted-foreground underline underline-offset-4 focus-visible:focus-ring";
+
 const outLink = "inline-flex min-h-11 items-center px-3 text-sm text-muted-foreground underline underline-offset-4";
 
 /**
  * The last thing of a page, on two lines at every width (#489, design github-link).
  *
  * Line 1, what stays in the app: a link to the home page (#232, A3), in the same tab, at the
- * fixed address `/`, then the language switch (#113). The home link takes nothing of the
- * current address along, is left out of `/` itself (`withHomeLink={false}`), where it would
- * lead nowhere, and is not prefetched: no page, the organiser's included, asks for the home
- * page before a tap on it.
+ * fixed address `/`, then the language switch (#113), then a link to the privacy page (#612,
+ * OA10.3), in the same tab too, at the fixed address `/confidentialite`. The home link takes
+ * nothing of the current address along, is left out of `/` itself (`withHomeLink={false}`),
+ * where it would lead nowhere, and is not prefetched: no page, the organiser's included, asks
+ * for the home page before a tap on it. The privacy link is not prefetched either, and is on
+ * every page, `/` included.
  *
  * Line 2, what leaves it: the source code on GitHub, then a discreet "contact us" link (#69,
  * K1 to K3), the last link of the page. Both open a new tab, with neither opener nor
@@ -36,14 +41,15 @@ export function ContactFooter({ withHomeLink = true }: { withHomeLink?: boolean 
       <LanguageSwitch
         before={
           withHomeLink && (
-            <Link
-              href="/"
-              prefetch={false}
-              className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-muted-foreground underline underline-offset-4 focus-visible:focus-ring"
-            >
+            <Link href="/" prefetch={false} className={inLink}>
               {t("home")}
             </Link>
           )
+        }
+        after={
+          <Link href="/confidentialite" prefetch={false} className={inLink}>
+            {t("privacy")}
+          </Link>
         }
       />
       <div className="flex flex-wrap justify-center">

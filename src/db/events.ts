@@ -4,6 +4,7 @@ import type { OrganiserAccessEvent } from "@/domain/organiser-access";
 import type { PendingSendRow } from "@/domain/pending-send";
 import { generatePublicId } from "@/domain/public-id";
 import type { Database, EventTable } from "./schema";
+import { tokenKey } from "./token-key";
 
 /**
  * Ids drawn before giving up. With 57⁸ ids, even one collision is rare: several in a row
@@ -56,6 +57,29 @@ export async function readAdminTokenHash(db: Kysely<Database>, id: string): Prom
   const row = await db.selectFrom("event").select("admin_token_hash").where("id", "=", id).executeTakeFirst();
   if (row === undefined) return undefined;
   return row.admin_token_hash?.toString("hex") ?? null;
+}
+
+/**
+ * Revokes the admin tokens of `tokens`, as they came in a request's body (OA9.1, « Se
+ * déconnecter »): each event whose token is one of them has its hash set to null, which no
+ * token matches. A value that is not a string matches nothing. The events are locked in id
+ * order first, as `lockEvent` locks one: a write of the organiser that waited on one then reads
+ * the token revoked. Gives how many were revoked. Never log a token, nor its hash.
+ */
+export async function revokeAdminTokens(db: Kysely<Database>, tokens: readonly unknown[]): Promise<number> {
+  const keys = tokens.map(tokenKey).filter((key): key is Buffer => key !== null);
+  if (keys.length === 0) return 0;
+  const held = await db
+    .selectFrom("event")
+    .select("id")
+    .where("admin_token_hash", "in", keys)
+    .orderBy("id")
+    .forNoKeyUpdate()
+    .execute();
+  if (held.length === 0) return 0;
+  const ids = held.map((row) => row.id);
+  const revoked = await db.updateTable("event").set({ admin_token_hash: null }).where("id", "in", ids).executeTakeFirst();
+  return Number(revoked.numUpdatedRows);
 }
 
 /**
