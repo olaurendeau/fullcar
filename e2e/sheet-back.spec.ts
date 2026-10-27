@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { animationsDone, holdFirst, holdToken, messages, newToken, recordBar } from "./device";
 import { editEventInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { areaEditButton, holdActionsWith, organiserPath, test as organiserTest, watchHash } from "./organiser";
+import { areaEditButton, holdActionsWith, organiserPath, test as organiserTest } from "./organiser";
 import { answerFor } from "./photon";
 import { namedPlace, textOf } from "./place-field";
 
@@ -13,11 +13,9 @@ leaveNoToken();
 test.use({ locale: "fr-FR" });
 organiserTest.use({ locale: "fr-FR" });
 
-// #768 (event-board v4.7, G1): the browser's « back » closes the open sheet as Escape does, or
-// goes back from its step, instead of leaving the page; a sheet closed otherwise leaves no entry.
+// #768 (event-board v4.7, G1): « back » closes the open sheet as Escape does, or leaves its step; closed otherwise, it leaves no entry.
 
 type Db = Kysely<Database>;
-
 const CLAIRE_PHONE = "06 11 22 33 44";
 const SEATS = "Places, sans compter qui conduit";
 const NOTE = "Note (facultatif)";
@@ -25,9 +23,8 @@ const STEP = "Qui sort de la voiture ?";
 const SOPHIE = "Qui monte dans la voiture de Sophie ?";
 
 /**
- * The device holds Claire (a number), Tom and Léa. Aller: Claire drives Nina and Paul (3 seats),
- * Sophie drives nobody (3 seats), Tom and Léa are without a car. Retour: Zoé drives nobody, Léa
- * is without a car. Nina, Paul, Sophie and Zoé are of other devices.
+ * The device holds Claire (a number), Tom and Léa. Aller: Claire drives Nina and Paul (3 seats), Sophie drives nobody
+ * (3 seats), Tom and Léa are without a car. Retour: Zoé drives nobody, Léa is without a car. The others are of other devices.
  */
 async function seedScene(db: Db, eventId: string, token: string) {
   const mine = async (firstName: string, phone: string | null = null) => (await seedPerson(db, eventId, { firstName, phone }, token)).id;
@@ -60,11 +57,12 @@ const freeSeat = (page: Page, driver: string) => card(page, driver).getByRole("b
 const button = (scope: Locator, name: string | RegExp) => scope.getByRole("button", { name, exact: typeof name === "string" });
 
 type Marked = { __g1?: number };
-
 /** On `/` first, then `path`: leaving the page means `/` again. Marked, to tell a reload. */
 async function arrive(page: Page, path: string) {
   await page.goto("/");
   await page.goto(path);
+  // Hydrated: Next has written its state, which an opening adds to.
+  await page.waitForFunction(() => history.state?.__NA === true);
   await page.evaluate(() => ((window as Marked).__g1 = 1));
 }
 
@@ -106,10 +104,7 @@ async function backLeaves(page: Page) {
 const length = (page: Page) => page.evaluate(() => history.length);
 const historyState = (page: Page) => page.evaluate(() => history.state as Record<string, unknown>);
 
-/**
- * G1.7, G1.14: opened by `open`, the address is the same, and `history.state` holds one key more,
- * whose value says nothing of `secrets`.
- */
+/** G1.7, G1.14: opened by `open`, the address is the same, and one key more in `history.state`, which says nothing of `secrets`. */
 async function opensOneEntry(page: Page, open: () => Promise<unknown>, secrets: string[]) {
   const url = page.url();
   const before = await historyState(page);
@@ -125,10 +120,7 @@ async function opensOneEntry(page: Page, open: () => Promise<unknown>, secrets: 
 
 /** The element that has the focus: its tag and its accessible text. */
 const focused = (page: Page) =>
-  page.evaluate(() => {
-    const element = document.activeElement as HTMLElement | null;
-    return element && `${element.tagName} ${element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 60)}`;
-  });
+  page.evaluate(() => (({ tagName, ariaLabel, textContent }: HTMLElement) => `${tagName} ${ariaLabel ?? textContent?.trim().slice(0, 60)}`)(document.activeElement as HTMLElement));
 
 /** « Modifier Claire », from the sheet of her first name. */
 async function editClaire(page: Page, firstName = "Claire") {
@@ -501,7 +493,6 @@ test.describe("the back gesture on the event's page", () => {
 
   test.describe("at 1280 × 800", () => {
     test.use({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false });
-
     test("G1.18: G1.1 and G1.5 (Escape) for « Modifier Claire »", async ({ page, seededEvent }) => {
       await visit(page, seededEvent.id);
       await SHEETS[2].open(page);
@@ -529,25 +520,8 @@ organiserTest.describe("the back gesture in the organiser's area", () => {
   const retourBox = (page: Page) => editSheet(page).getByRole("checkbox", { name: "Retour", exact: true });
   const submit = (page: Page) => button(editSheet(page), "Valider");
 
-  /** Whether the fragment is still `#{token}`: compared in the page, never printed. */
-  const hashKept = (page: Page, token: string) => page.evaluate((expected) => location.hash === `#${expected}`, token);
-
-  organiserTest("G1.8: « Modifier l’événement » closed by back: the token stays, nothing checked again; the next back leaves", async ({ page, seededEvent }) => {
-    const hashChanges = await watchHash(page);
-    await arrive(page, organiserPath(seededEvent));
-    await opensOneEntry(page, async () => {
-      await areaEditButton(page).click();
-      await titleField(page).fill("Sortie au lac");
-    }, [seededEvent.token, "Sortie au lac"]);
-    await backCloses(page);
-    expect(await hashKept(page, seededEvent.token)).toBe(true);
-    expect(await hashChanges()).toBe(0);
-    await expect(page.getByRole("group", { name: "Lien à partager" })).toBeVisible();
-    await expect(page.getByRole("group", { name: "Lien d’organisateur" })).toBeVisible();
-    await expect(page.getByText("Chargement de l’espace organisateur…")).toHaveCount(0);
-    await expect(page.getByText("Ce lien d’organisateur n’est pas valide.")).toHaveCount(0);
-    await backLeaves(page);
-    // G1.5: « Annuler » leaves no entry.
+  // G1.8 is in #860.
+  organiserTest("G1.5: « Annuler » of « Modifier l’événement » leaves no entry", async ({ page, seededEvent }) => {
     await arrive(page, organiserPath(seededEvent));
     await areaEditButton(page).click();
     await button(editSheet(page), "Annuler").click();

@@ -89,8 +89,8 @@ export function createSheetHistory(win: HistoryWindow) {
   }
 
   function onPopState(event: Pick<Event, "stopImmediatePropagation">) {
-    const ours = travelling || pushed().length > 0 || markOf(win.history.state) !== undefined;
-    if (ours && win.location.href === address) event.stopImmediatePropagation();
+    // Only a step between this page's entries, at their address: any other is Next's, onto a closed sheet's entry too.
+    if ((travelling || pushed().length > 0) && win.location.href === address) event.stopImmediatePropagation();
     if (travelling) {
       travelling = false;
       landed();

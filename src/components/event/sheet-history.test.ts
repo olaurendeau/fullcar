@@ -11,7 +11,7 @@ type State = Record<string, unknown>;
  * scroll restoration mode, which `pushState` copies.
  */
 function fakeTab() {
-  const entries: { state: State; mode: ScrollRestoration }[] = [{ state: { __NA: true }, mode: "auto" }];
+  const entries: { state: State; mode: ScrollRestoration; href: string }[] = [{ state: { __NA: true }, mode: "auto", href: "/e/1" }];
   let index = 0;
   let listener: (event: Pick<Event, "stopImmediatePropagation">) => void = () => {};
   const calls = { pushState: [] as unknown[][], go: [] as number[] };
@@ -21,6 +21,7 @@ function fakeTab() {
   const traverse = (by: number) =>
     setTimeout(() => {
       index = Math.max(0, Math.min(entries.length - 1, index + by));
+      location.href = entries[index].href;
       let stopped = false;
       listener({ stopImmediatePropagation: () => void (stopped = true) });
       if (!stopped) heardByNext += 1;
@@ -38,12 +39,14 @@ function fakeTab() {
     },
     pushState(...args: unknown[]) {
       calls.pushState.push(args);
-      // As Next's: its own state copied into the new entry.
-      entries.splice(++index, entries.length, { state: { __NA: true, ...(args[0] as State) }, mode: entries[index - 1].mode });
+      // As Next's: its own state copied into the new entry, at the address given, if any.
+      const [state, , href = entries[index].href] = args as [State, string, string?];
+      entries.splice(++index, entries.length, { state: { __NA: true, ...state }, mode: entries[index - 1].mode, href: (location.href = href) });
     },
     go: (by: number) => (calls.go.push(by), traverse(by)),
   };
-  const win: HistoryWindow = { history, location: { href: "/e/1" }, addEventListener: (_type, added) => void (listener = added) };
+  const location = { href: "/e/1" };
+  const win: HistoryWindow = { history, location, addEventListener: (_type, added) => void (listener = added) };
   const sheets = createSheetHistory(win);
   const at = () => ({ index, length: entries.length, heardByNext });
   return { sheets, win, calls, landed, traverse, at, state: () => entries[index].state };
@@ -112,6 +115,28 @@ describe("createSheetHistory", () => {
     expect(tab.calls.go).toEqual([-1, -2]);
     expect(tab.at()).toMatchObject({ index: 0, heardByNext: 0 });
     expect(onSheetBack).not.toHaveBeenCalled();
+  });
+
+  it("a step to or from another address is Next's, a sheet left open there or an entry of a closed one", async () => {
+    const tab = fakeTab();
+    const onBack = vi.fn();
+    // A link from /e/1 to /e/2, a sheet opened there, then back two steps, to /e/1: the sheet closes, and Next shows /e/1.
+    tab.win.history.pushState({}, "", "/e/2");
+    tab.sheets.add(onBack);
+    await settle();
+    tab.traverse(-2);
+    await settle();
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(tab.at().heardByNext).toBe(1);
+    // « Suivant » twice, onto the closed sheet's entry, a link from there, then back onto it: each Next's.
+    tab.traverse(1);
+    await settle();
+    tab.traverse(1);
+    await settle();
+    tab.win.history.pushState({}, "", "/");
+    tab.traverse(-1);
+    await settle();
+    expect(tab.at().heardByNext).toBe(4);
   });
 
   it("the browser restores no scroll as an entry leaves, then the page's mode is as it was (G1.10)", async () => {
