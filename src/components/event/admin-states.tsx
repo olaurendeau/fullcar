@@ -4,7 +4,9 @@ import { Eraser, Mail, MapPin, UserX } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { ReactNode, Ref } from "react";
+import { LoginForm } from "@/app/connexion/login-form";
 import type { Refusal } from "@/app/e/[id]/admin/admin-token-store";
+import { MyEventsLink } from "@/components/account/my-events-link";
 import { Button } from "@/components/ui/button";
 import { toWallClock, wallClockAsUtc } from "@/domain/wall-clock";
 import { useFormatDate } from "@/i18n/format-date";
@@ -17,14 +19,15 @@ const TITLE = "min-w-0 rounded-sm text-2xl font-bold wrap-anywhere focus-visible
  * place of the panel and of the board: nothing of either is shown. Its title, `headingRef`, is
  * the focus's place after « Réessayer » (O5.8).
  *
- * - `signIn`: « Espace organisateur » and `AdminLogin.body` (OA7.1); the form comes with #611.
+ * - `signIn`: « Espace organisateur », `AdminLogin.body` and the sign-in form, whose link brings
+ *   back here (OA7.1, OA4.4).
  * - `pending`: « Adresse pas encore confirmée », with or without a session (OA7.7): neither the
  *   address, nor a form.
  * - `notYours`: the address of the visitor's own session, « Voir l’événement » and « Se
  *   connecter avec une autre adresse » (OA7.2).
  * - `orphan`: « Cet événement n’a plus d’organisateur », for every visitor (OA7.9).
  * - `ended`: the organiser of an anonymised event: its title, place and dates, and when its
- *   sign-ups were erased; no action (OA8.4).
+ *   sign-ups were erased, under « Mes événements » (OA8.4).
  * - `invalid`: an event gone since the page was read: the area's title alone.
  *
  * Its links are not prefetched: a refused visitor asks for no page they did not open.
@@ -42,9 +45,12 @@ export function OrganiserRefused({ id, refusal, headingRef }: { id: string; refu
     case "invalid":
     case "signIn":
       return (
-        <section className="mx-auto flex w-full max-w-md flex-col gap-2">
-          {heading(t("Admin.title"))}
-          {refusal.kind === "signIn" && <p className="text-muted-foreground">{t("AdminLogin.body")}</p>}
+        <section className="mx-auto flex w-full max-w-md flex-col gap-6">
+          <div className="flex flex-col gap-2">
+            {heading(t("Admin.title"))}
+            {refusal.kind === "signIn" && <p className="text-muted-foreground">{t("AdminLogin.body")}</p>}
+          </div>
+          {refusal.kind === "signIn" && <LoginForm returnEventId={id} />}
         </section>
       );
     case "pending":
@@ -109,6 +115,7 @@ function Anonymized({ heading, refusal }: { heading: ReactNode; refusal: Extract
 
   return (
     <section className="mx-auto flex w-full max-w-md flex-col gap-4">
+      <MyEventsLink />
       <div className="flex flex-col gap-2">
         {heading}
         <p className="flex items-start gap-2">

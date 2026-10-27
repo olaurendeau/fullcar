@@ -61,6 +61,7 @@
     }
   },
   "Event": {
+    "organiserSpace": "Espace organisateur",
     "legs": {
       "aller": "Aller",
       "retour": "Retour"
@@ -330,6 +331,7 @@
     "removedElsewhere": "{firstName} ne fait plus partie de vos inscriptions : la personne a été retirée de l’événement depuis un autre appareil."
   },
   "Admin": {
+    "myEvents": "Mes événements",
     "title": "Espace organisateur",
     "shareLink": {
       "label": "Lien à partager",

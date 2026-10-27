@@ -3,6 +3,8 @@
 import { LoaderCircle } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { readSessionToken } from "@/app/session-token";
+import { MyEventsLink } from "@/components/account/my-events-link";
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
 import { OrganiserRefused } from "@/components/event/admin-states";
 import { EditEventSheet, LONG_WAIT } from "@/components/event/edit-event-sheet";
@@ -291,6 +293,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     <>
       {/* Refused, its screen takes the board's room too, and centres there. */}
       <div ref={frame} className={cn("flex flex-col", screen.state === "refused" && "flex-1")}>
+        {/* With the organiser's session, the way back to the list (OA7.3): read once the panel is applied, after hydration. */}
+        {screen.state === "ready" && readSessionToken() !== undefined && <MyEventsLink />}
         {area}
       </div>
       {screen.state === "ready" && (

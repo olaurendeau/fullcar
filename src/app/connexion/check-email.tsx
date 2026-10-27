@@ -22,16 +22,20 @@ type Resent = { n: number; alert?: LoginAlert };
 export function CheckEmail({
   email,
   headingRef,
+  level = "h1",
   resend,
   onChange,
 }: {
   email: string;
   headingRef: Ref<HTMLHeadingElement>;
+  /** An `h2` under another page's title, as the organiser area's (OA7.1). */
+  level?: "h1" | "h2";
   resend: () => Promise<LoginOutcome>;
   onChange: () => void;
 }) {
   const t = useTranslations("Check");
   const tLogin = useTranslations("Login");
+  const Title = level;
   const [resent, setResent] = useState<Resent>();
   const [sending, setSending] = useState(false);
   // Set at once: a second tap before the next render sends nothing.
@@ -55,9 +59,9 @@ export function CheckEmail({
       <div className="mb-4 grid size-12 place-items-center rounded-xl bg-brand-soft text-primary">
         <Mail aria-hidden className="size-6" />
       </div>
-      <h1 ref={headingRef} tabIndex={-1} className="self-start rounded-sm text-2xl font-bold focus-visible:focus-ring">
+      <Title ref={headingRef} tabIndex={-1} className="self-start rounded-sm text-2xl font-bold focus-visible:focus-ring">
         {t("title")}
-      </h1>
+      </Title>
       <p className="mt-2 mb-6 text-muted-foreground [overflow-wrap:anywhere]">{t("body", { email })}</p>
       <div className="flex flex-col gap-2">
         <Button type="button" variant="outline" className="h-11 aria-disabled:opacity-50" aria-disabled={sending || undefined} onClick={again}>

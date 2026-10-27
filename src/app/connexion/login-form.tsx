@@ -33,6 +33,9 @@ type FocusNext = "check" | "field" | undefined;
  *
  * With a session, « Session ouverte avec … » above the title (OA4.6), asked after the load
  * with the token of session-token.ts, in the body: the HTML depends on no session.
+ *
+ * In the organiser area (`returnEventId` given, OA7.1) the form comes under that page's own
+ * title and sentence: no title, intro or session line of its own.
  */
 export function LoginForm({ returnEventId = null }: { returnEventId?: string | null }) {
   const t = useTranslations("Login");
@@ -40,6 +43,9 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
   const tHome = useTranslations("Home");
   const tMyEvents = useTranslations("MyEvents");
   const ids = useId();
+  // Sent from the organiser area (OA7.1): its title and sentence are above, and no session is
+  // known to it (a session would have been refused with the address, OA7.2).
+  const inArea = returnEventId !== null;
   // Inactive until hydrated, as the creation form is (C1.5).
   const hydrated = useSyncExternalStore(
     noSubscription,
@@ -62,7 +68,7 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
 
   // OA9.1: led here by « Se déconnecter », the line says so once, and takes the focus (« Le focus »).
   // Only the App Router's navigation leads here so: the server, and a document loaded, find nothing.
-  const [signedOut] = useState(takeSignedOut);
+  const [signedOut] = useState(() => !inArea && takeSignedOut());
   const signedOutRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (signedOut) signedOutRef.current?.focus();
@@ -70,7 +76,7 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
 
   useEffect(() => {
     const token = readSessionToken();
-    if (token === undefined) return;
+    if (inArea || token === undefined) return;
     let current = true;
     void sendAction(() => signedInAs(token)).then((sent) => {
       // A failure says nothing of the session: the line is left out.
@@ -80,7 +86,7 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
     return () => {
       current = false;
     };
-  }, []);
+  }, [inArea]);
 
   useEffect(() => {
     const next = focusNext.current;
@@ -122,6 +128,7 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
       <CheckEmail
         email={sentTo}
         headingRef={checkRef}
+        level={inArea ? "h2" : "h1"}
         resend={() => request(sentTo)}
         onChange={() => {
           focusNext.current = "field";
@@ -159,16 +166,20 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
           </span>
         </p>
       )}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">{t("title")}</h1>
-        <p id="login-intro" className="text-muted-foreground">
-          {t("intro")}
-        </p>
-      </div>
-      <noscript>
-        <style>{WITHOUT_SCRIPT}</style>
-        <p className="text-sm text-destructive">{t("needsJavaScript")}</p>
-      </noscript>
+      {!inArea && (
+        <>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-2xl font-bold">{t("title")}</h1>
+            <p id="login-intro" className="text-muted-foreground">
+              {t("intro")}
+            </p>
+          </div>
+          <noscript>
+            <style>{WITHOUT_SCRIPT}</style>
+            <p className="text-sm text-destructive">{t("needsJavaScript")}</p>
+          </noscript>
+        </>
+      )}
       <form id="login-form" noValidate onSubmit={submit} className="flex flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-1.5">
           <Label htmlFor={`${ids}-email`} className={cn(error && "text-destructive")}>

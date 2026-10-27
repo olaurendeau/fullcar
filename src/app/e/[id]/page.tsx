@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ContactFooter } from "@/components/contact/contact-footer";
 import { EventEnded } from "@/components/event/event-ended";
+import { OrganiserLink } from "@/components/event/organiser-link";
 import { eventMetadata, loadEventPage } from "./load-event";
 import { ParticipantBoard } from "./participant-board";
 
@@ -26,6 +27,7 @@ export default async function EventPage({ params }: PageProps<"/e/[id]">) {
   // While the bar of messages shows, room below for it as measured, and its 12 px: nothing stays under it (C11.4).
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col p-4 has-data-[message-bar=open]:pb-[calc(1rem+var(--message-bar-height,0px)+12px+env(safe-area-inset-bottom))]">
+      <OrganiserLink id={id} />
       <ParticipantBoard id={id} state={state} />
       <ContactFooter />
     </main>
