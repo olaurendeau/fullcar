@@ -42,8 +42,9 @@ const PAGES: [string, (event: SeededEvent) => string, string, ((event: SeededEve
   ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
   ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
   ["the organiser's page", organiserPath, "Tournoi de Rennes", ({ token }) => token],
-  ["the organiser's page, wrong token", organiserPath, "Tournoi de Rennes", () => WRONG_TOKEN],
-  ["the organiser's page, no token", organiserPath, "Tournoi de Rennes"],
+  // Refused, the screen of a pending event takes the board's place, and its title is the page's (#598).
+  ["the organiser's page, wrong token", organiserPath, "Adresse pas encore confirmée", () => WRONG_TOKEN],
+  ["the organiser's page, no token", organiserPath, "Adresse pas encore confirmée"],
 ];
 
 /** G8: GitHub's hosts, the ones a badge, a logo or a script of GitHub would come from. */
@@ -94,7 +95,7 @@ async function open(page: Page, path: string, heading: string, token: string) {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
     await expect(
-      page.getByRole("region", { name: FR.panel }).or(areaRefused(page, FR.panel)),
+      page.getByRole("region", { name: FR.panel }).or(areaRefused(page)),
     ).toBeVisible();
   }
   // Hydrated: the language switch is inactive until then.
