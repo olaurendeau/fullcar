@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { readSessionToken } from "@/app/session-token";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
-import type { OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import type { EndedHeader, OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
 import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
+import { isWallClock, isWallDate, type WallDate } from "@/domain/wall-clock";
 import type { EditEventOutcome } from "../edit-event";
 import { sendAction, type Sent } from "../run-action";
 import { loadOrganiserPanel, updateEvent } from "./actions";
@@ -84,21 +85,50 @@ export function goToOrganiserArea(router: { push(href: string): void }, id: stri
   router.push(`/e/${id}/admin`);
 }
 
+/**
+ * Why the organiser area does not open, each with its own screen (#598): an unknown event,
+ * nobody (OA7.1), pending outside the creation browser (OA7.7), without an organiser
+ * (OA7.9), another account's session with its address (OA7.2), or the organiser of an
+ * anonymised event, with what is left of it and its day 30 (OA8.4).
+ */
+export type Refusal =
+  | { kind: "invalid" | "signIn" | "pending" | "orphan" }
+  | { kind: "notYours"; email: string }
+  | { kind: "ended"; event: EndedHeader; erasedOn: WallDate };
+
 export type OrganiserCheck =
   | { state: "checking" }
   | { state: "valid"; publicUrl: string; legs: OrganiserLeg[]; pending?: PendingNotice }
-  | { state: "refused" }
+  | { state: "refused"; refusal: Refusal }
   | { state: "failed"; retrying?: boolean };
 
-/** The states of the access rule (#596), each refused alike until its own screen comes (#598). */
-const REFUSED = new Set(["invalid", "signIn", "notYours", "pending", "orphan", "ended"]);
+/** The states of the access rule (#596) that carry nothing. */
+const BARE = new Set(["invalid", "signIn", "pending", "orphan"]);
+
+/** What is left of an anonymised event, copied field by field, or nothing when it is not that. */
+function endedHeader(value: unknown): EndedHeader | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { title, location, allerAt, retourAt } = value as Record<string, unknown>;
+  if (typeof title !== "string" || typeof location !== "string" || !isWallClock(allerAt)) return undefined;
+  if (retourAt !== null && !isWallClock(retourAt)) return undefined;
+  return { title, location, allerAt, retourAt };
+}
+
+/** The refusal a state of the access rule (#596) says, or nothing for anything else. */
+function refusalOf(answer: Record<string, unknown>): Refusal | undefined {
+  const { state, email, event, erasedOn } = answer;
+  if (typeof state === "string" && BARE.has(state)) return { kind: state as "invalid" | "signIn" | "pending" | "orphan" };
+  if (state === "notYours" && typeof email === "string") return { kind: "notYours", email };
+  const header = state === "ended" ? endedHeader(event) : undefined;
+  if (header && typeof erasedOn === "string" && isWallDate(erasedOn)) return { kind: "ended", event: header, erasedOn };
+  return undefined;
+}
 
 /**
  * What the server's answer means: the panel with its legs and the link to share (C4.9 amended,
- * OA7.3), with the notice of a pending event (OA1.7), or refused for every state the access
- * rule refuses with (#596). Anything else, such as the `undefined` Next resolves an action
- * with on an `x-action-redirect` response, is a failed check: the organiser is never refused
- * for it.
+ * OA7.3), with the notice of a pending event (OA1.7), or refused with the screen of the state the access rule decides (#596, #598).
+ * Anything else, such as the `undefined` Next resolves an action with on an
+ * `x-action-redirect` response, is a failed check: the organiser is never refused for it.
  */
 export function checkFromAnswer(answer: unknown, origin: string, id: string): OrganiserCheck {
   if (typeof answer !== "object" || answer === null) return { state: "failed" };
@@ -107,8 +137,8 @@ export function checkFromAnswer(answer: unknown, origin: string, id: string): Or
     const pending = pendingNoticeOf((answer as { pending?: unknown }).pending);
     return { state: "valid", publicUrl: `${origin}/e/${id}`, legs: legs as OrganiserLeg[], ...(pending && { pending }) };
   }
-  if (typeof state === "string" && REFUSED.has(state)) return { state: "refused" };
-  return { state: "failed" };
+  const refusal = refusalOf(answer as Record<string, unknown>);
+  return refusal ? { state: "refused", refusal } : { state: "failed" };
 }
 
 /**

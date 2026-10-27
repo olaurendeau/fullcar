@@ -20,6 +20,8 @@ const FR = {
   tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
   contact: "Nous contacter (s’ouvre dans un nouvel onglet)",
   panel: "Espace organisateur",
+  // The screen of a pending event, refused to a browser without its token (#598).
+  refused: "Adresse pas encore confirmée",
   title: "Titre",
   retour: "Retour",
   boosters: "Rehausseurs",
@@ -29,6 +31,7 @@ const EN = {
   tagline: "Group carpooling, there and back, no account needed.",
   contact: "Contact us (opens in a new tab)",
   panel: "Organiser area",
+  refused: "Email address not confirmed yet",
   title: "Title",
   retour: "Return",
   boosters: "Booster seats",
@@ -39,7 +42,7 @@ async function open(page: Page, path: string, heading: string) {
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
-    await expect(page.getByRole("region", { name: FR.panel }).or(areaRefused(page, FR.panel))).toBeVisible();
+    await expect(page.getByRole("region", { name: FR.panel }).or(areaRefused(page, FR.refused))).toBeVisible();
   }
 }
 
@@ -136,12 +139,13 @@ test.describe("the language switch, in a browser set to French", () => {
       seededEvent,
     }) => {
       await keepAdminToken(page, seededEvent.id, kept);
-      await open(page, organiserPath(seededEvent), "Tournoi de Rennes");
-      await expect(areaRefused(page, FR.panel)).toBeVisible();
+      // Refused, its screen takes the board's place, and its title is the page's.
+      await open(page, organiserPath(seededEvent), FR.refused);
+      await expect(areaRefused(page, FR.refused)).toBeVisible();
       const before = page.url();
 
       await switchTo(page, FR, EN, "en");
-      await expect(areaRefused(page, EN.panel)).toBeVisible();
+      await expect(areaRefused(page, EN.refused)).toBeVisible();
       expect(page.url() === before, "the URL is the same").toBe(true);
     });
   }

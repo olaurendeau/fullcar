@@ -4,6 +4,7 @@ import { LoaderCircle } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
+import { OrganiserRefused } from "@/components/event/admin-states";
 import { EditEventSheet, LONG_WAIT } from "@/components/event/edit-event-sheet";
 import { failureText, wordsOf } from "@/components/event/failure-words";
 import { focusLandmark, focusMapHint, focusMapToggle } from "@/components/event/focus";
@@ -14,6 +15,7 @@ import type { EventFields, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { EventState } from "../event-state";
 import { ParticipantBoard, type BoardHandle } from "../participant-board";
+import { cn } from "@/lib/utils";
 import { useOrganiserCheck } from "./admin-token-store";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
 import { keepFolded, readFolded } from "./organiser-fold";
@@ -25,9 +27,9 @@ import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRea
  * `children` under it.
  *
  * - The area: the panel once the server has accepted this browser's session or admin token
- *   (C4.9, #596), the area's title alone when it refuses them (#597, until #598), and a status
- *   line while the first check runs (O5.1). Hidden without JavaScript, where the page says why
- *   instead (O5.5).
+ *   (C4.9, #596), and a status line while the first check runs (O5.1). Refused, the screen of
+ *   why, in place of the panel and of the board (admin-states.tsx, #598): « Voir l’événement »
+ *   leads to the board. Hidden without JavaScript, where the page says why instead (O5.5).
  * - After « Réessayer », the focus goes to the button of the panel's title, or to the area's
  *   title when refused, before the browser paints, and stays on the button on a new failure (O5.8).
  * - The panel arrives folded or not as the device kept it, read as it is applied, never before
@@ -271,12 +273,12 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         {t("loading")}
       </p>
     );
+  } else if (screen.state === "refused") {
+    area = <OrganiserRefused id={id} refusal={screen.refusal} headingRef={refused} />;
   } else {
     area = (
       <AdminLinkProblem
-        ref={refused}
-        problem={screen.state}
-        retrying={screen.state === "failed" && screen.retrying}
+        retrying={screen.retrying}
         onRetry={() => {
           retried.current = true;
           link.retry();
@@ -287,7 +289,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
 
   return (
     <>
-      <div ref={frame} className="flex flex-col">
+      {/* Refused, its screen takes the board's room too, and centres there. */}
+      <div ref={frame} className={cn("flex flex-col", screen.state === "refused" && "flex-1")}>
         {area}
       </div>
       {screen.state === "ready" && (
@@ -304,18 +307,71 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         />
       )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">
-        <ParticipantBoard
-          ref={boardRef}
-          id={id}
-          state={state}
-          onAction={reread}
-          onState={setShown}
-          hint={screen.state === "ready" ? { onEdit: openEdit, sending: editSending } : undefined}
-          // The screen's, not `link.check`'s: the check is applied in a layout effect, and the area with it.
-          linkChecking={screen.state === "loading"}
-        />
+        {screen.state !== "refused" && (
+          <ParticipantBoard
+            ref={boardRef}
+            id={id}
+            state={state}
+            onAction={reread}
+            onState={setShown}
+            hint={screen.state === "ready" ? { onEdit: openEdit, sending: editSending } : undefined}
+            // The screen's, not `link.check`'s: the check is applied in a layout effect, and the area with it.
+            linkChecking={screen.state === "loading"}
+          />
+        )}
         {children}
       </div>
+    </>
+  );
+}
+
+/**
+ * `/e/{id}/admin` of an anonymised event (OA8.4, #598): no board is left, and the HTML says
+ * nothing of the event but what the metadata does. The check decides, as on any event: its
+ * organiser's session reads what is left, its place included, and « Inscriptions effacées »;
+ * anyone else, the screen the rule gives. A failed check has « Réessayer », the focus going to
+ * the screen's title once it answers (O5.8). The rule never opens the panel here: should an
+ * answer say otherwise, the area's title alone.
+ */
+export function EndedOrganiserScreen({ id, children }: { id: string; children: ReactNode }) {
+  const t = useTranslations("Admin");
+  const { check, retry } = useOrganiserCheck(id);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const retried = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!retried.current || check.state === "checking" || check.state === "failed") return;
+    retried.current = false;
+    heading.current?.focus();
+  }, [check.state]);
+
+  let area: ReactNode;
+  if (check.state === "checking") {
+    area = (
+      <p role="status" className="mx-auto flex w-full max-w-board items-center gap-2 text-sm text-muted-foreground noscript:hidden">
+        <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
+        {t("loading")}
+      </p>
+    );
+  } else if (check.state === "failed") {
+    area = (
+      <AdminLinkProblem
+        retrying={check.retrying}
+        onRetry={() => {
+          retried.current = true;
+          retry();
+        }}
+      />
+    );
+  } else {
+    const refusal = check.state === "refused" ? check.refusal : ({ kind: "invalid" } as const);
+    area = <OrganiserRefused id={id} refusal={refusal} headingRef={heading} />;
+  }
+
+  return (
+    <>
+      <div className={cn("flex flex-col", check.state === "refused" && "flex-1")}>{area}</div>
+      <div className="mx-auto flex w-full max-w-board flex-col gap-6">{children}</div>
     </>
   );
 }

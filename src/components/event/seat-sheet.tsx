@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { storageAvailable } from "@/app/e/[id]/device-token";
 import { Button } from "@/components/ui/button";
 import type { Leg } from "@/domain/leg";
+import { phonePrefill } from "@/domain/phone-prefill";
 import type { VisibleCar, VisibleLegBoard } from "@/domain/phone-visibility";
 import { sheetCandidates, sheetSubmit, tapOutcome } from "@/domain/tap";
 import { cn } from "@/lib/utils";
@@ -241,7 +242,7 @@ function RegisterSheet({
     >
       {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
       <PersonForm
-        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
+        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId), driver }}
         open={() => isOpen.current}
         onDone={() => onOpenChange(false)}
         onGone={() => onOpenChange(false)}
@@ -395,7 +396,7 @@ function SeatSheet({
           <>
             {!adding.kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
             <PersonForm
-              mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
+              mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId), prefill: phonePrefill(persons), driver }}
               open={() => isOpen.current}
               onGone={() => onOpenChange(false)}
               onDone={(personId) => {

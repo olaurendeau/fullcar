@@ -173,18 +173,46 @@ describe("checkFromAnswer", () => {
     expect(checkFromAnswer({ state: "panel", legs, pending: { send: "sent" } }, "https://fullcar.example", ID)).not.toHaveProperty(
       "pending",
     );
+    // Never on a refusal's screen (#598), whatever the answer carries.
+    expect(checkFromAnswer({ state: "pending", pending }, "https://fullcar.example", ID)).toStrictEqual({
+      state: "refused",
+      refusal: { kind: "pending" },
+    });
   });
 
-  // #596: each state of the access rule is refused, until its own screen comes (#598).
+  const ENDED = {
+    title: "Sortie scouts",
+    location: "Forêt de Paimpont",
+    allerAt: "2026-06-06 07:30:00",
+    retourAt: "2026-06-07 17:00:00",
+  };
+
+  // #598: each state of the access rule is refused with its own screen, and what that screen shows.
   it.each([
-    { state: "invalid" },
-    { state: "signIn" },
-    { state: "pending" },
-    { state: "orphan" },
-    { state: "ended" },
-    { state: "notYours", email: "a@b.fr" },
-  ])("refuses the area when the server answers $state", (answer) => {
-    expect(checkFromAnswer(answer, "https://fullcar.example", ID)).toStrictEqual({ state: "refused" });
+    [{ state: "invalid" }, { kind: "invalid" }],
+    [{ state: "signIn" }, { kind: "signIn" }],
+    [{ state: "pending" }, { kind: "pending" }],
+    [{ state: "orphan" }, { kind: "orphan" }],
+    [{ state: "notYours", email: "a@b.fr" }, { kind: "notYours", email: "a@b.fr" }],
+    [
+      { state: "ended", event: ENDED, erasedOn: "2026-07-07" },
+      { kind: "ended", event: ENDED, erasedOn: "2026-07-07" },
+    ],
+    [
+      { state: "ended", event: { ...ENDED, retourAt: null }, erasedOn: "2026-07-06" },
+      { kind: "ended", event: { ...ENDED, retourAt: null }, erasedOn: "2026-07-06" },
+    ],
+  ])("refuses the area with its screen when the server answers %o", (answer, refusal) => {
+    expect(checkFromAnswer(answer, "https://fullcar.example", ID)).toStrictEqual({ state: "refused", refusal });
+  });
+
+  // Copied field by field: nothing else the answer might carry reaches the screen.
+  it("keeps nothing but the screen's fields", () => {
+    const answer = { state: "ended", event: { ...ENDED, extra: 1 }, erasedOn: "2026-07-07", more: 2 };
+    expect(checkFromAnswer(answer, "https://fullcar.example", ID)).toStrictEqual({
+      state: "refused",
+      refusal: { kind: "ended", event: ENDED, erasedOn: "2026-07-07" },
+    });
   });
 
   // A good access must never read refused: Next resolves an action with undefined on
@@ -200,6 +228,13 @@ describe("checkFromAnswer", () => {
     ["the panel without legs", { state: "panel" }],
     ["the panel with legs that are not a list", { state: "panel", legs: {} }],
     ["another state", { state: "other" }],
+    ["not yours without an address", { state: "notYours" }],
+    ["not yours with an address that is not a text", { state: "notYours", email: 3 }],
+    ["ended without its event", { state: "ended", erasedOn: "2026-07-07" }],
+    ["ended without its day 30", { state: "ended", event: ENDED }],
+    ["ended with a day 30 that is not a date", { state: "ended", event: ENDED, erasedOn: "7 juillet" }],
+    ["ended with a start that is not a time", { state: "ended", event: { ...ENDED, allerAt: "demain" }, erasedOn: "2026-07-07" }],
+    ["ended without a place", { state: "ended", event: { ...ENDED, location: null }, erasedOn: "2026-07-07" }],
   ])("says the check failed when the server answers %s", (_, answer) => {
     expect(checkFromAnswer(answer, "https://fullcar.example", ID)).toStrictEqual({ state: "failed" });
   });
@@ -219,7 +254,7 @@ describe("retryFrom", () => {
 
   it.each<[string, OrganiserCheck]>([
     ["while the first check runs", { state: "checking" }],
-    ["on a refused area", { state: "refused" }],
+    ["on a refused area", { state: "refused", refusal: { kind: "pending" } }],
     ["on the panel", { state: "valid", publicUrl: "", legs: [] }],
   ])("starts nothing %s", (_, check) => {
     expect(retryFrom(check)).toBeUndefined();

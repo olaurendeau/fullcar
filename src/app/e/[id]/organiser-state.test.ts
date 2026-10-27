@@ -232,7 +232,9 @@ describe("readOrganiserState", () => {
       async (trx, { eventId }) => {
         const session = await seedSession(trx, await confirmSeededEvent(trx, eventId));
         await anonymiseEvent(trx, eventId);
-        return { proof: { session }, expected: { state: "ended" } };
+        // What the organiser's screen shows: the title, the place, the dates and day 30 (OA8.4).
+        const event = { title: "Tournoi de Rennes", location: "Gymnase des Gayeulles", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" };
+        return { proof: { session }, expected: { state: "ended", event, erasedOn: "2027-01-11" } };
       },
     ],
   ])("%s: that state and nothing else, the persons never built", async (_, arrange) => {

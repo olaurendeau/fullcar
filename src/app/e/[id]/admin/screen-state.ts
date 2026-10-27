@@ -8,7 +8,7 @@ import { positionOf } from "@/domain/place";
 import { isWallClock } from "@/domain/wall-clock";
 import type { EventState } from "../event-state";
 import { stateRead, type ActionProblem, type Sent } from "../run-action";
-import type { OrganiserCheck } from "./admin-token-store";
+import type { OrganiserCheck, Refusal } from "./admin-token-store";
 
 /*
  * The organiser area's state (epic #154, #182), pure: the first read of the panel and its
@@ -39,7 +39,8 @@ export const FOLDED_LINES = 5;
 
 export type ScreenState =
   | { state: "loading" }
-  | { state: "refused" }
+  /** Refused, with the screen of why (#598). */
+  | { state: "refused"; refusal: Refusal }
   | { state: "failed"; retrying: boolean }
   | {
       state: "ready";
@@ -83,7 +84,7 @@ function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
     case "checking":
       return { state: "loading" };
     case "refused":
-      return { state: "refused" };
+      return { state: "refused", refusal: check.refusal };
     case "failed":
       return { state: "failed", retrying: check.retrying ?? false };
     case "valid": {
