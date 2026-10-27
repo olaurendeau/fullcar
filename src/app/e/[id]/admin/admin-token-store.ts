@@ -13,17 +13,18 @@ import { loadOrganiserPanel, updateEvent } from "./actions";
  * « Session, liens et jeton d'admin », #597), as session-token.ts is for the session's. The
  * browser that created the event keeps the token the server drew, in `localStorage` under its
  * event's key, `fullcar:admin-token:{id}`; without `localStorage`, the page's memory keeps it.
- * It travels in the body of `loadOrganiserPanel` and `updateEvent` only, with the session's:
+ * It travels in the body of `loadOrganiserPanel`, `updateEvent` and `signOut` only, with the session's:
  * never in a URL, a header, a cookie, a log, an error or the page. There is no organiser's
  * link any more: a fragment on `/e/{id}/admin` is ignored (OA7.5). It is compared on the
  * server only.
  */
 
 /** What is used of `localStorage`. */
-export type AdminTokenStorage = Pick<Storage, "getItem" | "setItem">;
+export type AdminTokenStorage = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 
 /** The event's own key: the token of one event is worth nothing on another. */
-const keyOf = (id: string) => `fullcar:admin-token:${id}`;
+const PREFIX = "fullcar:admin-token:";
+const keyOf = (id: string) => `${PREFIX}${id}`;
 
 /**
  * The shape server-token.ts draws: 22 base64url characters for exactly 16 bytes, whose last
@@ -60,10 +61,50 @@ export function adminTokens({ storage }: { storage: () => AdminTokenStorage }) {
     }
   }
 
-  return { keepAdminToken, readAdminToken };
+  /** The admin-token keys of the storage, with the value each holds. Never throws: none when unavailable. */
+  function storedEntries(): [string, string | null][] {
+    try {
+      const kept = storage();
+      const keys = Array.from({ length: kept.length }, (_, n) => kept.key(n)).filter((key) => key?.startsWith(PREFIX));
+      return keys.map((key) => [key!, kept.getItem(key!)]);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Every well-formed admin token this browser keeps, whatever its event, for « Se déconnecter »
+   * (OA9.1). Reads only.
+   */
+  function keptAdminTokens(): string[] {
+    const stored = storedEntries().map(([, token]) => token);
+    const all = [...memory.values(), ...stored].filter((token): token is string => typeof token === "string" && FORMAT.test(token));
+    return [...new Set(all)];
+  }
+
+  /**
+   * Forgets `tokens`, once « Se déconnecter » has revoked them (OA9.1): each key that still holds
+   * one of them, and the page's memory. A token another tab stored meanwhile stays. Never throws.
+   */
+  function forgetAdminTokens(tokens: readonly string[]): void {
+    const sent = new Set(tokens);
+    for (const [id, token] of memory) if (sent.has(token)) memory.delete(id);
+    for (const [key, token] of storedEntries()) {
+      if (token === null || !sent.has(token)) continue;
+      try {
+        storage().removeItem(key);
+      } catch {
+        // Unavailable: there is nothing more to forget.
+      }
+    }
+  }
+
+  return { keepAdminToken, readAdminToken, keptAdminTokens, forgetAdminTokens };
 }
 
-export const { keepAdminToken, readAdminToken } = adminTokens({ storage: () => window.localStorage });
+export const { keepAdminToken, readAdminToken, keptAdminTokens, forgetAdminTokens } = adminTokens({
+  storage: () => window.localStorage,
+});
 
 /**
  * What the organiser's requests carry in their body (#596): the token this browser keeps for

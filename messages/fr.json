@@ -535,6 +535,7 @@
   "Login": {
     "title": "Se connecter",
     "intro": "Pas de mot de passe : nous vous envoyons un lien de connexion par e-mail.",
+    "signedOut": "Session fermée.",
     "email": "Adresse e-mail",
     "send": "Recevoir le lien",
     "sending": "Envoi en cours…",
@@ -575,5 +576,10 @@
       "title": "Vos événements n’ont pas pu être chargés",
       "body": "Vérifiez la connexion, puis réessayez."
     }
+  },
+  "Account": {
+    "title": "Mon compte",
+    "signOut": "Se déconnecter",
+    "signOutFailed": "La session n’a pas été fermée. Vérifiez la connexion, puis réessayez."
   }
 }
