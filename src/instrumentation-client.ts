@@ -1,3 +1,4 @@
+import { sheetHistory } from "@/components/event/sheet-history";
 import type { BrowserSdk } from "@/observability/client";
 
 /*
@@ -7,6 +8,9 @@ import type { BrowserSdk } from "@/observability/client";
  */
 
 let sentry: BrowserSdk | undefined;
+
+// Before the App Router listens to `popstate`: a step back between a sheet's entries never reaches it (event-board v4.7).
+if (typeof window !== "undefined") sheetHistory();
 
 if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
   void import("@/observability/client")

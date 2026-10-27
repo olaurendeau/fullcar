@@ -9,7 +9,7 @@
  * organiser is never listed (OA2.3), whatever the rows hold. « Passé » and day 30 are
  * day-thirty.ts's, at Paris time.
  */
-import { dayThirty, isPast } from "./day-thirty";
+import { dayThirty, isDayThirtyReached, isPast } from "./day-thirty";
 import { eventLegs, type Leg } from "./leg";
 import { decideOrganiserAccess } from "./organiser-access";
 import type { WallClock, WallDate } from "./wall-clock";
@@ -57,10 +57,14 @@ export interface UpcomingEvent extends CountedEvent {
   state: "upcoming";
 }
 
-/** Past, not anonymised yet: its sign-ups are erased on `erasedOn`, day 30 in Paris (OA6.3). */
+/**
+ * Past, not anonymised yet: its sign-ups are erased on `erasedOn`, day 30 in Paris (OA6.3).
+ * Null once day 30 has begun and the purge has not run yet (it runs at 03:00 UTC, and may
+ * fail): no date to come is left to give, and the page says « sous peu » (#607).
+ */
 export interface PastEvent extends CountedEvent {
   state: "past";
-  erasedOn: WallDate;
+  erasedOn: WallDate | null;
 }
 
 /** Anonymised: « Inscriptions effacées », and no count (OA6.4). */
@@ -103,7 +107,7 @@ export function listMyEvents(rows: readonly MyEventRow[], account: { id: string;
     if (row.anonymised) {
       past.push({ state: "erased", id: row.id, title: row.title, start: row.allerAt, location: row.location });
     } else if (isPast(row, now)) {
-      past.push({ state: "past", ...counted(row), erasedOn: dayThirty(row) });
+      past.push({ state: "past", ...counted(row), erasedOn: isDayThirtyReached(row, now) ? null : dayThirty(row) });
     } else {
       upcoming.push({ state: "upcoming", ...counted(row) });
     }

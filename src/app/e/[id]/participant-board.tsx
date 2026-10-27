@@ -24,10 +24,11 @@ import {
   type NotDone,
   type Why,
 } from "@/components/event/failure-words";
-import { focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusOffer, focusRetry, focusTitle } from "@/components/event/focus";
+import { focusAfterRemoval, focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusOffer, focusRetry, focusTitle } from "@/components/event/focus";
 import {
   aboutOf,
   allerPart,
+  carsGone,
   forget,
   offersRetour,
   pageHidden,
@@ -60,7 +61,21 @@ import {
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
-import { actionRunner, devicePersonsGone, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld, type Sent } from "./run-action";
+import { deviceRemovals, type DeviceRemovals } from "./removal-channel";
+import {
+  aboutPerson,
+  actionRunner,
+  carsOfPersonsGone,
+  devicePersonsGone,
+  goneNamed,
+  readEnded,
+  sendAction,
+  stateOf,
+  stateRead,
+  stateShown,
+  withTabsHeld,
+  type Sent,
+} from "./run-action";
 
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
@@ -118,6 +133,16 @@ export function ParticipantBoard({
   const displayed = useRef(rendered);
   const focused = useRef<Element | null>(null);
   const messages = useMessageBar();
+  // The removals this device sent, from this page or another tab (RP5.3); open once the page runs.
+  const removals = useRef<DeviceRemovals | null>(null);
+  useEffect(() => {
+    const opened = deviceRemovals(id);
+    removals.current = opened;
+    return () => {
+      opened.close();
+      removals.current = null;
+    };
+  }, [id]);
   // Every state the page shows goes through here: an action's, a read's, `apply`.
   // What is not a state (the legs alone, from a server not yet deployed) is not shown.
   const [setBoard] = useState(() => {
@@ -132,8 +157,21 @@ export function ParticipantBoard({
         else messages.retourBack();
       }
       // A person of the device gone, removed here or elsewhere: the bar's lines about her alone go,
-      // before what this state's answer says (remove-person v2, « Focus, barre, envoi »).
-      personsGone(devicePersonsGone(displayed.current, next));
+      // and those about the cars she drove (#850's review), before what this state's answer says
+      // (remove-person v2, « Focus, barre, envoi »). Removed elsewhere, the bar says it, once (RP5.3).
+      const gone = devicePersonsGone(displayed.current, next);
+      personsGone(gone);
+      carsGone(carsOfPersonsGone(displayed.current, next));
+      const told = removals.current?.news(gone) ?? [];
+      const persons = displayed.current.legs.flatMap((leg) => leg.device);
+      // The section's rows as they were, for her landmark: the next first name, as after a removal here (RP1.5).
+      const rows = [...new Set(persons.map((person) => person.id))];
+      for (const personId of told) {
+        const firstName = persons.find((person) => person.id === personId)?.firstName ?? "";
+        const text = words.t("PersonRemoval.removedElsewhere", { firstName });
+        const landmark = () => focusName(personId) || focusAfterRemoval(rows, personId);
+        whenPageShown(() => messages.inform({ text, landmark }));
+      }
       displayed.current = next;
       setState(next);
     };
@@ -147,9 +185,11 @@ export function ParticipantBoard({
           else release();
         }),
       );
-    return (next: EventState) => {
+    // `answer`, an action's: a refusal `personGone` names who is gone, and says it; the bar tells nothing more of them (RP5.4).
+    return (next: EventState, answer?: unknown) => {
       const shown = stateShown(displayed.current, next);
       if (!shown) return;
+      removals.current?.named(goneNamed(answer));
       latest.current = shown.state;
       // A sheet on the retour closes over it, its focus going back there, never with it (rule 9);
       // one on the aller stays, its focus with it.
@@ -316,7 +356,8 @@ export function ParticipantBoard({
   const updatePerson: UpdatePerson = async ({ personId, person, sending, ...sheet }) => {
     const sent = await runAction(
       `updatePerson:${sheet.key}`,
-      () => storePersonFields(id, readDeviceToken(id), { ...person, personId }),
+      // Refused by `personGone`, it names her alone (`aboutPerson`): another person gone with it is news (RP5.3).
+      async () => aboutPerson(await storePersonFields(id, readDeviceToken(id), { ...person, personId }), personId),
       sending,
       sheet.leaves,
     );
@@ -330,7 +371,8 @@ export function ParticipantBoard({
   // The page takes the state a refusal carries too (C11.6). In the bar, the failure names the
   // cell and the button touched, and says the refusal (`drives`, `forbidden`…); the sheet keeps the generic words.
   const setPersonLeg: SetPersonLeg = async (change, { cell, notDone, ...sheet }) => {
-    const sent = await runAction(`setPersonLeg:${sheet.key}`, () => storePersonLeg(id, readDeviceToken(id), change), undefined, sheet.leaves);
+    const send = async () => aboutPerson(await storePersonLeg(id, readDeviceToken(id), change), change.personId);
+    const sent = await runAction(`setPersonLeg:${sheet.key}`, send, undefined, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
     if (sent.ok && sent.value.ok) {
@@ -382,7 +424,7 @@ export function ParticipantBoard({
         names.length === 1 ? words.t("Seat.placed", { firstName: names[0], driver: firstName }) : words.t("Sheet.placed", { names: nameList(words, names), driver: firstName });
       const undo = undoOf(sheet.seq, { rideId, leg: car.leg, persons }, { names, driver: firstName });
       const boarded = passengerIds.map((personId) => personLeg(personId, car.leg));
-      sheet.whenStillTrue(boarded, () => messages.succeed({ text, landmark: focusCar(car.leg, rideId), undo, persons: passengerIds }));
+      sheet.whenStillTrue(boarded, () => messages.succeed({ text, landmark: focusCar(car.leg, rideId), undo, persons: passengerIds, car: rideId }));
       return { kind: "done" };
     }
     if (outcome && "errors" in outcome) return { kind: "errors", errors: outcome.errors, first: outcome.first };
@@ -460,7 +502,7 @@ export function ParticipantBoard({
       const seated = persons.map(({ personId }) => personLeg(personId, leg));
       sheet.changed(seated);
       const personIds = persons.map(({ personId }) => personId);
-      sheet.whenStillTrue(seated, () => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats), persons: personIds }));
+      sheet.whenStillTrue(seated, () => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats), persons: personIds, car: rideId }));
     } else {
       const closes = taken.kind === "noRetour" || taken.kind === "personGone";
       failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes, leg });
@@ -500,7 +542,14 @@ export function ParticipantBoard({
   // « Annuler ». A failure names her, then why; the confirmation says the problem, or the reason
   // of a refusal that sending again would not change (« Refus et échecs »).
   const removePerson: RemovePerson = async ({ personId, firstName, sending }, confirmation) => {
-    const remove = () => storePersonRemoval(id, readDeviceToken(id), personId);
+    // As it leaves, this device knows it sent it, its other tabs too: she gone is no news (RP5.3).
+    // Refused, she is still part of the event; an answer lost may have removed her all the same.
+    const remove = async () => {
+      removals.current?.sending(personId);
+      const answer = await storePersonRemoval(id, readDeviceToken(id), personId);
+      if (!answer.ok) removals.current?.refused(personId);
+      return answer;
+    };
     const sent = await runAction(`removePerson:${personId}`, remove, sending, confirmation.leaves);
     if (sent === undefined) return undefined;
     confirmation.answered();
