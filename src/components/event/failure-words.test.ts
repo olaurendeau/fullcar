@@ -18,6 +18,7 @@ import {
   offerWhy,
   personGone,
   personWhy,
+  removalProblem,
   undoWhy,
   undoneText,
   whyOf,
@@ -522,4 +523,30 @@ describe("failureText: each `noRetour` failure, word for word (v3.3)", () => {
       expect(failureText(words("en"), notDone, why)).toBe(en);
     });
   }
+});
+
+// remove-person v2, « Refus et échecs » (RP1.7): what a removal that failed says, in its
+// confirmation while it is open, in the bar once it is closed.
+describe("removalProblem: « Retirer de l’événement »", () => {
+  it("offline or on an error, the problem, whose red button stays; a refusal that sending again would not change, its reason", () => {
+    expect(removalProblem("offline")).toEqual({ problem: "offline", final: false });
+    expect(removalProblem("failed")).toEqual({ problem: "failed", final: false });
+    for (const error of ["forbidden", "eventNotFound", "eventEnded"] as const) expect(removalProblem(error)).toEqual({ problem: error, final: true });
+  });
+
+  it("`invalid`, which no page sends: the generic failure", () => {
+    expect(removalProblem("invalid")).toEqual({ problem: "failed", final: false });
+  });
+
+  it("in the bar, she is still part of the event, then why, word for word", () => {
+    const notDone: NotDone = { kind: "removePerson", firstName: "Léa" };
+    const said = (locale: Locale, error: Parameters<typeof removalProblem>[0]) => failureText(words(locale), notDone, whyOf(removalProblem(error).problem));
+    expect(said("fr", "offline")).toBe("Léa fait toujours partie de l’événement. Vérifiez la connexion, puis réessayez.");
+    expect(said("fr", "failed")).toBe("Léa fait toujours partie de l’événement. Une erreur est survenue : réessayez dans un instant.");
+    expect(said("fr", "forbidden")).toBe("Léa fait toujours partie de l’événement. Cet appareil ne peut pas faire ce changement : rechargez la page.");
+    expect(said("fr", "eventNotFound")).toBe("Léa fait toujours partie de l’événement. Cet événement est introuvable : il a peut-être été supprimé.");
+    expect(said("fr", "eventEnded")).toBe("Léa fait toujours partie de l’événement. Cet événement est terminé : ses inscriptions ont été effacées.");
+    expect(said("en", "forbidden")).toBe("Léa is still part of the event. This device cannot make this change: reload the page.");
+    expect(said("en", "invalid")).toBe("Léa is still part of the event. Something went wrong: try again in a moment.");
+  });
 });

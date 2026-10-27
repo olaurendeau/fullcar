@@ -539,6 +539,9 @@ ci-dessus valent pour chacun.
   string, un en-tête ou un cookie. Le jeton de session ne revient dans une réponse qu'une
   fois, dans le corps de l'action qui ouvre la session. Le HTML d'une page ne dépend
   d'aucune session : ce qu'un jeton ouvre est lu après le chargement, comme le panneau.
+  Ainsi « Session ouverte avec {email}. » de `/connexion` (OA4.6, #604) : l'action
+  `signedInAs` (`src/app/connexion/actions.ts`) reçoit le jeton dans le corps et ne répond
+  que l'adresse de la session ouverte, ou rien ; elle ne compte pas comme une visite.
 - **Pas de cookie, pas de middleware.** Aucun cookie ne porte une session ni un jeton : le
   seul cookie reste celui de la langue. Aucun `middleware.ts` ni `src/proxy.ts` ne lit une
   session. Une session terminée entre l'affichage d'une page et son envoi se voit donc en
@@ -1167,7 +1170,9 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   passent avant que `eventNotFound` et ce qu'elles vérifient avant la transaction, les
   erreurs de champs et, pour certaines, la requête mal formée (`invalid`). Un appel sans
   jeton, ou avec un faux, apprend donc que l'événement est anonymisé, ce que `/e/{id}` dit
-  déjà à tout le monde. `removePerson` ne répond pas encore `eventEnded` (RP2.9, #674).
+  déjà à tout le monde. L'état que ces refus joignent est celui de l'événement terminé, son
+  titre et son début, sans le lieu ni personne : `readEventState` le rend pour tout
+  événement anonymisé (OA8.3, #806). `removePerson` ne répond pas encore `eventEnded` (RP2.9, #674).
 - **Les sessions, les envois et les liens** (`session`, `email_send`, `email_link`) sont
   nettoyés par âge, par la même tâche (#589, `src/db/expired-rows.ts`) : une ligne part quand
   aucune règle ne la lit plus. Une ligne effacée plus tôt changerait la réponse d'une règle.

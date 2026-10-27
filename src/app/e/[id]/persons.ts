@@ -10,7 +10,7 @@ import { initialLegs, LEGS, type Leg } from "@/domain/leg";
 import { validatePerson, validatePersonChange, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
 import { hashToken, tokenMatches } from "@/domain/token-hash";
-import { readEventState, type EventState } from "./event-state";
+import { readEventState, type DeviceState } from "./event-state";
 import { lockLegs } from "./retour";
 
 /*
@@ -39,10 +39,10 @@ export type PersonRefusal =
 type Refused = Exclude<PersonRefusal, "eventNotFound">;
 
 export type PersonOutcome =
-  | { ok: true; state: EventState }
+  | { ok: true; state: DeviceState }
   | { ok: false; errors: PersonErrors; first: PersonField }
   | { ok: false; error: "eventNotFound" }
-  | { ok: false; error: Refused; state: EventState };
+  | { ok: false; error: Refused; state: DeviceState };
 
 type Written = { ok: true } | { ok: false; error: "eventNotFound" } | { ok: false; error: Refused };
 

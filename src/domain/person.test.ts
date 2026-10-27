@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIRST_NAME_MAX, PERSON_FIELDS, validateDriver, validatePerson, validatePersonChange, type PersonFields } from "./person";
+import { FIRST_NAME_MAX, PERSON_FIELDS, validateDriver, validateDriverPhone, validatePerson, validatePersonChange, type PersonFields } from "./person";
 
 function personOf(fields: PersonFields) {
   const result = validatePerson(fields);
@@ -212,5 +212,22 @@ describe("validateDriver (R4, v4.8 rule 6)", () => {
       errors: { firstName: "tooLong", phone: "invalid" },
       first: "firstName",
     });
+  });
+});
+
+describe("validateDriverPhone (R4, v4.8 rule 7)", () => {
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["blank", "  \t "],
+    ["invisible", "\u200b\u202a"],
+  ])("requires the number a person of the device gives to drive, so a %s one is an error", (_, phone) => {
+    expect(validateDriverPhone(phone)).toEqual({ ok: false, errors: { phone: "required" }, first: "phone" });
+  });
+
+  it("reads it as validatePerson does: cleaned and trimmed, malformed or too long an error", () => {
+    expect(validateDriverPhone(" \u202a06 12 34 56 78\u202c ")).toEqual({ ok: true, phone: "06 12 34 56 78" });
+    expect(validateDriverPhone("06 12")).toEqual({ ok: false, errors: { phone: "invalid" }, first: "phone" });
+    expect(validateDriverPhone("0".repeat(26))).toEqual({ ok: false, errors: { phone: "tooLong" }, first: "phone" });
   });
 });

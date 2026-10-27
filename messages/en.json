@@ -170,6 +170,9 @@
     },
     "driver": "Who drives?",
     "newDriver": "Someone new",
+    "phone": "Phone",
+    "driverPhone": "{firstName}’s phone",
+    "phoneHint": "So that the people on board can reach you. Only visible to the organiser and to the people in the same car.",
     "leavesCar": "Will leave {driver}’s car",
     "otherLeg": {
       "title": {
@@ -217,6 +220,7 @@
     "invalidTime": "Not a valid time.",
     "seats": "From 1 to 8 seats.",
     "chooseDriver": "Choose who drives.",
+    "driverPhone": "A number is needed to offer a car.",
     "tooManyPassengers": "{seats, plural, one {Only # seat} other {Only # seats}}: untick someone or add seats."
   },
   "Actions": {
@@ -512,5 +516,28 @@
       "nothingToDo": "To have it deleted, there is nothing to do.",
       "leadsTo": "The button leads to {url}: it signs nobody in by itself."
     }
+  },
+  "Login": {
+    "title": "Sign in",
+    "intro": "No password: we email you a sign-in link.",
+    "email": "Email address",
+    "send": "Send me the link",
+    "sending": "Sending…",
+    "noAccount": "No account yet? It is created with your first event.",
+    "already": "Signed in as {email}.",
+    "myEvents": "My events",
+    "offline": "The link was not sent. Check your connection, then try again.",
+    "failed": "The link may not have been sent. Something went wrong: try again in a few minutes.",
+    "tooMany": "Too many requests for this address. Try again in an hour.",
+    "needsJavaScript": "Signing in needs JavaScript: turn it on, then reload the page.",
+    "invalid": "Invalid email address."
+  },
+  "Check": {
+    "title": "Check your email",
+    "body": "We sent an email to {email}. Open the link inside: the session will open in the browser that opens it. It is valid for 1 hour.",
+    "spam": "Nothing? Check your spam folder.",
+    "resend": "Resend the email",
+    "change": "Use another address",
+    "resent": "Email sent again."
   }
 }
