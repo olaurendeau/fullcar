@@ -7,7 +7,7 @@ import type { Leg } from "@/domain/leg";
 import type { VisibleCar, VisibleLegBoard } from "@/domain/phone-visibility";
 import { sheetCandidates, sheetSubmit, tapOutcome } from "@/domain/tap";
 import { cn } from "@/lib/utils";
-import { BottomSheet } from "./bottom-sheet";
+import { BottomSheet, SheetStep } from "./bottom-sheet";
 import { Box } from "./create-event-form";
 import { nameList, personGone, whyOf, wordsOf, type Why } from "./failure-words";
 import { focusCar, focusCarTitle, focusFirstShown } from "./focus";
@@ -347,6 +347,12 @@ function SeatSheet({
     }
   }
 
+  // Back to the list, what was typed lost, the focus on « Ajouter une personne »: « Annuler », and the browser's « back » (v4.7, rule 3).
+  const cancelAdding = () => {
+    focusNext.current = () => addButton.current;
+    setAdding(null);
+  };
+
   const message = refused ?? (gone && t("Actions.rideGone"));
   // After a refusal for want of seats, the seats left are fewer than those ticked: red too.
   const over = submit.kind === "notEnoughSeats";
@@ -393,6 +399,7 @@ function SeatSheet({
       <div ref={body} className="contents">
         {adding ? (
           <>
+            <SheetStep onBack={cancelAdding} />
             {!adding.kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
             <PersonForm
               mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
@@ -402,10 +409,7 @@ function SeatSheet({
                 focusNext.current = () => document.getElementById(boxId(personId));
                 setAdding(null);
               }}
-              onCancel={() => {
-                focusNext.current = () => addButton.current;
-                setAdding(null);
-              }}
+              onCancel={cancelAdding}
             />
           </>
         ) : (

@@ -19,7 +19,7 @@ import { currentDriver, driverChoice, NEW_DRIVER, passengerCandidates } from "@/
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { useFormatDate } from "@/i18n/format-date";
 import { cn } from "@/lib/utils";
-import { BottomSheet, SheetBar } from "./bottom-sheet";
+import { BottomSheet, SheetBar, SheetStep } from "./bottom-sheet";
 import { Box } from "./event-fields";
 import type { NotDone } from "./failure-words";
 import { focusCar, focusFirstShown, focusOffer } from "./focus";
@@ -544,21 +544,26 @@ function RideForm({
 
   const stepSeats = validSeats(values.seats);
   if (editing && step !== null && stepSeats !== undefined) {
+    const cancel = () => {
+      backFromStep.current = true;
+      setStep(null);
+      setChanged(false);
+      setProblem(null);
+    };
+    // The browser's « back » as « Annuler » (v4.7, rule 3): one step for every round of it.
     return (
-      <LeavingStep
-        key={step}
-        passengers={editing.car.passengers}
-        seats={stepSeats}
-        alert={alert}
-        sending={sending}
-        onSubmit={(seen, leaving) => void change(seen, leaving, stepSeats)}
-        onCancel={() => {
-          backFromStep.current = true;
-          setStep(null);
-          setChanged(false);
-          setProblem(null);
-        }}
-      />
+      <>
+        <SheetStep onBack={cancel} />
+        <LeavingStep
+          key={step}
+          passengers={editing.car.passengers}
+          seats={stepSeats}
+          alert={alert}
+          sending={sending}
+          onSubmit={(seen, leaving) => void change(seen, leaving, stepSeats)}
+          onCancel={cancel}
+        />
+      </>
     );
   }
 
