@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOW_HEIGHT, sheetFrame } from "./sheet-frame";
+import { LOW_HEIGHT, revealBy, sheetFrame } from "./sheet-frame";
 
 // event-board v4.6, rules 2, 4, 8 and 9: where a sheet stands, from what the window shows.
 
@@ -88,5 +88,30 @@ describe("sheetFrame", () => {
         expect(sheetFrame({ viewport: { offsetTop: 0, height: 200 }, innerHeight: 800, width, fullHeight: false }).low).toBe(true);
       }
     });
+  });
+});
+
+// Rule 5: what has the focus is whole between the header and the bar, after a change of the sheet too.
+describe("revealBy", () => {
+  const space = { top: 60, bottom: 300 };
+
+  it("whole in the space, the sheet does not scroll", () => {
+    expect(revealBy({ top: 60, bottom: 100 }, space)).toBe(0);
+    expect(revealBy({ top: 260, bottom: 300 }, space)).toBe(0);
+  });
+
+  it("under the space, even in part, it scrolls down until its bottom is the space's", () => {
+    expect(revealBy({ top: 280, bottom: 320 }, space)).toBe(20);
+    expect(revealBy({ top: 500, bottom: 540 }, space)).toBe(240);
+  });
+
+  it("above the space, even in part, it scrolls up until its top is the space's", () => {
+    expect(revealBy({ top: 40, bottom: 80 }, space)).toBe(-20);
+    expect(revealBy({ top: -200, bottom: -160 }, space)).toBe(-260);
+  });
+
+  it("taller than the space, its top shows", () => {
+    expect(revealBy({ top: 100, bottom: 500 }, space)).toBe(40);
+    expect(revealBy({ top: 20, bottom: 500 }, space)).toBe(-40);
   });
 });

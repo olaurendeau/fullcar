@@ -4,7 +4,7 @@
  * Each says whether the focus is there: an element of the hidden tab's panel, which stays
  * mounted, does not take it.
  */
-import type { Leg } from "@/domain/leg";
+import { LEGS, type Leg } from "@/domain/leg";
 
 function focus(target: HTMLElement | null | undefined): boolean {
   target?.focus();
@@ -107,6 +107,17 @@ export const focusCar = (leg: Leg, rideId: string) => () => focusCarTitle(leg, r
 /** « Ajouter une personne » of `leg`, on its tab; false while that tab is not the active one. */
 export function focusAddPerson(leg: Leg): boolean {
   return focus(document.querySelector<HTMLElement>(`[data-add-person="${leg}"]`));
+}
+
+/**
+ * After a person of the device is removed (remove-person v2, « Focus, barre, envoi »): the next
+ * first name of `order`, the section's rows as they were, still shown; else the one before; else
+ * « Ajouter une personne » of the active tab.
+ */
+export function focusAfterRemoval(order: readonly string[], removedId: string): boolean {
+  const at = order.indexOf(removedId);
+  const around = at < 0 ? [] : [...order.slice(at + 1), ...order.slice(0, at).reverse()];
+  return around.some((id) => focusName(id)) || LEGS.some((leg) => focusAddPerson(leg));
 }
 
 /** « Proposer une voiture » of `leg`, on its tab; false while that tab is not the active one. */

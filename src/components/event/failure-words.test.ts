@@ -131,7 +131,8 @@ describe("failureText: each failure, word for word (C11.11)", () => {
   const table = rows();
 
   it("reads every row, and knows every action of the table", () => {
-    expect(table.length).toBeGreaterThanOrEqual(68);
+    // The exact count, so a row dropped from the README fails here (#785): update it with each copy of the design.
+    expect(table.length).toBe(70);
     expect(new Set(table.map((row) => row.action))).toEqual(new Set(Object.keys(ACTIONS)));
     // A failure column of a form `sources` does not know would give no test at all.
     for (const row of table) expect(sources(row.failure), `${row.action}, ${row.failure}`).not.toHaveLength(0);

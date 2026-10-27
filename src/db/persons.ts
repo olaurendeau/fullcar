@@ -117,6 +117,22 @@ export async function lockPersons(db: Kysely<Database>, eventId: string, ids: re
 }
 
 /**
+ * Whether that person of the event has a number: a condition of presence, `phone is not
+ * null`, read as a boolean, never the number itself (v4.8-18). The only read of the number
+ * stays `event-rows.ts`. False for an id the event does not have. Called under the lock of
+ * `lockPersons`, in the same transaction, so that no write empties it meanwhile.
+ */
+export async function hasPhone(db: Kysely<Database>, person: PersonRef): Promise<boolean> {
+  const row = await db
+    .selectFrom("person")
+    .select((eb) => eb("phone", "is not", null).as("has_phone"))
+    .where("id", "=", person.id)
+    .where("event_id", "=", person.eventId)
+    .executeTakeFirst();
+  return row?.has_phone === true;
+}
+
+/**
  * Whether a person of that event had that id, and is now gone, her hash with her: the
  * other persons of the same token keep theirs. Her Placements and Rides go by cascade; the
  * removal deletes her Rides first, under their locks, to keep the lock order (Ride, then

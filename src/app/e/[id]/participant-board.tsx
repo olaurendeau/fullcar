@@ -37,6 +37,7 @@ import {
 } from "@/components/event/hidden-page";
 import { MessageBar, useMessageBar } from "@/components/event/message-bar";
 import type { AddPerson, Registration, UpdatePerson } from "@/components/event/person-form";
+import type { RemovePerson } from "@/components/event/remove-person-dialog";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
@@ -46,6 +47,7 @@ import {
   addPerson as storePerson,
   loadEventState,
   offerRide as storeRideOffer,
+  removePerson as storePersonRemoval,
   removeRide as storeRideRemoval,
   setPersonLeg as storePersonLeg,
   takeSeats as storeSeats,
@@ -154,14 +156,20 @@ export function ParticipantBoard({
   });
   const { succeed, fail } = messages;
   // Anonymised since the page was rendered (OA8.3, #799): a read gives its title and its start
-  // only, and the server's page, read again, is « Événement terminé ». Nothing is shown of it here.
+  // only, and the server's page, read again, is « Événement terminé ». Nothing is shown of it
+  // here, and it is no failure: the read never ends, so the device's section stays « Chargement »
+  // and « Actualiser » stays « Actualisation… » until that page replaces them.
   const router = useRouter();
+  const [ending] = useState(() => () => {
+    router.refresh();
+    return new Promise<never>(() => {});
+  });
   useImperativeHandle(
     ref,
     () => ({
       read: async () => {
         const sent = await sendAction(() => loadEventState(id, readDeviceToken(id)));
-        if (readEnded(sent)) router.refresh();
+        if (readEnded(sent)) return ending();
         return sent.ok ? { ok: true, value: stateRead(sent) } : sent;
       },
       apply: setBoard,
@@ -169,7 +177,7 @@ export function ParticipantBoard({
       succeed,
       fail,
     }),
-    [id, router, setBoard, succeed, fail],
+    [id, ending, setBoard, succeed, fail],
   );
 
   useLayoutEffect(() => {
@@ -238,11 +246,10 @@ export function ParticipantBoard({
       const retry = retrying.current && { key: "retry", inSheet: () => false, ...sendAbout(["device:read"]) };
       retrying.current = false;
       const sent = retry ? await runAction("retry", read, undefined, retry.leaves) : await sendAction(read);
-      // Anonymised since: no failure to say, the page that comes says it.
+      // Anonymised since: no failure to say, the page that comes says it (see `ending`).
       if (readEnded(sent)) {
         if (retry) retry.answered();
-        router.refresh();
-        throw new Error("The event has ended.");
+        return ending();
       }
       // An answer that is not a state fails the read, as an unknown event does: the bar says so too.
       const answered = stateRead(sent);
@@ -335,6 +342,7 @@ export function ParticipantBoard({
   // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
   // In the bar, the failure names who drives and each leg offered, then why, `alreadyDriving` included,
   // and `alreadyInCar` the passengers ticked. A success with passengers says who boarded, with « Annuler » (C4.13).
+  // `driverWithoutPhone` (v4.8 rule 7) says so in the bar; in the sheet, the generic words until #777.
   const offerRide: OfferRide = async ({ offer: { driver, otherLeg, ...car }, passengers, creationIds, sending, notDone, landmark, ...sheet }) => {
     const passengerIds = passengers.map((person) => person.id);
     const send = () => {
@@ -475,6 +483,28 @@ export function ParticipantBoard({
     return sent.ok ? "failed" : sent.problem;
   };
 
+  // « Retirer de l’événement » (RP1): the person's id and the device's token in the body, once per
+  // person, as removeRide is once per car. The state answered shows her gone, her sheet with her; the
+  // bar says it once nothing hides the page, `alreadyRemoved` as a success too (RP1.8), without
+  // « Annuler ». A failure names her, then why; the confirmation keeps the generic words.
+  const removePerson: RemovePerson = async ({ personId, firstName, sending }, confirmation) => {
+    const remove = () => storePersonRemoval(id, readDeviceToken(id), personId);
+    const sent = await runAction(`removePerson:${personId}`, remove, sending, confirmation.leaves);
+    if (sent === undefined) return undefined;
+    confirmation.answered();
+    const outcome = sent.ok ? sent.value : undefined;
+    const landmark = () => focusName(personId);
+    if (outcome?.ok) {
+      const text = words.t(outcome.removal === "removed" ? "PersonRemoval.removed" : "PersonRemoval.alreadyRemoved", { firstName });
+      confirmation.whenClosed(() => messages.succeed({ text, landmark }));
+      return null;
+    }
+    // `noOrganiserAccess` is the organiser's path alone: here, what no page gets.
+    const error = !outcome ? (sent.ok ? "failed" : sent.problem) : outcome.error === "noOrganiserAccess" ? "invalid" : outcome.error;
+    failedIn(confirmation, { notDone: { kind: "removePerson", firstName }, why: whyOf(error), landmark });
+    return sent.ok ? "failed" : sent.problem;
+  };
+
   // Once per sheet, as offerRide: only the fields the form changed, its passengers and who leaves.
   const updateRide: UpdateRide = async ({ rideId, leg, ride, seenPassengerIds, leaving, sending, notDone, ...sheet }) => {
     const change = { ...ride, seenPassengerIds, leaving };
@@ -531,6 +561,7 @@ export function ParticipantBoard({
         takeSeats,
         updateRide,
         removeRide,
+        removePerson,
       }}
       messageBar={<MessageBar messages={messages} />}
     />

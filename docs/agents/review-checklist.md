@@ -15,11 +15,14 @@ celui qui écrit le code.
 - Comparaison à temps constant.
 - À partir de #154, le jeton d'admin n'entre que dans le corps de `loadOrganiserPanel`, et,
   à partir de #263, dans celui d'`updateEvent`. Pour un jeton d'admin faux, absent ou mal
-  formé, la réponse ne contient que `{ state: "invalid" }` pour `loadOrganiserPanel`, et que
-  `{ ok: false, error: "invalid" }` pour `updateEvent`, qui n'écrit alors rien. Un
-  identifiant d'événement inconnu ou mal formé reçoit `{ ok: false, error: "eventNotFound" }`
-  d'`updateEvent`, avant la vérification du jeton. La réponse du panneau n'est ni stockée
-  dans le navigateur, ni journalisée (O6.4).
+  formé, la réponse ne contient que `{ state: "invalid" }` pour `loadOrganiserPanel`, et,
+  sur un événement qui n'est pas anonymisé, que `{ ok: false, error: "invalid" }` pour
+  `updateEvent`, qui n'écrit alors rien. Avant la vérification du jeton, `updateEvent` répond
+  `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement inconnu ou mal formé,
+  puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un événement anonymisé,
+  quel que soit le jeton, sans rien écrire : l'anonymisation a effacé le hash du jeton
+  (« La purge » dans `architecture.md`). La réponse du panneau n'est ni stockée dans le
+  navigateur, ni journalisée (O6.4).
 - À partir de #66, le jeton personnel est tiré **par le navigateur** avec
   `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
   avant l'envoi. Un jeton personnel tiré
@@ -47,6 +50,10 @@ celui qui écrit le code.
   lire `phone`, même si le mot n'apparaît pas : `selectAll()` sur `person`, `returningAll()`
   après `insertInto("person")` ou une mise à jour de `person`, une fonction JSON qui prend
   toute la ligne (`to_json(person)`, `row_to_json`, `jsonObjectFrom` sur `selectAll()`).
+  Un test de présence de `phone` sous le verrou est permis (`phone IS NOT NULL`, un
+  booléen, jamais la valeur) ; lire sa valeur hors de la requête unique reste bloquant.
+- Un Ride créé a un conducteur avec un numéro ; vider le numéro de qui conduit est refusé,
+  sous le verrou de sa Person.
 - `event-rows.ts` renvoie les téléphones à part (`phonesById`), et seuls
   `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`) les reçoivent. Un
   `row.phone` recopié ailleurs (dans le board, par exemple) est bloquant, comme une liste de

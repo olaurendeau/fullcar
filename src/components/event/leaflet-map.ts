@@ -6,7 +6,7 @@
  */
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { BUBBLE_INSET, bubbleMaxHeight, framing } from "@/domain/event-map";
+import { BUBBLE_INSET, bubbleMaxHeight, fittingZoom, framing } from "@/domain/event-map";
 import type { Position } from "@/domain/place";
 import { FLAG_LAYER, mapUpdate, POINT_LAYERS, pointKey, pointLayer, type MapFocus, type TilesEvent } from "./event-map-state";
 
@@ -551,8 +551,12 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   // points into 0 × 0 px, and showing it again only resizes it (CA1.3). Until then, a first
   // map has no view, and Leaflet holds its layers back; a new state's framing waits as well.
   let unframed = true;
-  /** Half the widest point's button, its label, as laid out now: 0 for one not in the page yet. */
-  const halfLabel = () => Math.max(0, ...drawn.map(({ button }) => button.offsetWidth / 2));
+  /**
+   * Half the widest point's button, its label, as laid out now, to the fraction of a pixel:
+   * `offsetWidth` would round 104.3 px to 104, a margin of 52 px for half a label of 52.15
+   * (#829). `framing` rounds the margin up. 0 for a button not in the page yet.
+   */
+  const halfLabel = () => Math.max(0, ...drawn.map(({ button }) => button.getBoundingClientRect().width / 2));
   const fit = () => {
     const view = framing(state.flag, state.points, creditsHeight(), halfLabel());
     still(() => {
@@ -563,7 +567,10 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
           [view.north, view.east],
         ];
         const { top, right, bottom, left } = view.padding;
-        map.fitBounds(box, { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom], maxZoom: view.maxZoom, animate: false });
+        // Leaflet's zoom for the box may pass its padding (#820): the one that holds it, at most.
+        const size = map.getSize();
+        const maxZoom = fittingZoom(view, size.x, size.y);
+        map.fitBounds(box, { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom], maxZoom, animate: false });
       }
     });
   };

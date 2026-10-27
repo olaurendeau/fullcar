@@ -42,16 +42,17 @@ function newToken(): string {
  * | Sophie  | not concerned                | drives (3 seats): Marc    |
  * | Tom     | without a car                | not concerned             |
  *
- * Marc and Léa are the Martins' device; every other person has her own.
+ * Marc and Léa are the Martins' device; every other person has her own. Marc and Tom, who offer
+ * cars, have a number (v4.8).
  */
 async function seedScene(db: Db, eventId: string) {
   const martins = newToken();
-  const marc = await seedPerson(db, eventId, { firstName: "Marc" }, martins);
+  const marc = await seedPerson(db, eventId, { firstName: "Marc", phone: "06 11 11 11 11" }, martins);
   const lea = await seedPerson(db, eventId, { firstName: "Léa" }, martins);
   const ines = await seedPerson(db, eventId, { firstName: "Inès" });
   const claire = await seedPerson(db, eventId, { firstName: "Claire" });
   const sophie = await seedPerson(db, eventId, { firstName: "Sophie" });
-  const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+  const tom = await seedPerson(db, eventId, { firstName: "Tom", phone: "06 33 33 33 33" });
   const rides = {
     marcAller: await seedRide(db, eventId, marc.id, { leg: "aller", seats: 3 }),
     claireAller: await seedRide(db, eventId, claire.id, { leg: "aller", seats: 2 }),
@@ -516,7 +517,7 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       const { marc, lea, ines } = await seedScene(db, eventId);
       const answers = await inOrder(
         db,
-        (trx) => editEvent(trx, eventId, adminToken, WITHOUT_RETOUR, BEFORE, SEEN),
+        (trx) => editEvent(trx, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
         () => remove(db, eventId, marc),
       );
       expect(answers.first).toMatchObject({ ok: true });
@@ -540,7 +541,7 @@ describe("RP2.8 (8): the retour removed while she is removed", () => {
       const answers = await inOrder(
         db,
         (trx) => remove(trx, eventId, marc),
-        () => editEvent(db, eventId, adminToken, WITHOUT_RETOUR, BEFORE, SEEN),
+        () => editEvent(db, eventId, { adminToken: adminToken }, WITHOUT_RETOUR, BEFORE, SEEN),
       );
       expect(answers.first).toMatchObject({ ok: true, removal: "removed" });
       expect(answers.second).toEqual({ ok: false, error: "confirmRetour", cars: 1, persons: 2 });

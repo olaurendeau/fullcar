@@ -1,5 +1,6 @@
 import type { Kysely, Selectable } from "kysely";
 import type { NewEvent } from "@/domain/event";
+import type { OrganiserAccessEvent } from "@/domain/organiser-access";
 import { generatePublicId } from "@/domain/public-id";
 import type { Database, EventTable } from "./schema";
 
@@ -54,6 +55,27 @@ export async function readAdminTokenHash(db: Kysely<Database>, id: string): Prom
   const row = await db.selectFrom("event").select("admin_token_hash").where("id", "=", id).executeTakeFirst();
   if (row === undefined) return undefined;
   return row.admin_token_hash?.toString("hex") ?? null;
+}
+
+/**
+ * What the organiser-access rule reads of the event (organiser-access.ts): its account, whether
+ * it was confirmed and anonymised, and its admin token's hash in lowercase hex, `null` once
+ * revoked. Nothing for an unknown id. Never sent to a browser.
+ */
+export async function readOrganiserAccessEvent(db: Kysely<Database>, id: string): Promise<OrganiserAccessEvent | undefined> {
+  const row = await db
+    .selectFrom("event")
+    .select(["id", "account_id", "confirmed_at", "anonymised_at", "admin_token_hash"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+  if (row === undefined) return undefined;
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    confirmed: row.confirmed_at !== null,
+    anonymised: row.anonymised_at !== null,
+    adminTokenHash: row.admin_token_hash?.toString("hex") ?? null,
+  };
 }
 
 /**

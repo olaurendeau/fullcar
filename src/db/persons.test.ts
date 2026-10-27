@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { sql, type Kysely } from "kysely";
+import { sql, type Kysely, type KyselyPlugin } from "kysely";
 import { describe, expect, it } from "vitest";
-import { deletePerson, insertPerson, lockPersons, readTokenHolders, updatePerson } from "./persons";
+import { deletePerson, hasPhone, insertPerson, lockPersons, readTokenHolders, updatePerson } from "./persons";
 import type { Database } from "./schema";
 import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
@@ -136,6 +136,34 @@ describe("lockPersons", () => {
         await expect(forUpdate()).rejects.toMatchObject({ code: "55P03" });
       });
       await expect(forUpdate()).resolves.toBeDefined();
+    });
+  });
+});
+
+describe("hasPhone (v4.8-18)", () => {
+  it("says whether that person of the event has a number, and reads a boolean, never the number", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const { id: otherEventId } = await seedEvent(trx);
+      const claire = await seedPerson(trx, eventId, { firstName: "Claire", phone: "06 12 34 56 78" });
+      const lea = await seedPerson(trx, eventId);
+      const stranger = await seedPerson(trx, otherEventId, { phone: "06 99 99 99 99" });
+      // Every row the database gives back to hasPhone.
+      const read: unknown[] = [];
+      const watch: KyselyPlugin = {
+        transformQuery: ({ node }) => node,
+        async transformResult({ result }) {
+          read.push(...result.rows);
+          return result;
+        },
+      };
+      const db = trx.withPlugin(watch);
+
+      expect(await hasPhone(db, { id: claire.id, eventId })).toBe(true);
+      expect(await hasPhone(db, { id: lea.id, eventId })).toBe(false);
+      expect(await hasPhone(db, { id: stranger.id, eventId })).toBe(false);
+      expect(await hasPhone(db, { id: randomUUID(), eventId })).toBe(false);
+      expect(read.flatMap((row) => Object.values(row as object))).toEqual([true, false]);
     });
   });
 });

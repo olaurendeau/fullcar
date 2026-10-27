@@ -6,7 +6,7 @@ import type { Database } from "@/db/schema";
 import { withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement } from "@/db/test-participants";
+import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
 import { offerRide } from "./actions";
 import { readEventState } from "./event-state";
@@ -39,7 +39,7 @@ function anOffer(fields: Record<string, unknown> = {}) {
   return {
     rideId: randomUUID(),
     leg: "aller",
-    driver: { kind: "new", personId: randomUUID(), firstName: "Ana", phone: "" },
+    driver: { kind: "new", personId: randomUUID(), firstName: "Ana", phone: "06 44 44 44 44" },
     location: "Gare de Cesson",
     time: "08:00",
     seats: "3",
@@ -58,7 +58,7 @@ describe("offerRide (action)", () => {
   // connection, the state can only come from a read after the commit.
   it("writes on the real connection, then gives the state read after the commit", async () => {
     await withCommittedEvent(async (db, eventId) => {
-      const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+      const lea = await seedPerson(db, eventId, { firstName: "Léa", phone: "06 22 22 22 22" });
       await seedPlacement(db, { personId: lea.id, eventId, leg: "aller", rideId: null });
       const offer = anOffer({ driver: { kind: "device", personId: lea.id } });
 
@@ -93,10 +93,32 @@ describe("offerRide (action)", () => {
     });
   });
 
+  // v4.8 rule 7: her number emptied elsewhere, the page reads that she has none in the state.
+  it("T4.7: driverWithoutPhone carries the state, where she has no number, and none more, and nothing is written", async () => {
+    await inTransaction(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const marc = await seedPerson(trx, eventId, { firstName: "Marc", phone: "06 11 11 11 11" });
+      await seedRide(trx, eventId, marc.id);
+      const claire = await seedPerson(trx, eventId, { firstName: "Claire" });
+      await seedPlacement(trx, { personId: claire.id, eventId, leg: "aller", rideId: null });
+      const before = await countsOf(trx, eventId);
+
+      const result = await offerRide(eventId, claire.token, anOffer({ driver: { kind: "device", personId: claire.id } }));
+
+      const state = await readEventState(trx, eventId, claire.token);
+      expect(result).toEqual({ ok: false, error: "driverWithoutPhone", state });
+      const aller = state?.legs.find((leg) => leg.leg === "aller");
+      expect(aller?.device).toEqual([{ id: claire.id, firstName: "Claire", phone: null, state: { kind: "withoutCar" } }]);
+      // C10.1: Marc's car is not hers, and his number is not hers to see.
+      expect(JSON.stringify(result)).not.toContain("06 11");
+      expect(await countsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
   // C11.6, as takeSeats: the page shows the state after a refusal, but keeps its form on a field error.
   it("a refusal carries the state read after the commit, a field error does not", async () => {
     await withCommittedEvent(async (db, eventId) => {
-      const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+      const lea = await seedPerson(db, eventId, { firstName: "Léa", phone: "06 22 22 22 22" });
       const driver = { kind: "device", personId: lea.id };
       expect(await offerRide(eventId, lea.token, anOffer({ driver }))).toMatchObject({ ok: true });
       const state = await readEventState(db, eventId, lea.token);

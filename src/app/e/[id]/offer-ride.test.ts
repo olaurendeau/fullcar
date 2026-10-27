@@ -49,9 +49,12 @@ async function positionOf(db: Db, rideId: unknown) {
 type Choice = "keep" | "withoutCar" | "notConcerned" | "drive";
 type Start = "new" | "notConcerned" | "withoutCar" | "passenger";
 
+/** The number of the persons of a device who offer a car: one is needed to drive (v4.8). */
+const DEVICE_PHONE = "06 55 55 55 55";
+
 /**
  * Retour: Marc drives r2, 3 seats. Ana, who offers a car on the aller, is new to the event,
- * or of her device: without a car on the aller, and on the retour as `start` says.
+ * or of her device, with a number: without a car on the aller, and on the retour as `start` says.
  */
 async function aRetourScene(db: Db, eventId: string, start: Start) {
   const marc = await seedPerson(db, eventId, { firstName: "Marc" });
@@ -60,7 +63,7 @@ async function aRetourScene(db: Db, eventId: string, start: Start) {
     const driver = aNewDriver();
     return { marc, r2, token: newToken(), driver, driverId: driver.personId };
   }
-  const ana = await seedPerson(db, eventId, { firstName: "Ana" });
+  const ana = await seedPerson(db, eventId, { firstName: "Ana", phone: DEVICE_PHONE });
   await seedPlacement(db, { personId: ana.id, eventId, leg: "aller", rideId: null });
   if (start !== "notConcerned") {
     const rideId = start === "passenger" ? r2 : null;
@@ -100,12 +103,12 @@ async function blockedBy(db: Db, pid: number, sessions = 1) {
 
 /**
  * Aller: Marc drives Léa (r1), Tom is without a car. Retour: Léa and Tom are without a car.
- * Each has their own device.
+ * Each has their own device, and a number.
  */
 async function seedScene(db: Db, eventId: string) {
-  const marc = await seedPerson(db, eventId, { firstName: "Marc" });
-  const lea = await seedPerson(db, eventId, { firstName: "Léa" });
-  const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+  const marc = await seedPerson(db, eventId, { firstName: "Marc", phone: "06 11 11 11 11" });
+  const lea = await seedPerson(db, eventId, { firstName: "Léa", phone: "06 22 22 22 22" });
+  const tom = await seedPerson(db, eventId, { firstName: "Tom", phone: "06 33 33 33 33" });
   const r1 = await seedRide(db, eventId, marc.id, { leg: "aller" });
   await seedPlacement(db, { personId: lea.id, eventId, leg: "aller", rideId: r1 });
   await seedPlacement(db, { personId: lea.id, eventId, leg: "retour", rideId: null });
@@ -121,8 +124,8 @@ async function aScene(db: Db) {
 
 /**
  * One device: Ana and Bea without a car on the aller, Cleo not concerned by it, Dan in
- * Marc's car r1 there, Eve driving there; all of them without a car on the retour. Marc
- * and Tom have their own devices.
+ * Marc's car r1 there, Eve driving there; all of them without a car on the retour, and with
+ * `DEVICE_PHONE`. Marc and Tom have their own devices.
  */
 async function aDeviceScene(db: Db, eventId: string) {
   const token = newToken();
@@ -130,7 +133,9 @@ async function aDeviceScene(db: Db, eventId: string) {
   const tom = await seedPerson(db, eventId, { firstName: "Tom" });
   const r1 = await seedRide(db, eventId, marc.id, { leg: "aller" });
   const device = [];
-  for (const firstName of ["Ana", "Bea", "Cleo", "Dan", "Eve"]) device.push(await seedPerson(db, eventId, { firstName }, token));
+  for (const firstName of ["Ana", "Bea", "Cleo", "Dan", "Eve"]) {
+    device.push(await seedPerson(db, eventId, { firstName, phone: DEVICE_PHONE }, token));
+  }
   const [ana, bea, cleo, dan, eve] = device;
   await seedRide(db, eventId, eve.id, { leg: "aller" });
   for (const person of [ana, bea]) await seedPlacement(db, { personId: person.id, eventId, leg: "aller", rideId: null });
@@ -163,6 +168,22 @@ async function rowsOf(db: Db, eventId: string) {
     .execute();
   const persons = (await readTokenHolders(db, eventId)).map((holder) => holder.id).sort();
   return { rides, placements, persons };
+}
+
+/** Claire's number, and the one she sends with her offer. */
+const CLAIRE_PHONE = "06 12 34 56 78";
+const SENT_PHONE = "07 11 22 33 44";
+
+/** The number a person has in the database: the tests read it, the code never does. */
+async function phoneOf(db: Db, personId: string) {
+  return (await db.selectFrom("person").select("phone").where("id", "=", personId).executeTakeFirstOrThrow()).phone;
+}
+
+/** Claire, of her own device, without a car on both legs, with `phone` when given. */
+async function aClaire(db: Db, eventId: string, phone: string | null = null) {
+  const claire = await seedPerson(db, eventId, { firstName: "Claire", phone });
+  for (const leg of ["aller", "retour"] as const) await seedPlacement(db, { personId: claire.id, eventId, leg, rideId: null });
+  return { ...claire, driver: { kind: "device" as const, personId: claire.id } };
 }
 
 describe("offerRide", () => {
@@ -503,7 +524,7 @@ describe("offerRide", () => {
       async (choice) => {
         await withRollback(async (trx) => {
           const { id: eventId } = await seedEvent(trx, { retourAt: null });
-          const { id, token } = await seedPerson(trx, eventId);
+          const { id, token } = await seedPerson(trx, eventId, { phone: DEVICE_PHONE });
           const driver = { kind: "device" as const, personId: id };
           const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
           expect(await offerRide(trx, eventId, token, anOffer("aller", driver, { otherLeg }))).toEqual({ ok: false, error: "noRetour" });
@@ -517,7 +538,7 @@ describe("offerRide", () => {
     it("« Je ne fais pas le retour » on an event without a retour offers the car on the aller alone", async () => {
       await withRollback(async (trx) => {
         const { id: eventId } = await seedEvent(trx, { retourAt: null });
-        const { id, token } = await seedPerson(trx, eventId);
+        const { id, token } = await seedPerson(trx, eventId, { phone: DEVICE_PHONE });
         await seedPlacement(trx, { personId: id, eventId, leg: "aller", rideId: null });
         const offer = anOffer("aller", { kind: "device", personId: id }, { otherLeg: { kind: "notConcerned" } });
 
@@ -743,6 +764,148 @@ describe("offerRide", () => {
     });
   });
 
+  describe("the number of who drives (v4.8, T4.7)", () => {
+    it.each([
+      ["absent", undefined],
+      ["empty", ""],
+      ["blank", "   "],
+    ])("T4.7: a new driver with her number %s gets a field error, and nothing is written, on an unknown event too", async (_, phone) => {
+      await withRollback(async (trx) => {
+        const { eventId } = await aScene(trx);
+        const before = await rowsOf(trx, eventId);
+        const offer = anOffer("aller", { ...aNewDriver(), phone });
+        const required = { ok: false, errors: { phone: "required" }, first: "phone" };
+        expect(await offerRide(trx, eventId, newToken(), offer)).toEqual(required);
+        expect(await offerRide(trx, "Zz9yXw8v", newToken(), offer)).toEqual(required);
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+      });
+    });
+
+    it("T4.7: the number required is in the order of the form, after the first name and before the car", async () => {
+      await withRollback(async (trx) => {
+        const { eventId } = await aScene(trx);
+        const before = await rowsOf(trx, eventId);
+        const noName = anOffer("aller", { ...aNewDriver(""), phone: "" }, { location: "" });
+        expect(await offerRide(trx, eventId, newToken(), noName)).toEqual({
+          ok: false,
+          errors: { firstName: "required", phone: "required", location: "required" },
+          first: "firstName",
+        });
+        const named = anOffer("aller", { ...aNewDriver(), phone: "" }, { location: "" });
+        expect(await offerRide(trx, eventId, newToken(), named)).toEqual({
+          ok: false,
+          errors: { phone: "required", location: "required" },
+          first: "phone",
+        });
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+      });
+    });
+
+    it.each([
+      ["absent", undefined],
+      ["empty", ""],
+    ])("T4.7: a driver of the device without a number, the one sent %s, is refused by driverWithoutPhone, and nothing is written", async (_, phone) => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const claire = await aClaire(trx, eventId);
+        const before = await rowsOf(trx, eventId);
+        const offer = anOffer("aller", { ...claire.driver, phone }, { otherLeg: aDrive() });
+        expect(await offerRide(trx, eventId, claire.token, offer)).toEqual({ ok: false, error: "driverWithoutPhone" });
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+        expect(await phoneOf(trx, claire.id)).toBeNull();
+      });
+    });
+
+    it.each([
+      ["absent", undefined],
+      ["empty", ""],
+    ])("T4.7: a driver of the device with a number, the one sent %s, is accepted, her number unchanged", async (_, phone) => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const claire = await aClaire(trx, eventId, CLAIRE_PHONE);
+        const offer = anOffer("aller", { ...claire.driver, phone });
+        expect(await offerRide(trx, eventId, claire.token, offer)).toEqual({ ok: true, rideId: offer.rideId, driverId: claire.id });
+        expect(await phoneOf(trx, claire.id)).toBe(CLAIRE_PHONE);
+      });
+    });
+
+    it.each([
+      ["without a number", null],
+      ["with another number", CLAIRE_PHONE],
+    ])("T4.7: a driver of the device %s who sends one gets it on her Person, read as R1 reads it, with both cars", async (_, stored) => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const claire = await aClaire(trx, eventId, stored);
+        const drive = aDrive();
+        const offer = anOffer("aller", { ...claire.driver, phone: ` \u202a${SENT_PHONE}\u202c ` }, { otherLeg: drive });
+        expect(await offerRide(trx, eventId, claire.token, offer)).toEqual({ ok: true, rideId: offer.rideId, driverId: claire.id });
+        expect(await phoneOf(trx, claire.id)).toBe(SENT_PHONE);
+        const rides = (await rowsOf(trx, eventId)).rides.map((ride) => [ride.id, ride.driver_id]);
+        expect(rides.sort()).toEqual([[offer.rideId, claire.id], [drive.rideId, claire.id]].sort());
+      });
+    });
+
+    it("T4.7: a number sent for a driver of the device follows R1: malformed, it is a field error, the driver's first", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const claire = await aClaire(trx, eventId);
+        const before = await rowsOf(trx, eventId);
+        const offer = anOffer("aller", { ...claire.driver, phone: "06 12" }, { time: "25:00" });
+        expect(await offerRide(trx, eventId, claire.token, offer)).toEqual({
+          ok: false,
+          errors: { phone: "invalid", time: "invalid" },
+          first: "phone",
+        });
+        const forged = anOffer("aller", { ...claire.driver, phone: 612345678 });
+        expect(await offerRide(trx, eventId, claire.token, forged)).toEqual({ ok: false, errors: { phone: "invalid" }, first: "phone" });
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+        expect(await phoneOf(trx, claire.id)).toBeNull();
+      });
+    });
+
+    it("T4.7: an offer refused by alreadyDriving or alreadyInCar leaves the number as it was", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const { token, ana, dan, eve, driver } = await aDeviceScene(trx, eventId);
+        const before = await rowsOf(trx, eventId);
+
+        const byEve = anOffer("aller", { kind: "device", personId: eve.id, phone: SENT_PHONE });
+        expect(await offerRide(trx, eventId, token, byEve)).toEqual({ ok: false, error: "alreadyDriving" });
+        const withDan = anOffer("aller", { ...driver, phone: SENT_PHONE }, { passengerIds: [dan.id] });
+        expect(await offerRide(trx, eventId, token, withDan)).toEqual({ ok: false, error: "alreadyInCar" });
+        expect(await rowsOf(trx, eventId)).toEqual(before);
+        expect(await phoneOf(trx, eve.id)).toBe(DEVICE_PHONE);
+        expect(await phoneOf(trx, ana.id)).toBe(DEVICE_PHONE);
+      });
+    });
+
+    it("T4.7: an offer refused by noRetour leaves the number as it was", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx, { retourAt: null });
+        const claire = await seedPerson(trx, eventId, { firstName: "Claire" });
+        const offer = anOffer("retour", { kind: "device", personId: claire.id, phone: SENT_PHONE });
+        expect(await offerRide(trx, eventId, claire.token, offer)).toEqual({ ok: false, error: "noRetour" });
+        expect(await phoneOf(trx, claire.id)).toBeNull();
+      });
+    });
+
+    it("T4.7, C4.10: sent again after a lost answer, the offer writes the number no more", async () => {
+      await withRollback(async (trx) => {
+        const { id: eventId } = await seedEvent(trx);
+        const claire = await aClaire(trx, eventId);
+        const offer = anOffer("aller", { ...claire.driver, phone: SENT_PHONE });
+        const first = await offerRide(trx, eventId, claire.token, offer);
+        expect(first).toMatchObject({ ok: true });
+        // Changed since, from « Modifier Claire »: the offer sent again does not undo it.
+        await trx.updateTable("person").set({ phone: CLAIRE_PHONE }).where("id", "=", claire.id).execute();
+        const once = await rowsOf(trx, eventId);
+        expect(await offerRide(trx, eventId, claire.token, offer)).toEqual(first);
+        expect(await rowsOf(trx, eventId)).toEqual(once);
+        expect(await phoneOf(trx, claire.id)).toBe(CLAIRE_PHONE);
+      });
+    });
+  });
+
   describe("on committed data", () => {
     /** A plugin whose inserts into `table` fail from the `nth` on, as if the database broke at that moment. */
     function failingInsert(nth = 1, table = "ride"): KyselyPlugin {
@@ -850,7 +1013,7 @@ describe("offerRide", () => {
           const ines = await seedPerson(db, eventId, { firstName: "Inès" });
           const a = await seedRide(db, eventId, marc.id, { leg: "aller" });
           const b = await seedRide(db, eventId, ines.id, { leg: "retour" });
-          const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+          const lea = await seedPerson(db, eventId, { firstName: "Léa", phone: DEVICE_PHONE });
           const tom = await seedPerson(db, eventId, { firstName: "Tom" }, lea.token);
           await seedPlacement(db, { personId: lea.id, eventId, leg: "aller", rideId: a });
           await seedPlacement(db, { personId: lea.id, eventId, leg: "retour", rideId: b });
@@ -892,6 +1055,33 @@ describe("offerRide", () => {
         });
       },
     );
+
+    // The number is written before the Placements and the Rides: a failure after it undoes it.
+    it("T4.7, C4.5: one write: the number sent goes with the cars, a failure at the insert of a Ride undoes it", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const claire = await aClaire(db, eventId);
+        const before = await rowsOf(db, eventId);
+        const offer = anOffer("aller", { ...claire.driver, phone: SENT_PHONE }, { otherLeg: aDrive() });
+        await expect(offerRide(db.withPlugin(failingInsert(2)), eventId, claire.token, offer)).rejects.toThrow("injected failure");
+        expect(await rowsOf(db, eventId)).toEqual(before);
+        expect(await phoneOf(db, claire.id)).toBeNull();
+      });
+    });
+
+    it("T4.7: an offer refused by idTaken, after the number is written, leaves it as it was", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const claire = await aClaire(db, eventId);
+        const before = await rowsOf(db, eventId);
+        await withCommittedEvent(async (other, otherId) => {
+          const { id: driverId } = await seedPerson(other, otherId);
+          const rideId = await seedRide(other, otherId, driverId);
+          const offer = anOffer("aller", { ...claire.driver, phone: SENT_PHONE }, { rideId });
+          expect(await offerRide(db, eventId, claire.token, offer)).toEqual({ ok: false, error: "idTaken" });
+        });
+        expect(await rowsOf(db, eventId)).toEqual(before);
+        expect(await phoneOf(db, claire.id)).toBeNull();
+      });
+    });
 
     // Known only once the insert does nothing, after the seat is freed: the refusal rolls it back.
     it("a ride id held by another event is refused, and the driver keeps her seat", async () => {
@@ -968,8 +1158,8 @@ describe("offerRide", () => {
         const ines = await seedPerson(db, eventId, { firstName: "Inès" });
         const a = await seedRide(db, eventId, marc.id, { leg: "aller" });
         const b = await seedRide(db, eventId, ines.id, { leg: "retour" });
-        const lea = await seedPerson(db, eventId, { firstName: "Léa" });
-        const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+        const lea = await seedPerson(db, eventId, { firstName: "Léa", phone: DEVICE_PHONE });
+        const tom = await seedPerson(db, eventId, { firstName: "Tom", phone: DEVICE_PHONE });
         for (const person of [lea, tom]) {
           await seedPlacement(db, { personId: person.id, eventId, leg: "aller", rideId: a });
           await seedPlacement(db, { personId: person.id, eventId, leg: "retour", rideId: b });

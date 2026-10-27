@@ -53,6 +53,9 @@ reproduire, dans cet ordre.
   ainsi placer plusieurs personnes d'un coup, dans la limite des places libres. Sans aucune
   personne sur l'appareil, le tap ouvre la première inscription (prénom, téléphone
   facultatif), qui place directement.
+- **Proposer une voiture** demande un numéro à qui conduit. Ailleurs, le numéro reste
+  facultatif ; il est demandé sur la fiche d'une voiture quand personne de l'appareil qui
+  s'y trouve n'en a, et repris d'une personne de l'appareil à l'autre.
 - **Ajouter une personne** : la case « aller et retour » (cochée) la déclare sans voiture sur
   les deux legs ; décochée, seulement sur l'onglet en cours. Chaque leg se bascule ensuite
   séparément entre dans une voiture, sans voiture et pas concernée.
