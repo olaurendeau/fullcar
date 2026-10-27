@@ -804,6 +804,7 @@ describe("offerRide", () => {
     it.each([
       ["absent", undefined],
       ["empty", ""],
+      ["blank", "   "],
     ])("T4.7: a driver of the device without a number, the one sent %s, is refused by driverWithoutPhone, and nothing is written", async (_, phone) => {
       await withRollback(async (trx) => {
         const { id: eventId } = await seedEvent(trx);
