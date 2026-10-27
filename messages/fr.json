@@ -152,6 +152,8 @@
     },
     "remember": "Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.",
     "forSeat": "Cette personne prendra une place dans la voiture de {driver}.",
+    "samePhone": "Même numéro que {firstName}. Modifiez-le si besoin.",
+    "phoneHintForSeat": "Pour que {driver} puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.",
     "firstName": "Prénom",
     "phone": "Téléphone (facultatif)",
     "phoneHint": "Visible seulement par l’organisateur et par les personnes de la même voiture.",

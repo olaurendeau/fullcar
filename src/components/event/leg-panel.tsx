@@ -2,6 +2,7 @@ import { useTranslations } from "next-intl";
 import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
 import { phoneAsk } from "@/domain/phone-ask";
+import { phonePrefill } from "@/domain/phone-prefill";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
@@ -123,6 +124,7 @@ export function LegPanel({
           hasRetour={hasRetour}
           disabled={!deviceKnown(device.status)}
           addPerson={device.addPerson}
+          prefill={phonePrefill(board.device)}
         />
         <OfferRideButton
           leg={leg}
