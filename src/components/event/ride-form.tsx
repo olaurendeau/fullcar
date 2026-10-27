@@ -248,6 +248,8 @@ export function EditRideButton({ car, at, updateRide, near }: { car: VisibleCar;
       title={t(choosing ? "RideChanges.leaving.title" : "RideForm.title.edit")}
       // Its fields, and its step while they wait to be sent: on a phone, it fills the screen (v4.6, rule 2).
       fullHeight
+      // The step's way back is its « Annuler »: no « Fermer » under it (v4.6, rule 1).
+      closable={!choosing}
     >
       <RideForm
         key={opened}
