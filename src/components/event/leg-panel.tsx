@@ -1,6 +1,7 @@
 import { useTranslations } from "next-intl";
 import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
+import { phoneAsk } from "@/domain/phone-ask";
 import { phonePrefill } from "@/domain/phone-prefill";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
@@ -10,9 +11,11 @@ import { useFormatDate } from "@/i18n/format-date";
 import type { Message } from "./bar-state";
 import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
+import { personOf } from "./device-persons";
 import { EmptyLeg } from "./empty-leg";
 import { EventMap, OrganiserHint, type LegMap, type MapHint } from "./event-map";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
+import { PhoneAskButton } from "./phone-ask";
 import { RideCard } from "./ride-card";
 import type { RemovePerson } from "./remove-person-dialog";
 import type { RemoveRide } from "./remove-ride-dialog";
@@ -104,6 +107,13 @@ export function LegPanel({
   const seats = useSeatSheet(board, device, hasRetour);
   // A car is the device's when one of its persons drives it on this leg (C8.1).
   const drivesIt = (rideId: string) => board.device.some(({ state }) => state.kind === "driver" && state.rideId === rideId);
+  // Only once the device's persons are known (v4.8 rule 1, C5.9); her driving read on both legs (rule 8).
+  const known = deviceKnown(device.status);
+  const askOf = (car: (typeof cars)[number]) => {
+    const ask = known ? phoneAsk(car, board.device) : null;
+    const person = ask && personOf([board, { device: other?.persons ?? [] }], ask.personId);
+    return <PhoneAskButton ask={ask} person={person || null} leg={leg} rideId={car.id} updatePerson={device.updatePerson} />;
+  };
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -144,6 +154,7 @@ export function LegPanel({
                 updateRide={drivesIt(car.id) ? device.updateRide : undefined}
                 removeRide={drivesIt(car.id) ? device.removeRide : undefined}
                 near={near}
+                ask={askOf(car)}
               />
             ))
           ) : (

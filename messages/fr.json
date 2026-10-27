@@ -94,7 +94,13 @@
       "freeSeat": "Place libre",
       "takeSeat": "Place libre : prendre une place dans la voiture de {driver}",
       "edit": "Modifier",
-      "remove": "Retirer la voiture"
+      "remove": "Retirer la voiture",
+      "addPhoneWhy": {
+        "passenger": "Ajoutez un numéro pour que {driver} puisse vous joindre.",
+        "driver": "Ajoutez un numéro pour que les personnes à bord puissent vous joindre."
+      },
+      "addPhone": "Ajouter un numéro",
+      "addPhoneLabel": "Ajouter un numéro pour {firstName}"
     },
     "withoutCar": "Sans voiture",
     "call": "Appeler {firstName} au {phone}",

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { deviceMatrix, matrixSummary, startsExpanded } from "@/domain/device-matrix";
 import type { Leg } from "@/domain/leg";
 import { removalConfirmation } from "@/domain/person-removal";
-import type { VisibleLegBoard } from "@/domain/phone-visibility";
+import type { VisibleDevicePerson, VisibleLegBoard } from "@/domain/phone-visibility";
 import { findSeat } from "@/domain/tap";
 import { cn } from "@/lib/utils";
 import { CellSheet } from "./cell-sheet";
@@ -21,7 +21,7 @@ const MATRIX_ID = "device-persons-matrix";
  * A person's own number: the one `withVisiblePhones` set in the device's section, and nowhere else.
  * `drives`, whether she drives on a leg: her number is then not removed (v4.8 rule 8).
  */
-function personOf(board: readonly VisibleLegBoard[], id: string) {
+export function personOf(board: readonly { device: readonly VisibleDevicePerson[] }[], id: string) {
   const rows = board.flatMap((leg) => leg.device).filter((candidate) => candidate.id === id);
   const [person] = rows;
   const drives = rows.some((row) => row.state.kind === "driver");

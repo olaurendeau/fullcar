@@ -1,5 +1,6 @@
 import { Clock, MapPin, Plus, User } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 import type { VisibleCar } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
 import { wallClockAsUtc, type WallDate } from "@/domain/wall-clock";
@@ -20,6 +21,7 @@ const ABOVE_BAR = "scroll-mb-[calc(1rem+var(--message-bar-height,0px)+12px+env(s
  * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
  * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
  * removes it (C8.1); `near`, the event's position, brings its place's suggestions closer (AL4.1).
+ * `ask`, what the card asks the device, goes under the seats, above those two (v4.8 rule 1).
  */
 export function RideCard({
   car,
@@ -29,6 +31,7 @@ export function RideCard({
   updateRide,
   removeRide,
   near = null,
+  ask,
 }: {
   car: VisibleCar;
   date: WallDate;
@@ -37,6 +40,7 @@ export function RideCard({
   updateRide?: UpdateRide;
   removeRide?: RemoveRide;
   near?: Position | null;
+  ask?: ReactNode;
 }) {
   const t = useTranslations("Board.car");
   const format = useFormatter();
@@ -108,6 +112,7 @@ export function RideCard({
           </li>
         ))}
       </ul>
+      {ask}
       {(updateRide || removeRide) && (
         <div className="flex gap-2">
           {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} near={near} />}

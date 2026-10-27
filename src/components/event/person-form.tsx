@@ -167,6 +167,7 @@ export function AddPersonButton({
  * same rules, without « Aller et retour »; the first name has the focus as the form shows. For a
  * person who drives, the number is « Téléphone », with the help for who drives, and emptied, it is
  * refused, here as on the server (v4.8 rule 8); left as it was, it is not sent, and nothing refuses it.
+ * From a car's card that asks for a number, `focus` puts the focus in the number instead (v4.8 rule 2).
  * Opened from the sheet of a free seat, « Annuler » under « Valider » goes back to its list (C6.6).
  * Sent on the retour once it is gone, `onGone` closes its sheet (rule 9); sent from the aller with
  * « Aller et retour », the form stays without it (decision 41).
@@ -177,12 +178,15 @@ export function PersonForm({
   onDone,
   onCancel,
   onGone,
+  focus = "firstName",
 }: {
   mode: PersonFormMode;
   open: () => boolean;
   onDone: (personId: string) => void;
   onCancel?: () => void;
   onGone?: () => void;
+  /** In `edit` mode, the field that has the focus as the form shows. */
+  focus?: PersonField;
 }) {
   const t = useTranslations("PersonForm");
   const tErrors = useTranslations("FormErrors");
@@ -213,10 +217,10 @@ export function PersonForm({
   const drives = mode.kind === "edit" && mode.person.drives;
   const { leg, hasRetour } = mode.kind === "add" ? { leg: mode.leg, hasRetour: mode.hasRetour && !gone } : { leg: "aller" as const, hasRetour: false };
 
-  // « Modifier » is gone as the form takes its place: the focus goes to the first name.
+  // « Modifier » is gone as the form takes its place: the focus goes to the first name, or to `focus`.
   useEffect(() => {
-    if (editing) document.getElementById(`${ids}-firstName`)?.focus();
-  }, [editing, ids]);
+    if (editing) document.getElementById(`${ids}-${focus}`)?.focus();
+  }, [editing, ids, focus]);
 
   // « Valider » lost the focus while it was inactive: after a refusal, it gets it back
   // (« refus dans une feuille : ne bouge pas »). « Aller et retour » gone, it takes it wherever it was (M7.8).

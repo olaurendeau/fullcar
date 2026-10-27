@@ -375,9 +375,13 @@ test.describe("the scene of O2.5, and Oriane on the organiser's device", () => {
     { width: 1280, height: 800 },
   ]) {
     test(`O1.11: at ${viewport.width} px, at the bottom of the page, the organiser not scrolling, the bar of messages measured in the very frame the browser pulls the scroll back: the car stays in place (#316)`, async ({
+      db,
       page,
       seededEvent,
     }) => {
+      // Oriane with a number, given before the tap: the state it brings back has it, and Anaïs's
+      // card asks her nothing (event-board v4.8, rule 1), which would lengthen the page under it.
+      await db.updateTable("person").set({ phone: "06 12 34 56 78" }).where("id", "=", oriane).execute();
       await page.setViewportSize(viewport);
       await page.addStyleTag({ content: "html, main { overflow-anchor: none !important; }" });
       const title = carTitle(page, "Anaïs");
