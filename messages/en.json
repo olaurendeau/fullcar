@@ -170,6 +170,9 @@
     },
     "driver": "Who drives?",
     "newDriver": "Someone new",
+    "phone": "Phone",
+    "driverPhone": "{firstName}’s phone",
+    "phoneHint": "So that the people on board can reach you. Only visible to the organiser and to the people in the same car.",
     "leavesCar": "Will leave {driver}’s car",
     "otherLeg": {
       "title": {
@@ -217,6 +220,7 @@
     "invalidTime": "Not a valid time.",
     "seats": "From 1 to 8 seats.",
     "chooseDriver": "Choose who drives.",
+    "driverPhone": "A number is needed to offer a car.",
     "tooManyPassengers": "{seats, plural, one {Only # seat} other {Only # seats}}: untick someone or add seats."
   },
   "Actions": {
