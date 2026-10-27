@@ -326,7 +326,8 @@
     "final": "This cannot be undone.",
     "confirm": "Remove from the event",
     "removed": "{firstName} is no longer part of the event",
-    "alreadyRemoved": "{firstName} had already been removed from the event"
+    "alreadyRemoved": "{firstName} had already been removed from the event",
+    "removedElsewhere": "{firstName} is no longer in your sign-ups: they were removed from the event from another device."
   },
   "Admin": {
     "title": "Organiser area",
