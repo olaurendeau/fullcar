@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
@@ -57,7 +58,7 @@ import {
 import { ensureDeviceToken, readDeviceToken, useDevice } from "./device-token";
 import type { EventState } from "./event-state";
 import type { PersonOutcome } from "./persons";
-import { actionRunner, sendAction, stateOf, stateRead, stateShown, withTabsHeld, type Sent } from "./run-action";
+import { actionRunner, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld, type Sent } from "./run-action";
 
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
@@ -154,16 +155,29 @@ export function ParticipantBoard({
     };
   });
   const { succeed, fail } = messages;
+  // Anonymised since the page was rendered (OA8.3, #799): a read gives its title and its start
+  // only, and the server's page, read again, is « Événement terminé ». Nothing is shown of it
+  // here, and it is no failure: the read never ends, so the device's section stays « Chargement »
+  // and « Actualiser » stays « Actualisation… » until that page replaces them.
+  const router = useRouter();
+  const [ending] = useState(() => () => {
+    router.refresh();
+    return new Promise<never>(() => {});
+  });
   useImperativeHandle(
     ref,
     () => ({
-      read: () => sendAction(() => loadEventState(id, readDeviceToken(id))),
+      read: async () => {
+        const sent = await sendAction(() => loadEventState(id, readDeviceToken(id)));
+        if (readEnded(sent)) return ending();
+        return sent.ok ? { ok: true, value: stateRead(sent) } : sent;
+      },
       apply: setBoard,
       applyEvent: (event) => setBoard({ event, legs: latest.current.legs.filter(({ leg }) => leg === "aller" || event.retourAt) }),
       succeed,
       fail,
     }),
-    [id, setBoard, succeed, fail],
+    [id, ending, setBoard, succeed, fail],
   );
 
   useLayoutEffect(() => {
@@ -232,6 +246,11 @@ export function ParticipantBoard({
       const retry = retrying.current && { key: "retry", inSheet: () => false, ...sendAbout(["device:read"]) };
       retrying.current = false;
       const sent = retry ? await runAction("retry", read, undefined, retry.leaves) : await sendAction(read);
+      // Anonymised since: no failure to say, the page that comes says it (see `ending`).
+      if (readEnded(sent)) {
+        if (retry) retry.answered();
+        return ending();
+      }
       // An answer that is not a state fails the read, as an unknown event does: the bar says so too.
       const answered = stateRead(sent);
       if (retry && sent) {

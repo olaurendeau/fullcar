@@ -75,7 +75,13 @@ export function isEventState(value: unknown): value is EventState {
   return typeof value.event === "object" && value.event !== null && Array.isArray(value.legs);
 }
 
-/** The state a read answered: nothing for a failure, an unknown event, or the legs alone. */
+/** Whether a read answered that the event is anonymised (OA8.3, #799): the page is then « Événement terminé ». */
+export function readEnded(sent: Sent<unknown> | undefined): boolean {
+  if (!sent?.ok || typeof sent.value !== "object" || sent.value === null) return false;
+  return "ended" in sent.value && sent.value.ended === true;
+}
+
+/** The state a read answered: nothing for a failure, an unknown event, an ended one, or the legs alone. */
 export function stateRead(sent: Sent<unknown> | undefined): EventState | undefined {
   return sent?.ok && isEventState(sent.value) ? sent.value : undefined;
 }

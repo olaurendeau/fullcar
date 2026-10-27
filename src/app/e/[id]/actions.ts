@@ -4,7 +4,7 @@ import { getDb } from "@/db/client";
 import { databaseFailure } from "@/db/failure";
 import { isPublicId } from "@/domain/public-id";
 import * as changeRide from "./change-ride";
-import { readEventState, type EventState } from "./event-state";
+import { readDeviceState, readEventState, type EndedEvent, type EventState } from "./event-state";
 import { offerRide as storeRideOffer, type OfferRideOutcome } from "./offer-ride";
 import * as persons from "./persons";
 import { removeFromDevice, type RemovePersonOutcome } from "./remove-person";
@@ -17,13 +17,15 @@ import {
 
 /**
  * The event's state as this device sees it, for the browser to replace the one rendered
- * by the server. The personal token arrives in the body, never in the URL; it is only
- * compared, never logged. Nothing for an unknown event, and a malformed id reads nothing.
+ * by the server; once anonymised, its title and its start only (OA8.3, #799), for a page
+ * still open to show « Événement terminé ». The personal token arrives in the body, never in
+ * the URL; it is only compared, never logged. Nothing for an unknown event, and a malformed
+ * id reads nothing.
  */
-export async function loadEventState(id: unknown, token: unknown): Promise<EventState | undefined> {
+export async function loadEventState(id: unknown, token: unknown): Promise<EventState | EndedEvent | undefined> {
   if (!isPublicId(id)) return undefined;
   try {
-    return await readEventState(getDb(), id, token);
+    return await readDeviceState(getDb(), id, token);
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("loadEventState: the event could not be read", error);

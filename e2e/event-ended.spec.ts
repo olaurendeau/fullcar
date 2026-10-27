@@ -3,23 +3,22 @@ import type { Kysely } from "kysely";
 import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
 import { confirmSeededEvent } from "@/db/test-events";
-import { seedPerson } from "@/db/test-participants";
 import { expect, test } from "./fixtures";
 
 /*
  * #590, organizer-account OA8.3: the link of an event anonymised at day 30 says « Événement
- * terminé », its title and its start, and leads to /nouveau; neither its place nor a first
- * name. 200, in noindex (architecture « La purge »). `/e/{id}/admin` shows the same page until
+ * terminé », its title and its start, and leads to /nouveau; neither its place nor the
+ * board. 200, in noindex (architecture « La purge »). `/e/{id}/admin` shows the same page until
  * the organiser's screens come. The seed: « Tournoi de Rennes » at the « Gymnase des
- * Gayeulles », on 2026-12-12 at 07:30.
+ * Gayeulles », on 2026-12-12 at 07:30. No first name is checked for: anonymising deletes every
+ * person before the page is read, so none could show (#799). The place stays in the row.
  */
 
 const PATHS = [(id: string) => `/e/${id}`, (id: string) => `/e/${id}/admin`];
 
-/** The seeded event, confirmed by an account, with a participant, then anonymised as day 30 leaves it. Gives the account's id. */
+/** The seeded event, confirmed by an account, then anonymised as day 30 leaves it. Gives the account's id. */
 async function anonymised(db: Kysely<Database>, eventId: string): Promise<string> {
   const accountId = await confirmSeededEvent(db, eventId);
-  await seedPerson(db, eventId, { firstName: "Camille" });
   await anonymiseEvent(db, eventId);
   return accountId;
 }
@@ -59,12 +58,11 @@ test.describe("OA8.3: an anonymised event, opened by its link", () => {
       expect(await horizontalOverflow(page)).toBe(0);
     });
 
-    test(`${path("{id}")} shows neither the place nor a first name, nor the board`, async ({ page, seededEvent }) => {
+    test(`${path("{id}")} shows neither the place nor the board`, async ({ page, seededEvent }) => {
       await page.goto(path(seededEvent.id));
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Événement terminé");
       const html = await page.content();
       expect(html).not.toContain("Gymnase des Gayeulles");
-      expect(html).not.toContain("Camille");
       await expect(page.getByRole("tab")).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Proposer une voiture" })).toHaveCount(0);
     });
