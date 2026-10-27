@@ -6,7 +6,7 @@ import { seedPendingSend } from "@/db/test-events";
 import { CONFIRMATIONS_PER_EVENT } from "@/domain/send-limits";
 import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { answerMail, mailTo, newAddress } from "./mailbox";
+import { answerMail, mailTo, newAddress, releaseMail } from "./mailbox";
 import { areaEditButton, expect, organiserPath, test } from "./organiser";
 
 /*
@@ -221,12 +221,24 @@ for (const width of [1024, 1280]) {
 }
 
 test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
+  // Each test its own address; its sends are deleted after it, so that the global hourly cap never meets them.
+  let addresses: string[] = [];
+  const address = () => {
+    const email = newAddress();
+    addresses.push(email);
+    return email;
+  };
+  test.afterEach(async ({ db }) => {
+    if (addresses.length > 0) await db.deleteFrom("email_send").where("email", "in", addresses).execute();
+    addresses = [];
+  });
+
   test("one more email to the address, the bar says so, the notice says it was sent, the focus stays on the button", async ({
     page,
     db,
     seededEvent,
   }) => {
-    const email = newAddress();
+    const email = address();
     await seedPendingSend(db, seededEvent.id, { email, status: "failed", at: ago(HOUR) });
     await page.goto(organiserPath(seededEvent));
     await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email));
@@ -242,7 +254,7 @@ test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
   });
 
   test("a failure of Brevo is the notice's alert: no « E-mail renvoyé »", async ({ page, db, seededEvent }) => {
-    const email = newAddress();
+    const email = address();
     await answerMail([email], { kind: "error" });
     await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
     await page.goto(organiserPath(seededEvent));
@@ -257,7 +269,7 @@ test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
     db,
     seededEvent,
   }) => {
-    const email = newAddress();
+    const email = address();
     await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
     await seedSends(db, CONFIRMATIONS_PER_EVENT, { kind: "confirmation", email, eventId: seededEvent.id });
     await page.goto(organiserPath(seededEvent));
@@ -273,7 +285,7 @@ test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
     db,
     seededEvent,
   }) => {
-    const email = newAddress();
+    const email = address();
     await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
     await page.goto(organiserPath(seededEvent));
     await expectNotice(page, "polite", FR.title, FR.body(email));
@@ -286,5 +298,40 @@ test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
     }
     await expectNotice(page, "polite", FR.title, FR.body(email));
     expect(await mailTo(email)).toEqual([]);
+  });
+
+  test("while the email is on its way, the notice keeps its height, the buttons stay where they are and inactive, and a second tap sends nothing and opens nothing", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "failed", at: ago(HOUR) });
+    await answerMail([email], { kind: "hold" });
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(organiserPath(seededEvent));
+    await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email));
+    const resend = await box(button(page, FR.resend));
+    const spot = { x: resend.x + resend.width / 2, y: resend.y + resend.height / 2 };
+
+    await page.mouse.click(spot.x, spot.y);
+    await expect.poll(async () => (await mailTo(email)).length).toBe(1);
+    await expectNotice(page, "polite", FR.title, FR.sending(email));
+    for (const name of [FR.resend, FR.fix]) await expect(button(page, name)).toHaveAttribute("aria-disabled", "true");
+    // The button is under the finger still: « Modifier l’événement » did not move up to its place.
+    expect(Math.abs((await box(button(page, FR.resend))).y - resend.y)).toBeLessThanOrEqual(1);
+
+    await page.mouse.click(spot.x, spot.y);
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(button(page, FR.resend)).toHaveAttribute("aria-disabled", "true");
+    expect(Math.abs((await box(button(page, FR.resend))).y - resend.y)).toBeLessThanOrEqual(1);
+    expect(await mailTo(email)).toHaveLength(1);
+
+    expect(await releaseMail([email])).toBe(1);
+    await expect(messages(page)).toHaveText([FR.resent(email)]);
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await mailTo(email)).toHaveLength(1);
   });
 });

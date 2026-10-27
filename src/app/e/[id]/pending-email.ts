@@ -95,6 +95,6 @@ export async function resendConfirmation(eventId: unknown, proof: unknown, resen
   if ("ok" in claimed) return claimed;
 
   const { email, token } = claimed;
-  const send = await sendConfirmation(resending, { id: eventId, email, token, since: now });
+  const send = await sendConfirmation(resending, { id: eventId, email, token, since: now }, "resendEmail");
   return { ok: true, pending: { email, send } };
 }

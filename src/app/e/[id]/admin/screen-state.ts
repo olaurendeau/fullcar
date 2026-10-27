@@ -192,12 +192,13 @@ export function pendingRead(panel: Sent<unknown>): { pending?: PendingNotice } |
 
 /**
  * What « Renvoyer l’e-mail » came to (OA2.4): the notice the server answers, `sent` or
- * `failed`; the limit, which sent nothing; an event no longer awaiting confirmation; or not
- * resent, for want of a connection (`offline`) or any other reason, a refusal included.
+ * `failed`; the limit, which sent nothing; an event no longer awaiting confirmation; an event
+ * that ended (anonymised), which the page then reads as such; or not resent, for want of a
+ * connection (`offline`) or any other reason, a refusal included.
  */
 export type ResendAnswer =
   | { kind: "answered"; pending: PendingNotice }
-  | { kind: "tooMany" | "notPending" }
+  | { kind: "tooMany" | "notPending" | "eventEnded" }
   | { kind: "notResent"; offline: boolean };
 
 /** The answer of `resendEmail`, as the page takes it: anything it does not know is « not resent ». */
@@ -206,7 +207,7 @@ export function resendAnswer(sent: Sent<unknown>): ResendAnswer {
   const answer = sent.value as { ok?: unknown; pending?: unknown; error?: unknown } | null | undefined;
   const pending = answer?.ok === true ? pendingNoticeOf(answer.pending) : undefined;
   if (pending && (pending.send === "sent" || pending.send === "failed")) return { kind: "answered", pending };
-  if (answer?.ok === false && (answer.error === "tooMany" || answer.error === "notPending")) return { kind: answer.error };
+  if (answer?.ok === false && (answer.error === "tooMany" || answer.error === "notPending" || answer.error === "eventEnded")) return { kind: answer.error };
   return { kind: "notResent", offline: false };
 }
 

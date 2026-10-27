@@ -15,8 +15,8 @@ import { loadOrganiserPanel, resendEmail, updateEvent } from "./actions";
  * « Session, liens et jeton d'admin », #597), as session-token.ts is for the session's. The
  * browser that created the event keeps the token the server drew, in `localStorage` under its
  * event's key, `fullcar:admin-token:{id}`; without `localStorage`, the page's memory keeps it.
- * It travels in the body of `loadOrganiserPanel`, `updateEvent` and `signOut` only, with the session's:
- * never in a URL, a header, a cookie, a log, an error or the page. There is no organiser's
+ * It travels in the body of `loadOrganiserPanel`, `updateEvent`, `signOut` and `resendEmail` only,
+ * with the session's: never in a URL, a header, a cookie, a log, an error or the page. There is no organiser's
  * link any more: a fragment on `/e/{id}/admin` is ignored (OA7.5). It is compared on the
  * server only.
  */

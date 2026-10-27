@@ -29,20 +29,29 @@ export function PendingNotice({ pending, onResend, onFix }: { pending: Notice; o
   const [said, setSaid] = useState(pending);
   if (!hidden && (said.email !== pending.email || said.send !== pending.send)) setSaid(pending);
   const { email, send } = hidden ? said : pending;
+  // The last words that were not « Envoi du lien… »: while the email is on its way they stay in the
+  // notice, unseen, to keep its height, so that the buttons do not move under a second tap (OA2.4).
+  const [steady, setSteady] = useState(pending);
+  if (!hidden && pending.send !== "sending" && (steady.email !== pending.email || steady.send !== pending.send)) {
+    setSteady(pending);
+  }
   const failure = send === "failed" || send === "addressLimit";
   const Icon = send === "sending" ? LoaderCircle : failure ? TriangleAlert : Mail;
-  const [title, body] =
+  const wordsOf = ({ email, send }: Notice) =>
     send === "failed"
       ? [t("sendFailed.title"), t("sendFailed.body", { email })]
       : send === "addressLimit"
         ? [t("addressLimit.title"), t("addressLimit.body", { email })]
         : [t("title"), t(send === "sending" ? "sending" : "body", { email })];
-  const text = (
+  const lines = (title: string, body: string, bad: boolean) => (
     <>
-      <p className={cn("font-semibold", failure && "text-destructive")}>{title}</p>
+      <p className={cn("font-semibold", bad && "text-destructive")}>{title}</p>
       <p className="max-w-prose text-muted-foreground wrap-anywhere">{body}</p>
     </>
   );
+  const [title, body] = wordsOf({ email, send });
+  const text = lines(title, body, failure);
+  const [keptTitle, keptBody] = wordsOf(steady);
   const action = (name: "resend" | "fix", label: string, Glyph: typeof Mail, onPress: (() => void) | undefined) => {
     const inactive = send === "sending" || !onPress;
     return (
@@ -77,6 +86,11 @@ export function PendingNotice({ pending, onResend, onFix }: { pending: Notice; o
       <div role="alert" className={TEXT}>
         {failure && text}
       </div>
+      {send === "sending" && (
+        <div aria-hidden className={cn(TEXT, "invisible")}>
+          {lines(keptTitle, keptBody, false)}
+        </div>
+      )}
       <div className="col-start-2 row-start-2 mt-2 flex flex-wrap gap-2">
         {action("resend", t("resend"), Mail, onResend)}
         {action("fix", t("fix"), Pencil, onFix)}

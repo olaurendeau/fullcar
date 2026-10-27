@@ -1,11 +1,14 @@
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { anonymiseEvent } from "@/db/day-thirty";
 import { findLink } from "@/db/email-links";
+import { lockEvent } from "@/db/events";
 import type { Database } from "@/db/schema";
-import { anAddress, seedAccount, seedSends, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
+import { anAddress, seedAccount, seedSends, seedSession, withCommittedAddresses, withRollbackRecordingSends } from "@/db/test-accounts";
+import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { confirmSeededEvent, seedEvent, seedPendingSend } from "@/db/test-events";
 import { generatePublicId } from "@/domain/public-id";
-import { CONFIRMATIONS_PER_ADDRESS,CONFIRMATIONS_PER_EVENT, GLOBAL_SENDS_PER_HOUR } from "@/domain/send-limits";
+import { CONFIRMATIONS_PER_ADDRESS, CONFIRMATIONS_PER_EVENT, GLOBAL_SENDS_PER_HOUR } from "@/domain/send-limits";
 import type { Brevo, Email, SendAnswer } from "@/email/brevo";
 import type { Locale } from "@/i18n/locales";
 import { resendConfirmation, type Resending } from "./pending-email";
@@ -226,7 +229,11 @@ describe("resendConfirmation, who may ask", () => {
     });
   });
 
-  it.each([["an unknown event", generatePublicId()],["a malformed id", "../../x"], ["an id that is not a string", 42]])(
+  it.each([
+    ["an unknown event", generatePublicId()],
+    ["a malformed id", "../../x"],
+    ["an id that is not a string", 42],
+  ])(
     "answers `eventNotFound` for %s",
     async (_, id) => {
       await withRollbackRecordingSends(async (trx) => {
@@ -237,6 +244,19 @@ describe("resendConfirmation, who may ask", () => {
     },
   );
 
+  it("logs under its own words, not the creation's, when the email cannot be written", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await pendingEvent(trx);
+      const { deps, sent } = resending(trx);
+      expect(await resendConfirmation(id, proof, { ...deps, origin: "not an origin" })).toEqual({
+        ok: true,
+        pending: { email: expect.any(String), send: "failed" },
+      });
+      expect(sent).toEqual([]);
+      expect(logs).toEqual([["resendEmail: the email could not be written"]]);
+    });
+  });
+
   it("logs no address, no token", async () => {
     await withRollbackRecordingSends(async (trx) => {
       const { id, email, token, proof } = await pendingEvent(trx);
@@ -245,5 +265,56 @@ describe("resendConfirmation, who may ask", () => {
       const written = JSON.stringify(logs);
       for (const secret of [email, token, tokenIn(sent[0]!)]) expect(written).not.toContain(secret);
     });
+  });
+});
+
+/*
+ * #836: the access granted before the lock no longer holds once the lock is obtained. The
+ * resend reads it again under the Event's lock, from what was committed while it waited: on
+ * committed data, through two connections.
+ */
+describe("resendConfirmation, the access decided again under the Event's lock (committed data)", () => {
+  it("answers invalid for an event whose account was deleted while the resend waited for its lock, and sends nothing", async () => {
+    await withCommittedAddresses((_, address) =>
+      withCommittedEvent(async (db, eventId, token) => {
+        await seedPendingSend(db, eventId, { email: address(), status: "sent", at: new Date(Date.now() - HOUR) });
+        const { deps, sent } = resending(db);
+        const answer = await whileHeld(
+          db,
+          async (trx) => {
+            await lockEvent(trx, eventId, "noKeyUpdate");
+            // As a used confirmation link leaves it, its account then deleted: nothing awaits, and nobody owns it.
+            await trx.updateTable("event").set({ pending_email: null, send_status: null, send_status_at: null }).where("id", "=", eventId).execute();
+            const accountId = await confirmSeededEvent(trx, eventId);
+            await trx.deleteFrom("account").where("id", "=", accountId).execute();
+          },
+          (own) => resendConfirmation(eventId, { adminToken: token }, { ...deps, db: own }),
+        );
+        expect(answer).toEqual({ ok: false, error: "invalid" });
+        expect(sent).toEqual([]);
+        expect(await sendsFor(db, eventId)).toEqual([]);
+        expect(await linksOf(db, eventId)).toEqual([]);
+      }),
+    );
+  });
+
+  it("answers eventEnded for an event anonymised while the resend waited for its lock, and sends nothing", async () => {
+    await withCommittedAddresses((_, address) =>
+      withCommittedEvent(async (db, eventId, token) => {
+        await seedPendingSend(db, eventId, { email: address(), status: "sent", at: new Date(Date.now() - HOUR) });
+        const { deps, sent } = resending(db);
+        const answer = await whileHeld(
+          db,
+          async (trx) => {
+            await lockEvent(trx, eventId, "noKeyUpdate");
+            await anonymiseEvent(trx, eventId);
+          },
+          (own) => resendConfirmation(eventId, { adminToken: token }, { ...deps, db: own }),
+        );
+        expect(answer).toEqual({ ok: false, error: "eventEnded" });
+        expect(sent).toEqual([]);
+        expect(await sendsFor(db, eventId)).toEqual([]);
+      }),
+    );
   });
 });

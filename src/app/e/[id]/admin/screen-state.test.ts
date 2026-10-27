@@ -571,15 +571,16 @@ describe("resendAnswer (OA2.4)", () => {
     }
   });
 
-  it("reads the limit, and a confirmed event", () => {
+  it("reads the limit, a confirmed event, and an event that ended", () => {
     expect(resendAnswer({ ok: true, value: { ok: false, error: "tooMany" } })).toStrictEqual({ kind: "tooMany" });
     expect(resendAnswer({ ok: true, value: { ok: false, error: "notPending" } })).toStrictEqual({ kind: "notPending" });
+    expect(resendAnswer({ ok: true, value: { ok: false, error: "eventEnded" } })).toStrictEqual({ kind: "eventEnded" });
   });
 
   it("is not resent offline, nor on any other problem or refusal, nor on an answer it does not know", () => {
     expect(resendAnswer({ ok: false, problem: "offline" })).toStrictEqual({ kind: "notResent", offline: true });
     expect(resendAnswer({ ok: false, problem: "failed" })).toStrictEqual({ kind: "notResent", offline: false });
-    for (const error of ["invalid", "eventNotFound", "eventEnded", "other"]) {
+    for (const error of ["invalid", "eventNotFound", "other"]) {
       expect(resendAnswer({ ok: true, value: { ok: false, error } })).toStrictEqual({ kind: "notResent", offline: false });
     }
     for (const value of [undefined, null, {}, { ok: true }, { ok: true, pending: { email: "a@b.fr", send: "sending" } }]) {
@@ -588,7 +589,18 @@ describe("resendAnswer (OA2.4)", () => {
   });
 
   it("has its three sentences, in French and in English, as the design words them", () => {
-    const words = { fr: ["E-mail renvoyé à {email}.", "L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.", "Trop d’envois. Réessayez dans une heure."], en: ["Email sent again to {email}.", "The email was not sent again. Check your connection, then try again.", "Too many emails. Try again in an hour."] };
+    const words = {
+      fr: [
+        "E-mail renvoyé à {email}.",
+        "L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
+        "Trop d’envois. Réessayez dans une heure.",
+      ],
+      en: [
+        "Email sent again to {email}.",
+        "The email was not sent again. Check your connection, then try again.",
+        "Too many emails. Try again in an hour.",
+      ],
+    };
     for (const [locale, messages] of [["fr", fr], ["en", en]] as const) {
       const { resent, offline, tooMany } = messages.Admin.pending;
       expect([resent, offline, tooMany]).toEqual(words[locale]);
