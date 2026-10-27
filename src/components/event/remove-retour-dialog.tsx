@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { SheetStep } from "./bottom-sheet";
 
 /** What the retour holds, as the server counts it (`LegCounts`): its cars, and the persons on it. */
 export interface RetourCounts {
@@ -70,6 +71,8 @@ export function RemoveRetourDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && !held && onCancel()}>
+      {/* A step of the sheet under it (v4.7, rule 2): the browser's « back » as Escape, nothing while it waits. */}
+      {open && <SheetStep onBack={() => !held && onCancel()} />}
       <AlertDialogContent
         onEscapeKeyDown={(escape) => held && escape.preventDefault()}
         // The sheet has given the focus its place as this closed, before it was gone.

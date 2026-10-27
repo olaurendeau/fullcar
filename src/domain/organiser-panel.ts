@@ -11,18 +11,31 @@ import { coverage, type Coverage } from "./coverage";
 import { deviceMatrix, type MatrixRow } from "./device-matrix";
 import type { Leg } from "./leg";
 import type { OrganiserLegBoard } from "./phone-visibility";
-import type { WallTime } from "./wall-clock";
+import type { WallClock, WallDate, WallTime } from "./wall-clock";
 
 /**
  * What the server answers to the organiser area (#3 C4.9, amended by #596): the panel, or a
  * state and nothing else, as organiser-access.ts decides it. `invalid` for an unknown event;
  * `signIn` (OA7.1), `notYours` with the address of the visitor's own session (OA7.2),
- * `pending` (OA7.7), `orphan` (OA7.9), `ended` for the organiser of an anonymised event (OA8.4).
+ * `pending` (OA7.7), `orphan` (OA7.9), `ended` for the organiser of an anonymised event (OA8.4),
+ * with what is left of it and the date of its day 30, when the sign-ups were erased (#598).
  */
 export type OrganiserPanelAnswer =
-  | { state: "invalid" | "signIn" | "pending" | "orphan" | "ended" }
+  | { state: "invalid" | "signIn" | "pending" | "orphan" }
   | { state: "notYours"; email: string }
+  | { state: "ended"; event: EndedHeader; erasedOn: WallDate }
   | { state: "panel"; legs: OrganiserLeg[]; persons: OrganiserPerson[] };
+
+/**
+ * What an anonymised event keeps, as its organiser's screen shows it (OA8.4): its title, the
+ * text of its place and its dates. Only its organiser's session reads the place (Q3 = a).
+ */
+export interface EndedHeader {
+  title: string;
+  location: string;
+  allerAt: WallClock;
+  retourAt: WallClock | null;
+}
 
 /**
  * A person of the event, for « Personnes inscrites » (epic #645, RP4.2): an id, a first name

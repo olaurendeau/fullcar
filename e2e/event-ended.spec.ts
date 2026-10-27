@@ -8,13 +8,13 @@ import { expect, test } from "./fixtures";
 /*
  * #590, organizer-account OA8.3: the link of an event anonymised at day 30 says « Événement
  * terminé », its title and its start, and leads to /nouveau; neither its place nor the
- * board. 200, in noindex (architecture « La purge »). `/e/{id}/admin` shows the same page until
- * the organiser's screens come. The seed: « Tournoi de Rennes » at the « Gymnase des
+ * board. 200, in noindex (architecture « La purge »). The seed: « Tournoi de Rennes » at the « Gymnase des
  * Gayeulles », on 2026-12-12 at 07:30. No first name is checked for: anonymising deletes every
  * person before the page is read, so none could show (#799). The place stays in the row.
  */
 
-const PATHS = [(id: string) => `/e/${id}`, (id: string) => `/e/${id}/admin`];
+// `/e/{id}/admin` has the organiser's screens since #598 (organiser-states.spec.ts).
+const PATHS = [(id: string) => `/e/${id}`];
 
 /** The seeded event, confirmed by an account, then anonymised as day 30 leaves it. Gives the account's id. */
 async function anonymised(db: Kysely<Database>, eventId: string): Promise<string> {

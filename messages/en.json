@@ -328,7 +328,8 @@
     "final": "This cannot be undone.",
     "confirm": "Remove from the event",
     "removed": "{firstName} is no longer part of the event",
-    "alreadyRemoved": "{firstName} had already been removed from the event"
+    "alreadyRemoved": "{firstName} had already been removed from the event",
+    "removedElsewhere": "{firstName} is no longer in your sign-ups: they were removed from the event from another device."
   },
   "Admin": {
     "title": "Organiser area",
@@ -386,6 +387,28 @@
       "missing": "{missing, plural, one {# seat missing} other {# seats missing}}"
     },
     "edit": "Edit the event"
+  },
+  "AdminLogin": {
+    "body": "Sign in with the email address of the person who organises this event."
+  },
+  "AdminPending": {
+    "title": "Email address not confirmed yet",
+    "body": "This event is waiting for the person who created it to confirm their email address. If that is you, open the confirmation link you received by email: the event will join My events, and the organiser area will open in the browser that opens it.",
+    "expired": "Link expired? Open it anyway: the page will offer to send a new one."
+  },
+  "AdminNotYours": {
+    "title": "This organiser area is not yours",
+    "body": "You are signed in as {email}, who does not organise this event.",
+    "see": "See the event",
+    "switch": "Sign in with another address"
+  },
+  "AdminOrphan": {
+    "title": "This event no longer has an organiser",
+    "body": "The account that organised it has been deleted. The event stays open to participants until it is deleted, 30 days after its date."
+  },
+  "Anonymized": {
+    "title": "Sign-ups erased",
+    "body": "On {date}, 30 days after the event, first names, phone numbers, cars and sign-ups were erased. The title, place and dates remain."
   },
   "EditEvent": {
     "title": "Edit the event",
@@ -526,7 +549,6 @@
     "sending": "Sending…",
     "noAccount": "No account yet? It is created with your first event.",
     "already": "Signed in as {email}.",
-    "myEvents": "My events",
     "offline": "The link was not sent. Check your connection, then try again.",
     "failed": "The link may not have been sent. Something went wrong: try again in a few minutes.",
     "tooMany": "Too many requests for this address. Try again in an hour.",
@@ -540,5 +562,27 @@
     "resend": "Resend the email",
     "change": "Use another address",
     "resent": "Email sent again."
+  },
+  "MyEvents": {
+    "title": "My events",
+    "signedInAs": "Signed in as {email}",
+    "upcoming": "Upcoming ({count})",
+    "past": "Past ({count})",
+    "noUpcoming": "No upcoming events.",
+    "empty": {
+      "title": "No events yet",
+      "body": "Create an event: it will show up here."
+    },
+    "persons": "{count, plural, =0 {Nobody has signed up yet.} one {# person signed up} other {# people signed up}}",
+    "withoutCar": "{leg}: {count} without a car",
+    "erasedOn": "Sign-ups will be erased on {date}.",
+    "erasedSoon": "Sign-ups will be erased shortly.",
+    "erased": "Sign-ups erased",
+    "more": "{count, plural, one {Show the other one} other {Show the # others}}",
+    "loading": "Loading your events…",
+    "failed": {
+      "title": "Your events could not be loaded",
+      "body": "Check your connection, then try again."
+    }
   }
 }

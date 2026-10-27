@@ -34,6 +34,8 @@ const EN = {
 type Words = typeof FR;
 
 const TITLE = { fr: "Tournoi de Rennes", en: "Tournoi de Rennes" };
+/** Refused, the screen of a pending event takes the board's place, and its title is the page's (#598). */
+const REFUSED = { fr: "Adresse pas encore confirmée", en: "Email address not confirmed yet" };
 
 /**
  * The pages of the footer (footer.spec.ts): which, where, their title in each language, and on
@@ -44,8 +46,8 @@ const PAGES: [string, (event: SeededEvent) => string, Record<"fr" | "en", string
   ["the event not found", () => `/e/${UNKNOWN_ID}`, { fr: FR.notFound, en: EN.notFound }],
   ["the event's page", ({ id }) => `/e/${id}`, TITLE],
   ["the organiser's page", organiserPath, TITLE, ({ token }) => token],
-  ["the organiser's page, wrong secret", organiserPath, TITLE, () => WRONG_SECRET],
-  ["the organiser's page, no secret", organiserPath, TITLE, () => null],
+  ["the organiser's page, wrong secret", organiserPath, REFUSED, () => WRONG_SECRET],
+  ["the organiser's page, no secret", organiserPath, REFUSED, () => null],
 ];
 
 /** The page once it has settled: on the organiser's page, once its token has been checked. */
@@ -53,7 +55,7 @@ async function open(page: Page, path: string, heading: string, words: Words = FR
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
-    const refused = areaRefused(page, words.panel);
+    const refused = areaRefused(page, words === FR ? REFUSED.fr : REFUSED.en);
     await expect(page.getByRole("region", { name: words.panel }).or(refused)).toBeVisible();
   }
 }

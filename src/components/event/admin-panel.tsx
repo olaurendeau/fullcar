@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronUp, Pencil, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useId, useRef, type ReactNode, type Ref, type RefObject } from "react";
+import { useId, useRef, type ReactNode, type RefObject } from "react";
 import type { Said } from "@/app/e/[id]/admin/screen-state";
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
@@ -212,36 +212,21 @@ const ALERT_FRAME =
 const PROBLEM_FRAME = cn(ALERT_FRAME, "mx-auto w-full max-w-board focus-visible:focus-ring");
 
 /**
- * Instead of the panel, when the access rule refuses it (#596): the area's title alone, and
- * nothing of the panel, until each state has its own screen (#598). Or when the check
- * could not be made (OA7.3): then nothing says the area is refused, and « Réessayer » reads again
- * (O5.3). Its alert region holds the text alone, and is emptied while « Réessayer » reads,
- * then filled again on a failure, so that it is announced again; the text stays on screen
- * meanwhile, out of the region. The button is next to the region, never in it: it stays,
- * and keeps the focus. `ref` is the area's title, the focus's place should the
- * retry find the area refused.
+ * Instead of the panel, when the check could not be made (OA7.3): nothing says the area is
+ * refused, and « Réessayer » reads again (O5.3); a refusal has its own screens
+ * (admin-states.tsx, #598). Its alert region holds the text alone, and is emptied while
+ * « Réessayer » reads, then filled again on a failure, so that it is announced again; the
+ * text stays on screen meanwhile, out of the region. The button is next to the region, never
+ * in it: it stays, and keeps the focus.
  */
 export function AdminLinkProblem({
-  problem,
   retrying = false,
   onRetry,
-  ref,
 }: {
-  problem: "refused" | "failed";
   retrying?: boolean;
   onRetry?: () => void;
-  ref?: Ref<HTMLHeadingElement>;
 }) {
   const t = useTranslations("Admin");
-  if (problem === "refused") {
-    return (
-      <section className="mx-auto w-full max-w-board">
-        <h2 ref={ref} tabIndex={-1} className="rounded-sm font-semibold focus-visible:focus-ring">
-          {t("title")}
-        </h2>
-      </section>
-    );
-  }
   const text = (
     <div className="flex flex-col gap-0.5">
       <p className="font-semibold text-destructive">{t("failed.title")}</p>

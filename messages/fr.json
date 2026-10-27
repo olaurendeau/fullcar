@@ -328,7 +328,8 @@
     "final": "C’est définitif.",
     "confirm": "Retirer de l’événement",
     "removed": "{firstName} ne fait plus partie de l’événement",
-    "alreadyRemoved": "{firstName} ne faisait déjà plus partie de l’événement"
+    "alreadyRemoved": "{firstName} ne faisait déjà plus partie de l’événement",
+    "removedElsewhere": "{firstName} ne fait plus partie de vos inscriptions : la personne a été retirée de l’événement depuis un autre appareil."
   },
   "Admin": {
     "title": "Espace organisateur",
@@ -386,6 +387,28 @@
       "missing": "Il manque {missing, plural, one {# place} other {# places}}"
     },
     "edit": "Modifier l’événement"
+  },
+  "AdminLogin": {
+    "body": "Connectez-vous avec l’adresse e-mail de la personne qui organise cet événement."
+  },
+  "AdminPending": {
+    "title": "Adresse pas encore confirmée",
+    "body": "Cet événement attend que la personne qui l’a créé confirme son adresse e-mail. Si c’est vous, ouvrez le lien de confirmation reçu par e-mail : l’événement rejoindra Mes événements, et l’espace organisateur s’ouvrira dans le navigateur qui l’ouvre.",
+    "expired": "Lien expiré ? Ouvrez-le quand même : la page proposera d’en envoyer un nouveau."
+  },
+  "AdminNotYours": {
+    "title": "Cet espace organisateur n’est pas le vôtre",
+    "body": "La session est ouverte avec {email}, qui n’organise pas cet événement.",
+    "see": "Voir l’événement",
+    "switch": "Se connecter avec une autre adresse"
+  },
+  "AdminOrphan": {
+    "title": "Cet événement n’a plus d’organisateur",
+    "body": "Le compte qui l’organisait a été supprimé. L’événement reste ouvert aux participants jusqu’à sa suppression, 30 jours après sa date."
+  },
+  "Anonymized": {
+    "title": "Inscriptions effacées",
+    "body": "Le {date}, 30 jours après l’événement, les prénoms, les numéros, les voitures et les inscriptions ont été effacés. Il reste le titre, le lieu et les dates."
   },
   "EditEvent": {
     "title": "Modifier l’événement",
@@ -526,7 +549,6 @@
     "sending": "Envoi en cours…",
     "noAccount": "Pas encore de compte ? Il se crée avec votre premier événement.",
     "already": "Session ouverte avec {email}.",
-    "myEvents": "Mes événements",
     "offline": "Le lien n’a pas été envoyé. Vérifiez la connexion, puis réessayez.",
     "failed": "Le lien n’a peut-être pas été envoyé. Une erreur est survenue : réessayez dans quelques minutes.",
     "tooMany": "Trop de demandes pour cette adresse. Réessayez dans une heure.",
@@ -540,5 +562,27 @@
     "resend": "Renvoyer l’e-mail",
     "change": "Changer d’adresse",
     "resent": "E-mail renvoyé."
+  },
+  "MyEvents": {
+    "title": "Mes événements",
+    "signedInAs": "Session ouverte avec {email}",
+    "upcoming": "À venir ({count})",
+    "past": "Passés ({count})",
+    "noUpcoming": "Aucun événement à venir.",
+    "empty": {
+      "title": "Aucun événement pour l’instant",
+      "body": "Créez un événement : il apparaîtra ici."
+    },
+    "persons": "{count, plural, =0 {Personne ne s’est encore inscrit.} one {# personne inscrite} other {# personnes inscrites}}",
+    "withoutCar": "{leg} : {count} sans voiture",
+    "erasedOn": "Les inscriptions seront effacées le {date}.",
+    "erasedSoon": "Les inscriptions seront effacées sous peu.",
+    "erased": "Inscriptions effacées",
+    "more": "{count, plural, one {Afficher l’autre} other {Afficher les # autres}}",
+    "loading": "Chargement de vos événements…",
+    "failed": {
+      "title": "Vos événements n’ont pas pu être chargés",
+      "body": "Vérifiez la connexion, puis réessayez."
+    }
   }
 }
