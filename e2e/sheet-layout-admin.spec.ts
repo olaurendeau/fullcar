@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
-import { holdToken, newToken } from "./device";
+import { holdClose, holdToken, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
 import { expect, organiserPath, seedOrganiserScene, test, unfoldLegs } from "./organiser";
 
@@ -45,10 +45,15 @@ test("O1.11: /admin, the panel shorter after « Placer 1 personne » while the s
   await board(page).getByRole("button", { name: /^Place libre : prendre une place dans la voiture de Anaïs/ }).first().click();
   const sheet = page.getByRole("dialog", { name: "Qui monte dans la voiture de Anaïs ?" });
   await expect(sheet).toBeVisible();
+  // The sheet stays mounted until the panel is shorter, however fast it is read again (#790):
+  // the board's compensation always runs while the sheet keeps where it gives the page back.
+  const held = await page.addStyleTag({ content: holdClose });
   await sheet.getByRole("checkbox", { name: /^Paul/ }).uncheck();
   await sheet.getByRole("button", { name: "Placer 1 personne" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
   // The panel, read again, has Oriane no longer without a car: it is shorter.
   await expect.poll(async () => (await panel(page).boundingBox())!.height).toBeLessThan(height);
+  await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
+  await held.evaluate((style) => style.parentNode?.removeChild(style));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(Math.abs((await y()) - before)).toBeLessThanOrEqual(1);
 });

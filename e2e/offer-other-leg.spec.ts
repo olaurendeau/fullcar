@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { holdToken, newToken } from "./device";
+import { animationsDone, holdToken, newToken } from "./device";
 import { DRIVER_PHONE, fillDriver, numbersHidden } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -378,6 +378,9 @@ test.describe("the other leg read from the event (v4.5)", () => {
     expect(await radios(group)).toEqual({ names: [FR.drive.retour, FR.withoutCar, FR.notConcerned.retour], checked: [FR.notConcerned.retour] });
     const line = await hintOf(group);
     await expect(line).toBeVisible();
+    // Measured once the sheet has slid in: read at two frames of its opening, two boxes were not
+    // in the same sheet's place (#820).
+    await animationsDone(form(page));
     const [title, hint, first] = await Promise.all([
       form(page).getByText(FR.title.retour, { exact: true }).boundingBox(),
       line.boundingBox(),
