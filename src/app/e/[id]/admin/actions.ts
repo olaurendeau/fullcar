@@ -11,13 +11,14 @@ import { defaultLocale, isLocale } from "@/i18n/locales";
 import { editEvent, type EditEventOutcome } from "../edit-event";
 import { readOrganiserState } from "../organiser-state";
 import { resendConfirmation, type ResendOutcome } from "../pending-email";
+import { removeAsOrganiser, type RemovePersonOutcome } from "../remove-person";
 
 /**
  * The organiser area of event `id` (#3 C4.9 amended, C8.4; epic #154, O6.1; #596): the panel
  * when organiser-access.ts grants the access, the state it decides and nothing else
  * otherwise, `{ state: "invalid" }` for an unknown event. `proof` is `{ adminToken, session }`,
- * in the request's body: with `updateEvent`, `signOut` (mes-evenements/actions.ts) and `resendEmail`, the
- * only actions that receive the admin token.
+ * in the request's body: with `updateEvent`, `removePersonAsOrganiser`, `signOut`
+ * (mes-evenements/actions.ts) and `resendEmail`, the only actions that receive the admin token.
  * The client still reads that token from the URL's fragment, and sends no session yet (#597).
  * A malformed id reads nothing; a token that is not a string is refused by the comparison.
  * Never logs a token nor the panel, never puts either in an error.
@@ -74,5 +75,23 @@ export async function resendEmail(id: unknown, proof: unknown): Promise<ResendOu
   } catch (error) {
     // Only its code is logged: no other detail of a Postgres error leaves the server.
     throw databaseFailure("resendEmail: the email could not be sent again", error);
+  }
+}
+
+/**
+ * « Retirer » in « Personnes inscrites » (#672, remove-person v2, RP3.2, RP4): anyone of event
+ * `id` removed, when organiser-access.ts grants `proof` (`{ adminToken, session }`) the organiser
+ * area, before the Event's lock and under it; `removeAsOrganiser` gives the answers. `deviceToken`,
+ * the page's personal token, only chooses the board answered: no personal token opens this path
+ * (RP3.3). Everything arrives in the body, the person's id too, never in the URL. A malformed id
+ * reads nothing. Never logs a token, never puts one in an answer nor in an error.
+ */
+export async function removePersonAsOrganiser(id: unknown, proof: unknown, deviceToken: unknown, personId: unknown): Promise<RemovePersonOutcome> {
+  if (!isPublicId(id)) return { ok: false, error: "eventNotFound" };
+  try {
+    return await removeAsOrganiser(getDb(), id, proof, deviceToken, { personId });
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure("removePersonAsOrganiser: the person could not be removed", error);
   }
 }

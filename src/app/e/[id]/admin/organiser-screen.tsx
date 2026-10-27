@@ -6,10 +6,12 @@ import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "r
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
 import { OrganiserRefused } from "@/components/event/admin-states";
 import { EditEventSheet, LONG_WAIT } from "@/components/event/edit-event-sheet";
-import { failureText, wordsOf } from "@/components/event/failure-words";
+import { failureText, wordsOf, type RemovalProblem } from "@/components/event/failure-words";
 import { focusLandmark, focusMapHint, focusMapToggle } from "@/components/event/focus";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import { legHeadingId } from "@/components/event/organiser-leg";
+import { focusPersonRemoval, OrganiserPersons, personName } from "@/components/event/organiser-persons";
+import type { RemovePerson } from "@/components/event/remove-person-dialog";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
@@ -26,6 +28,7 @@ import {
   editAnswer,
   editFailure,
   panelRead,
+  PERSONS_LIST,
   resendAnswer,
   screenRead,
   screenReducer,
@@ -78,7 +81,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const [shown, setShown] = useState(state);
   const { event } = shown;
   const carsOn = (leg: Leg) => shown.legs.find((each) => each.leg === leg)?.cars.length ?? 0;
-  const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null)[] } | null>(null);
+  const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null | (() => HTMLElement | null))[] } | null>(null);
   useKeepBoardInPlace(frame);
 
   // « Envoi du lien… » is read again until the email's result is kept (OA1.7).
@@ -102,20 +105,23 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   useLayoutEffect(() => {
     const noted = focused.current;
     focused.current = null;
-    if (noted && !noted.element.isConnected) noted.fallbacks.find((each) => each?.isConnected)?.focus();
+    if (noted && !noted.element.isConnected) noted.fallbacks.map((each) => (typeof each === "function" ? each() : each)).find((each) => each?.isConnected)?.focus();
   }, [screen]);
 
   /**
    * Notes, before a panel is applied, the focus in the panel: its list's title, the button of its
-   * section's title, Aller's button, then the panel's title's.
+   * section's title, a leg's or « Personnes inscrites » (decision 60), Aller's button, then the
+   * panel's title's.
    */
   function noteFocus() {
     const element = document.activeElement;
     if (!element || !frame.current?.contains(element)) return;
     const list = element.closest("[data-organiser-list]")?.querySelector("h4");
-    const section = element.closest('section[aria-labelledby^="organiser-leg-"]')?.querySelector<HTMLElement>("h3 > button");
+    const section = element.closest('section[aria-labelledby^="organiser-"]')?.querySelector<HTMLElement>("h3 > button");
     const aller = section && document.getElementById(legHeadingId("aller"))?.querySelector<HTMLElement>("button");
-    focused.current = { element, fallbacks: [list ?? null, section ?? null, aller ?? null, title.current] };
+    // A line of « Personnes inscrites »: the first names around it, as the panel applied shows them (RP4.6).
+    const around = (element.closest<HTMLElement>("[data-around]")?.dataset.around ?? "").split(" ").filter(Boolean).map((id) => () => personName(id));
+    focused.current = { element, fallbacks: [...around, list ?? null, section ?? null, aller ?? null, title.current] };
   }
 
   // The screen now, not when the action left: one sent during « Chargement » may end after it.
@@ -128,10 +134,10 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   async function reread() {
     if (current.current.state !== "ready") return;
     const read = ++latest.current;
-    const legs = panelRead(await link.read());
+    const body = panelRead(await link.read());
     if (read !== latest.current) return;
     noteFocus();
-    dispatch({ type: "reread", legs });
+    dispatch({ type: "reread", legs: body?.legs, persons: body?.persons });
   }
 
   const now = announcement(screen);
@@ -267,7 +273,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     const outcome = screenRead(panel, board);
     noteFocus();
     if (outcome) handle.apply(outcome.board);
-    dispatch({ type: "reread", legs: outcome?.legs });
+    dispatch({ type: "reread", legs: outcome?.legs, persons: outcome?.persons });
   }
 
   async function refresh() {
@@ -283,8 +289,18 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
       noteFocus();
       handle.apply(outcome.board);
     }
-    dispatch({ type: "refreshEnded", read, legs: outcome?.legs });
+    dispatch({ type: "refreshEnded", read, legs: outcome?.legs, persons: outcome?.persons });
   }
+
+  // « Retirer » of « Personnes inscrites » (#672): the board's removal, sent with the organiser's
+  // proof. A refusal that sending again would not change is kept for that person, in memory, until
+  // the page reloads: each opening of her confirmation shows it, and sends nothing (decision 17).
+  const [refusals, setRefusals] = useState<ReadonlyMap<string, RemovalProblem>>(new Map());
+  const removePerson: RemovePerson = async (removal, confirmation) => {
+    const said = await boardRef.current?.removeAsOrganiser(removal, confirmation, { send: link.remove, landmark: focusPersonRemoval });
+    if (said?.final) setRefusals((kept) => new Map(kept).set(removal.personId, said));
+    return said;
+  };
 
   let area: ReactNode;
   if (screen.state === "ready") {
@@ -311,6 +327,17 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         editSending={editSending}
         onEdit={() => openEdit(null)}
         onResend={resend}
+        persons={
+          <OrganiserPersons
+            persons={screen.persons}
+            legs={shown.legs}
+            open={screen.personsOpen}
+            onToggle={() => dispatch({ type: "personsToggled" })}
+            fold={{ expanded: screen.expanded.has(PERSONS_LIST), onToggle: () => dispatch({ type: "listToggled", key: PERSONS_LIST }) }}
+            removePerson={removePerson}
+            refused={(personId) => refusals.get(personId)}
+          />
+        }
       />
     );
   } else if (screen.state === "loading") {

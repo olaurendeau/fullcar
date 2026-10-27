@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
-import { areaEditButton, expect, holdActionsWith, isAction, oneCharOff, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, holdActionsWith, isAction, LEG_HEADINGS, oneCharOff, organiserPath, test } from "./organiser";
 
 /*
  * #270, epic #250 (organizer-view v3.3.8, « Supprimer le retour »): unchecking « Retour » on a
@@ -160,7 +160,7 @@ async function expectRemoved(page: Page, db: Kysely<Database>, eventId: string) 
   await expect(messages(page)).toHaveText([FR.saved]);
   await expect(header(page).locator("dt")).toHaveText(["Début"]);
   await expect(page.getByRole("tab")).toHaveCount(0);
-  await expect(panel(page).getByRole("heading", { level: 3 })).toHaveCount(1);
+  await expect(panel(page).locator(LEG_HEADINGS)).toHaveCount(1);
   expect(await retourRows(db, eventId)).toEqual({ retourAt: null, rides: 0, placements: 0 });
 }
 

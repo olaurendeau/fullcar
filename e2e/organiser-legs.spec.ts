@@ -11,6 +11,7 @@ import {
   expect,
   foldKey,
   holdActionsWith,
+  LEG_HEADINGS,
   LEGS_EXAMPLE_PHONE,
   legButton,
   organiserPath,
@@ -49,7 +50,7 @@ const box = async (locator: Locator) => (await locator.boundingBox()) ?? Promise
 const overflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
 /** Every leg's button, and whether it is unfolded. */
-const states = (page: Page) => panel(page).locator("h3 > button").evaluateAll((all) => all.map((each) => each.getAttribute("aria-expanded")));
+const states = (page: Page) => panel(page).locator(`${LEG_HEADINGS} > button`).evaluateAll((all) => all.map((each) => each.getAttribute("aria-expanded")));
 
 /**
  * Marks the first element Tab reaches after the legs' sections, computed rather than named

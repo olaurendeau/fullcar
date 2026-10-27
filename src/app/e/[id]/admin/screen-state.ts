@@ -2,7 +2,7 @@ import { whyOf, type NotDone, type Why } from "@/components/event/failure-words"
 import type { LegCounts } from "@/db/legs";
 import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
-import type { OrganiserLeg } from "@/domain/organiser-panel";
+import type { OrganiserLeg, OrganiserPerson } from "@/domain/organiser-panel";
 import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { positionOf } from "@/domain/place";
 import { isWallClock } from "@/domain/wall-clock";
@@ -37,6 +37,9 @@ export const listKey = (leg: Leg, list: OrganiserList) => `${leg}:${list}`;
 /** The lines a long list shows before « Afficher les {n} autres » (O5.6). */
 export const FOLDED_LINES = 5;
 
+/** The list of « Personnes inscrites » in `expanded` (#672, RP4.3): the panel's rules for long lists. */
+export const PERSONS_LIST = "persons";
+
 export type ScreenState =
   | { state: "loading" }
   /** Refused, with the screen of why (#598). */
@@ -45,6 +48,8 @@ export type ScreenState =
   | {
       state: "ready";
       panel: Panel;
+      /** Every person of the event, as the last panel read gives them (RP4.1): kept while the panel is withdrawn. */
+      persons: OrganiserPerson[];
       /** The number of the read running, if one is. */
       refreshing: number | null;
       /** The failures in a row, said by the alert until the next read starts. */
@@ -60,6 +65,8 @@ export type ScreenState =
        * buttons alone; kept through the reads, the panel withdrawn and the card folded, in memory alone.
        */
       unfolded: ReadonlySet<Leg>;
+      /** « Personnes inscrites » unfolded (RP4.1): folded as the panel appears, then changed by its button alone, in memory alone. */
+      personsOpen: boolean;
     };
 
 export type ScreenEvent =
@@ -70,12 +77,13 @@ export type ScreenEvent =
   | { type: "checked"; check: OrganiserCheck; folded?: boolean }
   | { type: "toggleFolded" }
   | { type: "refreshStarted"; read: number }
-  /** With the panel's legs on a success; without, a failure. */
-  | { type: "refreshEnded"; read: number; legs?: OrganiserLeg[] }
+  /** With the panel's legs and persons on a success; without, a failure. */
+  | { type: "refreshEnded"; read: number; legs?: OrganiserLeg[]; persons?: OrganiserPerson[] }
   /** The panel read again after an action of the board, the latest such read (O1.10): with its legs, or without on a failure. */
-  | { type: "reread"; legs?: OrganiserLeg[] }
+  | { type: "reread"; legs?: OrganiserLeg[]; persons?: OrganiserPerson[] }
   | { type: "listToggled"; key: string }
   | { type: "legToggled"; leg: Leg }
+  | { type: "personsToggled" }
   /** The notice read again while its email is on its way (OA1.7): without one, it goes (OA2.6). */
   | { type: "pendingRead"; pending?: PendingNotice }
   /** No result read in 30 s (POLL_READS): the notice still « sending » reads as a failure, as the server's rule says. */
@@ -90,21 +98,24 @@ function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
     case "failed":
       return { state: "failed", retrying: check.retrying ?? false };
     case "valid": {
-      const { publicUrl, legs, pending } = check;
+      const { publicUrl, legs, persons, pending } = check;
       const panel = { publicUrl, legs, ...(pending && { pending }) };
-      return { state: "ready", panel, refreshing: null, refreshFailed: 0, refreshed: false, expanded: new Set(), folded, unfolded: new Set() };
+      const fresh = { expanded: new Set<string>(), unfolded: new Set<Leg>(), personsOpen: false };
+      return { state: "ready", panel, persons, refreshing: null, refreshFailed: 0, refreshed: false, folded, ...fresh };
     }
   }
 }
 
-/** The lists still unfolded once `legs` are applied: one of 5 lines or fewer has no button, and folds for what follows (O5.7). */
-function stillExpanded(expanded: ReadonlySet<string>, legs: OrganiserLeg[]): ReadonlySet<string> {
+/** The lists still unfolded once `legs` are applied: one of 5 lines or fewer has no button, and folds for what follows (O5.7, RP4.3). */
+function stillExpanded(expanded: ReadonlySet<string>, legs: OrganiserLeg[], persons: OrganiserPerson[]): ReadonlySet<string> {
   const lists = ["withoutCar", "carsWithoutPhone"] as const;
-  return new Set(
-    legs.flatMap((leg) =>
+  const long = expanded.has(PERSONS_LIST) && persons.length > FOLDED_LINES ? [PERSONS_LIST] : [];
+  return new Set([
+    ...legs.flatMap((leg) =>
       lists.filter((list) => expanded.has(listKey(leg.leg, list)) && leg[list].length > FOLDED_LINES).map((list) => listKey(leg.leg, list)),
     ),
-  );
+    ...long,
+  ]);
 }
 
 type Ready = Extract<ScreenState, { state: "ready" }>;
@@ -116,12 +127,13 @@ function stillUnfolded(unfolded: ReadonlySet<Leg>, legs: OrganiserLeg[]): Readon
 
 /**
  * `legs` applied, the alert and the announcement gone, no read running: the panel, its unfolded
- * lists and legs. Withdrawn (`legs` null), both are kept for the read that gives the panel back (decision 58).
+ * lists and legs. Withdrawn (`legs` null), all, persons too, are kept for the read that gives the panel back (decision 58).
  */
-function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean): Ready {
-  const expanded = legs ? stillExpanded(state.expanded, legs) : state.expanded;
+function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean, read: OrganiserPerson[] = []): Ready {
+  const persons = legs ? read : state.persons;
+  const expanded = legs ? stillExpanded(state.expanded, legs, persons) : state.expanded;
   const unfolded = legs ? stillUnfolded(state.unfolded, legs) : state.unfolded;
-  return { ...state, panel: { ...state.panel, legs }, expanded, unfolded, refreshing: null, refreshFailed: 0, refreshed };
+  return { ...state, panel: { ...state.panel, legs }, persons, expanded, unfolded, refreshing: null, refreshFailed: 0, refreshed };
 }
 
 /**
@@ -130,7 +142,8 @@ function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean):
  * checked again. A read after an action says nothing (O1.10): a success replaces the panel, a
  * failure withdraws it and empties the alert, so that one message is left, the action's in the
  * bar. Whether the card is folded, only its button changes (O8.6): no read, action nor failure;
- * whether a leg is, its button, or the read that takes that leg away (O9.5).
+ * whether a leg is, its button, or the read that takes that leg away (O9.5); whether
+ * « Personnes inscrites » is, its button alone (RP4.1).
  * It also ends a refresh still running, whose board was read before the action: the
  * organiser who asked for it hears its outcome, « actualisé » or the alert, withdrawn.
  */
@@ -138,6 +151,7 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   if (event.type === "checked") return fromCheck(event.check, event.folded);
   if (state.state !== "ready") return state;
   if (event.type === "toggleFolded") return { ...state, folded: !state.folded };
+  if (event.type === "personsToggled") return { ...state, personsOpen: !state.personsOpen };
   if (event.type === "pendingRead") {
     const { publicUrl, legs } = state.panel;
     return { ...state, panel: { publicUrl, legs, ...(event.pending && { pending: event.pending }) } };
@@ -149,7 +163,7 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   if (event.type === "reread") {
     // Ending a refresh, it is that refresh's outcome, said as a refresh says it (O1.9, O5.4).
     const refreshing = state.refreshing !== null;
-    if (event.legs || !refreshing) return applied(state, event.legs ?? null, refreshing);
+    if (event.legs || !refreshing) return applied(state, event.legs ?? null, refreshing, event.persons);
     return { ...applied(state, null, false), refreshFailed: state.refreshFailed + 1 };
   }
   if (event.type === "legToggled") {
@@ -167,7 +181,7 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   }
   if (state.refreshing !== event.read) return state;
   if (!event.legs) return { ...state, refreshing: null, refreshFailed: state.refreshFailed + 1 };
-  return applied(state, event.legs, true);
+  return applied(state, event.legs, true, event.persons);
 }
 
 /** How often the notice is read again while its email is on its way (OA1.7: its result within 15 s of the arrival). */
@@ -211,26 +225,30 @@ export function resendAnswer(sent: Sent<unknown>): ResendAnswer {
   return { kind: "notResent", offline: false };
 }
 
-/** The panel's legs of a read of the panel, or nothing when it failed or the link is no longer valid. */
-export function panelRead(panel: Sent<unknown>): OrganiserLeg[] | undefined {
+/** What a read of the panel shows: its legs, and every person (none from a server before #671). */
+export interface PanelBody {
+  legs: OrganiserLeg[];
+  persons: OrganiserPerson[];
+}
+
+/** The panel's legs and persons of a read of the panel, or nothing when it failed or the link is no longer valid. */
+export function panelRead(panel: Sent<unknown>): PanelBody | undefined {
   if (!panel.ok) return undefined;
-  const answer = panel.value as { state?: unknown; legs?: unknown } | null | undefined;
-  return answer?.state === "panel" && Array.isArray(answer.legs) ? (answer.legs as OrganiserLeg[]) : undefined;
+  const answer = panel.value as { state?: unknown; legs?: unknown; persons?: unknown } | null | undefined;
+  if (answer?.state !== "panel" || !Array.isArray(answer.legs)) return undefined;
+  return { legs: answer.legs as OrganiserLeg[], persons: Array.isArray(answer.persons) ? (answer.persons as OrganiserPerson[]) : [] };
 }
 
 /**
- * What a read of the screen gives, once both reads have ended: the panel's legs and the
- * board's state together, or nothing at all when either failed (O1.9). A link no longer
+ * What a read of the screen gives, once both reads have ended: the panel's legs and persons and
+ * the board's state together, or nothing at all when either failed (O1.9). A link no longer
  * valid, or a board's state `undefined`, is a failure too.
  */
-export function screenRead(
-  panel: Sent<unknown>,
-  board: Sent<EventState | undefined>,
-): { legs: OrganiserLeg[]; board: EventState } | undefined {
-  const legs = panelRead(panel);
+export function screenRead(panel: Sent<unknown>, board: Sent<EventState | undefined>): (PanelBody & { board: EventState }) | undefined {
+  const body = panelRead(panel);
   const state = stateRead(board);
-  if (!legs || !state) return undefined;
-  return { legs, board: state };
+  if (!body || !state) return undefined;
+  return { ...body, board: state };
 }
 
 /**

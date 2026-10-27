@@ -50,6 +50,14 @@ const notice = (page: Page) => page.locator("[data-pending-notice]");
 const polite = (page: Page) => notice(page).locator('[aria-live="polite"]');
 const alert = (page: Page) => notice(page).getByRole("alert");
 const button = (page: Page, name: string) => notice(page).getByRole("button", { name, exact: true });
+/** The id of Next's route announcer, a `role="alert"` that is not the bar's nor the panel's. */
+const ROUTE_ANNOUNCER = "#__next-route-announcer__";
+/** Shown, the alerts of the page that say something: the bar's and the panel's regions are there empty. */
+const saidAlerts = (page: Page) =>
+  page
+    .getByRole("alert")
+    .filter({ hasText: /\S/ })
+    .and(page.locator(`:not(${ROUTE_ANNOUNCER})`));
 const box = async (locator: Locator) => (await locator.boundingBox()) ?? Promise.reject(new Error("no box"));
 const overflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
@@ -354,6 +362,8 @@ test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Espace organisateur");
     await expect(page.getByRole("tab")).toHaveCount(0);
     await expect(resend).toHaveCount(0);
+    // The bar stays silent: the event ended, not a failure of sending.
+    await expect(saidAlerts(page)).toHaveCount(0);
     expect(await mailTo(email)).toEqual([]);
   });
 });
