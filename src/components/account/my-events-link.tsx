@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 
 /**
  * « Mes événements », above the title of the organiser's screens (OA7.3, OA8.4): a link of 44 px
- * back to the list, on the left. Shown only where a session is known to be the organiser's.
+ * back to the list, on the left. Shown when the browser keeps a session (« une session gardée »), whichever account it belongs to.
  */
 export function MyEventsLink() {
   const t = useTranslations("Admin");

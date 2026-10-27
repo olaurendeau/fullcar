@@ -3,7 +3,7 @@
 import { Eraser, Mail, MapPin, UserX } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import type { ReactNode, Ref } from "react";
+import { useState, type ReactNode, type Ref } from "react";
 import { LoginForm } from "@/app/connexion/login-form";
 import type { Refusal } from "@/app/e/[id]/admin/admin-token-store";
 import { MyEventsLink } from "@/components/account/my-events-link";
@@ -35,6 +35,8 @@ const TITLE = "min-w-0 rounded-sm text-2xl font-bold wrap-anywhere focus-visible
 export function OrganiserRefused({ id, refusal, headingRef }: { id: string; refusal: Refusal; headingRef?: Ref<HTMLHeadingElement> }) {
   const t = useTranslations();
   const see = t("AdminNotYours.see");
+  // Once the link is sent, « Regardez vos e-mails » replaces the form and the sentence that asks to sign in.
+  const [sent, setSent] = useState(false);
   const heading = (text: string) => (
     <h1 ref={headingRef} tabIndex={-1} className={TITLE}>
       {text}
@@ -48,9 +50,9 @@ export function OrganiserRefused({ id, refusal, headingRef }: { id: string; refu
         <section className="mx-auto flex w-full max-w-md flex-col gap-6">
           <div className="flex flex-col gap-2">
             {heading(t("Admin.title"))}
-            {refusal.kind === "signIn" && <p className="text-muted-foreground">{t("AdminLogin.body")}</p>}
+            {refusal.kind === "signIn" && !sent && <p className="text-muted-foreground">{t("AdminLogin.body")}</p>}
           </div>
-          {refusal.kind === "signIn" && <LoginForm returnEventId={id} />}
+          {refusal.kind === "signIn" && <LoginForm returnEventId={id} onSent={setSent} />}
         </section>
       );
     case "pending":

@@ -319,7 +319,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     <>
       {/* Refused, its screen takes the board's room too, and centres there. */}
       <div ref={frame} className={cn("flex flex-col", screen.state === "refused" && "flex-1")}>
-        {/* With the organiser's session, the way back to the list (OA7.3): read once the panel is applied, after hydration. */}
+        {/* With « une session gardée », the way back to the list (OA7.3): read once the panel is applied, after hydration. */}
         {screen.state === "ready" && readSessionToken() !== undefined && <MyEventsLink />}
         {area}
       </div>

@@ -27,8 +27,8 @@ export default async function EventPage({ params }: PageProps<"/e/[id]">) {
   // While the bar of messages shows, room below for it as measured, and its 12 px: nothing stays under it (C11.4).
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col p-4 has-data-[message-bar=open]:pb-[calc(1rem+var(--message-bar-height,0px)+12px+env(safe-area-inset-bottom))]">
-      <OrganiserLink id={id} />
       <ParticipantBoard id={id} state={state} />
+      <OrganiserLink id={id} />
       <ContactFooter />
     </main>
   );

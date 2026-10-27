@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
@@ -14,8 +14,8 @@ leaveNoToken();
  * #611, organizer-account v4: the way in and out of the organiser area. OA7.1 (the sign-in form
  * under « Espace organisateur », which brings the link back to the area, OA4.4), OA7.3 and
  * OA8.4 (« Mes événements » above the panel and above « Inscriptions effacées »), OA7.4
- * (« Espace organisateur » on /e/{id}, for the organiser's session and the creation browser,
- * for nobody else). Sessions are held as session-token.ts keeps them.
+ * (« Espace organisateur » on /e/{id}, after the board, for a browser that keeps a session or
+ * the event's admin token, for nobody else; the area decides on arrival). Sessions are held as session-token.ts keeps them.
  */
 
 const FR = {
@@ -28,6 +28,8 @@ const FR = {
   noAccount: "Pas encore de compte ? Il se crée avec votre premier événement.",
   create: "Créer un événement",
   erased: "Inscriptions effacées",
+  notYours: "Cet espace organisateur n’est pas le vôtre",
+  orphan: "Cet événement n’a plus d’organisateur",
 };
 
 const EN = { area: "Organiser area", myEvents: "My events", email: "Email address", send: "Send me the link" };
@@ -122,6 +124,10 @@ test.describe("in French", () => {
     // The area keeps its title; « Regardez vos e-mails » is a sub-title of it, in place of the form.
     await expect(main(page).getByRole("heading", { level: 2, name: FR.check })).toBeFocused();
     await expect(titles(page)).toHaveText(FR.area);
+    // A smaller title than the area's, and the sentence that asks to sign in is gone.
+    const size = (heading: Locator) => heading.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    expect(await size(main(page).getByRole("heading", { level: 2, name: FR.check }))).toBeLessThan(await size(titles(page)));
+    await expect(main(page).getByText(FR.login, { exact: true })).toHaveCount(0);
     await expect(main(page).getByText(email, { exact: false })).toBeVisible();
     // OA4.4: the link lands on this area (kept for the page of the link).
     const kept = await db
@@ -134,7 +140,7 @@ test.describe("in French", () => {
     expect((await mailTo(email)).length).toBe(1);
   });
 
-  test("OA7.4: the organiser's session: « Espace organisateur » above the header of /e/{id}", async ({ page, db, seededEvent }) => {
+  test("OA7.4: a kept session: « Espace organisateur » on /e/{id}, after the board", async ({ page, db, seededEvent }) => {
     const organiser = await account(db);
     await organisedBy(db, seededEvent.id, organiser);
     await holdSession(page, await seedSession(db, organiser));
@@ -142,25 +148,33 @@ test.describe("in French", () => {
     const link = main(page).getByRole("link", { name: FR.area, exact: true });
     await expect(link).toHaveAttribute("href", organiserPath(seededEvent));
     expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    expect((await link.boundingBox())!.y).toBeLessThan((await titles(page).boundingBox())!.y);
+    // After the board: its 44 px push nothing that was drawn (CA1.19, DS2.9).
+    expect((await link.boundingBox())!.y).toBeGreaterThan((await titles(page).boundingBox())!.y);
     await link.click();
     await expect(page).toHaveURL(organiserPath(seededEvent));
     await expect(main(page).getByRole("button", { name: "Actualiser" })).toBeVisible();
   });
 
-  test("OA7.4: a participant, another account's session, a browser without the token: no link", async ({ page, db, seededEvent }) => {
+  test("OA7.4: a participant, a browser keeping nothing: no link, and nothing sent for it", async ({ page, db, seededEvent }) => {
     await organisedBy(db, seededEvent.id, await account(db));
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST") posts.push(request.url());
+    });
     await page.goto(`/e/${seededEvent.id}`);
     await expect(titles(page)).toHaveText("Tournoi de Rennes");
-    // Give the page the time to ask: the link is read after the load.
+    // Give the page the time to hydrate: the link is read after the load.
     await page.waitForLoadState("networkidle");
     await expect(main(page).getByRole("link", { name: FR.area })).toHaveCount(0);
+    expect(posts).toEqual([]);
+  });
 
+  test("OA7.4: another account's session is a kept session: the link, and the area says it is not theirs", async ({ page, db, seededEvent }) => {
+    await organisedBy(db, seededEvent.id, await account(db));
     await holdSession(page, await seedSession(db, await account(db)));
     await page.goto(`/e/${seededEvent.id}`);
-    await page.waitForLoadState("networkidle");
-    await expect(titles(page)).toHaveText("Tournoi de Rennes");
-    await expect(main(page).getByRole("link", { name: FR.area })).toHaveCount(0);
+    await main(page).getByRole("link", { name: FR.area, exact: true }).click();
+    await expect(titles(page)).toHaveText(FR.notYours);
   });
 
   creatorTest("OA7.4: the creation browser: the link, the event pending", async ({ page, seededEvent }) => {
@@ -168,13 +182,12 @@ test.describe("in French", () => {
     await expect(main(page).getByRole("link", { name: FR.area, exact: true })).toHaveAttribute("href", organiserPath(seededEvent));
   });
 
-  creatorTest("OA7.9: without an organiser, the token left behind shows no link", async ({ page, db, seededEvent }) => {
+  creatorTest("OA7.9: without an organiser, the token left behind shows the link, and the area says there is none", async ({ page, db, seededEvent }) => {
     const organiser = await confirmSeededEvent(db, seededEvent.id);
     await db.deleteFrom("account").where("id", "=", organiser).execute();
     await page.goto(`/e/${seededEvent.id}`);
-    await page.waitForLoadState("networkidle");
-    await expect(titles(page)).toHaveText("Tournoi de Rennes");
-    await expect(main(page).getByRole("link", { name: FR.area })).toHaveCount(0);
+    await main(page).getByRole("link", { name: FR.area, exact: true }).click();
+    await expect(titles(page)).toHaveText(FR.orphan);
   });
 });
 

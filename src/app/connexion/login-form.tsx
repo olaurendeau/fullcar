@@ -37,7 +37,14 @@ type FocusNext = "check" | "field" | undefined;
  * In the organiser area (`returnEventId` given, OA7.1) the form comes under that page's own
  * title and sentence: no title, intro or session line of its own.
  */
-export function LoginForm({ returnEventId = null }: { returnEventId?: string | null }) {
+export function LoginForm({
+  returnEventId = null,
+  onSent,
+}: {
+  returnEventId?: string | null;
+  /** Tells whether « Regardez vos e-mails » replaces the form, for the page whose sentence it leaves. */
+  onSent?: (sent: boolean) => void;
+}) {
   const t = useTranslations("Login");
   const tErrors = useTranslations("FormErrors");
   const tHome = useTranslations("Home");
@@ -94,6 +101,10 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
     if (next === "check") checkRef.current?.focus();
     if (next === "field") fieldRef.current?.focus();
   }, [sentTo]);
+
+  useEffect(() => {
+    onSent?.(sentTo !== undefined);
+  }, [sentTo, onSent]);
 
   const request = async (address: string): Promise<LoginOutcome> =>
     loginOutcome(await sendAction(() => requestLink(address, returnEventId)));

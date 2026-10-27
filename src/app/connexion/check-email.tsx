@@ -4,6 +4,7 @@ import { CircleCheck, Mail } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRef, useState, type Ref } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { LoginAlert, LoginOutcome } from "./login-outcome";
 
 /** What the last « Renvoyer l’e-mail » showed, numbered: a second one alike is a new node, announced again. */
@@ -59,7 +60,11 @@ export function CheckEmail({
       <div className="mb-4 grid size-12 place-items-center rounded-xl bg-brand-soft text-primary">
         <Mail aria-hidden className="size-6" />
       </div>
-      <Title ref={headingRef} tabIndex={-1} className="self-start rounded-sm text-2xl font-bold focus-visible:focus-ring">
+      <Title
+        ref={headingRef}
+        tabIndex={-1}
+        className={cn("self-start rounded-sm font-bold focus-visible:focus-ring", level === "h1" ? "text-2xl" : "text-xl")}
+      >
         {t("title")}
       </Title>
       <p className="mt-2 mb-6 text-muted-foreground [overflow-wrap:anywhere]">{t("body", { email })}</p>

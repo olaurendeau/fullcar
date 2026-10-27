@@ -7,7 +7,6 @@ import { setBoardingStop as setBoardingStopInRide, type BoardingStopResult } fro
 import * as changeRide from "./change-ride";
 import { readEventState, type DeviceState } from "./event-state";
 import { offerRide as storeRideOffer, type OfferRideOutcome } from "./offer-ride";
-import { readOrganiserLink } from "./organiser-link";
 import * as persons from "./persons";
 import { removeFromDevice, type RemovePersonOutcome } from "./remove-person";
 import {
@@ -31,21 +30,6 @@ export async function loadEventState(id: unknown, token: unknown): Promise<Devic
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("loadEventState: the event could not be read", error);
-  }
-}
-
-/**
- * Whether « Espace organisateur » shows on this page (OA7.4). `proof` is `{ adminToken, session }`,
- * what this browser keeps, in the request's body and never in a URL; it is only compared, never
- * logged. Only a boolean comes back. A malformed id reads nothing.
- */
-export async function organiserLink(id: unknown, proof: unknown): Promise<boolean> {
-  if (!isPublicId(id)) return false;
-  try {
-    return await readOrganiserLink(getDb(), id, proof);
-  } catch (error) {
-    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
-    throw databaseFailure("organiserLink: the link could not be read", error);
   }
 }
 
