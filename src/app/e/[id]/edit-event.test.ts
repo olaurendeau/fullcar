@@ -708,7 +708,7 @@ describe("editEvent", () => {
         const answer = await whileHeld(
           db,
           (trx) => trx.deleteFrom("event").where("id", "=", eventId).execute(),
-          () => editEvent(db, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
+          (own) => editEvent(own, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
         );
         expect(answer).toEqual({ ok: false, error: "eventNotFound" });
       });
@@ -739,7 +739,7 @@ describe("editEvent", () => {
             await lockEvent(trx, eventId, "noKeyUpdate");
             await anonymiseEvent(trx, eventId);
           },
-          () => editEvent(db, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
+          (own) => editEvent(own, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE),
         );
         expect(answer).toEqual({ ok: false, error: "eventEnded" });
         expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
@@ -785,7 +785,7 @@ describe("M3.6: editEvent removing the retour while a write on the retour runs, 
       const answer = await whileHeld(
         db,
         (trx) => write(trx, eventId, scene),
-        () => editEvent(db, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
+        (own) => editEvent(own, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
       );
 
       expect(answer).toEqual({ ok: false, error: "confirmRetour", ...after });
@@ -801,7 +801,7 @@ describe("M3.6: editEvent removing the retour while a write on the retour runs, 
       const written = await whileHeld(
         db,
         (trx) => editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE, SEEN),
-        () => write(db, eventId, scene),
+        (own) => write(own, eventId, scene),
       );
 
       expect(written).toMatchObject({ ok: false, error: "noRetour" });

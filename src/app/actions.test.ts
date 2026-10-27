@@ -46,9 +46,6 @@ vi.mock("@/email/brevo", () => ({
   serverBrevo: () => ({ send: async (email: { to: string; subject: string }) => (mailbox.sent.push(email), { state: "sent" }) }),
 }));
 
-/** The real clock, read before the tests fake it. */
-const REAL_NOW = Date.now();
-
 /** `rollback` is withRollbackRecordingSends for a test that records a send. */
 function inTransaction<T>(fn: (trx: Transaction<Database>) => Promise<T>, rollback = withRollback): Promise<T> {
   return rollback(async (trx) => {
@@ -389,15 +386,16 @@ describe("createEvent", () => {
 
 describe("createEvent, with an address (#599)", () => {
   beforeEach(() => {
-    // Two hours ahead of the real clock: the hour the limits count holds no send another test file commits.
-    vi.setSystemTime(new Date(REAL_NOW + 2 * 60 * 60_000));
+    // The database writes its own now(): the server's clock is the real one here, and the send
+    // is recorded under WINDOW_LOCK (withRollbackRecordingSends).
+    vi.useRealTimers();
     deferred.tasks = [];
     mailbox.sent = [];
   });
 
   it("OA1.6, OA1.7: answers first, then sends the confirmation in the page's language, and keeps its result", async () => {
     page.locale = "en";
-    const date = new Date(REAL_NOW + 30 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+    const date = new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString().slice(0, 10);
     const email = anAddress();
     await inTransaction(async (trx) => {
       const result = await createEvent({ ...valid, allerDate: date, retourDate: date, email });
