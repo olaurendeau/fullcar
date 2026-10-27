@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
+import { numbersHidden } from "./driver";
 import { leaveNoToken } from "./fixtures";
 import { expectRing, press } from "./focus-ring";
 import {
@@ -812,8 +813,11 @@ test.describe("O9.9 in WebKit, the README's example", () => {
     for (const how of ["mouse", "script"] as const) {
       await unfoldLegs(page, ["retour"]);
       const tel = section(page, "retour").locator('a[href^="tel:"]').first();
-      await tel.focus();
-      await expect(tel).toBeFocused();
+      // A failure prints the link, its number included (#873).
+      await numbersHidden(async () => {
+        await tel.focus();
+        await expect(tel).toBeFocused();
+      });
       if (how === "mouse") await legButton(page, "retour").click();
       else await legButton(page, "retour").evaluate((button: HTMLElement) => button.click());
       await expect(legButton(page, "retour")).toHaveAttribute("aria-expanded", "false");
