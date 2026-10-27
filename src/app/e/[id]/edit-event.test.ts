@@ -770,7 +770,7 @@ describe("editEvent", () => {
           const answer = await whileHeld(
             db,
             (trx) => lockEvent(trx, eventId, "share"),
-            () => editEvent(db, eventId, { session }, U13, BEFORE),
+            (own) => editEvent(own, eventId, { session }, U13, BEFORE),
             async () => {
               expect(await closeSession(db, session)).toBe(true);
             },
@@ -792,7 +792,7 @@ describe("editEvent", () => {
               await trx.deleteFrom("account").where("id", "=", accountId).execute();
             },
             // OA7.9: the creation browser's token, left behind, opens nothing either.
-            () => editEvent(db, eventId, { session, adminToken: token }, U13, BEFORE),
+            (own) => editEvent(own, eventId, { session, adminToken: token }, U13, BEFORE),
           );
           expect(answer).toEqual({ ok: false, error: "invalid" });
           expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
@@ -808,7 +808,7 @@ describe("editEvent", () => {
             await lockEvent(trx, eventId, "noKeyUpdate");
             await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", eventId).execute();
           },
-          () => editEvent(db, eventId, { adminToken: token }, U13, BEFORE),
+          (own) => editEvent(own, eventId, { adminToken: token }, U13, BEFORE),
         );
         expect(answer).toEqual({ ok: false, error: "invalid" });
         expect((await findEventById(db, eventId))?.title).toBe(BEFORE.title);
@@ -822,7 +822,7 @@ describe("editEvent", () => {
           const answer = await whileHeld(
             db,
             (trx) => lockEvent(trx, eventId, "share"),
-            () => editEvent(db, eventId, { session }, U13, BEFORE),
+            (own) => editEvent(own, eventId, { session }, U13, BEFORE),
           );
           expect(answer).toMatchObject({ ok: true, event: { title: U13.title } });
           expect((await findEventById(db, eventId))?.title).toBe(U13.title);
