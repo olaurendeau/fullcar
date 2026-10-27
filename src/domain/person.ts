@@ -1,6 +1,7 @@
 /**
  * The rules of a Person (epic #66, R1): the form "Ajouter une personne", and the new
- * driver of R4. The same rules run in the browser and on the server.
+ * driver of R4, whose number is required (v4.8). The same rules run in the browser and on
+ * the server.
  */
 import { optionalText, text, type TextError } from "./text";
 
@@ -76,6 +77,19 @@ export function validatePerson(fields: PersonFields): PersonValidation {
     return { ok: false, errors, first: "error" in firstName ? "firstName" : "phone" };
   }
   return { ok: true, person: { firstName: firstName.value, phone: checkedPhone.value } };
+}
+
+/**
+ * A new person who drives (R4, v4.8 rule 6): the rules of `validatePerson`, and a number is
+ * `required`, so that the people on board can reach her.
+ */
+export function validateDriver(fields: PersonFields): PersonValidation {
+  const checked = validatePerson(fields);
+  const read = phone(fields.phone);
+  if ("error" in read || read.value !== null) return checked;
+  // Empty: required, after the first name's error, if any.
+  const errors: PersonErrors = { ...(checked.ok ? {} : checked.errors), phone: "required" };
+  return { ok: false, errors, first: errors.firstName ? "firstName" : "phone" };
 }
 
 /**

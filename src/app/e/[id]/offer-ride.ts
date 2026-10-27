@@ -1,5 +1,5 @@
 import type { Kysely } from "kysely";
-import { insertPerson, lockPersons, readTokenHolders } from "@/db/persons";
+import { hasPhone, insertPerson, lockPersons, readTokenHolders, updatePerson } from "@/db/persons";
 import { deletePlacement, findPlacement, seatedOnLeg, setPlacement, type PlacementRef } from "@/db/placements";
 import { findDrivenRide, insertRide, lockRides, type RideRef } from "@/db/rides";
 import type { Database } from "@/db/schema";
@@ -7,7 +7,7 @@ import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
 import { deviceAccess } from "@/domain/device";
 import { LEGS, otherLeg as otherLegOf, type Leg } from "@/domain/leg";
-import { validatePerson, type NewPerson, type PersonErrors, type PersonField } from "@/domain/person";
+import { validateDriver, validatePersonChange, type NewPerson, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
 import { positionOf, type Position } from "@/domain/place";
 import { isPublicId } from "@/domain/public-id";
@@ -30,8 +30,10 @@ import { lockLegs } from "./retour";
  * What the form « Proposer une voiture » sends (R4), typed `unknown` since a forged request
  * can send anything. `rideId`, and the `personId` of a new driver, are creation ids drawn
  * by the browser (C4.10). The driver is either
- * - `{ kind: "device", personId }`: a person of the device, or
- * - `{ kind: "new", personId, firstName, phone }`: a new person, created with the token.
+ * - `{ kind: "device", personId, phone }`: a person of the device, `phone` the number she
+ *   gives with the offer, none when absent or empty (v4.8 rule 7), or
+ * - `{ kind: "new", personId, firstName, phone }`: a new person, created with the token,
+ *   whose number is required (v4.8 rule 6).
  *
  * `otherLeg` is what becomes of the driver on the other leg, `keep` when absent (C4.11):
  * `{ kind: "keep" }`, `{ kind: "withoutCar" }`, `{ kind: "notConcerned" }`, or
@@ -80,6 +82,8 @@ export type OfferErrors = PersonErrors & RideErrors & Partial<Record<OtherLegFie
  *   longer a person of the event, removed since the page showed her (RP5.4): `goneIds`;
  * - `alreadyDriving`: she drives another car on this leg, or drives on the other leg and
  *   the offer would change it (C4.6);
+ * - `driverWithoutPhone`: the driver of the device has no number, and the offer gives none
+ *   (v4.8 rule 7): it was emptied elsewhere since the page showed it;
  * - `alreadyInCar`: a passenger is in another car on this leg, or drives on it (C4.13);
  * - `idTaken`: a Ride's id, or the new driver's, is held by someone else.
  */
@@ -91,6 +95,7 @@ export type OfferRefusal =
   | "forbidden"
   | "personGone"
   | "alreadyDriving"
+  | "driverWithoutPhone"
   | "alreadyInCar"
   | "idTaken";
 
@@ -116,8 +121,9 @@ export type OfferRideOutcome =
   | FieldErrors
   | { ok: false; error: "eventNotFound" };
 
+/** `phone`, of a driver of the device, is the number she gives with the offer, `undefined` for none. */
 type Driver =
-  | { kind: "device"; personId: string }
+  | { kind: "device"; personId: string; phone: string | undefined }
   | { kind: "new"; personId: string; person: NewPerson; token: string };
 
 /** A car's fields, and the position of its place (AL4.3). */
@@ -236,7 +242,10 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
   const position = placePosition(offer.location, offer.position);
   if (other === undefined || passengerIds === undefined || position === undefined) return undefined;
 
-  const person = kind === "new" ? validatePerson({ firstName: driver.firstName, phone: driver.phone }) : undefined;
+  // A new driver's number is required (v4.8 rule 6); one given by a driver of the device
+  // follows R1, and empty, she gives none (rule 7).
+  const person = kind === "new" ? validateDriver({ firstName: driver.firstName, phone: driver.phone }) : undefined;
+  const given = kind === "device" ? validatePersonChange({ phone: driver.phone }) : undefined;
   const ride = validateRide({ location: offer.location, time: offer.time, seats: offer.seats, note: offer.note });
   const seats = validSeats(offer.seats);
   const passengers: PassengersErrors =
@@ -244,9 +253,9 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
   const lastFirst =
     OTHER_LEG_FIELDS.find((field) => other.errors[field] !== undefined) ??
     (passengers.passengers ? "passengers" : undefined);
-  if (person?.ok === false || !ride.ok || lastFirst !== undefined) {
+  if (person?.ok === false || given?.ok === false || !ride.ok || lastFirst !== undefined) {
     // In the order of the form: the first one in error gets the focus.
-    const failures = [person, ride].flatMap((check) => (check?.ok === false ? [check] : []));
+    const failures = [person, given, ride].flatMap((check) => (check?.ok === false ? [check] : []));
     const errors: OfferErrors = Object.assign({}, ...failures.map((failure) => failure.errors), other.errors, passengers);
     return { ok: false, errors, first: failures[0]?.first ?? lastFirst ?? "otherLocation" };
   }
@@ -258,7 +267,9 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
     rideId,
     leg,
     driver:
-      newcomer && person?.ok ? { kind: "new", personId, person: person.person, token } : { kind: "device", personId },
+      newcomer && person?.ok
+        ? { kind: "new", personId, person: person.person, token }
+        : { kind: "device", personId, phone: (given?.ok && given.change.phone) || undefined },
     ride: { ...ride.ride, position },
     otherLeg,
     passengerIds,
@@ -268,7 +279,9 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
 /**
  * Proposes a car (R4), in one transaction, all or nothing (C4.5):
  * 1. the driver: a person of the device, or a new person created with the token, who has
- *    no Placement, so she is not concerned by the other leg (C4.4);
+ *    no Placement, so she is not concerned by the other leg (C4.4). She has a number: a new
+ *    person's is required, and a person of the device without one gives one, written on her
+ *    Person (v4.8 rules 6 and 7);
  * 2. she leaves her seat, or the list of persons without a car, on this leg (C4.5);
  * 3. on the other leg, as `otherLeg` says: unchanged, without a car, not concerned, or
  *    driving a second car with the same seats and note (C4.2, C4.11), leaving her seat
@@ -387,6 +400,10 @@ async function offerOnce(
   if (otherLeg.kind !== "keep" && (await findDrivenRide(trx, { driverId, eventId, leg: other })) !== undefined) {
     throw new Refused("alreadyDriving");
   }
+  // Her Person locked, no write empties her number meanwhile: its presence, never the number (v4.8-18).
+  if (driver.kind === "device" && driver.phone === undefined && !(await hasPhone(trx, { id: driverId, eventId }))) {
+    throw new Refused("driverWithoutPhone");
+  }
   // Their Persons locked, no other write can seat them on this leg meanwhile. The new car
   // is empty, and passengersFit counted them against its seats: none is short.
   const boarding = seatsDecision({
@@ -397,6 +414,10 @@ async function offerOnce(
   });
   if (!boarding.ok) throw new Refused(boarding.error === "alreadyInCar" ? "alreadyInCar" : "invalid");
 
+  // The number she gives, after every refusal before the writes, in the same write as her cars (rule 7).
+  if (driver.kind === "device" && driver.phone !== undefined) {
+    await updatePerson(trx, { id: driverId, eventId }, { phone: driver.phone });
+  }
   // Her Placements before the Rides she drives: the trigger of C12.8 refuses a Ride whose
   // driver is still placed on its leg.
   await deletePlacement(trx, here);
