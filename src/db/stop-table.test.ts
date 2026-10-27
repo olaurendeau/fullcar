@@ -213,7 +213,7 @@ describe("stop table", () => {
         await trx.updateTable("stop").set({ rank: 1 }).where("id", "=", a).execute();
         await trx.updateTable("stop").set({ rank: 0 }).where("id", "=", b).execute();
         await sql`set constraints stop_ride_rank_unique immediate`.execute(trx);
-        return { a, b, rows: await trx.selectFrom("stop").select(["id", "rank"]).orderBy("rank").execute() };
+        return { a, b, rows: await trx.selectFrom("stop").select(["id", "rank"]).where("ride_id", "=", rideId).orderBy("rank").execute() };
       });
       expect(stops.rows).toEqual([
         { id: stops.b, rank: 0 },

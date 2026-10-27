@@ -15,7 +15,7 @@ Les mêmes mots dans le code, la base, l'UI et les issues. Un synonyme est un d�
 | **Places** | les places **passagers** proposées, conducteur exclu. |
 | **Participation** | un montant facultatif par passager, affiché sur le Ride. Le reste (modalités, péage…) va dans la note. |
 | **Placement** | le fait qu'une Person occupe une place dans un Ride pour un leg donné, ou soit explicitement **sans voiture**. La clé est le couple (Person, Leg) : une personne a au plus un Placement par leg. Un passager peut y préciser l'**arrêt** où il monte (ou descend, au retour) ; sans arrêt, c'est le lieu du Ride. |
-| **Arrêt** (`Stop`) | un point de rendez-vous sur la route d'un Ride : lieu et heure, ordonnés. Ajouté par le conducteur, seulement si l'option « points de RDV » est active. Au retour, ce sont des points de dépose. |
+| **Arrêt** (`Stop`) | un point de rendez-vous sur la route d'un Ride : lieu et heure, ordonnés. Ajouté par le conducteur, seulement si l'option « points de RDV » est active. Seulement sur l'aller : un Ride du retour n'a pas d'Arrêt. |
 | **État sur un leg** | pour chaque leg, une Person est soit **dans une voiture** (conductrice d'un Ride, ou passagère), soit **sans voiture**, soit **pas concernée** (elle ne fait pas ce trajet). Pas concernée = aucun Placement et ne conduit pas. Une conductrice n'a pas de Placement sur le leg où elle conduit. |
 | **Sans voiture** | un état déclaré, pas une absence d'information. C'est ce qui alimente le bandeau de couverture et la liste à placer. |
 | **Pas concernée** | l'absence de Placement sur un leg, pour une personne qui ne conduit pas sur ce leg : elle ne fait pas ce trajet. Exemple : le parent qui dépose à l'aller et ne revient pas. N'entre pas dans la couverture. |

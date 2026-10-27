@@ -33,7 +33,8 @@ reproduire, dans cet ordre.
   personnes sans voiture. Pas de navigation à apprendre.
 - **Un geste.** Après la première inscription, rejoindre une voiture est un seul tap quand
   l'appareil a exactement une personne « sans voiture » sur ce leg ; sinon le tap ouvre la
-  feuille pour choisir qui monte.
+  feuille pour choisir qui monte. Exception : sur une voiture qui a des Arrêts, le tap ouvre
+  toujours la feuille, départ coché par défaut, même pour une seule personne.
 - **Aller et retour indépendants**, dans le même événement, sous deux onglets.
 - **Effacé à 30 jours.** 30 jours après le dernier leg (heure de Paris), tout ce qui concerne
   les participants est effacé : prénoms, téléphones, voitures, lieux de départ, notes,
@@ -47,7 +48,9 @@ reproduire, dans cet ordre.
 ## Règles d'interaction
 
 - **Prendre une place.** Un tap sur une place libre place directement la personne de
-  l'appareil si elle est la seule « sans voiture » sur ce leg. Sinon une feuille s'ouvre avec
+  l'appareil si elle est la seule « sans voiture » sur ce leg et si la voiture n'a aucun
+  Arrêt. Sinon (plusieurs personnes, ou une voiture à Arrêts : la feuille s'ouvre alors toujours,
+  départ coché par défaut) une feuille s'ouvre avec
   les personnes de l'appareil qui ne sont pas dans une voiture : celles « sans voiture »
   précochées, celles « pas concernées » décochées. On ajuste, on valide. Une personne peut
   ainsi placer plusieurs personnes d'un coup, dans la limite des places libres. Sans aucune
@@ -89,7 +92,7 @@ Un critère n'est tenu que s'il est **prouvé par un test**, pas constaté à l'
 | critère | preuve attendue |
 |---|---|
 | créer un événement en moins de 30 s | test de bout en bout depuis `/` : 8 actions pour un nouvel organisateur (l'adresse comprise), 7 avec une session ; aucun e-mail ni aucune réponse du fournisseur attendus sur ce chemin |
-| rejoindre une voiture en 1 tap après la 1re inscription, quand l'appareil a exactement une personne « sans voiture » sur ce leg | test de bout en bout, un seul clic sur la place libre ; avec deux personnes « sans voiture », le clic ouvre la feuille |
+| rejoindre une voiture en 1 tap après la 1re inscription, quand l'appareil a exactement une personne « sans voiture » sur ce leg et que la voiture n'a aucun Arrêt | test de bout en bout, un seul clic sur la place libre ; avec deux personnes « sans voiture », ou sur une voiture à Arrêts, le clic ouvre la feuille |
 | un appareil gère plusieurs personnes | test : deux personnes créées avec le même jeton, les deux modifiables |
 | aller et retour indépendants | test : placer quelqu'un à l'aller ne le place pas au retour |
 | utilisable sur 360 px | capture à 360 px, aucun débordement horizontal |
