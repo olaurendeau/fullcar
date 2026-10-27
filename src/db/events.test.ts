@@ -6,6 +6,7 @@ import { PUBLIC_ID_ALPHABET, isPublicId } from "@/domain/public-id";
 import {
   INSERT_ATTEMPTS,
   findEventById,
+  holdEventKey,
   insertEvent,
   lockEvent,
   readAdminTokenHash,
@@ -374,6 +375,49 @@ describe("lockEvent", () => {
       expect(await waits(db, id, "share", "share")).toBe(false);
       expect(await waits(db, id, "share", "noKeyUpdate")).toBe(true);
       expect(await waits(db, id, "noKeyUpdate", "share")).toBe(true);
+    });
+  });
+});
+
+describe("holdEventKey", () => {
+  /** Whether `write`, on the connection, waits for a transaction that holds the event's key. */
+  async function waitsForKey(db: Kysely<Database>, id: string, write: (trx: Kysely<Database>) => Promise<unknown>) {
+    const holder = await db.startTransaction().execute();
+    try {
+      expect(await holdEventKey(holder, id)).toBe(true);
+      const other = await db.startTransaction().execute();
+      try {
+        await sql`set local lock_timeout = '200ms'`.execute(other);
+        return await write(other).then(
+          () => false,
+          (error: { code?: string }) => {
+            if (error.code === "55P03") return true;
+            throw error;
+          },
+        );
+      } finally {
+        await other.rollback().execute();
+      }
+    } finally {
+      await holder.rollback().execute();
+    }
+  }
+
+  it("says whether the event exists", async () => {
+    await withRollback(async (trx) => {
+      const { id } = await seedEvent(trx);
+      expect(await holdEventKey(trx, id)).toBe(true);
+      expect(await holdEventKey(trx, "Zz9yXw8v")).toBe(false);
+    });
+  });
+
+  // A sign-in link refers to it once committed (OA4.4): the purge waits, a change of the event does not.
+  it("keeps the event from being deleted, and lets lockEvent and a change of its fields go", async () => {
+    await withCommittedEvent(async (db, id) => {
+      const retitle = (trx: Kysely<Database>) => trx.updateTable("event").set({ title: "Autre" }).where("id", "=", id).execute();
+      expect(await waitsForKey(db, id, (trx) => trx.deleteFrom("event").where("id", "=", id).execute())).toBe(true);
+      expect(await waitsForKey(db, id, (trx) => lockEvent(trx, id, "noKeyUpdate"))).toBe(false);
+      expect(await waitsForKey(db, id, retitle)).toBe(false);
     });
   });
 });

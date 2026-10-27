@@ -30,6 +30,7 @@ async function sendsInWindow(db: Kysely<Database>) {
 /** Sends to as many addresses as needed for the window to hold `count` sends, all kinds together. */
 async function fillWindowTo(db: Kysely<Database>, count: number, address: () => string = anAddress) {
   const missing = count - (await sendsInWindow(db));
+  if (missing < 0) throw new Error("fillWindowTo: the window already holds more sends");
   await seedSends(db, missing, { kind: "login", email: address });
 }
 
@@ -156,7 +157,7 @@ describe("recordSend", () => {
         );
         expect(outcome).toBe("global");
         expect(await sendsInWindow(db)).toBe(GLOBAL_SENDS_PER_HOUR);
-      });
+      }, { fillsTheWindow: true });
     });
   });
 
