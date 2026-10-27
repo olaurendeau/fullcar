@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import type { BoardPerson, DevicePerson } from "@/domain/board";
+import type { BoardPerson } from "@/domain/board";
 import { otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import { otherLegField, otherLegKind, type OtherLegChoice } from "@/domain/offer";
 import { validateDriver, validateDriverPhone } from "@/domain/person";
@@ -102,7 +102,7 @@ export interface OtherLegOf {
   at: WallClock;
   /** The event's place, its text whole: its position is not read (v4.5-6). */
   location: string;
-  persons: readonly DevicePerson[];
+  persons: readonly VisibleDevicePerson[];
 }
 
 interface FormProps {

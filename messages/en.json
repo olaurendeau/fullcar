@@ -94,7 +94,13 @@
       "freeSeat": "Free seat",
       "takeSeat": "Free seat: take a seat in {driver}’s car",
       "edit": "Edit",
-      "remove": "Remove the car"
+      "remove": "Remove the car",
+      "addPhoneWhy": {
+        "passenger": "Add a number so that {driver} can reach you.",
+        "driver": "Add a number so that the people on board can reach you."
+      },
+      "addPhone": "Add a number",
+      "addPhoneLabel": "Add a number for {firstName}"
     },
     "withoutCar": "Without a car",
     "call": "Call {firstName} on {phone}",
