@@ -170,6 +170,10 @@ test.describe("Mes événements", () => {
     // Every request of the page, whatever its method or path.
     const sent: Request[] = [];
     page.on("request", (request) => sent.push(request));
+    // Their headers as sent, `Cookie` included, which `headers()` leaves out: read once each request
+    // has finished, when they are known (`allHeaders()` waits forever on a request cancelled before).
+    const headers: Promise<string[]>[] = [];
+    page.on("requestfinished", (request) => headers.push(request.allHeaders().then(Object.values)));
     // `myEvents`, told from the load's `visit`, whose body holds the token too, by its action id.
     const visitId = await visitActionId(page);
     const read = page.waitForRequest((request) => isPageAction(request) && request.headers()["next-action"] !== visitId);
@@ -215,9 +219,9 @@ test.describe("Mes événements", () => {
     await expect(anonymised.getByText(/sans voiture/)).toHaveCount(0);
 
     // Checked once the page has sent all it sends: no URL nor header holds the token.
-    expect(sent.length).toBeGreaterThan(0);
-    const leaks = sent.filter((request) => [request.url(), ...Object.values(request.headers())].some((text) => text.includes(token)));
-    expect(leaks.length, "requests with the token in their URL or a header").toBe(0);
+    expect(headers.length).toBeGreaterThan(0);
+    const texts = [...sent.map((request) => request.url()), ...(await Promise.all(headers)).flat()];
+    expect(texts.filter((text) => text.includes(token)).length, "URLs and headers with the token").toBe(0);
   });
 
   test("OA6.5: no event, MyEvents.empty and no section title; none upcoming, « À venir (0) »", async ({ page, db }) => {
