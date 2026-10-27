@@ -307,6 +307,11 @@ function isSearch(request: Request): boolean {
   return new URL(request.url()).pathname === "/api/lieux";
 }
 
+/** A tile of the map, from our route (#820): `GET /tuiles/{z}/{x}/{y}`. */
+function isTile(request: Request): boolean {
+  return new URL(request.url()).pathname.startsWith("/tuiles/");
+}
+
 /** The app's icons, as a page links them (`<link rel="icon">`) or a browser asks for them. */
 const ICONS = new Set(["/icon.svg", "/favicon.ico"]);
 
@@ -340,7 +345,12 @@ interface Sent {
  * is not followed here but given to the browser, which follows it through this route again: its
  * `Location` and the next request stay searched. A place field's search (`/api/lieux`) is read the
  * same way: the page aborts it once answered, at a keystroke or as its form sends, and Chromium
- * may then drop its body too (#432).
+ * may then drop its body too (#432). A tile of the map (`/tuiles/…`) is read the same way: a
+ * test ends once its last tile shows, and the page leaves at once (`leaveNoToken()`). Chromium
+ * forgets the bodies of a page it leaves, and a tile's, asked of the browser while it left, was
+ * no longer found (« No resource with given identifier found »): the check failed on a body the
+ * page had shown (#820). Leaflet also abandons a tile it no longer shows, its answer given to a
+ * page that no longer takes it.
  *
  * The favicon, which Chromium fetches once the page has loaded, is often still loading when the
  * test leaves the page (`leaveNoToken()`): its body, asked of the browser, was then refused, or
@@ -355,7 +365,9 @@ interface Sent {
  * nobody reads is no longer left unhandled, whenever it fails. `stop()` waits for every body still
  * being read as well, so that none is still in flight when the context closes: a safeguard on top
  * of the handler, not what fixes #764. A body the page did receive and that cannot be read still
- * fails the check.
+ * fails the check. That check reads every exchange once the test is over: one that fails before is
+ * not left unhandled either, which made Playwright stop the worker mid-teardown, the next page
+ * there aborted (« frame was detached », #820).
  */
 async function record(context: BrowserContext, hide: (text: string) => string) {
   const state = { on: true };
@@ -380,9 +392,10 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     () => state.on,
     async (route: Route) => {
       const request = route.request();
-      if (isSearch(request)) {
-        // Abandoned by the page, answered or not (a keystroke, the form sending), it is given to
-        // a page that may no longer take it; its body, read here, is not marked unhandled meanwhile.
+      if (isSearch(request) || isTile(request)) {
+        // Abandoned by the page, answered or not (a keystroke, the form sending, a tile Leaflet
+        // no longer shows, the page left), it is given to a page that may no longer take it; its
+        // body, read here, is not marked unhandled meanwhile.
         const answer = route.fetch();
         fetched.set(request, read(answer.then((response) => response.text())));
         // Not fetched (the app's server down), it is abandoned here rather than left pending (#535).
@@ -432,7 +445,11 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     });
   });
   context.on("response", (response) => {
-    if (state.on) exchanges.push(exchange(response));
+    if (!state.on) return;
+    const each = exchange(response);
+    // Read by the check once the test is over: failed before, it is not left unhandled.
+    void each.catch(() => {});
+    exchanges.push(each);
   });
   context.on("console", (message) => {
     if (state.on) consoleLines.push(message.text());

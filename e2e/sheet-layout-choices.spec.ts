@@ -206,9 +206,10 @@ for (const locale of ["fr-FR", "en-GB"] as const) {
             expect(await textOf(button), `« ${await button.innerText()} », ${name}`).toEqual({ lines: 1, cut: false });
           }
           // The targets: its buttons, its links (Claire’s number), and its rows of a checkbox, whose box is not one alone (#650).
+          // Counted with a retry first: .all() takes the targets present at that instant (#813).
+          if (which === "seat") await expect(sheet.locator("label:has([role=checkbox])")).toHaveCount(2);
+          if (which === "person") await expect(sheet.locator("a[href^='tel:']")).toHaveCount(1);
           const targets = await sheet.locator("button:not([role=checkbox]), a[href], label:has([role=checkbox])").all();
-          if (which === "seat") expect(await sheet.locator("label:has([role=checkbox])").count()).toBe(2);
-          if (which === "person") expect(await sheet.locator("a[href^='tel:']").count()).toBe(1);
           for (const target of targets) {
             expect(await heightOf(target), `« ${await target.innerText()} », ${name}`).toBeGreaterThanOrEqual(44);
           }
