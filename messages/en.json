@@ -441,7 +441,145 @@
     "home": "Home",
     "link": "Contact us",
     "newTab": "(opens in a new tab)",
+    "privacy": "Privacy",
     "sourceCode": "Source code on GitHub"
+  },
+  "Privacy": {
+    "title": "Privacy",
+    "intro": "Fullcar is for organising group carpooling. This page says what we keep, why, for how long, who sees it and who we entrust it to. Participants never have an account. The organiser has one: an email address, with no password.",
+    "controller": {
+      "title": "Who is responsible",
+      "body": "The data controller is OLA ALPINE SOLUTIONS, a French simplified joint-stock company (SAS) with a share capital of €10,000, SIREN 938 878 675, 84 Route de la Lauzette, 05310 Champcella, France. For any question about your data, see “Contact us” below."
+    },
+    "keep": {
+      "title": "What we keep",
+      "intro": "Only what the carpool and the organiser’s account need. We ask for no surname, no password and not your device’s location, and our database keeps no IP address.",
+      "participant": {
+        "title": "For each participant",
+        "firstName": "the first name;",
+        "phone": "the phone number, if given: it is optional;",
+        "booster": "whether a booster seat is needed, if the organiser turned this option on;",
+        "legs": "for the outbound trip, then the return trip: driving, in a car, without a car, or not on it; the seat taken and, if any, the chosen stop;",
+        "cars": "the cars they offer: the place of departure on the outbound trip or of drop-off on the return trip, its position when it was picked from the suggestions, the time, the seats, the booster seats available, the cost share, the note and the stops;",
+        "token": "the fingerprint of the personal token of the device that signed them up, never the token itself."
+      },
+      "event": {
+        "title": "For each event",
+        "basics": "the title, the place and its position, the start and, if there is a return trip, the end;",
+        "description": "the description, if the organiser wrote one;",
+        "options": "the options turned on;",
+        "adminToken": "the fingerprint of the admin token of the browser that created it, when there is one;",
+        "pending": "until the organiser’s address is confirmed: the email address entered at creation, and the outcome of the last sending of the confirmation link (in progress, sent, failed or limit reached), with its date."
+      },
+      "organiser": {
+        "title": "For the organiser",
+        "email": "the email address;",
+        "locale": "the language of the last visit, used for the warning email before the account is deleted;",
+        "dates": "the date the account was created, the date of the last visit, and the date of the warning if it was sent;",
+        "events": "their events, and the date each one was confirmed;",
+        "sessions": "their sessions: the fingerprint of the token, the date it was opened and the date of the last visit;",
+        "links": "the sign-in and confirmation links sent: the fingerprint of the token, the date sent, the date used, and the page to return to afterwards."
+      },
+      "sends": {
+        "title": "To limit emails",
+        "body": "For each confirmation or sign-in email: the recipient’s address, the kind of email, the event if there is one, and the date. This also applies to an address with no account, when someone asks to sign in with it. This is what stops anyone from flooding an address."
+      },
+      "logs": {
+        "title": "Logs",
+        "body": "Our host, Vercel, logs the requests it receives: the path requested, the browser, and your IP address. These logs are kept for 1 hour. Our own log lines contain only fixed words and numbers: no first name, no number, no email address, no token, no description."
+      }
+    },
+    "why": {
+      "title": "Why",
+      "intro": "Each use has its legal basis, within the meaning of Article 6 of the GDPR:",
+      "carpool": "Organising the carpool: showing the group who drives, where seats are left and who is still without a car, and letting the people in the same car reach each other. Basis: performance of the service you use (6.1.b); for a person signed up by someone else, a child for instance, the group’s legitimate interest in organising the trip (6.1.f).",
+      "account": "The organiser’s account: confirming the address, signing in, finding events again in “My events”. Basis: performance of the service (6.1.b).",
+      "abuse": "Preventing abuse: the email limits, and the tokens that protect each access. Basis: our legitimate interest in protecting the service and other people’s email addresses (6.1.f).",
+      "inactive": "Deleting accounts that are no longer used, after a warning email. Basis: our legitimate interest in not keeping an address without a reason (6.1.f).",
+      "hosting": "Running the site and protecting it: the host’s logs. Basis: our legitimate interest (6.1.f).",
+      "errors": "Fixing failures: error reports, without personal data. Basis: our legitimate interest (6.1.f).",
+      "audience": "Counting visits to four pages, with no cookie (see “What we do not do”). Basis: our legitimate interest in knowing whether the site is used (6.1.f).",
+      "contact": "Answering you, when you write to us in the chat, and handling your requests about your data. Basis: our legitimate interest in answering you (6.1.f).",
+      "nothingElse": "Your data is used for nothing else."
+    },
+    "retention": {
+      "title": "How long",
+      "dayThirty": "Participants’ data, the description and the position of the place: erased on the 30th day after the date of the return trip, or of the outbound trip if there is no return, Paris time. An event whose return trip is on 12 December is erased on 11 January. The title, the text of the place, the dates and the options remain, in the organiser’s history.",
+      "removed": "A person removed from the event: erased at once, with their cars and seats.",
+      "history": "The organiser’s history (title, place, dates): until the account is deleted.",
+      "account": "The account: until “Delete my account”, or after 3 years without a visit. A warning email goes out 30 days before, and the account is deleted only once that email has been sent. A visit while signed in, before then, keeps the account.",
+      "deleteAccount": "After “Delete my account”: the email address is erased at once from all our tables, every session is closed and the history is deleted. Events not yet erased stay open to participants, with no organiser, until their 30th day.",
+      "noAccount": "An event with no account (address never confirmed, or account deleted): deleted entirely on the 30th day, with the email address it holds.",
+      "sessions": "A session ends 90 days after the last visit. It is then erased at the next clean-up, which runs once a day.",
+      "links": "A sign-in link is valid for 1 hour, a confirmation link for 7 days, and each works once. A link, used or not, does not contain your email address. A sign-in link is erased 30 days after it expires, about 30 days after sending. A confirmation link stays while its event is waiting to be confirmed, and goes with it on the 30th day; once the event is confirmed, it is erased 30 days after it expires, 37 days after sending, or on the event’s 30th day if that comes first.",
+      "sends": "The sending records used for the limits, which contain the recipient’s address: kept for 1 hour, the length of the sending limits, then erased at the next daily clean-up, by the next day at the latest.",
+      "cookie": "The language cookie: 365 days.",
+      "restore": "Our database keeps a restore history: erased data may stay there for a limited time, set by that database’s settings. This history is used only to restore the database after an incident.",
+      "providers": "At our providers: Vercel’s logs, 1 hour; Brevo’s sending logs, 1 month, with no copy of the emails’ content; successful requests at Geoapify, 24 hours at most, according to its policy; conversations at Crisp, 60 days; error reports at Sentry, for the period its policy sets."
+    },
+    "who": {
+      "title": "Who sees what",
+      "link": "The event’s link gives access to what its page shows: the title, the place, the dates, the description, first names, who drives, the cars’ places and times, the seats, the booster seats, the cost share, the notes and the stops. The link cannot be guessed, and search engines do not index it. Share it only with the group.",
+      "phone": {
+        "intro": "The phone number is shown in three places only:",
+        "car": "to the people in the same car, driver included, for the trip on which they share it: outbound, return, or both;",
+        "device": "on the device that signed the person up;",
+        "organiser": "to the organiser, in the organiser area, while the person is without a car on the outbound or the return trip, to help them find a seat.",
+        "nobody": "Nobody else sees it."
+      },
+      "organiser": "The organiser sees, in their area, every first name and what each person does on the outbound and the return trip, and can remove a person from the event. They never see a device’s personal token.",
+      "email": "The organiser’s email address is shown only to them, while they are signed in. Participants never see it.",
+      "after": "After the 30th day, the event’s page only says “Event over”, with the title and the date. The organiser keeps the title, the place and the dates.",
+      "previews": "A messaging app that shows a preview of the link may keep the title, or the start of the page, in the conversation after the 30th day: that preview is out of our hands."
+    },
+    "services": {
+      "title": "The services we use",
+      "intro": "Each one receives only what it needs. For those that transfer data outside the European Union, the safeguard is given on their line: the European Commission’s standard contractual clauses (Decision 2021/914), or the EU–US Data Privacy Framework.",
+      "vercel": "Vercel (Vercel Inc., United States) hosts the site. Our functions run in Frankfurt, Germany; Vercel’s network receives each request at the point closest to you, wherever you are. Like any host, Vercel sees your IP address and what your browser asks for. It also counts visits (see “What we do not do”). Transfers: standard contractual clauses, and certification under the Data Privacy Framework.",
+      "neon": "Neon hosts the database in Frankfurt, Germany (AWS eu-central-1). The contract is with Databricks, Inc. (United States), which runs Neon. The database holds everything listed in “What we keep”. The data is stored in the European Union; access from outside the Union, by Databricks or its subprocessors, remains possible, and it is covered by the standard contractual clauses.",
+      "brevo": "Brevo (Brevo SAS, RCS Paris 498 019 298, 9-17 rue Salneuve, 75017 Paris, France) sends the account’s four emails. It receives the recipient’s address and the email, which contains the sign-in or confirmation link; never your IP address, nor a title, a place or a first name. It may count opens and clicks, in an anonymised way, without tying them to the recipient (see “What we do not do”). Brevo hosts its data at OVH (France) and Google Cloud (Belgium); its delivery network, Cloudflare (United States), is covered by the Data Privacy Framework and the standard contractual clauses.",
+      "sentry": "Sentry (Functional Software, Inc., United States) receives error reports, through our own address, and stores them in Frankfurt, Germany. They are rebuilt before they leave: no first name, no number, no email address, no token, no description. What else Sentry keeps, IP address included, depends on its settings and its policy. Access from outside the Union, by Sentry or its subprocessors, remains possible: it is covered by the Data Privacy Framework, with standard contractual clauses as a fallback.",
+      "photon": "Photon, komoot’s public instance, hosted in Germany, suggests places while you type. Our server is what asks it: Photon receives the text typed, the language and, if known, the event’s area rounded to about 10 km, never your IP address.",
+      "geoapify": "Geoapify (KEPTAGO LTD, Paphos, Cyprus; servers in the European Union, according to its policy) provides the map backgrounds. Our server is what asks for them: Geoapify sees which parts of the map are requested, so the area looked at, never your IP address or your browser.",
+      "crisp": "Crisp (Crisp IM SAS, Nantes, France; main infrastructure in Amsterdam, the Netherlands, according to its policy) hosts the “Contact us” chat, the only way to write to us: questions, and requests to exercise your rights. Nothing of Crisp loads in Fullcar: the link opens Crisp’s page in a new tab. Crisp receives what you write there, and what any site you open receives, your IP address included. On its page, Crisp’s policy applies too, cookies included. According to that policy, Crisp may have messages processed by artificial intelligence tools, through model providers.",
+      "otherSites": "Links to other sites, such as the source code on GitHub or a link in a description, open those sites in a new tab, without passing on the page you came from. They have their own rules."
+    },
+    "not": {
+      "title": "What we do not do",
+      "ads": "No advertising, and no data sold or passed on.",
+      "tracking": "No tracking: no measurement or advertising cookie, no script loaded from another site, no profile.",
+      "emails": "In emails: we put no image and no text written by someone else. Brevo may count opens and clicks, in an anonymised way: without tying them to the recipient.",
+      "decisions": "No automated decision about you.",
+      "audience": "What we do, however: a reduced audience measurement. Vercel Web Analytics, on the production site only, counts page views of the home page, of “Create an event”, of an event’s page and of the organiser area, without the event’s identifier and without anything that follows the path. Other pages are not counted. It sets no cookie. According to Vercel, each page view also carries the country or region, the browser, the operating system, the type of device and the site you came from, along with a fingerprint computed from the request, discarded after 24 hours."
+    },
+    "storage": {
+      "title": "Cookies and browser storage",
+      "intro": "Fullcar sets a single cookie, and keeps a few values in your browser’s storage. All of them serve the service itself, none measurement or advertising: that is why there is no consent banner.",
+      "locale": "The language cookie, “fr” or “en”: set only when you tap the language button, at the bottom of the page. It lasts 365 days.",
+      "personal": "The personal token, one per event: it lets this device change the people it signed up. It stays until you clear the site’s data, even when the device has nobody left; after the 30th day, it opens nothing.",
+      "session": "The organiser’s session token: it keeps the session open, 90 days after the last visit. “Sign out” erases it from this browser.",
+      "admin": "The admin token, in the browser that created an event: it opens that event’s organiser area in this browser, until the 30th day. “Sign out” erases it, and it stops working once the account is deleted.",
+      "fold": "The folded organiser area, for one event, only while you leave it folded.",
+      "nothingElse": "Nothing else: no first name, no number and no email address is kept in your browser. Crisp’s and GitHub’s pages, opened in a new tab, have their own cookies and their own rules."
+    },
+    "rights": {
+      "title": "Your rights",
+      "intro": "You can access your data, correct it, have it erased, ask for a copy, object to a use or ask for it to be restricted. Most of the time, this is done in the app, at once:",
+      "organiser": "Organiser: “My events” shows your events; “Edit the event” corrects an event; “Delete my account”, at the bottom of “My events”, erases your address and your history.",
+      "participant": "Participant: on the device that signed you up, tap your first name in “Your sign-ups” to change your details; “Remove from the event” erases you, with your cars and seats. The organiser can also remove anyone, from “Signed-up people”.",
+      "otherwise": "Otherwise, or for any other right, write to us in the “Contact us” chat, with the event’s link and the first name concerned: since a participant has no account, that is how we find them.",
+      "cnil": "If you believe your rights are not respected, you can lodge a complaint with the CNIL, the French data protection authority, or with the authority of the country where you live:",
+      "cnilLink": "cnil.fr"
+    },
+    "contact": {
+      "title": "Contact us",
+      "body": "Every question or request about your data goes through the site’s chat: the “Contact us” link, at the bottom of every page, or this one. It is also where you exercise your rights. There is no contact email address. We answer within one month at most.",
+      "crisp": "“Contact us” opens Crisp’s chat in a new tab. What you write there, access or erasure requests included, is received and kept by Crisp on our behalf (see “The services we use”)."
+    },
+    "updates": {
+      "title": "Updates",
+      "body": "If what we keep or the services we use change, this page is updated first."
+    }
   },
   "NewEvent": {
     "title": "Create an event"
