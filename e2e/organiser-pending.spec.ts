@@ -1,4 +1,5 @@
-import type { Locator, Page, Response } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
+import { POLL_MS } from "@/app/e/[id]/admin/screen-state";
 import type { SendStatusColumn } from "@/db/schema";
 import { seedPendingSend } from "@/db/test-events";
 import { leaveNoToken } from "./fixtures";
@@ -137,14 +138,26 @@ test("OA1.7: a change while a sheet hides the page is said once the sheet is clo
 
   await areaEditButton(page).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  // One read has just been answered « sending »: the poll is still running, and the next read leaves
-  // POLL_MS after that answer is applied. Keeping the failure now, that next read is the one that sees it.
-  const isRead = (response: Response) =>
-    response.request().method() === "POST" && new URL(response.url()).pathname === organiserPath(seededEvent);
-  await (await page.waitForResponse(isRead)).finished();
+  // A read ends finished, or aborted by the page once it has its answer (net::ERR_ABORTED): Chromium
+  // may abort it just after its headers, and `response.finished()` then never resolves. The listener is set
+  // before the read leaves, so a `requestfailed` right after the response cannot be missed.
+  const readEnds = () =>
+    new Promise<void>((resolve) => {
+      const end = (request: Request) => {
+        if (request.method() !== "POST" || new URL(request.url()).pathname !== organiserPath(seededEvent)) return;
+        page.off("requestfinished", end).off("requestfailed", end);
+        resolve();
+      };
+      page.on("requestfinished", end).on("requestfailed", end);
+    });
+  // One read ends « sending »: the poll is still running, and the next read leaves POLL_MS after that
+  // answer is applied. Keeping the failure now, that next read is the one that sees it.
+  await readEnds();
+  const seedStart = Date.now();
   await seedPendingSend(db, seededEvent.id, { email, status: "failed" });
-  const answer = await page.waitForResponse(isRead, { timeout: 15_000 });
-  await answer.finished();
+  // Slower than POLL_MS, the next read would leave before the failure is kept: the test would prove nothing.
+  expect(Date.now() - seedStart).toBeLessThan(POLL_MS);
+  await readEnds();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   // Under the sheet, Radix's aria-hidden: the regions keep what they said.
   const regions = notice(page).locator('[aria-live="polite"], [role="alert"]');
