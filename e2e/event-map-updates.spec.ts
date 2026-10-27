@@ -369,7 +369,11 @@ onAdmin.describe("an event without a retour", () => {
       await expect(retourTab).toHaveAttribute("aria-selected", "true", { timeout: 500 });
     }).toPass();
     await expect(toggle(page.getByRole("tabpanel"))).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByRole("region", { name: mapName("retour", "aucune voiture"), exact: true }).locator(".leaflet-tile-loaded").first()).toBeVisible();
+    // Without the organiser's link (#597), the panel is shorter: the tab is tapped without a scroll,
+    // and the map below the fold starts once scrolled to (CA1.20).
+    const retour = page.getByRole("region", { name: mapName("retour", "aucune voiture"), exact: true });
+    await retour.scrollIntoViewIfNeeded();
+    await expect(retour.locator(".leaflet-tile-loaded").first()).toBeVisible();
     await tilesLoaded(page);
   });
 });

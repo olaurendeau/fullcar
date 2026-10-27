@@ -6,7 +6,7 @@ import type { OrganiserLeg } from "@/domain/organiser-panel";
 import en from "../../../../../messages/en.json";
 import fr from "../../../../../messages/fr.json";
 import type { EventState } from "../event-state";
-import type { AdminLinkCheck } from "./admin-link";
+import type { OrganiserCheck } from "./admin-token-store";
 import {
   alertShown,
   announcement,
@@ -30,8 +30,8 @@ const leg = (withoutCar: number): OrganiserLeg => ({
 });
 const before = [leg(2)];
 const after = [leg(3)];
-const links = { publicUrl: "https://fullcar.example/e/Ab3dEf7h", adminUrl: "https://fullcar.example/e/Ab3dEf7h/admin#x" };
-const valid: AdminLinkCheck = { state: "valid", ...links, legs: before };
+const links = { publicUrl: "https://fullcar.example/e/Ab3dEf7h" };
+const valid: OrganiserCheck = { state: "valid", ...links, legs: before };
 
 const ready = (fields: Partial<Extract<ScreenState, { state: "ready" }>> = {}): ScreenState => ({
   state: "ready",
@@ -51,7 +51,7 @@ describe("screenReducer", () => {
   it.each<[string, ScreenState, ScreenEvent, ScreenState]>([
     // The first read (O5.1, O5.2, O5.3).
     ["loading, the panel", { state: "loading" }, { type: "checked", check: valid }, ready()],
-    ["loading, an invalid link", { state: "loading" }, { type: "checked", check: { state: "invalid" } }, { state: "invalid" }],
+    ["loading, the area refused", { state: "loading" }, { type: "checked", check: { state: "refused" } }, { state: "refused" }],
     [
       "loading, a failed check",
       { state: "loading" },
@@ -107,7 +107,7 @@ describe("screenReducer", () => {
     ],
     ["the end of a read after the link was checked again", ready(), { type: "refreshEnded", read: 1, legs: after }, ready()],
     ["a refresh while one runs", ready({ refreshing: 1 }), { type: "refreshStarted", read: 2 }, ready({ refreshing: 1 })],
-    ["a refresh without the panel", { state: "invalid" }, { type: "refreshStarted", read: 1 }, { state: "invalid" }],
+    ["a refresh without the panel", { state: "refused" }, { type: "refreshStarted", read: 1 }, { state: "refused" }],
     // The panel read again after an action of the board (O1.10): no announcement either way.
     [
       "a read after an action replaces the panel, and says nothing",
@@ -186,7 +186,7 @@ describe("screenReducer, the folded card", () => {
   });
 
   it("does nothing without the panel", () => {
-    expect(screenReducer({ state: "invalid" }, { type: "toggleFolded" })).toStrictEqual({ state: "invalid" });
+    expect(screenReducer({ state: "refused" }, { type: "toggleFolded" })).toStrictEqual({ state: "refused" });
   });
 });
 
@@ -274,7 +274,7 @@ describe("screenReducer, the unfolded legs", () => {
     expect(unfolded(through(open(), ...events))).toStrictEqual(retour);
   });
 
-  it.each<[string, ScreenState, AdminLinkCheck]>([
+  it.each<[string, ScreenState, OrganiserCheck]>([
     ["the first read", { state: "loading" }, valid],
     ["« Réessayer » that succeeds", { state: "failed", retrying: true }, valid],
     ["the link checked again, the panel shown", open(), valid],
@@ -485,7 +485,7 @@ describe("alertShown", () => {
     ["the body still while the next read runs", ready({ refreshFailed: 1, refreshing: 2 }), "body"],
     ["the withdrawn body, the panel withdrawn", ready({ panel: withdrawn, refreshFailed: 1, refreshing: 2 }), "bodyWithdrawn"],
     ["nothing withdrawn without a failure: the sentence instead", ready({ panel: withdrawn }), ""],
-    ["nothing without the panel", { state: "invalid" }, ""],
+    ["nothing without the panel", { state: "refused" }, ""],
   ])("%s", (_, state, shown) => {
     expect(alertShown(state)).toBe(shown);
   });

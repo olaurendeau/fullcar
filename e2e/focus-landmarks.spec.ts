@@ -3,7 +3,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { failActions, holdActions, holdFirst, holdToken, messages, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { expectRing, press, pressUntil } from "./focus-ring";
-import { holdActionsWith, oneCharOff, organiserPath, seedCrowd, test as organiserTest, unfoldLegs } from "./organiser";
+import { areaRefused, holdActionsWith, keepAdminToken, oneCharOff, organiserPath, seedCrowd, test as organiserTest, unfoldLegs } from "./organiser";
 
 /*
  * #321, #314, epic #236: F1.17 of the language-switch design (v3.3.1). The landmarks that had
@@ -19,8 +19,7 @@ leaveNoToken();
 const FR = {
   retry: "Réessayer",
   loading: "Chargement de vos inscriptions…",
-  failed: "Le lien d’organisateur n’a pas pu être vérifié.",
-  invalid: "Ce lien d’organisateur n’est pas valide.",
+  failed: "L’espace organisateur n’a pas pu être chargé.",
   panel: "Espace organisateur",
   refresh: "Actualiser",
   less: "Réduire la liste",
@@ -99,26 +98,27 @@ test.describe("on the event's page", () => {
 organiserTest.describe("on the organiser's page", () => {
   organiserTest.use({ locale: "fr-FR" });
 
-  organiserTest("F1.17: the alert « lien non valide », once « Réessayer » finds the link invalid", async ({
+  organiserTest("F1.17: the area's title, once « Réessayer » finds the area refused (#597)", async ({
     page,
     seededEvent,
   }) => {
     // Only the check fails: the action posted with the wrong token in its body, never the page's GET.
     const wrong = oneCharOff(seededEvent.token);
+    await keepAdminToken(page, seededEvent.id, wrong);
     const check = await holdActionsWith(page, wrong);
-    await page.goto(`/e/${seededEvent.id}/admin#${wrong}`);
+    await page.goto(organiserPath(seededEvent));
     await expect.poll(check.held).toBe(1);
     await check.lose();
     await expect(alert(page, FR.failed)).toBeVisible();
-    await expect(alert(page, FR.invalid)).toHaveCount(0);
+    await expect(areaRefused(page)).toHaveCount(0);
 
-    // The route released, the second check answers « invalid ».
+    // The route released, the second check refuses the area.
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await pressUntil(page, "Tab", retry(page));
     await press(page, "Enter");
-    const invalid = alert(page, FR.invalid);
-    await expect(invalid).toBeFocused();
-    await expectRing(invalid);
+    const refused = areaRefused(page);
+    await expect(refused).toBeFocused();
+    await expectRing(refused);
   });
 
   organiserTest("F1.17: a list's title, when a read removes the line with the focus (noteFocus)", async ({

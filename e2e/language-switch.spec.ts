@@ -1,5 +1,6 @@
 import { devices, type Locator, type Page } from "@playwright/test";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { areaRefused, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -11,7 +12,7 @@ leaveNoToken();
 
 const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
 const UNKNOWN_ID = "Zz9yXw8v";
-const WRONG_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZa";
+const WRONG_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZQ";
 const DAY = 24 * 60 * 60;
 
 const FR = {
@@ -19,7 +20,6 @@ const FR = {
   tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
   contact: "Nous contacter (s’ouvre dans un nouvel onglet)",
   panel: "Espace organisateur",
-  invalid: "Ce lien d’organisateur n’est pas valide.",
   title: "Titre",
   retour: "Retour",
   boosters: "Rehausseurs",
@@ -29,7 +29,6 @@ const EN = {
   tagline: "Group carpooling, there and back, no account needed.",
   contact: "Contact us (opens in a new tab)",
   panel: "Organiser area",
-  invalid: "This organiser link is not valid.",
   title: "Title",
   retour: "Return",
   boosters: "Booster seats",
@@ -40,9 +39,7 @@ async function open(page: Page, path: string, heading: string) {
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
-    await expect(
-      page.getByRole("region", { name: FR.panel }).or(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })),
-    ).toBeVisible();
+    await expect(page.getByRole("region", { name: FR.panel }).or(areaRefused(page, FR.panel))).toBeVisible();
   }
 }
 
@@ -111,11 +108,12 @@ test.describe("the language switch, in a browser set to French", () => {
     expect(Math.abs(renewed[0].expires - (Date.now() / 1000 + 365 * DAY))).toBeLessThan(DAY);
   });
 
-  test("L3.1: with a valid link, the URL stays, fragment included, and the panel is the same, in English", async ({
+  test("L3.1: in the browser that keeps the token, the URL stays, and the panel is the same, in English", async ({
     page,
     seededEvent,
   }) => {
-    await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
+    await open(page, organiserPath(seededEvent), "Tournoi de Rennes");
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
     const before = page.url();
     await page.getByRole("region", { name: FR.panel }).evaluate((section) => {
@@ -125,25 +123,26 @@ test.describe("the language switch, in a browser set to French", () => {
     await switchTo(page, FR, EN, "en");
     const panel = page.getByRole("region", { name: EN.panel });
     await expect(panel).toBeVisible();
-    expect(page.url() === before, "the URL is the same, fragment included").toBe(true);
+    expect(page.url() === before, "the URL is the same").toBe(true);
     expect(await panel.evaluate((section) => (section as HTMLElement & { kept?: string }).kept)).toBe("the same node");
   });
 
-  for (const [which, fragment] of [
-    ["a wrong token", `#${WRONG_TOKEN}`],
-    ["no token", ""],
-  ]) {
-    test(`L3.3: with ${which}, the URL stays, and the link is still not valid, in English`, async ({
+  for (const [which, kept] of [
+    ["a wrong token", WRONG_TOKEN],
+    ["no token", null],
+  ] as const) {
+    test(`L3.3: with ${which} kept, the URL stays, and the area is still refused, in English`, async ({
       page,
       seededEvent,
     }) => {
-      await open(page, `/e/${seededEvent.id}/admin${fragment}`, "Tournoi de Rennes");
-      await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(FR.invalid);
+      await keepAdminToken(page, seededEvent.id, kept);
+      await open(page, organiserPath(seededEvent), "Tournoi de Rennes");
+      await expect(areaRefused(page, FR.panel)).toBeVisible();
       const before = page.url();
 
       await switchTo(page, FR, EN, "en");
-      await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })).toContainText(EN.invalid);
-      expect(page.url() === before, "the URL is the same, fragment included").toBe(true);
+      await expect(areaRefused(page, EN.panel)).toBeVisible();
+      expect(page.url() === before, "the URL is the same").toBe(true);
     });
   }
 
@@ -164,7 +163,8 @@ test.describe("the language switch, in a browser set to French", () => {
   });
 
   test("L3.4: on the organiser's page, no reload", async ({ page, seededEvent }) => {
-    await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
+    await open(page, organiserPath(seededEvent), "Tournoi de Rennes");
     await markWindow(page);
     await switchTo(page, FR, EN, "en");
     await expect(page.getByRole("region", { name: EN.panel })).toBeVisible();

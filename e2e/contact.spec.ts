@@ -1,5 +1,6 @@
 import type { Page, Request } from "@playwright/test";
 import { expect, leaveNoToken, test as base } from "./fixtures";
+import { keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -50,7 +51,8 @@ test.describe("contact link", () => {
   test.use({ locale: "fr-FR" });
 
   test("K1: not in the organiser's panel, and no header added", async ({ page, crisp, seededEvent }) => {
-    await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
+    await open(page, organiserPath(seededEvent), "Tournoi de Rennes");
     await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
     await expect(page.getByRole("region", { name: PANEL }).getByRole("link", { name: FR })).toHaveCount(0);
     await expect(page.getByRole("region", { name: PANEL }).getByRole("button", { name: SWITCH.fr })).toHaveCount(0);
@@ -65,7 +67,8 @@ test.describe("contact link", () => {
     seededEvent,
     baseURL,
   }) => {
-    const path = `/e/${seededEvent.id}/admin#${seededEvent.token}`;
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
+    const path = organiserPath(seededEvent);
     await open(page, path, "Tournoi de Rennes");
     await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
 
@@ -83,7 +86,7 @@ test.describe("contact link", () => {
     expect(sent.includes(seededEvent.id), "what Crisp receives holds the event's id").toBe(false);
 
     // K6: the organiser's tab has not moved.
-    expect(page.url() === `${new URL(baseURL!).origin}${path}`, "the organiser's tab is still on the organiser's link").toBe(true);
+    expect(page.url() === `${new URL(baseURL!).origin}${path}`, "the organiser's tab is still on the organiser area").toBe(true);
     await expect(page.getByRole("region", { name: PANEL })).toBeVisible();
   });
 

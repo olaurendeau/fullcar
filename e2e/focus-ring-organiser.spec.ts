@@ -19,14 +19,13 @@ const FR = {
   panel: "Espace organisateur",
   refresh: "Actualiser",
   shareLink: "Lien à partager",
-  adminLink: "Lien d’organisateur",
   copy: "Copier",
   share: "Partager",
 };
 
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
 const toggle = (page: Page) => page.getByRole("button", { name: FR.panel, exact: true });
-/** A link's group, named by its label and, for the organiser's link, its badge. */
+/** The link's group, named by its label. */
 const group = (page: Page, name: string) => panel(page).getByRole("group", { name });
 
 /** Aller: Anaïs drives Bastien, Chloé is without a car; nobody has a number. Chloé is without a car at the retour too. */
@@ -50,8 +49,8 @@ test("F1.7: on /e/{id}/admin, the fold button and the legs' buttons show the rin
   // Before the page loads: Chromium headless has no native sharing, and « Partager » would be absent.
   await page.addInitScript(() => Object.defineProperty(navigator, "share", { configurable: true, value: async () => {} }));
   await page.goto(organiserPath(seededEvent));
-  const adminCopy = group(page, FR.adminLink).getByRole("button", { name: FR.copy, exact: true });
-  await expect(adminCopy).toBeVisible();
+  const shareCopy = group(page, FR.shareLink).getByRole("button", { name: FR.copy, exact: true });
+  await expect(shareCopy).toBeVisible();
   await expect(group(page, FR.shareLink).getByRole("button", { name: FR.share, exact: true })).toBeVisible();
 
   // From the top of the page, every element Tab reaches down to the button of the retour.
@@ -59,8 +58,8 @@ test("F1.7: on /e/{id}/admin, the fold button and the legs' buttons show the rin
   const reached = await walk(page, { until: legButton(page, "retour"), offsets });
   const area = reached.slice(reached.indexOf(`<button> "${FR.panel}"`));
   expect(area.slice(0, 2), "the fold button, then « Actualiser »").toEqual([`<button> "${FR.panel}"`, `<button> "${FR.refresh}"`]);
-  expect(area.slice(2, 5), "the links").toEqual([`<button> "${FR.copy}"`, `<button> "${FR.share}"`, `<button> "${FR.copy}"`]);
-  expect(area.slice(5), "« Modifier l’événement », then a button per leg").toEqual([
+  expect(area.slice(2, 4), "the link to share, and no organiser's link (OA7.3)").toEqual([`<button> "${FR.copy}"`, `<button> "${FR.share}"`]);
+  expect(area.slice(4), "« Modifier l’événement », then a button per leg").toEqual([
     expect.stringMatching(/^<button> "Modifier/),
     `<button> "Aller"`,
     `<button> "Retour"`,

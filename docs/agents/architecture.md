@@ -561,7 +561,9 @@ ci-dessus valent pour chacun.
 - **Le jeton d'admin dans le navigateur de création** : à partir de #597, il est rangé dans
   `localStorage` sous la clé `fullcar:admin-token:{id}`, au travers de
   `src/app/e/[id]/admin/admin-token-store.ts` seulement, qui remplace `admin-link.ts`. La
-  création mène à `/e/{id}/admin`, sans fragment. Le jeton est révoqué (son hash passe à
+  création mène à `/e/{id}/admin`, sans fragment. Si `localStorage` refuse le jeton, la
+  mémoire de la page le garde, le temps de la page : l'arrivée après la création ouvre
+  encore le panneau, un rechargement non. Le jeton est révoqué (son hash passe à
   nul) par « Se déconnecter » dans ce navigateur, qui envoie les jetons d'admin qu'il garde
   et les efface, par l'anonymisation, et par la suppression du compte.
 - **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et

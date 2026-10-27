@@ -7,12 +7,14 @@ import { holdToken, newToken } from "./device";
 import { leaveNoToken } from "./fixtures";
 import { expectRing, press } from "./focus-ring";
 import {
+  areaRefused,
   breakStorage,
   expect,
   foldKey,
   hideToken,
   holdActionsWith,
   isAction,
+  keepAdminToken,
   legButton,
   oneCharOff,
   organiserPath,
@@ -40,8 +42,7 @@ const FR = {
   bodyWithdrawn: "Vérifiez la connexion, puis utilisez de nouveau « Actualiser ».",
   stale: "L’espace organisateur n’est plus à jour. Utilisez « Actualiser » pour le relire.",
   nobody: "Personne ne s’est encore inscrit.",
-  invalid: "Ce lien d’organisateur n’est pas valide.",
-  failed: "Le lien d’organisateur n’a pas pu être vérifié.",
+  failed: "L’espace organisateur n’a pas pu être chargé.",
   retry: "Réessayer",
   needsJavaScript: "L’espace organisateur nécessite JavaScript : activez-le, puis rechargez la page.",
 };
@@ -283,6 +284,7 @@ test.describe("the scene of O2.5", () => {
 
     const other = await seedEvent(db);
     try {
+      await keepAdminToken(page, other.id, other.token);
       await page.goto(organiserPath(other));
       await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
     } finally {
@@ -292,7 +294,7 @@ test.describe("the scene of O2.5", () => {
     expect((await elsewhere()) === before, "sessionStorage and the cookies, as before folding").toBe(true);
   });
 
-  test("O8.5, O4.2, O9.2: on a device where an event is folded, one created from /nouveau arrives unfolded, its links and warning shown, its legs folded", async ({
+  test("O8.5, O4.2, O9.2: on a device where an event is folded, one created from /nouveau arrives unfolded, its link shown, its legs folded", async ({
     page,
     db,
     seededEvent,
@@ -310,7 +312,6 @@ test.describe("the scene of O2.5", () => {
     const created = new URL(page.url()).pathname.split("/")[2];
     try {
       await expect(panel(page).getByTestId("link").first()).toBeVisible();
-      await expect(panel(page).getByRole("note")).toBeVisible();
       for (const leg of ["aller", "retour"] as const) await expect(legButton(page, leg)).toHaveAttribute("aria-expanded", "false");
       expect(await foldKeys(page)).toEqual([[foldKey(seededEvent.id), "1"]]);
     } finally {
@@ -318,8 +319,21 @@ test.describe("the scene of O2.5", () => {
     }
   });
 
-  for (const how of ["property", "getItem", "setItem", "removeItem", "a key that holds true"] as const) {
-    test(`O8.5: with ${how.startsWith("a key") ? how : `localStorage${how === "property" ? "" : `.${how}`} throwing`}, unfolded, and the button works for the page, with no message nor error`, async ({
+  // #597: localStorage unreachable, a page load reads no admin token: the area is refused, quietly.
+  test("O8.5, #597: with the localStorage property throwing, the area refused, with no message nor error", async ({ page, seededEvent }) => {
+    const errors: string[] = [];
+    page.on("console", (message) => void (message.type() === "error" && errors.push("console error")));
+    page.on("pageerror", () => errors.push("page error"));
+    await breakStorage(page, "property");
+    await page.goto(organiserPath(seededEvent));
+    await expect(areaRefused(page)).toBeVisible();
+    await expect(alertText(page)).toHaveCount(0);
+    await page.waitForLoadState("networkidle");
+    expect(errors).toEqual([]);
+  });
+
+  for (const how of ["getItem", "setItem", "removeItem", "a key that holds true"] as const) {
+    test(`O8.5: with ${how.startsWith("a key") ? how : `localStorage.${how} throwing`}, unfolded, and the button works for the page, with no message nor error`, async ({
       page,
       seededEvent,
     }) => {
@@ -328,7 +342,7 @@ test.describe("the scene of O2.5", () => {
       page.on("pageerror", () => errors.push("page error"));
       if (how === "a key that holds true") await keepKey(page, seededEvent.id, "true");
       else {
-        if (how === "property" || how === "getItem") await keepKey(page, seededEvent.id);
+        if (how === "getItem") await keepKey(page, seededEvent.id);
         await breakStorage(page, how as BrokenStorage);
       }
       await page.goto(organiserPath(seededEvent));
@@ -343,7 +357,7 @@ test.describe("the scene of O2.5", () => {
     });
   }
 
-  test("O8.5: nothing reads or writes the key on /e/{id}, nor with an invalid link", async ({ page, seededEvent }) => {
+  test("O8.5: nothing reads or writes the key on /e/{id}, nor with the area refused", async ({ page, seededEvent }) => {
     await page.addInitScript(() => {
       const keys: string[] = [];
       Object.assign(window, { foldAccess: keys });
@@ -360,8 +374,9 @@ test.describe("the scene of O2.5", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await page.waitForLoadState("networkidle");
     expect(await accesses()).toEqual([]);
-    await page.goto(`/e/${seededEvent.id}/admin#${oneCharOff(seededEvent.token)}`);
-    await expect(alertText(page)).toContainText(FR.invalid);
+    await keepAdminToken(page, seededEvent.id, oneCharOff(seededEvent.token));
+    await page.goto(organiserPath(seededEvent));
+    await expect(areaRefused(page)).toBeVisible();
     expect(await accesses()).toEqual([]);
   });
 
@@ -374,10 +389,12 @@ test.describe("the scene of O2.5", () => {
       await expect(toggle(page)).toHaveCount(0);
       await expect(page.locator(SUMMARY)).toHaveCount(0);
     };
-    await page.goto(`/e/${seededEvent.id}/admin#${oneCharOff(seededEvent.token)}`);
-    await expect(alertText(page)).toContainText(FR.invalid);
+    await keepAdminToken(page, seededEvent.id, oneCharOff(seededEvent.token));
+    await page.goto(organiserPath(seededEvent));
+    await expect(areaRefused(page)).toBeVisible();
     await nothingToFold();
 
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
     const reads = await holdActionsWith(page, seededEvent.token);
     await page.goto(organiserPath(seededEvent));
     await expect.poll(reads.held).toBe(1);

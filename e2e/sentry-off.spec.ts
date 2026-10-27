@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { keepAdminToken, organiserPath } from "./organiser";
 
 /*
  * #234: built without NEXT_PUBLIC_SENTRY_DSN, as the CI builds it, no page downloads the SDK,
@@ -51,7 +52,8 @@ test("without a DSN, no SDK and no request to Sentry or another origin, on the a
   });
   const sentryIn = (page: Page) => page.evaluate(() => "__SENTRY__" in globalThis);
 
-  await page.goto(`/e/${seededEvent.id}/admin#${seededEvent.token}`);
+  await keepAdminToken(page, seededEvent.id, seededEvent.token);
+  await page.goto(organiserPath(seededEvent));
   await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
   await failInThePage(page, failures);
   const onAdmin = await sentryIn(page);
