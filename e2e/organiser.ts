@@ -361,11 +361,13 @@ interface Sent {
  * A read the page leaves in flight, as a test ends on what its answer has already shown, gets no
  * `response`: its body is read all the same, by nobody. Read once the context closes, which first
  * disposes of every body fetched, it failed as « Response has been disposed », unhandled, and
- * failed the test (#764). `stop()` waits for every body still being read, and a body nobody reads
- * is not left unhandled; one the page did receive and that cannot be read still fails the check.
- * That check reads every exchange once the test is over: one that fails before is not left
- * unhandled either, which made Playwright stop the worker mid-teardown, the next page there
- * aborted (« frame was detached », #820).
+ * failed the test (#764). What fixes it is the handler `read()` attaches to every body: a body
+ * nobody reads is no longer left unhandled, whenever it fails. `stop()` waits for every body still
+ * being read as well, so that none is still in flight when the context closes: a safeguard on top
+ * of the handler, not what fixes #764. A body the page did receive and that cannot be read still
+ * fails the check. That check reads every exchange once the test is over: one that fails before is
+ * not left unhandled either, which made Playwright stop the worker mid-teardown, the next page
+ * there aborted (« frame was detached », #820).
  */
 async function record(context: BrowserContext, hide: (text: string) => string) {
   const state = { on: true };
@@ -466,6 +468,12 @@ async function record(context: BrowserContext, hide: (text: string) => string) {
     /** Ends the recording: no list above grows after it. */
     async stop() {
       state.on = false;
+      // Not bounded by `route.fetch()`, which has no timeout here: no `actionTimeout` is set, and
+      // the context's timeout is then 0. What bounds this wait is a timeout the size of the test's
+      // (30 s), which Playwright grants afresh to afterEach hooks and fixture teardown. A search
+      // (`/api/lieux`) is bounded by the app at about 3 s (`TIMEOUT_MS` in
+      // `src/app/api/lieux/photon.ts`), and a tile (`/tuiles/…`) at 5 s (`TIMEOUT_MS` in
+      // `src/app/tuiles/[z]/[x]/[y]/geoapify.ts`).
       await Promise.all(reading);
       await context.unrouteAll({ behavior: "ignoreErrors" });
     },
