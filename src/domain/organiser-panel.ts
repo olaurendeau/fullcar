@@ -10,6 +10,7 @@ import { buildBoard, type BoardRows } from "./board";
 import { coverage, type Coverage } from "./coverage";
 import { deviceMatrix, type MatrixRow } from "./device-matrix";
 import type { Leg } from "./leg";
+import type { PendingNotice } from "./pending-send";
 import type { OrganiserLegBoard } from "./phone-visibility";
 import type { WallTime } from "./wall-clock";
 
@@ -18,11 +19,12 @@ import type { WallTime } from "./wall-clock";
  * state and nothing else, as organiser-access.ts decides it. `invalid` for an unknown event;
  * `signIn` (OA7.1), `notYours` with the address of the visitor's own session (OA7.2),
  * `pending` (OA7.7), `orphan` (OA7.9), `ended` for the organiser of an anonymised event (OA8.4).
+ * The panel of an event awaiting confirmation carries its notice, `pending` (OA1.7, OA2.1).
  */
 export type OrganiserPanelAnswer =
   | { state: "invalid" | "signIn" | "pending" | "orphan" | "ended" }
   | { state: "notYours"; email: string }
-  | { state: "panel"; legs: OrganiserLeg[]; persons: OrganiserPerson[] };
+  | { state: "panel"; legs: OrganiserLeg[]; persons: OrganiserPerson[]; pending?: PendingNotice };
 
 /**
  * A person of the event, for « Personnes inscrites » (epic #645, RP4.2): an id, a first name

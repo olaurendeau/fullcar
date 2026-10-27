@@ -161,6 +161,20 @@ describe("checkFromAnswer", () => {
     });
   });
 
+  // OA1.7, OA2.1: a pending event's panel comes with its notice; a malformed one is none.
+  it("shows the notice « Confirmez votre adresse » with the panel, when the server sends one", () => {
+    const pending = { email: "claire.martin@exemple.fr", send: "addressLimit" };
+    expect(checkFromAnswer({ state: "panel", legs, pending }, "https://fullcar.example", ID)).toStrictEqual({
+      state: "valid",
+      publicUrl: `https://fullcar.example/e/${ID}`,
+      legs,
+      pending,
+    });
+    expect(checkFromAnswer({ state: "panel", legs, pending: { send: "sent" } }, "https://fullcar.example", ID)).not.toHaveProperty(
+      "pending",
+    );
+  });
+
   // #596: each state of the access rule is refused, until its own screen comes (#598).
   it.each([
     { state: "invalid" },

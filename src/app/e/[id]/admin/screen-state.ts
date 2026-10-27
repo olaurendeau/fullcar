@@ -3,6 +3,7 @@ import type { LegCounts } from "@/db/legs";
 import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
+import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { positionOf } from "@/domain/place";
 import { isWallClock } from "@/domain/wall-clock";
 import type { EventState } from "../event-state";
@@ -18,11 +19,13 @@ import type { OrganiserCheck } from "./admin-token-store";
 
 /**
  * The panel as last read: the link to share, and its legs, or `null` once withdrawn (O1.10):
- * the link stays, the sections go. There is no organiser's link any more (OA7.3).
+ * the link stays, the sections go. There is no organiser's link any more (OA7.3). `pending`, the
+ * notice « Confirmez votre adresse » of an event awaiting confirmation (OA1.7, OA2.1).
  */
 export interface Panel {
   publicUrl: string;
   legs: OrganiserLeg[] | null;
+  pending?: PendingNotice;
 }
 
 /** The two lists of a leg's section (O5.6). */
@@ -71,7 +74,9 @@ export type ScreenEvent =
   /** The panel read again after an action of the board, the latest such read (O1.10): with its legs, or without on a failure. */
   | { type: "reread"; legs?: OrganiserLeg[] }
   | { type: "listToggled"; key: string }
-  | { type: "legToggled"; leg: Leg };
+  | { type: "legToggled"; leg: Leg }
+  /** The notice read again while its email is on its way (OA1.7): without one, it goes (OA2.6). */
+  | { type: "pendingRead"; pending?: PendingNotice };
 
 function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
   switch (check.state) {
@@ -82,8 +87,8 @@ function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
     case "failed":
       return { state: "failed", retrying: check.retrying ?? false };
     case "valid": {
-      const { publicUrl, legs } = check;
-      const panel = { publicUrl, legs };
+      const { publicUrl, legs, pending } = check;
+      const panel = { publicUrl, legs, ...(pending && { pending }) };
       return { state: "ready", panel, refreshing: null, refreshFailed: 0, refreshed: false, expanded: new Set(), folded, unfolded: new Set() };
     }
   }
@@ -130,6 +135,10 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   if (event.type === "checked") return fromCheck(event.check, event.folded);
   if (state.state !== "ready") return state;
   if (event.type === "toggleFolded") return { ...state, folded: !state.folded };
+  if (event.type === "pendingRead") {
+    const { publicUrl, legs } = state.panel;
+    return { ...state, panel: { publicUrl, legs, ...(event.pending && { pending: event.pending }) } };
+  }
   if (event.type === "reread") {
     // Ending a refresh, it is that refresh's outcome, said as a refresh says it (O1.9, O5.4).
     const refreshing = state.refreshing !== null;
@@ -152,6 +161,26 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   if (state.refreshing !== event.read) return state;
   if (!event.legs) return { ...state, refreshing: null, refreshFailed: state.refreshFailed + 1 };
   return applied(state, event.legs, true);
+}
+
+/** How often the notice is read again while its email is on its way (OA1.7: its result within 15 s of the arrival). */
+export const POLL_MS = 2_000;
+
+/** Whether the notice is read again: on the panel, while its email is on its way. */
+export function pollsPending(state: ScreenState): boolean {
+  return state.state === "ready" && state.panel.pending?.send === "sending";
+}
+
+/**
+ * The notice of a read of the panel, `{}` for a panel without one (OA2.6); nothing to apply
+ * when the read failed or did not answer the panel.
+ */
+export function pendingRead(panel: Sent<unknown>): { pending?: PendingNotice } | undefined {
+  if (!panel.ok) return undefined;
+  const answer = panel.value as { state?: unknown; pending?: unknown } | null | undefined;
+  if (answer?.state !== "panel") return undefined;
+  const pending = pendingNoticeOf(answer.pending);
+  return pending ? { pending } : {};
 }
 
 /** The panel's legs of a read of the panel, or nothing when it failed or the link is no longer valid. */

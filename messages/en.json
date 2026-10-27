@@ -371,7 +371,22 @@
       "free": "{free, plural, one {# free seat} other {# free seats}}",
       "missing": "{missing, plural, one {# seat missing} other {# seats missing}}"
     },
-    "edit": "Edit the event"
+    "edit": "Edit the event",
+    "pending": {
+      "title": "Confirm your email address",
+      "sending": "Sending the link to {email}…",
+      "body": "We sent a link to {email}. Open it, on any device, to find this event in My events. Until then, the organiser area only opens in this browser.",
+      "resend": "Resend the email",
+      "fix": "Fix the address",
+      "sendFailed": {
+        "title": "The email may not have been sent",
+        "body": "Your event is created, but the link to confirm {email} may not have been sent. Use “Resend the email”: if the first one arrives anyway, both links stay valid. Until then, the organiser area only opens in this browser."
+      },
+      "addressLimit": {
+        "title": "The email did not go out",
+        "body": "Your event is created, but too many emails went to {email} this hour. In an hour, use “Resend the email”. Until then, the organiser area only opens in this browser."
+      }
+    }
   },
   "EditEvent": {
     "title": "Edit the event",

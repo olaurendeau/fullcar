@@ -6,20 +6,23 @@ import { useId, useRef, type ReactNode, type Ref, type RefObject } from "react";
 import type { Said } from "@/app/e/[id]/admin/screen-state";
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
+import type { PendingNotice as Notice } from "@/domain/pending-send";
 import type { WallClock } from "@/domain/wall-clock";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CopyableLink, ShareButton } from "./copyable-link";
 import { OrganiserLegs } from "./organiser-leg";
 import { OrganiserSummary } from "./organiser-summary";
+import { PendingNotice } from "./pending-notice";
 import { ReadButton } from "./read-button";
 
 /**
  * The organiser's panel (#3, R4), the same at every visit (C4.7): the link to share, and no
- * organiser's link nor « Gardez ce lien » any more (OA7.3); under it, a
+ * organiser's link nor « Gardez ce lien » any more (OA7.3); after it, the notice « Confirmez
+ * votre adresse » of a pending event, folded with the rest (OA2.1, OA2.8); under them, a
  * section per leg (#179), folded at every appearance, its title the button that unfolds it
  * (organizer-view v3.5, O9), and no tiles any more (O9.7). From 1024 px, the panel widens,
- * the link to share takes the first of two columns and the sections two more (O4.1, OA7.8).
+ * the link to share takes the first of two columns, the notice the second, and the sections two more (O4.1, OA7.8).
  * Reading the token is admin-token-store.ts's alone. Its title is the button that
  * folds it (#204, O8.1), `titleRef`, the focus's place after « Réessayer » (O5.8). Folded,
  * all but the title line and its alert is `hidden`, still mounted, and a line per leg sums it
@@ -34,6 +37,7 @@ import { ReadButton } from "./read-button";
  */
 export function AdminPanel({
   publicUrl,
+  pending,
   titleRef,
   legs,
   allerAt,
@@ -53,6 +57,8 @@ export function AdminPanel({
   onEdit,
 }: {
   publicUrl: string;
+  /** The notice « Confirmez votre adresse » of an event awaiting confirmation, after the link to share (OA2.1). */
+  pending?: Notice;
   titleRef: RefObject<HTMLButtonElement | null>;
   legs: OrganiserLeg[] | null;
   allerAt: WallClock;
@@ -134,13 +140,14 @@ export function AdminPanel({
       </div>
       {folded && (legs ? <OrganiserSummary legs={legs} /> : !framed && <Stale />)}
       <div ref={content} id={contentId} hidden={folded} className="flex flex-col gap-4">
-        {/* From 1024 px, the link to share keeps its column; the right one stays empty (OA7.8). */}
+        {/* From 1024 px, the link to share keeps its column; the right one is the notice's, or stays empty (OA7.8). */}
         <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
           <LinkGroup label={t("shareLink.label")} hint={t("shareLink.hint")}>
             <CopyableLink url={publicUrl}>
               <ShareButton url={publicUrl} />
             </CopyableLink>
           </LinkGroup>
+          {pending && <PendingNotice pending={pending} />}
         </div>
         {/* After the link to share, before the sections; from 1024 px, under both columns, at its width (v3.3). */}
         <Button

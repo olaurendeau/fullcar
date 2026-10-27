@@ -3,6 +3,7 @@ import { readSessionToken } from "@/app/session-token";
 import type { LegCounts } from "@/db/legs";
 import type { EventFields, EventHeader } from "@/domain/event";
 import type { OrganiserLeg, OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import type { EditEventOutcome } from "../edit-event";
 import { sendAction, type Sent } from "../run-action";
 import { loadOrganiserPanel, updateEvent } from "./actions";
@@ -85,7 +86,7 @@ export function goToOrganiserArea(router: { push(href: string): void }, id: stri
 
 export type OrganiserCheck =
   | { state: "checking" }
-  | { state: "valid"; publicUrl: string; legs: OrganiserLeg[] }
+  | { state: "valid"; publicUrl: string; legs: OrganiserLeg[]; pending?: PendingNotice }
   | { state: "refused" }
   | { state: "failed"; retrying?: boolean };
 
@@ -94,14 +95,17 @@ const REFUSED = new Set(["invalid", "signIn", "notYours", "pending", "orphan", "
 
 /**
  * What the server's answer means: the panel with its legs and the link to share (C4.9 amended,
- * OA7.3), or refused for every state the access rule refuses with (#596). Anything else, such
+ * OA7.3), with the notice of a pending event (OA1.7), or refused for every state the access rule refuses with (#596). Anything else, such
  * as the `undefined` Next resolves an action with on an `x-action-redirect` response, is a
  * failed check: the organiser is never refused for it.
  */
 export function checkFromAnswer(answer: unknown, origin: string, id: string): OrganiserCheck {
   if (typeof answer !== "object" || answer === null) return { state: "failed" };
   const { state, legs } = answer as { state?: unknown; legs?: unknown };
-  if (state === "panel" && Array.isArray(legs)) return { state: "valid", publicUrl: `${origin}/e/${id}`, legs: legs as OrganiserLeg[] };
+  if (state === "panel" && Array.isArray(legs)) {
+    const pending = pendingNoticeOf((answer as { pending?: unknown }).pending);
+    return { state: "valid", publicUrl: `${origin}/e/${id}`, legs: legs as OrganiserLeg[], ...(pending && { pending }) };
+  }
   if (typeof state === "string" && REFUSED.has(state)) return { state: "refused" };
   return { state: "failed" };
 }

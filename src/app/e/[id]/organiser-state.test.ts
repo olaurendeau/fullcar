@@ -6,7 +6,7 @@ import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
 import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
-import { confirmSeededEvent, seedEvent } from "@/db/test-events";
+import { confirmSeededEvent, seedEvent, seedPendingSend } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import type { Leg } from "@/domain/leg";
@@ -353,5 +353,58 @@ describe("readOrganiserState", () => {
     await expect(atomically(getDb(), (trx) => readOrganiserState(trx, "Zz9yXw8v", { adminToken: undefined }))).rejects.toThrow(
       "onOneSnapshot: the transaction given is in read committed, not repeatable read",
     );
+  });
+});
+
+describe("readOrganiserState: the notice « Confirmez votre adresse » (OA1.7, OA1.10, OA2.1)", () => {
+  const NOW = new Date("2026-10-27T09:00:00.000Z");
+  const ago = (ms: number) => new Date(NOW.getTime() - ms);
+  const HOUR = 60 * 60_000;
+
+  it.each([
+    ["sent", "sent", ago(HOUR), "sent"],
+    ["failed", "failed", ago(24 * HOUR), "failed"],
+    ["the limit of the address", "address_limit", ago(24 * HOUR), "addressLimit"],
+    ["still sending, 2 s ago", "sending", ago(2_000), "sending"],
+    // The function killed: nothing will end it (comment on #600).
+    ["still sending, 1 hour ago", "sending", ago(HOUR), "failed"],
+  ] as const)("the creation browser's panel carries the address and the result kept: %s", async (_, status, at, send) => {
+    await withRollback(async (trx) => {
+      const { id, token } = await seedEvent(trx);
+      const email = anAddress();
+      await seedPendingSend(trx, id, { email, status, at });
+      const answer = await readOrganiserState(trx, id, { adminToken: token }, NOW);
+      expect(answer.state === "panel" && answer.pending).toStrictEqual({ email, send });
+    });
+  });
+
+  it("OA7.7: anyone else reads « pending » and nothing else, never the address", async () => {
+    await withRollback(async (trx) => {
+      const { id, token } = await seedEvent(trx);
+      const email = anAddress();
+      await seedPendingSend(trx, id, { email, status: "sent", at: ago(HOUR) });
+      const session = await seedSession(trx, await seedAccount(trx));
+      for (const proof of [{}, { adminToken: oneCharOff(token) }, { session }]) {
+        const answer = await readOrganiserState(trx, id, proof, NOW);
+        expect(answer).toStrictEqual({ state: "pending" });
+        expect(JSON.stringify(answer)).not.toContain(email);
+      }
+    });
+  });
+
+  it("OA2.6: once confirmed, the panel has no notice, for the session as for the creation browser", async () => {
+    await withRollback(async (trx) => {
+      const { id, token } = await seedEvent(trx);
+      await seedPendingSend(trx, id, { email: anAddress(), status: "sent", at: ago(HOUR) });
+      // As a confirmation link leaves it: no address awaiting, then the account (#586).
+      await trx.updateTable("event").set({ pending_email: null }).where("id", "=", id).execute();
+      const accountId = await confirmSeededEvent(trx, id);
+      const session = await seedSession(trx, accountId);
+      for (const proof of [{ adminToken: token }, { session }]) {
+        const answer = await readOrganiserState(trx, id, proof, NOW);
+        expect(answer.state).toBe("panel");
+        expect(answer).not.toHaveProperty("pending");
+      }
+    });
   });
 });
