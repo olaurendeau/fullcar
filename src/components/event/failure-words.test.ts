@@ -203,6 +203,12 @@ describe("cellNotDone and cellWhy: a cell's failure names the person, the leg an
     const offered = Object.values(states).filter((state) => cellActions(state).includes("leaveCar"));
     expect(offered.map((state) => state.kind)).toEqual(["passenger"]);
   });
+
+  // v4.8, rule 8: only a change of her number meets it; a cell's action gets the generic reason.
+  it("gives `phoneWhileDriving` the generic reason", () => {
+    const { state } = CELLS["Cellule, « Sortir de la voiture » : Léa, voiture de Claire"];
+    expect(cellWhy("phoneWhileDriving", { firstName: "Léa", leg: "aller", state })).toEqual(whyOf("invalid"));
+  });
 });
 
 // #225: « Modifier » names the fields it sent; a refusal of a person's form says its reason.
