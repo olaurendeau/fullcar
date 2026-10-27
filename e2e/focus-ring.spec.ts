@@ -18,6 +18,8 @@ const field = (page: Page, label: string) => page.getByLabel(label, { exact: tru
 const contactReached = expect.stringMatching(/^<a> "Nous contacter/);
 /** « Code source sur GitHub » (#489), as `walk` names it. */
 const sourceReached = expect.stringMatching(/^<a> "Code source sur GitHub/);
+/** « Confidentialité » (#612, OA10.3), as `walk` names it. */
+const privacyReached = '<a> "Confidentialité"';
 
 /** The page, hydrated: the language switch is inactive until then. */
 async function open(page: Page, path: string) {
@@ -66,7 +68,7 @@ test.describe("the focus ring", () => {
   test("F1.1, F1.13: on /nouveau, every element Tab reaches down to « Nous contacter » shows the ring", async ({ page }) => {
     await open(page, "/nouveau");
     const reached = await walk(page, { until: contact(page) });
-    expect(reached.slice(-5)).toEqual(['<button> "Créer"', '<a> "Accueil"', '<button> "English"', sourceReached, contactReached]);
+    expect(reached.slice(-6)).toEqual(['<button> "Créer"', '<a> "Accueil"', '<button> "English"', privacyReached, sourceReached, contactReached]);
     // The title, the place, the dates and times; « Retour » and the three options, by their box.
     expect(reached.filter((element) => element === "<input>").length, "the fields").toBeGreaterThanOrEqual(4);
     expect(reached.filter((element) => element === "<button>").length, "the boxes").toBe(4);
@@ -77,7 +79,13 @@ test.describe("the focus ring", () => {
   }) => {
     await open(page, "/");
     const reached = await walk(page, { until: contact(page) });
-    expect(reached).toEqual(['<a> "Créer un événement"', '<button> "English"', sourceReached, contactReached]);
+    expect(reached).toEqual([
+      '<a> "Créer un événement"',
+      '<button> "English"',
+      privacyReached,
+      sourceReached,
+      contactReached,
+    ]);
   });
 
   test("F1.8: « Lieu », in error and focused by « Créer », shows the ring and no halo; the halo comes back once it is left", async ({

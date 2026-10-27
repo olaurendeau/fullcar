@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserUnsafeReached } from "@/domain/test-browser-safe";
-import { readSessionToken, sendVisit, sessionTokens, type TokenStorage } from "./session-token";
+import { forgetSessionToken, readSessionToken, sendVisit, sessionTokens, type TokenStorage } from "./session-token";
 
 /** A `localStorage` in memory, whose every call is a spy. */
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -140,9 +140,37 @@ describe("sendVisit", () => {
   });
 });
 
+describe("forgetSessionToken", () => {
+  // OA9.1: « Se déconnecter » leaves this browser without its session.
+  it("forgets the token sent, and touches no other key", () => {
+    const storage = fakeStorage({ [KEY]: TOKEN, "fullcar:admin-token:Ab3dEf7h": OTHER });
+    tokensOf(storage).forgetSessionToken(TOKEN);
+    expect([...storage.items]).toEqual([["fullcar:admin-token:Ab3dEf7h", OTHER]]);
+    expect(new Set(keysPassed(storage))).toEqual(new Set([KEY]));
+  });
+
+  // Another tab may open a new session while the sign-out is on its way: that one stays.
+  it("keeps a token other than the one sent", () => {
+    const storage = fakeStorage({ [KEY]: OTHER });
+    tokensOf(storage).forgetSessionToken(TOKEN);
+    expect([...storage.items]).toEqual([[KEY, OTHER]]);
+  });
+
+  it("throws nothing when localStorage cannot be reached", () => {
+    expect(() => sessionTokens({ storage: insecure }).forgetSessionToken(TOKEN)).not.toThrow();
+  });
+});
+
 describe("bound to window.localStorage", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("forgets in window.localStorage", () => {
+    const local = fakeStorage({ [KEY]: TOKEN });
+    vi.stubGlobal("window", { localStorage: local });
+    forgetSessionToken(TOKEN);
+    expect(local.items.size).toBe(0);
   });
 
   it("reads and forgets in window.localStorage only", async () => {

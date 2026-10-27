@@ -47,6 +47,7 @@ async function seedScene(db: Db, eventId: string, token: string, marcsToken: str
 
 const contact = (page: Page) => page.getByRole("link", { name: "Nous contacter (s’ouvre dans un nouvel onglet)", exact: true });
 const home = (page: Page) => page.getByRole("link", { name: "Accueil", exact: true });
+const privacy = (page: Page) => page.getByRole("link", { name: "Confidentialité", exact: true });
 const source = (page: Page) =>
   page.getByRole("link", { name: "Code source sur GitHub (s’ouvre dans un nouvel onglet)", exact: true });
 const languageSwitch = (page: Page) => page.getByRole("button", { name: "English", exact: true });
@@ -302,7 +303,7 @@ test.describe("the focus ring on the event's page", () => {
 test.describe("the focus ring on the event's page, without JavaScript", () => {
   test.use({ locale: "fr-FR", javaScriptEnabled: false });
 
-  test("F1.18: « Accueil », « Code source sur GitHub » and « Nous contacter » reached by Tab show the ring; the inactive language switch is not reached", async ({
+  test("F1.18: « Accueil », « Confidentialité », « Code source sur GitHub » and « Nous contacter » reached by Tab show the ring; the inactive language switch is not reached", async ({
     db,
     page,
     seededEvent,
@@ -313,6 +314,9 @@ test.describe("the focus ring on the event's page, without JavaScript", () => {
 
     await pressUntil(page, "Tab", home(page), 60);
     expect((await expectRing(home(page))).background).toBe(WHITE);
+    await press(page, "Tab");
+    await expect(privacy(page)).toBeFocused();
+    expect((await expectRing(privacy(page))).background).toBe(WHITE);
     await press(page, "Tab");
     await expect(source(page)).toBeFocused();
     expect((await expectRing(source(page))).background).toBe(WHITE);

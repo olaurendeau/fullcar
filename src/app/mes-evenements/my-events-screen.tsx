@@ -10,6 +10,7 @@ import { readSessionToken } from "@/app/session-token";
 import { ReadButton } from "@/components/event/read-button";
 import { Button } from "@/components/ui/button";
 import { myEvents } from "./actions";
+import { MyAccount } from "./my-account";
 import { MyEventRow } from "./my-event-row";
 import { myEventsRead, PAST_SHOWN, shownPast, type MyEventsRead, type MyEventsShown } from "./screen-state";
 
@@ -21,7 +22,8 @@ type Screen = MyEventsRead | { state: "loading" };
  * the body. Without a session, or with one the server says ended, the page leads to
  * /connexion, whose link brings it back here (OA6.8, OA4.4). While it reads, a status line;
  * on a failure, the alert and « Réessayer », after which the first title of the list takes
- * the focus, or the button keeps it on a new failure (« Le focus »).
+ * the focus, or the button keeps it on a new failure (« Le focus »). Below the events,
+ * « Mon compte » (OA9.1).
  */
 export function MyEventsScreen() {
   const t = useTranslations("MyEvents");
@@ -92,6 +94,7 @@ export function MyEventsScreen() {
         <Link href="/nouveau">{tHome("create")}</Link>
       </Button>
       {content}
+      {screen.state === "events" && <MyAccount email={screen.list.email} />}
     </>
   );
 }
