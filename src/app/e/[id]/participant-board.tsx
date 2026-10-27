@@ -218,7 +218,12 @@ export function ParticipantBoard({
         return sent.ok ? { ok: true, value: stateRead(sent) } : sent;
       },
       apply: setBoard,
-      applyEvent: (event) => setBoard({ event, legs: latest.current.legs.filter(({ leg }) => leg === "aller" || event.retourAt) }),
+      applyEvent: (event) =>
+        setBoard({
+          event,
+          options: latest.current.options,
+          legs: latest.current.legs.filter(({ leg }) => leg === "aller" || event.retourAt),
+        }),
       succeed,
       fail,
     }),

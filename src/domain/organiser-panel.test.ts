@@ -26,6 +26,7 @@ function car(
     position: null,
     seats,
     passengers: passengers.map(person),
+    stops: [],
     freeSeats,
     full: freeSeats === 0,
     driverHasPhone,
@@ -155,6 +156,7 @@ describe("organiserPersons (RP4.2)", () => {
     personId,
     leg,
     rideId,
+    stopId: null,
     placedAt: new Date(Date.UTC(2026, 9, 26, 8, 0, second)),
   });
   const ride = (id: string, leg: Leg, driverId: string): RideRow => ({
@@ -181,6 +183,7 @@ describe("organiserPersons (RP4.2)", () => {
     ],
     rides: [ride("r1", "aller", "lea")],
     placements: [placement("ines", "aller", null, 1), placement("hugo", "aller", "r1", 2), placement("hugo", "retour", null, 3)],
+    stops: [],
   };
 
   it("lists every person in the event's order, a cell per leg, those who do no leg included", () => {
@@ -227,7 +230,7 @@ describe("organiserPersons (RP4.2)", () => {
   });
 
   it("is empty when nobody has signed up", () => {
-    expect(organiserPersons({ persons: [], rides: [], placements: [] }, ["aller", "retour"])).toStrictEqual([]);
+    expect(organiserPersons({ persons: [], rides: [], placements: [], stops: [] },["aller", "retour"])).toStrictEqual([]);
   });
 
   it("carries no number, even from rows that hold one (Q2 = a)", () => {

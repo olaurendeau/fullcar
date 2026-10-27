@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { buildBoard, legBoard, type BoardRows, type PersonRow, type PlacementRow, type RideRow } from "./board";
+import {
+  buildBoard,
+  legBoard,
+  type BoardRows,
+  type PersonRow,
+  type PlacementRow,
+  type RideRow,
+  type StopRow,
+} from "./board";
 
 const NONE: ReadonlySet<string> = new Set();
 
 function person(id: string, firstName = id): PersonRow {
   return { id, firstName };
+}
+
+function stop(id: string, rideId: string, overrides: Partial<StopRow> = {}): StopRow {
+  return { id, rideId, location: "Mairie de Pacé", time: "07:30:00", position: null, ...overrides };
 }
 
 function ride(id: string, driverId: string, overrides: Partial<RideRow> = {}): RideRow {
@@ -22,13 +34,18 @@ function ride(id: string, driverId: string, overrides: Partial<RideRow> = {}): R
 }
 
 let clock = 0;
-function placed(personId: string, rideId: string | null, leg: RideRow["leg"] = "aller"): PlacementRow {
+function placed(
+  personId: string,
+  rideId: string | null,
+  leg: RideRow["leg"] = "aller",
+  stopId: string | null = null,
+): PlacementRow {
   clock += 1;
-  return { personId, leg, rideId, placedAt: new Date(Date.UTC(2026, 9, 14, 12, 0, clock)) };
+  return { personId, leg, rideId, stopId, placedAt: new Date(Date.UTC(2026, 9, 14, 12, 0, clock)) };
 }
 
 function rows(partial: Partial<BoardRows>): BoardRows {
-  return { persons: [], rides: [], placements: [], ...partial };
+  return { persons: [], rides: [], placements: [], stops: [], ...partial };
 }
 
 describe("legBoard: cars", () => {
@@ -69,6 +86,7 @@ describe("legBoard: cars", () => {
         ],
         freeSeats: 1,
         full: false,
+        stops: [],
       },
     ]);
   });
@@ -145,6 +163,83 @@ describe("legBoard: cars", () => {
       NONE,
     );
     expect(board.cars.map((car) => car.id)).toEqual(["early", "late"]);
+  });
+});
+
+describe("legBoard: stops (RV8.3)", () => {
+  const people = [person("marc"), person("lea"), person("tom"), person("ana")];
+
+  it("a car without a stop has none", () => {
+    const board = legBoard("aller", rows({ persons: people, rides: [ride("r1", "marc")] }), NONE);
+    expect(board.cars[0].stops).toEqual([]);
+  });
+
+  it("three stops come by time, then by the order they were read in", () => {
+    const board = legBoard(
+      "aller",
+      rows({
+        persons: people,
+        rides: [ride("r1", "marc")],
+        stops: [
+          stop("a", "r1", { time: "07:10:00", location: "Gare", position: { lat: 48.1, lng: -1.7 } }),
+          stop("c", "r1", { time: "07:20:00" }),
+          stop("b", "r1", { time: "07:20:00" }),
+          stop("z", "r1", { time: "06:55:00" }),
+        ],
+      }),
+      NONE,
+    );
+    expect(board.cars[0].stops).toEqual([
+      { id: "z", location: "Mairie de Pacé", time: "06:55:00", position: null, passengerIds: [] },
+      { id: "a", location: "Gare", time: "07:10:00", position: { lat: 48.1, lng: -1.7 }, passengerIds: [] },
+      { id: "c", location: "Mairie de Pacé", time: "07:20:00", position: null, passengerIds: [] },
+      { id: "b", location: "Mairie de Pacé", time: "07:20:00", position: null, passengerIds: [] },
+    ]);
+  });
+
+  it("a passenger at stop 2 is in the passengerIds of stop 2 only, in boarding order", () => {
+    const board = legBoard(
+      "aller",
+      rows({
+        persons: people,
+        rides: [ride("r1", "marc")],
+        stops: [stop("s1", "r1", { time: "07:10:00" }), stop("s2", "r1", { time: "07:20:00" })],
+        placements: [placed("tom", "r1", "aller", "s2"), placed("lea", "r1", "aller", "s2"), placed("ana", "r1")],
+      }),
+      NONE,
+    );
+    expect(board.cars[0].stops.map((s) => [s.id, s.passengerIds])).toEqual([
+      ["s1", []],
+      ["s2", ["tom", "lea"]],
+    ]);
+    expect(board.cars[0].passengers.map((p) => p.id)).toEqual(["tom", "lea", "ana"]);
+  });
+
+  it("a stopId that is not a stop of the car is ignored, as is the stop of another car", () => {
+    const board = legBoard(
+      "aller",
+      rows({
+        persons: people,
+        rides: [ride("r1", "marc"), ride("r2", "ana", { departureTime: "08:00:00" })],
+        stops: [stop("s1", "r1"), stop("s2", "r2")],
+        placements: [placed("lea", "r1", "aller", "s2"), placed("tom", "r1", "aller", "nowhere")],
+      }),
+      NONE,
+    );
+    const [first, second] = board.cars;
+    expect(first.stops.map((s) => s.passengerIds)).toEqual([[]]);
+    expect(second.stops.map((s) => s.passengerIds)).toEqual([[]]);
+    expect(first.passengers.map((p) => p.id)).toEqual(["lea", "tom"]);
+  });
+
+  it("the retour never has a stop, even when a row says so", () => {
+    const data = rows({
+      persons: people,
+      rides: [ride("r1", "marc", { leg: "retour" })],
+      stops: [stop("s1", "r1")],
+      placements: [placed("lea", "r1", "retour", "s1")],
+    });
+    expect(legBoard("retour", data, NONE).cars[0].stops).toEqual([]);
   });
 });
 

@@ -25,8 +25,17 @@ function storedPosition(lat: number | null, lng: number | null): Position | null
   return lat === null || lng === null ? null : { lat, lng };
 }
 
-/** Everything of one event's persons, Rides and Placements, both legs; nothing of another event. */
-export async function readEventRows(db: Kysely<Database>, eventId: string): Promise<EventRows> {
+/**
+ * Everything of one event's persons, Rides and Placements, both legs; nothing of another event.
+ * The Stops, and the Stop where each Placement boards, are read only when `stops` is true, the
+ * event's option (RV8.3): without it, `stops` is empty and every `stopId` is `null`, whatever
+ * the tables hold.
+ */
+export async function readEventRows(
+  db: Kysely<Database>,
+  eventId: string,
+  { stops: withStops }: { stops: boolean },
+): Promise<EventRows> {
   const persons = await db
     .selectFrom("person")
     .select(PERSON_COLUMNS)
@@ -44,11 +53,22 @@ export async function readEventRows(db: Kysely<Database>, eventId: string): Prom
   const placements = await db
     .selectFrom("placement")
     .select(["person_id", "leg", "ride_id", "placed_at"])
+    .$if(withStops, (query) => query.select("stop_id"))
     .where("event_id", "=", eventId)
     .orderBy("placed_at")
     .orderBy("person_id")
     .orderBy("leg")
     .execute();
+  const stops = withStops
+    ? await db
+        .selectFrom("stop")
+        .select(["id", "ride_id", "location", "location_lat", "location_lng", "stop_time"])
+        .where("event_id", "=", eventId)
+        .orderBy("stop_time")
+        .orderBy("rank")
+        .orderBy("id")
+        .execute()
+    : [];
 
   return {
     persons: persons.map((row) => ({ id: row.id, firstName: row.first_name })),
@@ -66,7 +86,15 @@ export async function readEventRows(db: Kysely<Database>, eventId: string): Prom
       personId: row.person_id,
       leg: row.leg,
       rideId: row.ride_id,
+      stopId: row.stop_id ?? null,
       placedAt: row.placed_at,
+    })),
+    stops: stops.map((row) => ({
+      id: row.id,
+      rideId: row.ride_id,
+      location: row.location,
+      time: row.stop_time,
+      position: storedPosition(row.location_lat, row.location_lng),
     })),
     phonesById: new Map(persons.map((row) => [row.id, row.phone])),
   };

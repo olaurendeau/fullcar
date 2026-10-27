@@ -576,7 +576,7 @@ export const test = creatorTest.extend<{ organiserTraffic: OrganiserTraffic }>({
       // Every number of the event, by the only query that reads them, named by its person's
       // rank in the event, as the scene names them by letter: never shown.
       const numbersNow = async () => {
-        const { persons, phonesById } = await readEventRows(db, id);
+        const { persons, phonesById } = await readEventRows(db, id, { stops: false });
         return persons.flatMap(({ id: personId }, n): [string, string][] => {
           const phone = phonesById.get(personId);
           return phone ? digitsOf(phone).map((form) => [`the number of person ${n + 1}`, form]) : [];

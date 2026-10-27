@@ -92,6 +92,7 @@ describe("readOrganiserState", () => {
       const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
       expect(answer).toStrictEqual({
         state: "panel",
+        options: { stops: false },
         legs: [
           {
             leg: "aller",
@@ -117,6 +118,19 @@ describe("readOrganiserState", () => {
       });
       expect(sentNumbers(answer)).toEqual(["b", "c"]);
       expect(sentNumbers(answer.state === "panel" && answer.persons)).toEqual([]);
+    });
+  });
+
+  it("options.stops follows the event's option, which « Modifier l'événement » reads", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      const options = async () => {
+        const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
+        return answer.state === "panel" ? answer.options : undefined;
+      };
+      expect(await options()).toEqual({ stops: false });
+      await trx.updateTable("event").set({ stops_enabled: true }).where("id", "=", scene.eventId).execute();
+      expect(await options()).toEqual({ stops: true });
     });
   });
 
