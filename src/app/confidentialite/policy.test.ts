@@ -1,3 +1,4 @@
+import type { Messages } from "next-intl";
 import { describe, expect, it } from "vitest";
 import { flattenKeys } from "@/i18n/keys";
 import en from "../../../messages/en.json";
@@ -67,7 +68,7 @@ describe("the privacy page (OA10.4, PP1)", () => {
     const shown = POLICY.map(({ key }) => key);
     expect(new Set(shown).size).toBe(shown.length);
     for (const [locale, messages] of Object.entries(LOCALES)) {
-      const own = flattenKeys(messages as Record<string, unknown>).filter((key) => key.startsWith("Privacy."));
+      const own = flattenKeys(messages as Messages).filter((key) => key.startsWith("Privacy."));
       expect(own.sort(), locale).toEqual(shown.filter((key) => key.startsWith("Privacy.")).sort());
       for (const key of shown) {
         const text = message(messages, key);
@@ -80,7 +81,7 @@ describe("the privacy page (OA10.4, PP1)", () => {
 describe("the text of the page (PP2)", () => {
   it("holds no marker of an unchecked fact, in either language", () => {
     for (const [locale, messages] of Object.entries(LOCALES)) {
-      const marked = flattenKeys(messages as Record<string, unknown>)
+      const marked = flattenKeys(messages as Messages)
         .filter((key) => key.startsWith("Privacy."))
         .filter((key) => MARKER.test(String(message(messages, key))));
       expect(marked, locale).toEqual([]);

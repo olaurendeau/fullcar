@@ -148,7 +148,7 @@ test.describe("the home link, in a browser set to French", () => {
     await expectNoNavigation(page);
   });
 
-  test("A3.3, A3.5: the keyboard goes « Accueil », the language, the source code, « Nous contacter », and « Accueil » shows the switch's ring", async ({
+  test("A3.3, A3.5: the keyboard goes « Accueil », the language, « Confidentialité », the source code, « Nous contacter », and « Accueil » shows the switch's ring", async ({
     page,
   }) => {
     await open(page, "/nouveau", "Créer un événement");
@@ -167,6 +167,8 @@ test.describe("the home link, in a browser set to French", () => {
     // The ring of the language switch, and only it.
     expect(ring).toEqual(await outlineOf(button));
 
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: FR.privacy, exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: FR.source, exact: true })).toBeFocused();
     await page.keyboard.press("Tab");

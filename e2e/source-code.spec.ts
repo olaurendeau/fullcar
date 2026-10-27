@@ -135,11 +135,13 @@ async function outlineOf(element: Locator) {
 test.describe("the source code link, in a browser set to French", () => {
   test.use({ locale: "fr-FR" });
 
-  test("G3, G10: the keyboard goes « English », the source code, « Nous contacter », and the link shows the ring of « Nous contacter »", async ({
+  test("G3, G10: the keyboard goes « English », « Confidentialité », the source code, « Nous contacter », and the link shows the ring of « Nous contacter »", async ({
     page,
   }) => {
     await open(page, "/nouveau", "Créer un événement");
     await pressUntil(page, "Tab", languageSwitch(page, FR));
+    await press(page, "Tab");
+    await expect(page.getByRole("link", { name: "Confidentialité", exact: true })).toBeFocused();
     await press(page, "Tab");
     const link = sourceLink(page, FR);
     await expect(link).toBeFocused();

@@ -23,7 +23,8 @@ const link =
  * of its two links, which leave in a new tab with neither opener nor referrer.
  */
 export default function PrivacyPage() {
-  const t = useTranslations();
+  // The keys come from `POLICY`, and policy.test.ts checks each against both languages.
+  const t = useTranslations() as unknown as (key: string) => string;
 
   const outLink = (href: string, key: string): ReactNode => (
     <p>

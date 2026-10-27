@@ -1,7 +1,6 @@
+import { readFileSync } from "node:fs";
 import type { Page, Request } from "@playwright/test";
 import { POLICY } from "@/app/confidentialite/policy";
-import en from "../messages/en.json";
-import fr from "../messages/fr.json";
 import { expect, test as base } from "./fixtures";
 
 /*
@@ -9,6 +8,10 @@ import { expect, test as base } from "./fixtures";
  * text of the owner, in French and in English. The footer's link to it (OA10.3) is in
  * footer.spec.ts.
  */
+
+const load = (locale: string): object => JSON.parse(readFileSync(`messages/${locale}.json`, "utf8"));
+const fr = load("fr");
+const en = load("en");
 
 const CNIL = "https://www.cnil.fr/fr/plaintes";
 const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
@@ -141,14 +144,13 @@ test.describe("/confidentialite, without JavaScript, and for the search engines"
   test("PP9: is in the sitemap, names itself as canonical, and is not kept from the index", async ({
     page,
     request,
-    baseURL,
   }) => {
-    const origin = new URL(baseURL!).origin;
-    expect(await (await request.get("/sitemap.xml")).text()).toContain(`<loc>${origin}/confidentialite</loc>`);
+    // The site's own origin (`siteOrigin`), not the address the test reaches the app by.
+    expect(await (await request.get("/sitemap.xml")).text()).toMatch(/<loc>https?:\/\/[^<]+\/confidentialite<\/loc>/);
 
     const response = await page.goto("/confidentialite");
     expect(response?.headers()["x-robots-tag"] ?? "").not.toMatch(/noindex/);
-    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${origin}/confidentialite`);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /^https?:\/\/[^/]+\/confidentialite$/);
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
   });
 });
