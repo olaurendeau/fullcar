@@ -3,12 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { findLink } from "@/db/email-links";
 import { SEND_LOCK_CLASS } from "@/db/email-sends";
 import type { Database } from "@/db/schema";
-import { anAddress, seedAccount, seedSends, withCommittedAddresses } from "@/db/test-accounts";
-import { withRollback } from "@/db/test-db";
+import { anAddress, seedAccount, seedSends, withCommittedAddresses, withRollbackRecordingSends } from "@/db/test-accounts";
 import { seedEvent } from "@/db/test-events";
 import { tokenKey } from "@/db/token-key";
 import { GLOBAL_SENDS_PER_HOUR, LOGINS_PER_ADDRESS } from "@/domain/send-limits";
-import type { Brevo, Email, SendAnswer } from "@/email/brevo";
+import { brevoSettings, createBrevo, type Brevo, type Email, type SendAnswer } from "@/email/brevo";
 import type { Locale } from "@/i18n/locales";
 import { requestLoginLink, type LoginLinkAnswer } from "./request-link";
 
@@ -61,7 +60,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("requestLoginLink", () => {
   it("sends a sign-in link to an address with an account: /connexion/lien, the token after #, kept hashed", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       const accountId = await seedAccount(trx, { email });
       const { brevo, sent } = fakeBrevo();
@@ -82,7 +81,7 @@ describe("requestLoginLink", () => {
 
   // OA3.5, decision 11: the same answer, an email still, and no account kept for nothing.
   it("sends the « adresse sans compte » email to an address without an account, and creates neither account nor link", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       const linksBefore = (await loginLinks(trx)).length;
       const { brevo, sent } = fakeBrevo();
@@ -100,7 +99,7 @@ describe("requestLoginLink", () => {
 
   // OA4.2: the page cannot tell who has an account, whatever Brevo answers.
   it("answers an address with an account and one without alike, sent or failed", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const withAccount = anAddress();
       await seedAccount(trx, { email: withAccount });
       for (const state of ["sent", "failed"] as const) {
@@ -113,7 +112,7 @@ describe("requestLoginLink", () => {
   });
 
   it("reads the address as email-address.ts does, and refuses one it cannot read without recording or sending", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       const accountId = await seedAccount(trx, { email });
       const { brevo, sent } = fakeBrevo();
@@ -128,7 +127,7 @@ describe("requestLoginLink", () => {
   });
 
   it("writes the email in the page's language", async () => {
-    await withRollback(async (trx) => {
+    await withRollbackRecordingSends(async (trx) => {
       const email = anAddress();
       await seedAccount(trx, { email, locale: "fr" });
       const { brevo, sent } = fakeBrevo();
@@ -141,7 +140,7 @@ describe("requestLoginLink", () => {
   // OA4.4: the link lands where the sign-in was asked for.
   describe("the return target, kept with the link", () => {
     it("is the event the request came from, when it exists", async () => {
-      await withRollback(async (trx) => {
+      await withRollbackRecordingSends(async (trx) => {
         const email = anAddress();
         await seedAccount(trx, { email });
         const { id } = await seedEvent(trx);
@@ -152,7 +151,7 @@ describe("requestLoginLink", () => {
     });
 
     it("is /mes-evenements for an unknown event or anything that is not an event id", async () => {
-      await withRollback(async (trx) => {
+      await withRollbackRecordingSends(async (trx) => {
         const email = anAddress();
         await seedAccount(trx, { email });
         const { brevo, sent } = fakeBrevo();
@@ -167,7 +166,7 @@ describe("requestLoginLink", () => {
   // OA4.5, decision 9: 5 sign-in requests per hour and per address, with or without an account.
   describe("the limits", () => {
     it("stops the 6th request of the hour for an address, with or without an account, and sends nothing", async () => {
-      await withRollback(async (trx) => {
+      await withRollbackRecordingSends(async (trx) => {
         const withAccount = anAddress();
         await seedAccount(trx, { email: withAccount });
         const without = anAddress();
@@ -186,7 +185,7 @@ describe("requestLoginLink", () => {
     });
 
     it("no longer counts a request of an hour ago, nor a confirmation email to the address", async () => {
-      await withRollback(async (trx) => {
+      await withRollbackRecordingSends(async (trx) => {
         const email = anAddress();
         await seedSends(trx, LOGINS_PER_ADDRESS, { kind: "login", email, sentAt: ago(61 * MINUTE) });
         await seedSends(trx, LOGINS_PER_ADDRESS, { kind: "confirmation", email });
@@ -195,7 +194,7 @@ describe("requestLoginLink", () => {
     });
 
     it("says too many requests at the global cap too, and sends nothing", async () => {
-      await withRollback(async (trx) => {
+      await withRollbackRecordingSends(async (trx) => {
         await seedSends(trx, GLOBAL_SENDS_PER_HOUR, { kind: "login", email: () => anAddress() });
         const email = anAddress();
         await seedAccount(trx, { email });
@@ -208,7 +207,7 @@ describe("requestLoginLink", () => {
 
     // A send Brevo refused or did not answer in 10 s counts: Brevo may still have accepted it.
     it("counts a failed send, and keeps its link valid", async () => {
-      await withRollback(async (trx) => {
+      await withRollbackRecordingSends(async (trx) => {
         const email = anAddress();
         await seedAccount(trx, { email });
         const { brevo, sent } = fakeBrevo("failed");
@@ -220,18 +219,27 @@ describe("requestLoginLink", () => {
   });
 
   // OA5.10, OA11.1.
-  it("logs neither the address nor the token, sent or failed", async () => {
-    await withRollback(async (trx) => {
-      const email = anAddress();
-      await seedAccount(trx, { email });
-      const { brevo, sent } = fakeBrevo("failed");
-      await request(trx, brevo, email);
-      await request(trx, brevo, anAddress());
-      const token = tokenOf(sent[0]!);
+  it("logs neither the address nor the token when Brevo refuses the email", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const withAccount = anAddress();
+      await seedAccount(trx, { email: withAccount });
+      const without = anAddress();
+      // The real client, whose refusal is logged, behind a Brevo that answers 500.
+      const asked: { to: { email: string }[]; textContent: string }[] = [];
+      const brevo = createBrevo({
+        fetch: (async (_url: string, init: RequestInit) => {
+          asked.push(JSON.parse(String(init.body)));
+          return new Response(null, { status: 500 });
+        }) as unknown as typeof fetch,
+        ...brevoSettings({ BREVO_API_KEY: "fullcar-test-brevo-key-4d8e1b6a", EMAIL_FROM: "Fullcar <bonjour@fullcar.test>" }),
+      });
+      expect(await request(trx, brevo, withAccount)).toEqual({ state: "failed" });
+      expect(await request(trx, brevo, without)).toEqual({ state: "failed" });
+      expect(asked.map(({ to }) => to[0]!.email)).toEqual([withAccount, without]);
+      const token = tokenOf({ to: withAccount, subject: "", html: "", text: asked[0]!.textContent });
+      expect(logs).toEqual(["email: send failed (HTTP 500)", "email: send failed (HTTP 500)"]);
       for (const line of logs) {
-        expect(line).not.toContain(email);
-        expect(line).not.toContain(sent[1]!.to);
-        expect(line).not.toContain(token);
+        for (const secret of [withAccount, without, token]) expect(line).not.toContain(secret);
       }
     });
   });

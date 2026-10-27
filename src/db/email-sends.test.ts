@@ -157,7 +157,7 @@ describe("recordSend", () => {
         );
         expect(outcome).toBe("global");
         expect(await sendsInWindow(db)).toBe(GLOBAL_SENDS_PER_HOUR);
-      });
+      }, { fillsTheWindow: true });
     });
   });
 

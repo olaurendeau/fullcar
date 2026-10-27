@@ -1,8 +1,7 @@
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db/schema";
-import { anAddress, seedAccount } from "@/db/test-accounts";
-import { withRollback } from "@/db/test-db";
+import { anAddress, seedAccount, withRollbackRecordingSends } from "@/db/test-accounts";
 import { requestLink } from "./actions";
 
 // The action reaches the database through getDb(): here, the test's transaction.
@@ -49,7 +48,7 @@ afterEach(() => {
 });
 
 function inTransaction<T>(fn: (trx: Kysely<Database>) => Promise<T>): Promise<T> {
-  return withRollback(async (trx) => {
+  return withRollbackRecordingSends(async (trx) => {
     connection.current = trx;
     try {
       return await fn(trx);
