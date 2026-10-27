@@ -172,7 +172,10 @@ en bout utilisent :
   fenêtre jusqu'au plafond avec des envois validés. Jamais une horloge avancée hors de la
   fenêtre à la place. `whileHeld` (`src/db/test-committed.ts`) passe à `second` une
   connexion à lui, et n'attend que sa session : une session d'un autre fichier, bloquée sur
-  le même verrou du plafond global, ne prouve rien du test.
+  le même verrou du plafond global, ne prouve rien du test. Depuis #856, c'est le seul
+  moyen d'attendre une session bloquée, sans copie locale ; pour plusieurs sessions,
+  `whileHeldInTurn` en lance une par connexion, chacune une fois la précédente en attente,
+  deux de moins que les connexions du pool (`POOL_SIZE`, `src/db/client.ts`), trois aujourd'hui.
 - `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
   seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
   remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la

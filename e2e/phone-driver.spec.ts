@@ -10,7 +10,8 @@ leaveNoToken();
 
 // #777, epic #766: « Proposer une voiture » asks who drives for a number (event-board v4.8,
 // rules 6 and 7, criteria T4). The numbers are the test's own: an assertion that could print
-// one goes through `numbersHidden`, a stored one is compared, never printed.
+// one goes through `numbersHidden`, a stored one is compared, never printed. A failure on a
+// field of a number prints the input, its value included (#865): each one goes through it.
 
 type Db = Kysely<Database>;
 
@@ -123,16 +124,16 @@ test.describe("a number to offer a car", () => {
     await openForm(page);
     const group = form(page).getByRole("group", { name: FR.driver });
     await expect(group.getByLabel(FR.firstName, { exact: true })).toBeVisible();
-    await expect(group.getByLabel(FR.phone, { exact: true })).toBeVisible();
+    await numbersHidden(() => expect(group.getByLabel(FR.phone, { exact: true })).toBeVisible());
     await expect(form(page).getByLabel(FR.optional)).toHaveCount(0);
-    await expect(field(page, FR.phone)).toHaveAccessibleDescription(FR.hint);
+    await numbersHidden(() => expect(field(page, FR.phone)).toHaveAccessibleDescription(FR.hint));
 
     await field(page, FR.firstName).fill("Marc");
     await fillPlace(page, "Mairie de Vitré");
     await submit(page).click();
-    await expect(field(page, FR.phone)).toHaveAttribute("aria-invalid", "true");
-    await expect(field(page, FR.phone)).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`);
-    await expect(field(page, FR.phone)).toBeFocused();
+    await numbersHidden(() => expect(field(page, FR.phone)).toHaveAttribute("aria-invalid", "true"));
+    await numbersHidden(() => expect(field(page, FR.phone)).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`));
+    await numbersHidden(() => expect(field(page, FR.phone)).toBeFocused());
     await expect(field(page, FR.location)).toHaveValue("Mairie de Vitré");
     expect(sent.length).toBe(0);
     expect(await persons(db, id)).toEqual([]);
@@ -161,8 +162,8 @@ test.describe("a number to offer a car", () => {
     await field(page, FR.phone).fill("06 12");
     await fillPlace(page, "Mairie de Vitré");
     await submit(page).click();
-    await expect(field(page, FR.phone)).toHaveAccessibleDescription(`${FR.invalid} ${FR.hint}`);
-    await expect(field(page, FR.phone)).toBeFocused();
+    await numbersHidden(() => expect(field(page, FR.phone)).toHaveAccessibleDescription(`${FR.invalid} ${FR.hint}`));
+    await numbersHidden(() => expect(field(page, FR.phone)).toBeFocused());
     expect(await persons(db, id)).toEqual([]);
     expect(await rides(db, id)).toEqual([]);
   });
@@ -175,36 +176,36 @@ test.describe("a number to offer a car", () => {
 
     await radio(page, "Claire").check();
     const claires = field(page, FR.driverPhone("Claire"));
-    await expect(claires).toHaveValue("");
-    await expect(claires).toHaveAccessibleDescription(FR.hint);
+    await numbersHidden(() => expect(claires).toHaveValue(""));
+    await numbersHidden(() => expect(claires).toHaveAccessibleDescription(FR.hint));
     await expect(phoneFields(page)).toHaveCount(1);
     // In the group's box, under its last radio button.
     const box = choices(page).locator("xpath=..");
-    await expect(box.getByLabel(FR.driverPhone("Claire"), { exact: true })).toBeVisible();
+    await numbersHidden(() => expect(box.getByLabel(FR.driverPhone("Claire"), { exact: true })).toBeVisible());
     const last = (await radio(page, FR.newDriver).boundingBox())!;
     expect((await claires.boundingBox())!.y).toBeGreaterThanOrEqual(last.y + last.height);
 
     await claires.fill("06 11");
     await radio(page, "Léa").check();
-    await expect(field(page, FR.driverPhone("Léa"))).toHaveValue("");
+    await numbersHidden(() => expect(field(page, FR.driverPhone("Léa"))).toHaveValue(""));
     await expect(field(page, FR.driverPhone("Claire"))).toHaveCount(0);
 
     // Léa's field left empty, « Valider »: her error. Claire chosen again: her field, empty, without it.
     const leas = field(page, FR.driverPhone("Léa"));
     await submit(page).click();
-    await expect(leas).toHaveAttribute("aria-invalid", "true");
-    await expect(leas).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`);
+    await numbersHidden(() => expect(leas).toHaveAttribute("aria-invalid", "true"));
+    await numbersHidden(() => expect(leas).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`));
     await radio(page, "Claire").check();
-    await expect(claires).toHaveValue("");
-    await expect(claires).not.toHaveAttribute("aria-invalid");
-    await expect(claires).toHaveAccessibleDescription(FR.hint);
+    await numbersHidden(() => expect(claires).toHaveValue(""));
+    await numbersHidden(() => expect(claires).not.toHaveAttribute("aria-invalid"));
+    await numbersHidden(() => expect(claires).toHaveAccessibleDescription(FR.hint));
 
     await radio(page, "Tom").check();
     await expect(phoneFields(page)).toHaveCount(0);
 
     await radio(page, FR.newDriver).check();
     await expect(field(page, FR.firstName)).toBeVisible();
-    await expect(field(page, FR.phone)).toBeVisible();
+    await numbersHidden(() => expect(field(page, FR.phone)).toBeVisible());
     await expect(phoneFields(page)).toHaveCount(1);
   });
 
@@ -218,9 +219,9 @@ test.describe("a number to offer a car", () => {
     await fillPlace(page, "Gare de Vitré");
     await submit(page).click();
     const claires = field(page, FR.driverPhone("Claire"));
-    await expect(claires).toHaveAttribute("aria-invalid", "true");
-    await expect(claires).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`);
-    await expect(claires).toBeFocused();
+    await numbersHidden(() => expect(claires).toHaveAttribute("aria-invalid", "true"));
+    await numbersHidden(() => expect(claires).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`));
+    await numbersHidden(() => expect(claires).toBeFocused());
     expect(sent.length).toBe(0);
     expect(await rides(db, id)).toEqual([]);
 
@@ -264,10 +265,10 @@ test.describe("a number to offer a car", () => {
     await answered;
 
     const claires = field(page, FR.driverPhone("Claire"));
-    await expect(claires).toHaveValue("");
-    await expect(claires).toHaveAttribute("aria-invalid", "true");
-    await expect(claires).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`);
-    await expect(claires).toBeFocused();
+    await numbersHidden(() => expect(claires).toHaveValue(""));
+    await numbersHidden(() => expect(claires).toHaveAttribute("aria-invalid", "true"));
+    await numbersHidden(() => expect(claires).toHaveAccessibleDescription(`${FR.required} ${FR.hint}`));
+    await numbersHidden(() => expect(claires).toBeFocused());
     await expect(form(page).getByRole("alert").filter({ hasText: /\S/ })).toHaveCount(0);
     await expect(field(page, FR.location)).toHaveValue("Gare de Vitré");
     await expect(field(page, FR.time)).toHaveValue("07:45");
@@ -307,7 +308,7 @@ test.describe("a number to offer a car", () => {
     await form(page).getByRole("radiogroup", { name: FR.retourTitle }).getByRole("radio", { name: FR.drive, exact: true }).check();
     await expect(field(page, FR.retourLocation)).toHaveValue("Mairie de Vitré");
     await submit(page).click();
-    await expect(field(page, FR.phone)).toBeFocused();
+    await numbersHidden(() => expect(field(page, FR.phone)).toBeFocused());
     expect(await rides(db, id)).toEqual([]);
 
     await field(page, FR.phone).fill(MARC_PHONE);
@@ -349,14 +350,14 @@ test.describe("a number to offer a car, in English", () => {
     await openForm(page, "Offer a car");
     const sheet = page.getByRole("dialog", { name: "Offer a car" });
     const claires = sheet.getByLabel(EN.driverPhone, { exact: true });
-    await expect(claires).toHaveAccessibleDescription(EN.hint);
+    await numbersHidden(() => expect(claires).toHaveAccessibleDescription(EN.hint));
 
     await sheet.getByRole("radio", { name: "Someone new", exact: true }).check();
     const phone = sheet.getByLabel(EN.phone, { exact: true });
-    await expect(phone).toHaveAccessibleDescription(EN.hint);
+    await numbersHidden(() => expect(phone).toHaveAccessibleDescription(EN.hint));
     await sheet.getByLabel("First name", { exact: true }).fill("Marc");
     await sheet.getByRole("button", { name: "Confirm" }).click();
-    await expect(phone).toHaveAccessibleDescription(new RegExp(`^${EN.required} `));
+    await numbersHidden(() => expect(phone).toHaveAccessibleDescription(new RegExp(`^${EN.required} `)));
   });
 });
 
@@ -385,14 +386,14 @@ test.describe("a number kept while driving", () => {
     await page.goto(`/e/${id}`);
     const edit = await editPerson(page, "Claire");
     const phone = edit.getByLabel(FR.phone, { exact: true });
-    await expect(phone).toHaveAccessibleDescription(FR.hint);
+    await numbersHidden(() => expect(phone).toHaveAccessibleDescription(FR.hint));
     await expect(edit.getByLabel(FR.optional)).toHaveCount(0);
 
     await phone.clear();
     await edit.getByRole("button", { name: "Valider" }).click();
-    await expect(phone).toHaveAttribute("aria-invalid", "true");
-    await expect(phone).toHaveAccessibleDescription(`${WHILE_DRIVING} ${FR.hint}`);
-    await expect(phone).toBeFocused();
+    await numbersHidden(() => expect(phone).toHaveAttribute("aria-invalid", "true"));
+    await numbersHidden(() => expect(phone).toHaveAccessibleDescription(`${WHILE_DRIVING} ${FR.hint}`));
+    await numbersHidden(() => expect(phone).toBeFocused());
     await expect(edit).toBeVisible();
     expect(sent.length).toBe(0);
     expect(await hasNumber(db, claire, CLAIRE_PHONE)).toBe(true);
@@ -416,7 +417,7 @@ test.describe("a number kept while driving", () => {
     await seedRide(db, id, claire);
     await page.goto(`/e/${id}`);
     const edit = await editPerson(page, "Claire");
-    await expect(edit.getByLabel(FR.phone, { exact: true })).toHaveValue("");
+    await numbersHidden(() => expect(edit.getByLabel(FR.phone, { exact: true })).toHaveValue(""));
     await edit.getByLabel(FR.firstName, { exact: true }).fill("Clara");
     await edit.getByRole("button", { name: "Valider" }).click();
     await expect(edit).toHaveCount(0);
@@ -437,7 +438,7 @@ test.describe("a number kept while driving", () => {
 
     const edit = await editPerson(page, "Claire");
     const phone = edit.getByLabel(FR.optional, { exact: true });
-    await expect(phone).toHaveAccessibleDescription(PERSON_HINT);
+    await numbersHidden(() => expect(phone).toHaveAccessibleDescription(PERSON_HINT));
     await phone.clear();
     await edit.getByRole("button", { name: "Valider" }).click();
     await expect(edit).toHaveCount(0);
@@ -449,7 +450,7 @@ test.describe("a number kept while driving", () => {
     const { Claire: claire } = await device(db, page, id, [{ firstName: "Claire", phone: CLAIRE_PHONE }]);
     await page.goto(`/e/${id}`);
     const edit = await editPerson(page, "Claire");
-    await expect(edit.getByLabel(FR.optional, { exact: true })).toBeVisible();
+    await numbersHidden(() => expect(edit.getByLabel(FR.optional, { exact: true })).toBeVisible());
     // As another device would.
     await seedRide(db, id, claire);
     await edit.getByLabel(FR.optional, { exact: true }).clear();
@@ -458,9 +459,9 @@ test.describe("a number kept while driving", () => {
     await answered;
 
     const phone = edit.getByLabel(FR.phone, { exact: true });
-    await expect(phone).toHaveAttribute("aria-invalid", "true");
-    await expect(phone).toHaveAccessibleDescription(`${WHILE_DRIVING} ${FR.hint}`);
-    await expect(phone).toBeFocused();
+    await numbersHidden(() => expect(phone).toHaveAttribute("aria-invalid", "true"));
+    await numbersHidden(() => expect(phone).toHaveAccessibleDescription(`${WHILE_DRIVING} ${FR.hint}`));
+    await numbersHidden(() => expect(phone).toBeFocused());
     await expect(edit.getByRole("alert").filter({ hasText: /\S/ })).toHaveCount(0);
     expect(await hasNumber(db, claire, CLAIRE_PHONE)).toBe(true);
   });
