@@ -551,7 +551,12 @@ ci-dessus valent pour chacun.
 - **Une seule règle d'accès** à l'espace organisateur : `src/domain/organiser-access.ts`
   (#596). Elle donne l'accès à la session du compte de l'événement, ou au jeton d'admin du
   navigateur de création. `withOrganiserPhones` n'accepte qu'une autorisation produite par
-  cette règle (voir « Visibilité du téléphone »).
+  cette règle (voir « Visibilité du téléphone »). Une écriture de l'organisateur décide
+  l'accès une première fois avant le verrou de l'Event, pour refuser sans l'attendre, puis
+  le décide de nouveau sous ce verrou, en lisant l'événement, la session et le compte dans
+  la même transaction (#836). Une déconnexion, une suppression de compte ou un jeton
+  révoqué validés pendant l'attente refusent alors l'écriture (`invalid`). C'est le cas
+  d'`editEvent` ; les autres écritures de l'organisateur (#672, #675) suivront ce chemin.
 - **Le retrait d'une personne par l'organisateur** (#645, `removeAsOrganiser`,
   `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin :
   aujourd'hui par `adminTokenMatches`, comme `editEvent`, puis par `organiser-access.ts`
