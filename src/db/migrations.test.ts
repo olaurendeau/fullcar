@@ -7,6 +7,8 @@ import { createDb } from "./client";
 import { createMigrator } from "./migrator";
 import type { Database } from "./schema";
 import { migrations } from "./migrations";
+import { seedEvent } from "./test-events";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "./test-participants";
 
 function expectSuccess({ error, results }: MigrationResultSet) {
   expect(error).toBeUndefined();
@@ -38,6 +40,12 @@ async function schemaOf(db: Kysely<Database>) {
     where schemaname = 'public' and tablename not like 'kysely_%'
     order by tablename, indexname`.execute(db);
   return { columns, constraints, indexes };
+}
+
+async function functionNames(db: Kysely<Database>): Promise<string[]> {
+  const { rows } = await sql<{ name: string }>`
+    select proname as name from pg_proc where pronamespace = 'public'::regnamespace`.execute(db);
+  return rows.map((row) => row.name);
 }
 
 /**
@@ -95,6 +103,45 @@ describe("migrations", () => {
       expectSuccess(await migrator.migrateUp());
       expectSuccess(await migrator.migrateDown());
       expectSuccess(await migrator.migrateUp());
+    }
+  });
+
+  // #883 (epic #881): the down of 0006 gives back exactly what 0005 left: columns, constraints,
+  // indexes, and no trigger function behind.
+  it("0006 goes down to the schema 0005 left", async () => {
+    const migrator = createMigrator(db);
+    expectSuccess(await migrator.migrateTo("0005_event_description"));
+    const before = await schemaOf(db);
+    expectSuccess(await migrator.migrateTo("0006_stops"));
+    expect(await schemaOf(db)).not.toEqual(before);
+    expect(await functionNames(db)).toContain("placement_stop_on_ride");
+    expectSuccess(await migrator.migrateTo("0005_event_description"));
+    expect(await schemaOf(db)).toEqual(before);
+    expect(await functionNames(db)).not.toContain("placement_stop_on_ride");
+    expectSuccess(await migrator.migrateToLatest());
+  });
+
+  // The down drops the Stops with their passengers' boarding points, and the schema goes up
+  // again over what is left.
+  it("0006 goes down and up again with Stops and a boarding point in the database", async () => {
+    const migrator = createMigrator(db);
+    expectSuccess(await migrator.migrateToLatest());
+    const { id: eventId } = await seedEvent(db);
+    try {
+      const driver = await seedPerson(db, eventId);
+      const passenger = await seedPerson(db, eventId);
+      const rideId = await seedRide(db, eventId, driver.id);
+      const stopId = await seedStop(db, eventId, rideId);
+      await seedPlacement(db, { personId: passenger.id, eventId, leg: "aller", rideId, stopId });
+
+      expectSuccess(await migrator.migrateTo("0005_event_description"));
+      const { rows } = await sql<{ ride_id: string }>`
+        select ride_id from placement where person_id = ${passenger.id}`.execute(db);
+      expect(rows).toEqual([{ ride_id: rideId }]);
+      expectSuccess(await migrator.migrateToLatest());
+      expect(await db.selectFrom("stop").select("id").where("event_id", "=", eventId).execute()).toEqual([]);
+    } finally {
+      await db.deleteFrom("event").where("id", "=", eventId).execute();
     }
   });
 

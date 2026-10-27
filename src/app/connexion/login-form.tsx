@@ -1,6 +1,6 @@
 "use client";
 
-import { Users } from "lucide-react";
+import { CircleCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
@@ -13,6 +13,7 @@ import { EMAIL_MAX, emailAddress, type EmailError } from "@/domain/email-address
 import { cn } from "@/lib/utils";
 import { requestLink, signedInAs } from "./actions";
 import { CheckEmail } from "./check-email";
+import { takeSignedOut } from "./signed-out";
 import { loginOutcome, type LoginAlert, type LoginOutcome } from "./login-outcome";
 
 const noSubscription = () => () => {};
@@ -58,6 +59,14 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
   const focusNext = useRef<FocusNext>(undefined);
   const fieldRef = useRef<HTMLInputElement>(null);
   const checkRef = useRef<HTMLHeadingElement>(null);
+
+  // OA9.1: led here by « Se déconnecter », the line says so once, and takes the focus (« Le focus »).
+  // Only the App Router's navigation leads here so: the server, and a document loaded, find nothing.
+  const [signedOut] = useState(takeSignedOut);
+  const signedOutRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (signedOut) signedOutRef.current?.focus();
+  }, [signedOut]);
 
   useEffect(() => {
     const token = readSessionToken();
@@ -128,6 +137,17 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
 
   return (
     <>
+      {signedOut && (
+        <p
+          ref={signedOutRef}
+          tabIndex={-1}
+          role="status"
+          className="flex items-start gap-2 rounded-[10px] bg-muted px-3 py-2.5 text-sm focus-visible:focus-ring"
+        >
+          <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0">{t("signedOut")}</span>
+        </p>
+      )}
       {signedIn !== undefined && (
         <p className="flex items-start gap-2 rounded-[10px] bg-muted px-3 py-2.5 text-sm">
           <Users aria-hidden className="mt-0.5 size-4 shrink-0" />

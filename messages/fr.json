@@ -459,7 +459,145 @@
     "home": "Accueil",
     "link": "Nous contacter",
     "newTab": "(s’ouvre dans un nouvel onglet)",
+    "privacy": "Confidentialité",
     "sourceCode": "Code source sur GitHub"
+  },
+  "Privacy": {
+    "title": "Confidentialité",
+    "intro": "Fullcar sert à organiser un covoiturage de groupe. Cette page dit ce que nous gardons, pourquoi, combien de temps, qui le voit et à qui nous le confions. Les participants n’ont jamais de compte. L’organisateur en a un : une adresse e-mail, sans mot de passe.",
+    "controller": {
+      "title": "Qui est responsable",
+      "body": "Le responsable du traitement est OLA ALPINE SOLUTIONS, SAS au capital de 10 000 €, SIREN 938 878 675, 84 Route de la Lauzette, 05310 Champcella, France. Pour toute question sur vos données, voyez « Nous contacter », plus bas."
+    },
+    "keep": {
+      "title": "Ce que nous gardons",
+      "intro": "Seulement ce qui sert au covoiturage et au compte de l’organisateur. Nous ne demandons ni nom de famille, ni mot de passe, ni la position de votre appareil, et notre base ne garde aucune adresse IP.",
+      "participant": {
+        "title": "Pour chaque participant",
+        "firstName": "le prénom ;",
+        "phone": "le numéro de téléphone, s’il est donné : il est facultatif ;",
+        "booster": "le besoin d’un rehausseur, si l’organisateur a activé cette option ;",
+        "legs": "pour l’aller, puis pour le retour : conduit, dans une voiture, sans voiture, ou ne le fait pas ; la place prise et, s’il y en a un, l’arrêt choisi ;",
+        "cars": "les voitures qu’il propose : le lieu de départ à l’aller ou de dépose au retour, sa position quand il a été choisi parmi les propositions, l’heure, les places, les rehausseurs disponibles, la participation aux frais, la note et les arrêts ;",
+        "token": "l’empreinte du jeton personnel de l’appareil qui l’a inscrit, jamais le jeton lui-même."
+      },
+      "event": {
+        "title": "Pour chaque événement",
+        "basics": "le titre, le lieu et sa position, le début et, s’il y a un retour, la fin ;",
+        "description": "la description, si l’organisateur en a écrit une ;",
+        "options": "les options activées ;",
+        "adminToken": "l’empreinte du jeton d’admin du navigateur qui l’a créé, quand il en a un ;",
+        "pending": "tant que l’adresse de l’organisateur n’est pas confirmée : l’adresse e-mail saisie à la création, et le résultat du dernier envoi du lien de confirmation (en cours, envoyé, échec ou limite atteinte), avec sa date."
+      },
+      "organiser": {
+        "title": "Pour l’organisateur",
+        "email": "l’adresse e-mail ;",
+        "locale": "la langue de sa dernière visite, qui sert à l’e-mail d’avertissement avant la suppression du compte ;",
+        "dates": "la date de création du compte, celle de la dernière visite, et celle de l’avertissement s’il est parti ;",
+        "events": "ses événements, et la date de confirmation de chacun ;",
+        "sessions": "ses sessions : l’empreinte du jeton, la date d’ouverture et celle de la dernière visite ;",
+        "links": "les liens de connexion et de confirmation envoyés : l’empreinte du jeton, la date d’envoi, celle de l’utilisation, et la page où revenir ensuite."
+      },
+      "sends": {
+        "title": "Pour limiter les envois d’e-mails",
+        "body": "Pour chaque e-mail de confirmation ou de connexion : l’adresse du destinataire, la sorte d’e-mail, l’événement s’il y en a un, et la date. Cela vaut aussi pour une adresse sans compte, quand quelqu’un demande à se connecter avec elle. C’est ce qui empêche d’inonder une adresse."
+      },
+      "logs": {
+        "title": "Les journaux",
+        "body": "Notre hébergeur, Vercel, journalise les requêtes qu’il reçoit : le chemin demandé, le navigateur, et votre adresse IP. Ces journaux sont gardés 1 heure. Nos propres lignes de journal ne contiennent que des mots fixes et des nombres : ni prénom, ni numéro, ni adresse e-mail, ni jeton, ni description."
+      }
+    },
+    "why": {
+      "title": "Pourquoi",
+      "intro": "Chaque usage a sa base légale, au sens de l’article 6 du RGPD :",
+      "carpool": "Organiser le covoiturage : montrer au groupe qui conduit, où il reste des places et qui est encore sans voiture, et permettre aux personnes d’une même voiture de se joindre. Base : l’exécution du service que vous utilisez (6.1.b) ; pour une personne inscrite par quelqu’un d’autre, un enfant par exemple, l’intérêt légitime du groupe à organiser le déplacement (6.1.f).",
+      "account": "Le compte de l’organisateur : confirmer son adresse, ouvrir une session, retrouver ses événements dans « Mes événements ». Base : l’exécution du service (6.1.b).",
+      "abuse": "Empêcher les abus : les limites d’envoi d’e-mails, et les jetons qui protègent chaque accès. Base : notre intérêt légitime à protéger le service et les adresses e-mail des autres (6.1.f).",
+      "inactive": "Supprimer les comptes qui ne servent plus, après un e-mail d’avertissement. Base : notre intérêt légitime à ne pas garder une adresse sans raison (6.1.f).",
+      "hosting": "Faire fonctionner le site et le protéger : les journaux de l’hébergeur. Base : notre intérêt légitime (6.1.f).",
+      "errors": "Corriger les pannes : les rapports d’erreur, sans données personnelles. Base : notre intérêt légitime (6.1.f).",
+      "audience": "Compter les visites de quatre pages, sans cookie (voir « Ce que nous ne faisons pas »). Base : notre intérêt légitime à savoir si le site sert (6.1.f).",
+      "contact": "Vous répondre, quand vous nous écrivez dans la discussion, et traiter vos demandes sur vos données. Base : notre intérêt légitime à vous répondre (6.1.f).",
+      "nothingElse": "Vos données ne servent à rien d’autre."
+    },
+    "retention": {
+      "title": "Combien de temps",
+      "dayThirty": "Les données des participants, la description et la position du lieu : effacées le 30e jour après la date du retour, ou de l’aller s’il n’y a pas de retour, à l’heure de Paris. Un événement dont le retour a lieu le 12 décembre est effacé le 11 janvier. Restent le titre, le texte du lieu, les dates et les options, dans l’historique de l’organisateur.",
+      "removed": "Une personne retirée de l’événement : effacée tout de suite, avec ses voitures et ses places.",
+      "history": "L’historique de l’organisateur (titre, lieu, dates) : jusqu’à la suppression de son compte.",
+      "account": "Le compte : jusqu’à « Supprimer mon compte », ou après 3 ans sans visite. Un e-mail d’avertissement part 30 jours avant, et le compte n’est supprimé qu’une fois cet e-mail envoyé. Une visite avec une session ouverte, d’ici là, garde le compte.",
+      "deleteAccount": "Après « Supprimer mon compte » : l’adresse e-mail est effacée tout de suite de toutes nos tables, toutes les sessions sont fermées et l’historique est supprimé. Les événements pas encore effacés restent ouverts aux participants, sans organisateur, jusqu’à leur 30e jour.",
+      "noAccount": "Un événement sans compte (adresse jamais confirmée, ou compte supprimé) : supprimé en entier le 30e jour, avec l’adresse e-mail qu’il porte.",
+      "sessions": "Une session prend fin 90 jours après la dernière visite. Elle est alors effacée au nettoyage suivant, qui a lieu une fois par jour.",
+      "links": "Un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et chacun ne sert qu’une fois. Un lien, utilisé ou non, ne contient pas votre adresse e-mail. Un lien de connexion est effacé 30 jours après son expiration, soit environ 30 jours après l’envoi. Un lien de confirmation reste tant que son événement attend la confirmation, et part avec lui le 30e jour ; une fois l’événement confirmé, il est effacé 30 jours après son expiration, soit 37 jours après l’envoi, ou le 30e jour de l’événement si celui-ci vient avant.",
+      "sends": "Les traces d’envoi qui servent aux limites, et qui contiennent l’adresse du destinataire : gardées 1 heure, la durée des limites d’envoi, puis effacées au nettoyage quotidien suivant, au plus tard le lendemain.",
+      "cookie": "Le cookie de langue : 365 jours.",
+      "restore": "Notre base de données garde un historique de restauration : une donnée effacée peut y rester pendant une durée limitée, fixée par les réglages de cette base. Cet historique ne sert qu’à restaurer la base après un incident.",
+      "providers": "Chez nos prestataires : les journaux de Vercel, 1 heure ; les journaux d’envoi de Brevo, 1 mois, sans copie du contenu des e-mails ; les requêtes réussies chez Geoapify, 24 heures au plus, selon sa politique ; les conversations chez Crisp, 60 jours ; les rapports d’erreur chez Sentry, pendant la durée que fixe Sentry."
+    },
+    "who": {
+      "title": "Qui voit quoi",
+      "link": "Le lien de l’événement donne accès à ce que montre sa page : le titre, le lieu, les dates, la description, les prénoms, qui conduit, les lieux et heures des voitures, les places, les rehausseurs, la participation aux frais, les notes et les arrêts. Ce lien ne se devine pas, et les moteurs de recherche ne l’indexent pas. Partagez-le seulement avec le groupe.",
+      "phone": {
+        "intro": "Le numéro de téléphone n’est montré qu’à trois endroits :",
+        "car": "aux personnes de la même voiture, conducteur compris, pour le sens où elles la partagent : l’aller, le retour, ou les deux ;",
+        "device": "sur l’appareil qui a inscrit la personne ;",
+        "organiser": "à l’organisateur, dans l’espace organisateur, tant que la personne est sans voiture à l’aller ou au retour, pour l’aider à trouver une place.",
+        "nobody": "Personne d’autre ne le voit."
+      },
+      "organiser": "L’organisateur voit, dans son espace, tous les prénoms et ce que fait chacun à l’aller et au retour, et peut retirer une personne de l’événement. Il ne voit jamais le jeton personnel d’un appareil.",
+      "email": "L’adresse e-mail de l’organisateur n’est montrée qu’à lui, quand sa session est ouverte. Les participants ne la voient jamais.",
+      "after": "Après le 30e jour, la page de l’événement dit seulement « Événement terminé », avec le titre et la date. L’organisateur garde le titre, le lieu et les dates.",
+      "previews": "Une messagerie qui affiche un aperçu du lien peut garder dans la conversation le titre, ou le début de la page, après le 30e jour : cet aperçu ne dépend pas de nous."
+    },
+    "services": {
+      "title": "Les services que nous utilisons",
+      "intro": "Chacun ne reçoit que ce qu’il lui faut. Pour ceux qui transfèrent des données hors de l’Union européenne, la garantie est dite à leur ligne : les clauses contractuelles types de la Commission européenne (décision 2021/914), ou le Data Privacy Framework UE–États-Unis.",
+      "vercel": "Vercel (Vercel Inc., États-Unis) héberge le site. Nos fonctions tournent à Francfort, en Allemagne ; le réseau de Vercel reçoit chaque requête au point le plus proche de vous, où que vous soyez. Comme tout hébergeur, Vercel voit votre adresse IP et ce que demande votre navigateur. Il compte aussi les visites (voir « Ce que nous ne faisons pas »). Transferts : clauses contractuelles types, et certification au Data Privacy Framework.",
+      "neon": "Neon héberge la base de données à Francfort, en Allemagne (AWS eu-central-1). Le contrat est conclu avec Databricks, Inc. (États-Unis), qui exploite Neon. La base contient tout ce que liste « Ce que nous gardons ». Les données sont stockées dans l’Union européenne ; un accès depuis l’extérieur de l’Union, par Databricks ou ses sous-traitants, reste possible, et il est couvert par les clauses contractuelles types.",
+      "brevo": "Brevo (Brevo SAS, RCS Paris 498 019 298, 9-17 rue Salneuve, 75017 Paris) envoie les quatre e-mails du compte. Il reçoit l’adresse du destinataire et l’e-mail, qui contient le lien de connexion ou de confirmation ; jamais votre adresse IP, ni un titre, un lieu ou un prénom. Il peut compter les ouvertures et les clics, de façon anonymisée, sans les rattacher au destinataire (voir « Ce que nous ne faisons pas »). Brevo héberge ses données chez OVH (France) et Google Cloud (Belgique) ; son réseau de diffusion, Cloudflare (États-Unis), est couvert par le Data Privacy Framework et les clauses contractuelles types.",
+      "sentry": "Sentry (Functional Software, Inc., États-Unis) reçoit les rapports d’erreur, au travers de notre propre adresse, et les stocke à Francfort, en Allemagne. Ils sont reconstruits avant de partir : ni prénom, ni numéro, ni adresse e-mail, ni jeton, ni description. Ce que Sentry garde d’autre, adresse IP comprise, dépend de ses réglages et de sa politique. Un accès depuis l’extérieur de l’Union, par Sentry ou ses sous-traitants, reste possible : il est couvert par le Data Privacy Framework, avec les clauses contractuelles types en secours.",
+      "photon": "Photon, l’instance publique de komoot, hébergée en Allemagne, propose des lieux pendant que vous tapez. C’est notre serveur qui l’interroge : Photon reçoit le texte tapé, la langue et, si elle est connue, la zone de l’événement arrondie à 10 km environ, jamais votre adresse IP.",
+      "geoapify": "Geoapify (KEPTAGO LTD, Paphos, Chypre ; serveurs dans l’Union européenne, selon sa politique) fournit les fonds de carte. C’est notre serveur qui les demande : Geoapify voit quelles portions de carte sont demandées, donc la zone regardée, jamais votre adresse IP ni votre navigateur.",
+      "crisp": "Crisp (Crisp IM SAS, Nantes, France ; infrastructure principale à Amsterdam, aux Pays-Bas, selon sa politique) accueille la discussion de « Nous contacter », le seul moyen de nous écrire : questions, et demandes pour exercer vos droits. Rien de Crisp ne se charge dans Fullcar : le lien ouvre la page de Crisp dans un nouvel onglet. Crisp reçoit ce que vous y écrivez, et ce que reçoit tout site que vous ouvrez, dont votre adresse IP. Sur sa page, la politique de Crisp s’applique aussi, cookies compris. Selon cette politique, Crisp peut faire traiter les messages par des outils d’intelligence artificielle, au travers de fournisseurs de modèles.",
+      "otherSites": "Les liens vers d’autres sites, comme le code source sur GitHub ou un lien dans une description, ouvrent ces sites dans un nouvel onglet, sans leur transmettre la page d’où vous venez. Ils ont leurs propres règles."
+    },
+    "not": {
+      "title": "Ce que nous ne faisons pas",
+      "ads": "Pas de publicité, et aucune donnée vendue ni cédée.",
+      "tracking": "Pas de pistage : aucun cookie de mesure ou de publicité, aucun script chargé depuis un autre site, aucun profil.",
+      "emails": "Dans les e-mails : nous ne mettons aucune image ni aucun texte écrit par quelqu’un d’autre. Brevo peut compter les ouvertures et les clics, de façon anonymisée : sans les rattacher au destinataire.",
+      "decisions": "Aucune décision automatique à votre sujet.",
+      "audience": "Ce que nous faisons, en revanche : une mesure d’audience réduite. Vercel Web Analytics, sur le site de production seulement, compte les pages vues de l’accueil, de « Créer un événement », de la page d’un événement et de l’espace organisateur, sans l’identifiant de l’événement et sans rien de ce qui suit le chemin. Les autres pages ne sont pas comptées. Elle ne pose aucun cookie. Selon Vercel, chaque page vue porte aussi le pays ou la région, le navigateur, le système, le type d’appareil et le site d’où vous venez, ainsi qu’une empreinte calculée à partir de la requête, effacée après 24 heures."
+    },
+    "storage": {
+      "title": "Cookies et stockage du navigateur",
+      "intro": "Fullcar ne pose qu’un cookie, et garde quelques valeurs dans le stockage de votre navigateur. Tous servent au service lui-même, aucun à la mesure ni à la publicité : c’est pourquoi il n’y a pas de bandeau de consentement.",
+      "locale": "Le cookie de langue, « fr » ou « en » : posé seulement quand vous touchez le bouton de langue, en bas de page. Il dure 365 jours.",
+      "personal": "Le jeton personnel, un par événement : il permet à cet appareil de modifier les personnes qu’il a inscrites. Il reste jusqu’à ce que vous effaciez les données du site, même quand l’appareil n’a plus personne ; après le 30e jour, il n’ouvre plus rien.",
+      "session": "Le jeton de session de l’organisateur : il garde la session ouverte, 90 jours après la dernière visite. « Se déconnecter » l’efface de ce navigateur.",
+      "admin": "Le jeton d’admin, dans le navigateur qui a créé un événement : il ouvre l’espace organisateur de cet événement dans ce navigateur, jusqu’au 30e jour. « Se déconnecter » l’efface, et il ne sert plus après la suppression du compte.",
+      "fold": "Le repli de l’espace organisateur, pour un événement, seulement tant que vous le laissez replié.",
+      "nothingElse": "Rien d’autre : ni prénom, ni numéro, ni adresse e-mail n’est gardé dans votre navigateur. Les pages de Crisp et de GitHub, ouvertes dans un nouvel onglet, ont leurs propres cookies et leurs propres règles."
+    },
+    "rights": {
+      "title": "Vos droits",
+      "intro": "Vous pouvez accéder à vos données, les corriger, les faire effacer, en demander une copie, vous opposer à un usage ou en demander la limitation. Le plus souvent, cela se fait dans l’application, tout de suite :",
+      "organiser": "Organisateur : « Mes événements » montre vos événements ; « Modifier l’événement » corrige un événement ; « Supprimer mon compte », en bas de « Mes événements », efface votre adresse et votre historique.",
+      "participant": "Participant : sur l’appareil qui vous a inscrit, touchez votre prénom dans « Vos inscriptions » pour vous modifier ; « Retirer de l’événement » vous efface, avec vos voitures et vos places. L’organisateur peut aussi retirer n’importe qui, depuis « Personnes inscrites ».",
+      "otherwise": "Sinon, ou pour tout autre droit, écrivez-nous dans la discussion « Nous contacter », avec le lien de l’événement et le prénom concerné : un participant n’ayant pas de compte, c’est ainsi que nous le retrouvons.",
+      "cnil": "Si vous estimez que vos droits ne sont pas respectés, vous pouvez adresser une réclamation à la CNIL, l’autorité française de protection des données, ou à celle du pays où vous vivez :",
+      "cnilLink": "cnil.fr"
+    },
+    "contact": {
+      "title": "Nous contacter",
+      "body": "Toute question ou demande sur vos données passe par la discussion du site : le lien « Nous contacter », en bas de chaque page, ou celui-ci. C’est aussi là que vous exercez vos droits. Il n’y a pas d’adresse e-mail de contact. Nous répondons dans un délai d’un mois au plus.",
+      "crisp": "« Nous contacter » ouvre la discussion de Crisp dans un nouvel onglet. Ce que vous y écrivez, demandes d’accès ou d’effacement comprises, est reçu et gardé par Crisp pour notre compte (voir « Les services que nous utilisons »)."
+    },
+    "updates": {
+      "title": "Mise à jour",
+      "body": "Si ce que nous gardons ou les services que nous utilisons changent, cette page est mise à jour avant."
+    }
   },
   "NewEvent": {
     "title": "Créer un événement"
@@ -553,6 +691,7 @@
   "Login": {
     "title": "Se connecter",
     "intro": "Pas de mot de passe : nous vous envoyons un lien de connexion par e-mail.",
+    "signedOut": "Session fermée.",
     "email": "Adresse e-mail",
     "send": "Recevoir le lien",
     "sending": "Envoi en cours…",
@@ -593,5 +732,10 @@
       "title": "Vos événements n’ont pas pu être chargés",
       "body": "Vérifiez la connexion, puis réessayez."
     }
+  },
+  "Account": {
+    "title": "Mon compte",
+    "signOut": "Se déconnecter",
+    "signOutFailed": "La session n’a pas été fermée. Vérifiez la connexion, puis réessayez."
   }
 }

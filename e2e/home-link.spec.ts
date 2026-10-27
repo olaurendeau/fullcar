@@ -19,6 +19,7 @@ const UNKNOWN_ID = "Zz9yXw8v";
 const FR = {
   home: "Accueil",
   switch: "English",
+  privacy: "Confidentialité",
   source: "Code source sur GitHub (s’ouvre dans un nouvel onglet)",
   contact: "Nous contacter (s’ouvre dans un nouvel onglet)",
   panel: "Espace organisateur",
@@ -28,6 +29,7 @@ type Words = typeof FR;
 const EN: Words = {
   home: "Home",
   switch: "Français",
+  privacy: "Privacy",
   source: "Source code on GitHub (opens in a new tab)",
   contact: "Contact us (opens in a new tab)",
   panel: "Organiser area",
@@ -136,17 +138,17 @@ function windowMarked(page: Page) {
 test.describe("the home link, in a browser set to French", () => {
   test.use({ locale: "fr-FR" });
 
-  test("A3.2, A3.6: on /, no link « Accueil »: line 1 is the language, line 2 the source code, then « Nous contacter »", async ({
+  test("A3.2, A3.6: on /, no link « Accueil »: line 1 is the language and « Confidentialité », line 2 the source code, then « Nous contacter »", async ({
     page,
   }) => {
     await open(page, "/", "Fullcar");
     await expect(homeLink(page, FR)).toHaveCount(0);
     await expect(page.locator('footer a[href="/"]')).toHaveCount(0);
-    expect(await footerRow(page)).toEqual([FR.switch, FR.source, FR.contact]);
+    expect(await footerRow(page)).toEqual([FR.switch, FR.privacy, FR.source, FR.contact]);
     await expectNoNavigation(page);
   });
 
-  test("A3.3, A3.5: the keyboard goes « Accueil », the language, the source code, « Nous contacter », and « Accueil » shows the switch's ring", async ({
+  test("A3.3, A3.5: the keyboard goes « Accueil », the language, « Confidentialité », the source code, « Nous contacter », and « Accueil » shows the switch's ring", async ({
     page,
   }) => {
     await open(page, "/nouveau", "Créer un événement");
@@ -165,6 +167,8 @@ test.describe("the home link, in a browser set to French", () => {
     // The ring of the language switch, and only it.
     expect(ring).toEqual(await outlineOf(button));
 
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: FR.privacy, exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: FR.source, exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
@@ -263,7 +267,7 @@ test.describe("the home link, in a browser set to French", () => {
       const still = await noScript.newPage();
       await still.goto("/nouveau");
       await expect(still.getByRole("heading", { level: 1 })).toHaveText("Créer un événement");
-      expect(await footerRow(still)).toEqual([FR.home, FR.switch, FR.source, FR.contact]);
+      expect(await footerRow(still)).toEqual([FR.home, FR.switch, FR.privacy, FR.source, FR.contact]);
       await expect(languageSwitch(still, FR)).toBeDisabled();
       await expectHomeLink(still, FR);
 
@@ -303,7 +307,7 @@ test.describe("the home link, in a browser set to English", () => {
     test(`A3.1, A3.4: on ${where}, one link « Home » to /, on line 1 with the switch`, async ({ page }) => {
       await open(page, path, heading);
       await expectHomeLink(page, EN);
-      expect(await footerRow(page)).toEqual([EN.home, EN.switch, EN.source, EN.contact]);
+      expect(await footerRow(page)).toEqual([EN.home, EN.switch, EN.privacy, EN.source, EN.contact]);
       await expectDiscreetFirstLine(page, EN);
     });
   }
@@ -311,6 +315,6 @@ test.describe("the home link, in a browser set to English", () => {
   test("A3.2: on /, no link « Home »", async ({ page }) => {
     await open(page, "/", "Fullcar");
     await expect(homeLink(page, EN)).toHaveCount(0);
-    expect(await footerRow(page)).toEqual([EN.switch, EN.source, EN.contact]);
+    expect(await footerRow(page)).toEqual([EN.switch, EN.privacy, EN.source, EN.contact]);
   });
 });
