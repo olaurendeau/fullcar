@@ -1,4 +1,4 @@
-import type { Locator, Page, Request } from "@playwright/test";
+import type { Locator, Page, Response } from "@playwright/test";
 import type { SendStatusColumn } from "@/db/schema";
 import { seedPendingSend } from "@/db/test-events";
 import { leaveNoToken } from "./fixtures";
@@ -137,15 +137,13 @@ test("OA1.7: a change while a sheet hides the page is said once the sheet is clo
 
   await areaEditButton(page).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  // Listening before the failure is kept, only the reads that start after it count: one already
-  // on its way may have been answered « sending ».
-  const isRead = (request: Request) =>
-    request.method() === "POST" && new URL(request.url()).pathname === organiserPath(seededEvent);
-  const readsStarted = new Set<Request>();
-  page.on("request", (request) => isRead(request) && readsStarted.add(request));
+  // One read has just been answered « sending »: the poll is still running, and the next read leaves
+  // POLL_MS after that answer is applied. Keeping the failure now, that next read is the one that sees it.
+  const isRead = (response: Response) =>
+    response.request().method() === "POST" && new URL(response.url()).pathname === organiserPath(seededEvent);
+  await (await page.waitForResponse(isRead)).finished();
   await seedPendingSend(db, seededEvent.id, { email, status: "failed" });
-  // A read of the panel that leaves once the failure is kept, then its answer applied.
-  const answer = await page.waitForResponse((response) => readsStarted.has(response.request()), { timeout: 15_000 });
+  const answer = await page.waitForResponse(isRead, { timeout: 15_000 });
   await answer.finished();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   // Under the sheet, Radix's aria-hidden: the regions keep what they said.
