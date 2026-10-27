@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
-import { actionRunner, carsOfPersonsGone, devicePersonsGone, goneNamed, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
+import { aboutPerson, actionRunner, carsOfPersonsGone, devicePersonsGone, goneNamed, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -192,16 +192,29 @@ describe("carsOfPersonsGone", () => {
   });
 });
 
-// RP5.4: a refusal `personGone` names those it was sent about; its failure says it, the information does not.
+// RP5.4: a refusal `personGone` names those it was sent about; its failure says it, the information
+// does not. The others gone with it are news (RP5.3): Marc removed, then Tom, Tom's refusal names Tom alone.
 describe("goneNamed", () => {
-  it("the persons a refusal `personGone` names: its `goneIds`, or, for an action about one person, those gone with it", () => {
-    expect(goneNamed({ ok: false, error: "personGone", goneIds: ["tom"] }, ["tom", "lea"])).toEqual(["tom"]);
-    expect(goneNamed({ ok: false, error: "personGone", state: {} }, ["tom"])).toEqual(["tom"]);
+  it("the persons a refusal `personGone` names: its `goneIds`, and nobody else", () => {
+    expect(goneNamed({ ok: false, error: "personGone", goneIds: ["tom"] })).toEqual(["tom"]);
+    expect(goneNamed({ ok: false, error: "personGone", goneIds: ["tom", "lea"] })).toEqual(["tom", "lea"]);
+    expect(goneNamed({ ok: false, error: "personGone", state: {} })).toEqual([]);
   });
 
   it("nobody for any other answer", () => {
     for (const answer of [{ ok: true }, { ok: false, error: "forbidden" }, { ok: false, error: "rideGone" }, null, "personGone", undefined]) {
-      expect(goneNamed(answer, ["tom"])).toEqual([]);
+      expect(goneNamed(answer)).toEqual([]);
+    }
+  });
+
+  it("an action about one person (« Modifier », a cell's choice): her refusal `personGone` names her alone", () => {
+    expect(goneNamed(aboutPerson({ ok: false, error: "personGone", state: {} }, "tom"))).toEqual(["tom"]);
+    expect(aboutPerson({ ok: false, error: "personGone", state: {} }, "tom")).toEqual({ ok: false, error: "personGone", state: {}, goneIds: ["tom"] });
+  });
+
+  it("any other answer of an action about one person is left as it was", () => {
+    for (const answer of [{ ok: true, state: {} }, { ok: false, error: "forbidden" }, { ok: false, error: "personGone", goneIds: ["lea"] }]) {
+      expect(aboutPerson(answer, "tom")).toBe(answer);
     }
   });
 });

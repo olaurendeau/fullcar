@@ -138,18 +138,31 @@ export function DevicePersons({
       </div>
     );
   }
-  if (!ready) return null;
+  // Gone, removed here or elsewhere, her sheet closes over what it showed, rather than going with
+  // her (RP5.3), the last person of the device's too, whose section goes: closed, it gives the
+  // focus where the removal says. Out of the section, so that it stays mounted as the section goes.
+  const shown = sheet && personOf(board, sheet.id);
+  const person = shown || sheet?.person;
+  const personSheet = sheet && person && (
+    <PersonSheet
+      key={sheet.opened}
+      person={person}
+      open={sheet.open && !!shown}
+      // A success comes after the sheet that sent it: it closes that one, not one opened since.
+      onOpenChange={(isOpen) => setSheet((current) => (current?.opened === sheet.opened ? { ...current, open: isOpen } : current))}
+      updatePerson={updatePerson}
+      removal={removalConfirmation(board, person.id)}
+      removePerson={removePerson}
+      refocus={() => focusName(person.id) || focusAfterRemoval(removedFrom.current, person.id)}
+    />
+  );
 
   const open = expanded ?? startsExpanded(rows);
   const Chevron = open ? ChevronUp : ChevronDown;
-  // Gone, removed here or elsewhere, her sheet closes over what it showed, rather than going with
-  // her (RP5.3): closed, it gives the focus where the removal says.
-  const shown = sheet && personOf(board, sheet.id);
-  const person = shown || sheet?.person;
   const cellRow = cellSheet && rows.find((row) => row.id === cellSheet.id);
   const cell = cellRow && cellRow.cells.find((candidate) => candidate.leg === cellSheet.leg);
 
-  return (
+  const section = ready && (
     <section
       aria-labelledby={TITLE_ID}
       className={cn("flex flex-col gap-1 rounded-[14px] border px-3 pt-1", open ? "pb-3" : "pb-1")}
@@ -180,21 +193,6 @@ export function DevicePersons({
           onCell={(id, leg) => setCellSheet({ id, leg, open: true, opened: (cellSheet?.opened ?? 0) + 1 })}
         />
       </div>
-      {sheet && person && (
-        <PersonSheet
-          key={sheet.opened}
-          person={person}
-          open={sheet.open && !!shown}
-          // A success comes after the sheet that sent it: it closes that one, not one opened since.
-          onOpenChange={(isOpen) =>
-            setSheet((current) => (current?.opened === sheet.opened ? { ...current, open: isOpen } : current))
-          }
-          updatePerson={updatePerson}
-          removal={removalConfirmation(board, person.id)}
-          removePerson={removePerson}
-          refocus={() => focusName(person.id) || focusAfterRemoval(removedFrom.current, person.id)}
-        />
-      )}
       {cellSheet && cellRow && cell && (
         <CellSheet
           key={cellSheet.opened}
@@ -213,5 +211,11 @@ export function DevicePersons({
         />
       )}
     </section>
+  );
+  return (
+    <>
+      {section}
+      {personSheet}
+    </>
   );
 }

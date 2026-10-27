@@ -30,6 +30,7 @@ const car = (page: Page, driver: string) => panel(page).getByRole("article", { n
 const tab = (page: Page, leg: "Aller" | "Retour") => page.getByRole("tab", { name: new RegExp(`^${leg}`) });
 const withoutCar = (page: Page) => panel(page).getByRole("region", { name: "Sans voiture" }).getByRole("listitem");
 const barStatus = (page: Page) => page.locator('[role="status"]:has(+ [role="alert"])');
+const barClose = (page: Page) => page.locator("[data-message-bar]").getByRole("button", { name: "Fermer" });
 const barUndo = (page: Page) => page.locator("[data-message-bar]").getByRole("button", { name: "Annuler" });
 
 /** Closes every sheet and confirmation, before an answer. */
@@ -126,6 +127,61 @@ test.describe("a removal seen from the other devices", () => {
     await page.reload();
     await expect(names(page)).toHaveText(["Léa", "Tom"]);
     await expect(messages(page)).toHaveCount(0);
+  });
+
+  test("RP5.3: removed elsewhere, no sheet open: « Fermer » gives the focus to the next first name", async ({ db, page, seededEvent }) => {
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(names(page)).toHaveText(["Marc", "Léa", "Tom"]);
+    await deleteSeededPerson(db, seededEvent.id, example.device.marc);
+    await notConcerned(page, "Tom", "Aller");
+    await expect(names(page)).toHaveText(["Léa", "Tom"]);
+    await expect(messages(page)).toHaveText([elsewhere("Marc")]);
+    await barClose(page).click();
+    await expect(messages(page)).toHaveCount(0);
+    await expect(nameButton(page, "Léa")).toBeFocused();
+  });
+
+  // The review of #862: Marc removed, then Tom; the refusal of Tom's action names Tom alone, and Marc is news.
+  test("RP5.3, RP5.4: two removed elsewhere, an action on one: her refusal names her, the other is said removed elsewhere", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(names(page)).toHaveText(["Marc", "Léa", "Tom"]);
+    await deleteSeededPerson(db, seededEvent.id, example.device.marc);
+    await deleteSeededPerson(db, seededEvent.id, example.device.tom);
+    await notConcerned(page, "Tom", "Aller");
+    await expect(names(page)).toHaveText(["Léa"]);
+    await expect(messages(page)).toHaveText([
+      "Tom · Aller : « Ne fait pas l’aller » n’a pas été enregistré. Tom ne fait plus partie de l’événement.",
+      elsewhere("Marc"),
+    ]);
+  });
+
+  // The last person of the device: the section goes, her sheet closes, the focus on « Ajouter une personne ».
+  test("RP5.3: the device's last person removed elsewhere, her sheet open: it closes, the focus on « Ajouter une personne »", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await holdToken(page, seededEvent.id, inesToken);
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(names(page)).toHaveText(["Inès"]);
+    // The read: her « Ne fait pas le retour », answered once her sheet is open and she is removed.
+    const answer = await holdFirst(page, example.others.ines, false);
+    await notConcerned(page, "Inès", "Retour", true);
+    await nameButton(page, "Inès").click();
+    await expect(sheet(page, "Inès")).toBeVisible();
+    await deleteSeededPerson(db, seededEvent.id, example.others.ines);
+    answer();
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(section(page)).toHaveCount(0);
+    await expect(panel(page).locator('[data-add-person="aller"]')).toBeFocused();
+    await expect(messages(page)).toHaveText(["Inès · Retour : « Ne fait pas le retour » n’a pas été enregistré. Inès ne fait plus partie de l’événement."]);
   });
 
   test("RP5.3: two pages of one device: A removes Léa, B never says she was removed elsewhere", async ({ context, page, seededEvent }) => {

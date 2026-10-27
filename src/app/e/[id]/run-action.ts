@@ -128,14 +128,26 @@ export function carsOfPersonsGone(shown: EventState, next: EventState): string[]
     .map((car) => car.id);
 }
 
+const refusedGone = (answer: unknown): answer is { error: "personGone" } =>
+  typeof answer === "object" && answer !== null && "error" in answer && answer.error === "personGone";
+
 /**
- * The persons an answer refused by `personGone` names (RP5.4): its `goneIds`, or, from an action
- * about one person, which carries none, those of `gone` (the device's persons gone with that
- * answer). Its failure says they are no longer part of the event; nobody else does.
+ * The persons an answer refused by `personGone` names (RP5.4), its `goneIds`: its failure says
+ * they are no longer part of the event. Nobody else: another person gone with that answer, removed
+ * elsewhere, is news (RP5.3).
  */
-export function goneNamed(answer: unknown, gone: readonly string[]): string[] {
-  if (typeof answer !== "object" || answer === null || !("error" in answer) || answer.error !== "personGone") return [];
-  return "goneIds" in answer && Array.isArray(answer.goneIds) ? answer.goneIds.filter((id) => typeof id === "string") : [...gone];
+export function goneNamed(answer: unknown): string[] {
+  if (!refusedGone(answer) || !("goneIds" in answer) || !Array.isArray(answer.goneIds)) return [];
+  return answer.goneIds.filter((id): id is string => typeof id === "string");
+}
+
+/**
+ * The answer of an action about one person (`updatePerson`, `setPersonLeg`), whose refusal
+ * `personGone` names nobody: it names her, `personId` (`goneNamed`). Any other answer as it was.
+ */
+export function aboutPerson<T>(answer: T, personId: string): T {
+  if (!refusedGone(answer) || "goneIds" in answer) return answer;
+  return { ...answer, goneIds: [personId] };
 }
 
 /**
