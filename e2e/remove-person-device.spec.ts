@@ -1,11 +1,11 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
-import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
-import type { Leg } from "@/domain/leg";
+import { deleteSeededPerson, seedRide } from "@/db/test-participants";
 import { hashToken } from "@/domain/token-hash";
 import { holdFirst, holdToken, messages, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { PHONES, seedExample } from "./removal-example";
 
 leaveNoToken();
 
@@ -17,35 +17,6 @@ type Db = Kysely<Database>;
 const REMOVE = "Retirer de l’événement";
 const ERASED = "Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.";
 const FINAL = "C’est définitif.";
-const PHONES = { marc: "06 11 22 33 44", lea: "06 12 34 56 78", tom: "06 98 76 54 32" };
-
-/**
- * The example of the page, the device holding Marc, Léa and Tom. Aller: Marc drives Inès, Hugo
- * and Léa, in his 3 seats; Claire drives Sophie, one seat left; Tom is without a car. Retour:
- * Sophie drives Marc; Léa, Inès and Hugo are without a car; Tom is not concerned.
- */
-async function seedExample(db: Db, eventId: string, token: string) {
-  const mine = async (firstName: string, phone: string) => (await seedPerson(db, eventId, { firstName, phone }, token)).id;
-  const device = { marc: await mine("Marc", PHONES.marc), lea: await mine("Léa", PHONES.lea), tom: await mine("Tom", PHONES.tom) };
-  const other = async (firstName: string) => (await seedPerson(db, eventId, { firstName })).id;
-  const others = { claire: await other("Claire"), sophie: await other("Sophie"), ines: await other("Inès"), hugo: await other("Hugo") };
-  const cars = {
-    marc: await seedRide(db, eventId, device.marc, { seats: 3, departureTime: "08:00:00" }),
-    claire: await seedRide(db, eventId, others.claire, { seats: 2, departureTime: "08:15:00" }),
-    sophie: await seedRide(db, eventId, others.sophie, { leg: "retour", seats: 3 }),
-  };
-  const place = (personId: string, leg: Leg, rideId: string | null) => seedPlacement(db, { personId, eventId, leg, rideId });
-  await place(others.ines, "aller", cars.marc);
-  await place(others.hugo, "aller", cars.marc);
-  await place(device.lea, "aller", cars.marc);
-  await place(others.sophie, "aller", cars.claire);
-  await place(device.tom, "aller", null);
-  await place(device.marc, "retour", cars.sophie);
-  await place(device.lea, "retour", null);
-  await place(others.ines, "retour", null);
-  await place(others.hugo, "retour", null);
-  return { device, others, cars };
-}
 
 /** The persons of the event, by first name. */
 const persons = async (db: Db, eventId: string) =>

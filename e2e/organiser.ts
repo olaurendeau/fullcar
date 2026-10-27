@@ -24,11 +24,12 @@ export function organiserPath({ id }: Pick<SeededEvent, "id">): string {
 }
 
 /**
- * The organiser area refused (#597, until each state has its own screen, #598): its title alone,
- * in the panel's place. Not the panel's own title, which is a button.
+ * The organiser area refused to a browser without the seeded event's token (#598): the event is
+ * pending, and its screen « Adresse pas encore confirmée » (OA7.7), `name` in another language,
+ * takes the place of the panel and of the board.
  */
-export const areaRefused = (page: Page, name = "Espace organisateur") =>
-  page.getByRole("main").getByRole("heading", { level: 2, name, exact: true }).filter({ hasNot: page.getByRole("button") });
+export const areaRefused = (page: Page, name = "Adresse pas encore confirmée") =>
+  page.getByRole("main").getByRole("heading", { level: 1, name, exact: true });
 
 export { adminTokenKey };
 

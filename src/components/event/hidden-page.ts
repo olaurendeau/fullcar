@@ -193,6 +193,16 @@ export function personsGone(personIds: readonly string[]) {
 }
 
 /**
+ * The cars of persons gone from the state the page now shows (`carsOfPersonsGone`, #850's review):
+ * what was answered about them, waiting or in the bar, goes and is never said, as « Retirer la
+ * voiture » forgets it, the success of a placement in them too. What is still on its way is not,
+ * as for `personsGone`: its answer says what came of it (`rideGone`).
+ */
+export function carsGone(rideIds: readonly string[]) {
+  if (rideIds.length > 0) withdraw({ cars: rideIds });
+}
+
+/**
  * For the content of a sheet that sends actions, under `SheetContent`: call what it returns at
  * each send, for that send's `FromSheet`. Each mount is a sheet of its own (`useId` draws a new
  * id at each mount once the page is hydrated): one reopened once closed is a new one, and the

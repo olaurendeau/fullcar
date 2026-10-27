@@ -7,7 +7,7 @@ import type { Position } from "@/domain/place";
 import { holdToken, newToken } from "./device";
 import { idle, watchMap } from "./event-map-points";
 import { leaveNoToken } from "./fixtures";
-import { areaRefused, expect, foldKey, holdActionsWith, isAction, keepAdminToken, oneCharOff, organiserPath, test as organiserTest } from "./organiser";
+import { expect, foldKey, holdActionsWith, isAction, keepAdminToken, organiserPath, test as organiserTest } from "./organiser";
 import { answerTiles, placeOf, tileAt } from "./tiles";
 
 /*
@@ -198,7 +198,8 @@ test.describe("CA1.20 (2): on /e/{id}/admin", () => {
     await tilesLoaded(page);
   });
 
-  for (const end of ["invalid", "failed"] as const) {
+  // Refused, the board and its map give way to the refusal's screen (#598): only a failed check keeps them.
+  for (const end of ["failed"] as const) {
     test(`the check ${end}, the message in place of the area: nothing while checked, nor after, the box under the fold; a scroll starts it`, async ({
       db,
       page,
@@ -207,7 +208,7 @@ test.describe("CA1.20 (2): on /e/{id}/admin", () => {
       // The message is shorter than the area: twelve persons push the box under the fold. Server
       // actions leave one at a time, the device's read first: held, the check waits behind it.
       const settleDevice = await twelveOnTheDevice(db, page, placed);
-      const token = end === "invalid" ? oneCharOff(placed.token) : placed.token;
+      const token = placed.token;
       const check = await holdActionsWith(page, token);
       const watch = watchMap(page);
       const sent = page.waitForRequest(isAction);
@@ -222,11 +223,8 @@ test.describe("CA1.20 (2): on /e/{id}/admin", () => {
       await expect.poll(check.held).toBeGreaterThan(0);
       await expect(page.getByRole("button", { name: /^Vos inscriptions/ })).toHaveAttribute("aria-expanded", "true");
       await expect(region(page)).not.toBeInViewport();
-      if (end === "failed") await check.fail();
-      else await check.release();
-      // Refused, the area's title alone (#597, until #598); failed, the alert.
-      if (end === "failed") await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
-      else await expect(areaRefused(page)).toBeVisible();
+      await check.fail();
+      await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
       await expect(region(page)).not.toBeInViewport();
       await expectNothingAsked(page, watch);
       await expectStartedByScroll(page, watch);

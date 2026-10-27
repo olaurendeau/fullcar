@@ -256,23 +256,20 @@ test.describe("organiser area, refused", () => {
     ["a token one character off", (token: string) => oneCharOff(token)],
     ["no token", () => null],
   ] as const) {
-    test(`#596, #597: with ${what} kept, the public page, preceded by the area's title alone`, async ({
+    test(`#596, #598, OA7.7: with ${what} kept, the screen of a pending event, in place of the panel and the board`, async ({
       page,
       seededEvent,
     }) => {
       await keepAdminToken(page, seededEvent.id, kept(seededEvent.token));
       await page.goto(adminPath(seededEvent));
-      const title = areaRefused(page);
-      await expect(title).toBeVisible();
-      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tournoi de Rennes");
-      await expect(page.getByRole("tab", { name: "Aller" })).toBeVisible();
+      await expect(areaRefused(page)).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+      await expect(page.getByRole("tab")).toHaveCount(0);
       await expect(panel(page)).toHaveCount(0);
       await expect(page.getByText(GONE)).toHaveCount(0);
       await expect(page.getByText(/\/admin/)).toHaveCount(0);
-      // The title comes before the event.
-      expect((await title.boundingBox())!.y).toBeLessThan(
-        (await page.getByRole("heading", { level: 1 }).boundingBox())!.y,
-      );
+      // « Voir l’événement » leads to the board.
+      await expect(page.getByRole("main").getByRole("link", { name: "Voir l’événement" })).toHaveAttribute("href", `/e/${seededEvent.id}`);
       expect(await horizontalOverflow(page)).toBe(0);
     });
   }
@@ -361,6 +358,6 @@ test.describe("organiser's arrival, in a browser set to English", () => {
 
     await keepAdminToken(page, seededEvent.id, null);
     await page.goto(adminPath(seededEvent));
-    await expect(areaRefused(page, "Organiser area")).toBeVisible();
+    await expect(areaRefused(page, "Email address not confirmed yet")).toBeVisible();
   });
 });
