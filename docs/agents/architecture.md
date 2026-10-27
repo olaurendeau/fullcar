@@ -563,9 +563,10 @@ ci-dessus valent pour chacun.
   révoqué validés pendant l'attente refusent alors l'écriture (`invalid`). C'est le cas
   d'`editEvent` ; les autres écritures de l'organisateur (#672, #675) suivront ce chemin.
 - **Le retrait d'une personne par l'organisateur** (#645, `removeAsOrganiser`,
-  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin :
-  aujourd'hui par `adminTokenMatches`, comme `editEvent`, puis par `organiser-access.ts`
-  seul (#675). La requête porte aussi le jeton personnel de l'appareil, mais seulement pour
+  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin,
+  comparé par `adminTokenMatches` sous le verrou de l'Event ; il passera par
+  `organiser-access.ts` seul, comme `editEvent` aujourd'hui (#675). La requête porte
+  aussi le jeton personnel de l'appareil, mais seulement pour
   relire le tableau que la page montre (`readEventState`), dont « Vos inscriptions » et les
   numéros visibles dépendent de ce jeton. Ce jeton ne donne aucun droit sur ce chemin : un
   jeton personnel n'ouvre jamais le retrait par l'organisateur, pas même celui du navigateur

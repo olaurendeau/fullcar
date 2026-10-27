@@ -89,10 +89,10 @@ export function removeFromDevice(
 
 /**
  * Anyone removed by the organiser (RP3.2): today the event's admin token alone, compared
- * by `adminTokenMatches` as `editEvent` does, then `organiser-access.ts` alone (#675). A
- * revoked token (#586) is no stored hash, which no token matches. `deviceToken`, the
- * page's personal token, only chooses the board read afterwards: it gives no right here,
- * and no personal token opens this path (RP3.3).
+ * by `adminTokenMatches` under the Event's lock, then `organiser-access.ts` alone, as
+ * `editEvent` already does (#675). A revoked token (#586) is no stored hash, which no
+ * token matches. `deviceToken`, the page's personal token, only chooses the board read
+ * afterwards: it gives no right here, and no personal token opens this path (RP3.3).
  */
 export function removeAsOrganiser(
   db: Kysely<Database>,
