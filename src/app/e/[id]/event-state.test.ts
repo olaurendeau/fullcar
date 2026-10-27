@@ -13,8 +13,9 @@ import type { NewEvent } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import { withVisiblePhones } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
-import { readEventPage, readEventState, type EventState } from "./event-state";
+import { readEventPage, readEventState, type DeviceState } from "./event-state";
 import { eventMetadata, loadEventPage } from "./load-event";
+import { stillOpen } from "./test-state";
 
 // Passed through, and watched: the board and the numbers must follow the same device.
 vi.mock("@/domain/board", async (importOriginal) => {
@@ -90,8 +91,8 @@ function sentNumbers(value: unknown): Name[] {
   return names.filter((name) => sent.some((text) => text.includes(digits(PHONES[name])))).sort();
 }
 
-function legOf(state: EventState | undefined, leg: Leg) {
-  const found = state?.legs.find((board) => board.leg === leg);
+function legOf(state: DeviceState | undefined, leg: Leg) {
+  const found = stillOpen(state)?.legs.find((board) => board.leg === leg);
   if (found === undefined) throw new Error(`no ${leg} in the state`);
   return found;
 }
@@ -146,7 +147,7 @@ describe("readEventState", () => {
     await withRollback(async (trx) => {
       const a = await seedScene(trx);
       const b = await seedScene(trx);
-      const state = await readEventState(trx, b.eventId, a.lea.token);
+      const state = stillOpen(await readEventState(trx, b.eventId, a.lea.token));
       expect(state?.legs.flatMap((leg) => leg.device)).toEqual([]);
       expect(sentNumbers(state)).toEqual([]);
     });
@@ -205,7 +206,7 @@ describe("readEventState", () => {
   it("has one leg without a retour", async () => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx, { retourAt: null });
-      expect((await readEventState(trx, eventId))?.legs.map((leg) => leg.leg)).toEqual(["aller"]);
+      expect(stillOpen(await readEventState(trx, eventId))?.legs.map((leg) => leg.leg)).toEqual(["aller"]);
     });
   });
 
@@ -219,7 +220,7 @@ describe("readEventState", () => {
   ])("carries the event's header, %s", async (_, fields, retourAt, locationPosition, description) => {
     await withRollback(async (trx) => {
       const { id: eventId } = await seedEvent(trx, { title: "Match à Vannes", location: "Salle du Vincin", ...fields });
-      const state = await readEventState(trx, eventId);
+      const state = stillOpen(await readEventState(trx, eventId));
       expect(state?.event).toStrictEqual({
         title: "Match à Vannes",
         location: "Salle du Vincin",
@@ -238,7 +239,7 @@ describe("readEventState", () => {
       await withCommittedEvent(async (db, eventId) => {
         await db.updateTable("event").set({ description }).where("id", "=", eventId).execute();
         // The read of an action, then the page's: its state, and its document's title (DS5.2, DS5.3).
-        expect((await readEventState(db, eventId))?.event.description).toBe(description);
+        expect(stillOpen(await readEventState(db, eventId))?.event.description).toBe(description);
         const page = await loadEventPage(eventId);
         expect(page?.ended === false && page.state.event.description).toBe(description);
         expect(await eventMetadata(eventId)).toStrictEqual({ title: "Tournoi de Rennes" });
@@ -254,6 +255,20 @@ describe("readEventState", () => {
       const scene = await seedScene(trx);
       const state = await readEventState(trx, scene.eventId, scene.lea.token);
       expect(JSON.parse(JSON.stringify(state))).toStrictEqual(state);
+    });
+  });
+
+  // #806: every action that answers with a state reads it here, its refusal by eventEnded included.
+  it.each<[string, (scene: Awaited<ReturnType<typeof seedScene>>) => unknown]>([
+    ["a device's token", (scene) => scene.lea.token],
+    ["no token", () => undefined],
+  ])("OA8.3: with %s, an anonymised event gives its title and its start, neither its place nor anyone", async (_, tokenOf) => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      await anonymiseEvent(trx, scene.eventId);
+      const state = await readEventState(trx, scene.eventId, tokenOf(scene));
+      expect(state).toStrictEqual({ ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" });
+      expect(strings(state).join(" ")).not.toMatch(/Gymnase|Marc|Léa|Zoé|Tom/);
     });
   });
 
@@ -330,7 +345,7 @@ describe("readEventState", () => {
         },
       };
 
-      const state = await readEventState(db.withPlugin(between), eventId);
+      const state = stillOpen(await readEventState(db.withPlugin(between), eventId));
       expect(changed).toBe(true);
       expect(state?.event).toMatchObject({ title: "Tournoi de Rennes", retourAt: "2026-12-12 18:00:00" });
       expect(state?.legs.map((leg) => leg.leg)).toEqual(["aller", "retour"]);

@@ -10,7 +10,7 @@ import { LEGS, type Leg } from "@/domain/leg";
 import { isPublicId } from "@/domain/public-id";
 import { seatsDecision } from "@/domain/ride";
 import { EVENT_NOT_FOUND, type EventNotFound } from "./change-ride";
-import { readEventState, type EventState } from "./event-state";
+import { readEventState, type DeviceState } from "./event-state";
 import { lockLegs } from "./retour";
 
 /**
@@ -32,7 +32,7 @@ export type SeatsOutcome =
   | { ok: false; error: "personGone"; goneIds: string[] };
 
 /** The outcome, and the event's state as the device now sees it, refusal or not. */
-export type TakeSeatsResult = SeatsOutcome & { state: EventState };
+export type TakeSeatsResult = SeatsOutcome & { state: DeviceState };
 
 interface SeatsRequest {
   rideId: string;
@@ -140,7 +140,7 @@ export type UndoOutcome =
   | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" };
 
 /** The outcome, and the event's state as the device now sees it, refusal or not. */
-export type UndoSeatsResult = UndoOutcome & { state: EventState };
+export type UndoSeatsResult = UndoOutcome & { state: DeviceState };
 
 interface UndoRequest {
   rideId: string;

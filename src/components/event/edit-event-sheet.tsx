@@ -16,7 +16,7 @@ import {
 } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import { cn } from "@/lib/utils";
-import { BottomSheet } from "./bottom-sheet";
+import { BottomSheet, SheetBar } from "./bottom-sheet";
 import { carTimesKept, EventFormFields, eventFieldsChanged, loadedEventFields, withSavedFields } from "./event-fields";
 import { RemoveRetourDialog, type RemovalSaid, type RetourCounts } from "./remove-retour-dialog";
 
@@ -34,7 +34,8 @@ type LateRemoval = { kind: "offline" | "failed" | "eventNotFound" } | { kind: "r
 
 /**
  * « Modifier l’événement » (organizer-view v3.3.6, « Le formulaire »): a sheet with the fields of
- * the creation and no option, loaded with `event`, the values the page shows as it opens. Neither
+ * the creation and no option, loaded with `event`, the values the page shows as it opens. On a
+ * phone, it fills the visible height, its messages and buttons in its bar (event-board v4.6). Neither
  * « Fermer »: « Annuler » and Escape close it. Closed, by them or once saved, the focus goes back
  * to `onClosed`'s place, « Modifier l’événement ». While open, `lateSavedRef` gives it the values a
  * change sent from an earlier sheet saved (decision 51). Each `opening` mounts a form of its own,
@@ -66,6 +67,7 @@ export function EditEventSheet({
       open={open}
       onOpenChange={onOpenChange}
       title={t("title")}
+      fullHeight
       closable={false}
       onCloseAutoFocus={(focus) => {
         focus.preventDefault();
@@ -299,35 +301,44 @@ function EditEventForm({
     notes[leg] = tEdit(`carTimes.${leg}`, { count });
   }
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
+    <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} notes={notes} locked={sending} suggestions />
-      {(said === "offline" || said === "failed") && (
-        <p role="alert" className="text-sm text-destructive">
-          {tActions(said)}
-        </p>
-      )}
-      {late && <SheetNotice said={late} destructive />}
-      {said === "changed" && <SheetNotice said={said} />}
-      {gone && !late && <SheetNotice said={said} destructive />}
-      {/* No live region: the focus stays on « Valider », which it describes (M2.6). */}
-      {sending && (
-        <p id={idOf("sending")} className="text-sm text-muted-foreground">
-          {tEdit("sending")}
-        </p>
-      )}
-      <Button
-        ref={submitButton}
-        type="submit"
-        className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
-        aria-disabled={sending || undefined}
-        aria-describedby={sending ? idOf("sending") : undefined}
-        disabled={gone}
+      {/* In the sheet's bar, out of the form: « Valider » is its submit button by `form` (v4.6, rule 1). */}
+      <SheetBar
+        messages={
+          <>
+            {(said === "offline" || said === "failed") && (
+              <p role="alert" className="text-sm text-destructive">
+                {tActions(said)}
+              </p>
+            )}
+            {late && <SheetNotice said={late} destructive />}
+            {said === "changed" && <SheetNotice said={said} />}
+            {gone && !late && <SheetNotice said={said} destructive />}
+            {/* No live region: the focus stays on « Valider », which it describes (M2.6). */}
+            {sending && (
+              <p id={idOf("sending")} className="text-sm text-muted-foreground">
+                {tEdit("sending")}
+              </p>
+            )}
+          </>
+        }
       >
-        {tActions("submit")}
-      </Button>
-      <Button ref={cancelButton} type="button" variant="outline" className="h-11 w-full" onClick={onDone}>
-        {tActions("cancel")}
-      </Button>
+        <Button
+          ref={submitButton}
+          type="submit"
+          form={idOf("form")}
+          className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
+          aria-disabled={sending || undefined}
+          aria-describedby={sending ? idOf("sending") : undefined}
+          disabled={gone}
+        >
+          {tActions("submit")}
+        </Button>
+        <Button ref={cancelButton} type="button" variant="outline" className="h-11 w-full" onClick={onDone}>
+          {tActions("cancel")}
+        </Button>
+      </SheetBar>
       {/* In a portal: out of the form in the document, its buttons submit nothing. */}
       {confirmation && (
         <RemoveRetourDialog
