@@ -67,6 +67,18 @@ test("RP4.1–RP4.3, O9.4: folded at every display, by first name, and nothing s
   await expect(button(page)).toHaveAttribute("aria-expanded", "true");
   await button(page).click();
   await expect(panel(page).getByText(FR.hint)).toBeHidden();
+  // O9.4: « un clic, Entrée ou Espace » — the keys unfold and fold it as the click does, in place.
+  const here = await button(page).boundingBox();
+  for (const [key, expanded] of [["Enter", "true"], ["Enter", "false"], ["Space", "true"], ["Space", "false"]] as const) {
+    await button(page).focus();
+    await page.keyboard.press(key);
+    await expect(button(page)).toHaveAttribute("aria-expanded", expanded);
+    await expect(button(page)).toBeFocused();
+    expect(await button(page).boundingBox()).toEqual(here);
+    if (expanded === "true") await expect(panel(page).getByText(FR.hint)).toBeVisible();
+    else await expect(panel(page).getByText(FR.hint)).toBeHidden();
+  }
+  expect(await legStates(page)).toEqual(["true", "false"]);
   expect(sent()).toBe(0);
   expect(await storage()).toEqual(before);
 
@@ -149,5 +161,51 @@ for (const closed of [false, true]) {
     expect(sent()).toBe(1);
     await expect(messages(page)).toHaveCount(closed ? 1 : 0);
     expect(await db.selectFrom("person").select("id").where("id", "=", example.persons.doublon.id).execute()).toHaveLength(1);
+  });
+}
+
+// RP4.7 follows RP1.11 (#854): a failure that sending again could change is not kept. The confirmation
+// reopened is a new one, with the red button, and the removal goes through without a reload.
+const TRANSIENT = {
+  offline: "Action impossible, vérifiez la connexion",
+  "a server error (500)": "Une erreur est survenue et rien n’a changé. Réessayez dans un instant.",
+} as const;
+for (const [what, said] of Object.entries(TRANSIENT)) {
+  test(`RP4.7, RP1.11, ${what}: not kept as final; the confirmation reopened is new, and the removal goes through`, async ({
+    context,
+    page,
+    seededEvent,
+  }) => {
+    await page.goto(organiserPath(seededEvent));
+    await button(page).click();
+    const held = await holdActionsWith(page, example.persons.doublon.id);
+    const sent = countActions(page, example.persons.doublon.id);
+    const remove = row(page, 4).getByRole("button", { name: "Retirer Léa de l’événement", exact: true });
+    const confirm = confirmation(page, "Léa").getByRole("button", { name: "Retirer de l’événement", exact: true });
+    await remove.click();
+    await confirm.click();
+    await expect.poll(held.held).toBe(1);
+    if (what === "offline") {
+      await context.setOffline(true);
+      await held.lose();
+    } else {
+      await held.fail();
+    }
+    await expect(confirmation(page, "Léa").getByRole("alert")).toHaveText(said);
+    await expect(confirmation(page, "Léa").getByRole("button")).toHaveText(["Retirer de l’événement", "Annuler"]);
+    await context.setOffline(false);
+
+    await confirmation(page, "Léa").getByRole("button", { name: "Annuler" }).click();
+    await expect(remove).toBeFocused();
+    await remove.click();
+    await expect(confirmation(page, "Léa").getByRole("alert")).toHaveCount(0);
+    await expect(confirmation(page, "Léa").getByRole("button")).toHaveText(["Retirer de l’événement", "Annuler"]);
+    await confirm.click();
+    await expect.poll(held.held).toBe(1);
+    await held.release();
+
+    await expect(messages(page)).toHaveText(["Léa ne fait plus partie de l’événement"]);
+    await expect(button(page)).toHaveAccessibleName("Personnes inscrites (7)");
+    expect(sent()).toBe(2);
   });
 }

@@ -324,7 +324,7 @@
     "passenger": "{leg, select, aller {Sa place dans la voiture de {driver} à l’aller sera libérée.} other {Sa place dans la voiture de {driver} au retour sera libérée.}}",
     "notified": "{cars, plural, one {Personne n’est prévenu : pensez à le dire aux personnes de cette voiture.} other {Personne n’est prévenu : pensez à le dire aux personnes de ces voitures.}}",
     "notifiedOrganiser": "Personne n’est prévenu, pas même {firstName}.",
-    "erased":"Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.",
+    "erased": "Son prénom, son numéro s’il y en a un et ses inscriptions seront effacés.",
     "final": "C’est définitif.",
     "confirm": "Retirer de l’événement",
     "removed": "{firstName} ne fait plus partie de l’événement",

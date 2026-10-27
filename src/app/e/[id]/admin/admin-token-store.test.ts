@@ -172,6 +172,7 @@ describe("checkFromAnswer", () => {
       state: "valid",
       publicUrl: `https://fullcar.example/e/${ID}`,
       legs,
+      persons: [],
       pending,
     });
     expect(checkFromAnswer({ state: "panel", legs, pending: { send: "sent" } }, "https://fullcar.example", ID)).not.toHaveProperty(

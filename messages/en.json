@@ -324,7 +324,7 @@
     "passenger": "{leg, select, aller {Their seat in {driver}’s car on the outbound trip will be freed.} other {Their seat in {driver}’s car on the return trip will be freed.}}",
     "notified": "{cars, plural, one {Nobody is notified: remember to tell the people in that car.} other {Nobody is notified: remember to tell the people in those cars.}}",
     "notifiedOrganiser": "Nobody is notified, not even {firstName}.",
-    "erased":"Their first name, their number if any, and their sign-ups will be erased.",
+    "erased": "Their first name, their number if any, and their sign-ups will be erased.",
     "final": "This cannot be undone.",
     "confirm": "Remove from the event",
     "removed": "{firstName} is no longer part of the event",
