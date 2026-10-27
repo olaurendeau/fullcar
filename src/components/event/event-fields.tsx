@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { DESCRIPTION_MAX, descriptionCount } from "@/domain/description";
 import { EVENT_FIELDS, type EventErrors, type EventField, type EventFields as SentFields, type EventHeader } from "@/domain/event";
 import { LEGS, type Leg } from "@/domain/leg";
 import { samePlace, type Position } from "@/domain/place";
@@ -84,6 +86,9 @@ export function loadedEventFields({ title, location, locationPosition, allerAt, 
     retourDateFollows: retour === undefined || retour.date === aller.date,
   };
 }
+
+/** Characters, counted as the server counts them, from which the description's counter shows (DS1.7). */
+const DESCRIPTION_COUNTED = 900;
 
 /** The place of `values`, its text and its position: the couple a place is compared by. */
 const placeOf = (values: EventFieldValues) => ({ text: values.location, position: values.locationPosition });
@@ -175,8 +180,8 @@ export function withSavedFields(loaded: EventFieldValues, saved: EventFieldsStat
 
 /**
  * The fields of an Event (#264): Titre, Lieu, the start's date and time, the box Retour and,
- * while it is checked, the end's date and time. Shared by the creation and, with epic #250,
- * the organiser's change of the Event. Each error shows under its field; `idOf` names the
+ * while it is checked, the end's date and time, then the description (#713). Shared by the
+ * creation and, with epic #250, the organiser's change of the Event. Each error shows under its field; `idOf` names the
  * fields, so that the form around them can focus the first error. `onChange` receives an
  * update, as a state setter takes it. A leg's `notes` show under its date and time, which they
  * describe after their error (M5.1, review of #293).
@@ -214,11 +219,61 @@ export function EventFormFields({
       </p>
     );
 
-  /** A field's error: its message, and the id that describes the field. */
+  /**
+   * A field's error: its message, and the id that describes the field. Its maximum as digits:
+   * « 1000 caractères au maximum. », as event-description v3 writes it, not « 1 000 ».
+   */
   const errorOf = (name: EventField) => {
     const error = errors[name];
     const message = error && eventErrorMessage(name, error);
-    return message ? { id: idOf(`${name}-error`), message: t(`errors.${message.key}`, message.values) } : undefined;
+    const values = message?.values && { max: String(message.values.max) };
+    return message ? { id: idOf(`${name}-error`), message: t(`errors.${message.key}`, values) } : undefined;
+  };
+
+  /**
+   * The description (event-description v3, « Écrire »): a text area that grows with its text up
+   * to 6 lines, then scrolls inside, with no `maxlength`; under it, its error, its sentence and,
+   * from 900 characters counted as the server counts them, its counter, in the error colour
+   * beyond 1000. No live region: the field's description says it (DS1.7).
+   */
+  const descriptionField = () => {
+    const error = errorOf("description");
+    const count = descriptionCount(values.description);
+    const counted = count >= DESCRIPTION_COUNTED;
+    const describedBy = [error && error.id, idOf("description-hint"), counted && idOf("description-count")].filter(Boolean).join(" ");
+    return (
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <Label htmlFor={idOf("description")} className={cn(error && "text-destructive")}>
+          {t("description")}
+        </Label>
+        <Textarea
+          id={idOf("description")}
+          // 6 lines of 24 px, then of 20 px from `md:text-sm`, with the padding and the border (DS1.14).
+          className="max-h-[162px] overflow-y-auto md:max-h-[138px]"
+          value={values.description}
+          readOnly={locked || undefined}
+          onChange={(e) => !locked && onChange(withEventField("description", e.target.value))}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+        />
+        {error && (
+          <p id={error.id} className="text-[13px] leading-[18px] text-destructive">
+            {error.message}
+          </p>
+        )}
+        <p id={idOf("description-hint")} className="text-[13px] leading-[18px] text-muted-foreground">
+          {t("descriptionHint")}
+        </p>
+        {counted && (
+          <p
+            id={idOf("description-count")}
+            className={cn("text-[13px] leading-[18px] text-muted-foreground", count > DESCRIPTION_MAX && "text-destructive")}
+          >
+            {t("descriptionCount", { count: String(count), max: String(DESCRIPTION_MAX) })}
+          </p>
+        )}
+      </div>
+    );
   };
 
   const text = (name: Exclude<EventField, "description">, type: "text" | "date" | "time" = "text") => {
@@ -288,6 +343,7 @@ export function EventFormFields({
         </div>
       )}
       {values.retour && note("retour")}
+      {descriptionField()}
     </>
   );
 }

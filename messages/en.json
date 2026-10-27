@@ -30,6 +30,9 @@
     "retourHint": "Untick if no return trip is organised.",
     "retourDate": "End date",
     "retourTime": "End time",
+    "description": "Description (optional)",
+    "descriptionHint": "What the group should know. Visible to everyone who has the link, erased 30 days after the event.",
+    "descriptionCount": "{count} of {max} characters",
     "options": "Options",
     "boosters": {
       "label": "Booster seats",
