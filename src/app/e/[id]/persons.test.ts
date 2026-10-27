@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { getDb } from "@/db/client";
-import { readTokenHolders } from "@/db/persons";
+import { lockPersons, readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
 import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
@@ -10,6 +10,7 @@ import { seedEvent } from "@/db/test-events";
 import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { readEventState, type DeviceState, type EventState } from "./event-state";
+import { offerRide } from "./offer-ride";
 import { addPerson, setPersonLeg, updatePerson, type PersonOutcome } from "./persons";
 import { stillOpen } from "./test-state";
 
@@ -559,6 +560,148 @@ describe("on a person removed meanwhile", () => {
       );
       expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "personGone" }));
       expect(await personIds(db, eventId)).toEqual([]);
+    });
+  });
+});
+
+const CLAIRE_PHONE = "06 98 76 54 32";
+const OTHER_PHONE = "07 13 13 13 13";
+
+/** Whether `personId`'s number is `phone`, `null` for none: an assertion prints a boolean, never a number. */
+async function hasNumber(db: Db, personId: string, phone: string | null) {
+  const row = await db.selectFrom("person").select(["phone"]).where("id", "=", personId).executeTakeFirstOrThrow();
+  return row.phone === phone;
+}
+
+/** Claire, with a number, drives on `leg`; she is without a car on the other leg. */
+async function aDrivingClaire(db: Db, leg: Leg) {
+  const { id: eventId } = await seedEvent(db);
+  const claire = await seedPerson(db, eventId, { firstName: "Claire", phone: CLAIRE_PHONE });
+  await seedRide(db, eventId, claire.id, { leg });
+  await seedPlacement(db, { personId: claire.id, eventId, leg: leg === "aller" ? "retour" : "aller", rideId: null });
+  return { eventId, claire };
+}
+
+// v4.8 rule 8: a number is not removed while its person drives, on either leg (#778).
+describe("T5.5: updatePerson, the number of who drives", () => {
+  it.each<[string, Leg, Record<string, unknown>]>([
+    ["on the aller", "aller", {}],
+    ["on the retour alone", "retour", {}],
+    ["with her first name changed in the same request", "aller", { firstName: "Clara" }],
+    ["of spaces", "aller", { phone: "   " }],
+  ])("T5.5: emptied by a person who drives %s, it is refused by phoneWhileDriving, with the state, and nothing is written", async (_, leg, fields) => {
+    await withRollback(async (trx) => {
+      const { eventId, claire } = await aDrivingClaire(trx, leg);
+      const before = await readEventState(trx, eventId, claire.token);
+      const outcome = await updatePerson(trx, eventId, claire.token, { personId: claire.id, phone: "", ...fields });
+      expect(outcome).toEqual({ ok: false, error: "phoneWhileDriving", state: before });
+      expect(await readEventState(trx, eventId, claire.token)).toEqual(before);
+      expect(await hasNumber(trx, claire.id, CLAIRE_PHONE)).toBe(true);
+    });
+  });
+
+  it("T5.5: another valid number is written", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, claire } = await aDrivingClaire(trx, "aller");
+      stateOf(await updatePerson(trx, eventId, claire.token, { personId: claire.id, phone: OTHER_PHONE }));
+      expect(await hasNumber(trx, claire.id, OTHER_PHONE)).toBe(true);
+    });
+  });
+
+  it("T5.5: her number left out, nothing is refused: a driver from before, without one, changes her first name", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const claire = await seedPerson(trx, eventId, { firstName: "Claire" });
+      await seedRide(trx, eventId, claire.id);
+      stateOf(await updatePerson(trx, eventId, claire.token, { personId: claire.id, firstName: "Clara" }));
+      const row = await trx.selectFrom("person").select(["first_name"]).where("id", "=", claire.id).executeTakeFirstOrThrow();
+      expect(row.first_name).toBe("Clara");
+      expect(await hasNumber(trx, claire.id, null)).toBe(true);
+    });
+  });
+
+  it("T5.5: for a person who does not drive, an empty number is removed, as before", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea } = await seedScene(trx);
+      stateOf(await updatePerson(trx, eventId, lea.token, { personId: lea.id, phone: "" }));
+      expect(await hasNumber(trx, lea.id, null)).toBe(true);
+    });
+  });
+});
+
+// T5.6: an offer that makes Claire drive, and a change that empties her number, sent together.
+// Her Person is held first; each send then waits for it, in the order they arrive, and the
+// second sees what the first committed: exactly one of them is done (v4.8-18).
+describe("T5.6: an offer and the removal of the driver's number, at once", () => {
+  /** Resolves once `sessions` sessions wait, directly or behind another waiter, for a lock `pid` holds. */
+  async function waiting(db: Db, pid: number, sessions: number) {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      const { rows } = await sql<{ pid: number }>`
+        with recursive waiting(pid) as (
+          select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))
+          union
+          select activity.pid from pg_stat_activity activity, waiting
+          where waiting.pid = any(pg_blocking_pids(activity.pid))
+        )
+        select pid from waiting`.execute(db);
+      if (rows.length >= sessions) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`fewer than ${sessions} sessions waited for Claire's Person`);
+  }
+
+  it.each(["the offer", "the removal"] as const)("T5.6: %s first, exactly one of them is done", async (first) => {
+    await withCommittedEvent(async (db, eventId) => {
+      const claire = await seedPerson(db, eventId, { firstName: "Claire", phone: CLAIRE_PHONE });
+      for (const leg of ["aller", "retour"] as const) await seedPlacement(db, { personId: claire.id, eventId, leg, rideId: null });
+      const offer = {
+        rideId: randomUUID(),
+        leg: "aller",
+        driver: { kind: "device", personId: claire.id },
+        location: "Gare de Cesson",
+        time: "08:00",
+        seats: "3",
+        note: "",
+      };
+      const sends = {
+        offer: () => offerRide(db, eventId, claire.token, offer),
+        removal: () => updatePerson(db, eventId, claire.token, { personId: claire.id, phone: "" }),
+      };
+      const order = first === "the offer" ? (["offer", "removal"] as const) : (["removal", "offer"] as const);
+
+      const holder = await db.startTransaction().execute();
+      const answers: Promise<{ ok: boolean; error?: string }>[] = [];
+      try {
+        await lockPersons(holder, eventId, [claire.id]);
+        const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
+        for (const [at, name] of order.entries()) {
+          const answer = sends[name]();
+          answer.catch(() => {});
+          answers.push(answer);
+          await waiting(db, rows[0].pid, at + 1);
+        }
+        await holder.commit().execute();
+      } finally {
+        try {
+          await holder.rollback().execute();
+        } catch {
+          // Committed.
+        }
+      }
+
+      const [offered, removed] = first === "the offer" ? await Promise.all(answers) : (await Promise.all(answers)).reverse();
+      const rides = await db.selectFrom("ride").select("id").where("event_id", "=", eventId).execute();
+      if (first === "the offer") {
+        expect(offered).toMatchObject({ ok: true });
+        expect(removed).toMatchObject({ ok: false, error: "phoneWhileDriving" });
+        expect(rides.length).toBe(1);
+        expect(await hasNumber(db, claire.id, CLAIRE_PHONE)).toBe(true);
+      } else {
+        expect(removed).toMatchObject({ ok: true });
+        expect(offered).toMatchObject({ ok: false, error: "driverWithoutPhone" });
+        expect(rides.length).toBe(0);
+        expect(await hasNumber(db, claire.id, null)).toBe(true);
+      }
     });
   });
 });
