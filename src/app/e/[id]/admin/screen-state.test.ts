@@ -15,6 +15,9 @@ import {
   listKey,
   PERSONS_LIST,
   panelRead,
+  pendingRead,
+  pollsPending,
+  POLL_MS,
   screenRead,
   screenReducer,
   type EditAnswer,
@@ -529,5 +532,67 @@ describe("alertShown", () => {
     ["nothing without the panel", { state: "refused", refusal: { kind: "signIn" } }, ""],
   ])("%s", (_, state, shown) => {
     expect(alertShown(state)).toBe(shown);
+  });
+});
+
+describe("the notice « Confirmez votre adresse » (OA1.7)", () => {
+  const sending = { email: "claire.martin@exemple.fr", send: "sending" } as const;
+  const sent = { ...sending, send: "sent" } as const;
+
+  it("comes with the panel, and is in the panel only when the server sent one", () => {
+    expect(screenReducer({ state: "loading" }, { type: "checked", check: { ...valid, pending: sending } })).toStrictEqual(
+      ready({ panel: { ...links, legs: before, pending: sending } }),
+    );
+    expect(screenReducer({ state: "loading" }, { type: "checked", check: valid })).toStrictEqual(ready());
+  });
+
+  it("a read while sending replaces it, and only it; without one, the notice goes (OA2.6)", () => {
+    const shown = ready({ panel: { ...links, legs: before, pending: sending }, expanded: new Set(["aller:withoutCar"]) });
+    expect(screenReducer(shown, { type: "pendingRead", pending: sent })).toStrictEqual({
+      ...shown,
+      panel: { ...links, legs: before, pending: sent },
+    });
+    expect(screenReducer(shown, { type: "pendingRead" })).toStrictEqual({ ...shown, panel: { ...links, legs: before } });
+    // Withdrawn, the sections stay withdrawn.
+    const away = ready({ panel: { ...withdrawn, pending: sending } });
+    expect(screenReducer(away, { type: "pendingRead", pending: sent })).toStrictEqual(ready({ panel: { ...withdrawn, pending: sent } }));
+  });
+
+  it("given up while sending, reads as a failure, as the server reads a send left « sending » after 30 s", () => {
+    const shown = ready({ panel: { ...links, legs: before, pending: sending } });
+    expect(screenReducer(shown, { type: "pendingGaveUp" })).toStrictEqual(
+      ready({ panel: { ...links, legs: before, pending: { ...sending, send: "failed" } } }),
+    );
+    // A result kept meanwhile, or no notice, stays as it is.
+    const kept = ready({ panel: { ...links, legs: before, pending: sent } });
+    expect(screenReducer(kept, { type: "pendingGaveUp" })).toBe(kept);
+    const none = ready();
+    expect(screenReducer(none, { type: "pendingGaveUp" })).toBe(none);
+  });
+
+  it("does nothing without the panel", () => {
+    const refused: ScreenState = { state: "refused", refusal: { kind: "pending" } };
+    for (const state of [{ state: "loading" }, refused, { state: "failed", retrying: false }] as ScreenState[]) {
+      expect(screenReducer(state, { type: "pendingRead", pending: sent })).toBe(state);
+    }
+  });
+
+  it("is read again, every POLL_MS, only while the email is on its way", () => {
+    expect(POLL_MS).toBe(2_000);
+    expect(pollsPending(ready({ panel: { ...links, legs: before, pending: sending } }))).toBe(true);
+    for (const send of ["sent", "failed", "addressLimit"] as const) {
+      expect(pollsPending(ready({ panel: { ...links, legs: before, pending: { ...sending, send } } }))).toBe(false);
+    }
+    expect(pollsPending(ready())).toBe(false);
+    expect(pollsPending({ state: "loading" })).toBe(false);
+  });
+
+  it("pendingRead: the notice of a panel read, none on a panel without one, and nothing to apply otherwise", () => {
+    expect(pendingRead({ ok: true, value: { state: "panel", legs: after, pending: sent } })).toStrictEqual({ pending: sent });
+    expect(pendingRead({ ok: true, value: { state: "panel", legs: after } })).toStrictEqual({});
+    expect(pendingRead({ ok: true, value: { state: "panel", legs: after, pending: { email: 1 } } })).toStrictEqual({});
+    expect(pendingRead({ ok: false, problem: "offline" })).toBeUndefined();
+    expect(pendingRead({ ok: true, value: { state: "pending" } })).toBeUndefined();
+    expect(pendingRead({ ok: true, value: undefined })).toBeUndefined();
   });
 });

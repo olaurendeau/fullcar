@@ -27,6 +27,9 @@ const types: pg.CustomTypesConfig = {
   },
 };
 
+/** Connections of each pool: the concurrency tests count on it (test-committed.ts). */
+export const POOL_SIZE = 5;
+
 /** Logged alone: the error may carry a query, its parameters or a connection string. */
 export const POOL_ERROR_MESSAGE = "Postgres: a connection of the pool failed";
 
@@ -37,7 +40,7 @@ export const POOL_ERROR_MESSAGE = "Postgres: a connection of the pool failed";
  * on it fail, and the pool opens a new connection for the next ones.
  */
 export function createPool(connectionString: string): pg.Pool {
-  const pool = new pg.Pool({ connectionString, max: 5, idleTimeoutMillis: 5_000, types });
+  const pool = new pg.Pool({ connectionString, max: POOL_SIZE, idleTimeoutMillis: 5_000, types });
   // pg-pool removes its own listener while a connection is lent out, and Kysely adds none:
   // each connection gets one for its whole life, and logs its failure once.
   pool.on("connect", (client) => {

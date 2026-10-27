@@ -101,7 +101,8 @@ celui qui écrit le code.
   nettoyage dans la même PR est bloquante : elle garderait ses lignes pour toujours. Une
   ligne nettoyée avant qu'une règle ait fini de la lire (un lien expiré qui doit encore dire
   « Ce lien a expiré ») est bloquante aussi.
-- Les autres clés étrangères suivent le tableau d'`architecture.md` : `stop.ride_id`,
+- Les autres clés étrangères suivent le tableau d'`architecture.md` : `stop (ride_id, event_id, leg)`
+  (`stop_ride_fk`, composite), `stop.event_id` (`stop_event_fk`),
   `placement (person_id, event_id)` et `ride (driver_id, event_id)` en `CASCADE`,
   `placement (ride_id, event_id, leg)` en `SET NULL (ride_id)`, `placement.stop_id` en
   `SET NULL`. Un écart est bloquant : une cascade sur la clé `placement → ride` effacerait
@@ -274,7 +275,7 @@ celui qui écrit le code.
   comme fait » de `product.md` restent de bout en bout, chaque cas compris : « créer un
   événement en moins de 30 s » (8 actions pour un nouvel organisateur, 7 avec une session)
   et « rejoindre une voiture en 1 tap » (un seul clic sur la place libre ; avec deux
-  personnes « sans voiture », le clic ouvre la feuille). Raison : le bout en bout faisait
+  personnes « sans voiture », ou sur une voiture à Arrêts, le clic ouvre la feuille). Raison : le bout en bout faisait
   87 % du temps de la CI, mesuré avant #652.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.

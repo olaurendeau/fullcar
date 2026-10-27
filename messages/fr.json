@@ -386,7 +386,22 @@
       "free": "{free, plural, one {# place libre} other {# places libres}}",
       "missing": "Il manque {missing, plural, one {# place} other {# places}}"
     },
-    "edit": "Modifier l’événement"
+    "edit": "Modifier l’événement",
+    "pending": {
+      "title": "Confirmez votre adresse",
+      "sending": "Envoi du lien à {email}…",
+      "body": "Nous avons envoyé un lien à {email}. Ouvrez-le, sur n’importe quel appareil, pour retrouver cet événement dans Mes événements. D’ici là, l’espace organisateur ne s’ouvre que dans ce navigateur.",
+      "resend": "Renvoyer l’e-mail",
+      "fix": "Corriger l’adresse",
+      "sendFailed": {
+        "title": "L’e-mail n’a peut-être pas été envoyé",
+        "body": "Votre événement est créé, mais le lien pour confirmer {email} n’a peut-être pas été envoyé. Utilisez « Renvoyer l’e-mail » : si le premier arrive quand même, les deux liens restent valables. D’ici là, l’espace organisateur ne s’ouvre que dans ce navigateur."
+      },
+      "addressLimit": {
+        "title": "L’e-mail n’est pas parti",
+        "body": "Votre événement est créé, mais trop d’e-mails sont partis vers {email} cette heure-ci. Dans une heure, utilisez « Renvoyer l’e-mail ». D’ici là, l’espace organisateur ne s’ouvre que dans ce navigateur."
+      }
+    }
   },
   "AdminLogin": {
     "body": "Connectez-vous avec l’adresse e-mail de la personne qui organise cet événement."

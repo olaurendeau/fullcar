@@ -1,6 +1,6 @@
 import type { Kysely } from "kysely";
 import { readEventRows } from "@/db/event-rows";
-import { readOrganiserAccessEvent } from "@/db/events";
+import { readOrganiserAccessEvent, readPendingSend } from "@/db/events";
 import type { Database } from "@/db/schema";
 import { findSession } from "@/db/sessions";
 import { onOneSnapshot } from "@/db/transaction";
@@ -9,6 +9,7 @@ import { dayThirty } from "@/domain/day-thirty";
 import { eventLegs } from "@/domain/leg";
 import { decideOrganiserAccess, organiserProofOf } from "@/domain/organiser-access";
 import { organiserPanel, organiserPersons, type OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import { pendingNotice } from "@/domain/pending-send";
 import { withOrganiserPhones } from "@/domain/phone-visibility";
 import { isPublicId } from "@/domain/public-id";
 import { findPublicEvent } from "./event";
@@ -24,9 +25,16 @@ import { findPublicEvent } from "./event";
  * device, and `withOrganiserPhones` sets the numbers DO1 allows only with the access the rule
  * granted: no caller tells it « checked ». Only then is the list of every person built
  * (RP4.2), from the rows without `phonesById`. The tokens are only compared, never logged
- * nor kept; nothing is written, the session's visit included.
+ * nor kept; nothing is written, the session's visit included. A pending event's panel carries
+ * its notice (OA1.7): the address and the result kept of its email, as read at `now`; the
+ * address is read once the access is granted, and is in no other answer.
  */
-export async function readOrganiserState(db: Kysely<Database>, eventId: string, proof: unknown): Promise<OrganiserPanelAnswer> {
+export async function readOrganiserState(
+  db: Kysely<Database>,
+  eventId: string,
+  proof: unknown,
+  now: Date = new Date(),
+): Promise<OrganiserPanelAnswer> {
   if (!isPublicId(eventId)) return { state: "invalid" };
   const { adminToken, session } = organiserProofOf(proof);
   return onOneSnapshot(db, async (trx): Promise<OrganiserPanelAnswer> => {
@@ -47,6 +55,9 @@ export async function readOrganiserState(db: Kysely<Database>, eventId: string, 
     const legs = withOrganiserPhones(board, phonesById, decision.access, eventId);
     if (legs === undefined) return { state: "invalid" };
     // The list of every person is built once the access is granted, from rows without a number.
-    return { state: "panel", legs: organiserPanel(legs), persons: organiserPersons(rows, legNames) };
+    const persons = organiserPersons(rows, legNames);
+    const sendRow = await readPendingSend(trx, eventId);
+    const pending = sendRow && pendingNotice(sendRow, now);
+    return { state: "panel", legs: organiserPanel(legs), persons, ...(pending && { pending }) };
   });
 }

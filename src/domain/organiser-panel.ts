@@ -10,6 +10,7 @@ import { buildBoard, type BoardRows } from "./board";
 import { coverage, type Coverage } from "./coverage";
 import { deviceMatrix, type MatrixRow } from "./device-matrix";
 import type { Leg } from "./leg";
+import type { PendingNotice } from "./pending-send";
 import type { OrganiserLegBoard } from "./phone-visibility";
 import type { WallClock, WallDate, WallTime } from "./wall-clock";
 
@@ -19,12 +20,13 @@ import type { WallClock, WallDate, WallTime } from "./wall-clock";
  * `signIn` (OA7.1), `notYours` with the address of the visitor's own session (OA7.2),
  * `pending` (OA7.7), `orphan` (OA7.9), `ended` for the organiser of an anonymised event (OA8.4),
  * with what is left of it and the date of its day 30, when the sign-ups were erased (#598).
+ * The panel of an event awaiting confirmation carries its notice, `pending` (OA1.7, OA2.1).
  */
 export type OrganiserPanelAnswer =
   | { state: "invalid" | "signIn" | "pending" | "orphan" }
   | { state: "notYours"; email: string }
   | { state: "ended"; event: EndedHeader; erasedOn: WallDate }
-  | { state: "panel"; legs: OrganiserLeg[]; persons: OrganiserPerson[] };
+  | { state: "panel"; legs: OrganiserLeg[]; persons: OrganiserPerson[]; pending?: PendingNotice };
 
 /**
  * What an anonymised event keeps, as its organiser's screen shows it (OA8.4): its title, the

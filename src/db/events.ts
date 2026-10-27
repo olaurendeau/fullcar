@@ -1,6 +1,7 @@
 import type { Kysely, Selectable } from "kysely";
 import type { NewEvent } from "@/domain/event";
 import type { OrganiserAccessEvent } from "@/domain/organiser-access";
+import type { PendingSendRow } from "@/domain/pending-send";
 import { generatePublicId } from "@/domain/public-id";
 import type { Database, EventTable } from "./schema";
 
@@ -76,6 +77,20 @@ export async function readOrganiserAccessEvent(db: Kysely<Database>, id: string)
     anonymised: row.anonymised_at !== null,
     adminTokenHash: row.admin_token_hash?.toString("hex") ?? null,
   };
+}
+
+/**
+ * The address awaiting confirmation and the result kept of its email (OA1.7), for the notice
+ * of the organiser's panel only: never read before the access is granted. Nothing for an
+ * unknown id.
+ */
+export async function readPendingSend(db: Kysely<Database>, id: string): Promise<PendingSendRow | undefined> {
+  const row = await db
+    .selectFrom("event")
+    .select(["pending_email", "send_status", "send_status_at"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+  return row && { email: row.pending_email, status: row.send_status, at: row.send_status_at };
 }
 
 /**

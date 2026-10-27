@@ -1,0 +1,323 @@
+<title>Fullcar, points de RDV à l’aller</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root{--bg:#f6f6f4;--fg:#1d1d1f;--muted:#6b6b70;--line:#dcdcd8;--note:#fff7e0;--note-line:#ecd48a;--frame:#2b2b2e;
+--a-bg:#fff;--a-fg:#0a0a0a;--a-muted:#737373;--a-mutedbg:#f5f5f5;--a-border:#e5e5e5;--a-primary:#005a5b;--a-primary-fg:#fafafa;--a-destructive:#e7000b;--a-amber:#fef3c7;--a-amber-fg:#461901}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#161618;--fg:#ececee;--muted:#a0a0a8;--line:#33333a;--note:#2f2818;--note-line:#6b5a26;--frame:#4a4a50;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#161618;--fg:#ececee;--muted:#a0a0a8;--line:#33333a;--note:#2f2818;--note-line:#6b5a26;--frame:#4a4a50;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 ui-sans-serif,system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:1.7rem;margin:0 0 4px}h2{font-size:1.2rem;margin:40px 0 6px;padding-top:12px;border-top:1px solid var(--line)}
+p.lead,.n{color:var(--muted);max-width:78ch;margin:0 0 8px}.n{font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}.col{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cap{font-size:12px;font-weight:600;color:var(--muted)}
+.ph{width:360px;max-width:100%;box-sizing:border-box;border:6px solid var(--frame);border-radius:20px;background:var(--a-bg);color:var(--a-fg);padding:14px 12px;font-size:14px;line-height:1.4;color-scheme:light;overflow:hidden}
+.ph *{box-sizing:border-box}
+.ph h3{font-size:15px;margin:0 0 8px}.m{color:var(--a-muted)}.s{font-size:12px}
+.card{border:1px solid var(--a-border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0;overflow-wrap:anywhere}
+.hd{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.pt{display:flex;gap:8px;align-items:baseline}.pt time{font-variant-numeric:tabular-nums;min-width:42px;font-weight:600}
+.tl{list-style:none;margin:0;padding:0 0 0 10px;border-left:2px solid var(--a-border);display:flex;flex-direction:column;gap:6px}
+.pr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-height:44px;background:var(--a-mutedbg);border-radius:8px;padding:0 12px}
+.pr .x{flex:1;min-width:0}.seat{min-height:44px;border:1px dashed #0a0a0a40;border-radius:8px;display:flex;align-items:center;padding:0 12px;font-weight:500}
+.btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 14px;border-radius:8px;border:1px solid var(--a-border);font-weight:500;background:var(--a-bg)}
+.btn.p{background:var(--a-primary);color:var(--a-primary-fg);border-color:var(--a-primary)}.btn.sm{min-height:44px;padding:0 8px;font-size:13px;color:var(--a-primary)}
+.fld{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}.fld label{font-weight:500}
+.in{min-height:44px;border:1px solid var(--a-border);border-radius:8px;padding:10px 12px;display:flex;align-items:center}
+.in.err{border-color:var(--a-destructive)}.er{color:var(--a-destructive);font-size:12px}
+.pbox{border:1px solid var(--a-border);border-radius:12px;padding:10px;margin-bottom:10px;display:flex;flex-direction:column;gap:6px}
+.pbox .top{display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.opt{display:flex;gap:10px;align-items:center;min-height:48px;border:1px solid var(--a-border);border-radius:10px;padding:6px 12px;margin-bottom:6px}
+.opt.on{border-color:var(--a-primary);background:#e6f2f2}.dot{width:18px;height:18px;border-radius:50%;border:2px solid #0a0a0a66;flex:none}.on .dot{border:5px solid var(--a-primary)}
+.sheet{border-top:1px solid var(--a-border);margin:14px -12px -14px;padding:14px 12px}
+.bar{background:#171717;color:#fff;border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;gap:8px;margin-top:10px}
+.note{background:var(--a-amber);color:var(--a-amber-fg);border-radius:8px;padding:8px 10px;font-size:13px}
+.dec{background:var(--note);border:1px solid var(--note-line);border-radius:10px;padding:10px 14px;margin:10px 0;max-width:80ch}
+.fr,.en{display:block}.en{color:var(--muted);font-size:13px}
+table{border-collapse:collapse;font-size:13px;width:100%}td,th{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}.tw{overflow-x:auto;max-width:100%}
+.chk{display:flex;gap:10px;align-items:flex-start;min-height:48px;border:1px solid var(--a-border);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.cb{width:24px;height:24px;border:2px solid #0a0a0a99;border-radius:6px;flex:none;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;line-height:1}
+.chk.on .cb{background:var(--a-primary);border-color:var(--a-primary);color:var(--a-primary-fg)}
+.chk.dis{background:var(--a-mutedbg)}.chk.dis .cb{background:#595959;border-color:#595959;color:#fff}
+.chk .lb{display:flex;flex-direction:column;gap:2px;min-width:0}
+.focus{outline:2px solid var(--a-primary);outline-offset:2px}
+.pr .m,.opt .m,.chk.dis .m{color:#595959}
+.alert{color:var(--a-destructive);font-size:13px;margin:6px 0}
+svg{display:block;max-width:100%}
+</style>
+<div class="wrap">
+<h1>Points de RDV à l’aller</h1>
+<p class="lead">Epic #881. Le conducteur d’une voiture de l’<b>aller</b> ajoute des points de RDV (lieu, heure) sur sa route ; la personne qui prend une place choisit où elle monte, et peut le changer ; les points sont sur la carte. Un point est l’<b>Arrêt</b> du glossaire, sur le lieu et l’heure d’une voiture, rien de plus. Le départ du Ride reste le départ : ce n’est pas un point à saisir.</p>
+<p class="n">Maquettes à 360 px, en clair (comme l’application). Les mots sont ceux de l’application ; chaque chaîne FR est suivie de l’EN dans la section « Les mots ».</p>
+
+<div class="dec"><b>Décisions de cette maquette</b> (D1 à D3 tranchées par le propriétaire, #881) :
+<ol>
+<li><b>D1, porte (tranchée) :</b> l’option « Points de RDV » s’active aussi dans « Modifier l’événement » (section 1 bis). Elle n’est jamais désactivable tant qu’un point existe : la case reste cochée, verrouillée, avec la raison écrite.</li>
+<li><b>D2, un tap (tranchée) :</b> sur une voiture <i>avec</i> des points, le tap sur une place libre ouvre toujours la feuille, le départ coché par défaut (même pour une seule personne). Une voiture <i>sans</i> point garde le tap unique. <code>product.md</code> (« Arrêts ») est amendé : voir la liste « À faire dans la tâche » en fin de page.</li>
+<li><b>D3, mot (tranchée) :</b> « Points de RDV » à l’écran, « Arrêt » (<code>Stop</code>) dans le code, comme le glossaire. Le glossaire dit « au retour, ce sont des points de dépose » : hors périmètre, à relire quand le retour viendra.</li>
+<li>Lieu d’un point : le <b>même champ</b> que le lieu de départ (<code>PlaceField</code> : texte libre, position seulement si une proposition est choisie, #237 déjà livré). Rien n’attend l’auto-complétion ; sans position, le point est dans la liste mais pas sur la carte.</li>
+<li>6 points au plus par voiture ; heure strictement après l’heure de départ de la voiture ; classés par heure (à égalité, l’ordre de saisie) ; un seul point de montée par tap, pour toutes les personnes placées ensemble.</li>
+<li>Un passager sans point choisi est « au départ » (valeur vide, jamais un point inventé). Un point retiré renvoie ses passagers au départ, sans prévenir personne (comme « Retirer la voiture »).</li>
+</ol></div>
+
+<h2>1. Le formulaire de la voiture : 0 à 6 points</h2>
+<p class="lead">Dans « Proposer une voiture » et « Modifier la voiture », aller seulement, option active. Sous l’heure de départ, avant les places. Au retour, la section est absente.</p>
+<div class="row">
+ <div class="col"><span class="cap">0 point (début)</span><div class="ph">
+  <div class="fld"><label>Lieu de départ</label><div class="in">Champcella</div></div>
+  <div class="fld"><label>Heure de départ</label><div class="in">08:00</div></div>
+  <h3>Points de RDV</h3><p class="m s" style="margin:0 0 8px">Où vous prenez du monde en route, avec l’heure de passage. Visible par toutes les personnes qui ont le lien.</p>
+  <span class="btn" style="width:100%">+ Ajouter un point de RDV</span>
+  <div class="fld" style="margin-top:12px"><label>Places, sans compter qui conduit</label><div class="in">3</div></div></div></div>
+ <div class="col"><span class="cap">3 points, un en erreur</span><div class="ph">
+  <h3>Points de RDV</h3>
+  <div class="pbox"><div class="top">Point 1 <span class="btn sm">Retirer</span></div>
+   <div class="fld"><label>Lieu du point 1</label><div class="in">Prelles boucherie</div></div>
+   <div class="fld"><label>Heure du point 1</label><div class="in">08:25</div></div></div>
+  <div class="pbox"><div class="top">Point 2 <span class="btn sm">Retirer</span></div>
+   <div class="fld"><label>Lieu du point 2</label><div class="in">Briançon carrefour</div><span class="s m" style="display:flex;align-items:center;gap:4px">Position enregistrée · <span class="btn sm" aria-label="Retirer la position du point 2">Retirer</span></span></div>
+   <div class="fld"><label>Heure du point 2</label><div class="in">08:35</div></div></div>
+  <div class="pbox"><div class="top">Point 3 <span class="btn sm">Retirer</span></div>
+   <div class="fld"><label>Lieu du point 3</label><div class="in err">Monétier</div></div>
+   <div class="fld"><label>Heure du point 3</label><div class="in err">07:50</div><span class="er">L’heure doit être après 08:00, l’heure de départ.</span></div></div>
+  <span class="btn" style="width:100%">+ Ajouter un point de RDV</span></div></div>
+ <div class="col"><span class="cap">Maximum, et un point où des gens montent</span><div class="ph">
+  <p class="s m" role="status" style="margin:0 0 6px">Points classés par heure.</p>
+  <div class="pbox"><div class="top">Point 6 <span class="btn sm">Retirer</span></div>
+   <div class="fld"><label>Lieu du point 6</label><div class="in">La Salle-les-Alpes</div></div>
+   <div class="fld"><label>Heure du point 6</label><div class="in">09:10</div></div></div>
+  <p class="m s" style="margin:0 0 10px">6 points au maximum.</p>
+  <div class="pbox" style="border-color:var(--a-destructive)"><div class="top">Point 1 <span class="btn sm">Retirer</span></div>
+   <div class="note">2 personnes montent ici : elles monteront au lieu de départ.</div></div>
+  <p class="m s">Si vous retirez ce point, la note reste jusqu’à « Valider ». Rien n’est supprimé avant.</p></div></div>
+</div>
+<p class="n">Ajouter : une nouvelle ligne vide, le focus dans « Lieu du point n ». Retirer : la ligne disparaît, le focus va au « Retirer » du point précédent, sinon à « Ajouter un point de RDV ». Les lignes se reclassent par heure en quittant le champ heure (jamais pendant la frappe) ; la zone <code>status</code> dit « Points classés par heure. » seulement si l’ordre a changé. Modifier : les mêmes champs, préremplis. Lieu non rempli : « Champ requis. » ; heure non valide : « Heure non valide. » ; lieu trop long : « 120 caractères au maximum. ». Rien n’est envoyé tant qu’une ligne a une erreur ; la première ligne en erreur prend le focus.</p>
+
+<h2>1 bis. Activer l’option dans « Modifier l’événement » (D1)</h2>
+<p class="lead">Sur <code>/e/{id}/admin</code>, la feuille « Modifier l’événement » gagne une case « Points de RDV », comme celle de la création. Elle suit le style de la case « Retour ». Le bouton « Valider » l’enregistre avec le reste.</p>
+<div class="row">
+ <div class="col"><span class="cap">Option désactivée</span><div class="ph">
+  <h3>Modifier l’événement</h3>
+  <div class="fld"><label>Titre</label><div class="in">Week-end ski</div></div>
+  <div class="chk"><span class="cb"></span><span class="lb"><span><b>Points de RDV</b></span><span class="m s" id="h1">Les conducteurs de l’aller peuvent ajouter des points de RDV à leur voiture.</span></span></div>
+  <div style="display:flex;gap:8px"><span class="btn" style="flex:1">Annuler</span><span class="btn p" style="flex:1">Valider</span></div></div>
+  <p class="n">Case décochée. La cocher puis « Valider » active l’option : la section « Points de RDV » apparaît dans les formulaires de voiture de l’aller. Aucune donnée existante n’est touchée.</p></div>
+ <div class="col"><span class="cap">Activée, aucun point : déverrouillée</span><div class="ph">
+  <h3>Modifier l’événement</h3>
+  <div class="chk on"><span class="cb" aria-hidden="true">✓</span><span class="lb"><span><b>Points de RDV</b></span><span class="m s">Les conducteurs de l’aller peuvent ajouter des points de RDV à leur voiture.</span></span></div>
+  <div style="display:flex;gap:8px"><span class="btn" style="flex:1">Annuler</span><span class="btn p" style="flex:1">Valider</span></div></div>
+  <p class="n">Cochée, et rien ne retient : on peut la décocher (la désactiver), puisqu’aucune voiture n’a de point. Rien n’est supprimé.</p></div>
+ <div class="col"><span class="cap">Activée, des points existent : verrouillée</span><div class="ph">
+  <h3>Modifier l’événement</h3>
+  <div class="chk dis focus" role="checkbox" aria-checked="true" aria-disabled="true" aria-describedby="h3" tabindex="0"><span class="cb" aria-hidden="true">✓</span><span class="lb"><span><b>Points de RDV</b></span><span class="m s">Les conducteurs de l’aller peuvent ajouter des points de RDV à leur voiture.</span><span class="s" id="h3">2 voitures ont des points de RDV : l’option reste active tant qu’ils existent.</span></span></div>
+  <div style="display:flex;gap:8px"><span class="btn" style="flex:1">Annuler</span><span class="btn p" style="flex:1">Valider</span></div></div>
+  <p class="n">État accessible : <code>aria-disabled="true"</code>, jamais <code>disabled</code> (la case reste au clavier et lue avec sa raison, <code>aria-describedby</code>). Toucher la case ne change rien. Le serveur refuse aussi de désactiver si des points existent, même si l’appareil l’envoie (course avec un conducteur). Le texte de la raison est à contraste normal, pas grisé.</p></div>
+ <div class="col"><span class="cap">« Valider » échoue (hors ligne)</span><div class="ph">
+  <h3>Modifier l’événement</h3>
+  <div class="chk on"><span class="cb" aria-hidden="true">✓</span><span class="lb"><span><b>Points de RDV</b></span><span class="m s">Les conducteurs de l’aller peuvent ajouter des points de RDV à leur voiture.</span></span></div>
+  <p class="alert" role="alert">Action impossible, vérifiez la connexion</p>
+  <div style="display:flex;gap:8px"><span class="btn" style="flex:1">Annuler</span><span class="btn p" style="flex:1">Valider</span></div>
+  <div class="bar" style="margin-top:12px"><span>L’option « Points de RDV » n’a pas été modifiée. Vérifiez la connexion, puis réessayez.</span><b>Fermer</b></div></div>
+  <p class="n">Dans la feuille ouverte, le message actuel de « Modifier l’événement ». Si la feuille a été fermée avant la réponse, la barre dit la phrase ci-dessus. Course (des points sont apparus entre-temps) : « L’option « Points de RDV » reste active : des voitures ont des points de RDV. », la feuille rouverte la montre verrouillée.</p></div>
+</div>
+
+<h2>2. La fiche de la voiture</h2>
+<div class="row">
+ <div class="col"><span class="cap">Voiture avec points, un passager au point 1</span><div class="ph"><div class="card">
+  <div class="hd"><span>Voiture de Nina</span><span>08:00</span></div>
+  <div class="s">📍 Champcella · note : trois sièges enfants</div>
+  <ul class="tl" aria-label="Points de RDV">
+   <li class="pt"><time>08:25</time><span>Prelles boucherie</span></li>
+   <li class="pt"><time>08:35</time><span>Briançon carrefour</span></li>
+   <li class="pt"><time>08:50</time><span>Monétier</span></li></ul>
+  <div class="pr"><span class="x">Paul</span><span class="m s">monte à Prelles boucherie</span></div>
+  <div class="pr"><span class="x">Léa</span></div>
+  <div class="seat">+ Place libre</div></div></div>
+  <p class="n">Le départ garde sa ligne actuelle (lieu, heure en tête de fiche). Les points, sous elle, par heure ; aucune ligne s’il n’y en a pas. « monte à … » seulement pour un passager d’un point : au départ, rien (comme aujourd’hui).</p></div>
+ <div class="col"><span class="cap">Voiture sans point : inchangée</span><div class="ph"><div class="card">
+  <div class="hd"><span>Voiture de Sam</span><span>09:00</span></div><div class="s">📍 Valence</div>
+  <div class="seat">+ Place libre</div></div></div></div>
+</div>
+
+<h2>3. Prendre une place : le choix du point</h2>
+<div class="row">
+ <div class="col"><span class="cap">Feuille « Qui monte… », voiture avec points</span><div class="ph">
+  <h3>Qui monte dans la voiture de Nina ?</h3>
+  <div class="pr" style="margin-bottom:6px"><span class="x">☑ Paul</span></div>
+  <p class="m s">Il reste 2 places dans cette voiture</p>
+  <fieldset style="border:0;padding:0;margin:8px 0 0"><legend style="font-weight:600;padding:0">Point de montée</legend>
+   <div class="opt on focus" role="radio" aria-checked="true" tabindex="0"><span class="dot"></span><span>Champcella <span class="m s">· 08:00 · Lieu de départ</span></span></div>
+   <div class="opt"><span class="dot"></span><span>Prelles boucherie <span class="m s">· 08:25</span></span></div>
+   <div class="opt"><span class="dot"></span><span>Briançon carrefour <span class="m s">· 08:35</span></span></div>
+   <div class="opt"><span class="dot"></span><span>Monétier <span class="m s">· 08:50</span></span></div></fieldset>
+  <span class="btn p" style="width:100%;margin-top:6px">Placer 1 personne</span></div>
+  <p class="n">Le départ est coché à l’ouverture. Un seul groupe de choix pour toutes les personnes cochées. Une voiture sans point : la feuille et le tap unique sont inchangés. Le groupe est une liste de boutons radio (flèches, Espace), cibles de 48 px ; le focus est un anneau de 2 px (#005a5b, décalé de 2 px) sur la ligne cochée à l’ouverture.</p></div>
+ <div class="col"><span class="cap">Après « Placer »</span><div class="ph">
+  <div class="card"><div class="hd"><span>Voiture de Nina</span><span>08:00</span></div>
+   <div class="pr"><span class="x">Paul</span><span class="m s">monte à Briançon carrefour</span></div></div>
+  <div class="bar"><span>Paul est dans la voiture de Nina</span><b>Annuler</b></div></div>
+  <p class="n">La barre garde son message actuel ; « Annuler » rend la place comme avant. Refus (voiture partie, plus de place, déjà dans une voiture) : les mots actuels de la feuille.</p></div>
+ <div class="col"><span class="cap">Le point a disparu pendant la feuille</span><div class="ph">
+  <h3>Qui monte dans la voiture de Nina ?</h3>
+  <div class="note" role="alert">Ce point n’existe plus : Paul monte au lieu de départ.</div>
+  <p class="m s" style="margin:8px 0">Paul est placé au départ ; la feuille se ferme et la barre le dit.</p></div>
+  <p class="n">Le serveur place la personne au départ (jamais un refus ni une place perdue).</p></div>
+</div>
+
+<div class="row">
+ <div class="col"><span class="cap">« Placer » échoue, feuille ouverte (hors ligne)</span><div class="ph">
+  <h3>Qui monte dans la voiture de Nina ?</h3>
+  <div class="pr" style="margin-bottom:6px"><span class="x">☑ Paul</span></div>
+  <fieldset style="border:0;padding:0;margin:8px 0 0"><legend style="font-weight:600;padding:0">Point de montée</legend>
+   <div class="opt"><span class="dot"></span><span>Champcella <span class="m s">· 08:00 · Lieu de départ</span></span></div>
+   <div class="opt on"><span class="dot"></span><span>Briançon carrefour <span class="m s">· 08:35</span></span></div></fieldset>
+  <p class="alert" role="alert">Action impossible, vérifiez la connexion</p>
+  <span class="btn p" style="width:100%">Placer 1 personne</span></div>
+  <p class="n">La feuille reste ouverte, le choix de point et les cases sont gardés, le focus va à « Placer ». Rien n’est écrit. Le message est celui des feuilles actuelles (v4.1).</p></div>
+ <div class="col"><span class="cap">Feuille fermée avant la réponse : la barre</span><div class="ph">
+  <div class="card"><div class="hd"><span>Voiture de Nina</span><span>08:00</span></div><div class="seat">+ Place libre</div></div>
+  <div class="bar"><span>Paul n’a pas pu monter dans la voiture de Nina. Vérifiez la connexion, puis réessayez.</span><b>Fermer</b></div></div>
+  <p class="n">Mots de la barre actuelle : <code>Actions.notDone.seats</code> + <code>Actions.why.offline</code>. Erreur serveur : « … Une erreur est survenue : réessayez dans un instant. » (<code>why.failed</code>). Le point choisi n’est pas rappelé : l’échec est celui de la place.</p></div>
+ <div class="col"><span class="cap">Refus RV3.5, mots réutilisés (inchangés)</span><div class="ph">
+  <div class="bar" style="margin:0 0 6px"><span>Paul n’a pas pu monter dans la voiture de Nina. Cette place vient d’être prise.</span></div>
+  <p class="m s" style="margin:6px 0 0"><code>why.seatTaken</code> · <code>why.rideGone</code> « Cette voiture n’est plus proposée. » · <code>why.notEnoughSeats</code> « Il ne reste plus qu’une place. » · <code>why.alreadyInCar</code> « Paul est déjà dans une voiture. » · <code>why.forbidden</code> · <code>why.eventNotFound</code></p></div>
+  <p class="n">Ces refus ne changent pas ; avec un point choisi, la barre ne le mentionne pas. Seul « le point a disparu » (ci-dessus) est un cas nouveau, et n’est pas un refus.</p></div>
+</div>
+
+<h2>4. Changer de point ensuite</h2>
+<div class="row">
+ <div class="col"><span class="cap">Sur la fiche : les personnes de cet appareil</span><div class="ph"><div class="card">
+  <div class="hd"><span>Voiture de Nina</span><span>08:00</span></div>
+  <div class="pr"><span class="x">Paul</span><span class="m s">monte à Prelles boucherie</span><span class="btn sm">Changer le point</span></div>
+  <div class="pr"><span class="x">Léa</span><span class="m s">monte au départ</span></div></div></div>
+  <p class="n">Le bouton est sur les passagers de l’appareil seulement, et seulement si la voiture a des points (nom accessible « Changer le point de montée de Paul »). Pour un passager de l’appareil, « monte au départ » est écrit pour qu’il sache qu’il peut changer.</p></div>
+ <div class="col"><span class="cap">Feuille « Où monte Paul ? »</span><div class="ph">
+  <h3>Où monte Paul ?</h3>
+  <div class="opt"><span class="dot"></span><span>Champcella <span class="m s">· 08:00 · Lieu de départ</span></span></div>
+  <div class="opt on"><span class="dot"></span><span>Prelles boucherie <span class="m s">· 08:25</span></span></div>
+  <div class="opt"><span class="dot"></span><span>Briançon carrefour <span class="m s">· 08:35</span></span></div>
+  <div style="display:flex;gap:8px;margin-top:6px"><span class="btn" style="flex:1">Annuler</span><span class="btn p" style="flex:1">Valider</span></div>
+  <div class="bar"><span>Paul monte à Briançon carrefour</span><b>Annuler</b></div></div>
+  <p class="n">Même feuille basse que le choix de la section 3, le choix actuel coché. Pas de changement de choix : « Valider » ne fait rien et ferme. Hors ligne ou échec : « Le point de Paul n’a pas été changé. » avec les mots de connexion actuels de la barre.</p></div>
+</div>
+
+<div class="row"><div class="col"><span class="cap">« Valider » échoue (hors ligne)</span><div class="ph">
+  <h3>Où monte Paul ?</h3>
+  <div class="opt on"><span class="dot"></span><span>Briançon carrefour <span class="m s">· 08:35</span></span></div>
+  <p class="alert" role="alert">Action impossible, vérifiez la connexion</p>
+  <div style="display:flex;gap:8px"><span class="btn" style="flex:1">Annuler</span><span class="btn p" style="flex:1">Valider</span></div></div>
+  <p class="n">Feuille ouverte : la feuille garde le choix, le message actuel s’affiche, le focus va à « Valider ».</p></div>
+ <div class="col"><span class="cap">Feuille fermée avant la réponse</span><div class="ph">
+  <div class="card"><div class="hd"><span>Voiture de Nina</span><span>08:00</span></div>
+   <div class="pr"><span class="x">Paul</span><span class="m s">monte à Prelles boucherie</span></div></div>
+  <div class="bar"><span>Le point de Paul n’a pas été changé. Vérifiez la connexion, puis réessayez.</span><b>Fermer</b></div></div>
+  <p class="n">Phrase : <code>Sheet.stop.failed</code> + <code>Actions.why.offline</code>. Erreur serveur : + « Une erreur est survenue : réessayez dans un instant. » (<code>why.failed</code>). Voiture partie : + « Cette voiture n’est plus proposée. » (<code>why.rideGone</code>). La fiche garde l’ancien point, puisque rien n’a changé. Point disparu : « Ce point n’existe plus : Paul monte au lieu de départ. »</p></div></div>
+
+<h2>5. La carte de l’aller</h2>
+<div class="row">
+ <div class="col"><span class="cap">Carte dépliée (maquette du fond)</span>
+ <div class="ph" style="padding:0"><svg viewBox="0 0 348 250" width="348" role="img" aria-label="Carte de l’aller avec les points de RDV">
+  <rect width="348" height="250" fill="#f4f4f2"/><path d="M0 190 C80 150 140 210 348 120" stroke="#d4dce2" stroke-width="14" fill="none"/>
+  <polyline points="40,205 100,160 160,130 215,100 300,50" stroke="#171717" stroke-width="2" fill="none"/>
+  <circle cx="40" cy="205" r="6" fill="#005a5b"/><circle cx="100" cy="160" r="5" fill="#fff" stroke="#171717" stroke-width="2"/><circle cx="160" cy="130" r="5" fill="#fff" stroke="#171717" stroke-width="2"/><circle cx="215" cy="100" r="5" fill="#fff" stroke="#171717" stroke-width="2"/>
+  <path d="M300 50v-22l14 6-14 6" fill="#005a5b" stroke="#005a5b" stroke-width="3"/>
+  <g font-size="11" font-family="system-ui"><rect x="8" y="176" width="86" height="22" rx="11" fill="#fff" stroke="#005a5b"/><text x="16" y="191">Nina · 3</text>
+  <rect x="106" y="165" width="80" height="20" rx="10" fill="#fff" stroke="#171717"/><text x="114" y="179">08:25 Nina</text>
+  <rect x="166" y="136" width="80" height="20" rx="10" fill="#fff" stroke="#171717"/><text x="174" y="150">08:35 Nina</text>
+  <rect x="222" y="106" width="80" height="20" rx="10" fill="#fff" stroke="#171717"/><text x="230" y="120">08:50 Nina</text></g></svg>
+  <div style="padding:8px 12px" class="m s">1 point de RDV n’est pas sur la carte : son lieu n’a pas de position.</div></div>
+  <p class="n">Un point avec position : un petit rond blanc (bordure #171717) et une étiquette « heure + prénom » ; le trait de la voiture passe par ses points, dans l’ordre, avant le drapeau. Voiture sans position : aucun de ses points n’est dessiné (leur trait n’a pas de départ) et ils comptent dans la ligne « pas sur la carte ». Les points ne se regroupent jamais (pas la règle des 25 m) et passent sous l’étiquette de voiture survolée, comme les autres.</p></div>
+ <div class="col"><span class="cap">Bulle d’un point (toucher / Entrée)</span><div class="ph">
+  <h3>Prelles boucherie, 08:25</h3>
+  <div class="opt" style="min-height:44px"><span>Voiture de Nina · 2 places libres</span></div>
+  <p class="m s">Le bouton ouvre la fiche de la voiture, comme celui d’une bulle de voiture.</p></div>
+  <p class="n">Nom accessible du point : « Point de RDV de Nina : Prelles boucherie, 08:25 ». Tab : les points suivent leur voiture. Hors de l’aller, ou option désactivée : aucun point.</p></div>
+ <div class="col"><span class="cap">Bulle, deux voitures au même point</span><div class="ph">
+  <h3>2 voitures</h3>
+  <p class="m s" style="margin:0 0 6px">Prelles boucherie, 08:25</p>
+  <div class="opt" style="min-height:44px"><span>Voiture de Nina · 2 places libres</span></div>
+  <div class="opt" style="min-height:44px"><span>Voiture de Sam · 1 place libre</span></div></div>
+  <p class="n">Même position à 25 m près : un seul point dessiné pour la bulle, une ligne-bouton par voiture ; le titre est le nombre de voitures, le lieu et l’heure de la première en dessous. Avec une seule voiture : le titre « {lieu}, {heure} » ci-contre.</p></div>
+ <div class="col"><span class="cap">Aucun point n’a de position : la carte reste</span>
+ <div class="ph" style="padding:0"><svg viewBox="0 0 348 200" width="348" role="img" aria-label="Carte de l’aller, sans point de RDV positionné">
+  <rect width="348" height="200" fill="#f4f4f2"/><path d="M0 150 C80 110 140 170 348 80" stroke="#d4dce2" stroke-width="14" fill="none"/>
+  <polyline points="40,165 300,40" stroke="#171717" stroke-width="2" fill="none"/>
+  <circle cx="40" cy="165" r="6" fill="#005a5b"/><path d="M300 40v-22l14 6-14 6" fill="#005a5b" stroke="#005a5b" stroke-width="3"/>
+  <g font-size="11" font-family="system-ui"><rect x="8" y="136" width="86" height="22" rx="11" fill="#fff" stroke="#005a5b"/><text x="16" y="151">Nina · 3</text></g></svg>
+  <div style="padding:8px 12px" class="s" role="status"><span class="m">3 points de RDV ne sont pas sur la carte : leurs lieux n’ont pas de position.</span></div></div>
+  <p class="n">Voiture avec position, ses 3 points sans : la carte se dessine comme avant (voiture, trait direct jusqu’au drapeau), sans rond de point, et la ligne le dit. Les points restent dans la fiche.</p></div>
+</div>
+
+<h2>6. Un point retiré alors que des passagers l’avaient choisi</h2>
+<p class="lead">Le conducteur retire le point 1 (section 1, note rouge) et valide. Ses passagers repassent au départ ; leur place dans la voiture est intacte ; la couverture ne bouge pas. Personne n’est prévenu : une ligne sous « Valider » le dit, avec les mots de « Retirer la voiture ».</p>
+<div class="row"><div class="col"><div class="ph">
+ <div class="card"><div class="hd"><span>Voiture de Nina</span><span>08:00</span></div>
+ <div class="pr"><span class="x">Paul</span><span class="m s">monte au départ</span><span class="btn sm">Changer le point</span></div></div>
+ <p class="m s" style="margin:8px 0 0">Personne n’est prévenu : pensez à le leur dire.</p></div></div>
+ <div class="col" style="max-width:420px"><p class="n">Paul, sur un autre appareil, voit le changement à l’actualisation de la page (15 s ou retour au premier plan) : rien d’autre. Un point dont l’heure ou le lieu change garde ses passagers. Si la voiture est retirée : comportement actuel, les points partent avec.</p></div></div>
+
+<h2>7. 360 px et clavier</h2>
+<p class="lead">Toutes les maquettes ci-dessus sont à 360 px. Règles : aucun débordement horizontal (lieu et prénoms à la ligne n’importe où, <code>wrap-anywhere</code>) ; chaque ligne de point : lieu pleine largeur puis heure, jamais côte à côte sous 400 px ; cibles de 44 px ; avec 6 points et 3 passagers, la fiche ne dépasse pas ce que la page défile ; la feuille de choix défile dans son cadre, « Placer » toujours visible dans la barre.</p>
+<p class="lead"><b>Contraste (vérifié sur les jetons réels de l’application, <code>globals.css</code>).</b> <code>--muted-foreground</code> oklch(0.556 0 0) vaut #737373 : 4,74:1 sur blanc (conforme), mais <b>4,35:1 sur <code>--muted</code> #f5f5f5</b> (lignes de passagers) et 4,14:1 sur la ligne de choix cochée, sous les 4,5:1 requis pour un texte de 12 à 13 px. Ici, le texte secondaire posé sur un fond gris ou teinté (lignes de passagers, lignes de choix, raison de l’option verrouillée) prend #595959 (6,4:1 sur #f5f5f5) ; les jetons de l’application ne changent pas. La maquette le montre ainsi.</p>
+
+<h2>8. Jour 30, et ce qui est stocké</h2>
+<div class="row"><div class="col"><div class="ph">
+ <h3>Inscriptions effacées</h3><p style="margin:0">Le 24 novembre, 30 jours après l’événement, les prénoms, les numéros, les voitures et les inscriptions ont été effacés. Il reste le titre, le lieu et les dates.</p></div></div>
+ <div class="col" style="max-width:520px"><p class="n">Texte actuel, inchangé : « les voitures et les inscriptions » couvre les points et le choix de chaque passager. Stocké : par point, le lieu (texte), l’heure, la position facultative, la voiture ; par inscription, le point choisi (référence). Aucun numéro, aucune donnée de plus. Le jour 30 efface les points avec leur voiture, qu’il anonymise l’événement ou le supprime.</p></div></div>
+
+<h2>Les mots</h2>
+<div class="tw"><table><tr><th>Clé</th><th>FR</th><th>EN</th></tr>
+<tr><td>RideForm.stops.title</td><td>Points de RDV</td><td>Meeting points</td></tr>
+<tr><td>.hint</td><td>Où vous prenez du monde en route, avec l’heure de passage. Visible par toutes les personnes qui ont le lien.</td><td>Where you pick people up along the way, with the time you pass. Visible to everyone with the link.</td></tr>
+<tr><td>.add</td><td>Ajouter un point de RDV</td><td>Add a meeting point</td></tr>
+<tr><td>.pointTitle</td><td>Point {n}</td><td>Point {n}</td></tr>
+<tr><td>.place / .time</td><td>Lieu du point {n} / Heure du point {n}</td><td>Place of point {n} / Time of point {n}</td></tr>
+<tr><td>.remove</td><td>Retirer (nom accessible : Retirer le point {n})</td><td>Remove (accessible name: Remove point {n})</td></tr>
+<tr><td>.max</td><td>6 points au maximum.</td><td>6 points at most.</td></tr>
+<tr><td>.sorted</td><td>Points classés par heure.</td><td>Points sorted by time.</td></tr>
+<tr><td>.timeAfter</td><td>L’heure doit être après {time}, l’heure de départ.</td><td>The time must be after {time}, the departure time.</td></tr>
+<tr><td>.boarding</td><td>{count, plural, one {# personne monte ici : elle montera au lieu de départ.} other {# personnes montent ici : elles monteront au lieu de départ.}}</td><td>{count, plural, one {# person boards here: they will board at the departure place.} other {# people board here: they will board at the departure place.}}</td></tr>
+<tr><td>Board.car.stops (liste)</td><td>Points de RDV</td><td>Meeting points</td></tr>
+<tr><td>Board.car.boardsAt</td><td>monte à {place}</td><td>boards at {place}</td></tr>
+<tr><td>Board.car.boardsAtStart</td><td>monte au départ</td><td>boards at the departure</td></tr>
+<tr><td>Board.car.changeStop</td><td>Changer le point (nom : Changer le point de montée de {firstName})</td><td>Change the point (name: Change {firstName}’s boarding point)</td></tr>
+<tr><td>Sheet.stop.legend</td><td>Point de montée</td><td>Boarding point</td></tr>
+<tr><td>Sheet.stop.start</td><td>{place} · {time} · Lieu de départ</td><td>{place} · {time} · Departure place</td></tr>
+<tr><td>Sheet.stop.option</td><td>{place} · {time}</td><td>{place} · {time}</td></tr>
+<tr><td>Sheet.stop.title</td><td>Où monte {firstName} ?</td><td>Where does {firstName} board?</td></tr>
+<tr><td>Sheet.stop.changed</td><td>{firstName} monte à {place}</td><td>{firstName} boards at {place}</td></tr>
+<tr><td>Sheet.stop.changedStart</td><td>{firstName} monte au lieu de départ</td><td>{firstName} boards at the departure place</td></tr>
+<tr><td>Sheet.stop.gone</td><td>Ce point n’existe plus : {firstName} monte au lieu de départ.</td><td>This point no longer exists: {firstName} boards at the departure place.</td></tr>
+<tr><td>Sheet.stop.failed</td><td>Le point de {firstName} n’a pas été changé.</td><td>{firstName}’s boarding point was not changed.</td></tr>
+<tr><td>EventMap.stop</td><td>Point de RDV de {driver} : {place}, {time}</td><td>{driver}’s meeting point: {place}, {time}</td></tr>
+<tr><td>EventMap.stopTitle</td><td>{place}, {time}</td><td>{place}, {time}</td></tr>
+<tr><td>EventMap.stopsNotOnMap</td><td>{count, plural, one {# point de RDV n’est pas sur la carte : son lieu n’a pas de position.} other {# points de RDV ne sont pas sur la carte : leurs lieux n’ont pas de position.}}</td><td>{count, plural, one {# meeting point is not on the map: its place has no position.} other {# meeting points are not on the map: their places have no position.}}</td></tr>
+<tr><td>EditEvent.stops.label</td><td>Points de RDV</td><td>Meeting points</td></tr>
+<tr><td>.hint</td><td>Les conducteurs de l’aller peuvent ajouter des points de RDV à leur voiture.</td><td>Drivers of the outbound trip can add meeting points to their car.</td></tr>
+<tr><td>.locked</td><td>{count, plural, one {# voiture a des points de RDV : l’option reste active tant qu’ils existent.} other {# voitures ont des points de RDV : l’option reste active tant qu’ils existent.}}</td><td>{count, plural, one {# car has meeting points: the option stays on as long as they exist.} other {# cars have meeting points: the option stays on as long as they exist.}}</td></tr>
+<tr><td>.failed</td><td>L’option « Points de RDV » n’a pas été modifiée.</td><td>The “Meeting points” option was not changed.</td></tr>
+<tr><td>.stillLocked</td><td>L’option « Points de RDV » reste active : des voitures ont des points de RDV.</td><td>The “Meeting points” option stays on: cars have meeting points.</td></tr>
+<tr><td>RideForm.stops.positionSaved</td><td>Position enregistrée</td><td>Position saved</td></tr>
+<tr><td>.positionRemove</td><td>Retirer (nom accessible : Retirer la position du point {n})</td><td>Remove (accessible name: Remove the position of point {n})</td></tr>
+<tr><td>EventMap.stopCars</td><td>{count, plural, one {# voiture} other {# voitures}}</td><td>{count, plural, one {# car} other {# cars}}</td></tr>
+<tr><td>EventMap.stopCar</td><td>Voiture de {driver} · {free, plural, =0 {complète} one {# place libre} other {# places libres}}</td><td>{driver}’s car · {free, plural, =0 {full} one {# free seat} other {# free seats}} (reprendre la ligne de bulle de voiture de event-map si elle existe)</td></tr>
+<tr><td>Actions réutilisées (RV3.5, RV3.6, RV4.3)</td><td><code>Actions.notDone.seats</code> + <code>Actions.why.</code> offline, failed, seatTaken, notEnoughSeats, alreadyInCar, rideGone, forbidden, eventNotFound · « Action impossible, vérifiez la connexion »</td><td>the existing English strings</td></tr>
+<tr><td>réutilisés</td><td>Champ requis. · Heure non valide. · {max} caractères au maximum. · Placer · Annuler · Valider · Personne n’est prévenu : pensez à le leur dire.</td><td>the existing English strings</td></tr>
+</table></div>
+
+<h2>Hors périmètre</h2>
+<ul>
+<li>Le retour (points de dépose), une règle par leg autre que « aller seulement ».</li>
+<li>Une heure d’arrivée par point, un calcul d’itinéraire ou de durée, un ordre fixé à la main.</li>
+<li>Un point par personne dans une même saisie, une capacité par point, le nombre de personnes par point sur la carte.</li>
+<li>Notification d’un changement de point ou de la suppression d’un point.</li>
+<li>Changer l’auto-complétion (#237) ; regrouper les points proches sur la carte ; point partagé entre voitures.</li>
+<li>Numéro de téléphone ou toute donnée personnelle de plus ; le choix du point par le conducteur à la place du passager.</li>
+<li>Désactiver l’option « Points de RDV » alors que des points existent (refusé, RV9.3) ; l’organisateur qui retire les points d’un conducteur.</li>
+</ul>
+<h2>À faire dans la tâche</h2>
+<ul style="list-style:none;padding-left:0">
+<li>☐ Amender <code>docs/agents/product.md</code>, « Arrêts » : remplacer « le tap sur une place libre place la personne au lieu du Ride ; elle choisit ensuite son arrêt sur la fiche de la voiture. Le geste reste unique. » par « sur une voiture qui a des Arrêts, le tap sur une place libre ouvre toujours la feuille, départ coché par défaut ; sans Arrêt, le geste reste unique. » (D2). Le chemin est protégé : le propriétaire fusionne.</li>
+<li>☐ Ajouter la ligne « activable dans Modifier l’événement, jamais désactivable tant que des Arrêts existent » à la même entrée (D1).</li>
+</ul>
+</div>
