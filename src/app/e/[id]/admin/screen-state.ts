@@ -77,7 +77,9 @@ export type ScreenEvent =
   | { type: "listToggled"; key: string }
   | { type: "legToggled"; leg: Leg }
   /** The notice read again while its email is on its way (OA1.7): without one, it goes (OA2.6). */
-  | { type: "pendingRead"; pending?: PendingNotice };
+  | { type: "pendingRead"; pending?: PendingNotice }
+  /** No result read in 30 s (POLL_READS): the notice still « sending » reads as a failure, as the server's rule says. */
+  | { type: "pendingGaveUp" };
 
 function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
   switch (check.state) {
@@ -139,6 +141,10 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   if (event.type === "pendingRead") {
     const { publicUrl, legs } = state.panel;
     return { ...state, panel: { publicUrl, legs, ...(event.pending && { pending: event.pending }) } };
+  }
+  if (event.type === "pendingGaveUp") {
+    const { pending } = state.panel;
+    return pending?.send === "sending" ? { ...state, panel: { ...state.panel, pending: { ...pending, send: "failed" } } } : state;
   }
   if (event.type === "reread") {
     // Ending a refresh, it is that refresh's outcome, said as a refresh says it (O1.9, O5.4).

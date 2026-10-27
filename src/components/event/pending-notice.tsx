@@ -2,9 +2,11 @@
 
 import { LoaderCircle, Mail, Pencil, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 import type { PendingNotice as Notice } from "@/domain/pending-send";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { usePageHidden } from "./hidden-page";
 
 /**
  * The notice « Confirmez votre adresse » of a pending event (organizer-account v4, OA1.7,
@@ -13,14 +15,20 @@ import { cn } from "@/lib/utils";
  * failure, or the limit of the address, is in the destructive colour.
  *
  * It never takes the focus: its words are in a polite live region, a failure's in an alert
- * (OA1.7), both always there, so that a change is announced. While the email is on its way,
+ * (OA1.7), both always there, so that a change is announced; a change while a sheet hides
+ * the page waits for it to show. While the email is on its way,
  * both buttons are inactive (`aria-disabled`, they keep the focus). Decision: without
  * `onResend` or `onFix`, its button is inactive too. — Reason: their actions come with #601
  * and #602; a button that would do nothing is not shown as active.
  */
 export function PendingNotice({ pending, onResend, onFix }: { pending: Notice; onResend?: () => void; onFix?: () => void }) {
   const t = useTranslations("Admin.pending");
-  const { email, send } = pending;
+  // While a sheet hides the page, under Radix's `aria-hidden`, the notice keeps what it said:
+  // its change is written, and announced, once the page shows again (#182, as the panel's regions).
+  const hidden = usePageHidden();
+  const [said, setSaid] = useState(pending);
+  if (!hidden && (said.email !== pending.email || said.send !== pending.send)) setSaid(pending);
+  const { email, send } = hidden ? said : pending;
   const failure = send === "failed" || send === "addressLimit";
   const Icon = send === "sending" ? LoaderCircle : failure ? TriangleAlert : Mail;
   const [title, body] =

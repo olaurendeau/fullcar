@@ -523,6 +523,18 @@ describe("the notice « Confirmez votre adresse » (OA1.7)", () => {
     expect(screenReducer(away, { type: "pendingRead", pending: sent })).toStrictEqual(ready({ panel: { ...withdrawn, pending: sent } }));
   });
 
+  it("given up while sending, reads as a failure, as the server reads a send left « sending » after 30 s", () => {
+    const shown = ready({ panel: { ...links, legs: before, pending: sending } });
+    expect(screenReducer(shown, { type: "pendingGaveUp" })).toStrictEqual(
+      ready({ panel: { ...links, legs: before, pending: { ...sending, send: "failed" } } }),
+    );
+    // A result kept meanwhile, or no notice, stays as it is.
+    const kept = ready({ panel: { ...links, legs: before, pending: sent } });
+    expect(screenReducer(kept, { type: "pendingGaveUp" })).toBe(kept);
+    const none = ready();
+    expect(screenReducer(none, { type: "pendingGaveUp" })).toBe(none);
+  });
+
   it("does nothing without the panel", () => {
     const refused: ScreenState = { state: "refused", refusal: { kind: "pending" } };
     for (const state of [{ state: "loading" }, refused, { state: "failed", retrying: false }] as ScreenState[]) {

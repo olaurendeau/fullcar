@@ -42,7 +42,7 @@ import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRea
  *   decision 60); in a section gone, the retour's, to Aller's button (decision 57); never to
  *   `<body>`.
  * - While the notice « Confirmez votre adresse » says « Envoi du lien… », it alone is read again,
- *   every 2 s, until the email's result is kept (OA1.7).
+ *   every 2 s, until the email's result is kept, for 30 s at most (OA1.7).
  * - Its frame keeps the board in place on screen as it changes height (O1.11).
  * - While a sheet hides the page, the live regions keep what they said: their next words wait
  *   for it to show. The legs' dates are the page's, from the header of the state the board

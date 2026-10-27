@@ -121,12 +121,36 @@ test("OA1.7: a send left « sending » reads as a failure once 30 s have passed,
   seededEvent,
 }) => {
   const email = newAddress();
-  // Its function killed 24 s ago: nothing will write its result.
-  await seedPendingSend(db, seededEvent.id, { email, status: "sending", at: ago(24_000) });
+  // Its function killed 18 s ago: nothing will write its result.
+  await seedPendingSend(db, seededEvent.id, { email, status: "sending", at: ago(18_000) });
   await page.goto(organiserPath(seededEvent));
   await expectNotice(page, "polite", FR.title, FR.sending(email));
   // 30 s after the send, and the next read 2 s later at most.
-  await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email), 15_000);
+  await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email), 20_000);
+});
+
+test("OA1.7: a change while a sheet hides the page is said once the sheet is closed", async ({ page, db, seededEvent }) => {
+  const email = newAddress();
+  await seedPendingSend(db, seededEvent.id, { email, status: "sending" });
+  await page.goto(organiserPath(seededEvent));
+  await expectNotice(page, "polite", FR.title, FR.sending(email));
+
+  await areaEditButton(page).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await seedPendingSend(db, seededEvent.id, { email, status: "failed" });
+  // A read of the panel that leaves once the failure is kept, then its answer applied.
+  const read = await page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname === organiserPath(seededEvent),
+  );
+  await (await read.response())?.finished();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Under the sheet, Radix's aria-hidden: the regions keep what they said.
+  const regions = notice(page).locator('[aria-live="polite"], [role="alert"]');
+  expect(await regions.allTextContents()).toEqual([`${FR.title}${FR.sending(email)}`, ""]);
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email));
 });
 
 test("OA2.8: folded, the notice is hidden with the rest, and stays so after a reload", async ({ page, db, seededEvent }) => {
