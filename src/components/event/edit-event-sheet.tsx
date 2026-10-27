@@ -85,7 +85,7 @@ export function EditEventSheet({
 }
 
 /** What the sheet says above « Valider » after an answer (« Enregistrer », feuille ouverte). */
-type Said = ActionProblem | "changed" | "invalid" | "eventNotFound";
+type Said = ActionProblem | "changed" | "eventNotFound";
 
 /**
  * The form, mounted with each opening: what it loaded is what the page showed then. Nothing
@@ -97,7 +97,7 @@ type Said = ActionProblem | "changed" | "invalid" | "eventNotFound";
  * among the values; while sending, it is read-only, asks nothing and its « Retirer » does nothing
  * (AL5.4). Saved, the sheet closes; a field refused shows under it, the focus on the first. Otherwise
  * the sheet says why above « Valider », which gets the focus, and what was typed stays:
- * offline, a failure, or the link refused (M8.2). Changed on another device (M6.1, M6.2), the
+ * offline, or a failure, a request refused included (M8.2 amended, #597). Changed on another device (M6.1, M6.2), the
  * fields not changed take the saved values, which become the ones loaded and `before`. The event
  * gone (M8.3), « Valider » is `disabled` for good, and the focus goes to « Annuler ». The retour
  * unchecked still holding cars or persons, « Supprimer le retour ? » asks first (M3.2): its
@@ -212,7 +212,8 @@ function EditEventForm({
       setBefore(answer.event);
       setSaid("changed");
     } else {
-      setSaid(answer.kind === "problem" ? answer.problem : answer.reason);
+      // Refused (`invalid`): the generic failure, as the confirmation says it; there is no organiser's link to check (#597).
+      setSaid(answer.kind === "problem" ? answer.problem : "failed");
     }
     submitButton.current?.focus();
   }
@@ -307,7 +308,7 @@ function EditEventForm({
       )}
       {late && <SheetNotice said={late} destructive />}
       {said === "changed" && <SheetNotice said={said} />}
-      {(said === "invalid" || (gone && !late)) && <SheetNotice said={said} destructive />}
+      {gone && !late && <SheetNotice said={said} destructive />}
       {/* No live region: the focus stays on « Valider », which it describes (M2.6). */}
       {sending && (
         <p id={idOf("sending")} className="text-sm text-muted-foreground">
@@ -349,10 +350,10 @@ function EditEventForm({
 
 /**
  * An answer said with a title and a body, above « Valider »: changed on another device (M6.1),
- * or, in the destructive colour, the link refused (M8.2), the event gone (M8.3), and a removal
+ * or, in the destructive colour, the event gone (M8.3), and a removal
  * answered once its confirmation was closed (M3.7).
  */
-function SheetNotice({ said, destructive = false }: { said: "changed" | "invalid" | "eventNotFound" | LateRemoval; destructive?: boolean }) {
+function SheetNotice({ said, destructive = false }: { said: "changed" | "eventNotFound" | LateRemoval; destructive?: boolean }) {
   const t = useTranslations();
   const [title, body] =
     typeof said === "object"
@@ -362,7 +363,6 @@ function SheetNotice({ said, destructive = false }: { said: "changed" | "invalid
         ]
       : {
           changed: [t("EditEvent.changed.title"), t("EditEvent.changed.body")],
-          invalid: [t("Admin.invalid.title"), t("Admin.invalid.body")],
           eventNotFound: [t("Actions.notDone.editEvent"), t("Actions.why.eventNotFound")],
         }[said];
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Lock, Pencil, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useId, useRef, type ReactNode, type Ref, type RefObject } from "react";
 import type { Said } from "@/app/e/[id]/admin/screen-state";
@@ -15,26 +15,25 @@ import { OrganiserSummary } from "./organiser-summary";
 import { ReadButton } from "./read-button";
 
 /**
- * The organiser's panel (#3, R4), the same at every visit (C4.7), in the order of C4.1:
- * the link to share, the organiser's own link as personal, then why to keep it; under it, a
+ * The organiser's panel (#3, R4), the same at every visit (C4.7): the link to share, and no
+ * organiser's link nor « Gardez ce lien » any more (OA7.3); under it, a
  * section per leg (#179), folded at every appearance, its title the button that unfolds it
  * (organizer-view v3.5, O9), and no tiles any more (O9.7). From 1024 px, the panel widens,
- * the links take two columns and the sections two more (O4.1). It receives the organiser's
- * link ready-made: reading the token is admin-link.ts's alone. Its title is the button that
+ * the link to share takes the first of two columns and the sections two more (O4.1, OA7.8).
+ * Reading the token is admin-token-store.ts's alone. Its title is the button that
  * folds it (#204, O8.1), `titleRef`, the focus's place after « Réessayer » (O5.8). Folded,
  * all but the title line and its alert is `hidden`, still mounted, and a line per leg sums it
  * up, or the withdrawal's sentence does (O8.2). Which lists are unfolded, `expanded`, the
  * screen keeps, by leg and list (O5.6, O5.7), and which legs, `unfolded` (O9.5).
  * « Actualiser », right of the title, reads the screen again (O1.8); `said` is what the title
  * line's live regions say of it (O1.9, O5.4), and `shown` what the alert's frame shows
- * meanwhile. Withdrawn (`legs` null), the sections go, the links stay, and a sentence says
+ * meanwhile. Withdrawn (`legs` null), the sections go, the link stays, and a sentence says
  * why, not live, unless the alert shows in its place (O1.10, O5.4). « Modifier l’événement »
- * follows « Gardez ce lien », with the links: it stays when the panel is withdrawn, and folds
- * with them (v3.3).
+ * follows the link to share: it stays when the panel is withdrawn, and folds
+ * with it (v3.3).
  */
 export function AdminPanel({
   publicUrl,
-  adminUrl,
   titleRef,
   legs,
   allerAt,
@@ -54,7 +53,6 @@ export function AdminPanel({
   onEdit,
 }: {
   publicUrl: string;
-  adminUrl: string;
   titleRef: RefObject<HTMLButtonElement | null>;
   legs: OrganiserLeg[] | null;
   allerAt: WallClock;
@@ -136,32 +134,15 @@ export function AdminPanel({
       </div>
       {folded && (legs ? <OrganiserSummary legs={legs} /> : !framed && <Stale />)}
       <div ref={content} id={contentId} hidden={folded} className="flex flex-col gap-4">
+        {/* From 1024 px, the link to share keeps its column; the right one stays empty (OA7.8). */}
         <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
           <LinkGroup label={t("shareLink.label")} hint={t("shareLink.hint")}>
             <CopyableLink url={publicUrl}>
               <ShareButton url={publicUrl} />
             </CopyableLink>
           </LinkGroup>
-          <hr className="lg:hidden" />
-          <div className="flex flex-col gap-4 lg:gap-3">
-            <LinkGroup
-              label={
-                <>
-                  {t("adminLink.label")}
-                  <span className="inline-flex h-5 items-center gap-1 rounded-full border bg-muted px-2 text-xs font-medium text-foreground/80">
-                    <Lock className="size-3" />
-                    {t("adminLink.badge")}
-                  </span>
-                </>
-              }
-              hint={t("adminLink.hint")}
-            >
-              <CopyableLink url={adminUrl} />
-            </LinkGroup>
-            <Notice title={t("keep.title")} body={t("keep.body")} />
-          </div>
         </div>
-        {/* After « Gardez ce lien », before the sections; from 1024 px, under both columns, at its width (v3.3). */}
+        {/* After the link to share, before the sections; from 1024 px, under both columns, at its width (v3.3). */}
         <Button
           ref={editRef}
           type="button"
@@ -192,7 +173,7 @@ export function AdminPanel({
   );
 }
 
-/** The withdrawal's sentence (O1.10), not live: under the links unfolded, in the summary's place folded. */
+/** The withdrawal's sentence (O1.10), not live: under the link unfolded, in the summary's place folded. */
 function Stale() {
   const t = useTranslations("Admin");
   return (
@@ -225,13 +206,14 @@ const ALERT_FRAME =
 const PROBLEM_FRAME = cn(ALERT_FRAME, "mx-auto w-full max-w-board focus-visible:focus-ring");
 
 /**
- * Instead of the panel, when the link is not the organiser's (C6.5), or when the check
- * could not be made: then nothing says the link is wrong, and « Réessayer » reads again
+ * Instead of the panel, when the access rule refuses it (#596): the area's title alone, and
+ * nothing of the panel, until each state has its own screen (#598). Or when the check
+ * could not be made (OA7.3): then nothing says the area is refused, and « Réessayer » reads again
  * (O5.3). Its alert region holds the text alone, and is emptied while « Réessayer » reads,
  * then filled again on a failure, so that it is announced again; the text stays on screen
  * meanwhile, out of the region. The button is next to the region, never in it: it stays,
- * and keeps the focus. `ref` is the invalid link's alert, the focus's place should the
- * retry find the link invalid.
+ * and keeps the focus. `ref` is the area's title, the focus's place should the
+ * retry find the area refused.
  */
 export function AdminLinkProblem({
   problem,
@@ -239,28 +221,29 @@ export function AdminLinkProblem({
   onRetry,
   ref,
 }: {
-  problem: "invalid" | "failed";
+  problem: "refused" | "failed";
   retrying?: boolean;
   onRetry?: () => void;
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLHeadingElement>;
 }) {
   const t = useTranslations("Admin");
+  if (problem === "refused") {
+    return (
+      <section className="mx-auto w-full max-w-board">
+        <h2 ref={ref} tabIndex={-1} className="rounded-sm font-semibold focus-visible:focus-ring">
+          {t("title")}
+        </h2>
+      </section>
+    );
+  }
   const text = (
     <div className="flex flex-col gap-0.5">
-      <p className="font-semibold text-destructive">{t(`${problem}.title`)}</p>
-      <p className="text-muted-foreground">{t(`${problem}.body`)}</p>
+      <p className="font-semibold text-destructive">{t("failed.title")}</p>
+      <p className="text-muted-foreground">{t("failed.body")}</p>
     </div>
   );
   const icon = <TriangleAlert aria-hidden className="mt-0.5 size-4 text-destructive" />;
 
-  if (problem === "invalid") {
-    return (
-      <div ref={ref} role="alert" tabIndex={-1} className={PROBLEM_FRAME}>
-        {icon}
-        {text}
-      </div>
-    );
-  }
   return (
     <div className={PROBLEM_FRAME}>
       {icon}
@@ -278,16 +261,6 @@ export function AdminLinkProblem({
       >
         {t("retry")}
       </ReadButton>
-    </div>
-  );
-}
-
-function Notice({ title, body }: { title: string; body: string }) {
-  return (
-    <div role="note" className="grid grid-cols-[1rem_1fr] gap-x-2.5 gap-y-0.5 rounded-lg border p-3 text-sm">
-      <TriangleAlert className="row-span-2 mt-0.5 size-4" />
-      <p className="font-semibold">{title}</p>
-      <p className="text-muted-foreground">{body}</p>
     </div>
   );
 }

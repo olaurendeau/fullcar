@@ -325,25 +325,12 @@
       "label": "Lien à partager",
       "hint": "À envoyer au groupe."
     },
-    "adminLink": {
-      "label": "Lien d’organisateur",
-      "badge": "Personnel",
-      "hint": "Ne le partagez pas : il montre des numéros de téléphone et permet de tout modifier."
-    },
-    "keep": {
-      "title": "Gardez ce lien",
-      "body": "C’est le seul moyen de modifier l’événement. Sans compte ni e-mail, nous ne pouvons pas vous le renvoyer."
-    },
     "copy": "Copier",
     "copied": "Copié",
     "copyFailed": "Copie impossible : sélectionnez le lien et copiez-le à la main.",
     "share": "Partager",
-    "invalid": {
-      "title": "Ce lien d’organisateur n’est pas valide.",
-      "body": "Vérifiez qu’il a été copié en entier."
-    },
     "failed": {
-      "title": "Le lien d’organisateur n’a pas pu être vérifié.",
+      "title": "L’espace organisateur n’a pas pu être chargé.",
       "body": "Vérifiez la connexion, puis réessayez."
     },
     "loading": "Chargement de l’espace organisateur…",

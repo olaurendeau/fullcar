@@ -1,11 +1,11 @@
 import type { Locator, Page, Request, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
 import { leaveNoToken } from "./fixtures";
-import { digitsOf, expect, oneCharOff, organiserPath, SCENE_PHONES, seedOrganiserScene, test } from "./organiser";
+import { areaRefused, digitsOf, expect, keepAdminToken, oneCharOff, organiserPath, SCENE_PHONES, seedOrganiserScene, test } from "./organiser";
 
 /*
  * #181, epic #154: arriving on the organiser area. While the first read runs, a status line;
- * a wrong link, the alert that says so; a failed read, the alert and « Réessayer », which reads
+ * the area refused, its title alone (#597); a failed read, the alert and « Réessayer », which reads
  * again without reloading the page; without JavaScript, a sentence. The fixture
  * `organiserTraffic` checks every test for the token (O6.1) and the storage (O2.10).
  */
@@ -15,8 +15,7 @@ leaveNoToken();
 const FR = {
   panel: "Espace organisateur",
   loading: "Chargement de l’espace organisateur…",
-  invalid: "Ce lien d’organisateur n’est pas valide.",
-  failed: "Le lien d’organisateur n’a pas pu être vérifié.",
+  failed: "L’espace organisateur n’a pas pu être chargé.",
   failedBody: "Vérifiez la connexion, puis réessayez.",
   retry: "Réessayer",
   needsJavaScript: "L’espace organisateur nécessite JavaScript : activez-le, puis rechargez la page.",
@@ -26,7 +25,9 @@ const FR = {
 const alert = (page: Page) => page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ });
 const loading = (page: Page) => page.getByRole("main").getByRole("status").filter({ hasText: FR.loading });
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
-const retry = (page: Page) => page.getByRole("button", { name: FR.retry });
+/** The area's title alone, in the panel's place, once the access is refused (#597, until #598). */
+const refused = (page: Page) => areaRefused(page);
+const retry =(page: Page) => page.getByRole("button", { name: FR.retry });
 /** The failed check's frame: its alert region, then « Réessayer », next to it. */
 const failedFrame = (page: Page) => page.getByRole("main").locator("div", { has: retry(page) }).last();
 /** Playwright's text and role engines skip `<noscript>`: found by its markup. */
@@ -153,22 +154,20 @@ test("O5.1: while the first read runs, a status line instead of the panel, with 
   await expect(loading(page)).toHaveCount(0);
 });
 
-for (const [name, link] of [
-  ["a token one character off", ({ id, token }: SeededEvent) => `/e/${id}/admin#${oneCharOff(token)}`],
-  ["no fragment", ({ id }: SeededEvent) => `/e/${id}/admin`],
+for (const [name, kept] of [
+  ["a token one character off", ({ token }: SeededEvent) => oneCharOff(token)],
+  ["no token", () => null],
 ] as const) {
-  test(`O5.2, O7.7: with ${name}, the untinted alert that says the link is not valid, nothing of the panel`, async ({
-    page,
-    seededEvent,
-  }) => {
-    await page.goto(link(seededEvent));
-    await expect(alert(page)).toContainText(FR.invalid);
+  test(`O5.2, #597: with ${name} kept, the area's title alone, nothing of the panel`, async ({ page, seededEvent }) => {
+    await keepAdminToken(page, seededEvent.id, kept(seededEvent));
+    await page.goto(organiserPath(seededEvent));
+    await expect(refused(page)).toBeVisible();
+    await expect(alert(page)).toHaveCount(0);
     await expect(panel(page)).toHaveCount(0);
     await expect(loading(page)).toHaveCount(0);
     // No tile, no section of a leg: the board's own tabs and headings only.
     await expect(page.getByRole("main").getByRole("button", { name: /sans voiture/ })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: /^(Sans voiture|Voitures sans numéro) \(/ })).toHaveCount(0);
-    await expectUntinted(page, alert(page), FR.invalid);
   });
 }
 
@@ -195,7 +194,7 @@ test("O5.3, O5.8, O7.4, O7.7: offline, the failed check and « Réessayer », wh
 
   await expect(alert(page)).toContainText(FR.failed);
   await expect(alert(page)).toContainText(FR.failedBody);
-  await expect(page.getByText(FR.invalid)).toHaveCount(0);
+  await expect(refused(page)).toHaveCount(0);
   await expect(retry(page)).toBeVisible();
   expect((await retry(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expectUntinted(page, failedFrame(page), FR.failed);
@@ -283,7 +282,7 @@ test("O5.8: « Réessayer » clicked, then the panel: the focus goes to its titl
   expect(seen).not.toContain("BODY");
 });
 
-test("O5.8: when « Réessayer » finds the link no longer valid, the focus goes to the alert that says so", async ({
+test("O5.8: when « Réessayer » finds the area refused, the focus goes to its title", async ({
   page,
   db,
   seededEvent,
@@ -300,14 +299,13 @@ test("O5.8: when « Réessayer » finds the link no longer valid, the focus goes
   await db.deleteFrom("event").where("id", "=", seededEvent.id).execute();
   await retry(page).focus();
   await page.keyboard.press("Enter");
-  await expect(alert(page)).toContainText(FR.invalid);
-  await expect(alert(page)).toBeFocused();
+  await expect(refused(page)).toBeFocused();
 });
 
 test.describe("at 1280 px", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test("O7.5: loading, the failed check and the invalid link have the board's width, centred", async ({
+  test("O7.5: loading, the failed check and the area refused have the board's width, centred", async ({
     page,
     seededEvent,
   }) => {
@@ -322,9 +320,10 @@ test.describe("at 1280 px", () => {
     await expect(alert(page)).toContainText(FR.failed);
     await expectBoardWidth(page, failedFrame(page));
 
-    await page.goto(`/e/${seededEvent.id}/admin#${oneCharOff(seededEvent.token)}`);
-    await expect(alert(page)).toContainText(FR.invalid);
-    await expectBoardWidth(page, alert(page));
+    await keepAdminToken(page, seededEvent.id, oneCharOff(seededEvent.token));
+    await page.reload();
+    await expect(refused(page)).toBeVisible();
+    await expectBoardWidth(page, refused(page));
   });
 });
 

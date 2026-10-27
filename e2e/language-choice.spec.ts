@@ -1,6 +1,7 @@
 import type { BrowserContext, Page, Request } from "@playwright/test";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { areaRefused, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -14,7 +15,7 @@ leaveNoToken();
  */
 
 const UNKNOWN_ID = "Zz9yXw8v";
-const WRONG_SECRET = "q3Vx9kLmN2pR7sT1uW4yZa";
+const WRONG_SECRET = "q3Vx9kLmN2pR7sT1uW4yZQ";
 
 const FR = {
   switch: "English",
@@ -22,7 +23,6 @@ const FR = {
   notFound: "Événement introuvable",
   panel: "Espace organisateur",
   shareLink: "Lien à partager",
-  adminLink: "Lien d’organisateur",
 };
 const EN = {
   switch: "Français",
@@ -30,37 +30,38 @@ const EN = {
   notFound: "Event not found",
   panel: "Organiser area",
   shareLink: "Link to share",
-  adminLink: "Organiser link",
 };
 type Words = typeof FR;
 
-/** The pages of the footer (footer.spec.ts): which, where, and their title in each language. */
-const PAGES: [string, (event: SeededEvent) => string, Record<"fr" | "en", string>][] = [
+const TITLE = { fr: "Tournoi de Rennes", en: "Tournoi de Rennes" };
+
+/**
+ * The pages of the footer (footer.spec.ts): which, where, their title in each language, and on
+ * the organiser's page the admin token the browser keeps, or none (#597).
+ */
+const PAGES: [string, (event: SeededEvent) => string, Record<"fr" | "en", string>, ((event: SeededEvent) => string | null)?][] = [
   ["the home page", () => "/", { fr: "Fullcar", en: "Fullcar" }],
   ["the event not found", () => `/e/${UNKNOWN_ID}`, { fr: FR.notFound, en: EN.notFound }],
-  ["the event's page", ({ id }) => `/e/${id}`, { fr: "Tournoi de Rennes", en: "Tournoi de Rennes" }],
-  [
-    "the organiser's page",
-    ({ id, token }) => `/e/${id}/admin#${token}`,
-    { fr: "Tournoi de Rennes", en: "Tournoi de Rennes" },
-  ],
-  [
-    "the organiser's page, wrong secret",
-    ({ id }) => `/e/${id}/admin#${WRONG_SECRET}`,
-    { fr: "Tournoi de Rennes", en: "Tournoi de Rennes" },
-  ],
-  ["the organiser's page, no secret", ({ id }) => `/e/${id}/admin`, { fr: "Tournoi de Rennes", en: "Tournoi de Rennes" }],
+  ["the event's page", ({ id }) => `/e/${id}`, TITLE],
+  ["the organiser's page", organiserPath, TITLE, ({ token }) => token],
+  ["the organiser's page, wrong secret", organiserPath, TITLE, () => WRONG_SECRET],
+  ["the organiser's page, no secret", organiserPath, TITLE, () => null],
 ];
 
-/** The page once it has settled: on the organiser's page, once its link has been checked. */
+/** The page once it has settled: on the organiser's page, once its token has been checked. */
 async function open(page: Page, path: string, heading: string, words: Words = FR) {
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
-    await expect(
-      page.getByRole("region", { name: words.panel }).or(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })),
-    ).toBeVisible();
+    const refused = areaRefused(page, words.panel);
+    await expect(page.getByRole("region", { name: words.panel }).or(refused)).toBeVisible();
   }
+}
+
+/** Opens a page of `PAGES`, the browser keeping on the organiser's page what that page says. */
+async function openPage(page: Page, event: SeededEvent, [, path, heading, kept]: (typeof PAGES)[number], lang: "fr" | "en" = "fr") {
+  if (kept) await keepAdminToken(page, event.id, kept(event));
+  await open(page, path(event), heading[lang]);
 }
 
 const languageSwitch = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
@@ -142,10 +143,10 @@ test.describe("the language, without a choice", () => {
       context,
       seededEvent,
     }) => {
-      for (const [where, path, heading] of PAGES) {
-        await open(page, path(seededEvent), heading.fr);
+      for (const each of PAGES) {
+        await openPage(page, seededEvent, each);
         await expectLanguage(page, "fr");
-        expect(await cookieNames(context), where).toEqual([]);
+        expect(await cookieNames(context), each[0]).toEqual([]);
       }
     });
 
@@ -204,7 +205,8 @@ test.describe("the language chosen, kept by the device", () => {
       seededEvent,
     }) => {
       const { id, token } = seededEvent;
-      await open(page, `/e/${id}/admin#${token}`, "Tournoi de Rennes");
+      await keepAdminToken(page, id, token);
+      await open(page, organiserPath(seededEvent), "Tournoi de Rennes");
       await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
 
       for (const lang of ["en", "fr"] as const) {
@@ -230,8 +232,8 @@ test.describe("the language chosen, kept by the device", () => {
       await switchTo(page, "fr");
       expect(await localeCookie(context)).toBe("fr");
 
-      for (const [, path, heading] of PAGES) {
-        await open(page, path(seededEvent), heading.fr);
+      for (const each of PAGES) {
+        await openPage(page, seededEvent, each);
         await expectLanguage(page, "fr");
       }
       const next = await context.newPage();
@@ -297,14 +299,15 @@ function watchRequests(page: Page): () => Promise<Sent[]> {
 test.describe("the language never in a URL", () => {
   test.use({ locale: "fr-FR" });
 
-  for (const [where, path, heading] of PAGES) {
+  for (const each of PAGES) {
+    const [where, path, heading] = each;
     test(`L2.7: on ${where}, a tap keeps the URL, puts the language in no path nor query, and sends no secret`, async ({
       page,
       seededEvent,
     }) => {
       const at = path(seededEvent);
       const { pathname } = new URL(at, "http://fullcar.test");
-      await open(page, at, heading.fr);
+      await openPage(page, seededEvent, each);
       const before = page.url();
       const sent = watchRequests(page);
       // Every URL the document goes through, `history.replaceState` included: none but its own.
@@ -382,19 +385,17 @@ test.describe("the language never in a URL", () => {
     expect(isIconVersion("/favicon.ico", "favicon.en-GB.ico", "")).toBe(false);
   });
 
-  test("L2.7: the organiser's two links are the same after the tap, and the shared one opens in French", async ({
+  test("L2.7: the link to share is the same after the tap, and opens in French", async ({
     page,
     browser,
     baseURL,
     seededEvent,
   }) => {
-    await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");
-    const links = (words: Words) =>
-      Promise.all(
-        [words.shareLink, words.adminLink].map((name) =>
-          page.getByRole("region", { name: words.panel }).getByRole("group", { name }).getByTestId("link").innerText(),
-        ),
-      );
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
+    await open(page, organiserPath(seededEvent), "Tournoi de Rennes");
+    const links = async (words: Words) => [
+      await page.getByRole("region", { name: words.panel }).getByRole("group", { name: words.shareLink }).getByTestId("link").innerText(),
+    ];
     const before = await links(FR);
     expect(before[0] === `${new URL(baseURL!).origin}/e/${seededEvent.id}`, "the share link").toBe(true);
 
@@ -402,7 +403,6 @@ test.describe("the language never in a URL", () => {
     await expect(page.getByRole("region", { name: EN.panel })).toBeVisible();
     const after = await links(EN);
     expect(after[0] === before[0], "the share link is the same").toBe(true);
-    expect(after[1] === before[1], "the organiser's link is the same").toBe(true);
 
     const elsewhere = await browser.newContext({ locale: "fr-FR", baseURL });
     try {
@@ -441,7 +441,7 @@ test.describe("an event created in the language chosen", () => {
     await field("End time").fill("18:00");
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
-    // Read by its path only: the URL's fragment is the organiser's secret.
+    // Read by its path: the arrival has no fragment (OA1.6).
     await expect.poll(() => /^\/e\/\w{8}\/admin$/.test(new URL(page.url()).pathname)).toBe(true);
     const id = new URL(page.url()).pathname.split("/")[2];
     try {
@@ -453,20 +453,19 @@ test.describe("an event created in the language chosen", () => {
     }
   });
 
-  test("C4.2 of #3, in English after the tap: both links and the warning are visible without scrolling at 360 × 780", async ({
+  test("C4.2 of #3, in English after the tap: the link to share is visible without scrolling at 360 × 780", async ({
     page,
     seededEvent,
   }) => {
     expect(page.viewportSize()).toEqual({ width: 360, height: 780 });
-    await open(page, `/e/${seededEvent.id}/admin#${seededEvent.token}`, "Tournoi de Rennes");
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
+    await open(page, organiserPath(seededEvent), "Tournoi de Rennes");
     await switchTo(page, "en");
 
     // The tap scrolled down to the footer: the panel is read from the top, as on arrival.
     await page.evaluate(() => window.scrollTo(0, 0));
     const panel = page.getByRole("region", { name: EN.panel });
     await expect(panel.getByRole("group", { name: EN.shareLink }).getByTestId("link")).toBeInViewport({ ratio: 1 });
-    await expect(panel.getByRole("group", { name: EN.adminLink }).getByTestId("link")).toBeInViewport({ ratio: 1 });
-    await expect(panel.getByRole("note")).toBeInViewport({ ratio: 1 });
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
