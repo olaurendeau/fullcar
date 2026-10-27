@@ -64,7 +64,7 @@ describe("the privacy page (OA10.4, PP1)", () => {
     ]);
   });
 
-  it("renders every message of the page, once, and nothing else", () => {
+  it("lists every message of the page in POLICY, once, and nothing else", () => {
     const shown = POLICY.map(({ key }) => key);
     expect(new Set(shown).size).toBe(shown.length);
     for (const [locale, messages] of Object.entries(LOCALES)) {
@@ -91,6 +91,7 @@ describe("the text of the page (PP2)", () => {
   it("states no figure nor setting that nobody has checked (restore window, Sentry, publication date)", () => {
     const text = (messages: Record<string, unknown>, key: string) => String(message(messages, key));
     expect(text(fr, "Privacy.retention.restore")).not.toMatch(/\d\s*heures?/);
+    expect(text(en, "Privacy.retention.restore")).not.toMatch(/\d\s*hours?/);
     expect(text(fr, "Privacy.services.sentry")).not.toMatch(/n’est pas gardée/);
     expect(text(en, "Privacy.services.sentry")).not.toMatch(/is not kept/);
     expect(text(fr, "Privacy.updates.body")).not.toMatch(/Dernière mise à jour/);

@@ -515,7 +515,7 @@
       "sends": "Les traces d’envoi qui servent aux limites, et qui contiennent l’adresse du destinataire : gardées 1 heure, la durée des limites d’envoi, puis effacées au nettoyage quotidien suivant, au plus tard le lendemain.",
       "cookie": "Le cookie de langue : 365 jours.",
       "restore": "Notre base de données garde un historique de restauration : une donnée effacée peut y rester pendant une durée limitée, fixée par les réglages de cette base. Cet historique ne sert qu’à restaurer la base après un incident.",
-      "providers": "Chez nos prestataires : les journaux de Vercel, 1 heure ; les journaux d’envoi de Brevo, 1 mois, sans copie du contenu des e-mails ; les requêtes réussies chez Geoapify, 24 heures au plus, selon sa politique ; les conversations chez Crisp, 60 jours ; les rapports d’erreur chez Sentry, pendant la durée que fixe sa politique."
+      "providers": "Chez nos prestataires : les journaux de Vercel, 1 heure ; les journaux d’envoi de Brevo, 1 mois, sans copie du contenu des e-mails ; les requêtes réussies chez Geoapify, 24 heures au plus, selon sa politique ; les conversations chez Crisp, 60 jours ; les rapports d’erreur chez Sentry, pendant la durée que fixe Sentry."
     },
     "who": {
       "title": "Qui voit quoi",

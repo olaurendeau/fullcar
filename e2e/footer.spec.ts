@@ -106,7 +106,7 @@ async function open(page: Page, path: string, heading: string, token: string) {
 
 const sourceLink = (page: Page, words: Words) => page.getByRole("link", { name: words.source, exact: true });
 const contactLink = (page: Page, words: Words) => page.getByRole("link", { name: words.contact, exact: true });
-const privacyLink = (page: Page, words: Words) => page.getByRole("link", { name: words.privacy, exact: true });
+const privacyLink = (page: Page, words: Words) => page.locator("footer").getByRole("link", { name: words.privacy, exact: true });
 const homeLink = (page: Page, words: Words) => page.getByRole("link", { name: words.home, exact: true });
 const languageSwitch = (page: Page, words: Words) => page.getByRole("button", { name: words.switch, exact: true });
 
@@ -216,7 +216,6 @@ async function expectHomeLink(page: Page) {
 async function expectPrivacyOnFirstLine(page: Page, words: Words) {
   const link = privacyLink(page, words);
   await expect(link).toHaveCount(1);
-  await expect(page.locator("footer").getByRole("link", { name: words.privacy, exact: true })).toHaveCount(1);
   await expect(link).toHaveAttribute("href", "/confidentialite");
   expect(await link.getAttribute("target")).toBeNull();
   const [size, contactSize] = await Promise.all(

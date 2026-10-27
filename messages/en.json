@@ -515,7 +515,7 @@
       "sends": "The sending records used for the limits, which contain the recipient’s address: kept for 1 hour, the length of the sending limits, then erased at the next daily clean-up, by the next day at the latest.",
       "cookie": "The language cookie: 365 days.",
       "restore": "Our database keeps a restore history: erased data may stay there for a limited time, set by that database’s settings. This history is used only to restore the database after an incident.",
-      "providers": "At our providers: Vercel’s logs, 1 hour; Brevo’s sending logs, 1 month, with no copy of the emails’ content; successful requests at Geoapify, 24 hours at most, according to its policy; conversations at Crisp, 60 days; error reports at Sentry, for the period its policy sets."
+      "providers": "At our providers: Vercel’s logs, 1 hour; Brevo’s sending logs, 1 month, with no copy of the emails’ content; successful requests at Geoapify, 24 hours at most, according to its policy; conversations at Crisp, 60 days; error reports at Sentry, for the period Sentry sets."
     },
     "who": {
       "title": "Who sees what",
