@@ -144,11 +144,14 @@ async function checkStops(
   const departure = change.ride.time ?? locked.departureTime.slice(0, 5);
   if (change.stops !== undefined) {
     if (change.stops.length > 0 && !locked.stopsEnabled) return { ok: false, error: "stopsOff" };
+    // Option off (RV8.3): the page shows no Stop, and an empty list has none to remove.
+    if (!locked.stopsEnabled) return { list: undefined };
     const checked = validateStops(change.stops, departure);
     if (!checked.ok) return { ok: false, error: "stopErrors", stopErrors: checked.errors, first: checked.first };
     return { list: checked.stops };
   }
-  if (change.ride.time === undefined) return { list: undefined };
+  // Option off (RV8.3): the Stops recorded, if any, are not shown, and do not bound the departure.
+  if (change.ride.time === undefined || !locked.stopsEnabled) return { list: undefined };
   const [first] = await rideStops(trx, ride);
   const firstStopTime = first?.time.slice(0, 5);
   if (firstStopTime !== undefined && change.ride.time >= firstStopTime) {

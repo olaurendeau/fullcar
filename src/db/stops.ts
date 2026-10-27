@@ -103,14 +103,32 @@ export async function replaceStops(db: Kysely<Database>, ride: RideRef, stops: r
     if (taken.length > 0) return false;
   }
   const own = (await db.selectFrom("stop").select("id").where("ride_id", "=", ride.id).execute()).map((row) => row.id);
+  // The new ones first: an id taken since the check above (a forged request) is `false`, not an error,
+  // and what this wrote is taken back. The rank constraint is deferred, so the order is free.
+  const fresh = stops.flatMap((stop, rank) =>
+    own.includes(stop.id)
+      ? []
+      : [{ id: stop.id, event_id: ride.eventId, ride_id: ride.id, leg: "aller" as const, ...stopColumns(stop, rank) }],
+  );
+  if (fresh.length > 0) {
+    const inserted = await db
+      .insertInto("stop")
+      .values(fresh)
+      .onConflict((conflict) => conflict.column("id").doNothing())
+      .returning("id")
+      .execute();
+    if (inserted.length < fresh.length) {
+      if (inserted.length > 0) {
+        await db.deleteFrom("stop").where("id", "in", inserted.map((row) => row.id)).execute();
+      }
+      return false;
+    }
+  }
   const gone = own.filter((id) => !ids.includes(id));
   if (gone.length > 0) await db.deleteFrom("stop").where("ride_id", "=", ride.id).where("id", "in", gone).execute();
   for (const [rank, stop] of stops.entries()) {
     if (own.includes(stop.id)) {
       await db.updateTable("stop").set(stopColumns(stop, rank)).where("id", "=", stop.id).where("ride_id", "=", ride.id).execute();
-    } else {
-      const columns = { id: stop.id, event_id: ride.eventId, ride_id: ride.id, leg: "aller" as const, ...stopColumns(stop, rank) };
-      await db.insertInto("stop").values(columns).execute();
     }
   }
   return true;

@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { anonymiseEvent } from "@/db/day-thirty";
+import { lockEvent } from "@/db/events";
 import { setPlacement } from "@/db/placements";
-import { ridePassengers } from "@/db/rides";
+import { lockRide, ridePassengers } from "@/db/rides";
 import type { Database } from "@/db/schema";
-import { insertStops } from "@/db/stops";
+import { insertStops, replaceStops } from "@/db/stops";
 import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { removeSeededRetour, seedEvent } from "@/db/test-events";
@@ -663,6 +664,19 @@ describe("updateRide, the Stops of the aller (RV1, RV6)", () => {
     });
   });
 
+  it("RV8.3: with the option off, the Stops recorded are neither read nor written: they do not bound the departure, and an empty list keeps them", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r1 } = await seedStopsScene(trx, false);
+      const recorded = await stopsOf(trx, r1);
+      expect(recorded).toHaveLength(2);
+
+      expect(await updateRide(trx, eventId, marc.token, r1, "aller", form({ time: "09:00" }))).toMatchObject({ ok: true });
+      expect(await updateRide(trx, eventId, marc.token, r1, "aller", form({ stops: [] }))).toMatchObject({ ok: true });
+
+      expect(await stopsOf(trx, r1)).toEqual(recorded);
+    });
+  });
+
   it("is invalid with Stops on the retour, or an id that is a Stop of another car, and nothing is written", async () => {
     await withRollback(async (trx) => {
       const { eventId, marc, r1, r2 } = await seedStopsScene(trx);
@@ -689,6 +703,89 @@ describe("updateRide, the Stops of the aller (RV1, RV6)", () => {
     await withRollback(async (trx) => {
       const { eventId, marc, r1 } = await seedStopsScene(trx);
       expect(await updateRide(trx, eventId, marc.token, r1, "aller", form({ stops }))).toMatchObject({ ok: false, error: "invalid" });
+    });
+  });
+
+  // Two sessions on committed data: the first holds a lock and changes what the update decides
+  // on, the second goes through updateRide on its own connection and waits. It must decide on
+  // the option, the departure and the Stops the locks give, never on ones read before.
+  describe("at the same time as another session, on committed data", () => {
+    /** Marc drives r1, aller, at 07:15, on the committed event; the option is `enabled`. */
+    async function seedCommitted(db: Db, eventId: string, enabled: boolean) {
+      await db.updateTable("event").set({ stops_enabled: enabled }).where("id", "=", eventId).execute();
+      const marc = await seedPerson(db, eventId, { firstName: "Marc" });
+      const r1 = await seedRide(db, eventId, marc.id, { leg: "aller", seats: 3 });
+      return { marc, r1, ref: { id: r1, eventId, leg: "aller" as const } };
+    }
+
+    const turnOption = (eventId: string, to: boolean) => async (trx: Db) => {
+      await lockEvent(trx, eventId, "noKeyUpdate");
+      await trx.updateTable("event").set({ stops_enabled: to }).where("id", "=", eventId).execute();
+    };
+
+    it("RV1.9: an option turned off while the update waits refuses the Stops by stopsOff, and writes nothing", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { marc, r1 } = await seedCommitted(db, eventId, true);
+        const before = await rowsOf(db, eventId);
+        const fields = form({ seats: "4", stops: [{ id: POSTE, location: "La Poste", time: "07:30" }] });
+
+        const result = await whileHeld(db, turnOption(eventId, false), (own) => updateRide(own, eventId, marc.token, r1, "aller", fields));
+
+        expect(result).toMatchObject({ ok: false, error: "stopsOff" });
+        expect(await rowsOf(db, eventId)).toEqual(before);
+        expect(await stopsOf(db, r1)).toEqual([]);
+      });
+    });
+
+    it("RV1.9: an option turned on while the update waits accepts the Stops, and writes them", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { marc, r1 } = await seedCommitted(db, eventId, false);
+        const fields = form({ stops: [{ id: POSTE, location: "La Poste", time: "07:30" }] });
+
+        const result = await whileHeld(db, turnOption(eventId, true), (own) => updateRide(own, eventId, marc.token, r1, "aller", fields));
+
+        expect(result).toMatchObject({ ok: true });
+        expect((await stopsOf(db, r1)).map((stop) => stop.id)).toEqual([POSTE]);
+      });
+    });
+
+    it("RV1.4: Stops sent without a time are checked against the departure another update moved meanwhile", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { marc, r1, ref } = await seedCommitted(db, eventId, true);
+        const fields = { ...form(), time: undefined, stops: [{ id: POSTE, location: "La Poste", time: "07:35" }] };
+
+        const result = await whileHeld(
+          db,
+          async (trx) => {
+            await lockRide(trx, ref);
+            await trx.updateTable("ride").set({ departure_time: "07:40:00" }).where("id", "=", r1).execute();
+          },
+          (own) => updateRide(own, eventId, marc.token, r1, "aller", fields),
+        );
+
+        expect(result).toMatchObject({ ok: false, error: "stopErrors", stopErrors: [{ time: "notAfterDeparture" }], first: 0 });
+        expect(await stopsOf(db, r1)).toEqual([]);
+      });
+    });
+
+    it("RV1.10: a departure moved without stops is checked against the first Stop another update recorded meanwhile", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { marc, r1, ref } = await seedCommitted(db, eventId, true);
+        await insertStops(db, ref, [{ id: POSTE, location: "La Poste", position: null, time: "07:30" }]);
+        const moved = form({ seats: "4", time: "07:25" });
+
+        const result = await whileHeld(
+          db,
+          async (trx) => {
+            await lockRide(trx, ref);
+            await replaceStops(trx, ref, [{ id: POSTE, location: "La Poste", position: null, time: "07:20" }]);
+          },
+          (own) => updateRide(own, eventId, marc.token, r1, "aller", moved),
+        );
+
+        expect(result).toMatchObject({ ok: false, error: "afterStop", firstStopTime: "07:20" });
+        expect((await rowsOf(db, eventId)).rides).toEqual([expect.objectContaining({ departure_time: "07:15:00", seats: 3 })]);
+      });
     });
   });
 

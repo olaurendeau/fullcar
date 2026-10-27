@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { ValidStop } from "@/domain/stop";
 import { countStopRides, insertStops, replaceStops, rideStops } from "./stops";
+import { whileHeld, withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
 import { seedPerson, seedPlacement, seedRide, seedStop } from "./test-participants";
+import { atomically } from "./transaction";
 
 describe("rideStops", () => {
   it("gives the Stops of a Ride by time, then by rank", async () => {
@@ -186,6 +189,28 @@ describe("replaceStops", () => {
 
       expect((await rideStops(trx, ref)).map((s) => s.id)).toEqual([A]);
       expect((await rideStops(trx, other)).map((s) => s.location)).toEqual(["Chez l'autre"]);
+    });
+  });
+
+  // The id is not yet a Stop when `replaceStops` looks (the check sees committed rows only),
+  // and is one by the time it inserts: another session holds it, uncommitted, and commits.
+  it("says no, not an error, when an id becomes a Stop of another Ride between the check and the insert, and keeps what was there", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      const [kept, fresh, taken] = [randomUUID(), randomUUID(), randomUUID()];
+      const rideId = await seedRide(db, eventId, (await seedPerson(db, eventId)).id);
+      const otherRide = await seedRide(db, eventId, (await seedPerson(db, eventId)).id);
+      const ref = { id: rideId, eventId, leg: "aller" as const };
+      await insertStops(db, ref, [stop(kept)]);
+
+      const done = await whileHeld(
+        db,
+        (holder) => insertStops(holder, { ...ref, id: otherRide }, [stop(taken, { location: "Chez l'autre" })]),
+        (own) => atomically(own, (trx) => replaceStops(trx, ref, [stop(fresh, { time: "07:20" }), stop(taken, { time: "07:40" })])),
+      );
+
+      expect(done).toBe(false);
+      expect((await rideStops(db, ref)).map((s) => s.id)).toEqual([kept]);
+      expect((await rideStops(db, { ...ref, id: otherRide })).map((s) => s.location)).toEqual(["Chez l'autre"]);
     });
   });
 });

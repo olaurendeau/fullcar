@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { sql, TableNode, type Kysely, type KyselyPlugin, type QueryId } from "kysely";
 import { describe, expect, it } from "vitest";
 import { anonymiseEvent } from "@/db/day-thirty";
+import { lockEvent } from "@/db/events";
 import { readTokenHolders } from "@/db/persons";
 import { findPlacement, setPlacement } from "@/db/placements";
 import type { Database } from "@/db/schema";
@@ -1242,6 +1243,40 @@ describe("offerRide, the Stops of the aller (RV1)", () => {
       await anonymiseEvent(trx, eventId);
       const refused = await offerRide(trx, eventId, newToken(), anOffer("aller", aNewDriver(), { stops: stopsFor() }));
       expect(refused).toEqual({ ok: false, error: "eventEnded" });
+    });
+  });
+
+  // Two sessions on committed data: the organiser holds the Event's lock and turns the option
+  // over; the offer, on its own connection, waits for it and must decide on the option the lock
+  // gives, never on one read before `lockLegs` (RV1.9, RV8.3).
+  describe("at the same time as the organiser turning the option over, on committed data", () => {
+    const turnOption = (eventId: string, to: boolean) => async (trx: Db) => {
+      await lockEvent(trx, eventId, "noKeyUpdate");
+      await trx.updateTable("event").set({ stops_enabled: to }).where("id", "=", eventId).execute();
+    };
+
+    it("RV1.9: an option turned off while the offer waits refuses the Stops by stopsOff, and writes nothing", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        await db.updateTable("event").set({ stops_enabled: true }).where("id", "=", eventId).execute();
+        const offer = anOffer("aller", aNewDriver(), { stops: stopsFor() });
+
+        const result = await whileHeld(db, turnOption(eventId, false), (own) => offerRide(own, eventId, newToken(), offer));
+
+        expect(result).toEqual({ ok: false, error: "stopsOff" });
+        expect((await rowsOf(db, eventId)).rides).toEqual([]);
+        expect(await storedStops(db, eventId)).toEqual([]);
+      });
+    });
+
+    it("RV1.9: an option turned on while the offer waits accepts the Stops, and writes them", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const offer = anOffer("aller", aNewDriver(), { stops: stopsFor() });
+
+        const result = await whileHeld(db, turnOption(eventId, true), (own) => offerRide(own, eventId, newToken(), offer));
+
+        expect(result).toMatchObject({ ok: true });
+        expect((await storedStops(db, eventId)).map((stop) => stop.ride_id)).toEqual([offer.rideId, offer.rideId, offer.rideId]);
+      });
     });
   });
 
