@@ -3,6 +3,7 @@
 import { getDb } from "@/db/client";
 import { databaseFailure } from "@/db/failure";
 import { isPublicId } from "@/domain/public-id";
+import { setBoardingStop as setBoardingStopInRide, type BoardingStopResult } from "./boarding-stop";
 import * as changeRide from "./change-ride";
 import { readEventState, type DeviceState } from "./event-state";
 import { offerRide as storeRideOffer, type OfferRideOutcome } from "./offer-ride";
@@ -44,13 +45,36 @@ export async function takeSeats(
   rideId: unknown,
   leg: unknown,
   personIds: unknown,
+  stopId?: unknown,
 ): Promise<TakeSeatsResult | changeRide.EventNotFound> {
   if (!isPublicId(id)) return changeRide.EVENT_NOT_FOUND;
   try {
-    return await takeSeatsInRide(getDb(), id, token, rideId, leg, personIds);
+    return await takeSeatsInRide(getDb(), id, token, rideId, leg, personIds, stopId);
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("takeSeats: the seats could not be taken", error);
+  }
+}
+
+/**
+ * « Changer le point » (RV4.2): a person of the device, in a car of the aller, boards at
+ * another point of it, or at its start with `null`. « Annuler » calls it again with the point
+ * before. As for takeSeats: the token arrives in the body, never in the URL, and is only
+ * compared, never logged; `eventNotFound` for an unknown event.
+ */
+export async function setBoardingStop(
+  id: unknown,
+  token: unknown,
+  rideId: unknown,
+  personId: unknown,
+  stopId: unknown,
+): Promise<BoardingStopResult | changeRide.EventNotFound> {
+  if (!isPublicId(id)) return changeRide.EVENT_NOT_FOUND;
+  try {
+    return await setBoardingStopInRide(getDb(), id, token, rideId, personId, stopId);
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure("setBoardingStop: the boarding point could not be changed", error);
   }
 }
 
