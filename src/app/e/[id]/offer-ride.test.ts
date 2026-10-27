@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { sql, TableNode, type Kysely, type KyselyPlugin, type QueryId } from "kysely";
 import { describe, expect, it } from "vitest";
+import { anonymiseEvent } from "@/db/day-thirty";
 import { readTokenHolders } from "@/db/persons";
 import { findPlacement, setPlacement } from "@/db/placements";
 import type { Database } from "@/db/schema";
@@ -1131,6 +1132,127 @@ describe("offerRide", () => {
           expect(cars.map((car) => car.driver.id).sort()).toEqual([leg === "aller" ? marc.id : ines.id, lea.id, tom.id].sort());
         }
       });
+    });
+  });
+});
+
+describe("offerRide, the Stops of the aller (RV1)", () => {
+  const MAIRIE = randomUUID();
+  const GARE = randomUUID();
+  const EGLISE = randomUUID();
+  const stopsFor = () => [
+    { id: GARE, location: "Gare", time: "08:30", position: VAUGNERAY_EXACT },
+    { id: MAIRIE, location: "Mairie", time: "08:10" },
+    { id: EGLISE, location: "Église", time: "08:30" },
+  ];
+
+  async function storedStops(db: Db, eventId: string) {
+    return db
+      .selectFrom("stop")
+      .select(["id", "ride_id", "location", "stop_time", "rank"])
+      .where("event_id", "=", eventId)
+      .orderBy("stop_time")
+      .orderBy("rank")
+      .execute();
+  }
+
+  it("RV1.7: without stops, the car is written as before, and has none", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const offer = anOffer("aller", aNewDriver());
+      expect(await offerRide(trx, eventId, newToken(), offer)).toMatchObject({ ok: true });
+      expect(await storedStops(trx, eventId)).toEqual([]);
+    });
+  });
+
+  it("RV1.4, RV1.5: writes the Stops after the Ride, by time then order of entry, with their position", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const offer = anOffer("aller", aNewDriver(), { stops: stopsFor() });
+      expect(await offerRide(trx, eventId, newToken(), offer)).toMatchObject({ ok: true });
+
+      const stored = await storedStops(trx, eventId);
+      expect(stored.map((stop) => [stop.id, stop.ride_id, stop.rank, stop.stop_time])).toEqual([
+        [MAIRIE, offer.rideId, 0, "08:10:00"],
+        [GARE, offer.rideId, 1, "08:30:00"],
+        [EGLISE, offer.rideId, 2, "08:30:00"],
+      ]);
+      const gare = await trx.selectFrom("stop").select(["location_lat", "location_lng"]).where("id", "=", GARE).executeTakeFirstOrThrow();
+      expect(gare).toEqual({ location_lat: VAUGNERAY.lat, location_lng: VAUGNERAY.lng });
+    });
+  });
+
+  it("RV1.4: a Stop at the time of the departure is an error of its line, and nothing is written", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const offer = anOffer("aller", aNewDriver(), {
+        stops: [
+          { id: MAIRIE, location: "Mairie", time: "08:10" },
+          { id: GARE, location: " ", time: "08:00" },
+        ],
+      });
+      expect(await offerRide(trx, eventId, newToken(), offer)).toEqual({
+        ok: false,
+        errors: {},
+        first: "stops",
+        stopErrors: [{}, { location: "required", time: "notAfterDeparture" }],
+      });
+      expect((await rowsOf(trx, eventId)).rides).toEqual([]);
+    });
+  });
+
+  it("the errors of the car's fields come first, and the Stops are not compared to a time in error", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const offer = anOffer("aller", aNewDriver(), { time: "", stops: [{ id: MAIRIE, location: "Mairie", time: "00:01" }] });
+      expect(await offerRide(trx, eventId, newToken(), offer)).toEqual({ ok: false, errors: { time: "required" }, first: "time" });
+    });
+  });
+
+  const sevenIds = Array.from({ length: 7 }, (_, at) => `00000000-0000-4000-8000-00000000000${at}`);
+  it.each([
+    ["on the retour", () => anOffer("retour", aNewDriver(), { stops: stopsFor() })],
+    ["in otherLeg", () => anOffer("aller", aNewDriver(), { otherLeg: aDrive({ stops: stopsFor() }) })],
+    ["seven", () => anOffer("aller", aNewDriver(), { stops: sevenIds.map((id) => ({ id, location: "x", time: "08:30" })) })],
+    ["an id twice", () => anOffer("aller", aNewDriver(), { stops: [stopsFor()[0], stopsFor()[0]] })],
+  ])("RV1.4: stops %s are invalid, and nothing is written", async (_name, build) => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      expect(await offerRide(trx, eventId, newToken(), build())).toEqual({ ok: false, error: "invalid" });
+      expect((await rowsOf(trx, eventId)).rides).toEqual([]);
+      expect(await storedStops(trx, eventId)).toEqual([]);
+    });
+  });
+
+  it("RV1.9: with the option off, the Stops are refused by stopsOff and nothing is written; an empty list is not Stops", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const before = await rowsOf(trx, eventId);
+      const refused = await offerRide(trx, eventId, newToken(), anOffer("aller", aNewDriver(), { stops: stopsFor() }));
+      expect(refused).toEqual({ ok: false, error: "stopsOff" });
+      expect(await rowsOf(trx, eventId)).toEqual(before);
+      expect(await storedStops(trx, eventId)).toEqual([]);
+      expect(await offerRide(trx, eventId, newToken(), anOffer("aller", aNewDriver(), { stops: [] }))).toMatchObject({ ok: true });
+    });
+  });
+
+  it("RV8.3: an anonymised event gives eventEnded, before stopsOff", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      await anonymiseEvent(trx, eventId);
+      const refused = await offerRide(trx, eventId, newToken(), anOffer("aller", aNewDriver(), { stops: stopsFor() }));
+      expect(refused).toEqual({ ok: false, error: "eventEnded" });
+    });
+  });
+
+  it("refuses an id that is already the Stop of another car as invalid", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const first = anOffer("aller", aNewDriver(), { stops: stopsFor() });
+      expect(await offerRide(trx, eventId, newToken(), first)).toMatchObject({ ok: true });
+      const second = anOffer("aller", aNewDriver("Bea"), { stops: [{ id: GARE, location: "Autre", time: "08:20" }] });
+      expect(await offerRide(trx, eventId, newToken(), second)).toEqual({ ok: false, error: "invalid" });
+      expect((await storedStops(trx, eventId)).every((stop) => stop.ride_id === first.rideId)).toBe(true);
     });
   });
 });
