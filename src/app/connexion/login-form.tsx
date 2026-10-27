@@ -37,6 +37,7 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
   const t = useTranslations("Login");
   const tErrors = useTranslations("FormErrors");
   const tHome = useTranslations("Home");
+  const tMyEvents = useTranslations("MyEvents");
   const ids = useId();
   // Inactive until hydrated, as the creation form is (C1.5).
   const hydrated = useSyncExternalStore(
@@ -133,7 +134,7 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
           <span className="min-w-0 [overflow-wrap:anywhere]">
             {t("already", { email: signedIn })}{" "}
             <Link href="/mes-evenements" className="underline underline-offset-4">
-              {t("myEvents")}
+              {tMyEvents("title")}
             </Link>
           </span>
         </p>
