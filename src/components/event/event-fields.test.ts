@@ -325,7 +325,7 @@ describe("EventFormFields", () => {
     return updates[0](meanwhile);
   }
 
-  it.each(["title", "location", "allerDate", "allerTime", "retourDate", "retourTime"] as const)("%s: the keystroke applies to the state given", (name) => {
+  it.each(["title", "location", "allerDate", "allerTime", "retourDate", "retourTime", "description"] as const)("%s: the keystroke applies to the state given", (name) => {
     expect(change(name, { target: { value: "x" } })).toEqual({ ...meanwhile, values: { ...meanwhile.values, [name]: "x" } });
   });
 
@@ -338,7 +338,7 @@ describe("EventFormFields", () => {
     const updates: EventFieldsUpdate[] = [];
     const tree = EventFormFields({ idOf: (id) => `f-${id}`, state: rendered, errors: {}, onChange: (update) => updates.push(update), locked: true });
     const props = (name: string) => elements(tree).find((each) => each.props?.id === `f-${name}` && each.props.onChange)?.props as Record<string, unknown>;
-    for (const name of ["title", "location", "allerDate", "allerTime", "retourDate", "retourTime"]) {
+    for (const name of ["title", "location", "allerDate", "allerTime", "retourDate", "retourTime", "description"]) {
       expect(props(name).readOnly, name).toBe(true);
       (props(name).onChange as (value: unknown) => void)({ target: { value: "x" } });
     }
@@ -368,6 +368,77 @@ describe("EventFormFields", () => {
     expect(describedBy("retourDate")["aria-describedby"]).toBeUndefined();
     const note = elements(tree).find((each) => each.props?.id === "f-aller-note");
     expect(JSON.stringify(note?.props?.children)).toContain("Les 3 voitures…");
+  });
+});
+
+// #713, event-description v3 (« Écrire »): the description's field, last of the fields.
+describe("EventFormFields, the description", () => {
+  type Element = { props?: Record<string, unknown> & { id?: string; children?: unknown } };
+  const elements = (node: unknown): Element[] => {
+    if (Array.isArray(node)) return node.flatMap(elements);
+    if (typeof node !== "object" || node === null) return [];
+    const element = node as Element;
+    return [element, ...elements(element.props?.children)];
+  };
+  const fields = (description: string, errors = {}) =>
+    elements(
+      EventFormFields({
+        idOf: (id) => `f-${id}`,
+        state: { ...BLANK_EVENT_FIELDS, values: { ...BLANK_EVENT_FIELDS.values, description } },
+        errors,
+        onChange: () => {},
+      }),
+    );
+  const byId = (tree: Element[], id: string) => tree.find((each) => each.props?.id === id);
+  const describedBy = (tree: Element[]) => byId(tree, "f-description")?.props?.["aria-describedby"];
+
+  // DS1.1: after the end's fields, its label, described by its sentence.
+  it("is a text area, the last field, named by its label and described by its sentence", () => {
+    const tree = fields("");
+    const ids = tree.map((each) => each.props?.id).filter((id): id is string => typeof id === "string" && /^f-\w+$/.test(id));
+    expect(ids.at(-1)).toBe("f-description");
+    expect(byId(tree, "f-description")?.props?.value).toBe("");
+    expect(describedBy(tree)).toBe("f-description-hint");
+    expect(byId(tree, "f-description-hint")?.props?.children).toBe("descriptionHint");
+    expect(tree.find((each) => each.props?.htmlFor === "f-description")?.props?.children).toBe("description");
+  });
+
+  // DS1.7: no `maxlength`, a paste stays whole; DS1.14: at most 6 lines, then it scrolls inside.
+  it("has no maxlength, and stops at 6 lines, 162 px then 138 px from 768 px, before it scrolls", () => {
+    const area = byId(fields(""), "f-description")!;
+    expect(area.props?.maxLength).toBeUndefined();
+    expect(String(area.props?.className).split(" ")).toEqual(expect.arrayContaining(["max-h-[162px]", "md:max-h-[138px]", "overflow-y-auto"]));
+  });
+
+  // DS1.7: below 900, no counter; from 900, the length the server would count, in its description.
+  it("shows no counter below 900 counted characters", () => {
+    const tree = fields(`${"a".repeat(899)}   \n\n`);
+    expect(byId(tree, "f-description-count")).toBeUndefined();
+    expect(describedBy(tree)).toBe("f-description-hint");
+  });
+
+  it("counts as the server does from 900, in no live region", () => {
+    const tree = fields(`${"a".repeat(899)}\n\n\n\nb   `);
+    const count = byId(tree, "f-description-count")!;
+    expect(count.props?.children).toBe("descriptionCount");
+    expect(String(count.props?.className)).not.toContain("text-destructive");
+    expect(count.props?.role).toBeUndefined();
+    expect(count.props?.["aria-live"]).toBeUndefined();
+    expect(describedBy(tree)).toBe("f-description-hint f-description-count");
+  });
+
+  it("puts the counter in the error colour beyond 1000", () => {
+    expect(String(byId(fields("a".repeat(1001)), "f-description-count")?.props?.className)).toContain("text-destructive");
+    expect(String(byId(fields("a".repeat(1000)), "f-description-count")?.props?.className)).not.toContain("text-destructive");
+  });
+
+  // DS1.6: the error under the field, first in its description.
+  it("shows its error under the field, before its sentence and its counter", () => {
+    const tree = fields("a".repeat(1001), { description: "tooLong" });
+    expect(byId(tree, "f-description")?.props?.["aria-invalid"]).toBe(true);
+    expect(describedBy(tree)).toBe("f-description-error f-description-hint f-description-count");
+    const order = tree.map((each) => each.props?.id).filter((id) => typeof id === "string" && id.startsWith("f-description"));
+    expect(order).toEqual(["f-description", "f-description-error", "f-description-hint", "f-description-count"]);
   });
 });
 

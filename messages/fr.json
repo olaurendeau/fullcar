@@ -30,6 +30,9 @@
     "retourHint": "Décochez s’il n’y a pas de retour organisé.",
     "retourDate": "Date de fin",
     "retourTime": "Heure de fin",
+    "description": "Description (facultatif)",
+    "descriptionHint": "Ce que le groupe doit savoir. Visible par toutes les personnes qui ont le lien, effacée 30 jours après l’événement.",
+    "descriptionCount": "{count} caractères sur {max}",
     "options": "Options",
     "boosters": {
       "label": "Rehausseurs",
