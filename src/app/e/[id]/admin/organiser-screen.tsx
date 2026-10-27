@@ -14,7 +14,7 @@ import type { EventFields, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { EventState } from "../event-state";
 import { ParticipantBoard, type BoardHandle } from "../participant-board";
-import { useAdminLinkCheck } from "./admin-link";
+import { useOrganiserCheck } from "./admin-token-store";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
 import { keepFolded, readFolded } from "./organiser-fold";
 import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
@@ -23,11 +23,12 @@ import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRea
  * The organiser's screen (epic #154): the organiser area, then the event's board, with
  * `children` under it.
  *
- * - The area: the panel once the server has accepted the link's token (C4.9), the "not valid"
- *   message otherwise (C6.5), and a status line while the first check runs (O5.1). Hidden
- *   without JavaScript, where the page says why instead (O5.5).
- * - After « Réessayer », the focus goes to the button of the panel's title, or to the "not
- *   valid" message, before the browser paints, and stays on the button on a new failure (O5.8).
+ * - The area: the panel once the server has accepted this browser's session or admin token
+ *   (C4.9, #596), the area's title alone when it refuses them (#597, until #598), and a status
+ *   line while the first check runs (O5.1). Hidden without JavaScript, where the page says why
+ *   instead (O5.5).
+ * - After « Réessayer », the focus goes to the button of the panel's title, or to the area's
+ *   title when refused, before the browser paints, and stays on the button on a new failure (O5.8).
  * - The panel arrives folded or not as the device kept it, read as it is applied, never before
  *   (O8.5); its button alone folds and unfolds it, and keeps that on the device (#204).
  * - « Actualiser » reads the panel and the board together, and applies both or nothing (O1.9).
@@ -50,13 +51,13 @@ import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRea
  */
 export function OrganiserScreen({ id, state, children }: { id: string; state: EventState; children: ReactNode }) {
   const t = useTranslations("Admin");
-  const link = useAdminLinkCheck(id);
+  const link = useOrganiserCheck(id);
   const [screen, dispatch] = useReducer(screenReducer, { state: "loading" });
   const boardRef = useRef<BoardHandle>(null);
   const latest = useRef(0);
   const retried = useRef(false);
   const title = useRef<HTMLButtonElement>(null);
-  const invalid = useRef<HTMLDivElement>(null);
+  const refused = useRef<HTMLHeadingElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   // The state the board shows last: its header, and its cars on each leg for the sheet (M5.1).
   const [shown, setShown] = useState(state);
@@ -76,7 +77,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   useLayoutEffect(() => {
     if (!retried.current || screen.state === "loading" || screen.state === "failed") return;
     retried.current = false;
-    (screen.state === "ready" ? title : invalid).current?.focus();
+    (screen.state === "ready" ? title : refused).current?.focus();
   }, [screen.state]);
 
   // After the commit that applied a panel: where the focus goes, should its element be gone.
@@ -267,7 +268,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   } else {
     area = (
       <AdminLinkProblem
-        ref={invalid}
+        ref={refused}
         problem={screen.state}
         retrying={screen.state === "failed" && screen.retrying}
         onRetry={() => {

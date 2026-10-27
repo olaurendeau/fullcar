@@ -20,8 +20,8 @@ const FR = {
 /** The marker of the leak tests (event-description v3, « Critères »). */
 const MARKER = "Zorglub4729";
 
-/** Where a new event lands: its organiser's link, the secret in the fragment only. */
-const ARRIVAL = /\/e\/[2-9A-HJ-NP-Za-km-z]{8}\/admin#[A-Za-z0-9_-]{22}$/;
+/** Where a new event lands: its organiser area, without a fragment (OA1.6). */
+const ARRIVAL = /\/e\/[2-9A-HJ-NP-Za-km-z]{8}\/admin$/;
 
 const field = (page: Page, label: string) => page.getByLabel(label, { exact: true });
 const area = (page: Page) => page.getByRole("textbox", { name: FR.label, exact: true });

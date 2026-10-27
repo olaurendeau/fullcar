@@ -1,7 +1,7 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test as base } from "./fixtures";
-import { hideToken } from "./organiser";
+import { areaRefused, hideToken, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -17,7 +17,7 @@ leaveNoToken();
 const REPOSITORY = "https://github.com/olaurendeau/fullcar";
 const CRISP_CHAT = "https://go.crisp.chat/chat/embed/?website_id=3c4a7eb6-cf0d-4f60-a3c2-7919ae98ac83";
 const UNKNOWN_ID = "Zz9yXw8v";
-const WRONG_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZa";
+const WRONG_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZQ";
 
 const FR = {
   home: "Accueil",
@@ -35,15 +35,15 @@ const EN: Words = {
   panel: "Organiser area",
 };
 
-/** G1, K1, L1.1, A3.1: the pages of the footer, and the title that tells each is shown. */
-const PAGES: [string, (event: SeededEvent) => string, string][] = [
+/** G1, K1, L1.1, A3.1: the pages of the footer, the title that tells each is shown, and the admin token kept there (#597). */
+const PAGES: [string, (event: SeededEvent) => string, string, ((event: SeededEvent) => string)?][] = [
   ["the home page", () => "/", "Fullcar"],
   ["the creation form", () => "/nouveau", "Créer un événement"],
   ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
   ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
-  ["the organiser's page", ({ id, token }) => `/e/${id}/admin#${token}`, "Tournoi de Rennes"],
-  ["the organiser's page, wrong token", ({ id }) => `/e/${id}/admin#${WRONG_TOKEN}`, "Tournoi de Rennes"],
-  ["the organiser's page, no token", ({ id }) => `/e/${id}/admin`, "Tournoi de Rennes"],
+  ["the organiser's page", organiserPath, "Tournoi de Rennes", ({ token }) => token],
+  ["the organiser's page, wrong token", organiserPath, "Tournoi de Rennes", () => WRONG_TOKEN],
+  ["the organiser's page, no token", organiserPath, "Tournoi de Rennes"],
 ];
 
 /** G8: GitHub's hosts, the ones a badge, a logo or a script of GitHub would come from. */
@@ -94,7 +94,7 @@ async function open(page: Page, path: string, heading: string, token: string) {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
     await expect(
-      page.getByRole("region", { name: FR.panel }).or(page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ })),
+      page.getByRole("region", { name: FR.panel }).or(areaRefused(page, FR.panel)),
     ).toBeVisible();
   }
   // Hydrated: the language switch is inactive until then.
@@ -223,7 +223,7 @@ async function expectHomeOnFirstLine(page: Page) {
 test.describe("the footer, in a browser set to French", () => {
   test.use({ locale: "fr-FR" });
 
-  for (const [where, path, heading] of PAGES) {
+  for (const [where, path, heading, kept] of PAGES) {
     // « Accueil » is on every page but the home page itself (A3.2, in home-link.spec.ts).
     const onHome = where === "the home page";
     const ids = ["G1", "G2", "G3", "G4", "G8", "K1", "K2", "K3", "K5"]
@@ -236,6 +236,7 @@ test.describe("the footer, in a browser set to French", () => {
       crisp,
       seededEvent,
     }) => {
+      if (kept) await keepAdminToken(page, seededEvent.id, kept(seededEvent));
       await open(page, path(seededEvent), heading, seededEvent.token);
 
       await test.step("G3, A3.3: « Accueil » (not on /), the language, the source code, « Nous contacter »", async () => {

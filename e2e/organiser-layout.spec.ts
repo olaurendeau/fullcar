@@ -19,7 +19,6 @@ leaveNoToken();
 const FR = {
   panel: "Espace organisateur",
   shareLink: "Lien à partager",
-  adminLink: "Lien d’organisateur",
   nobody: "Personne ne s’est encore inscrit.",
   noCarRetour: "Aucune voiture proposée pour le retour",
 };
@@ -86,17 +85,17 @@ test.describe("the README's example", () => {
     await expect(page.locator('a[href^="#"]')).toHaveCount(0);
   });
 
-  test("O4.1 (amended by #250 and v3.5): under 1024 px, top to bottom: the title, both links, the warning, « Modifier l’événement », then the sections", async ({
+  test("O4.1 (amended by #250, v3.5 and OA7.3): under 1024 px, top to bottom: the title, the link to share, « Modifier l’événement », then the sections", async ({
     page,
     seededEvent,
   }) => {
     await page.goto(organiserPath(seededEvent));
     await expect(heading(page, "Retour")).toBeVisible();
+    await expect(panel(page).getByRole("group")).toHaveCount(1);
+    await expect(panel(page).getByRole("note")).toHaveCount(0);
     const parts = [
       panel(page).getByRole("heading", { level: 2 }),
       linkGroup(page, FR.shareLink),
-      linkGroup(page, FR.adminLink),
-      panel(page).getByRole("note"),
       panel(page).getByRole("button", { name: "Modifier l’événement", exact: true }),
       heading(page, "Aller"),
       heading(page, "Retour"),
@@ -106,12 +105,10 @@ test.describe("the README's example", () => {
     expect(new Set(tops).size).toBe(tops.length);
   });
 
-  test("O4.2: at 360 × 780, both links and the warning are visible without scrolling", async ({ page, seededEvent }) => {
+  test("O4.2: at 360 × 780, the link to share is visible without scrolling", async ({ page, seededEvent }) => {
     await page.goto(organiserPath(seededEvent));
     await expect(heading(page, "Retour")).toBeVisible();
     await expect(linkGroup(page, FR.shareLink).getByTestId("link")).toBeInViewport({ ratio: 1 });
-    await expect(linkGroup(page, FR.adminLink).getByTestId("link")).toBeInViewport({ ratio: 1 });
-    await expect(panel(page).getByRole("note")).toBeInViewport({ ratio: 1 });
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
   });
 
@@ -120,37 +117,30 @@ test.describe("the README's example", () => {
     test.describe(`at ${width} × 800`, () => {
       test.use({ viewport: { width, height: 800 } });
 
-      test("O1.2, O4.1: both links in two columns, one separator, then the sections side by side, Aller on the left and first", async ({
+      test("O1.2, O4.1, OA7.8: the link to share in the left column, the right one empty, one separator, then the sections side by side, Aller on the left and first", async ({
         page,
         seededEvent,
       }) => {
         await page.goto(organiserPath(seededEvent));
         await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
-        const [share, admin, warning, aller, retour] = await Promise.all(
-          [
-            linkGroup(page, FR.shareLink),
-            linkGroup(page, FR.adminLink),
-            panel(page).getByRole("note"),
-            section(page, "Aller"),
-            section(page, "Retour"),
-          ].map(box),
+        const [share, aller, retour] = await Promise.all(
+          [linkGroup(page, FR.shareLink), section(page, "Aller"), section(page, "Retour")].map(box),
         );
-        expect(Math.abs(share.y - admin.y)).toBeLessThanOrEqual(1);
-        expect(share.x + share.width).toBeLessThanOrEqual(admin.x);
-        expect(Math.abs(warning.x - admin.x)).toBeLessThanOrEqual(1);
-        expect(warning.y).toBeGreaterThan(admin.y);
+        // OA7.8: the link keeps its column's width, Aller's, and nothing is beside it, over Retour.
+        expect(Math.abs(share.width - aller.width)).toBeLessThanOrEqual(1);
+        expect(share.x + share.width).toBeLessThanOrEqual(retour.x);
 
-        // A single line between the links and the sections: the one between the links is gone.
+        // A single line between the link and the sections.
         const separators = panel(page).locator("hr:visible");
         await expect(separators).toHaveCount(1);
         const line = await box(separators);
-        expect(line.y).toBeGreaterThanOrEqual(Math.max(share.y + share.height, warning.y + warning.height));
+        expect(line.y).toBeGreaterThanOrEqual(share.y + share.height);
         expect(line.y).toBeLessThanOrEqual(aller.y);
 
         expect(Math.abs(aller.y - retour.y)).toBeLessThanOrEqual(1);
         expect(aller.x + aller.width).toBeLessThanOrEqual(retour.x);
         expect(Math.abs(aller.x - share.x)).toBeLessThanOrEqual(1);
-        expect(aller.y).toBeGreaterThan(Math.max(share.y + share.height, warning.y + warning.height));
+        expect(aller.y).toBeGreaterThan(share.y + share.height);
         await expect(section(page, "Aller")).toHaveCSS("border-top-width", "0px");
         expect(await horizontalOverflow(page)).toBe(0);
       });
@@ -208,23 +198,20 @@ test.describe("without a retour", () => {
 
     for (const width of [1024, 1280]) {
       await page.setViewportSize({ width, height: 800 });
-      const [aller, left, right] = await Promise.all(
-        [section(page, "Aller"), linkGroup(page, FR.shareLink), linkGroup(page, FR.adminLink)].map(box),
-      );
+      const [aller, left] = await Promise.all([section(page, "Aller"), linkGroup(page, FR.shareLink)].map(box));
       expect(Math.abs(aller.x - left.x), `at ${width} px, the section's left edge`).toBeLessThanOrEqual(1);
-      expect(aller.x + aller.width, `at ${width} px, the section's right edge`).toBeLessThanOrEqual(right.x);
+      expect(Math.abs(aller.x + aller.width - (left.x + left.width)), `at ${width} px, the section's right edge`).toBeLessThanOrEqual(1);
       await expect(panel(page).getByRole("region")).toHaveCount(1);
     }
   });
 });
 
-test("O4.2: at 360 × 780, on an empty event, both links and the warning are visible without scrolling", async ({
+test("O4.2: at 360 × 780, on an empty event, the link to share is visible without scrolling", async ({
   page,
   seededEvent,
 }) => {
   await page.goto(organiserPath(seededEvent));
   await expect(panel(page)).toBeVisible();
-  await expect(panel(page).getByRole("note")).toBeInViewport({ ratio: 1 });
   await expect(linkGroup(page, FR.shareLink).getByTestId("link")).toBeInViewport({ ratio: 1 });
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });

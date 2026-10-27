@@ -5,20 +5,49 @@ import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
-import { expect, test as base } from "./fixtures";
+import { adminTokenKey, creatorTest, expect } from "./fixtures";
 
 /*
- * The organiser area in the browser (epic #154, #178): its link, its scene, and a record of
+ * The organiser area in the browser (epic #154, #178): its path, its scene, and a record of
  * everything the browser sent and received, checked after each test for the admin token
  * (O6.1) and the browser's storage for the token and the event's numbers (O2.10).
  * No assertion, title or message here carries the token: a leak is named, never shown.
+ * Each test's browser is the one that created its event (#597): it keeps the event's admin
+ * token, as admin-token-store.ts does, from its first page on.
  */
 
 export { expect };
 
-/** The organiser's link of an event, as a path: the token in the fragment, which no request carries. */
-export function organiserPath({ id, token }: SeededEvent): string {
-  return `/e/${id}/admin#${token}`;
+/** The organiser area of an event, as a path: no organiser's link any more, nothing after it (OA1.6). */
+export function organiserPath({ id }: Pick<SeededEvent, "id">): string {
+  return `/e/${id}/admin`;
+}
+
+/**
+ * The organiser area refused (#597, until each state has its own screen, #598): its title alone,
+ * in the panel's place. Not the panel's own title, which is a button.
+ */
+export const areaRefused = (page: Page, name = "Espace organisateur") =>
+  page.getByRole("main").getByRole("heading", { level: 2, name, exact: true }).filter({ hasNot: page.getByRole("button") });
+
+export { adminTokenKey };
+
+/**
+ * From the next document of `page` on, its browser keeps `token` as the admin token of event
+ * `id`, or none with `null`, instead of what it kept: a token one character off, for one.
+ */
+export async function keepAdminToken(page: Page, id: string, token: string | null): Promise<void> {
+  await page.addInitScript(
+    ({ key, token }) => {
+      try {
+        if (token === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, token);
+      } catch {
+        // A document without the app's storage (about:blank): nothing to keep there.
+      }
+    },
+    { key: adminTokenKey(id), token },
+  );
 }
 
 /**
@@ -31,9 +60,12 @@ export const areaEditButton = (page: Page, name = "Modifier l’événement") =>
 /** The same, found by its words while a sheet makes the page `aria-hidden`. */
 export const areaEditByText = (page: Page, text = "Modifier l’événement") => page.locator("button:not([data-map-hint])", { hasText: text });
 
-/** A token one character off: the same length and alphabet, its last character changed. */
+/**
+ * A token one character off: the same length and alphabet, its last character changed for
+ * another a token of 16 bytes may end with, so that the browser still sends it (#597).
+ */
 export function oneCharOff(token: string): string {
-  return `${token.slice(0, -1)}${token.at(-1) === "A" ? "B" : "A"}`;
+  return `${token.slice(0, -1)}${token.at(-1) === "A" ? "Q" : "A"}`;
 }
 
 /** `text` with the admin token replaced: what a message may show of a path or a header. */
@@ -195,7 +227,9 @@ export type BrokenStorage = "property" | "getItem" | "setItem" | "removeItem";
 
 /**
  * Makes `localStorage` throw, as a blocked storage does, on the documents of `/e/…` alone:
- * once the test is over, the fixture still reads the storage on `/icon.svg` (O2.10).
+ * once the test is over, the fixture still reads the storage on `/icon.svg` (O2.10). A method
+ * throws for every key but the admin token's, which the browser that created the event still
+ * reads (#597); the property throwing, that browser reads no token either.
  */
 export async function breakStorage(page: Page, how: BrokenStorage): Promise<void> {
   await page.addInitScript((how) => {
@@ -203,8 +237,15 @@ export async function breakStorage(page: Page, how: BrokenStorage): Promise<void
     const refuse = () => {
       throw new DOMException("The operation is insecure.", "SecurityError");
     };
-    if (how === "property") Object.defineProperty(window, "localStorage", { configurable: true, get: refuse });
-    else Object.defineProperty(Storage.prototype, how, { configurable: true, value: refuse });
+    if (how === "property") {
+      Object.defineProperty(window, "localStorage", { configurable: true, get: refuse });
+      return;
+    }
+    const original = Storage.prototype[how] as (this: Storage, ...args: string[]) => unknown;
+    function refusing(this: Storage, ...args: string[]) {
+      return String(args[0]).startsWith("fullcar:admin-token:") ? original.apply(this, args) : refuse();
+    }
+    Object.defineProperty(Storage.prototype, how, { configurable: true, value: refusing });
   }, how);
 }
 
@@ -496,17 +537,19 @@ function findings(places: [string, string][], secrets: [string, string][]): stri
  * context's: any page of the origin reads its `localStorage`, and with no page left, one is
  * opened for it here. Not by `storageState()`, which opens a hidden tab of its own for an
  * origin no page shows, and fails or waits when it cannot (#436). Exported for the test of that
- * page (`organiser-leaks.spec.ts`), the one case no other spec reaches.
+ * page (`organiser-leaks.spec.ts`), the one case no other spec reaches. `kept`, an entry of
+ * `localStorage` the app may keep, is left out of it, exactly that key with exactly that value:
+ * the admin token under its event's key (O2.10 amended, #597).
  */
-export async function storageOf(context: BrowserContext, origin: string): Promise<[string, string][]> {
+export async function storageOf(context: BrowserContext, origin: string, kept?: [string, string]): Promise<[string, string][]> {
   const places: [string, string][] = [];
   const pages = context.pages().length > 0 ? context.pages() : [await context.newPage()];
   for (const page of pages) {
     await page.goto(`${origin}/icon.svg`);
-    const stored = await page.evaluate(() => ({
-      local: JSON.stringify(Object.entries(localStorage)),
+    const stored = await page.evaluate((kept) => ({
+      local: JSON.stringify(Object.entries(localStorage).filter(([key, value]) => !kept || key !== kept[0] || value !== kept[1])),
       session: JSON.stringify(Object.entries(sessionStorage)),
-    }));
+    }), kept);
     places.push(["localStorage", stored.local], ["sessionStorage", stored.session]);
   }
   places.push(["the cookies", JSON.stringify(await context.cookies())]);
@@ -514,15 +557,16 @@ export async function storageOf(context: BrowserContext, origin: string): Promis
 }
 
 /**
- * `test`, with `organiserTraffic`, automatic: once the test is over, the admin token of
+ * `creatorTest`, with `organiserTraffic`, automatic: once the test is over, the admin token of
  * `seededEvent` is in no path, query string, header, body received or console message, nor
- * in any request body but a server action's posted to `/e/{id}/admin` (O6.1); neither the
- * token nor any number of the event is in the origin's `localStorage`, `sessionStorage` or
- * cookies (O2.10). It runs after the test's `afterEach` hooks, `leaveNoToken()` (#160)
- * included, and takes the pages to `/icon.svg` before it checks anything: the snapshot of a
- * failure never holds the admin link. Both checks report, whichever fails.
+ * in any request body but a server action's posted to `/e/{id}/admin` (O6.1); no number of
+ * the event is in the origin's `localStorage`, `sessionStorage` or cookies, nor the token,
+ * but in `localStorage` under its event's key (O2.10 amended, #597). It runs after the test's
+ * `afterEach` hooks, `leaveNoToken()` (#160) included, and takes the pages to `/icon.svg`
+ * before it checks anything. Both checks report, whichever fails. `keepAdminToken` changes
+ * the token the browser keeps, for a page.
  */
-export const test = base.extend<{ organiserTraffic: OrganiserTraffic }>({
+export const test = creatorTest.extend<{ organiserTraffic: OrganiserTraffic }>({
   organiserTraffic: [
     async ({ context, db, seededEvent, baseURL }, provide) => {
       const { token, id } = seededEvent;
@@ -568,7 +612,7 @@ export const test = base.extend<{ organiserTraffic: OrganiserTraffic }>({
       ];
       const leaks = findings(places, [["the admin token", token]]);
 
-      const stored = findings(await storageOf(context, new URL(baseURL!).origin), [
+      const stored = findings(await storageOf(context, new URL(baseURL!).origin, [adminTokenKey(id), token]), [
         ["the admin token", token],
         ...kept,
         ...(await numbersNow()),
