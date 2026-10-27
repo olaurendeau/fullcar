@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent } from "react";
+import { SENDING_STALE_MS } from "@/domain/pending-send";
 import type { Sent } from "../run-action";
 import { pendingRead, pollsPending, POLL_MS, type ScreenEvent, type ScreenState } from "./screen-state";
 
@@ -7,7 +8,7 @@ import { pendingRead, pollsPending, POLL_MS, type ScreenEvent, type ScreenState 
  * « sending » as a failure (OA1.7). By then the server has answered something else, unless
  * the reads keep failing or answer something other than the panel.
  */
-export const POLL_READS = 15;
+export const POLL_READS = SENDING_STALE_MS / POLL_MS;
 
 /**
  * Reads the panel every POLL_MS with `read`, each read waiting for the one before, and
