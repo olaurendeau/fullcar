@@ -17,10 +17,15 @@ import { PersonsMatrix } from "./persons-matrix";
 const TITLE_ID = "device-persons-title";
 const MATRIX_ID = "device-persons-matrix";
 
-/** A person's own number: the one `withVisiblePhones` set in the device's section, and nowhere else. */
+/**
+ * A person's own number: the one `withVisiblePhones` set in the device's section, and nowhere else.
+ * `drives`, whether she drives on a leg: her number is then not removed (v4.8 rule 8).
+ */
 function personOf(board: readonly VisibleLegBoard[], id: string) {
-  const person = board.flatMap((leg) => leg.device).find((candidate) => candidate.id === id);
-  return person && { id: person.id, firstName: person.firstName, phone: person.phone };
+  const rows = board.flatMap((leg) => leg.device).filter((candidate) => candidate.id === id);
+  const [person] = rows;
+  const drives = rows.some((row) => row.state.kind === "driver");
+  return person && { id: person.id, firstName: person.firstName, phone: person.phone, drives };
 }
 
 /**

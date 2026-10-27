@@ -146,9 +146,13 @@
     },
     "remember": "No account, no e-mail: this device will remember it for this event.",
     "forSeat": "This person will take a seat in {driver}’s car.",
+    "samePhone": "Same number as {firstName}. Change it if needed.",
+    "phoneHintForSeat": "So that {driver} can reach you. Only visible to the organiser and to the people in the same car.",
     "firstName": "First name",
     "phone": "Phone (optional)",
     "phoneHint": "Only visible to the organiser and to the people in the same car.",
+    "phoneDriving": "Phone",
+    "phoneHintDriving": "So that the people on board can reach you. Only visible to the organiser and to the people in the same car.",
     "both": "Outbound and return",
     "bothHint": {
       "aller": "Untick if this person only makes the outbound trip.",
@@ -221,6 +225,7 @@
     "seats": "From 1 to 8 seats.",
     "chooseDriver": "Choose who drives.",
     "driverPhone": "A number is needed to offer a car.",
+    "phoneWhileDriving": "A number is needed while {firstName} is driving.",
     "tooManyPassengers": "{seats, plural, one {Only # seat} other {Only # seats}}: untick someone or add seats."
   },
   "Actions": {
