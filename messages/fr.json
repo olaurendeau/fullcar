@@ -170,6 +170,9 @@
     },
     "driver": "Qui conduit ?",
     "newDriver": "Une nouvelle personne",
+    "phone": "Téléphone",
+    "driverPhone": "Téléphone de {firstName}",
+    "phoneHint": "Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.",
     "leavesCar": "Quittera la voiture de {driver}",
     "otherLeg": {
       "title": {
@@ -217,6 +220,7 @@
     "invalidTime": "Heure non valide.",
     "seats": "De 1 à 8 places.",
     "chooseDriver": "Choisissez qui conduit.",
+    "driverPhone": "Un numéro est requis pour proposer une voiture.",
     "tooManyPassengers": "{seats, plural, one {# place seulement} other {# places seulement}} : décochez quelqu’un ou ajoutez des places."
   },
   "Actions": {

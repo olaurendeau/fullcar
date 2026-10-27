@@ -15,3 +15,11 @@ export function personErrorMessage(
   if (error !== "invalid") return { key: error };
   return { key: field === "firstName" ? "invalidText" : "invalidPhone" };
 }
+
+/**
+ * The message of an error on the number of who drives, in « Proposer une voiture » (v4.8
+ * rules 6 and 7): a missing one says why it is needed there (v4.8-11), the others as anywhere.
+ */
+export function driverPhoneMessage(error: PersonError): { key: PersonErrorKey | "driverPhone"; values?: { max: number } } {
+  return error === "required" ? { key: "driverPhone" } : personErrorMessage("phone", error);
+}
