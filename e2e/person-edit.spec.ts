@@ -17,6 +17,8 @@ const NEW_PHONE = "07 12 12 12 12";
 const REQUIRED = "Champ requis.";
 const INVALID_PHONE = "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )";
 const PHONE_HINT = "Visible seulement par l’organisateur et par les personnes de la même voiture.";
+/** Claire drives at the aller: her number is « Téléphone », with the help for who drives (v4.8, rule 8). */
+const DRIVING_HINT = "Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.";
 /** In the bar, the failure of « Clara » names the field sent and the first name before it (C11.11, #225). */
 const FAILED = "Le prénom de Claire n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
 
@@ -42,6 +44,7 @@ const car = (scope: Page | Locator, driver: string) => scope.getByRole("article"
 const call = (scope: Page | Locator, firstName: string) => scope.getByRole("link", { name: `Appeler ${firstName} au`, exact: false });
 const withoutCar = (page: Page) => page.getByRole("tabpanel").getByRole("region", { name: "Sans voiture" }).getByRole("listitem");
 const alerts = (scope: Page | Locator) => scope.getByRole("alert").filter({ hasText: /\S/ });
+const drivingPhone = (form: Locator) => form.getByLabel("Téléphone", { exact: true });
 
 /** Opens the sheet of `firstName`, then its form: the focus on the first name, which it reads. */
 async function openForm(page: Page, firstName: string) {
@@ -78,7 +81,7 @@ async function kept(db: Db, personId: string, phone: string) {
  */
 async function nothingSentBefore(page: Page, sent: Request[]) {
   const form = await openForm(page, "Claire");
-  await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
+  await drivingPhone(form).fill(NEW_PHONE);
   await form.getByRole("button", { name: "Valider" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(sent.map((request) => !!request.postData()?.includes(NEW_PHONE))).toEqual([true]);
@@ -114,8 +117,8 @@ test.describe("edit a person", () => {
 
     const form = dialog(page, "Modifier Claire");
     await expect(form.getByLabel("Prénom")).toHaveValue("Claire");
-    await expect(form.getByLabel("Téléphone (facultatif)")).toHaveValue(CLAIRE_PHONE);
-    await expect(form.getByLabel("Téléphone (facultatif)")).toHaveAccessibleDescription(PHONE_HINT);
+    await expect(drivingPhone(form)).toHaveValue(CLAIRE_PHONE);
+    await expect(drivingPhone(form)).toHaveAccessibleDescription(DRIVING_HINT);
     await expect(form.getByRole("checkbox")).toHaveCount(0);
     await expect(form.getByText("cet appareil s’en souviendra")).toHaveCount(0);
     await expect(form.getByRole("link")).toHaveCount(0);
@@ -172,13 +175,13 @@ test.describe("edit a person", () => {
     await page.goto(`/e/${seededEvent.id}`);
     const form = await openForm(page, "Claire");
     const firstName = form.getByLabel("Prénom");
-    const phone = form.getByLabel("Téléphone (facultatif)");
+    const phone = drivingPhone(form);
     await firstName.clear();
     await phone.fill("06 12");
     await form.getByRole("button", { name: "Valider" }).click();
 
     await expect(firstName).toHaveAccessibleDescription(REQUIRED);
-    await expect(phone).toHaveAccessibleDescription(`${INVALID_PHONE} ${PHONE_HINT}`);
+    await expect(phone).toHaveAccessibleDescription(`${INVALID_PHONE} ${DRIVING_HINT}`);
     await expect(firstName).toBeFocused();
     await expect(phone).toHaveValue("06 12");
 
@@ -315,7 +318,7 @@ test.describe("edit a person", () => {
         await dialog(page, "Claire").getByRole("button", { name: "Modifier", exact: true }).click();
         const form = dialog(page, "Modifier Claire");
         await form.getByLabel("Prénom").fill(after.firstName);
-        await form.getByLabel("Téléphone (facultatif)").fill(after.phone);
+        await drivingPhone(form).fill(after.phone);
         await form.getByRole("button", { name: "Valider" }).click();
         if (when === "before") await failHeld(page, answer);
         await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -343,7 +346,7 @@ test.describe("edit a person", () => {
     await sendThenClose(page);
     const form = await openForm(page, "Claire");
     await expect(form.getByLabel("Prénom")).toHaveValue("Claire");
-    await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
+    await drivingPhone(form).fill(NEW_PHONE);
     await form.getByRole("button", { name: "Valider" }).click();
     // Sent, not dropped: inactive until its answer (C1.9).
     await expect(form.getByRole("button", { name: "Valider" })).toBeDisabled();
@@ -361,8 +364,8 @@ test.describe("edit a person", () => {
     "V1.3: « Valider » after each field changed, then put back": async (form: Locator) => {
       await form.getByLabel("Prénom").fill("Clara");
       await form.getByLabel("Prénom").fill("Claire");
-      await form.getByLabel("Téléphone (facultatif)").clear();
-      await form.getByLabel("Téléphone (facultatif)").fill(CLAIRE_PHONE);
+      await drivingPhone(form).clear();
+      await drivingPhone(form).fill(CLAIRE_PHONE);
       await form.getByRole("button", { name: "Valider" }).click();
     },
   };
@@ -402,7 +405,7 @@ test.describe("edit a person", () => {
     // As `nothingSentBefore`, with a first name the form takes: one request, the second.
     const form = await openInvisible();
     await form.getByLabel("Prénom").fill("Claire");
-    await form.getByLabel("Téléphone (facultatif)").fill(NEW_PHONE);
+    await drivingPhone(form).fill(NEW_PHONE);
     await form.getByRole("button", { name: "Valider" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(sent.map((request) => !!request.postData()?.includes(NEW_PHONE))).toEqual([true]);

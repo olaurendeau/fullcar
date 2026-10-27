@@ -136,10 +136,12 @@ export function cellNotDone(action: Exclude<CellAction, "seeCar">, { firstName, 
 
 /**
  * Why a cell's action was not done: as `whyOf`, `drives` names who drives, on the cell's leg, and
- * `personGone` the person, removed meanwhile (RP5.4).
+ * `personGone` the person, removed meanwhile (RP5.4); `phoneWhileDriving`, which only a change of
+ * her number meets (v4.8 rule 8), the generic reason.
  */
-export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personGone", { firstName, leg }: Cell): Why {
+export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personGone" | "phoneWhileDriving", { firstName, leg }: Cell): Why {
   if (error === "personGone") return { kind: "personGone", firstName };
+  if (error === "phoneWhileDriving") return whyOf("invalid");
   return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
 }
 
