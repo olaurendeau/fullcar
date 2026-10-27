@@ -4,9 +4,10 @@ import { getDb } from "@/db/client";
 import { databaseFailure } from "@/db/failure";
 import { isPublicId } from "@/domain/public-id";
 import * as changeRide from "./change-ride";
-import { readEventState, type EventState } from "./event-state";
+import { readDeviceState, readEventState, type EndedEvent, type EventState } from "./event-state";
 import { offerRide as storeRideOffer, type OfferRideOutcome } from "./offer-ride";
 import * as persons from "./persons";
+import { removeFromDevice, type RemovePersonOutcome } from "./remove-person";
 import {
   takeSeats as takeSeatsInRide,
   undoSeats as undoSeatsInRide,
@@ -16,13 +17,15 @@ import {
 
 /**
  * The event's state as this device sees it, for the browser to replace the one rendered
- * by the server. The personal token arrives in the body, never in the URL; it is only
- * compared, never logged. Nothing for an unknown event, and a malformed id reads nothing.
+ * by the server; once anonymised, its title and its start only (OA8.3, #799), for a page
+ * still open to show « Événement terminé ». The personal token arrives in the body, never in
+ * the URL; it is only compared, never logged. Nothing for an unknown event, and a malformed
+ * id reads nothing.
  */
-export async function loadEventState(id: unknown, token: unknown): Promise<EventState | undefined> {
+export async function loadEventState(id: unknown, token: unknown): Promise<EventState | EndedEvent | undefined> {
   if (!isPublicId(id)) return undefined;
   try {
-    return await readEventState(getDb(), id, token);
+    return await readDeviceState(getDb(), id, token);
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("loadEventState: the event could not be read", error);
@@ -86,6 +89,23 @@ export async function updatePerson(id: unknown, token: unknown, fields: unknown)
 /** Without a car, or not concerned, on one leg, for one of the device's persons. */
 export async function setPersonLeg(id: unknown, token: unknown, fields: unknown): Promise<persons.PersonOutcome> {
   return changePerson("setPersonLeg", persons.setPersonLeg, id, token, fields);
+}
+
+/**
+ * « Retirer de l’événement » from the person's sheet (#668, remove-person v2, RP1): one of the
+ * device's persons, her Rides and her Placements erased, then the state the device now sees;
+ * `alreadyRemoved` for a person the event no longer has (RP1.8). The person's id and the token
+ * arrive in the body, never in the URL; the token is only compared, never logged, and no
+ * refusal carries anything of the person.
+ */
+export async function removePerson(id: unknown, token: unknown, personId: unknown): Promise<RemovePersonOutcome> {
+  if (!isPublicId(id)) return { ok: false, error: "eventNotFound" };
+  try {
+    return await removeFromDevice(getDb(), id, token, { personId });
+  } catch (error) {
+    // A Postgres error may carry the row: only its code is logged, none of it is thrown.
+    throw databaseFailure("removePerson: the person could not be removed", error);
+  }
 }
 
 /**

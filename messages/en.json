@@ -121,6 +121,7 @@
     },
     "sheetTitle": "{firstName} · {leg}",
     "edit": "Edit",
+    "remove": "Remove from the event",
     "seeCar": "See the car",
     "findSeat": "Find a seat",
     "noFreeSeat": {
@@ -240,7 +241,8 @@
       "editRide": "{leg, select, aller {The changes to {driver}’s car for the outbound trip were not saved.} other {The changes to {driver}’s car for the return trip were not saved.}}",
       "readDevice": "Your sign-ups could not be loaded.",
       "editEvent": "The event was not changed.",
-      "removeRetour": "The event was not changed and the return trip was not removed."
+      "removeRetour": "The event was not changed and the return trip was not removed.",
+      "removePerson": "{firstName} is still part of the event."
     },
     "why": {
       "offline": "Check your connection, then try again.",
@@ -305,6 +307,17 @@
       "body": "{passengers, plural, =0 {No passenger will be left without a car.} one {# passenger will be without a car again.} other {# passengers will be without a car again.}}",
       "notified": "Nobody is notified: remember to tell them."
     }
+  },
+  "PersonRemoval": {
+    "title": "Remove {firstName} from the event?",
+    "drives": "{leg, select, aller {Their car for the outbound trip will be removed.} other {Their car for the return trip will be removed.}} {passengers, plural, =0 {} one {# passenger will be without a car again.} other {# passengers will be without a car again.}}",
+    "passenger": "{leg, select, aller {Their seat in {driver}’s car on the outbound trip will be freed.} other {Their seat in {driver}’s car on the return trip will be freed.}}",
+    "notified": "{cars, plural, one {Nobody is notified: remember to tell the people in that car.} other {Nobody is notified: remember to tell the people in those cars.}}",
+    "erased": "Their first name, their number if any, and their sign-ups will be erased.",
+    "final": "This cannot be undone.",
+    "confirm": "Remove from the event",
+    "removed": "{firstName} is no longer part of the event",
+    "alreadyRemoved": "{firstName} had already been removed from the event"
   },
   "Admin": {
     "title": "Organiser area",

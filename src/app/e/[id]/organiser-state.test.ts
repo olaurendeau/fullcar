@@ -2,9 +2,11 @@ import { sql, type Kysely } from "kysely";
 import { describe, expect, it, vi } from "vitest";
 import { getDb } from "@/db/client";
 import { updatePerson } from "@/db/persons";
+import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
+import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
-import { seedEvent } from "@/db/test-events";
+import { confirmSeededEvent, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import type { Leg } from "@/domain/leg";
@@ -87,7 +89,7 @@ describe("readOrganiserState", () => {
   it("O2.5, O3.4: with the right token, the numbers of the persons without a car, on their leg only", async () => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
-      const answer = await readOrganiserState(trx, scene.eventId, scene.token);
+      const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
       expect(answer).toStrictEqual({
         state: "panel",
         legs: [
@@ -126,7 +128,7 @@ describe("readOrganiserState", () => {
       for (const [n, { id }] of order.entries()) {
         await sql`update person set created_at = ${new Date(Date.UTC(2026, 9, 1, 8, n))} where id = ${id}`.execute(trx);
       }
-      const answer = await readOrganiserState(trx, scene.eventId, scene.token);
+      const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
       const withA = { kind: "passenger", rideId: scene.ride, driver: { id: scene.a.id, firstName: "A" } };
       const withoutCar = { kind: "withoutCar" };
       const notConcerned = { kind: "notConcerned" };
@@ -147,7 +149,7 @@ describe("readOrganiserState", () => {
   it("RP4.2: an event without a retour and without anybody has nobody to list", async () => {
     await withRollback(async (trx) => {
       const { id, token } = await seedEvent(trx, { retourAt: null });
-      const answer = await readOrganiserState(trx, id, token);
+      const answer = await readOrganiserState(trx, id, { adminToken: token });
       expect(answer.state === "panel" && answer.persons).toStrictEqual([]);
     });
   });
@@ -160,29 +162,104 @@ describe("readOrganiserState", () => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
       vi.mocked(organiserPersons).mockClear();
-      await readOrganiserState(trx, scene.eventId, tokenOf(scene.token));
+      await readOrganiserState(trx, scene.eventId, { adminToken: tokenOf(scene.token) });
       expect(organiserPersons).toHaveBeenCalledTimes(times);
     });
   });
 
-  it.each([
-    ["a token one character off", oneCharOff],
-    ["no token", () => undefined],
-  ])("O2.6: with %s, invalid and nothing else", async (_, tokenOf) => {
+  it("OA7.6: the organiser's session reads the very panel the creation browser's token reads", async () => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
-      const answer = await readOrganiserState(trx, scene.eventId, tokenOf(scene.token));
-      expect(answer).toStrictEqual({ state: "invalid" });
+      const session = await seedSession(trx, await confirmSeededEvent(trx, scene.eventId));
+      const byToken = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
+      const bySession = await readOrganiserState(trx, scene.eventId, { session });
+      expect(bySession.state).toBe("panel");
+      expect(bySession).toStrictEqual(byToken);
+      expect(sentNumbers(bySession)).toEqual(["b", "c"]);
+    });
+  });
+
+  /** Each case leaves the scene's event as it says, and gives what the request's body carries. */
+  type Case = (trx: Db, scene: Awaited<ReturnType<typeof seedScene>>) => Promise<{ proof: unknown; expected: OrganiserPanelAnswer }>;
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it.each<[string, Case]>([
+    ["O2.6, OA7.7: pending, a token one character off", async (_, { token }) => ({ proof: { adminToken: oneCharOff(token) }, expected: { state: "pending" } })],
+    ["OA7.7: pending, any account's session", async (trx) => ({ proof: { session: await seedSession(trx, await seedAccount(trx)) }, expected: { state: "pending" } })],
+    // #586: a revoked token is a null hash, which no token matches.
+    [
+      "OA7.7: pending, the event's own token once revoked",
+      async (trx, { eventId, token }) => {
+        await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", eventId).execute();
+        return { proof: { adminToken: token }, expected: { state: "pending" } };
+      },
+    ],
+    [
+      "OA7.1: confirmed, neither session nor token",
+      async (trx, { eventId }) => {
+        await confirmSeededEvent(trx, eventId);
+        return { proof: {}, expected: { state: "signIn" } };
+      },
+    ],
+    [
+      "OA9.6: confirmed, the organiser's session ended 91 days after its last visit",
+      async (trx, { eventId }) => {
+        const accountId = await confirmSeededEvent(trx, eventId);
+        const session = await seedSession(trx, accountId, { lastVisitAt: new Date(Date.now() - 91 * DAY) });
+        return { proof: { session }, expected: { state: "signIn" } };
+      },
+    ],
+    [
+      "OA7.2: confirmed, another account's session, which reads its own address",
+      async (trx, { eventId }) => {
+        await confirmSeededEvent(trx, eventId);
+        const email = anAddress();
+        const session = await seedSession(trx, await seedAccount(trx, { email }));
+        return { proof: { session }, expected: { state: "notYours", email } };
+      },
+    ],
+    [
+      "OA7.9, OA9.5: the account deleted, the former organiser's session and the creation browser's token",
+      async (trx, { eventId, token }) => {
+        const accountId = await confirmSeededEvent(trx, eventId);
+        const session = await seedSession(trx, accountId);
+        await trx.deleteFrom("account").where("id", "=", accountId).execute();
+        return { proof: { adminToken: token, session }, expected: { state: "orphan" } };
+      },
+    ],
+    [
+      "OA8.4: anonymised, the organiser's session",
+      async (trx, { eventId }) => {
+        const session = await seedSession(trx, await confirmSeededEvent(trx, eventId));
+        await anonymiseEvent(trx, eventId);
+        return { proof: { session }, expected: { state: "ended" } };
+      },
+    ],
+  ])("%s: that state and nothing else, the persons never built", async (_, arrange) => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      const { proof, expected } = await arrange(trx, scene);
+      vi.mocked(organiserPersons).mockClear();
+      const answer = await readOrganiserState(trx, scene.eventId, proof);
+      expect(answer).toStrictEqual(expected);
       expect(sentNumbers(answer)).toEqual([]);
+      expect(organiserPersons).not.toHaveBeenCalled();
+    });
+  });
+
+  it("OA7.5: a bare token, as the old link's fragment was sent, opens nothing", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      expect(await readOrganiserState(trx, scene.eventId, scene.token)).toStrictEqual({ state: "pending" });
     });
   });
 
   it("O2.7: once C has taken a seat at the aller, the next read no longer carries C's number", async () => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
-      expect(sentNumbers(await readOrganiserState(trx, scene.eventId, scene.token))).toContain("c");
+      expect(sentNumbers(await readOrganiserState(trx, scene.eventId, { adminToken: scene.token }))).toContain("c");
       await seedPlacement(trx, { personId: scene.c.id, eventId: scene.eventId, leg: "aller", rideId: scene.ride });
-      const answer = await readOrganiserState(trx, scene.eventId, scene.token);
+      const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
       expect(sentNumbers(answer)).toEqual(["b"]);
       expect(legOf(answer, "aller").withoutCar.map((person) => person.firstName)).toEqual(["D"]);
     });
@@ -203,7 +280,7 @@ describe("readOrganiserState", () => {
       });
       await seedPlacement(trx, { personId: scene.b.id, eventId, leg: "retour", rideId: late });
 
-      const retour = legOf(await readOrganiserState(trx, eventId, scene.token), "retour");
+      const retour = legOf(await readOrganiserState(trx, eventId, { adminToken: scene.token }), "retour");
       expect(retour.carCount).toBe(2);
       expect(retour.carsWithoutPhone).toStrictEqual([
         { id: early, driverFirstName: "G", departureTime: "18:15:00", location: "Gare", taken: 0, free: 2 },
@@ -211,7 +288,7 @@ describe("readOrganiserState", () => {
       ]);
 
       await updatePerson(trx, { id: g.id, eventId }, { firstName: "G", phone: "06 77 77 77 77" });
-      const after = legOf(await readOrganiserState(trx, eventId, scene.token), "retour");
+      const after = legOf(await readOrganiserState(trx, eventId, { adminToken: scene.token }), "retour");
       expect(after.carsWithoutPhone.map((car) => car.id)).toEqual([late]);
       expect(after.carCount).toBe(2);
     });
@@ -220,7 +297,7 @@ describe("readOrganiserState", () => {
   it("O1.5, O1.7: an event without a retour and without anybody has one leg, empty", async () => {
     await withRollback(async (trx) => {
       const { id, token } = await seedEvent(trx, { retourAt: null });
-      const answer = await readOrganiserState(trx, id, token);
+      const answer = await readOrganiserState(trx, id, { adminToken: token });
       expect(answer.state === "panel" && answer.legs.map((leg) => leg.leg)).toEqual(["aller"]);
       expect(legIsEmpty(legOf(answer, "aller"))).toBe(true);
     });
@@ -229,7 +306,7 @@ describe("readOrganiserState", () => {
   it("O1.6: persons without a car and no car: carCount is 0, and the leg is not empty", async () => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
-      const retour = legOf(await readOrganiserState(trx, scene.eventId, scene.token), "retour");
+      const retour = legOf(await readOrganiserState(trx, scene.eventId, { adminToken: scene.token }), "retour");
       expect(retour.carCount).toBe(0);
       expect(legIsEmpty(retour)).toBe(false);
     });
@@ -253,38 +330,27 @@ describe("readOrganiserState", () => {
       });
       const before = await rows();
       expect(Object.values(before).map((table) => table.length)).toEqual([1, 5, 1, 5]);
-      await readOrganiserState(trx, scene.eventId, scene.token);
-      await readOrganiserState(trx, scene.eventId, oneCharOff(scene.token));
+      await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
+      await readOrganiserState(trx, scene.eventId, { adminToken: oneCharOff(scene.token) });
       expect(await rows()).toStrictEqual(before);
-    });
-  });
-
-  // #586: a revoked token is a null hash, which no token matches.
-  it("answers invalid for the event's own token once revoked, and nothing else", async () => {
-    await withRollback(async (trx) => {
-      const scene = await seedScene(trx);
-      await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", scene.eventId).execute();
-      const answer = await readOrganiserState(trx, scene.eventId, scene.token);
-      expect(answer).toStrictEqual({ state: "invalid" });
-      expect(sentNumbers(answer)).toEqual([]);
     });
   });
 
   it("answers invalid for a well-formed id that is not stored, even with another event's token", async () => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
-      expect(await readOrganiserState(trx, "Zz9yXw8v", scene.token)).toStrictEqual({ state: "invalid" });
+      expect(await readOrganiserState(trx, "Zz9yXw8v", { adminToken: scene.token })).toStrictEqual({ state: "invalid" });
     });
   });
 
   it("answers invalid for a malformed id, without reading the database", async () => {
-    await expect(readOrganiserState(untouchable, "Ab3dEf70", "AAAAAAAAAAAAAAAAAAAAAA")).resolves.toStrictEqual({
+    await expect(readOrganiserState(untouchable, "Ab3dEf70", { adminToken: "AAAAAAAAAAAAAAAAAAAAAA" })).resolves.toStrictEqual({
       state: "invalid",
     });
   });
 
   it("refuses to read in a READ COMMITTED transaction, rather than mixing snapshots", async () => {
-    await expect(atomically(getDb(), (trx) => readOrganiserState(trx, "Zz9yXw8v", undefined))).rejects.toThrow(
+    await expect(atomically(getDb(), (trx) => readOrganiserState(trx, "Zz9yXw8v", { adminToken: undefined }))).rejects.toThrow(
       "onOneSnapshot: the transaction given is in read committed, not repeatable read",
     );
   });

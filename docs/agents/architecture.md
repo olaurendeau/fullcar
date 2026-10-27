@@ -456,7 +456,11 @@ deviné l'est aussi.
   le fait dans le **fragment** (`#…`), que le navigateur n'envoie jamais au serveur : le
   client le lit et le transmet dans le corps de la requête. Pour le lien admin, ce corps est
   celui de `loadOrganiserPanel`, qui répond `{ state: "invalid" }` sans aucune donnée, ou le
-  panneau, et rien d'autre (amendement de #3 C4.9). Le panneau n'est jamais dans le HTML.
+  panneau, et rien d'autre (amendement de #3 C4.9). À partir de #596, ce corps est
+  `{ adminToken, session }`, et la réponse est le panneau ou l'état que décide
+  `organiser-access.ts`, sans aucune autre donnée : `invalid` pour un événement inconnu,
+  `signIn`, `notYours` avec l'adresse de la session du visiteur, `pending`, `orphan` ou
+  `ended`. Le panneau n'est jamais dans le HTML.
   À partir de #263, c'est aussi celui d'`updateEvent`, la modification de l'événement : un
   jeton refusé répond `invalid` sans rien écrire, et aucune réponse ne porte le jeton.
   - lien admin : `/e/{id}/admin#{token}`, jusqu'à #597 ; ensuite il n'y a plus de lien
@@ -525,9 +529,14 @@ ci-dessus valent pour chacun.
   au travers de `src/app/session-token.ts` seulement (#595). Une session dure 90 jours après
   la dernière **visite**. La visite s'enregistre à chaque chargement de page :
   `src/components/account/session-visit.tsx`, monté par `src/app/layout.tsx`, envoie le
-  jeton à l'action `visit`, qui prolonge la session et note la date et la langue de la
-  visite sur le compte (`last_visit_at`, `locale`). C'est cette date, jamais l'ouverture de
-  la session, qui mesure l'inactivité du compte (OA9.7).
+  jeton à l'action `visit` (`src/app/actions.ts`), qui prolonge la session et note la date
+  et la langue de la visite sur le compte (`last_visit_at`, `locale`). C'est cette date,
+  jamais l'ouverture de la session, qui mesure l'inactivité du compte (OA9.7). La visite
+  part une fois par document chargé, pas à chaque navigation dans l'application, et rien ne
+  part sans jeton. Elle ne répond que `open` ou `ended` : ni le compte, ni son adresse. Une
+  session terminée ne revient pas, et le navigateur oublie alors son jeton, seulement s'il
+  n'a pas changé entre-temps (un autre onglet a pu ouvrir une session). Une visite en échec
+  garde le jeton.
 - **Le jeton d'admin dans le navigateur de création** : à partir de #597, il est rangé dans
   `localStorage` sous la clé `fullcar:admin-token:{id}`, au travers de
   `src/app/e/[id]/admin/admin-token-store.ts` seulement, qui remplace `admin-link.ts`. La
@@ -608,15 +617,26 @@ Cette règle ne doit exister **qu'à un seul endroit** du code, traversé par to
 lectures. Si deux chemins la re-dérivent, l'un des deux finira par la rater — et le défaut
 sera invisible dans l'UI de celui qui l'a écrit. À partir de #66, cet endroit est
 `src/domain/phone-visibility.ts`, et une seule requête lit la colonne `phone` :
-`src/db/event-rows.ts`. Celle-ci renvoie les téléphones **à part** des autres données
+`src/db/event-rows.ts`. Un test de présence de `phone` sous le verrou de la Person est
+permis (`phone IS NOT NULL`, qui rend un booléen, jamais la valeur, #766) ; lire sa valeur
+hors de cette requête reste bloquant. `event-rows.ts` renvoie les téléphones **à part** des autres données
 (`phonesById`), et seuls `withVisiblePhones` et `withOrganiserPhones` (`phone-visibility.ts`)
 les reçoivent et les posent : un `row.phone` recopié ailleurs, dans le board par exemple,
-re-dériverait la règle. `withOrganiserPhones` vérifie lui-même le jeton d'admin
-(`adminTokenMatches`) et ne rend rien s'il ne correspond pas. À partir de #596, il ne reçoit
-plus le jeton mais une autorisation, d'un type que seule `src/domain/organiser-access.ts`
-produit : la session de l'organisateur ou le jeton d'admin du navigateur de création (OA7.6). Une liste de colonnes qui
+re-dériverait la règle. Depuis #596, `withOrganiserPhones` ne reçoit plus le jeton mais une
+autorisation, que seule `src/domain/organiser-access.ts` produit : la session de
+l'organisateur ou le jeton d'admin du navigateur de création (OA7.6). Il ne rend rien pour
+une autorisation que la règle n'a pas donnée, pour cet événement : un objet de même forme,
+une copie, ou l'autorisation d'un autre événement. Une liste de colonnes qui
 contient `phone` reste privée à `event-rows.ts` (non exportée) : un `.select(cette liste)`
 ailleurs serait une nouvelle lecture.
+
+Ce test, à partir de #776, est `hasPhone` (`src/db/persons.ts`) : `offerRide` l'appelle
+après `lockPersons`, dans la même transaction, pour la personne de l'appareil qui conduit.
+Hors d'`event-rows.ts`, `phone` n'apparaît que dans ce test et dans les écritures
+(`insertPerson`, `updatePerson`). Sans numéro en base et sans numéro envoyé, c'est le refus
+`driverWithoutPhone`, qui porte l'état (C11.6). Le numéro envoyé est écrit par
+`updatePerson` après tous les refus d'avant les écritures, et avant `deletePlacement` : dans
+la même écriture que les voitures. Une offre renvoyée (C4.10) n'écrit rien de plus.
 
 ## Auto-complétion des lieux (#237)
 
@@ -1111,10 +1131,17 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
 - **Après l'anonymisation**, les écritures sont refusées : une écriture qui a attendu le
   verrou de l'Event voit `anonymised_at` (`retour.ts`, `edit-event.ts`). `/e/{id}` répond
   200 avec « Événement terminé » et `noindex` (#590, #797), un statut qui ne demande pas de
-  middleware (décision du coordinateur sur #581). `editEvent` répond `eventEnded` avant de
-  contrôler le jeton : l'événement anonymisé n'a plus de hash de jeton à comparer. Un appel
-  sans jeton, ou avec un faux, apprend donc que l'événement est anonymisé, ce que `/e/{id}`
-  dit déjà à tout le monde.
+  middleware (décision du coordinateur sur #581). Les écritures répondent `eventEnded` avant
+  leurs propres refus. `editEvent` le répond avant de contrôler le jeton d'admin, puisque
+  l'événement anonymisé n'a plus de hash de jeton à comparer : seul l'identifiant mal formé
+  ou inconnu (`eventNotFound`) passe avant. Les écritures sur un leg (`addPerson`,
+  `updatePerson`, `setPersonLeg`, `offerRide`, `updateRide`, `removeRide`, `takeSeats`,
+  `undoSeats`) le répondent dès le verrou de l'Event pris par `lockLegs`, avant `noRetour`,
+  le contrôle du jeton personnel (`forbidden`) et tout autre refus de leur transaction : ne
+  passent avant que `eventNotFound` et ce qu'elles vérifient avant la transaction, les
+  erreurs de champs et, pour certaines, la requête mal formée (`invalid`). Un appel sans
+  jeton, ou avec un faux, apprend donc que l'événement est anonymisé, ce que `/e/{id}` dit
+  déjà à tout le monde. `removePerson` ne répond pas encore `eventEnded` (RP2.9, #674).
 - **Les sessions, les envois et les liens** (`session`, `email_send`, `email_link`) sont
   nettoyés par âge, par la même tâche (#589, `src/db/expired-rows.ts`) : une ligne part quand
   aucune règle ne la lit plus. Une ligne effacée plus tôt changerait la réponse d'une règle.
@@ -1242,7 +1269,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | e-mails | `src/email/brevo.ts`, à partir de #591 ; `src/email/messages.ts`, à partir de #592 | seul `brevo.ts` lit `BREVO_URL`, `BREVO_API_KEY` et `EMAIL_FROM` et appelle Brevo ; `messages.ts` écrit les quatre e-mails, sans aucun texte saisi (voir « Les e-mails ») |
 | jour 30 et « passé » | `src/domain/day-thirty.ts`, à partir de #587 | le seul calcul de « aujourd'hui », « passé » et du jour 30, à l'heure de Paris (voir « Heures sans fuseau ») |
 | purge | `src/app/api/purge/` (`route.ts`, `handle.ts`, `day-thirty.ts`, `inactive-accounts.ts`), à partir de #589 ; `src/db/day-thirty.ts`, à partir de #588 ; `src/db/expired-rows.ts`, à partir de #589 | la route n'exporte que `GET` et vérifie `CRON_SECRET` ; l'anonymisation et la suppression au jour 30, le nettoyage par âge, les comptes inactifs (voir « La purge ») |
-| téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones |
+| téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones ; à partir de #776, `hasPhone` (`src/db/persons.ts`) n'en lit que la présence, un booléen, sous le verrou de la Person |
 | lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position ; `samePlace` compare deux lieux (texte et position) |
 | description | `src/domain/description.ts`, à partir de #707 | `DESCRIPTION_MAX` (1000 points de code) ; `normalizeDescription`, la seule normalisation, partagée par le serveur (`description`, les règles de `text()`) et le compteur (`descriptionCount`) ; `guessFolds`, la devinette du pli que rend le serveur |
 | propositions de lieux | `src/domain/suggestion.ts` ; `src/app/api/lieux/` (`route.ts`, `handle.ts`, `photon.ts`), à partir de #425 | le domaine lit la requête, écrit l'URL de Photon et les libellés ; la route n'exporte que `POST` ; seul `photon.ts` appelle Photon, avec son cache, son plafond et son disjoncteur (voir « Auto-complétion des lieux ») |
