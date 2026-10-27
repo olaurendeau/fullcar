@@ -1,7 +1,7 @@
 import type { Kysely } from "kysely";
 import { insertPerson, lockPersons, readTokenHolders, updatePerson as storePersonFields } from "@/db/persons";
 import { deletePlacement, setPlacement } from "@/db/placements";
-import { findDrivenRide } from "@/db/rides";
+import { findDrivenRide, findDrivenRides } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
@@ -31,6 +31,8 @@ export type PersonRefusal =
   | "personGone"
   /** The person drives on that leg: she has no Placement there to change. */
   | "drives"
+  /** Her number sent empty while she drives on a leg (v4.8 rule 8): it stays. */
+  | "phoneWhileDriving"
   /** Something only a forged request sends: an id, a leg or a state that is not one. */
   | "invalid"
   /** The write is on the retour, and the event no longer has one (decision 40). */
@@ -135,7 +137,9 @@ export async function addPerson(
 
 /**
  * Changes the first name and the number of one of the device's persons (C2.3): an empty number
- * removes it, and a field left out stays as it is (`validatePersonChange`).
+ * removes it, and a field left out stays as it is (`validatePersonChange`). Sent empty while she
+ * drives a Ride on either leg, it is refused by `phoneWhileDriving`, and nothing is written, first
+ * name included (v4.8 rule 8). The question is whether she drives: her number is never read.
  */
 export async function updatePerson(
   db: Kysely<Database>,
@@ -151,8 +155,14 @@ export async function updatePerson(
     if (!isCreationId(personId)) return INVALID;
     const refused = await refusalFor(trx, eventId, token, personId);
     if (refused) return refused;
-    // Removed after the read, while the update waited for her row: no row is left to update.
+    // Her Person locked (lock order: Event, then Person), as `offerRide` locks it before it reads
+    // whether she has a number: an offer that makes her drive and this change come one after the
+    // other (v4.8-18). Removed after the read, while this waited, no row is left to update (RP5.4).
+    if ((await lockPersons(trx, eventId, [personId])).length === 0) return PERSON_GONE;
     const { change } = validation;
+    if (change.phone === null && (await findDrivenRides(trx, { driverId: personId, eventId })).length > 0) {
+      return { ok: false, error: "phoneWhileDriving" };
+    }
     if (Object.keys(change).length > 0 && !(await storePersonFields(trx, { id: personId, eventId }, change))) return PERSON_GONE;
     return { ok: true };
   });

@@ -151,6 +151,8 @@
     "firstName": "First name",
     "phone": "Phone (optional)",
     "phoneHint": "Only visible to the organiser and to the people in the same car.",
+    "phoneDriving": "Phone",
+    "phoneHintDriving": "So that the people on board can reach you. Only visible to the organiser and to the people in the same car.",
     "both": "Outbound and return",
     "bothHint": {
       "aller": "Untick if this person only makes the outbound trip.",
@@ -223,6 +225,7 @@
     "seats": "From 1 to 8 seats.",
     "chooseDriver": "Choose who drives.",
     "driverPhone": "A number is needed to offer a car.",
+    "phoneWhileDriving": "A number is needed while {firstName} is driving.",
     "tooManyPassengers": "{seats, plural, one {Only # seat} other {Only # seats}}: untick someone or add seats."
   },
   "Actions": {
