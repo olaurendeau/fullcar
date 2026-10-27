@@ -224,8 +224,9 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
    * « Renvoyer l’e-mail » (OA2.4): the notice says « Envoi du lien… » while the email is on its
    * way, then what the server kept; the bar says `resent`, or why nothing went (`tooMany`,
    * `offline`) once no sheet hides the page, and the focus stays on the button. A failure of
-   * Brevo is the notice's alert alone. An event ended meanwhile switches the page to « Événement
-   * terminé », as the other actions do. Decision: any other refusal or a server error takes the
+   * Brevo is the notice's alert alone. An event ended meanwhile has the page read again, as the
+   * other actions do: the creation browser's token is revoked, and the refused screen
+   * (`EndedOrganiserScreen`, « Espace organisateur ») comes. Decision: any other refusal or a server error takes the
    * words of `offline`, and the notice is as it was. — Reason: the design has no other sentence for an
    * email not sent again, and the organiser can only try again. An event no longer awaiting
    * confirmation loses its notice.
@@ -241,7 +242,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     send.answered();
     const kept = answer.kind === "answered" ? answer.pending : answer.kind === "notPending" ? undefined : before;
     dispatch({ type: "pendingRead", ...(kept && { pending: kept }) });
-    // Anonymised meanwhile: the board's read says so, and the page that comes is « Événement terminé ».
+    // Anonymised meanwhile: the page is read again, and the refused screen (`EndedOrganiserScreen`) comes.
     if (answer.kind === "eventEnded") return void readScreen(handle);
     const landmark = () => {
       const button = document.querySelector<HTMLElement>("[data-pending-action=resend]");

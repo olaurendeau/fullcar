@@ -1,6 +1,7 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import { POLL_MS } from "@/app/e/[id]/admin/screen-state";
 import type { SendStatusColumn } from "@/db/schema";
+import { anonymiseEvent } from "@/db/day-thirty";
 import { seedSends } from "@/db/test-accounts";
 import { seedPendingSend } from "@/db/test-events";
 import { CONFIRMATIONS_PER_EVENT } from "@/domain/send-limits";
@@ -333,5 +334,26 @@ test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
     await expectNotice(page, "polite", FR.title, FR.body(email));
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(await mailTo(email)).toHaveLength(1);
+  });
+
+  // The panel is shown still; the server says the event ended, and the page is read again: the creation
+  // browser's token, revoked by the anonymisation, opens nothing, and `EndedOrganiserScreen` comes.
+  test("the event anonymised meanwhile: the page switches to the refused screen, nothing is sent", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    const resend = button(page, FR.resend);
+
+    await anonymiseEvent(db, seededEvent.id);
+    await resend.click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Espace organisateur");
+    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(resend).toHaveCount(0);
+    expect(await mailTo(email)).toEqual([]);
   });
 });

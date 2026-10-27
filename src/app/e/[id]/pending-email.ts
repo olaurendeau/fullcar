@@ -79,7 +79,6 @@ export async function resendConfirmation(eventId: unknown, proof: unknown, resen
   const claimed = await atomically(db, async (trx) => {
     const row = await lockEvent(trx, eventId, "noKeyUpdate");
     if (row === undefined) return EVENT_NOT_FOUND;
-    if (row.anonymised_at !== null) return EVENT_ENDED;
     const refusedNow = await accessRefusal(trx, eventId, proof);
     if (refusedNow) return refusedNow;
     const waiting = await readPendingSend(trx, eventId);
