@@ -415,7 +415,12 @@ comptage se fait donc sous verrou, et l'ordre devient **Event, puis adresse** :
 - Un envoi pour un événement (création, « Renvoyer l'e-mail », « Corriger l'adresse »,
   nouveau lien après un lien de confirmation expiré) verrouille d'abord l'Event
   (`lockEvent`), puis l'adresse, puis compte la limite de l'événement et celle de l'adresse.
-- Une demande de connexion, qui n'a pas d'événement, ne verrouille que l'adresse.
+- Une demande de connexion, qui n'a pas d'événement, ne verrouille que l'adresse. Venue de
+  `/e/{id}/admin`, elle tient d'abord la clé de cet Event (`holdEventKey`, `FOR KEY SHARE`,
+  #603) : la purge ne le supprime pas avant que le lien, qui y mène (OA4.4), soit écrit, et
+  aucune écriture sur l'Event n'attend. Puis l'adresse, puis le plafond global, puis le
+  lien dans la même transaction ; l'e-mail part après la validation
+  (`src/app/connexion/request-link.ts`).
 - Le plafond global se compte dans la même transaction. S'il prend un verrou, ce verrou
   vient après celui de l'adresse. Deux décisions de la relecture de #623 :
   - les avertissements d'inactivité (#616) ne comptent pas dans le plafond global ; la
