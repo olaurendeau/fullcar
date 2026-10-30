@@ -356,7 +356,7 @@ describe("panelRead", () => {
 
 describe("screenRead", () => {
   const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: null, description: null };
-  const board: EventState = { event: header, legs: [] };
+  const board: EventState = { event: header, options: { stops: false }, legs: [] };
   const panel = { state: "panel", legs: after, persons: [] };
 
   it("is the panel's legs and the board's state when both reads answered", () => {

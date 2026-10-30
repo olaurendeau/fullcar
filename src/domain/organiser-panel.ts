@@ -26,7 +26,14 @@ export type OrganiserPanelAnswer =
   | { state: "invalid" | "signIn" | "pending" | "orphan" }
   | { state: "notYours"; email: string }
   | { state: "ended"; event: EndedHeader; erasedOn: WallDate }
-  | { state: "panel"; legs: OrganiserLeg[]; persons: OrganiserPerson[]; pending?: PendingNotice };
+  | {
+      state: "panel";
+      /** The event's options: « Modifier l'événement » needs `stops` (epic #881). */
+      options: { stops: boolean };
+      legs: OrganiserLeg[];
+      persons: OrganiserPerson[];
+      pending?: PendingNotice;
+    };
 
 /**
  * What an anonymised event keeps, as its organiser's screen shows it (OA8.4): its title, the

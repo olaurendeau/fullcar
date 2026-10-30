@@ -34,19 +34,45 @@ export interface PlacementRow {
   personId: string;
   leg: Leg;
   rideId: string | null;
+  /** The Stop of the car where the person boards, or `null` for the departure. */
+  stopId: string | null;
   /** When the person boarded, or declared being without a car: gives the order. */
   placedAt: Date;
+}
+
+/** A Stop of a Ride on the aller, read by time and then by rank (RV1.5). */
+export interface StopRow {
+  id: string;
+  rideId: string;
+  location: string;
+  /** `HH:MM:SS` on the date of the aller. */
+  time: WallTime;
+  /** The position of `location`, or `null` when it has none. */
+  position: Position | null;
 }
 
 export interface BoardRows {
   persons: readonly PersonRow[];
   rides: readonly RideRow[];
   placements: readonly PlacementRow[];
+  /** Empty when the event's option is off (RV8.3). */
+  stops: readonly StopRow[];
 }
 
 export interface BoardPerson {
   id: string;
   firstName: string;
+}
+
+/** A meeting point of a car and the persons who board there. */
+export interface BoardStop {
+  id: string;
+  location: string;
+  time: WallTime;
+  /** The position of `location`, or `null`. */
+  position: Position | null;
+  /** In boarding order; a passenger who boards at the departure is in none. */
+  passengerIds: string[];
 }
 
 export interface BoardCar {
@@ -61,6 +87,8 @@ export interface BoardCar {
   seats: number;
   /** In boarding order. */
   passengers: BoardPerson[];
+  /** By time, then by rank; always empty on the retour. */
+  stops: BoardStop[];
   freeSeats: number;
   /** No free seat left: the card says « Complet ». */
   full: boolean;
@@ -93,6 +121,10 @@ function byPlacedAt(a: PlacementRow, b: PlacementRow): number {
   return a.placedAt.getTime() - b.placedAt.getTime();
 }
 
+function byTime(a: { time: WallTime }, b: { time: WallTime }): number {
+  return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
+}
+
 function byDepartureTime(a: BoardCar, b: BoardCar): number {
   return a.departureTime < b.departureTime ? -1 : a.departureTime > b.departureTime ? 1 : 0;
 }
@@ -121,6 +153,21 @@ export function legBoard(leg: Leg, rows: BoardRows, deviceIds: ReadonlySet<strin
         const passengers = placements
           .filter((placement) => placement.rideId === ride.id)
           .flatMap((placement) => personOf(placement.personId));
+        const rideStops = leg === "aller" ? rows.stops.filter((stop) => stop.rideId === ride.id) : [];
+        const boardStops = rideStops
+          .map(
+            (stop): BoardStop => ({
+              id: stop.id,
+              location: stop.location,
+              time: stop.time,
+              position: stop.position,
+              passengerIds: placements
+                .filter((placement) => placement.rideId === ride.id && placement.stopId === stop.id)
+                .map((placement) => placement.personId),
+            }),
+          )
+          // Stable: Stops at the same time stay in the order they were read in, their rank.
+          .sort(byTime);
         const freeSeats = Math.max(0, ride.seats - passengers.length);
         return {
           id: ride.id,
@@ -132,6 +179,7 @@ export function legBoard(leg: Leg, rows: BoardRows, deviceIds: ReadonlySet<strin
           position: ride.position,
           seats: ride.seats,
           passengers,
+          stops: boardStops,
           freeSeats,
           full: freeSeats === 0,
         };

@@ -49,7 +49,7 @@ describe("phoneVisible (C10.1, C10.5)", () => {
 let clock = 0;
 function placed(personId: string, leg: Leg, rideId: string | null): PlacementRow {
   clock += 1;
-  return { personId, leg, rideId, placedAt: new Date(Date.UTC(2026, 9, 15, 8, 0, clock)) };
+  return { personId, leg, rideId, stopId: null, placedAt: new Date(Date.UTC(2026, 9, 15, 8, 0, clock)) };
 }
 
 function ride(id: string, leg: Leg, driverId: string, departureTime: RideRow["departureTime"]): RideRow {
@@ -77,6 +77,7 @@ const ROWS: BoardRows = {
     placed("tom", "retour", null),
     placed("zoe", "retour", null),
   ],
+  stops: [],
 };
 
 const GYMNASE = { lat: 48.85661, lng: 2.35222 };
@@ -145,6 +146,7 @@ describe("withVisiblePhones", () => {
       ],
       rides: [ride("r5", "aller", "sam", "07:00:00")],
       placements: [placed("lea", "aller", "r5")],
+      stops: [],
     };
     const [aller] = withVisiblePhones(buildBoard(rows, ["aller"], deviceIds), PHONES, deviceIds);
     expect(aller.cars[0].driver).toEqual({ id: "sam", firstName: "sam", phone: null });
@@ -271,6 +273,7 @@ function sceneWithEve(eve: EveOnAller): BoardRows {
     persons: ["marc", "lea", "tom", "ana", "eve", "sam"].map((id) => ({ id, firstName: id })),
     rides,
     placements,
+    stops: [],
   };
 }
 
@@ -387,6 +390,7 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
         { id: "lea", firstName: "lea" },
         { id: "eve", firstName: "eve" },
       ],
+      stops: [],
       freeSeats: 1,
       full: false,
       driverHasPhone: true,
@@ -404,6 +408,27 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
     ]);
     expect(retour.cars.map((card) => [card.id, card.position])).toStrictEqual([["r3", null]]);
     expect(JSON.parse(JSON.stringify(aller.cars[0]))).toHaveProperty("position", null);
+  });
+
+  it("RV8.3: a car's stops arrive as they are, with their passengers' ids, and no field more", () => {
+    const rows = sceneWithEve("a passenger");
+    const withStops: BoardRows = {
+      ...rows,
+      stops: [{ id: "s1", rideId: "r1", location: "Gare", time: "07:20:00", position: GYMNASE }],
+      placements: rows.placements.map((row) => (row.personId === "eve" ? { ...row, stopId: "s1" } : row)),
+    };
+    const board = buildBoard(withStops, ["aller", "retour"], new Set());
+    // A stop that carried a number would not go through: the fields are copied one by one.
+    const stop = board[0].cars[0].stops[0];
+    Object.assign(stop, { phone: EVE_PHONE });
+
+    const [aller, retour] = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT, EVENT_ID) ?? [];
+
+    expect(aller.cars[0].stops).toStrictEqual([
+      { id: "s1", location: "Gare", time: "07:20:00", position: GYMNASE, passengerIds: ["eve"] },
+    ]);
+    expect(retour.cars[0].stops).toStrictEqual([]);
+    expect(sentOrganiserNumbers(aller.cars[0].stops)).toEqual([]);
   });
 
   it("does not take the device's section: only the leg, its cars and its list without a car", () => {
