@@ -1,12 +1,13 @@
 import type { Kysely, Transaction } from "kysely";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { findAccount } from "@/db/accounts";
 import { readAdminTokenHash } from "@/db/events";
 import type { Database } from "@/db/schema";
 import { findSession } from "@/db/sessions";
 import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
-import { myEvents, signOut } from "./actions";
+import { deleteAccount, myEvents, signOut } from "./actions";
 import { MAX_ADMIN_TOKENS } from "./sign-out";
 
 // The action reaches the database through getDb(): here, the test's transaction.
@@ -155,5 +156,54 @@ describe("signOut", () => {
     }
     expect(cause).toBeUndefined();
     expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([["signOut: the session could not be closed (SQLSTATE 57P01)"]]);
+  });
+});
+
+describe("deleteAccount", () => {
+  it("deletes the account of the session, revokes the admin tokens in the body, and logs nothing", async () => {
+    const spies = CONSOLE.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+    await inTransaction(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const session = await seedSession(trx, accountId);
+      const created = await seedEvent(trx);
+      expect(await deleteAccount(session, [created.token])).toEqual({ deleted: true });
+      expect(await findAccount(trx, accountId)).toBeUndefined();
+      expect(await readAdminTokenHash(trx, created.id)).toBeNull();
+    });
+    expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
+  });
+
+  it.each([
+    ["an ended session", "AAAAAAAAAAAAAAAAAAAAAA"],
+    ["no session", undefined],
+  ])("deletes nothing for %s, and says so", async (_, session) => {
+    await inTransaction(async (trx) => {
+      const accountId = await seedAccount(trx);
+      await seedSession(trx, accountId);
+      const created = await seedEvent(trx);
+      expect(await deleteAccount(session, [created.token])).toEqual({ deleted: false });
+      expect(await findAccount(trx, accountId)).toBeDefined();
+      expect(await readAdminTokenHash(trx, created.id)).not.toBeNull();
+    });
+  });
+
+  it("fails with a fixed error when the database fails, and neither the log nor the error carries a token", async () => {
+    const session = "kP3x-Vb7_Zq9Lt2Wn8Rc4g";
+    const admin = "q3Vx9kLmN2pR7sT1uW4yZQ";
+    connection.current = failingDb;
+    const spies = CONSOLE.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+    const failure = await deleteAccount(session, [admin]).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    const { message, stack, cause } = failure as Error;
+    for (const text of [message, stack, JSON.stringify(failure)]) {
+      expect(text?.includes(session)).toBe(false);
+      expect(text?.includes(admin)).toBe(false);
+      expect(text?.includes("exemple.fr")).toBe(false);
+    }
+    expect(cause).toBeUndefined();
+    expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([["deleteAccount: the account could not be deleted (SQLSTATE 57P01)"]]);
   });
 });

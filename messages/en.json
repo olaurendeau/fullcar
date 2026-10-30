@@ -19,7 +19,8 @@
         "text": "A banner shows how many people still have no car, and whether seats are missing."
       }
     },
-    "deleted": "Events are deleted 30 days after their date."
+    "deleted": "Events are deleted 30 days after their date.",
+    "accountDeleted": "Your account has been deleted."
   },
   "CreateEvent": {
     "title": "Title",
@@ -750,6 +751,16 @@
   "Account": {
     "title": "My account",
     "signOut": "Sign out",
-    "signOutFailed": "You were not signed out. Check your connection, then try again."
+    "signOutFailed": "You were not signed out. Check your connection, then try again.",
+    "delete": "Delete my account"
+  },
+  "DeleteAccount": {
+    "title": "Delete your account?",
+    "erased": "Your email address and the history of your events will be erased.",
+    "open": "{count, plural, one {The event whose sign-ups are not erased yet stays open to participants, with no organiser, and will be deleted 30 days after its date.} other {The # events whose sign-ups are not erased yet stay open to participants, with no organiser, and will be deleted 30 days after their date.}}",
+    "final": "This cannot be undone.",
+    "confirm": "Delete my account",
+    "cancel": "Cancel",
+    "failed": "The account was not deleted. Check your connection, then try again."
   }
 }
