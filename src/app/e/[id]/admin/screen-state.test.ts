@@ -12,6 +12,7 @@ import {
   announcement,
   editAnswer,
   editFailure,
+  fixAnswer,
   listKey,
   PERSONS_LIST,
   panelRead,
@@ -721,6 +722,58 @@ describe("resendAnswer (OA2.4)", () => {
     for (const [locale, messages] of [["fr", fr], ["en", en]] as const) {
       const { resent, offline, tooMany } = messages.Admin.pending;
       expect([resent, offline, tooMany]).toEqual(words[locale]);
+    }
+  });
+});
+
+describe("fixAnswer (OA2.5)", () => {
+  it("is the notice the server answers, sent or failed", () => {
+    for (const send of ["sent", "failed"] as const) {
+      const pending = { email: "camille@exemple.fr", send };
+      expect(fixAnswer({ ok: true, value: { ok: true, pending } })).toStrictEqual({ kind: "answered", pending });
+    }
+  });
+
+  it("reads the address refused, the limit, a confirmed event, and an event that ended", () => {
+    for (const reason of ["required", "invalid", "tooLong"]) {
+      expect(fixAnswer({ ok: true, value: { ok: false, error: "address", reason } })).toStrictEqual({ kind: "address", reason });
+    }
+    expect(fixAnswer({ ok: true, value: { ok: false, error: "tooMany" } })).toStrictEqual({ kind: "tooMany" });
+    expect(fixAnswer({ ok: true, value: { ok: false, error: "notPending" } })).toStrictEqual({ kind: "notPending" });
+    expect(fixAnswer({ ok: true, value: { ok: false, error: "eventEnded" } })).toStrictEqual({ kind: "eventEnded" });
+  });
+
+  it("is not sent offline, nor on any other problem or refusal, nor on an answer it does not know", () => {
+    expect(fixAnswer({ ok: false, problem: "offline" })).toStrictEqual({ kind: "notSent" });
+    expect(fixAnswer({ ok: false, problem: "failed" })).toStrictEqual({ kind: "notSent" });
+    for (const error of ["invalid", "eventNotFound", "other"]) {
+      expect(fixAnswer({ ok: true, value: { ok: false, error } })).toStrictEqual({ kind: "notSent" });
+    }
+    for (const value of [undefined, null, {}, { ok: true }, { ok: false, error: "address", reason: "other" }]) {
+      expect(fixAnswer({ ok: true, value })).toStrictEqual({ kind: "notSent" });
+    }
+  });
+
+  it("has the sheet's words, in French and in English, as the design words them", () => {
+    const words = {
+      fr: [
+        "Corriger l’adresse",
+        "Le lien envoyé à {email} ne marchera plus.",
+        "Envoyer le lien",
+        "Annuler",
+        "L’e-mail n’est pas parti. Vérifiez la connexion, puis réessayez.",
+      ],
+      en: [
+        "Fix the address",
+        "The link sent to {email} will stop working.",
+        "Send the link",
+        "Cancel",
+        "The email did not go out. Check your connection, then try again.",
+      ],
+    };
+    for (const [locale, messages] of [["fr", fr], ["en", en]] as const) {
+      const { title, note, send, cancel, offline } = messages.FixEmail;
+      expect([title, note, send, cancel, offline]).toEqual(words[locale]);
     }
   });
 });

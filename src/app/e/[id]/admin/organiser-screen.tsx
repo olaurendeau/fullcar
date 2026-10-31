@@ -10,6 +10,7 @@ import { OrganiserRefused } from "@/components/event/admin-states";
 import { EditEventSheet, LONG_WAIT, type EditEvent } from "@/components/event/edit-event-sheet";
 import { eventFieldsChanged, loadedEventFields } from "@/components/event/event-fields";
 import { failureText, wordsOf, type RemovalProblem } from "@/components/event/failure-words";
+import { FixEmailSheet } from "@/components/event/fix-email-sheet";
 import { focusLandmark, focusMapHint, focusMapToggle } from "@/components/event/focus";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import { legHeadingId } from "@/components/event/organiser-leg";
@@ -30,12 +31,14 @@ import {
   announcement,
   editAnswer,
   editFailure,
+  fixAnswer,
   panelRead,
   PERSONS_LIST,
   resendAnswer,
   screenRead,
   screenReducer,
   type EditAnswer,
+  type FixAnswer,
 } from "./screen-state";
 
 /**
@@ -59,6 +62,8 @@ import {
  *   `<body>`.
  * - While the notice « Confirmez votre adresse » says « Envoi du lien… », it alone is read again,
  *   every 2 s, until the email's result is kept, for 30 s at most (OA1.7).
+ * - « Corriger l’adresse » opens a sheet with the address (OA2.5); sent, the notice shows the new
+ *   one, and the focus goes back to that button, as it does for « Annuler » and Escape.
  * - Its frame keeps the board in place on screen as it changes height (O1.11).
  * - While a sheet hides the page, the live regions keep what they said: their next words wait
  *   for it to show. The legs' dates are the page's, from the header of the state the board
@@ -171,6 +176,15 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const editWaits = useRef(0);
   // The sheet opened since a change left, to which its late `ok` gives the values saved (decision 51).
   const lateSaved = useRef<((event: EventHeader, stops?: boolean) => void) | null>(null);
+  // « Corriger l’adresse » (OA2.5): its sheet, the address the notice showed as it opened, and each opening's form.
+  const [fixing, setFixing] = useState(false);
+  const [fixed, setFixed] = useState("");
+  const [fixOpening, setFixOpening] = useState(0);
+  const focusFix = () => {
+    const button = document.querySelector<HTMLElement>("[data-pending-action=fix]");
+    button?.focus();
+    return !!button && document.activeElement === button;
+  };
   const focusEdit = () => {
     editButton.current?.focus();
     return !!editButton.current && document.activeElement === editButton.current;
@@ -274,6 +288,24 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     }
   }
 
+  /**
+   * « Corriger l’adresse » (OA2.5): the sheet sends the corrected address, and the notice takes
+   * what the server answers, the new address with its result. A bar message about the address's
+   * earlier emails goes with it (`pending:resend`). An event no longer awaiting confirmation
+   * loses its notice; one that ended has the page read again, as for « Renvoyer l’e-mail ». The
+   * sheet says the rest: the address refused, the limit, the email not sent.
+   */
+  async function fix(typed: string): Promise<FixAnswer> {
+    const send = sendAbout(["pending:resend"]);
+    send.leaves();
+    const answer = fixAnswer(await link.fix(typed));
+    send.answered();
+    if (answer.kind === "answered") dispatch({ type: "pendingRead", pending: answer.pending });
+    else if (answer.kind === "notPending") dispatch({ type: "pendingRead" });
+    else if (answer.kind === "eventEnded" && boardRef.current) void readScreen(boardRef.current);
+    return answer;
+  }
+
   async function readScreen(handle: BoardHandle) {
     if (current.current.state !== "ready") return;
     const read = ++latest.current;
@@ -336,6 +368,12 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         editSending={editSending}
         onEdit={() => openEdit(null)}
         onResend={resend}
+        onFix={() => {
+          if (!screen.panel.pending) return;
+          setFixed(screen.panel.pending.email);
+          setFixOpening((opened) => opened + 1);
+          setFixing(true);
+        }}
         persons={
           <OrganiserPersons
             persons={screen.persons}
@@ -393,6 +431,17 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           onClosed={() => focusFrom(editFrom.current)() || focusLandmark()}
           lateSavedRef={lateSaved}
           opening={opening}
+        />
+      )}
+      {screen.state === "ready" && (
+        <FixEmailSheet
+          open={fixing}
+          onOpenChange={setFixing}
+          email={fixed}
+          onFix={fix}
+          // Its button gone (confirmed meanwhile): the active tab or the title, never `<body>`.
+          onClosed={() => focusFix() || focusLandmark()}
+          opening={fixOpening}
         />
       )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">

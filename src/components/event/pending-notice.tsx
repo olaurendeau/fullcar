@@ -18,8 +18,8 @@ import { usePageHidden } from "./hidden-page";
  * (OA1.7), both always there, so that a change is announced; a change while a sheet hides
  * the page waits for it to show. While the email is on its way,
  * both buttons are inactive (`aria-disabled`, they keep the focus). Decision: without
- * `onResend` or `onFix`, its button is inactive too. — Reason: « Renvoyer l’e-mail » (#601) is
- * given, « Corriger l’adresse » comes with #602; a button that would do nothing is not shown as active.
+ * `onResend` or `onFix`, its button is inactive too. — Reason: a button that would do nothing is
+ * not shown as active. « Corriger l’adresse » (#602, OA2.5) opens its sheet, `FixEmailSheet`.
  */
 export function PendingNotice({ pending, onResend, onFix }: { pending: Notice; onResend?: () => void; onFix?: () => void }) {
   const t = useTranslations("Admin.pending");
