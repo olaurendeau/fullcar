@@ -22,6 +22,8 @@ export type NotDone =
   /** « Retirer de l’événement » (remove-person v2): the person, as her sheet showed her. */
   | { kind: "removePerson"; firstName: string }
   | { kind: "editRide"; driver: string; leg: Leg }
+  /** « Changer le point » (RV4.3): the person, as the sheet showed her. */
+  | { kind: "stop"; firstName: string }
   | { kind: "readDevice" }
   | { kind: "editEvent" }
   /** « Modifier l’événement » that only changed the option « Points de RDV » (RV9.4). */
@@ -250,6 +252,8 @@ function notDoneText(words: Words, notDone: NotDone): string {
     }
     case "editStops":
       return t("EditEvent.stops.failed");
+    case "stop":
+      return t("Sheet.stop.failed", { firstName: notDone.firstName });
     default: {
       const { kind, ...values } = notDone;
       return t(`Actions.notDone.${kind}`, values);
