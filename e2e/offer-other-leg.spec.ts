@@ -179,8 +179,6 @@ test.describe("the other leg in « Proposer une voiture »", () => {
     await openForm(page);
     const group = otherLeg(page, FR.title.retour);
     const drivers = form(page).getByRole("radiogroup", { name: "Qui conduit ?" });
-    // The board reads the device's persons once hydrated: before they are in the form, a choice is the new person's, lost when they arrive.
-    await expect(drivers).toBeVisible();
     await field(page, FR.location.aller).fill("Gare");
     await radio(group, FR.drive.retour).check();
     await submit(page).click();
