@@ -311,7 +311,15 @@ export function EventMap({ leg, map, cars, date }: { leg: Leg; map: LegMap; cars
       name: `${label}, ${name}`,
       title: here.length === 1 ? where : t("stopCars", { count: here.length }),
       detail: here.length === 1 ? "" : where,
-      cars: here.map(({ car }) => carOf(car)),
+      cars: here.map(({ car, stop }) => {
+        const own = carOf(car);
+        const at = format.dateTime(wallClockAsUtc(`${date} ${stop.time}`), { timeStyle: "short" });
+        // Only the line of a car whose place or time is not the title's says its own: « · Prelles église, 09:20 » (RV5.6).
+        if (here.length === 1 || (stop.location === first.stop.location && at === time)) return own;
+        const title = t("stopLineAt", { line: own.title, place: stop.location, time: at });
+        // Its name starts with its visible text (WCAG 2.5.3).
+        return { ...own, title, name: `${title}, ${own.name}` };
+      }),
     };
   });
   const points: CarPoint[] = grouped.map((point) => {

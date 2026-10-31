@@ -3,7 +3,7 @@
 - Artifact : https://claude.ai/artifact/PCinu9DcFBdAHrhjfaZyCk
 - Issue : https://github.com/olaurendeau/fullcar/issues/881 (voir aussi l’épic #68, « Les options à l’écran », dont les Arrêts sont la part non faite)
 - Page : `index.html` (autonome, maquettes à 360 px, clair)
-- Version : v2.1
+- Version : v2.2
 
 ## Problème
 
@@ -74,7 +74,7 @@ D1 à D3 et les règles sont en tête de `index.html`. Tranchées par le propri�
 - RV5.3 Un point sans position, ou d’une voiture sans position, n’est pas dessiné et compte dans « {n} point(s) de RDV n’est/ne sont pas sur la carte… ».
 - RV5.4 La bulle d’un point a pour titre « {lieu}, {heure} » et un bouton par voiture qui l’ouvre (comme une bulle de voiture) ; les points de voitures différentes à moins de 25 m l’un de l’autre partagent un seul rond (RV5.6), mais ne sont jamais regroupés avec une voiture ni avec le drapeau ; l’ordre de survol et de focus de event-map (CA1.23) vaut pour eux.
 - RV5.5 Une position ajoutée ou retirée sur un point se voit à l’actualisation suivante, sans recharger.
-- RV5.6 Les points de plusieurs voitures à moins de 25 m l’un de l’autre forment un seul rond, avec une bulle de titre « {n} voitures » (lieu et heure dessous) et une ligne-bouton « Voiture de {conducteur} · {n} place(s) libre(s) » par voiture ; ce rond n’est jamais regroupé avec une voiture ni avec le drapeau.
+- RV5.6 Les points de plusieurs voitures à moins de 25 m l’un de l’autre forment un seul rond, avec une bulle de titre « {n} voitures » (lieu et heure dessous) et une ligne-bouton « Voiture de {conducteur} · {n} place(s) libre(s) » par voiture, suivie de « · {lieu}, {heure} » (`EventMap.stopLineAt`) quand le lieu ou l’heure de cette voiture diffère de ceux du titre ; l’étiquette du rond (« {heure} · {n} voitures ») et son nom accessible ne montrent que la première voiture ; ce rond n’est jamais regroupé avec une voiture ni avec le drapeau.
 - RV5.7 Si aucun point n’a de position, la carte se dessine comme avant, sans rond de point, et dit « {n} points de RDV ne sont pas sur la carte : leurs lieux n’ont pas de position. ».
 
 ### RV6, point retiré
@@ -104,3 +104,4 @@ Retour ; arrivée estimée par point, itinéraire ; capacité ou compte par poin
 - v1 : première version (epic #881).
 - v2 : D1 à D3 tranchées par le propriétaire. Ajoutés : « Modifier l’événement » (option désactivée, activée sans point, verrouillée avec ses mots et son état accessible, échec ; RV9) ; clés FR/EN de l’option, de la raison, de l’échec, de « Position enregistrée · Retirer », de la bulle « 2 voitures » ; états d’échec de « Placer » et de « Valider » avec les refus réutilisés nommés (RV3.5, RV3.6, RV4.3) ; anneau de focus, carte sans aucune position, contraste #737373 sur #f5f5f5 vérifié (4,35:1, RV7.3), amendement de `product.md` en cases à cocher.
 - v2.1 : trois corrections de #894 reprises (RV5.6 scindé en RV5.6 et RV5.7 ; pluriel ICU de `EditEvent.stops.locked` dans RV9.3 ; hors-périmètre « regroupement de points avec une voiture ou avec le drapeau »). Q2 confirmée (#881) : les points de voitures différentes à moins de 25 m partagent un rond (« 2 voitures »), jamais regroupés avec une voiture ni avec le drapeau (RV5.4, RV5.6) ; `index.html` corrigé (note de la bulle, hors-périmètre) pour ne plus la contredire. Q1 : mots de `stopsOff` et `afterStop` (RV1.9, RV1.10, `RideForm.stops.off`, `RideForm.stops.afterStop`).
+- v2.2 (#918) : Q1 : l’heure et le lieu d’une autre voiture d’un rond partagé sont dans la ligne-bouton de la bulle, seulement quand ils diffèrent du titre (RV5.6) ; rien de plus sur la carte. Q2 : au repos, un Arrêt est sur une couche positive sous la couche survolée ou focalisée (`z-1!`, RV5.4) : il peut couvrir une partie d’une étiquette de voiture, jamais l’inverse au repos ; un Arrêt n’est plus entièrement caché au premier affichage.
