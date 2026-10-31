@@ -1,9 +1,11 @@
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db/schema";
-import { anAddress, seedAccount, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
+import { findSession } from "@/db/sessions";
+import { anAddress, seedAccount, seedLink, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
-import { requestLink, signedInAs } from "./actions";
+import { seedEvent, seedPendingSend } from "@/db/test-events";
+import { openConfirmationLink, openLoginLink, requestLink, resendConfirmationLink, signedInAs } from "./actions";
 
 // The action reaches the database through getDb(): here, the test's transaction.
 const connection = vi.hoisted(() => ({ current: undefined as Kysely<Database> | undefined }));
@@ -161,5 +163,69 @@ describe("signedInAs", () => {
       connection.current = undefined;
     }
     expect(logs).toEqual(["signedInAs: the session could not be read (SQLSTATE 57P01)"]);
+  });
+});
+
+// OA5: the links of the emails, used with the token in the body.
+describe("the links of the emails", () => {
+  const HOUR = 60 * 60_000;
+  const DAY = 24 * HOUR;
+
+  it("openLoginLink opens a session of the link's account", async () => {
+    await inTransaction(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const token = await seedLink(trx, { kind: "login", accountId, returnEventId: null });
+      const answer = await openLoginLink(token);
+      if (answer.state !== "opened") throw new Error("expected a session");
+      expect((await findSession(trx, answer.session))?.id).toBe(accountId);
+      expect(await openLoginLink(token)).toEqual({ state: "used" });
+      expect(logs).toEqual([]);
+    });
+  });
+
+  it("openConfirmationLink creates the account in the page's language", async () => {
+    await inTransaction(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const email = anAddress();
+      await seedPendingSend(trx, id, { email, status: "sent" });
+      const token = await seedLink(trx, { kind: "confirmation", eventId: id });
+      request.headers = new Headers({ "accept-language": "en-GB,en;q=0.9" });
+      const answer = await openConfirmationLink(token);
+      expect(answer).toMatchObject({ state: "opened", eventId: id });
+      const account = await trx.selectFrom("account").select("locale").where("email", "=", email).executeTakeFirstOrThrow();
+      expect(account.locale).toBe("en");
+    });
+  });
+
+  it("resendConfirmationLink sends the new link, in the page's language, to the pending address", async () => {
+    await inTransaction(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const email = anAddress();
+      await seedPendingSend(trx, id, { email, status: "sent" });
+      const token = await seedLink(trx, { kind: "confirmation", eventId: id }, { createdAt: new Date(Date.now() - 8 * DAY) });
+      request.headers = new Headers({ "accept-language": "en-GB,en;q=0.9" });
+      expect(await resendConfirmationLink(token)).toEqual({ state: "sent" });
+      expect(brevo).toEqual([{ to: email, subject: "Confirm your email address for Fullcar" }]);
+    });
+  });
+
+  it.each([
+    ["openLoginLink", openLoginLink, "openLoginLink: the sign-in link could not be used"],
+    ["openConfirmationLink", openConfirmationLink, "openConfirmationLink: the confirmation link could not be used"],
+    ["resendConfirmationLink", resendConfirmationLink, "resendConfirmationLink: the new link could not be sent"],
+  ])("%s throws a fixed error, with the database's code alone in the log", async (_, action, message) => {
+    const token = "AAAAAAAAAAAAAAAAAAAAAA";
+    connection.current = new Proxy({} as Kysely<Database>, {
+      get() {
+        throw Object.assign(new Error(`Failing row contains (${token})`), { code: "57P01" });
+      },
+    });
+    try {
+      await expect(action(token)).rejects.toThrow(new Error(message));
+    } finally {
+      connection.current = undefined;
+    }
+    expect(logs).toEqual([`${message} (SQLSTATE 57P01)`]);
+    expect(brevo).toEqual([]);
   });
 });

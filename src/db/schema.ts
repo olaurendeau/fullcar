@@ -29,7 +29,7 @@ export type SendStatusColumn = "sending" | "sent" | "failed" | "address_limit";
  * From #586 (epic #581): `account_id` is the confirmed organiser's account, null while
  * the event is pending or once its account is deleted; `pending_email` is the address
  * awaiting confirmation, null once confirmed; `send_status` and `send_status_at` are the
- * last result of the confirmation email, both or neither; `anonymised_at` is the day 30
+ * last result of the confirmation email, both or neither, null once confirmed; `anonymised_at` is the day 30
  * of an event with an account, after which it has no token and no position.
  * From #706 (epic #654): `description` is 1 to 1000 code points, null when there is none,
  * and null once anonymised.
