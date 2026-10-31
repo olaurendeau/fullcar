@@ -92,6 +92,20 @@ svg{display:block;max-width:100%}
   <p class="m s">Si vous retirez ce point, la note reste jusqu’à « Valider ». Rien n’est supprimé avant.</p></div></div>
 </div>
 <p class="n">Ajouter : une nouvelle ligne vide, le focus dans « Lieu du point n ». Retirer : la ligne disparaît, le focus va au « Retirer » du point précédent, sinon à « Ajouter un point de RDV ». Les lignes se reclassent par heure en quittant le champ heure (jamais pendant la frappe) ; la zone <code>status</code> dit « Points classés par heure. » seulement si l’ordre a changé. Modifier : les mêmes champs, préremplis. Lieu non rempli : « Champ requis. » ; heure non valide : « Heure non valide. » ; lieu trop long : « 120 caractères au maximum. ». Rien n’est envoyé tant qu’une ligne a une erreur ; la première ligne en erreur prend le focus.</p>
+<h3>Deux refus du serveur, rien n’est écrit (RV1.9, RV1.10)</h3>
+<div class="row">
+ <div class="col"><span class="cap">L’option vient d’être désactivée (<code>stopsOff</code>)</span><div class="ph">
+  <p class="alert" role="alert" style="color:var(--a-destructive);margin:0 0 8px">L’option « Points de RDV » vient d’être désactivée : votre voiture n’a pas été enregistrée. Rechargez la page, puis réessayez.</p>
+  <div class="pbox"><div class="top">Point 1 <span class="btn sm">Retirer</span></div>
+   <div class="fld"><label>Lieu du point 1</label><div class="in">Prelles</div></div>
+   <div class="fld"><label>Heure du point 1</label><div class="in">08:25</div></div></div>
+  <span class="btn p" style="width:100%">Valider</span></div></div>
+ <div class="col"><span class="cap">Départ déplacé à l’heure d’un point ou après (<code>afterStop</code>)</span><div class="ph">
+  <div class="fld"><label>Heure de départ</label><div class="in err" aria-invalid="true">08:30</div><span class="er">L’heure doit être avant 08:25, l’heure du premier point de RDV.</span></div>
+  <p class="m s" style="margin:0 0 8px">Les points enregistrés (Prelles 08:25, Briançon 08:35…) ne sont pas touchés.</p>
+  <span class="btn p" style="width:100%">Valider</span></div></div>
+</div>
+<p class="n"><code>stopsOff</code> : la voiture est envoyée avec des points au moment où l’organisateur désactive l’option ; la page affichait encore la section. Le message est un <code>role="alert"</code> au-dessus de « Valider », les champs gardent leur saisie, le focus va à « Valider », rien n’est écrit. <code>afterStop</code> : une page qui n’envoie pas les points (ouverte avant leur arrivée, ou sans la section) déplace l’heure de départ à l’heure d’un point enregistré ou après ; l’erreur est sur le champ « Heure de départ » (<code>aria-invalid</code>, focus), avec l’heure du premier point, et rien n’est écrit. Ni l’un ni l’autre ne supprime un point.</p>
 
 <h2>1 bis. Activer l’option dans « Modifier l’événement » (D1)</h2>
 <p class="lead">Sur <code>/e/{id}/admin</code>, la feuille « Modifier l’événement » gagne une case « Points de RDV », comme celle de la création. Elle suit le style de la case « Retour ». Le bouton « Valider » l’enregistre avec le reste.</p>
@@ -237,7 +251,7 @@ svg{display:block;max-width:100%}
   <p class="m s" style="margin:0 0 6px">Prelles boucherie, 08:25</p>
   <div class="opt" style="min-height:44px"><span>Voiture de Nina · 2 places libres</span></div>
   <div class="opt" style="min-height:44px"><span>Voiture de Sam · 1 place libre</span></div></div>
-  <p class="n">Même position à 25 m près : un seul point dessiné pour la bulle, une ligne-bouton par voiture ; le titre est le nombre de voitures, le lieu et l’heure de la première en dessous. Avec une seule voiture : le titre « {lieu}, {heure} » ci-contre.</p></div>
+  <p class="n">Points de voitures différentes à 25 m l’un de l’autre : un seul rond et une seule bulle, une ligne-bouton par voiture ; le titre est le nombre de voitures, le lieu et l’heure en dessous. Ce rond n’est jamais regroupé avec une voiture ni avec le drapeau (RV5.4, RV5.6). Avec une seule voiture : le titre « {lieu}, {heure} » ci-contre.</p></div>
  <div class="col"><span class="cap">Aucun point n’a de position : la carte reste</span>
  <div class="ph" style="padding:0"><svg viewBox="0 0 348 200" width="348" role="img" aria-label="Carte de l’aller, sans point de RDV positionné">
   <rect width="348" height="200" fill="#f4f4f2"/><path d="M0 150 C80 110 140 170 348 80" stroke="#d4dce2" stroke-width="14" fill="none"/>
@@ -270,6 +284,8 @@ svg{display:block;max-width:100%}
 <tr><td>RideForm.stops.title</td><td>Points de RDV</td><td>Meeting points</td></tr>
 <tr><td>.hint</td><td>Où vous prenez du monde en route, avec l’heure de passage. Visible par toutes les personnes qui ont le lien.</td><td>Where you pick people up along the way, with the time you pass. Visible to everyone with the link.</td></tr>
 <tr><td>.add</td><td>Ajouter un point de RDV</td><td>Add a meeting point</td></tr>
+<tr><td>RideForm.stops.off</td><td>L’option « Points de RDV » vient d’être désactivée : votre voiture n’a pas été enregistrée. Rechargez la page, puis réessayez.</td><td>The “Meeting points” option has just been turned off: your car was not saved. Reload the page, then try again.</td></tr>
+<tr><td>RideForm.stops.afterStop</td><td>L’heure doit être avant {time}, l’heure du premier point de RDV.</td><td>The time must be before {time}, the time of the first meeting point.</td></tr>
 <tr><td>.pointTitle</td><td>Point {n}</td><td>Point {n}</td></tr>
 <tr><td>.place / .time</td><td>Lieu du point {n} / Heure du point {n}</td><td>Place of point {n} / Time of point {n}</td></tr>
 <tr><td>.remove</td><td>Retirer (nom accessible : Retirer le point {n})</td><td>Remove (accessible name: Remove point {n})</td></tr>
@@ -311,7 +327,7 @@ svg{display:block;max-width:100%}
 <li>Une heure d’arrivée par point, un calcul d’itinéraire ou de durée, un ordre fixé à la main.</li>
 <li>Un point par personne dans une même saisie, une capacité par point, le nombre de personnes par point sur la carte.</li>
 <li>Notification d’un changement de point ou de la suppression d’un point.</li>
-<li>Changer l’auto-complétion (#237) ; regrouper les points proches sur la carte ; point partagé entre voitures.</li>
+<li>Changer l’auto-complétion (#237) ; regrouper un point avec une voiture ou avec le drapeau (les points de voitures différentes à 25 m partagent un rond, RV5.6).</li>
 <li>Numéro de téléphone ou toute donnée personnelle de plus ; le choix du point par le conducteur à la place du passager.</li>
 <li>Désactiver l’option « Points de RDV » alors que des points existent (refusé, RV9.3) ; l’organisateur qui retire les points d’un conducteur.</li>
 </ul>

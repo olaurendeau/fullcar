@@ -15,6 +15,7 @@ import { validateDriver, validateDriverPhone } from "@/domain/person";
 import type { VisibleCar, VisibleDevicePerson } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
 import { passengersFit, RIDE_SEATS_DEFAULT, validateRide, validSeats } from "@/domain/ride";
+import type { StopLineErrors } from "@/domain/stop";
 import { currentDriver, driverChoice, NEW_DRIVER, passengerCandidates } from "@/domain/tap";
 import { wallClockAsUtc, wallClockParts, type WallClock } from "@/domain/wall-clock";
 import { useFormatDate } from "@/i18n/format-date";
@@ -31,6 +32,8 @@ import { PlaceField } from "./place-field";
 import type { PlaceValue } from "./place-field-state";
 import { rideChange, type RideChange } from "./ride-change";
 import { rideErrorMessage } from "./ride-error";
+import { StopsFields, stopControlName } from "./stops-fields";
+import { lineErrors, stopsToSend, type StopLine } from "./stops-state";
 
 /**
  * What the form sends, before its creation ids: who drives, the car on the tab's leg (R4),
@@ -43,6 +46,8 @@ export interface RideDraft extends Record<"location" | "time" | "seats" | "note"
   position: Position | null;
   driver: { kind: "device"; personId: string; phone?: string } | { kind: "new"; firstName: string; phone: string };
   otherLeg?: { kind: "keep" | "withoutCar" | "notConcerned" } | { kind: "drive"; location: string; position: Position | null; time: string };
+  /** The Stops of the aller (« Points de RDV »), none when the form has none to send (RV1.7). */
+  stops?: StopLine[];
 }
 
 /** An offer as the form sends it; sending, and where a failure is said, as for a registration. */
@@ -68,7 +73,9 @@ type CreationIds = Record<"rideId" | "personId" | "otherRideId", string>;
 export type Offered =
   | Exclude<Registration, { kind: "errors" }>
   | { kind: "errors"; errors: OfferErrors; first: OfferField }
-  | { kind: "driverWithoutPhone" };
+  | { kind: "driverWithoutPhone" }
+  /** The option « Points de RDV » was turned off since the page showed it (RV1.9): said in the form, which keeps its input. */
+  | { kind: "stopsOff" };
 
 /** Offers a car (R4): the device's token if the driver is new, then the form's creation ids, then the request. */
 export type OfferRide = (offering: Offering) => Promise<Offered | undefined>;
@@ -92,7 +99,11 @@ export interface Changing extends FromSheet, Pick<Registering, "sending"> {
  * What became of a change, as for an offer, which changes no driver; `passengersChanged` gives
  * how many passengers there are now (C8.5).
  */
-export type Changed = Exclude<Offered, { kind: "driverWithoutPhone" }> | { kind: "passengersChanged"; passengers: number };
+export type Changed =
+  | Exclude<Offered, { kind: "driverWithoutPhone" }>
+  | { kind: "passengersChanged"; passengers: number }
+  /** The departure moved to the time of the first Stop recorded, or after it (RV1.10): `time`, `HH:MM`, is that Stop's. */
+  | { kind: "afterStop"; time: string };
 
 /** Changes one of the device's cars (R8), with the device's token. */
 export type UpdateRide = (changing: Changing) => Promise<Changed | undefined>;
@@ -119,12 +130,14 @@ interface FormProps {
   offerRide: OfferRide;
   /** The event's position, which brings the suggestions for a car's places closer (AL4.1). */
   near?: Position | null;
+  /** The option « Points de RDV » is on: the aller's form has its section (RV1.1). */
+  stopsOn?: boolean;
 }
 
 /** What the form does: offer a car on a leg, or change one of the device's (C8.2). */
 type FormMode =
-  | ({ kind: "offer" } & Pick<FormProps, "persons" | "other" | "offerRide" | "near">)
-  | ({ kind: "edit"; car: VisibleCar; updateRide: UpdateRide } & Pick<FormProps, "near">);
+  | ({ kind: "offer" } & Pick<FormProps, "persons" | "other" | "offerRide" | "near" | "stopsOn">)
+  | ({ kind: "edit"; car: VisibleCar; updateRide: UpdateRide } & Pick<FormProps, "near" | "stopsOn">);
 
 /** `driverPhone`, the number a person of the device without one gives to drive (v4.8 rule 7): its errors are `phone`'s. */
 type FieldName = Exclude<OfferField, "passengers" | "stops"> | "driverPhone";
@@ -223,7 +236,7 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
  * (C8.4). Each opening is a new form: the one that sent may be gone. Closed, after a success
  * too, the sheet gives the focus back to « Modifier » (Radix's default).
  */
-export function EditRideButton({ car, at, updateRide, near }: { car: VisibleCar; at: WallClock; updateRide: UpdateRide } & Pick<FormProps, "near">) {
+export function EditRideButton({ car, at, updateRide, near, stopsOn }: { car: VisibleCar; at: WallClock; updateRide: UpdateRide } & Pick<FormProps, "near" | "stopsOn">) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(0);
@@ -253,7 +266,7 @@ export function EditRideButton({ car, at, updateRide, near }: { car: VisibleCar;
         key={opened}
         leg={car.leg}
         at={at}
-        mode={{ kind: "edit", car, updateRide, near }}
+        mode={{ kind: "edit", car, updateRide, near, stopsOn }}
         open={() => isOpen.current}
         onDone={() => toggle(false)}
         onStep={setChoosing}
@@ -297,14 +310,22 @@ function RideForm({
   const editing = mode.kind === "edit" ? mode : undefined;
   // The other leg as the sheet opened with it (the page holds it while the sheet shows), until
   // its own send is refused by `noRetour` (decision 41): the aller alone, then.
-  const [problem, setProblem] = useState<"offline" | "failed" | "noRetour" | null>(null);
+  const [problem, setProblem] = useState<"offline" | "failed" | "noRetour" | "stopsOff" | null>(null);
   const [gone, setGone] = useState(false);
   const { persons, other } = mode.kind === "offer" ? { ...mode, other: gone ? undefined : mode.other } : { persons: [], other: undefined };
-  // What the form showed, in `edit` mode, its place with its position: a field left as it was is not sent (#208).
+  // « Points de RDV »: on the aller, option on (RV1.1). Absent from the DOM otherwise. As the form opened:
+  // an option turned off since keeps the section, and its input, until the form says so (RV1.9).
+  const [withStops] = useState(mode.stopsOn === true && leg === "aller");
+  // What the form showed, in `edit` mode, its place with its position, and its Stops: a field left as it was is not sent (#208).
   const [shown] = useState(() => {
     const car = editing?.car;
-    return car && { location: car.location, position: car.position, time: car.departureTime.slice(0, 5), seats: String(car.seats), note: car.note ?? "" };
+    const stops = withStops && car ? car.stops.map(({ id, location, position, time }) => ({ id, location, position, time: time.slice(0, 5) })) : undefined;
+    return car && { location: car.location, position: car.position, time: car.departureTime.slice(0, 5), seats: String(car.seats), note: car.note ?? "", stops };
   });
+  const [stops, setStops] = useState<StopLine[]>(() => shown?.stops ?? []);
+  // The errors of the Stops by line, said at the send (RV1.4); the first Stop's time a departure must precede (RV1.10).
+  const [stopErrors, setStopErrors] = useState<Record<string, StopLineErrors | undefined>>({});
+  const [afterStop, setAfterStop] = useState<string | null>(null);
   const { candidates, chosen } = driverChoice(persons);
   const [picked, setDriver] = useState(chosen);
   // A choice the page's state no longer allows is none (review of #200).
@@ -324,7 +345,7 @@ function RideForm({
   }));
   const placeOf = (name: PlaceName): PlaceValue => ({ text: values[name], ...marks[name === "otherLocation" && follows ? "location" : name] });
   // The car as the form holds it, in `edit` mode: what `rideChange` compares with `shown`.
-  const edited = () => ({ ...values, position: placeOf("location").position });
+  const edited = () => ({ ...values, position: placeOf("location").position, stops: withStops ? stops : undefined });
   // The other leg follows who drives, from her state there (v4-8).
   const there = driver === NEW_DRIVER ? undefined : other?.persons.find((person) => person.id === driver)?.state;
   const otherField = other && otherLegField(there ?? "new");
@@ -344,7 +365,7 @@ function RideForm({
   // In `edit` mode: the step shown, by its round, a new one at each refusal (C8.5), and that refusal said.
   const [step, setStep] = useState<number | null>(null);
   const [changed, setChanged] = useState(false);
-  const alert = problem ? tActions(problem) : changed ? tChanges("changed") : null;
+  const alert = problem === "stopsOff" ? t("stops.off") : problem ? tActions(problem) : changed ? tChanges("changed") : null;
   // « Annuler » pressed in the step: the seats take the focus once the form shows again, and only then.
   const backFromStep = useRef(false);
   const creationIds = useRef<CreationIds | undefined>(undefined);
@@ -378,7 +399,8 @@ function RideForm({
     const active = document.activeElement;
     if (sending || step !== null) return;
     // The other leg gone from the form, wherever the focus was: « Valider » (M7.6).
-    if (problem === "noRetour") {
+    // The option turned off (RV1.9), as the other leg gone: « Valider », wherever the focus was.
+    if (problem === "noRetour" || problem === "stopsOff") {
       submitButton.current?.focus();
       return;
     }
@@ -387,8 +409,23 @@ function RideForm({
     else if (back) document.getElementById(`${ids}-seats`)?.focus();
   }, [problem, changed, sending, step, ids]);
 
-  function showErrors(found: OfferErrors, missing: boolean, first: OfferField | undefined) {
+  // The first error in the order of the form: the place and the time of the car, then its Stops, then the rest.
+  const firstError = (ride: OfferField | undefined, lines: { errors: Record<string, StopLineErrors>; first: string } | undefined) =>
+    ride === "location" || ride === "time" ? ride : (lines?.first ?? ride);
+
+  // The Stops' errors by line id, and the control of the first one in error (RV1.4).
+  function stopsFound(stopList: StopLine[]) {
+    const found = withStops ? lineErrors(stopList, values.time) : undefined;
+    if (!found) return undefined;
+    const errors = Object.fromEntries(stopList.map((line, at) => [line.id, found.errors[at]]));
+    const first = stopList[found.first];
+    return { errors, first: stopControlName(first.id, found.errors[found.first].location ? "place" : "time") };
+  }
+
+  function showErrors(found: OfferErrors, missing: boolean, first: string | undefined) {
     setProblem(null);
+    setStopErrors({});
+    setAfterStop(null);
     setErrors(found);
     setNoDriver(missing);
     // The seats sent, which the message of too many ticked counts, whatever is typed since.
@@ -424,6 +461,15 @@ function RideForm({
     // Done, or its car's retour gone (rule 9): the sheet closes.
     else if (answer.kind === "done" || answer.kind === "noRetour") onDone();
     else if (answer.kind === "problem") setProblem(answer.problem);
+    // The option turned off (RV1.9): said above « Valider », the input kept, the focus on it.
+    else if (answer.kind === "stopsOff") setProblem("stopsOff");
+    // The departure at the time of a Stop recorded, or after it (RV1.10): the field in error, the Stops untouched.
+    else if (answer.kind === "afterStop") {
+      setStep(null);
+      showErrors({}, false, undefined);
+      setAfterStop(answer.time);
+      focusing.current = "time";
+    }
     else {
       setChanged(true);
       setStep((round) => (seats < answer.passengers ? (round ?? 0) + 1 : null));
@@ -438,7 +484,11 @@ function RideForm({
       // sent, the step does not open, and the bar keeps what it holds (v4.4.5, #313).
       if (shown && rideChange(shown, edited()).fields.length === 0) return onDone();
       const ride = validateRide(values);
-      if (!ride.ok) return showErrors(ride.errors, false, ride.first);
+      const lines = stopsFound(stops);
+      if (!ride.ok || lines) {
+        showErrors(!ride.ok ? ride.errors : {}, false, firstError(!ride.ok ? ride.first : undefined, lines));
+        return setStopErrors(lines?.errors ?? {});
+      }
       showErrors({}, false, undefined);
       const seen = mode.car.passengers.map(({ id }) => id);
       if (ride.ride.seats >= seen.length) return change(seen, [], ride.ride.seats);
@@ -456,10 +506,13 @@ function RideForm({
     const seats = validSeats(values.seats);
     const tooMany: OfferErrors = seats !== undefined && !passengersFit(boarding.length, seats) ? { passengers: "tooMany" } : {};
     const lastFirst = otherErrors.otherLocation ? "otherLocation" : otherErrors.otherTime ? "otherTime" : tooMany.passengers && "passengers";
-    if (driver === undefined || person?.ok === false || given?.ok === false || !ride.ok || lastFirst) {
+    const lines = stopsFound(stops);
+    if (driver === undefined || person?.ok === false || given?.ok === false || !ride.ok || lines || lastFirst) {
       const found = { ...(person?.ok === false && person.errors), ...(given?.ok === false && given.errors), ...(!ride.ok && ride.errors), ...otherErrors, ...tooMany };
-      const first = person?.ok === false ? person.first : given?.ok === false ? given.first : !ride.ok ? ride.first : lastFirst;
-      return showErrors(found, driver === undefined, first);
+      const rideFirst = firstError(!ride.ok ? ride.first : undefined, lines) ?? lastFirst;
+      const first = person?.ok === false ? person.first : given?.ok === false ? given.first : rideFirst || undefined;
+      showErrors(found, driver === undefined, first);
+      return setStopErrors(lines?.errors ?? {});
     }
     showErrors({}, false, undefined);
     const { firstName, phone, driverPhone, otherLocation, otherTime, ...car } = values;
@@ -469,6 +522,8 @@ function RideForm({
     const name = person?.ok ? person.person.firstName : (candidates.find((candidate) => candidate.id === driver)?.firstName ?? "");
     const legs = kind === "drive" ? [leg, otherLegOf(leg)] : [leg];
     const sheet = sends([], legs.map((offered) => `offer:${offered}:${isNew ? `new:${name}` : driver}`));
+    // Without a point, as before (RV1.7).
+    const sentStops = withStops ? stopsToSend(undefined, stops) : undefined;
     const answer = await mode.offerRide({
       offer: {
         leg,
@@ -476,6 +531,7 @@ function RideForm({
         position: placeOf("location").position,
         driver: isNew ? { kind: "new", firstName, phone } : { kind: "device", personId: driver, ...(asksPhone && { phone: driverPhone }) },
         otherLeg,
+        ...(sentStops && { stops: sentStops }),
       },
       passengers: boarding,
       notDone: { kind: "offerRide", driver: name, legs: kind === "drive" ? "both" : leg },
@@ -491,6 +547,8 @@ function RideForm({
       if (sheet.inSheet()) onDone(boarding.length > 0 && rideId ? () => focusFirstShown([focusCar(leg, rideId)]) : undefined);
     } else if (answer?.kind === "errors") showErrors(answer.errors, false, answer.first);
     else if (answer?.kind === "problem" && sheet.inSheet()) setProblem(answer.problem);
+    // The option turned off since the page showed it (RV1.9): said above « Valider », the input kept.
+    else if (answer?.kind === "stopsOff" && sheet.inSheet()) setProblem("stopsOff");
     // Her number emptied elsewhere: the state shows her without one, and her field, empty, in
     // error, the focus in it once it shows (v4.8 rule 7, state 18). The rest is kept.
     else if (answer?.kind === "driverWithoutPhone" && sheet.inSheet()) {
@@ -509,7 +567,9 @@ function RideForm({
   }
 
   const field = (name: FieldName, label: string, control: Control, hint?: string) => {
-    const message = messageOf(errors, name);
+    const found = messageOf(errors, name);
+    // The departure at the time of a Stop recorded, or after it (RV1.10): the field's error, with that time.
+    const message = name === "time" && afterStop !== null ? { text: t("stops.afterStop", { time: afterStop }) } : found && { text: tErrors(found.key, found.values) };
     // Never both shown: a number is who drives', and its errors, its id and its focus are `phone`'s.
     const id = name === "driverPhone" ? "phone" : name;
     const describedBy = [message && idOf(`${id}-error`), hint && idOf(`${id}-hint`)].filter(Boolean).join(" ");
@@ -537,7 +597,7 @@ function RideForm({
         )}
         {message && (
           <p id={idOf(`${id}-error`)} className="text-[13px] leading-[18px] text-destructive">
-            {tErrors(message.key, message.values)}
+            {message.text}
           </p>
         )}
         {hint && (
@@ -662,6 +722,7 @@ function RideForm({
       )}
       {place("location", t(`location.${leg}`))}
       {field("time", t("time"), { type: "time" }, t("timeHint", { date: formatDate(wallClockAsUtc(at), { dateStyle: "full" }) }))}
+      {withStops && <StopsFields prefix={ids} lines={stops} onChange={setStops} departure={values.time} errors={stopErrors} near={mode.near} locked={sending} />}
       {field("seats", t("seats"), { type: "text", inputMode: "numeric" }, t("seatsHint"))}
       {field("note", t("note"), "textarea", t("noteHint"))}
       {other && otherField && (
