@@ -33,7 +33,7 @@ import type { PlaceValue } from "./place-field-state";
 import { rideChange, type RideChange } from "./ride-change";
 import { rideErrorMessage } from "./ride-error";
 import { StopsFields, stopControlName } from "./stops-fields";
-import { lineErrors, stopsToSend, type StopLine } from "./stops-state";
+import { lineErrors, removedWithPassengers, stopsToSend, type KnownStop, type StopLine } from "./stops-state";
 
 /**
  * What the form sends, before its creation ids: who drives, the car on the tab's leg (R4),
@@ -91,6 +91,8 @@ export interface Changing extends FromSheet, Pick<Registering, "sending"> {
   ride: RideChange;
   seenPassengerIds: string[];
   leaving: string[];
+  /** A Stop that people had chosen is removed by this change: the page says nobody is told (RV6.1). */
+  stopsRemoved: boolean;
   /** What the bar says was not done: the changes to this car, named by its driver and its leg (C11.11). */
   notDone: NotDone;
 }
@@ -326,6 +328,9 @@ function RideForm({
   // The errors of the Stops by line, said at the send (RV1.4); the first Stop's time a departure must precede (RV1.10).
   const [stopErrors, setStopErrors] = useState<Record<string, StopLineErrors | undefined>>({});
   const [afterStop, setAfterStop] = useState<string | null>(null);
+  // The Stops of the car that people chose, and those the form no longer holds (RV6.1): their note stays until « Valider ».
+  const known = (editing && withStops ? editing.car.stops : []).map((stop): KnownStop => ({ id: stop.id, location: stop.location, passengers: stop.passengerIds.length }));
+  const removed = removedWithPassengers(known, stops);
   const { candidates, chosen } = driverChoice(persons);
   const [picked, setDriver] = useState(chosen);
   // A choice the page's state no longer allows is none (review of #200).
@@ -449,6 +454,8 @@ function RideForm({
       ride,
       seenPassengerIds: seen,
       leaving,
+      // Those who boarded at a Stop removed are at the departure now, and nobody is told (RV6.1).
+      stopsRemoved: removed.length > 0,
       sending: setSending,
       notDone: { kind: "editRide", driver: editing.car.driver.firstName, leg },
       ...sheet,
@@ -722,7 +729,7 @@ function RideForm({
       )}
       {place("location", t(`location.${leg}`))}
       {field("time", t("time"), { type: "time" }, t("timeHint", { date: formatDate(wallClockAsUtc(at), { dateStyle: "full" }) }))}
-      {withStops && <StopsFields prefix={ids} lines={stops} onChange={setStops} departure={values.time} errors={stopErrors} near={mode.near} locked={sending} />}
+      {withStops && <StopsFields prefix={ids} lines={stops} onChange={setStops} departure={values.time} errors={stopErrors} removed={removed} near={mode.near} locked={sending} />}
       {field("seats", t("seats"), { type: "text", inputMode: "numeric" }, t("seatsHint"))}
       {field("note", t("note"), "textarea", t("noteHint"))}
       {other && otherField && (

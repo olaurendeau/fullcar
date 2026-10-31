@@ -10,7 +10,7 @@ import { RIDE_LOCATION_MAX } from "@/domain/ride";
 import type { StopLineErrors } from "@/domain/stop";
 import { cn } from "@/lib/utils";
 import { PlaceField } from "./place-field";
-import { addStop, atMaximum, removeStop, sortByTime, type StopLine } from "./stops-state";
+import { addStop, atMaximum, removeStop, sortByTime, type KnownStop, type StopLine } from "./stops-state";
 
 /** The ids of a line's controls in the DOM, under the form's: where the focus goes (RV1.2, RV1.4, RV1.6). */
 export const stopControlName = (id: string, part: "place" | "time" | "remove") => `stop-${id}-${part}`;
@@ -22,7 +22,9 @@ const addId = (prefix: string) => `${prefix}-stops-add`;
  * #881, RV1): the lines, each a place (`PlaceField`, as the departure's) and a time, « Retirer »,
  * and « Ajouter un point de RDV », six lines at most. The lines are the form's (`onChange`); a
  * line is reclassed by time as its time field is left, and the `status` says so only when the
- * order changed (RV1.5). The errors are by line id, said by the form at its send (RV1.4).
+ * order changed (RV1.5). The errors are by line id, said by the form at its send (RV1.4). A line
+ * removed that people chose as their point of boarding (`removed`, RV6.1) leaves its note, which
+ * stays until « Valider »: nothing is deleted before.
  */
 export function StopsFields({
   prefix,
@@ -30,6 +32,7 @@ export function StopsFields({
   onChange,
   departure,
   errors,
+  removed,
   near,
   locked,
 }: {
@@ -39,6 +42,8 @@ export function StopsFields({
   /** The departure's time as typed, which the lines must follow. */
   departure: string;
   errors: Record<string, StopLineErrors | undefined>;
+  /** The Stops removed that people chose: they board at the departure once the form is sent. */
+  removed: readonly KnownStop[];
   near?: Position | null;
   /** The form is sending: nothing is asked of the suggestions. */
   locked: boolean;
@@ -151,6 +156,15 @@ export function StopsFields({
             </div>
           );
         })}
+        {/* A live region present before the first note, so that a screen reader announces it (as « sorted »). */}
+        <div role="status" className="flex min-w-0 flex-col gap-3 empty:hidden">
+          {removed.map((stop) => (
+            <div key={stop.id} className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-destructive p-3.5">
+              <span className="text-sm font-semibold wrap-anywhere">{stop.location}</span>
+              <p className="text-[13px] leading-[18px] wrap-anywhere">{t("boarding", { count: stop.passengers })}</p>
+            </div>
+          ))}
+        </div>
         {atMaximum(lines) ? (
           <p className="text-[13px] leading-[18px] text-muted-foreground">{t("max")}</p>
         ) : (

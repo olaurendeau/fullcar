@@ -243,6 +243,7 @@
       "max": "6 points at most.",
       "sorted": "Points sorted by time.",
       "timeAfter": "The time must be after {time}, the departure time.",
+      "boarding": "{count, plural, one {# person boards here: they will board at the departure place.} other {# people board here: they will board at the departure place.}}",
       "positionRemove": "Remove the position of point {n}",
       "positionSaved": "Position saved"
     }
