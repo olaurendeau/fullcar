@@ -44,7 +44,7 @@ async function pendingWithLink(db: Kysely<Database>, email = anAddress(), age = 
 /** The event confirmed by another link: its address and the result of its email cleared, an account of its own. */
 async function alreadyConfirmed(db: Kysely<Database>, id: string) {
   await db.updateTable("event").set({ pending_email: null, send_status: null, send_status_at: null }).where("id", "=", id).execute();
-  await confirmSeededEvent(db, id);
+  return confirmSeededEvent(db, id);
 }
 
 describe("openWithLoginLink (OA5.2, OA5.4, OA5.5, OA5.7, OA5.9)", () => {
@@ -254,9 +254,11 @@ describe("openWithConfirmationLink (OA5.3, OA5.4, OA5.6, decision 3)", () => {
   it("OA5.4: an event confirmed in another way says used, and no session opens", async () => {
     await withRollbackRecordingSends(async (trx) => {
       const { id, token } = await pendingWithLink(trx);
-      await alreadyConfirmed(trx, id);
+      const accountId = await alreadyConfirmed(trx, id);
+      // The database is shared: sessions committed by other test files sit in `session`, so only this account's rows count.
+      await seedSession(trx, await seedAccount(trx));
       expect(await openWithConfirmationLink(trx, token, "fr")).toEqual({ state: "used" });
-      expect(await trx.selectFrom("session").select("token_hash").execute()).toEqual([]);
+      expect(await trx.selectFrom("session").select("token_hash").where("account_id", "=", accountId).execute()).toEqual([]);
     });
   });
 
