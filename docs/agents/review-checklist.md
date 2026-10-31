@@ -31,15 +31,19 @@ celui qui écrit le code.
   session du compte lit `ended`, une autre session `notYours`, personne `signIn`. Ce que
   chaque action répond quand l'accès est refusé, et n'écrit rien alors :
   - `loadOrganiserPanel` : hors du panneau, ne contient que l'état que la règle décide
-    (`orphan`, `ended`, `pending`, `notYours`, `signIn`) et aucune donnée du panneau ;
-    `notYours` n'ajoute que l'adresse de la session du visiteur. Elle ne répond
-    `{ state: "invalid" }` qu'à un identifiant inconnu ou mal formé.
+    (`orphan`, `ended`, `pending`, `notYours`, `signIn`) et aucune donnée du panneau, sauf
+    deux : `notYours` n'ajoute que l'adresse de la session du visiteur, et, depuis #868,
+    `ended` répond à la session du compte de l'événement ce qu'il en reste (titre, lieu,
+    dates) et le jour 30 (`erasedOn`), jamais à une autre session ni à un jeton seul. Elle
+    ne répond `{ state: "invalid" }` qu'à un identifiant inconnu ou mal formé.
   - `updateEvent` : `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement
     inconnu ou mal formé, puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un
     événement anonymisé, quels que soient le jeton et la session : l'anonymisation a effacé
     le hash du jeton (« La purge » dans `architecture.md`) ; puis
     `{ ok: false, error: "invalid" }` quand la règle n'ouvre rien.
-  - `removePersonAsOrganiser` : `{ ok: false, error: "eventNotFound" }` à un identifiant
+  - `removePersonAsOrganiser` : `{ ok: false, error: "invalid" }` à un identifiant de
+    personne mal formé, avant tout contrôle de l'accès (RP3.4) ; puis
+    `{ ok: false, error: "eventNotFound" }` à un identifiant
     d'événement inconnu ou mal formé, puis `{ ok: false, error: "noOrganiserAccess" }` quand
     la règle n'ouvre rien, y compris sur un événement anonymisé.
   - `resendEmail` : `{ ok: false, error: "eventNotFound" }`, puis `"eventEnded"` à un
