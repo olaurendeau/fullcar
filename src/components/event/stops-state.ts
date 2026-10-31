@@ -66,3 +66,18 @@ export function stopsToSend(shown: readonly StopLine[] | undefined, current: Sto
   const same = shown.length === current.length && shown.every((line, at) => sameLine(line, current[at]));
   return same ? undefined : current;
 }
+
+/** A Stop the car has, as the page shows it: how many people chose it as their point of boarding. */
+export interface KnownStop {
+  id: string;
+  location: string;
+  passengers: number;
+}
+
+/**
+ * RV6.1: the Stops of the car that people chose and that the form no longer holds, in the car's
+ * order. A line kept or changed (RV6.2) is in the form; one added has an id the car does not know.
+ */
+export function removedWithPassengers(known: readonly KnownStop[], lines: readonly StopLine[]): KnownStop[] {
+  return known.filter((stop) => stop.passengers > 0 && !lines.some((line) => line.id === stop.id));
+}
