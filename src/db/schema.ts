@@ -33,6 +33,10 @@ export type SendStatusColumn = "sending" | "sent" | "failed" | "address_limit";
  * of an event with an account, after which it has no token and no position.
  * From #706 (epic #654): `description` is 1 to 1000 code points, null when there is none,
  * and null once anonymised.
+ * From #940 (epic #935): `transfer_email` is the address the organiser hands the event over
+ * to, written as `pending_email` is; `transfer_status` and `transfer_status_at` are the last
+ * result of the handover email, as `send_status` is. The three are null together, and only an
+ * event with a confirmed account, not anonymised, may have them.
  */
 export interface EventTable {
   id: string;
@@ -54,6 +58,9 @@ export interface EventTable {
   send_status_at: Date | null;
   anonymised_at: Date | null;
   description: string | null;
+  transfer_email: string | null;
+  transfer_status: SendStatusColumn | null;
+  transfer_status_at: Date | null;
 }
 
 /** The two legs of an Event, as stored: `retour` only when the event has one. */
