@@ -104,7 +104,7 @@ export function LegPanel({
   const tBoard = useTranslations("Board");
   const { leg, cars, withoutCar } = board;
   const legDate = wallClockParts(at).date;
-  const seats = useSeatSheet(board, device, hasRetour);
+  const seats = useSeatSheet(board, device, hasRetour, legDate);
   // A car is the device's when one of its persons drives it on this leg (C8.1).
   const drivesIt = (rideId: string) => board.device.some(({ state }) => state.kind === "driver" && state.rideId === rideId);
 

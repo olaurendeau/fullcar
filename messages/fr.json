@@ -102,6 +102,8 @@
       "seats": "Places",
       "freeSeat": "Place libre",
       "takeSeat": "Place libre : prendre une place dans la voiture de {driver}",
+      "stops": "Points de RDV",
+      "boardsAt": "monte à {place}",
       "edit": "Modifier",
       "remove": "Retirer la voiture"
     },
@@ -322,7 +324,13 @@
       "retour": "Toutes vos personnes sont déjà dans une voiture pour le retour."
     },
     "notEnoughSeats": "Il n’y a plus assez de places : personne n’a été placé.",
-    "placed": "{names} sont dans la voiture de {driver}"
+    "placed": "{names} sont dans la voiture de {driver}",
+    "stop": {
+      "legend": "Point de montée",
+      "start": "{place} · {time} · Lieu de départ",
+      "option": "{place} · {time}",
+      "gone": "{count, plural, one {Ce point n’existe plus : {names} monte au lieu de départ.} other {Ce point n’existe plus : {names} montent au lieu de départ.}}"
+    }
   },
   "Seat": {
     "placed": "{firstName} est dans la voiture de {driver}",
