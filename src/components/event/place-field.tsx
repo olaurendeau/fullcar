@@ -65,6 +65,7 @@ export function PlaceField({
   near = null,
   locked = false,
   readOnly = false,
+  removeLabel,
   error,
   hint,
 }: {
@@ -78,6 +79,8 @@ export function PlaceField({
   near?: Position | null;
   locked?: boolean;
   readOnly?: boolean;
+  /** The accessible name of « Retirer » when « Retirer la position ({field}) » does not fit (a point of RDV's, RV1.8). */
+  removeLabel?: string;
   /** The field's error: its message, and the id that describes the field. */
   error?: { id: string; message: string };
   /** A sentence under the field, after its position: who sees a car's place (AL4.4). */
@@ -261,7 +264,7 @@ export function PlaceField({
           </span>
           <button
             type="button"
-            aria-label={t("removeLabel", { field: label })}
+            aria-label={removeLabel ?? t("removeLabel", { field: label })}
             aria-disabled={state.locked || undefined}
             onClick={remove}
             className="min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium underline underline-offset-3 focus-visible:focus-ring aria-disabled:opacity-50"

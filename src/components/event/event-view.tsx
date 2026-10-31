@@ -18,6 +18,8 @@ export interface EventViewProps extends EventHeader {
   board: VisibleBoard;
   /** What the page knows of the device's persons (#87). */
   device: BoardDevice;
+  /** The organiser's option « Points de RDV » is on: the forms of a car on the aller have their section (epic #881). */
+  stopsOn?: boolean;
   /** The page's bar of messages: in the DOM after the header, before the legs. */
   messageBar: ReactNode;
   /** The active tab, the page's: « Voir la voiture » makes its leg's active (#89). */
@@ -47,7 +49,7 @@ function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
  * The page is settled once the device's persons are read, or none, or failed, and on `/admin`
  * once the first check of the link is over: from then on, for good, a map may start (v29).
  */
-export function EventView({ title, location, locationPosition, allerAt, retourAt, description, board, device, messageBar, tab, onTab, hint, linkChecking = false }: EventViewProps) {
+export function EventView({ title, location, locationPosition, allerAt, retourAt, description, board, device, stopsOn, messageBar, tab, onTab, hint, linkChecking = false }: EventViewProps) {
   const t = useTranslations("Event.legs");
   const legs = retourAt ? (["aller", "retour"] as const) : (["aller"] as const);
   const [mapOpen, setMapOpen] = useState(true);
@@ -82,6 +84,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           aller={legOf(board, "aller")}
           retour={legOf(board, "retour")}
           device={device}
+          stopsOn={stopsOn}
           location={location}
           near={locationPosition}
           tab={tab}
@@ -95,7 +98,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           <h2 id="leg-aller" className="sr-only">
             {t("aller")}
           </h2>
-          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} near={locationPosition} map={map} hint={hint} />
+          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} near={locationPosition} stopsOn={stopsOn} map={map} hint={hint} />
         </section>
       )}
     </div>

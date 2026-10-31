@@ -453,6 +453,8 @@ export function ParticipantBoard({
     // the retour goes from the sheet; closed, the bar says to offer the car again (decision 47).
     failedIn(sheet, { notDone, landmark, ...noRetourWhy(why, car.leg, "offerRide"), ...gone });
     if (outcome?.error === "driverWithoutPhone") return { kind: "driverWithoutPhone" };
+    // The option turned off since the page showed it (RV1.9): said in the sheet, the form kept.
+    if (outcome?.error === "stopsOff") return { kind: "stopsOff" };
     return why.kind === "noRetour" ? { kind: "noRetour" } : { kind: "problem", problem };
   };
 
@@ -604,12 +606,15 @@ export function ParticipantBoard({
     // `passengersChanged` is said in the step while it is open (C8.5). In the bar, the failure
     // names the car and its leg, then why, a refusal included.
     const problem = sent.ok ? "failed" : sent.problem;
-    // The refusals of the Stops have no word yet, and no form sends Stops (#889): the generic reason.
+    // In the bar, once the sheet is closed, the refusals of the Stops have no word of their own: the generic reason.
     const said = outcome?.error === "stopsOff" || outcome?.error === "stopErrors" || outcome?.error === "afterStop" ? "invalid" : outcome?.error;
     const why = said ? whyOf(said) : whyOf(problem);
     // A car of the retour once it is gone: the sheet closes (rule 9).
     failedIn(sheet, { notDone, why, landmark: focusCar(leg, rideId), closes: why.kind === "noRetour", leg });
     if (outcome?.error === "passengersChanged") return { kind: "passengersChanged", passengers: outcome.passengerIds.length };
+    // Said in the sheet (RV1.9, RV1.10): the form kept, nothing written.
+    if (outcome?.error === "stopsOff") return { kind: "stopsOff" };
+    if (outcome?.error === "afterStop") return { kind: "afterStop", time: outcome.firstStopTime };
     return why.kind === "noRetour" ? { kind: "noRetour" } : { kind: "problem", problem };
   };
 
@@ -617,6 +622,7 @@ export function ParticipantBoard({
     <EventView
       {...event}
       board={state.legs}
+      stopsOn={state.options.stops}
       tab={tab}
       onTab={setTab}
       hint={hint}

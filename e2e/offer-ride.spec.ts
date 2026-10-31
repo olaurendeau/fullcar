@@ -565,8 +565,9 @@ test.describe("offer a car", () => {
     await expect(withoutCar(panel(page))).toHaveText(["Tom"]);
   });
 
-  test("C4.9: with the three options on, the form is the same as without", async ({ db, page, seededEvent }) => {
-    const options = await seedEvent(db, { boostersEnabled: true, participationEnabled: true, stopsEnabled: true });
+  // « Points de RDV » adds its section to the aller's form (#889, RV1.1; e2e/ride-stops.spec.ts): it is left out here.
+  test("C4.9: with the options on but « Points de RDV », the form is the same as without", async ({ db, page, seededEvent }) => {
+    const options = await seedEvent(db, { boostersEnabled: true, participationEnabled: true, stopsEnabled: false });
     try {
       const shown: string[][] = [];
       for (const id of [seededEvent.id, options.id]) {
