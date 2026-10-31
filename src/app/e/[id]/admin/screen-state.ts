@@ -1,5 +1,6 @@
 import { whyOf, type NotDone, type Why } from "@/components/event/failure-words";
 import type { LegCounts } from "@/db/legs";
+import type { EmailError } from "@/domain/email-address";
 import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg, OrganiserPerson } from "@/domain/organiser-panel";
@@ -223,6 +224,34 @@ export function resendAnswer(sent: Sent<unknown>): ResendAnswer {
   if (pending && (pending.send === "sent" || pending.send === "failed")) return { kind: "answered", pending };
   if (answer?.ok === false && (answer.error === "tooMany" || answer.error === "notPending" || answer.error === "eventEnded")) return { kind: answer.error };
   return { kind: "notResent", offline: false };
+}
+
+/**
+ * What « Envoyer le lien » of « Corriger l’adresse » came to (OA2.5): the notice the server
+ * answers, `sent` (the sheet closes) or `failed` (the sheet stays open, with `FixEmail.offline`,
+ * the correction being kept all the same); the address it refused, with the code the field shows; the limit,
+ * which sent nothing; an event no longer awaiting confirmation; an event that ended, which the
+ * page then reads as such; or not sent, for want of a connection or any other reason, a refusal
+ * included: the sheet then says `FixEmail.offline`.
+ */
+export type FixAnswer =
+  | { kind: "answered"; pending: PendingNotice }
+  | { kind: "address"; reason: EmailError }
+  | { kind: "tooMany" | "notPending" | "eventEnded" | "notSent" };
+
+const ADDRESS_REASONS: readonly unknown[] = ["required", "invalid", "tooLong"] satisfies EmailError[];
+
+/** The answer of `fixEmail`, as the page takes it: anything it does not know is « not sent ». */
+export function fixAnswer(sent: Sent<unknown>): FixAnswer {
+  if (!sent.ok) return { kind: "notSent" };
+  const answer = sent.value as { ok?: unknown; pending?: unknown; error?: unknown; reason?: unknown } | null | undefined;
+  const pending = answer?.ok === true ? pendingNoticeOf(answer.pending) : undefined;
+  if (pending && (pending.send === "sent" || pending.send === "failed")) return { kind: "answered", pending };
+  if (answer?.ok === false && answer.error === "address" && ADDRESS_REASONS.includes(answer.reason)) {
+    return { kind: "address", reason: answer.reason as EmailError };
+  }
+  if (answer?.ok === false && (answer.error === "tooMany" || answer.error === "notPending" || answer.error === "eventEnded")) return { kind: answer.error };
+  return { kind: "notSent" };
 }
 
 /** What a read of the panel shows: its legs, and every person (none from a server before #671). */

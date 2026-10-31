@@ -19,7 +19,7 @@ p.lead,.n{color:var(--muted);max-width:78ch;margin:0 0 8px}.n{font-size:13px}
 .pt{display:flex;gap:8px;align-items:baseline}.pt time{font-variant-numeric:tabular-nums;min-width:42px;font-weight:600}
 .tl{list-style:none;margin:0;padding:0 0 0 10px;border-left:2px solid var(--a-border);display:flex;flex-direction:column;gap:6px}
 .pr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-height:44px;background:var(--a-mutedbg);border-radius:8px;padding:0 12px}
-.pr .x{flex:1;min-width:0}.seat{min-height:44px;border:1px dashed #0a0a0a40;border-radius:8px;display:flex;align-items:center;padding:0 12px;font-weight:500}
+.pr .x{flex:1 1 12ch;min-width:min(12ch,100%)}.seat{min-height:44px;border:1px dashed #0a0a0a40;border-radius:8px;display:flex;align-items:center;padding:0 12px;font-weight:500}
 .btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 14px;border-radius:8px;border:1px solid var(--a-border);font-weight:500;background:var(--a-bg)}
 .btn.p{background:var(--a-primary);color:var(--a-primary-fg);border-color:var(--a-primary)}.btn.sm{min-height:44px;padding:0 8px;font-size:13px;color:var(--a-primary)}
 .fld{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}.fld label{font-weight:500}
@@ -55,6 +55,7 @@ svg{display:block;max-width:100%}
 <li><b>D1, porte (tranchée) :</b> l’option « Points de RDV » s’active aussi dans « Modifier l’événement » (section 1 bis). Elle n’est jamais désactivable tant qu’un point existe : la case reste cochée, verrouillée, avec la raison écrite.</li>
 <li><b>D2, un tap (tranchée) :</b> sur une voiture <i>avec</i> des points, le tap sur une place libre ouvre toujours la feuille, le départ coché par défaut (même pour une seule personne). Une voiture <i>sans</i> point garde le tap unique. <code>product.md</code> (« Arrêts ») est amendé : voir la liste « À faire dans la tâche » en fin de page.</li>
 <li><b>D3, mot (tranchée) :</b> « Points de RDV » à l’écran, « Arrêt » (<code>Stop</code>) dans le code, comme le glossaire. Le glossaire dit « au retour, ce sont des points de dépose » : hors périmètre, à relire quand le retour viendra.</li>
+<li><b>D4, v3 (demande du propriétaire, test en production) :</b> sur une voiture <i>avec</i> des points, <b>chaque ligne de passager dit où il monte, pour tout le monde</b> : « monte à {lieu} » ou « monte au départ ». Avant, le départ ne disait rien, sauf aux personnes de l’appareil : « Léa » sans phrase ne se distinguait pas d’un « on ne sait pas ». « Changer le point » reste sur les personnes de l’appareil seulement. Une voiture sans point ne dit rien (section 2). Rien de stocké ni de visible de plus : voir la note de la section 8.</li>
 <li>Lieu d’un point : le <b>même champ</b> que le lieu de départ (<code>PlaceField</code> : texte libre, position seulement si une proposition est choisie, #237 déjà livré). Rien n’attend l’auto-complétion ; sans position, le point est dans la liste mais pas sur la carte.</li>
 <li>6 points au plus par voiture ; heure strictement après l’heure de départ de la voiture ; classés par heure (à égalité, l’ordre de saisie) ; un seul point de montée par tap, pour toutes les personnes placées ensemble.</li>
 <li>Un passager sans point choisi est « au départ » (valeur vide, jamais un point inventé). Un point retiré renvoie ses passagers au départ, sans prévenir personne (comme « Retirer la voiture »).</li>
@@ -144,13 +145,19 @@ svg{display:block;max-width:100%}
    <li class="pt"><time>08:25</time><span>Prelles boucherie</span></li>
    <li class="pt"><time>08:35</time><span>Briançon carrefour</span></li>
    <li class="pt"><time>08:50</time><span>Monétier</span></li></ul>
-  <div class="pr"><span class="x">Paul</span><span class="m s">monte à Prelles boucherie</span></div>
-  <div class="pr"><span class="x">Léa</span></div>
+  <div class="pr"><span class="x">Paul</span><span class="m s" style="flex-basis:100%">monte à Prelles boucherie</span></div>
+  <div class="pr"><span class="x">Léa</span><span class="m s" style="flex-basis:100%">monte au départ</span></div>
   <div class="seat">+ Place libre</div></div></div>
-  <p class="n">Le départ garde sa ligne actuelle (lieu, heure en tête de fiche). Les points, sous elle, par heure ; aucune ligne s’il n’y en a pas. « monte à … » seulement pour un passager d’un point : au départ, rien (comme aujourd’hui).</p></div>
+  <p class="n"><b>v3.</b> Le départ garde sa ligne actuelle (lieu, heure en tête de fiche). Les points, sous elle, par heure ; aucune ligne s’il n’y en a pas. <b>Chaque passager</b> d’une voiture à points dit où il monte, sur son appareil comme sur celui des autres : « monte à … » à un point, « monte au départ » au lieu de départ. Ici aucun des deux n’a le bouton : c’est un autre appareil.</p></div>
  <div class="col"><span class="cap">Voiture sans point : inchangée</span><div class="ph"><div class="card">
   <div class="hd"><span>Voiture de Sam</span><span>09:00</span></div><div class="s">📍 Valence</div>
-  <div class="seat">+ Place libre</div></div></div></div>
+  <div class="seat">+ Place libre</div></div></div>
+  <p class="n">Aucun point : aucune liste, et aucun passager ne dit où il monte (il n’y a qu’un lieu). Inchangé. Sur la voiture de Nina, si le conducteur retire tous ses points, la voiture redevient celle-ci : les phrases disparaissent avec la liste.</p></div>
+ <div class="col"><span class="cap">v3, 360 px : le pire cas d’une ligne</span><div class="ph"><div class="card">
+  <div class="hd"><span>Voiture de Nina</span><span>08:00</span></div>
+  <div class="pr" style="padding-block:6px"><span class="x">Jean-Baptiste-Alexandre</span><span class="btn sm" style="color:#0a0a0a;text-decoration:underline;white-space:nowrap">+33 6 12 34 56 78</span><span class="btn sm" style="text-decoration:underline">Changer le point</span><span class="m s" style="flex-basis:100%">monte à Station de ravitaillement du col de l’Échelle, parking nord, à côté de la chapelle Saint-Joseph, Névache</span></div>
+  <div class="pr" style="padding-block:6px"><span class="x">Jeanne</span><span class="btn sm" style="color:#0a0a0a;text-decoration:underline;white-space:nowrap">06 12 34 56 78</span><span class="m s" style="flex-basis:100%">monte au départ</span></div></div></div>
+  <p class="n">Ordre dans la ligne : prénom (prend la place qui reste, passe à la ligne s’il est long), lien d’appel (insécable, 44 px de haut), « Changer le point » (44 px, appareil seulement), puis la phrase <b>sur toute la largeur</b> de la ligne, qui passe à la ligne n’importe où (<code>wrap-anywhere</code>). Le prénom garde au moins 12 caractères de large (<code>flex:1 1 12ch; min-width:min(12ch,100%)</code>) : quand il ne reste pas assez de place à côté de lui, c’est le numéro ou le bouton qui passe à la ligne suivante, jamais le prénom qui se réduit à une colonne de lettres. Mesuré dans Chrome à 360 px : « Jean-Baptiste-Alexandre » fait 130 × 39 px (deux lignes) à côté du numéro, le bouton est dessous, la phrase en dessous encore (ligne de 158 px de haut) ; sans le bouton, le même prénom fait aussi 130 × 39 px (ligne de 110 px) ; rien ne déborde, rien ne se chevauche. Le lieu de 120 caractères prend autant de lignes qu’il faut. La ligne a 6 px de marge haute et basse dès qu’elle porte une phrase, pour que le texte ne colle pas au bord.</p></div>
 </div>
 
 <h2>3. Prendre une place : le choix du point</h2>
@@ -204,7 +211,7 @@ svg{display:block;max-width:100%}
   <div class="hd"><span>Voiture de Nina</span><span>08:00</span></div>
   <div class="pr"><span class="x">Paul</span><span class="m s">monte à Prelles boucherie</span><span class="btn sm">Changer le point</span></div>
   <div class="pr"><span class="x">Léa</span><span class="m s">monte au départ</span></div></div></div>
-  <p class="n">Le bouton est sur les passagers de l’appareil seulement, et seulement si la voiture a des points (nom accessible « Changer le point de montée de Paul »). Pour un passager de l’appareil, « monte au départ » est écrit pour qu’il sache qu’il peut changer.</p></div>
+  <p class="n">Le bouton est sur les passagers de l’appareil seulement, et seulement si la voiture a des points (nom accessible « Changer le point de montée de Paul »). v3 : « monte au départ » n’est plus propre à l’appareil, tout le monde le lit ; seul le bouton reste réservé. Les autres appareils voient la même phrase sans bouton.</p></div>
  <div class="col"><span class="cap">Feuille « Où monte Paul ? »</span><div class="ph">
   <h3>Où monte Paul ?</h3>
   <div class="opt"><span class="dot"></span><span>Champcella <span class="m s">· 08:00 · Lieu de départ</span></span></div>
@@ -277,7 +284,7 @@ svg{display:block;max-width:100%}
 <h2>8. Jour 30, et ce qui est stocké</h2>
 <div class="row"><div class="col"><div class="ph">
  <h3>Inscriptions effacées</h3><p style="margin:0">Le 24 novembre, 30 jours après l’événement, les prénoms, les numéros, les voitures et les inscriptions ont été effacés. Il reste le titre, le lieu et les dates.</p></div></div>
- <div class="col" style="max-width:520px"><p class="n">Texte actuel, inchangé : « les voitures et les inscriptions » couvre les points et le choix de chaque passager. Stocké : par point, le lieu (texte), l’heure, la position facultative, la voiture ; par inscription, le point choisi (référence). Aucun numéro, aucune donnée de plus. Le jour 30 efface les points avec leur voiture, qu’il anonymise l’événement ou le supprime.</p></div></div>
+ <div class="col" style="max-width:520px"><p class="n">Texte actuel, inchangé : « les voitures et les inscriptions » couvre les points et le choix de chaque passager. Stocké : par point, le lieu (texte), l’heure, la position facultative, la voiture ; par inscription, le point choisi (référence). Aucun numéro, aucune donnée de plus. <b>v3 :</b> rien n’est stocké de plus, et rien n’est envoyé de plus : le point de chaque passager est déjà dans l’état de la page, et les autres appareils le lisaient déjà pour « monte à … » ; « monte au départ » se déduit de l’absence de point. Les numéros de téléphone des passagers ne changent pas de visibilité. Le jour 30 efface les points avec leur voiture, qu’il anonymise l’événement ou le supprime.</p></div></div>
 
 <h2>Les mots</h2>
 <div class="tw"><table><tr><th>Clé</th><th>FR</th><th>EN</th></tr>
@@ -328,6 +335,7 @@ svg{display:block;max-width:100%}
 <li>Un point par personne dans une même saisie, une capacité par point, le nombre de personnes par point sur la carte.</li>
 <li>Notification d’un changement de point ou de la suppression d’un point.</li>
 <li>Changer l’auto-complétion (#237) ; regrouper un point avec une voiture ou avec le drapeau (les points de voitures différentes à 25 m partagent un rond, RV5.6).</li>
+<li>v3 : une phrase sur une voiture sans point ; grouper les passagers par point ; le bouton « Changer le point » pour les autres appareils ; un nombre de personnes par point sur la fiche.</li>
 <li>Numéro de téléphone ou toute donnée personnelle de plus ; le choix du point par le conducteur à la place du passager.</li>
 <li>Désactiver l’option « Points de RDV » alors que des points existent (refusé, RV9.3) ; l’organisateur qui retire les points d’un conducteur.</li>
 </ul>

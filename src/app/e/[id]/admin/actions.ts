@@ -10,16 +10,16 @@ import { serverBrevo } from "@/email/brevo";
 import { defaultLocale, isLocale } from "@/i18n/locales";
 import { editEvent, type EditEventOutcome } from "../edit-event";
 import { readOrganiserState } from "../organiser-state";
-import { resendConfirmation, type ResendOutcome } from "../pending-email";
+import { correctAddress, resendConfirmation, type CorrectionOutcome, type ResendOutcome } from "../pending-email";
 import { removeAsOrganiser, type RemovePersonOutcome } from "../remove-person";
 
 /**
  * The organiser area of event `id` (#3 C4.9 amended, C8.4; epic #154, O6.1; #596): the panel
  * when organiser-access.ts grants the access, the state it decides and nothing else
  * otherwise, `{ state: "invalid" }` for an unknown event. `proof` is `{ adminToken, session }`,
- * in the request's body: with `updateEvent`, `removePersonAsOrganiser`, `resendEmail`, and `signOut`
- * and `deleteAccount` (mes-evenements/actions.ts, which receive every admin token the browser
- * keeps), the six actions that receive the admin token.
+ * in the request's body: with `updateEvent`, `removePersonAsOrganiser`, `resendEmail`, `fixEmail`,
+ * and `signOut` and `deleteAccount` (mes-evenements/actions.ts, which receive every admin token
+ * the browser keeps), the seven actions that receive the admin token.
  * The browser sends the token it keeps (admin-token-store.ts) and its session's (#597), never one read from a URL.
  * A malformed id reads nothing; a token that is not a string is refused by the comparison.
  * Never logs a token nor the panel, never puts either in an error.
@@ -76,6 +76,29 @@ export async function resendEmail(id: unknown, proof: unknown): Promise<ResendOu
   } catch (error) {
     // Only its code is logged: no other detail of a Postgres error leaves the server.
     throw databaseFailure("resendEmail: the email could not be sent again", error);
+  }
+}
+
+/**
+ * « Envoyer le lien » of « Corriger l'adresse » (epic #581, OA2.5): the pending event `id` waits
+ * on `email` from now on, as pending-email.ts says, and the links sent to the address before are
+ * deleted. `proof` is `{ adminToken, session }`, in the request's body, as for the actions
+ * above. The answer waits for Brevo's, 10 s at most. Never logs a token nor an address; puts no
+ * token in an answer.
+ */
+export async function fixEmail(id: unknown, proof: unknown, email: unknown): Promise<CorrectionOutcome> {
+  const locale = await getLocale();
+  try {
+    return await correctAddress(id, proof, email, {
+      db: getDb(),
+      now: new Date(),
+      locale: isLocale(locale) ? locale : defaultLocale,
+      origin: siteOrigin(),
+      brevo: serverBrevo(),
+    });
+  } catch (error) {
+    // Only its code is logged: no other detail of a Postgres error leaves the server.
+    throw databaseFailure("fixEmail: the address could not be corrected", error);
   }
 }
 

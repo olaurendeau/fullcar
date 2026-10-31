@@ -72,7 +72,8 @@ const stopIdsOf = async (db: Db, rideId: string) =>
 
 /**
  * What the page says of the car's seats: the banner of the coverage, the card's free seats and its
- * passengers' first names (a row says more under a passenger at a stop, « monte à … »: #912).
+ * passengers' first names (every row of a car with points has a second line, « monte à … » or
+ * « monte au départ »: RV2.2, #936).
  */
 async function seatsSaid(page: Page) {
   const banner = await page.getByText(/^Tout le monde a une place/).first().innerText();
@@ -98,6 +99,9 @@ test.describe("point retiré, passagers au départ", () => {
   }) => {
     const { rideId, prelles, briancon, people } = await scene(db, page, seededEvent.id);
     await page.goto(`/e/${seededEvent.id}`);
+    const rows = card(page).getByRole("list", { name: "Places" }).getByRole("listitem");
+    // The car keeps its points: Mia, at the departure, says so (RV2.2).
+    await numbersHidden(() => expect(rows.filter({ hasText: "Mia" })).toContainText("monte au départ"));
     const form = await openEdit(page);
     await numbersHidden(async () => {
       // No note while no point is removed.
@@ -119,6 +123,8 @@ test.describe("point retiré, passagers au départ", () => {
       await expect(form).toHaveCount(0);
       await expect(messages(page).filter({ hasText: FR.notified })).toBeVisible();
       for (const name of ["Paul", "Anna", "Léo", "Mia"]) await expect(card(page)).toContainText(name);
+      // No point left: no row says where it boards (RV2.2).
+      await expect(card(page).getByRole("list", { name: "Places" })).not.toContainText("monte");
     });
     expect(await stopIdsOf(db, rideId)).toEqual([]);
     const placements = await placementsOf(db, rideId);
