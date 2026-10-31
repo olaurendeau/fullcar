@@ -6,6 +6,7 @@ const FR = {
   intro:
     "Un match, un mariage, un week-end au ski : partagez un seul lien, et chacun voit qui conduit, où il reste des places et qui n’a pas encore de voiture.",
   create: "Créer un événement",
+  myEvents: "Mes événements",
   howItWorks: "Comment ça marche",
   steps: [
     [
@@ -27,6 +28,7 @@ const EN: Words = {
   intro:
     "A match, a wedding, a ski weekend: share one link, and everyone sees who is driving, where seats are free and who still has no car.",
   create: "Create an event",
+  myEvents: "My events",
   howItWorks: "How it works",
   steps: [
     [
@@ -58,6 +60,7 @@ async function expectHome(page: Page, words: Words) {
     `P ${words.tagline}`,
     `P ${words.intro}`,
     `A ${words.create}`,
+    `A ${words.myEvents}`,
     `H2 ${words.howItWorks}`,
     ...words.steps.flatMap(([title, text]) => [`H3 ${title}`, `P ${text}`]),
     `P ${words.deleted}`,

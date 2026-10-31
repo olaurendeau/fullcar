@@ -34,6 +34,13 @@ export default function Home() {
       <Button asChild className="h-11">
         <Link href="/nouveau">{t("create")}</Link>
       </Button>
+      {/* With or without a session: without one, /mes-evenements sends to /connexion (OA10.2). */}
+      <Link
+        href="/mes-evenements"
+        className="-mt-3 inline-flex min-h-11 items-center justify-center rounded-lg text-primary underline underline-offset-4 focus-visible:focus-ring"
+      >
+        {t("myEvents")}
+      </Link>
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">{t("howItWorks")}</h2>
         {/* `role="list"`: without its bullets, Safari would no longer expose the list as one. */}
