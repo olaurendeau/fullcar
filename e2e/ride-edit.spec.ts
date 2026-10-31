@@ -260,8 +260,8 @@ test.describe("edit a car", () => {
   async function sendThenClose(page: Page, closing = false) {
     const form = await openForm(page);
     await form.getByLabel("Lieu de départ").fill(GARE);
-    // Next sends the page's actions one at a time, and `holdFirst` holds this one on its way out:
-    // closed before it has left, the failure would have nothing to wait for (#922).
+    // Hypothesis, not reproduced (#922, #929): closed before the request has left, the failure may have
+    // nothing to wait for, since `holdFirst` holds it on its way out. Waiting for it to leave keeps the criterion.
     const left = page.waitForRequest((request) => !!request.headers()["next-action"] && !!request.postData()?.includes(GARE));
     await form.getByRole("button", { name: "Valider" }).click();
     await left;
