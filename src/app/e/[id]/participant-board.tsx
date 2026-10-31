@@ -45,6 +45,7 @@ import type { RemovePerson } from "@/components/event/remove-person-dialog";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
+import { boardingStopTaken, type SetBoardingStop } from "@/components/event/stop-sheet";
 import type { EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import {
@@ -53,6 +54,7 @@ import {
   offerRide as storeRideOffer,
   removePerson as storePersonRemoval,
   removeRide as storeRideRemoval,
+  setBoardingStop as storeBoardingStop,
   setPersonLeg as storePersonLeg,
   takeSeats as storeSeats,
   undoSeats as storeUndo,
@@ -530,6 +532,48 @@ export function ParticipantBoard({
     return taken;
   };
 
+  // « Changer le point » (RV4.2, RV4.3): as a placement, its refusal or failure is said in the sheet
+  // while it shows it, in the bar otherwise, and its success carries an « Annuler » that sends the
+  // point before again, whose own success says that point (without an « Annuler »).
+  const setBoardingStop: SetBoardingStop = async (request, { sending, firstName, said, restored, ...sheet }) => {
+    const { rideId, personId, stopId } = request;
+    const seated = [personLeg(personId, "aller")];
+    const landmark = focusCar("aller", rideId);
+    const notDone: NotDone = { kind: "stop", firstName };
+    const person = { id: personId, firstName };
+    const send = (to: string | null) => () => storeBoardingStop(id, readDeviceToken(id), rideId, personId, to);
+    const sent = await runAction(`stop:${sheet.key}`, send(stopId), sending, sheet.leaves);
+    if (sent === undefined) return undefined;
+    sheet.answered();
+    const taken = boardingStopTaken(sent, person);
+    if (taken.kind === "done") {
+      sheet.changed(seated);
+      const text = taken.stopGone ? stopGoneText(words, [firstName]) : said;
+      const undo: Undo = { run: () => void giveBack(), leg: "aller" };
+      async function giveBack() {
+        const back = { key: "undo", inSheet: () => false, ...sendAbout(aboutOf([`undo:${rideId}`], [personId])) };
+        const answered = await runAction(`undo:${sheet.seq}`, send(request.before), undefined, back.leaves);
+        if (answered === undefined) return;
+        back.answered();
+        const undone = boardingStopTaken(answered, person);
+        if (undone.kind !== "done") {
+          // Offline or on an error, « Annuler » is to be used again (rule 6).
+          const { why } = undone;
+          return failedIn(back, { notDone, why: why.kind === "offline" || why.kind === "failed" ? undoWhy(why.kind) : why, landmark, undo, leg: "aller" });
+        }
+        back.changed(seated);
+        back.whenClosed(() => {
+          messages.succeed({ text: undone.stopGone ? stopGoneText(words, [firstName]) : restored, landmark, leg: "aller" });
+          setUndoneIn({ landmark });
+        });
+      }
+      sheet.whenStillTrue(seated, () => messages.succeed({ text, landmark, undo, persons: [personId], car: rideId }));
+    } else {
+      failedIn(sheet, { notDone, why: taken.why, landmark, closes: taken.kind === "personGone", leg: "aller" });
+    }
+    return taken;
+  };
+
   // The car's id and leg, and the device's token, in the body; the page takes the state a refusal carries too.
   // Once per car, not per confirmation: removing it is the same whichever sends, and one reopened meanwhile waits.
   const removeRide: RemoveRide = async ({ rideId, leg, sending, removed, notDone }, confirmation) => {
@@ -647,6 +691,7 @@ export function ParticipantBoard({
         setPersonLeg,
         offerRide,
         takeSeats,
+        setBoardingStop,
         updateRide,
         removeRide,
         removePerson,

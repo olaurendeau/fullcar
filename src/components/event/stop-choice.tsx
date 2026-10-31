@@ -22,6 +22,7 @@ export interface StopOption {
  */
 export function StopChoice({
   legend,
+  hideLegend,
   date,
   start,
   stops,
@@ -31,6 +32,8 @@ export function StopChoice({
 }: {
   /** The group's name. */
   legend: string;
+  /** The sheet's title says it already (« Où monte {prénom} ? »): the name stays, for the screen reader alone. */
+  hideLegend?: boolean;
   /** The aller's date, with which a time is shown as the leg's. */
   date: WallDate;
   start: { location: string; time: WallTime };
@@ -60,7 +63,7 @@ export function StopChoice({
 
   return (
     <div ref={root} className="flex min-w-0 flex-col gap-2">
-      <span id={`${ids}-legend`} className="text-sm font-semibold">
+      <span id={`${ids}-legend`} className={hideLegend ? "sr-only" : "text-sm font-semibold"}>
         {legend}
       </span>
       <RadioGroup

@@ -104,6 +104,9 @@
       "takeSeat": "Place libre : prendre une place dans la voiture de {driver}",
       "stops": "Points de RDV",
       "boardsAt": "monte à {place}",
+      "boardsAtStart": "monte au départ",
+      "changeStop": "Changer le point",
+      "changeStopName": "Changer le point de montée de {firstName}",
       "edit": "Modifier",
       "remove": "Retirer la voiture"
     },
@@ -327,6 +330,10 @@
     "placed": "{names} sont dans la voiture de {driver}",
     "stop": {
       "legend": "Point de montée",
+      "title": "Où monte {firstName} ?",
+      "changed": "{firstName} monte à {place}",
+      "changedStart": "{firstName} monte au lieu de départ",
+      "failed": "Le point de {firstName} n’a pas été changé.",
       "start": "{place} · {time} · Lieu de départ",
       "option": "{place} · {time}",
       "gone": "{count, plural, one {Ce point n’existe plus : {names} monte au lieu de départ.} other {Ce point n’existe plus : {names} montent au lieu de départ.}}"

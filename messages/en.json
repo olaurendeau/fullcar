@@ -104,6 +104,9 @@
       "takeSeat": "Free seat: take a seat in {driver}’s car",
       "stops": "Meeting points",
       "boardsAt": "boards at {place}",
+      "boardsAtStart": "boards at the departure",
+      "changeStop": "Change the point",
+      "changeStopName": "Change {firstName}’s boarding point",
       "edit": "Edit",
       "remove": "Remove the car"
     },
@@ -327,6 +330,10 @@
     "placed": "{names} are in {driver}’s car",
     "stop": {
       "legend": "Boarding point",
+      "title": "Where does {firstName} board?",
+      "changed": "{firstName} boards at {place}",
+      "changedStart": "{firstName} boards at the departure place",
+      "failed": "{firstName}’s boarding point was not changed.",
       "start": "{place} · {time} · Departure place",
       "option": "{place} · {time}",
       "gone": "{count, plural, one {This point no longer exists: {names} boards at the departure place.} other {This point no longer exists: {names} board at the departure place.}}"
