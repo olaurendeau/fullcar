@@ -684,6 +684,8 @@
     "groupTitle": "{count, plural, other {# voitures}}, {seats}",
     "notOnMap": "{count, plural, one {# voiture n’est pas sur la carte : son lieu n’a pas de position.} other {# voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.}}",
     "stop": "Point de RDV de {driver} : {place}, {time}",
+    "stopTitle": "{place}, {time}",
+    "stopCars": "{count, plural, one {# voiture} other {# voitures}}",
     "stopsNotOnMap": "{count, plural, one {# point de RDV n’est pas sur la carte : son lieu n’a pas de position.} other {# points de RDV ne sont pas sur la carte : leurs lieux n’ont pas de position.}}",
     "touchHint": "Deux doigts pour déplacer ou zoomer la carte.",
     "organiserHint": "Pour afficher la carte, choisissez le lieu de l’événement parmi les propositions.",
