@@ -238,6 +238,7 @@
       "max": "6 points au maximum.",
       "sorted": "Points classés par heure.",
       "timeAfter": "L’heure doit être après {time}, l’heure de départ.",
+      "boarding": "{count, plural, one {# personne monte ici : elle montera au lieu de départ.} other {# personnes montent ici : elles monteront au lieu de départ.}}",
       "positionRemove": "Retirer la position du point {n}",
       "positionSaved": "Position enregistrée"
     }

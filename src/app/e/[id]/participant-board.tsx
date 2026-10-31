@@ -585,7 +585,7 @@ export function ParticipantBoard({
   }
 
   // Once per sheet, as offerRide: only the fields the form changed, its passengers and who leaves.
-  const updateRide: UpdateRide = async ({ rideId, leg, ride, seenPassengerIds, leaving, sending, notDone, ...sheet }) => {
+  const updateRide: UpdateRide = async ({ rideId, leg, ride, seenPassengerIds, leaving, stopsRemoved, sending, notDone, ...sheet }) => {
     const change = { ...ride, seenPassengerIds, leaving };
     const sent = await runAction(
       `updateRide:${sheet.key}`,
@@ -597,7 +597,8 @@ export function ParticipantBoard({
     sheet.answered();
     const outcome = sent.ok ? sent.value : undefined;
     if (outcome?.ok) {
-      messages.succeed(null);
+      // A Stop people had chosen is removed: they board at the departure, and nobody is told (RV6.1, the words of « Retirer la voiture »).
+      messages.succeed(stopsRemoved ? { text: words.t("RideChanges.remove.notified"), landmark: focusCar(leg, rideId) } : null);
       // Those ticked in « Qui sort de la voiture ? » are without a car on its leg (v4.4.5).
       sheet.changed(leaving.map((personId) => personLeg(personId, leg)));
       return { kind: "done" };
