@@ -45,12 +45,20 @@ export type TapOutcome =
 /**
  * `device` is the device section of the tapped seat's leg. Only persons without a car on
  * that leg are counted: a driver, a passenger or a person not concerned never is (C5.6).
+ * `car` is the car tapped: with Stops, a tap always opens the sheet, where the boarding point
+ * is chosen, the departure ticked (RV3.2, D2). A device without a person still registers, and
+ * boards at the departure (RV3.1, Q3).
  */
-export function tapOutcome(status: DeviceStatus, device: readonly DevicePerson[]): TapOutcome {
+export function tapOutcome(
+  status: DeviceStatus,
+  device: readonly DevicePerson[],
+  car: Pick<BoardCar, "stops"> = { stops: [] },
+): TapOutcome {
   if (!deviceKnown(status)) return { kind: "wait" };
   if (status === "none") return { kind: "register" };
   // A key that no person of the event carries is a device without a person.
   if (device.length === 0) return { kind: "register" };
+  if (car.stops.length > 0) return { kind: "sheet" };
   const toPlace = device.filter((person) => person.state.kind === "withoutCar");
   return toPlace.length === 1 ? { kind: "place", personId: toPlace[0].id } : { kind: "sheet" };
 }
