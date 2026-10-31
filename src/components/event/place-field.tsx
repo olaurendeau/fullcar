@@ -66,6 +66,7 @@ export function PlaceField({
   locked = false,
   readOnly = false,
   removeLabel,
+  savedLabel,
   error,
   hint,
 }: {
@@ -81,6 +82,8 @@ export function PlaceField({
   readOnly?: boolean;
   /** The accessible name of « Retirer » when « Retirer la position ({field}) » does not fit (a point of RDV's, RV1.8). */
   removeLabel?: string;
+  /** The line of a saved position without a label when « Position enregistrée » does not fit (a point of RDV's). */
+  savedLabel?: string;
   /** The field's error: its message, and the id that describes the field. */
   error?: { id: string; message: string };
   /** A sentence under the field, after its position: who sees a car's place (AL4.4). */
@@ -260,7 +263,7 @@ export function PlaceField({
         <div className="flex min-h-11 items-center gap-2 rounded-lg bg-muted pl-2.5">
           <Crosshair aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           <span id={positionId} className="min-w-0 flex-1 py-1.5 text-[13px] leading-[18px] wrap-anywhere">
-            {state.label === null ? t("saved") : t("position", { label: state.label })}
+            {state.label === null ? (savedLabel ?? t("saved")) : t("position", { label: state.label })}
           </span>
           <button
             type="button"

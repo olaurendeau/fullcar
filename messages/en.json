@@ -238,7 +238,8 @@
       "max": "6 points at most.",
       "sorted": "Points sorted by time.",
       "timeAfter": "The time must be after {time}, the departure time.",
-      "positionRemove": "Remove the position of point {n}"
+      "positionRemove": "Remove the position of point {n}",
+      "positionSaved": "Position saved"
     }
   },
   "FormErrors": {

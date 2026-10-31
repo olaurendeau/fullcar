@@ -124,6 +124,7 @@ export function StopsFields({
                 near={near}
                 locked={locked}
                 removeLabel={t("positionRemove", { n })}
+                savedLabel={t("positionSaved")}
                 error={placeError ? { id: `${timeId}-place-error`, message: placeError } : undefined}
               />
               <div className="flex min-w-0 flex-col gap-1.5">

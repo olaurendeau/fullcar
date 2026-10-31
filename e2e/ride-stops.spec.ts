@@ -380,6 +380,31 @@ test.describe("« Points de RDV » du formulaire de la voiture", () => {
     expect(await stopsOf(db, rideId)).toEqual([]);
   });
 
+  test("RV1.9: « Proposer une voiture », l’option désactivée entre-temps, la saisie est gardée, le message au-dessus de « Valider », le focus dessus ; aucune voiture écrite", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await scene(db, page, seededEvent.id, false);
+    await page.goto(`/e/${seededEvent.id}`);
+    const form = await openOffer(page);
+    await numbersHidden(async () => {
+      await form.getByLabel("Lieu de départ", { exact: true }).fill("Gare de Vitré");
+      await expect(form.locator("p", { hasText: FR.answered })).toBeVisible();
+      await addButton(form).click();
+      await fillPoint(form, 1, "Prelles", "07:45");
+    });
+    await db.updateTable("event").set({ stops_enabled: false }).where("id", "=", seededEvent.id).execute();
+    await numbersHidden(async () => {
+      await submit(page, FR.offer).click();
+      await expect(form.getByRole("alert")).toHaveText(FR.off);
+      await expect(submit(page, FR.offer)).toBeFocused();
+      await expect(placeOf(form, 1)).toHaveValue("Prelles");
+      await expect(timeOf(form, 1)).toHaveValue("07:45");
+    });
+    expect(await db.selectFrom("ride").select("id").where("event_id", "=", seededEvent.id).execute()).toEqual([]);
+  });
+
   test("RV1.10: une page qui n’envoie pas ses points ne déplace pas le départ à l’heure du premier ; rien n’est écrit", async ({
     db,
     page,

@@ -238,7 +238,8 @@
       "max": "6 points au maximum.",
       "sorted": "Points classés par heure.",
       "timeAfter": "L’heure doit être après {time}, l’heure de départ.",
-      "positionRemove": "Retirer la position du point {n}"
+      "positionRemove": "Retirer la position du point {n}",
+      "positionSaved": "Position enregistrée"
     }
   },
   "FormErrors": {
