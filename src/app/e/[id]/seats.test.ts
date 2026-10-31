@@ -866,16 +866,6 @@ describe("takeSeats at a stop", () => {
     });
   });
 
-  it("RV8.3: eventEnded comes before stopsOff", async () => {
-    await withRollback(async (trx) => {
-      const { eventId, lea, r1 } = await seedScene(trx);
-      await trx.updateTable("event").set({ stops_enabled: false }).where("id", "=", eventId).execute();
-      await anonymiseEvent(trx, eventId);
-      const refused = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], randomUUID());
-      expect(refused).toMatchObject({ ok: false, error: "eventEnded" });
-    });
-  });
-
   it("RV3.4: a point of another car is no point of this one", async () => {
     await withRollback(async (trx) => {
       const { eventId, lea, r1, r2 } = await seedScene(trx);

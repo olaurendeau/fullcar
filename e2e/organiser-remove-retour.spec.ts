@@ -22,6 +22,7 @@ test.use({ locale: "fr-FR" });
 const WORDS = {
   fr: {
     edit: "Modifier l’événement",
+    retourBox: "Retour",
     question: "Supprimer le retour ?",
     confirm: "Supprimer le retour",
     cancel: "Annuler",
@@ -34,6 +35,7 @@ const WORDS = {
   },
   en: {
     edit: "Edit the event",
+    retourBox: "Return",
     question: "Remove the return trip?",
     confirm: "Remove the return trip",
     cancel: "Cancel",
@@ -460,7 +462,7 @@ test.describe("M9: the confirmation, readable everywhere", () => {
         for (const size of ["100%", "125%"]) {
           await page.evaluate((size) => (document.documentElement.style.fontSize = size), size);
           await editButton(page, words.edit).click();
-          await sheet(page, words.edit).getByRole("checkbox").click();
+          await sheet(page, words.edit).getByRole("checkbox", { name: words.retourBox, exact: true }).click();
           await sheet(page, words.edit).getByRole("button", { name: words.submit, exact: true }).click();
           const dialog = confirmation(page, words.question);
           await expect(dialog).toBeVisible();

@@ -171,7 +171,7 @@ test.describe("the option on, cars have Stops", () => {
 
     await submit(page).click();
     await expect(sheet(page)).toHaveCount(0);
-    expect(sent, "requests sent: nothing changed").toHaveLength(0);
+    expect(sent.length, "requests sent: nothing changed").toBe(0);
     expect(await stored(db, seededEvent.id)).toBe(true);
     expect(await db.selectFrom("stop").select("id").where("event_id", "=", seededEvent.id).execute()).toHaveLength(2);
   });

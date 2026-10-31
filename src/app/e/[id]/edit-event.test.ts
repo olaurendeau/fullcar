@@ -262,8 +262,11 @@ describe("editEvent", () => {
     it("RV9.3: the retour is not removed when the option cannot be turned off", async () => {
       await onSeeded(
         async (trx, eventId, token) => {
-          await seedCarWithStop(trx, eventId);
+          // Real retour rows to lose: were the removal done before the refusal, they would be gone.
+          const { aller } = await seedScene(trx, eventId);
+          await seedStop(trx, eventId, aller);
           const before = await rowsOf(trx, eventId);
+          expect(before.rides.filter((ride) => ride.leg === "retour")).toHaveLength(2);
           const answer = await editEvent(trx, eventId, { adminToken: token }, { ...WITHOUT_RETOUR, stops: false }, BEFORE, SEEN);
           expect(answer).toEqual({ ok: false, error: "stopsLocked", cars: 1 });
           expect(await rowsOf(trx, eventId)).toEqual(before);
