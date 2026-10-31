@@ -74,6 +74,9 @@ async function openEdit(page: Page) {
   await panel(page).getByRole("article", { name: "Voiture de Claire" }).getByRole("button", { name: "Modifier", exact: true }).click();
   const form = dialog(page, FR.edit);
   await expect(form.getByLabel("Lieu de départ", { exact: true })).toHaveValue("Mairie de Cesson");
+  // The sheet slides in for 200 ms: a box measured on the way is a fraction of a pixel short
+  // (43.99997 for the 44 of « Retirer la position »), the requirement itself unchanged.
+  await form.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
   return form;
 }
 
