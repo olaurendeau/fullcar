@@ -94,7 +94,7 @@ test.describe("« Changer le point »", () => {
     return dialog;
   }
 
-  test("RV4.1: each passenger of the device of a car with points has « Changer le point » and says where she boards; the others have neither button", async ({ db, page, seededEvent }) => {
+  test("RV4.1: each passenger of the device of a car with points has « Changer le point » and says where she boards; the others say where they board and have no button", async ({ db, page, seededEvent }) => {
     await visit(page, db, seededEvent.id);
     await numbersHidden(async () => {
       await expect(line(page, "Nina", "Tom")).toContainText(`monte à ${PRELLES}`);
@@ -105,7 +105,7 @@ test.describe("« Changer le point »", () => {
       await expect(line(page, "Nina", "Paul")).toContainText(`monte à ${PRELLES}`);
       await expect(line(page, "Nina", "Paul").getByRole("button")).toHaveCount(0);
       await expect(car(page, "Nina").getByRole("button", { name: /^Changer le point/ })).toHaveCount(2);
-      // Ava is of the device, but Sam's car has no point: no button, nothing said of where she boards.
+      // Ava is of the device, but Sam's car has no point: no button, nothing said of where she boards (RV2.2).
       await expect(line(page, "Sam", "Ava")).toBeVisible();
       await expect(car(page, "Sam").getByRole("button", { name: /^Changer le point/ })).toHaveCount(0);
       await expect(line(page, "Sam", "Ava")).not.toContainText("monte");
@@ -397,6 +397,52 @@ test.describe("« Changer le point » at 360 px", () => {
     for (const button of [cancel(dialog), validate(dialog)]) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     // « Valider » stays reachable in the bar of the sheet, whatever the list's length.
     await expect(validate(dialog)).toBeInViewport();
+  });
+
+  test("RV7.1, RV2.4: a first name of 23 characters next to a number and « Changer le point » keeps 12ch of width; the number or the button goes under, the phrase is neither cut nor covered", async ({ db, page, seededEvent }) => {
+    const NAME = "Jean-Baptiste-Alexandre";
+    const nina = await seedRide(db, seededEvent.id, (await seedPerson(db, seededEvent.id, { firstName: "Nina" })).id, { departureTime: "08:00:00", seats: 3, location: START });
+    const prelles = await seedStop(db, seededEvent.id, nina, { location: PRELLES, time: "08:25:00" });
+    const jean = (await seedPerson(db, seededEvent.id, { firstName: NAME, phone: DRIVER_PHONE }, token)).id;
+    await seedPlacement(db, { personId: jean, eventId: seededEvent.id, leg: "aller", rideId: nina, stopId: prelles });
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+
+    const row = line(page, "Nina", NAME);
+    await numbersHidden(() => expect(row).toContainText(`monte à ${PRELLES}`));
+    const call = row.getByRole("link", { name: /^Appeler/ });
+    const change = changeButton(page, "Nina", NAME);
+    await expect(call).toBeVisible();
+    const name = row.getByText(NAME, { exact: true });
+    const said = row.getByText(`monte à ${PRELLES}`);
+    const box = async (locator: Locator) => (await locator.boundingBox())!;
+    const [rowBox, nameBox, callBox, changeBox, saidBox] = [await box(row), await box(name), await box(call), await box(change), await box(said)];
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    expect(await row.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+    // 12ch measured in the page, in the font of the name, not in pixels.
+    const twelveCh = await name.evaluate((element) => {
+      const probe = document.createElement("span");
+      probe.style.cssText = "position:absolute;visibility:hidden;width:12ch;white-space:nowrap";
+      element.appendChild(probe);
+      const width = probe.getBoundingClientRect().width;
+      probe.remove();
+      return width;
+    });
+    expect(twelveCh).toBeGreaterThan(60);
+    expect(nameBox.width).toBeGreaterThanOrEqual(twelveCh - 1);
+    expect(callBox.height).toBeGreaterThanOrEqual(44);
+    expect(changeBox.height).toBeGreaterThanOrEqual(44);
+    // The phrase is within the row, under the name, the number and the button.
+    expect(saidBox.x).toBeGreaterThanOrEqual(rowBox.x);
+    expect(saidBox.x + saidBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+    expect(await said.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+    for (const other of [nameBox, callBox, changeBox]) expect(saidBox.y).toBeGreaterThanOrEqual(other.y + other.height - 0.5);
+    // Nothing of the row covers another.
+    for (const [a, b] of [[callBox, changeBox], [nameBox, callBox], [nameBox, changeBox]]) {
+      const apart = a.x + a.width <= b.x + 0.5 || b.x + b.width <= a.x + 0.5 || a.y + a.height <= b.y + 0.5 || b.y + b.height <= a.y + 0.5;
+      expect(apart).toBe(true);
+    }
   });
 });
 

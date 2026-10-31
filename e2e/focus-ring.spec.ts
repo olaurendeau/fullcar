@@ -74,13 +74,14 @@ test.describe("the focus ring", () => {
     expect(reached.filter((element) => element === "<button>").length, "the boxes").toBe(4);
   });
 
-  test("F1.2: on /, every element Tab reaches down to « Nous contacter » shows the ring, « Créer un événement » too", async ({
+  test("F1.2: on /, every element Tab reaches down to « Nous contacter » shows the ring, « Créer un événement » and « Mes événements » too", async ({
     page,
   }) => {
     await open(page, "/");
     const reached = await walk(page, { until: contact(page) });
     expect(reached).toEqual([
       '<a> "Créer un événement"',
+      '<a> "Mes événements"',
       '<button> "English"',
       privacyReached,
       sourceReached,

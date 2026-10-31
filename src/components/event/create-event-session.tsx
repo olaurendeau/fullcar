@@ -80,12 +80,15 @@ export function EmailField({
   problem,
   inputRef,
   onChange,
+  readOnly = false,
 }: {
   id: string;
   value: string;
   problem: EmailProblem | undefined;
   inputRef: Ref<HTMLInputElement>;
   onChange: (value: string) => void;
+  /** While the address is being sent (« Corriger l’adresse », OA2.5): it is shown, not changed. */
+  readOnly?: boolean;
 }) {
   const t = useTranslations("CreateEvent");
   const tErrors = useTranslations("FormErrors");
@@ -111,6 +114,7 @@ export function EmailField({
         autoComplete="email"
         className="h-10"
         value={value}
+        readOnly={readOnly}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={problem ? true : undefined}
         aria-describedby={problem ? errorId : undefined}

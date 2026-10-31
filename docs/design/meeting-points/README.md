@@ -3,7 +3,7 @@
 - Artifact : https://claude.ai/artifact/PCinu9DcFBdAHrhjfaZyCk
 - Issue : https://github.com/olaurendeau/fullcar/issues/881 (voir aussi l’épic #68, « Les options à l’écran », dont les Arrêts sont la part non faite)
 - Page : `index.html` (autonome, maquettes à 360 px, clair)
-- Version : v2.2
+- Version : v3 (révision de la visibilité du point de montée, voir « Révisions »)
 
 ## Problème
 
@@ -51,7 +51,9 @@ D1 à D3 et les règles sont en tête de `index.html`. Tranchées par le propri�
 
 ### RV2, la fiche
 - RV2.1 Une voiture à points montre, sous son lieu, la liste « Points de RDV » : heure + lieu, par heure ; sans point, aucune liste ni titre.
-- RV2.2 Un passager d’un point porte « monte à {lieu} » ; au départ, rien, sauf sur les personnes de l’appareil (RV4.1).
+- RV2.2 (v3) Sur une voiture à points, **chaque ligne de passager** dit où il monte, pour tout le monde, quel que soit l'appareil : « monte à {lieu} » s'il est à un point, « monte au départ » s'il est au lieu de départ (aucun point choisi, ou point retiré). Le texte est le même pour un passager de l'appareil et pour les autres. Sur une voiture **sans point**, aucune ligne de passager ne le dit, comme avant ; elle n'a ni liste « Points de RDV » ni phrase.
+- RV2.4 (v3) La phrase est dans la ligne du passager, sous son prénom et son numéro (s'il en a un), sur sa propre ligne de texte, à la largeur de la ligne ; un lieu de 120 caractères passe à la ligne, sans défilement horizontal. À 360 px, avec un numéro (« +33 6 12 34 56 78 »), un prénom de 20 caractères et le bouton « Changer le point », la ligne ne déborde pas, le lien d'appel et le bouton mesurent 44 px au moins, et la phrase n'est ni coupée ni recouverte.
+- RV2.5 (v3) La phrase est du texte, pas une couleur ni une icône : un lecteur d'écran la lit dans la ligne du passager, après son prénom. Contraste : voir RV7.3 (elle vaut pour toutes les lignes, plus seulement celles de l'appareil).
 - RV2.3 Les lieux longs passent à la ligne, aucun défilement horizontal.
 
 ### RV3, prendre une place
@@ -63,7 +65,7 @@ D1 à D3 et les règles sont en tête de `index.html`. Tranchées par le propri�
 - RV3.6 Échec de « Placer » (hors ligne, 500) : feuille ouverte, elle reste ouverte avec le choix de point et les cases gardés, et dit « Action impossible, vérifiez la connexion » ; le focus va à « Placer » ; rien n’est écrit. Feuille fermée avant la réponse : la barre dit « {prénom} n’a pas pu monter dans la voiture de {conducteur}. Vérifiez la connexion, puis réessayez. » (`why.offline`, ou `why.failed` : « Une erreur est survenue : réessayez dans un instant. »), sans nommer le point.
 
 ### RV4, changer
-- RV4.1 Sur une voiture à points, chaque passager de l’appareil a « Changer le point » (nom : « Changer le point de montée de {prénom} ») et « monte au départ » ou « monte à {lieu} » ; les autres passagers n’ont pas le bouton.
+- RV4.1 Sur une voiture à points, chaque passager de l’appareil a « Changer le point » (nom : « Changer le point de montée de {prénom} ») et « monte au départ » ou « monte à {lieu} » ; les autres passagers n’ont pas le bouton, mais portent la même phrase (RV2.2, v3). Le bouton reste réservé aux personnes de l’appareil : rien ne change pour qui peut modifier un point.
 - RV4.2 La feuille « Où monte {prénom} ? » coche le choix actuel ; « Valider » l’enregistre, la barre dit « {prénom} monte à {lieu} » (ou « …au lieu de départ ») avec « Annuler » ; choisir le même point ferme sans écrire.
 - RV4.3 Échec : feuille ouverte, elle garde le choix et dit « Action impossible, vérifiez la connexion », focus sur « Valider » ; feuille fermée, la barre dit « Le point de {prénom} n’a pas été changé. » + `why.offline` / `why.failed` / `why.rideGone` ; la fiche garde l’ancien point ; point disparu : mots de RV3.4.
 - RV4.4 Changer de point ne change ni la place ni la couverture.
@@ -83,19 +85,21 @@ D1 à D3 et les règles sont en tête de `index.html`. Tranchées par le propri�
 - RV6.3 Moins de points au total qu’avant : la voiture ne perd ni passager ni place.
 
 ### RV7, 360 px
-- RV7.1 À 360 px, avec 6 points aux lieux de 120 caractères et 3 passagers, formulaire, fiche, feuilles et bulle n’ont aucun débordement horizontal ; chaque cible mesure 44 px au moins.
+- RV7.1 À 360 px, avec 6 points aux lieux de 120 caractères et 3 passagers (dont un au départ, un à un point au lieu de 120 caractères et un numéro, un de l'appareil avec « Changer le point »), formulaire, fiche, feuilles et bulle n’ont aucun débordement horizontal ; chaque cible mesure 44 px au moins. (v3.1) Dans la ligne de l'appareil avec un prénom de 23 caractères, un numéro et « Changer le point », le prénom mesure au moins 12 caractères de large (jamais une colonne de lettres) ; le numéro ou le bouton passe sous lui.
 - RV7.2 Le groupe de choix est une liste radio au clavier (flèches, Espace) ; le focus entre dans la feuille sur le choix coché, qui porte un anneau visible de 2 px.
-- RV7.3 Contraste : un texte de 12 à 13 px sur fond gris ou teinté (lignes de passagers, choix coché, raison de l’option verrouillée) mesure au moins 4,5:1. Vérifié sur les jetons réels : `--muted-foreground` (#737373) fait 4,35:1 sur `--muted` (#f5f5f5), donc la maquette y prend #595959 (6,4:1) ; les jetons ne changent pas.
+- RV7.3 Contraste : un texte de 12 à 13 px sur fond gris ou teinté (lignes de passagers, y compris « monte au départ » et « monte à {lieu} » des passagers des autres appareils, choix coché, raison de l’option verrouillée) mesure au moins 4,5:1. Vérifié sur les jetons réels : `--muted-foreground` (#737373) fait 4,35:1 sur `--muted` (#f5f5f5), donc la maquette y prend #595959 (6,4:1) ; les jetons ne changent pas.
 
 ### RV8, jour 30 et stockage
 - RV8.1 Après le jour 30, `purgeDayThirty` sur un événement avec compte (anonymisé) ou sans (supprimé) ne laisse aucun point ni choix de point ; la page « Inscriptions effacées » est inchangée.
-- RV8.2 Un point stocke lieu, heure, position facultative et sa voiture ; une inscription stocke le point choisi ; aucun numéro, aucune autre donnée de personne.
+- RV8.2 Un point stocke lieu, heure, position facultative et sa voiture ; une inscription stocke le point choisi ; aucun numéro, aucune autre donnée de personne. (v3) Rien de plus n'est stocké ni envoyé : le point de montée de chaque passager est déjà dans l'état de la page que reçoit toute personne qui a le lien ; « monte au départ » se déduit de l'absence de point, sans valeur nouvelle.
 - RV8.3 Les points d’un événement dont l’option est désactivée ne sont ni lus ni écrits ; une action sur un point d’un événement terminé est refusée comme les autres actions.
 
 ### Limites sans critère prouvable
 « La liste se lit facilement » : non couvert ; seul RV7.1 le remplace.
 
 ## Hors périmètre
+
+(v3) Une phrase « monte au départ » sur une voiture sans point ; regrouper les passagers par point (liste « à Prelles : Paul, Léa ») ; montrer « Changer le point » aux autres appareils ; un nombre de personnes par point sur la fiche ; un téléphone de plus ou un numéro montré à d'autres qu'aujourd'hui.
 
 Retour ; arrivée estimée par point, itinéraire ; capacité ou compte par point ; notification ; changement de l’auto-complétion ; regroupement de points avec une voiture ou avec le drapeau ; téléphone ou donnée de plus ; désactiver l’option avec des points existants (refusé, RV9.3) ; l’organisateur qui retire les points d’un conducteur.
 
@@ -105,3 +109,5 @@ Retour ; arrivée estimée par point, itinéraire ; capacité ou compte par poin
 - v2 : D1 à D3 tranchées par le propriétaire. Ajoutés : « Modifier l’événement » (option désactivée, activée sans point, verrouillée avec ses mots et son état accessible, échec ; RV9) ; clés FR/EN de l’option, de la raison, de l’échec, de « Position enregistrée · Retirer », de la bulle « 2 voitures » ; états d’échec de « Placer » et de « Valider » avec les refus réutilisés nommés (RV3.5, RV3.6, RV4.3) ; anneau de focus, carte sans aucune position, contraste #737373 sur #f5f5f5 vérifié (4,35:1, RV7.3), amendement de `product.md` en cases à cocher.
 - v2.1 : trois corrections de #894 reprises (RV5.6 scindé en RV5.6 et RV5.7 ; pluriel ICU de `EditEvent.stops.locked` dans RV9.3 ; hors-périmètre « regroupement de points avec une voiture ou avec le drapeau »). Q2 confirmée (#881) : les points de voitures différentes à moins de 25 m partagent un rond (« 2 voitures »), jamais regroupés avec une voiture ni avec le drapeau (RV5.4, RV5.6) ; `index.html` corrigé (note de la bulle, hors-périmètre) pour ne plus la contredire. Q1 : mots de `stopsOff` et `afterStop` (RV1.9, RV1.10, `RideForm.stops.off`, `RideForm.stops.afterStop`).
 - v2.2 (#918) : Q1 : l’heure et le lieu d’une autre voiture d’un rond partagé sont dans la ligne-bouton de la bulle, seulement quand ils diffèrent du titre (RV5.6) ; rien de plus sur la carte. Q2 : au repos, un Arrêt est sur une couche positive sous la couche survolée ou focalisée (`z-1!`, RV5.4) : il peut couvrir une partie d’une étiquette de voiture, jamais l’inverse au repos ; un Arrêt n’est plus entièrement caché au premier affichage.
+- v3 (demande du propriétaire, test en production) : le point de montée est dit sur chaque ligne de passager d'une voiture à points, au départ comme à un point, pour tout le monde (RV2.2, RV2.4, RV2.5 ; RV4.1, RV7.1, RV7.3, RV8.2 précisés). Aucun mot nouveau : `Board.car.boardsAt` et `Board.car.boardsAtStart` suffisent. `index.html` : sections 2, 4, 6 et 7 refaites, Léa et Zoé « au départ » visibles. Tests à amender : `e2e/board-stops.spec.ts` ligne 97 (Zoé `not.toContainText("monte")` devient `toContainText("monte au départ")`) et le titre du test RV2.1/RV2.2 ; `e2e/change-stop.spec.ts` ligne 97 (le titre « the others have neither button » reste vrai pour le bouton) ; relire `e2e/ride-stops-removed.spec.ts` (`seatsSaid`, lignes de passagers d'une voiture qui garde des points) ; `ride-card.tsx` lignes 101-130 (`stop || changes` devient « la voiture a des points »).
+- v3.1 (revue de v3, rendu Chrome 360 px) : le prénom ne se réduit plus à 2 px. `index.html` : `.pr .x{flex:1 1 12ch;min-width:min(12ch,100%)}` remplace `flex:1;min-width:0` ; légende de la section 2 corrigée (elle était fausse). Mesuré dans Chrome headless, ligne de 294 px : « Jean-Baptiste-Alexandre » 130 × 39 px, ligne de 158 px avec numéro, bouton et phrase (avant : 2 × 451 px, ligne de 517 px) ; sans le bouton, 130 × 39 px, ligne de 110 px. RV2.4/RV7.1 : le prénom d'une ligne garde au moins 12 caractères de large, c'est le numéro ou le bouton qui passe dessous. Ordre DOM d'une ligne : prénom, numéro, « Changer le point », puis la phrase ; un lecteur d'écran lit donc le prénom, le numéro, le bouton, puis la phrase, qui suit le prénom dans le DOM mais pas immédiatement (RV2.5). `src/components/event/ride-card.tsx` existe sur `origin/main` ; le défaut y est confirmé (`min-w-0 flex-1 wrap-anywhere` sur le prénom dans une ligne `flex-wrap`) et corrigé par cette tâche. Le designer avait lu un checkout périmé.
