@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { myEventsRead, shownPast } from "./screen-state";
+import { myEventsRead, openEventCount, shownPast } from "./screen-state";
+
+describe("openEventCount", () => {
+  const upcoming = (id: string) => ({ state: "upcoming", id }) as never;
+  const past = (id: string) => ({ state: "past", id }) as never;
+  const erased = (id: string) => ({ state: "erased", id }) as never;
+
+  // OA9.3: the events whose sign-ups are not erased yet, which stay open to participants.
+  it("counts the upcoming and the past events whose sign-ups are not erased, and not the erased ones", () => {
+    const list = { email: "a@b.fr", upcoming: [upcoming("a"), upcoming("b")], past: [past("c"), erased("d"), erased("e")] };
+    expect(openEventCount(list as never)).toBe(3);
+  });
+});
 
 const LIST = { state: "events", email: "camille@exemple.fr", upcoming: [], past: [] } as const;
 

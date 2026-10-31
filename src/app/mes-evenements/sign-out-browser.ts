@@ -10,7 +10,8 @@ export interface BrowserTokens {
   forgetAdminTokens(tokens: readonly string[]): void;
 }
 
-const bound: BrowserTokens = { readSessionToken, keptAdminTokens, forgetSessionToken, forgetAdminTokens };
+/** The real ones; the deletion of the account (delete-account-browser.ts) forgets them too. */
+export const bound: BrowserTokens = { readSessionToken, keptAdminTokens, forgetSessionToken, forgetAdminTokens };
 
 /**
  * « Se déconnecter » in this browser (OA9.1, OA9.2): `send` takes the session's token and every

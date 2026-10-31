@@ -49,6 +49,7 @@ function loadSeeded(token: (seeded: string) => unknown, id: (seeded: string) => 
 /** The panel of an event without a retour and without anybody. */
 const EMPTY_PANEL = {
   state: "panel",
+  options: { stops: false },
   legs: [{ leg: "aller", coverage: { withoutCar: 0, freeSeats: 0 }, carCount: 0, withoutCar: [], carsWithoutPhone: [] }],
   persons: [],
 };
@@ -79,6 +80,7 @@ describe("loadOrganiserPanel", () => {
     it("gives the panel for the event's token, the number of the person without a car in it", async () => {
       const { c, answer } = await loadSeeded((token) => token);
       expect(answer).toStrictEqual({
+        options: { stops: false },
         state: "panel",
         legs: [
           {

@@ -93,8 +93,8 @@ describe("readEnded", () => {
 });
 
 describe("stateShown", () => {
-  const withRetour: EventState = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [] };
-  const withoutRetour: EventState = { event: header, legs: [] };
+  const withRetour: EventState = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, options: { stops: false }, legs: [] };
+  const withoutRetour: EventState = { event: header, options: { stops: false }, legs: [] };
 
   it("shows nothing that is not a state: the legs alone change nothing, and throw nothing", () => {
     expect(stateShown(withRetour, [])).toBeUndefined();
@@ -115,20 +115,22 @@ describe("stateShown", () => {
 // #266: nor does a retour come, which would mount the aller's panel anew, and its sheet with it.
 describe("withTabsHeld", () => {
   const leg = (name: "aller" | "retour", rideId: string) => ({ leg: name, cars: [], withoutCar: [], device: [], rideId });
-  const shown = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [leg("aller", "old"), leg("retour", "old")] } as never as EventState;
-  const next = { event: { ...header, title: "Tournoi de Vannes" }, legs: [leg("aller", "new")] } as never as EventState;
+  const shown = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, options: { stops: false }, legs: [leg("aller", "old"), leg("retour", "old")] } as never as EventState;
+  const next = { event: { ...header, title: "Tournoi de Vannes" }, options: { stops: false }, legs: [leg("aller", "new")] } as never as EventState;
 
   it("the retour removed: shows the next state, with the end and the retour leg shown", () => {
     expect(withTabsHeld(shown, next)).toStrictEqual({
       event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-12 18:00:00" },
+      options: { stops: false },
       legs: [leg("aller", "new"), leg("retour", "old")],
     });
   });
 
   it("a retour added: shows the next state, without its end nor its retour leg", () => {
-    const added = { event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-13 19:00:00" }, legs: [leg("aller", "new"), leg("retour", "new")] };
+    const added = { event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-13 19:00:00" }, options: { stops: false }, legs: [leg("aller", "new"), leg("retour", "new")] };
     expect(withTabsHeld(next, added as never as EventState)).toStrictEqual({
       event: { ...header, title: "Tournoi de Vannes", retourAt: null },
+      options: { stops: false },
       legs: [leg("aller", "new")],
     });
   });
@@ -220,7 +222,7 @@ describe("goneNamed", () => {
 });
 
 describe("actionRunner", () => {
-  const state: EventState = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
+  const state: EventState = { event: header, options: { stops: false }, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
   /** A page that records the states the runner gives it and each action that begins and ends, and a connection that can be cut. */
   function page() {

@@ -49,7 +49,7 @@ export async function readOrganiserState(
     }
     if (decision.state === "notYours") return decision;
     if (decision.state !== "organiser") return { state: decision.state };
-    const { phonesById, ...rows } = await readEventRows(trx, eventId);
+    const { phonesById, ...rows } = await readEventRows(trx, eventId, { stops: event.stops_enabled });
     const legNames = eventLegs(event.retour_at);
     const board = buildBoard(rows, legNames, new Set());
     const legs = withOrganiserPhones(board, phonesById, decision.access, eventId);
@@ -58,6 +58,7 @@ export async function readOrganiserState(
     const persons = organiserPersons(rows, legNames);
     const sendRow = await readPendingSend(trx, eventId);
     const pending = sendRow && pendingNotice(sendRow, now);
-    return { state: "panel", legs: organiserPanel(legs), persons, ...(pending && { pending }) };
+    const options = { stops: event.stops_enabled };
+    return { state: "panel", options, legs: organiserPanel(legs), persons, ...(pending && { pending }) };
   });
 }

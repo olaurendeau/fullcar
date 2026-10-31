@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { myEvents } from "./actions";
 import { MyAccount } from "./my-account";
 import { MyEventRow } from "./my-event-row";
-import { myEventsRead, PAST_SHOWN, shownPast, type MyEventsRead, type MyEventsShown } from "./screen-state";
+import { myEventsRead, openEventCount, PAST_SHOWN, shownPast, type MyEventsRead, type MyEventsShown } from "./screen-state";
 
 type Screen = MyEventsRead | { state: "loading" };
 
@@ -94,7 +94,7 @@ export function MyEventsScreen() {
         <Link href="/nouveau">{tHome("create")}</Link>
       </Button>
       {content}
-      {screen.state === "events" && <MyAccount email={screen.list.email} />}
+      {screen.state === "events" && <MyAccount email={screen.list.email} openEvents={openEventCount(screen.list)} />}
     </>
   );
 }

@@ -7,13 +7,13 @@ function ride(id: string, driverId: string, seats: number): RideRow {
 }
 
 function placed(personId: string, rideId: string | null, leg: RideRow["leg"] = "aller"): PlacementRow {
-  return { personId, leg, rideId, placedAt: new Date(Date.UTC(2026, 9, 14)) };
+  return { personId, leg, rideId, stopId: null, placedAt: new Date(Date.UTC(2026, 9, 14)) };
 }
 
 /** Every id is also a person of the event; with `allOnDevice`, a person of the device too. */
 function aller(rides: RideRow[], placements: PlacementRow[], allOnDevice = false) {
   const ids = new Set([...rides.map((r) => r.driverId), ...placements.map((p) => p.personId)]);
-  const data: BoardRows = { persons: [...ids].map((id) => ({ id, firstName: id })), rides, placements };
+  const data: BoardRows = { persons: [...ids].map((id) => ({ id, firstName: id })), rides, placements, stops: [] };
   return legBoard("aller", data, allOnDevice ? ids : new Set());
 }
 

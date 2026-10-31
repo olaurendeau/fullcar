@@ -19,7 +19,8 @@
         "text": "Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places."
       }
     },
-    "deleted": "Les événements sont supprimés 30 jours après leur date."
+    "deleted": "Les événements sont supprimés 30 jours après leur date.",
+    "accountDeleted": "Votre compte a été supprimé."
   },
   "CreateEvent": {
     "title": "Titre",
@@ -752,6 +753,16 @@
   "Account": {
     "title": "Mon compte",
     "signOut": "Se déconnecter",
-    "signOutFailed": "La session n’a pas été fermée. Vérifiez la connexion, puis réessayez."
+    "signOutFailed": "La session n’a pas été fermée. Vérifiez la connexion, puis réessayez.",
+    "delete": "Supprimer mon compte"
+  },
+  "DeleteAccount": {
+    "title": "Supprimer votre compte ?",
+    "erased": "Votre adresse e-mail et l’historique de vos événements seront effacés.",
+    "open": "{count, plural, one {L’événement dont les inscriptions ne sont pas encore effacées reste ouvert aux participants, sans organisateur, et sera supprimé 30 jours après sa date.} other {Les # événements dont les inscriptions ne sont pas encore effacées restent ouverts aux participants, sans organisateur, et seront supprimés 30 jours après leur date.}}",
+    "final": "C’est définitif.",
+    "confirm": "Supprimer mon compte",
+    "cancel": "Annuler",
+    "failed": "Le compte n’a pas été supprimé. Vérifiez la connexion, puis réessayez."
   }
 }

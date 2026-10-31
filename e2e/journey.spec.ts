@@ -435,11 +435,14 @@ test.describe("an event with its three options", () => {
     // whatever was rendered on `/` before, ticking the options included.
     // Radix's mounted tab panel too: it holds `animation-duration: 0s` until a render after
     // the next frame, which may or may not have come yet. It shows nothing.
+    // The page state's `options.stops` too: it carries the event's option, which is what #884
+    // asks for (#888). It is the one field that differs, and only it, between the two events.
     const normalise = (html: string) =>
       html
         .replaceAll(id, "{id}")
         .replace(/_r_\w+_/g, "{useId}")
-        .replaceAll('style="animation-duration: 0s;"', 'style=""');
+        .replaceAll('style="animation-duration: 0s;"', 'style=""')
+        .replaceAll(/"options":\{"stops":(?:true|false)\}/g, '"options":{"stops":{stops}}');
     const withoutScripts = () =>
       page.locator("body").evaluate((body) => {
         const copy = body.cloneNode(true) as HTMLElement;
