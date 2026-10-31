@@ -663,17 +663,19 @@ describe("a point's layer (#722, CA1.23)", () => {
 
 describe("a Stop's layer (#893, RV5.4, WCAG 2.4.11)", () => {
   it.each([
-    [false, false, "-z-1!"],
-    [true, false, "z-999!"],
-    [false, true, "z-1001!"],
-    [true, true, "z-1001!"],
-  ] as const)("focused: %s, open: %s: %s", (focused, open, layer) => {
-    expect(stopLayer({ focused, open })).toBe(layer);
+    [false, false, false, "-z-1!"],
+    [true, false, false, "z-999!"],
+    [false, true, false, "z-999!"],
+    [true, true, false, "z-999!"],
+    [false, false, true, "z-1001!"],
+    [true, true, true, "z-1001!"],
+  ] as const)("hovered: %s, focused: %s, open: %s: %s", (hovered, focused, open, layer) => {
+    expect(stopLayer({ hovered, focused, open })).toBe(layer);
     expect(STOP_LAYERS).toContain(layer);
   });
 
-  it("under the labels of the cars, which are at 0; focused, above them and under the flag", () => {
+  it("under the labels of the cars, which are at 0; hovered or focused, above them and under the flag", () => {
     expect(STOP_LAYERS[0]).toBe("-z-1!");
-    expect(Number(/(\d+)/.exec(stopLayer({ focused: true, open: false }))![1])).toBeLessThan(Number(/(\d+)/.exec(FLAG_LAYER)![1]));
+    expect(Number(/(\d+)/.exec(stopLayer({ hovered: true, focused: false, open: false }))![1])).toBeLessThan(Number(/(\d+)/.exec(FLAG_LAYER)![1]));
   });
 });

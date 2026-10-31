@@ -123,6 +123,61 @@ test("RV5.4, WCAG 2.4.11: a Stop under a car's label is raised above it while it
   expect(await shows()).toBe(false);
 });
 
+test.describe("with a mouse", () => {
+  // The hover in a context with a mouse, the project being a touch Pixel 7 (CA1.23, amendment 4).
+  test.use({ hasTouch: false, isMobile: false });
+
+  test("RV5.4, CA1.23: a Stop under a car's label is raised above it while a mouse is over a part of its label that shows, and goes back under", async ({
+    db,
+    page,
+    placed,
+  }) => {
+    const marc = await seedCar(db, placed.id, "Marc", { position: around(placed.place, { east: 3000 }), departureTime: "08:00:00" });
+    const spot = around(placed.place, { north: 1200 });
+    await seedStop(db, placed.id, marc, { location: "Prelles boucherie", time: "08:25:00", position: spot });
+    // 10 m from the Stop, and not grouped with it, a car being a car: her label lies over its round.
+    await seedCar(db, placed.id, "Inès", { position: around(spot, { north: 10 }), location: "Gare", departureTime: "09:00:00" });
+
+    await page.goto(`/e/${placed.id}`);
+    const map = await openMap(page, mapName("aller", "2 voitures"));
+    await expect(stops(map)).toHaveCount(1);
+    await expect(points(map)).toHaveCount(2);
+    const stop = stops(map);
+    const dot = stop.locator("[data-map-stop-dot]");
+    /** Whether the centre of the round shows the Stop: the label of a car would be what the point lands on otherwise. */
+    const shows = () =>
+      dot.evaluate((element) => {
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return !!element.closest("[data-map-stop]")?.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+      });
+    /** A spot of the Stop's label where the Stop is on top, relative to its button, for Playwright's `position`. */
+    const visibleSpot = () =>
+      stop.evaluate((button) => {
+        const label = button.querySelector("[data-map-stop-label]")!.getBoundingClientRect();
+        const own = button.getBoundingClientRect();
+        const y = label.y + label.height / 2;
+        for (let x = label.x + 2; x < label.x + label.width - 2; x += 2) {
+          if (button.contains(document.elementFromPoint(x, y))) return { x: x - own.x, y: y - own.y };
+        }
+        return null;
+      });
+    await dot.scrollIntoViewIfNeeded();
+    const away = (await map.boundingBox())!;
+    await page.mouse.move(away.x + 10, Math.max(1, away.y - 30));
+    expect(await shows(), "the round lies under a car's label").toBe(false);
+
+    // Hovered on a part of its label that shows: the round shows too.
+    const position = await visibleSpot();
+    expect(position, "a part of the label shows").not.toBeNull();
+    await stop.hover({ position: position! });
+    expect(await shows(), "the hovered round shows").toBe(true);
+
+    // The mouse out of the map: under the labels again.
+    await page.mouse.move(away.x + 10, Math.max(1, away.y - 30));
+    expect(await shows()).toBe(false);
+  });
+});
+
 test("WCAG 2.5.3: the accessible name of a Stop's button starts with its visible text, then its name", async ({ db, page, placed }) => {
   const marc = await seedCar(db, placed.id, "Marc", { position: around(placed.place, { east: 3000 }), departureTime: "08:00:00" });
   const nina = await seedCar(db, placed.id, "Nina", { position: around(placed.place, { north: 1500 }), departureTime: "09:00:00" });
@@ -145,7 +200,7 @@ test("WCAG 2.5.3: the accessible name of a Stop's button starts with its visible
   for (const [name, visible] of names) expect(name.startsWith(`${visible}, `), `« ${name} » starts with « ${visible} »`).toBe(true);
   expect(names.map(([name]) => name).sort()).toEqual([
     "08:25 Marc, Point de RDV de Marc : Prelles boucherie, 08:25",
-    "08:30 2, Point de RDV de Marc, Paul : Gare nord, 08:30",
+    "08:30 · 2 voitures, Point de RDV de Marc, Paul : Gare nord, 08:30",
     "09:20 Nina, Point de RDV de Nina : Monétier, 09:20",
   ]);
   // The role-and-name query reads the same name.
@@ -166,8 +221,8 @@ test("RV5.6: the Stops of two cars 10 m apart are one round: the title « 2 voit
   await expect(stops(map)).toHaveCount(1);
   await expect(points(map)).toHaveCount(2);
   const stop = stops(map);
-  await expect(stop.locator("[data-map-stop-label]")).toHaveText("08:25 2");
-  await expect(stop).toHaveAccessibleName("08:25 2, Point de RDV de Marc, Nina : Prelles boucherie, 08:25");
+  await expect(stop.locator("[data-map-stop-label]")).toHaveText("08:25 · 2 voitures");
+  await expect(stop).toHaveAccessibleName("08:25 · 2 voitures, Point de RDV de Marc, Nina : Prelles boucherie, 08:25");
 
   await stop.locator("[data-map-stop-dot]").tap();
   const bubble = bubbleOf(map, "2 voitures Prelles boucherie, 08:25");
@@ -199,7 +254,7 @@ test("RV5.6: two Stops of one car 10 m apart stay two rounds, and a Stop 10 m fr
 
   // Marc's first Stop and Nina's make one round; Marc's second, his own.
   await expect(stops(map)).toHaveCount(2);
-  await expect(stops(map).first().locator("[data-map-stop-label]")).toHaveText("08:25 2");
+  await expect(stops(map).first().locator("[data-map-stop-label]")).toHaveText("08:25 · 2 voitures");
   await expect(stops(map).last().locator("[data-map-stop-label]")).toHaveText("08:30 Marc");
 });
 
@@ -221,7 +276,7 @@ test("RV7.1: at 360 px, a place of 120 characters in the bubble of a Stop, one c
 
   for (const [label, title] of [
     ["10:15 Paul", `${place}, 10:15`],
-    ["08:25 2", "2 voitures"],
+    ["08:25 · 2 voitures", "2 voitures"],
   ]) {
     const stop = stops(map).filter({ hasText: label });
     // From the keyboard: at 360 px a label of a car may lie over the round, which a touch would not reach.

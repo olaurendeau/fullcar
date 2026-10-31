@@ -58,7 +58,7 @@ export interface StopPoint {
   /** Its first car's id: in the Tab order, the round follows that car's point (RV5.4, CA1.23). */
   follows: string;
   position: Position;
-  /** « 08:25 Nina »; several cars, « 08:25 2 ». */
+  /** « 08:25 Nina »; several cars, « 08:25 · 2 voitures ». */
   label: string;
   /** Starts with its label (WCAG 2.5.3): « 08:25 Nina, Point de RDV de Nina : Prelles boucherie, 08:25 ». */
   name: string;
@@ -457,7 +457,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
   /** A point on the map, named by its key (`pointKey`): its marker, its button, its line to the flag (none at the flag). */
   type Drawn = PointElements & { kind: "point"; key: string; point: CarPoint; marker: L.Marker; line: L.Polyline | null; hovered: boolean };
   /** A round of Stops on the map, named by its key. */
-  type DrawnStop = StopElements & { kind: "stop"; key: string; point: StopPoint; marker: L.Marker };
+  type DrawnStop = StopElements & { kind: "stop"; key: string; point: StopPoint; marker: L.Marker; hovered: boolean };
   /** What has a bubble: a point or a round of Stops. */
   type Anchor = Drawn | DrawnStop;
   /** The open bubble, of `entry`'s point or round: its buttons by car, then « Fermer ». */
@@ -503,12 +503,12 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     const icon = entry.marker.getElement();
     if (!icon) return;
     const focused = !!focusTo && icon.contains(focusTo);
-    // A Stop is under the labels, but for its focus (#893, WCAG 2.4.11): a mouse over it raises nothing.
+    // A Stop is under the labels, but for a mouse over it or the focus in it (#893, WCAG 2.4.11).
     const layers = entry.kind === "stop" ? STOP_LAYERS : POINT_LAYERS;
     icon.classList.remove(...layers);
     icon.classList.add(
       entry.kind === "stop"
-        ? stopLayer({ focused, open: open?.entry === entry })
+        ? stopLayer({ hovered: entry.hovered, focused, open: open?.entry === entry })
         : pointLayer({ hovered: entry.hovered, focused, open: open?.entry === entry }),
     );
   };
@@ -635,7 +635,16 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     const { button, text } = stopButton(() => openBubble(entry));
     const icon = L.divIcon({ html: button, className: STOP_LAYERS[0], iconSize: [0, 0] });
     const marker = L.marker([point.position.lat, point.position.lng], { icon, keyboard: false, interactive: false });
-    const entry: DrawnStop = { kind: "stop", key: point.key, button, text, point, marker };
+    const entry: DrawnStop = { kind: "stop", key: point.key, button, text, point, marker, hovered: false };
+    // A touch emits `pointerenter` too, and hovers nothing.
+    button.addEventListener("pointerenter", (event) => {
+      entry.hovered = event.pointerType === "mouse";
+      raise(entry);
+    });
+    button.addEventListener("pointerleave", () => {
+      entry.hovered = false;
+      raise(entry);
+    });
     marker.on("add", () => {
       watch(entry);
       arrange();

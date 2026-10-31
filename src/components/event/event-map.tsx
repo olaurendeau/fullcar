@@ -297,8 +297,8 @@ export function EventMap({ leg, map, cars, date }: { leg: Leg; map: LegMap; cars
     const time = format.dateTime(wallClockAsUtc(`${date} ${first.stop.time}`), { timeStyle: "short" });
     const where = t("stopTitle", { place: first.stop.location, time });
     const drivers = here.map(({ car }) => car.driver.firstName);
-    // « 08:25 Nina », or « 08:25 2 »; its name starts with it (WCAG 2.5.3).
-    const label = `${time} ${here.length === 1 ? drivers[0] : format.number(here.length)}`;
+    // « 08:25 Nina », or « 08:25 · 2 voitures », the design's word for the count; its name starts with it (WCAG 2.5.3).
+    const label = here.length === 1 ? `${time} ${drivers[0]}` : `${time} · ${t("stopCars", { count: here.length })}`;
     const name = t("stop", { driver: format.list(drivers, { type: "conjunction", style: "narrow" }), place: first.stop.location, time });
     return {
       key: here
