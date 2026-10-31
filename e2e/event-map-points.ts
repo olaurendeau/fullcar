@@ -144,7 +144,7 @@ export async function serverPage(page: Page, path: string) {
 }
 
 /** The car points of `map`, in the DOM's order: an open bubble's buttons are not points. */
-export const points = (map: Locator) => map.locator(".leaflet-marker-pane .leaflet-marker-icon > button");
+export const points = (map: Locator) => map.locator(".leaflet-marker-pane .leaflet-marker-icon > button:not([data-map-stop])");
 /** The lines of `map`. */
 export const lines = (map: Locator) => map.locator(".leaflet-overlay-pane path");
 

@@ -682,6 +682,8 @@
     "group": "{count, plural, other {# cars}}: {drivers}, {seats}",
     "groupTitle": "{count, plural, other {# cars}}, {seats}",
     "notOnMap": "{count, plural, one {# car is not on the map: its place has no position.} other {# cars are not on the map: their places have no position.}}",
+    "stop": "{driver}’s meeting point: {place}, {time}",
+    "stopsNotOnMap": "{count, plural, one {# meeting point is not on the map: its place has no position.} other {# meeting points are not on the map: their places have no position.}}",
     "touchHint": "Use two fingers to move or zoom the map.",
     "organiserHint": "To show the map, pick the event’s place from the suggestions.",
     "loading": "Loading the map…",
