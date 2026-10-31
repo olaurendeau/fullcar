@@ -43,7 +43,7 @@ const FR = {
     "Nous avons envoyé un nouveau lien de confirmation à l’adresse qui a créé l’événement. Il est valable 7 jours. Ouvrez-le dans le navigateur où vous voulez administrer l’événement.",
   tooMany: "Trop d’envois. Réessayez dans une heure.",
   resendFailed: "Le lien n’a peut-être pas été envoyé. Une erreur est survenue : réessayez dans quelques minutes.",
-  notSent:"L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
+  notSent: "L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
   signedInAs: (email: string) => `Session ouverte avec ${email}.`,
   needsJavaScript: "Se connecter nécessite JavaScript : activez-le, puis rechargez la page.",
 };
