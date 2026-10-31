@@ -437,6 +437,32 @@ describe("editAnswer", () => {
     });
   });
 
+  // D1: the option stored comes with the answer, from a server that says it.
+  it("carries the option stored on `ok` and on `changed`, when the server says it", () => {
+    expect(editAnswer({ ok: true, value: { ok: true, event, stops: true } })).toStrictEqual({ kind: "saved", event, stops: true });
+    expect(editAnswer({ ok: true, value: { ok: false, error: "changed", event, stops: false } })).toStrictEqual({
+      kind: "changed",
+      event,
+      stops: false,
+    });
+  });
+
+  it("ignores an option that is no boolean", () => {
+    expect(editAnswer({ ok: true, value: { ok: true, event, stops: "yes" } })).toStrictEqual({ kind: "saved", event });
+  });
+
+  // RV9.3: the option stays on, and the number of cars that hold it.
+  it("is the number of cars on `stopsLocked`", () => {
+    expect(editAnswer({ ok: true, value: { ok: false, error: "stopsLocked", cars: 2 } })).toStrictEqual({ kind: "stopsLocked", cars: 2 });
+  });
+
+  it.each<[string, unknown]>([
+    ["without its number", { ok: false, error: "stopsLocked" }],
+    ["with a number that is no count", { ok: false, error: "stopsLocked", cars: -1 }],
+  ])("is the failure on `stopsLocked` %s", (_, value) => {
+    expect(editAnswer({ ok: true, value })).toStrictEqual({ kind: "problem", problem: "failed" });
+  });
+
   // Nothing was written, and the sheet says the generic failure.
   it.each<[string, unknown]>([
     ["`changed` without a header", { ok: false, error: "changed" }],
@@ -506,6 +532,53 @@ describe("editFailure: the sheet closed before the answer, word for word", () =>
       }
     }
   }
+});
+
+// RV9.4, RV9.3 (docs/design/meeting-points, section 1 bis): the sheet closed before the answer of a
+// change that only touched the option « Points de RDV ».
+describe("editFailure: the option « Points de RDV », word for word", () => {
+  const words = (locale: "fr" | "en") =>
+    wordsOf(createTranslator<Messages>({ locale, messages: locale === "fr" ? fr : en }), createFormatter({ locale }));
+  const said = (answer: Exclude<EditAnswer, { kind: "saved" }>, optionOnly: boolean, locale: "fr" | "en" = "fr") => {
+    const { notDone, why } = editFailure(answer, false, optionOnly);
+    return failureText(words(locale), notDone, why);
+  };
+
+  it.each<[string, Exclude<EditAnswer, { kind: "saved" }>, string, string]>([
+    [
+      "offline",
+      { kind: "problem", problem: "offline" },
+      "L’option « Points de RDV » n’a pas été modifiée. Vérifiez la connexion, puis réessayez.",
+      "The “Meeting points” option was not changed. Check your connection, then try again.",
+    ],
+    [
+      "a server error",
+      { kind: "problem", problem: "failed" },
+      "L’option « Points de RDV » n’a pas été modifiée. Une erreur est survenue : réessayez dans un instant.",
+      "The “Meeting points” option was not changed. Something went wrong: try again in a moment.",
+    ],
+    [
+      "cars that have meeting points (RV9.3)",
+      { kind: "stopsLocked", cars: 2 },
+      "L’option « Points de RDV » reste active : des voitures ont des points de RDV.",
+      "The “Meeting points” option stays on: cars have meeting points.",
+    ],
+  ])("%s: the option alone", (_, answer, inFrench, inEnglish) => {
+    expect(said(answer, true)).toBe(inFrench);
+    expect(said(answer, true, "en")).toBe(inEnglish);
+  });
+
+  it("another field changed too: the event was not changed, and the option stays on as the reason says", () => {
+    expect(said({ kind: "stopsLocked", cars: 1 }, false)).toBe(
+      "L’événement n’a pas été modifié. L’option « Points de RDV » reste active : des voitures ont des points de RDV.",
+    );
+    expect(said({ kind: "problem", problem: "offline" }, false)).toBe("L’événement n’a pas été modifié. Vérifiez la connexion, puis réessayez.");
+  });
+
+  it("a removal of the retour keeps its own words", () => {
+    const { notDone } = editFailure({ kind: "stopsLocked", cars: 1 }, true, true);
+    expect(notDone).toEqual({ kind: "removeRetour" });
+  });
 });
 
 describe("announcement", () => {

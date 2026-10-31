@@ -361,8 +361,12 @@ test.describe("M9: readable everywhere", () => {
             expect(clipped, `« ${name} » cut at ${size}`).toBe(false);
             expect((await button.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(44);
           }
-          const box = dialog.locator("label").filter({ has: page.getByRole("checkbox") });
-          expect((await box.boundingBox())!.height, `the box's row at ${size}`).toBeGreaterThanOrEqual(44);
+          // Two options now, « Retour » and « Points de RDV »: each row is measured.
+          const rows = dialog.locator("label").filter({ has: page.getByRole("checkbox") });
+          expect(await rows.count()).toBe(2);
+          for (const row of await rows.all()) {
+            expect((await row.boundingBox())!.height, `a box's row at ${size}`).toBeGreaterThanOrEqual(44);
+          }
           await page.keyboard.press("Escape");
           await expect(dialog).toHaveCount(0);
         }
