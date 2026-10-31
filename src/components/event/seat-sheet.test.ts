@@ -1,7 +1,7 @@
 import { createFormatter, createTranslator, type Messages } from "next-intl";
 import { describe, expect, it } from "vitest";
 import fr from "../../../messages/fr.json";
-import { failureText, wordsOf } from "./failure-words";
+import { failureText, stopGoneText, wordsOf } from "./failure-words";
 import { seatsTaken } from "./seat-sheet";
 
 describe("seatsTaken", () => {
@@ -25,6 +25,25 @@ describe("seatsTaken", () => {
     const words = wordsOf(createTranslator<Messages>({ locale: "fr", messages: fr }), createFormatter({ locale: "fr" }));
     expect(failureText(words, { kind: "seats", names: ["Tom"], driver: "Claire" }, taken.why)).toBe(
       "Tom n’a pas pu monter dans la voiture de Claire. Tom ne fait plus partie de l’événement.",
+    );
+  });
+
+  // RV3.4: the point is gone before the send; the persons board at the departure, a success that says so.
+  it("RV3.4: keeps `stopGone` on a success, and says it in the bar's words", () => {
+    expect(seatsTaken({ ok: true, value: { ok: true, stopGone: true } }, ["Paul"])).toEqual({ kind: "done", stopGone: true });
+    expect(seatsTaken({ ok: true, value: { ok: true } }, ["Paul"])).toEqual({ kind: "done" });
+    const words = wordsOf(createTranslator<Messages>({ locale: "fr", messages: fr }), createFormatter({ locale: "fr" }));
+    expect(stopGoneText(words, ["Paul"])).toBe("Ce point n’existe plus : Paul monte au lieu de départ.");
+    expect(stopGoneText(words, ["Paul", "Léa"])).toBe("Ce point n’existe plus : Paul et Léa montent au lieu de départ.");
+  });
+
+  // RV3.5: the refusals keep their words, whatever point was chosen: none names it.
+  it("RV3.5: a refusal says nothing of the point", () => {
+    const words = wordsOf(createTranslator<Messages>({ locale: "fr", messages: fr }), createFormatter({ locale: "fr" }));
+    const taken = seatsTaken({ ok: true, value: { ok: false, error: "seatTaken" } }, ["Paul"]);
+    if (taken.kind === "done") throw new Error("A refusal is not a success.");
+    expect(failureText(words, { kind: "seats", names: ["Paul"], driver: "Nina" }, taken.why)).toBe(
+      "Paul n’a pas pu monter dans la voiture de Nina. Cette place vient d’être prise.",
     );
   });
 });

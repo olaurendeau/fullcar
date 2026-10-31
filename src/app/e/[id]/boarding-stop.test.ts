@@ -120,7 +120,7 @@ describe("setBoardingStop", () => {
 
   it("RV4.4: the seat, the boarding time and the board stay as they were", async () => {
     await withRollback(async (trx) => {
-      const { eventId, lea, hugo, r1, s2 } = await seedScene(trx);
+      const { eventId, lea, hugo, r1, s1, s2 } = await seedScene(trx);
       const before = await rowsOf(trx, eventId);
       const boardBefore = await boardOf(trx, eventId, lea.token);
       const passengersBefore = await ridePassengers(trx, { id: r1, eventId, leg: "aller" });
@@ -129,6 +129,10 @@ describe("setBoardingStop", () => {
       expect(await setBoardingStop(trx, eventId, lea.token, r1, hugo.id, null)).toMatchObject({ ok: true });
 
       const after = await rowsOf(trx, eventId);
+      // The point did change, or a change that writes nothing would pass for one that leaves the rest alone.
+      const stopOf = (rows: typeof after, personId: string) => rows.find((row) => row.person_id === personId)?.stop_id;
+      expect([stopOf(before, lea.id), stopOf(before, hugo.id)]).toEqual([null, s1]);
+      expect([stopOf(after, lea.id), stopOf(after, hugo.id)]).toEqual([s2, null]);
       expect(after.map(({ person_id, ride_id, placed_at }) => ({ person_id, ride_id, placed_at }))).toEqual(
         before.map(({ person_id, ride_id, placed_at }) => ({ person_id, ride_id, placed_at })),
       );
@@ -285,6 +289,10 @@ describe("setBoardingStop", () => {
           db,
           (trx) => setBoardingStop(trx, eventId, lea.token, rideId, lea.id, stopId),
           (own) => removeStopUnderRide(own, eventId, rideId, stopId),
+          // The point was written in the first, which waits: without it, the end state would be the same.
+          async (_pid, trx) => {
+            expect(await rowsOf(trx, eventId)).toEqual([expect.objectContaining({ ride_id: rideId, stop_id: stopId })]);
+          },
         );
 
         expect(await rowsOf(db, eventId)).toEqual([expect.objectContaining({ ride_id: rideId, stop_id: null })]);

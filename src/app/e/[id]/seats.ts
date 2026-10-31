@@ -97,7 +97,8 @@ async function placeInRide(
     return decision.error === "notEnoughSeats" && personIds.length === 1 ? { ok: false, error: "seatTaken" } : decision;
   }
   // Read under the Ride's lock, which every write of a Stop takes: it holds until the commit.
-  const stopGone = stopId !== null && !(await isStopOfRide(trx, ride, stopId));
+  // Said only when someone is placed: those already in the car keep their point, whatever is asked.
+  const stopGone = decision.place.length > 0 && stopId !== null && !(await isStopOfRide(trx, ride, stopId));
   // `stopId` on every write: without it, `setPlacement` puts the person back at the start.
   const boardsAt = stopGone ? null : stopId;
   for (const personId of decision.place) await setPlacement(trx, { personId, eventId, leg, rideId, stopId: boardsAt });

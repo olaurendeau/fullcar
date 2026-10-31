@@ -76,17 +76,36 @@ export function RideCard({
         </p>
         {car.note && <p className="text-muted-foreground wrap-anywhere">{car.note}</p>}
       </div>
+      {car.stops.length > 0 && (
+        // None, no list and no title (RV2.1): the departure keeps its line above.
+        <ul aria-label={t("stops")} className="ml-2 flex min-w-0 flex-col gap-1.5 border-l-2 pl-3 text-sm">
+          {car.stops.map((stop) => (
+            <li key={stop.id} className="flex min-w-0 items-baseline gap-2">
+              <time dateTime={`${date}T${stop.time.slice(0, 5)}`} className="min-w-11 shrink-0 font-semibold tabular-nums">
+                {format.dateTime(wallClockAsUtc(`${date} ${stop.time}`), { timeStyle: "short" })}
+              </time>
+              <span className="min-w-0 wrap-anywhere">{stop.location}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <ul aria-label={t("seats")} className="flex flex-col gap-2">
-        {car.passengers.map((passenger) => (
-          <li
-            key={passenger.id}
-            className="flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg bg-muted px-3 text-sm"
-          >
-            <User aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 wrap-anywhere">{passenger.firstName}</span>
-            {passenger.phone && <PhoneLink firstName={passenger.firstName} phone={passenger.phone} />}
-          </li>
-        ))}
+        {car.passengers.map((passenger) => {
+          // Where she boards, if at a point: at the departure, nothing (RV2.2).
+          const stop = car.stops.find(({ passengerIds }) => passengerIds.includes(passenger.id));
+          return (
+            <li
+              key={passenger.id}
+              className={cn("flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg bg-muted px-3 text-sm", stop && "py-1.5")}
+            >
+              <User aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 wrap-anywhere">{passenger.firstName}</span>
+              {passenger.phone && <PhoneLink firstName={passenger.firstName} phone={passenger.phone} />}
+              {/* #595959 on `muted`: 6,4:1 where `muted-foreground` makes 4,35:1 (RV7.3). */}
+              {stop && <span className="basis-full text-xs text-[#595959] wrap-anywhere">{t("boardsAt", { place: stop.location })}</span>}
+            </li>
+          );
+        })}
         {Array.from({ length: car.freeSeats }, (_, seat) => (
           <li key={`free-${seat}`} className="flex">
             <button

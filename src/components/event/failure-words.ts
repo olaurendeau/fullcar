@@ -225,6 +225,14 @@ export function undoneText(words: Words, { names, undone, driver }: { names: rea
   return words.t(key, { names: nameList(words, said), count: said.length, driver });
 }
 
+/**
+ * The bar's success when the point chosen was gone at the send (RV3.4): `names` board at the
+ * departure, in the car all the same. Not a refusal: no « Annuler » is lost, no seat.
+ */
+export function stopGoneText(words: Words, names: readonly string[]): string {
+  return words.t("Sheet.stop.gone", { names: nameList(words, names), count: names.length });
+}
+
 function notDoneText(words: Words, notDone: NotDone): string {
   const { t } = words;
   switch (notDone.kind) {

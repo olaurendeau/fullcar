@@ -847,6 +847,21 @@ describe("takeSeats at a stop", () => {
     });
   });
 
+  it("RV3.4: everyone asked already in the car: nothing is written, the point asked is ignored and no stopGone is said", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const stop = await seedStop(trx, eventId, r1);
+      await trx.deleteFrom("stop").where("id", "=", stop).execute();
+      expect(await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], null)).toMatchObject({ ok: true });
+      const before = await placementsOf(trx, eventId);
+
+      const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], stop);
+
+      expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
   it("RV3.4: a point of another car is no point of this one", async () => {
     await withRollback(async (trx) => {
       const { eventId, lea, r1, r2 } = await seedScene(trx);
@@ -953,6 +968,10 @@ describe("takeSeats at a stop", () => {
           db,
           (trx) => takeSeats(trx, eventId, lea.token, rideId, "aller", [lea.id], stopId),
           (own) => removeStopUnderRide(own, eventId, rideId, stopId),
+          // The point was written in the first, which waits: a take that writes none would end the same.
+          async (_pid, trx) => {
+            expect(await boardingOf(trx, eventId)).toEqual({ [lea.id]: stopId });
+          },
         );
 
         expect(await boardingOf(db, eventId)).toEqual({ [lea.id]: null });
