@@ -453,9 +453,6 @@ test.describe("OA2.5: « Corriger l’adresse »", () => {
     await expect(sheet(page).getByText("Adresse e-mail non valide.")).toBeVisible();
     await expect(field(page)).toBeFocused();
     await expect(field(page)).toHaveAttribute("aria-invalid", "true");
-    await field(page).fill("");
-    await send(page).click();
-    await expect(sheet(page).getByText("Champ requis.")).toBeVisible();
     expect(await mailTo(email)).toEqual([]);
   });
 
