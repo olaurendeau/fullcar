@@ -51,16 +51,18 @@ function recordRequests(page: Page): Request[] {
 }
 
 /**
- * Where `token` went among the finished requests (never printed): in a URL, in a header, in a body.
- * Headers are read with `allHeaders`, the ones the browser added included.
+ * Where `token` went among the finished requests (never printed): in a URL, in a header, in how
+ * many bodies. Headers are read with `allHeaders`, the ones the browser added included. A page
+ * that keeps a session sends it in two bodies: its visit (session-visit.tsx), and the question
+ * whether it is the event's organiser's; one only when that question is not asked.
  */
 async function whereTokenWent(requests: Request[], token: string) {
-  const went = { url: false, headers: false, body: false };
+  const went = { url: false, headers: false, bodies: 0 };
   for (const request of requests) {
     if (request.url().includes(token)) went.url = true;
     const headers = Object.values(await request.allHeaders());
     if (headers.some((value) => value.includes(token))) went.headers = true;
-    if (request.postData()?.includes(token)) went.body = true;
+    if (request.postData()?.includes(token)) went.bodies += 1;
   }
   return went;
 }
@@ -178,9 +180,9 @@ test.describe("in French", () => {
     await expect(board).toBeVisible();
     const boardBox = (await board.boundingBox())!;
     expect((await link.boundingBox())!.y).toBeGreaterThanOrEqual(boardBox.y + boardBox.height);
-    // The session went in a body, and in no URL nor header.
+    // The session went in bodies, and in no URL nor header.
     await page.waitForLoadState("networkidle");
-    expect(await whereTokenWent(requests, session)).toEqual({ url: false, headers: false, body: true });
+    expect(await whereTokenWent(requests, session)).toEqual({ url: false, headers: false, bodies: 2 });
     await link.click();
     await expect(page).toHaveURL(organiserPath(seededEvent));
     await expect(main(page).getByRole("button", { name: "Actualiser" })).toBeVisible();
@@ -210,7 +212,7 @@ test.describe("in French", () => {
     // The server answers after the load: wait for it before saying that no link came.
     await page.waitForLoadState("networkidle");
     await expect(main(page).getByRole("link", { name: FR.area })).toHaveCount(0);
-    expect(await whereTokenWent(requests, other)).toEqual({ url: false, headers: false, body: true });
+    expect(await whereTokenWent(requests, other)).toEqual({ url: false, headers: false, bodies: 2 });
   });
 
   creatorTest("OA7.4: the creation browser: the link, the event pending, and nothing sent for it", async ({ page, seededEvent }) => {
@@ -224,16 +226,15 @@ test.describe("in French", () => {
     expect(posts).toEqual([]);
   });
 
-  creatorTest("OA7.4: the creation browser with another account's session: the link, and still nothing sent", async ({ page, db, seededEvent }) => {
-    await holdSession(page, await seedSession(db, await account(db)));
-    const posts: string[] = [];
-    page.on("request", (request) => {
-      if (request.method() === "POST") posts.push(request.url());
-    });
+  creatorTest("OA7.4: the creation browser with another account's session: the link, and no question asked for it", async ({ page, db, seededEvent }) => {
+    const session = await seedSession(db, await account(db));
+    await holdSession(page, session);
+    const requests = recordRequests(page);
     await page.goto(`/e/${seededEvent.id}`);
     await expect(main(page).getByRole("link", { name: FR.area, exact: true })).toHaveAttribute("href", organiserPath(seededEvent));
     await page.waitForLoadState("networkidle");
-    expect(posts).toEqual([]);
+    // The visit alone: the admin token is known to the browser, nothing is asked.
+    expect(await whereTokenWent(requests, session)).toEqual({ url: false, headers: false, bodies: 1 });
   });
 
   creatorTest("OA7.9: without an organiser, the token left behind shows the link, and the area says there is none", async ({ page, db, seededEvent }) => {
