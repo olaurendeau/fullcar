@@ -81,6 +81,7 @@ export function LegPanel({
   hasRetour,
   other,
   near,
+  stopsOn,
   map,
   hint,
 }: {
@@ -92,6 +93,8 @@ export function LegPanel({
   other?: OtherLegOf;
   /** The event's position, for the suggestions of a car's places (AL4.1). */
   near: Position | null;
+  /** The option « Points de RDV » is on: the forms of a car on the aller have their section. */
+  stopsOn?: boolean;
   /** The event's place and the page's open or folded map; none without a position (CA2.1). */
   map?: LegMap;
   /** The organiser's sentence, shown without a map. */
@@ -122,6 +125,7 @@ export function LegPanel({
           persons={board.device}
           other={other}
           near={near}
+          stopsOn={stopsOn}
           main={coverageBanner(coverage(board)).kind === "missingSeats"}
           disabled={!deviceKnown(device.status)}
           offerRide={device.offerRide}
@@ -144,6 +148,7 @@ export function LegPanel({
                 updateRide={drivesIt(car.id) ? device.updateRide : undefined}
                 removeRide={drivesIt(car.id) ? device.removeRide : undefined}
                 near={near}
+                stopsOn={stopsOn}
               />
             ))
           ) : (

@@ -29,6 +29,7 @@ export function RideCard({
   updateRide,
   removeRide,
   near = null,
+  stopsOn,
 }: {
   car: VisibleCar;
   date: WallDate;
@@ -37,6 +38,8 @@ export function RideCard({
   updateRide?: UpdateRide;
   removeRide?: RemoveRide;
   near?: Position | null;
+  /** The option « Points de RDV » is on: « Modifier la voiture » has its section on the aller. */
+  stopsOn?: boolean;
 }) {
   const t = useTranslations("Board.car");
   const format = useFormatter();
@@ -129,7 +132,7 @@ export function RideCard({
       </ul>
       {(updateRide || removeRide) && (
         <div className="flex gap-2">
-          {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} near={near} />}
+          {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} near={near} stopsOn={stopsOn} />}
           {removeRide && (
             <RemoveRideButton
               car={{ id: car.id, leg: car.leg, driverId: car.driver.id, driver: car.driver.firstName, passengers: car.passengers.length }}

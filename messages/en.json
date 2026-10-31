@@ -225,7 +225,24 @@
     "seatsHint": "From 1 to 8.",
     "note": "Note (optional)",
     "noteHint": "What passengers should know.",
-    "passengers": "Who rides with you?"
+    "passengers": "Who rides with you?",
+    "stops": {
+      "title": "Meeting points",
+      "hint": "Where you pick people up along the way, with the time you pass. Visible to everyone with the link.",
+      "add": "Add a meeting point",
+      "off": "The “Meeting points” option has just been turned off: your car was not saved. Reload the page, then try again.",
+      "afterStop": "The time must be before {time}, the time of the first meeting point.",
+      "pointTitle": "Point {n}",
+      "place": "Place of point {n}",
+      "time": "Time of point {n}",
+      "remove": "Remove",
+      "removeLabel": "Remove point {n}",
+      "max": "6 points at most.",
+      "sorted": "Points sorted by time.",
+      "timeAfter": "The time must be after {time}, the departure time.",
+      "positionRemove": "Remove the position of point {n}",
+      "positionSaved": "Position saved"
+    }
   },
   "FormErrors": {
     "required": "Required.",

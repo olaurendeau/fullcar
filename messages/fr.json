@@ -225,7 +225,24 @@
     "seatsHint": "De 1 à 8.",
     "note": "Note (facultatif)",
     "noteHint": "Ce que les personnes à bord doivent savoir.",
-    "passengers": "Qui monte avec vous ?"
+    "passengers": "Qui monte avec vous ?",
+    "stops": {
+      "title": "Points de RDV",
+      "hint": "Où vous prenez du monde en route, avec l’heure de passage. Visible par toutes les personnes qui ont le lien.",
+      "add": "Ajouter un point de RDV",
+      "off": "L’option « Points de RDV » vient d’être désactivée : votre voiture n’a pas été enregistrée. Rechargez la page, puis réessayez.",
+      "afterStop": "L’heure doit être avant {time}, l’heure du premier point de RDV.",
+      "pointTitle": "Point {n}",
+      "place": "Lieu du point {n}",
+      "time": "Heure du point {n}",
+      "remove": "Retirer",
+      "removeLabel": "Retirer le point {n}",
+      "max": "6 points au maximum.",
+      "sorted": "Points classés par heure.",
+      "timeAfter": "L’heure doit être après {time}, l’heure de départ.",
+      "positionRemove": "Retirer la position du point {n}",
+      "positionSaved": "Position enregistrée"
+    }
   },
   "FormErrors": {
     "required": "Champ requis.",
