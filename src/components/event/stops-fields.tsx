@@ -156,12 +156,15 @@ export function StopsFields({
             </div>
           );
         })}
-        {removed.map((stop) => (
-          <div key={stop.id} className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-destructive p-3.5">
-            <span className="text-sm font-semibold wrap-anywhere">{stop.location}</span>
-            <p className="text-[13px] leading-[18px] wrap-anywhere">{t("boarding", { count: stop.passengers })}</p>
-          </div>
-        ))}
+        {/* A live region present before the first note, so that a screen reader announces it (as « sorted »). */}
+        <div role="status" className="flex min-w-0 flex-col gap-3 empty:hidden">
+          {removed.map((stop) => (
+            <div key={stop.id} className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-destructive p-3.5">
+              <span className="text-sm font-semibold wrap-anywhere">{stop.location}</span>
+              <p className="text-[13px] leading-[18px] wrap-anywhere">{t("boarding", { count: stop.passengers })}</p>
+            </div>
+          ))}
+        </div>
         {atMaximum(lines) ? (
           <p className="text-[13px] leading-[18px] text-muted-foreground">{t("max")}</p>
         ) : (

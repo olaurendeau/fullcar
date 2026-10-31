@@ -70,12 +70,15 @@ const placementsOf = (db: Db, rideId: string) =>
 const stopIdsOf = async (db: Db, rideId: string) =>
   (await db.selectFrom("stop").select("id").where("ride_id", "=", rideId).execute()).map(({ id }) => id).sort();
 
-/** What the page says of the car's seats: the banner of the coverage, the card's free seats and its passengers. */
+/**
+ * What the page says of the car's seats: the banner of the coverage, the card's free seats and its
+ * passengers' first names (a row says more under a passenger at a stop, « monte à … »: #912).
+ */
 async function seatsSaid(page: Page) {
   const banner = await page.getByText(/^Tout le monde a une place/).first().innerText();
   const free = await card(page).locator("[data-free-seat]").count();
-  const passengers = await card(page).getByRole("list", { name: "Places" }).locator("li:not(:has([data-free-seat]))").allInnerTexts();
-  return { banner, free, passengers };
+  const rows = await card(page).getByRole("list", { name: "Places" }).locator("li:not(:has([data-free-seat]))").allInnerTexts();
+  return { banner, free, passengers: rows.map((row) => row.trim().split("\n")[0]) };
 }
 
 /** The place and time of a line typed; the answer under the place is waited for (#546). */
@@ -101,6 +104,8 @@ test.describe("point retiré, passagers au départ", () => {
       await expect(form.getByText(/monte(nt)? ici/)).toHaveCount(0);
       await removeOf(form, 1).click();
       await expect(form.getByText(FR.two, { exact: true })).toBeVisible();
+      // The note is announced: it sits in a polite live region.
+      await expect(form.getByRole("status").getByText(FR.two, { exact: true })).toBeVisible();
       await removeOf(form, 1).click();
       await expect(form.getByText(FR.one, { exact: true })).toBeVisible();
       // The notes stay while the form is open: nothing is deleted before « Valider ».
@@ -157,8 +162,10 @@ test.describe("point retiré, passagers au départ", () => {
   test("RV6.3: les places libres et la couverture sont les mêmes avant et après", async ({ db, page, seededEvent }) => {
     const { rideId } = await scene(db, page, seededEvent.id);
     await page.goto(`/e/${seededEvent.id}`);
-    await expect(card(page)).toBeVisible();
-    const before = await numbersHidden(() => seatsSaid(page));
+    const before = await numbersHidden(async () => {
+      await expect(card(page)).toBeVisible();
+      return seatsSaid(page);
+    });
     const form = await openEdit(page);
     await numbersHidden(async () => {
       await removeOf(form, 1).click();
@@ -167,7 +174,10 @@ test.describe("point retiré, passagers au départ", () => {
       await expect(form).toHaveCount(0);
       await expect(messages(page).filter({ hasText: FR.notified })).toBeVisible();
     });
-    expect(await numbersHidden(() => seatsSaid(page))).toEqual(before);
+    await numbersHidden(async () => {
+      await expect(card(page)).toBeVisible();
+      expect(await seatsSaid(page)).toEqual(before);
+    });
     expect(await placementsOf(db, rideId)).toHaveLength(4);
   });
 
@@ -193,6 +203,7 @@ test.describe("point retiré, passagers au départ", () => {
       const note = form.getByText(FR.two, { exact: true });
       expect((await note.boundingBox())!.width).toBeLessThanOrEqual(360);
       for (let n = 1; n <= 5; n++) expect((await removeOf(form, n).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await form.getByRole("button", { name: "Ajouter un point de RDV", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
       expect((await submit(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     });
   });
