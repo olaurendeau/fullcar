@@ -204,6 +204,27 @@ export function pendingRead(panel: Sent<unknown>): { pending?: PendingNotice } |
   return pending ? { pending } : {};
 }
 
+/**
+ * What « Renvoyer l’e-mail » came to (OA2.4): the notice the server answers, `sent` or
+ * `failed`; the limit, which sent nothing; an event no longer awaiting confirmation; an event
+ * that ended (anonymised), which the page then reads as such; or not resent, for want of a
+ * connection (`offline`) or any other reason, a refusal included.
+ */
+export type ResendAnswer =
+  | { kind: "answered"; pending: PendingNotice }
+  | { kind: "tooMany" | "notPending" | "eventEnded" }
+  | { kind: "notResent"; offline: boolean };
+
+/** The answer of `resendEmail`, as the page takes it: anything it does not know is « not resent ». */
+export function resendAnswer(sent: Sent<unknown>): ResendAnswer {
+  if (!sent.ok) return { kind: "notResent", offline: sent.problem === "offline" };
+  const answer = sent.value as { ok?: unknown; pending?: unknown; error?: unknown } | null | undefined;
+  const pending = answer?.ok === true ? pendingNoticeOf(answer.pending) : undefined;
+  if (pending && (pending.send === "sent" || pending.send === "failed")) return { kind: "answered", pending };
+  if (answer?.ok === false && (answer.error === "tooMany" || answer.error === "notPending" || answer.error === "eventEnded")) return { kind: answer.error };
+  return { kind: "notResent", offline: false };
+}
+
 /** What a read of the panel shows: its legs, and every person (none from a server before #671). */
 export interface PanelBody {
   legs: OrganiserLeg[];

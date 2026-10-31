@@ -1,9 +1,13 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import { POLL_MS } from "@/app/e/[id]/admin/screen-state";
 import type { SendStatusColumn } from "@/db/schema";
+import { anonymiseEvent } from "@/db/day-thirty";
+import { seedSends } from "@/db/test-accounts";
 import { seedPendingSend } from "@/db/test-events";
+import { CONFIRMATIONS_PER_EVENT } from "@/domain/send-limits";
+import { messages } from "./device";
 import { leaveNoToken } from "./fixtures";
-import { newAddress } from "./mailbox";
+import { answerMail, mailTo, newAddress, releaseMail } from "./mailbox";
 import { areaEditButton, expect, organiserPath, test } from "./organiser";
 
 /*
@@ -33,6 +37,9 @@ const FR = {
     `Votre événement est créé, mais trop d’e-mails sont partis vers ${email} cette heure-ci. Dans une heure, utilisez « Renvoyer l’e-mail ». D’ici là, l’espace organisateur ne s’ouvre que dans ce navigateur.`,
   resend: "Renvoyer l’e-mail",
   fix: "Corriger l’adresse",
+  resent: (email: string) => `E-mail renvoyé à ${email}.`,
+  offline: "L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
+  tooMany: "Trop d’envois. Réessayez dans une heure.",
 };
 
 const HOUR = 60 * 60_000;
@@ -43,6 +50,14 @@ const notice = (page: Page) => page.locator("[data-pending-notice]");
 const polite = (page: Page) => notice(page).locator('[aria-live="polite"]');
 const alert = (page: Page) => notice(page).getByRole("alert");
 const button = (page: Page, name: string) => notice(page).getByRole("button", { name, exact: true });
+/** The id of Next's route announcer, a `role="alert"` that is not the bar's nor the panel's. */
+const ROUTE_ANNOUNCER = "#__next-route-announcer__";
+/** Shown, the alerts of the page that say something: the bar's and the panel's regions are there empty. */
+const saidAlerts = (page: Page) =>
+  page
+    .getByRole("alert")
+    .filter({ hasText: /\S/ })
+    .and(page.locator(`:not(${ROUTE_ANNOUNCER})`));
 const box = async (locator: Locator) => (await locator.boundingBox()) ?? Promise.reject(new Error("no box"));
 const overflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
@@ -213,3 +228,142 @@ for (const width of [1024, 1280]) {
     });
   });
 }
+
+test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
+  // Each test its own address; its sends are deleted after it, so that the global hourly cap never meets them.
+  let addresses: string[] = [];
+  const address = () => {
+    const email = newAddress();
+    addresses.push(email);
+    return email;
+  };
+  test.afterEach(async ({ db }) => {
+    if (addresses.length > 0) await db.deleteFrom("email_send").where("email", "in", addresses).execute();
+    addresses = [];
+  });
+
+  test("one more email to the address, the bar says so, the notice says it was sent, the focus stays on the button", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "failed", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email));
+
+    await button(page, FR.resend).click();
+    await expect(messages(page)).toHaveText([FR.resent(email)]);
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    await expect(button(page, FR.resend)).toBeFocused();
+    expect(await mailTo(email)).toHaveLength(1);
+    // The result kept is the new one: it is the same after a reload.
+    await page.reload();
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+  });
+
+  test("a failure of Brevo is the notice's alert: no « E-mail renvoyé »", async ({ page, db, seededEvent }) => {
+    const email = address();
+    await answerMail([email], { kind: "error" });
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.resend).click();
+    await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email));
+    await expect(messages(page)).toHaveCount(0);
+    expect(await mailTo(email)).toHaveLength(1);
+  });
+
+  test("past 3 emails in the hour for the event, the bar says « Trop d’envois », nothing goes, the notice is as it was", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await seedSends(db, CONFIRMATIONS_PER_EVENT, { kind: "confirmation", email, eventId: seededEvent.id });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.resend).click();
+    await expect(messages(page)).toHaveText([FR.tooMany]);
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    expect(await mailTo(email)).toEqual([]);
+  });
+
+  test("offline, the bar says the email was not sent again, nothing is sent, the notice is as it was", async ({
+    page,
+    context,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    await context.setOffline(true);
+    try {
+      await button(page, FR.resend).click();
+      await expect(messages(page)).toHaveText([FR.offline]);
+    } finally {
+      await context.setOffline(false);
+    }
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    expect(await mailTo(email)).toEqual([]);
+  });
+
+  test("while the email is on its way, the notice keeps its height, the buttons stay where they are and inactive, and a second tap sends nothing and opens nothing", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "failed", at: ago(HOUR) });
+    await answerMail([email], { kind: "hold" });
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(organiserPath(seededEvent));
+    await expectNotice(page, "alert", FR.failedTitle, FR.failedBody(email));
+    const resend = await box(button(page, FR.resend));
+    const spot = { x: resend.x + resend.width / 2, y: resend.y + resend.height / 2 };
+
+    await page.mouse.click(spot.x, spot.y);
+    await expect.poll(async () => (await mailTo(email)).length).toBe(1);
+    await expectNotice(page, "polite", FR.title, FR.sending(email));
+    for (const name of [FR.resend, FR.fix]) await expect(button(page, name)).toHaveAttribute("aria-disabled", "true");
+    // The button is under the finger still: « Modifier l’événement » did not move up to its place.
+    expect(Math.abs((await box(button(page, FR.resend))).y - resend.y)).toBeLessThanOrEqual(1);
+
+    await page.mouse.click(spot.x, spot.y);
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(button(page, FR.resend)).toHaveAttribute("aria-disabled", "true");
+    expect(Math.abs((await box(button(page, FR.resend))).y - resend.y)).toBeLessThanOrEqual(1);
+    expect(await mailTo(email)).toHaveLength(1);
+
+    expect(await releaseMail([email])).toBe(1);
+    await expect(messages(page)).toHaveText([FR.resent(email)]);
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await mailTo(email)).toHaveLength(1);
+  });
+
+  // The panel is shown still; the server says the event ended, and the page is read again: the creation
+  // browser's token, revoked by the anonymisation, opens nothing, and `EndedOrganiserScreen` comes.
+  test("the event anonymised meanwhile: the page switches to the refused screen, nothing is sent", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+    const resend = button(page, FR.resend);
+
+    await anonymiseEvent(db, seededEvent.id);
+    await resend.click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Espace organisateur");
+    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(resend).toHaveCount(0);
+    // The bar stays silent: the event ended, not a failure of sending.
+    await expect(saidAlerts(page)).toHaveCount(0);
+    expect(await mailTo(email)).toEqual([]);
+  });
+});
