@@ -70,6 +70,7 @@
     }
   },
   "Event": {
+    "organiserSpace": "Organiser area",
     "legs": {
       "aller": "Outbound",
       "retour": "Return"
@@ -374,6 +375,7 @@
     "removedElsewhere": "{firstName} is no longer in your sign-ups: they were removed from the event from another device."
   },
   "Admin": {
+    "myEvents": "My events",
     "title": "Organiser area",
     "shareLink": {
       "label": "Link to share",
