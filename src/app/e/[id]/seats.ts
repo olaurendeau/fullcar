@@ -9,6 +9,7 @@ import { deviceAccess } from "@/domain/device";
 import { LEGS, type Leg } from "@/domain/leg";
 import { isPublicId } from "@/domain/public-id";
 import { seatsDecision } from "@/domain/ride";
+import { isStopOfRide, requestedStop } from "./boarding-stop";
 import { EVENT_NOT_FOUND, type EventNotFound } from "./change-ride";
 import { readEventState, type DeviceState } from "./event-state";
 import { lockLegs } from "./retour";
@@ -20,14 +21,18 @@ import { lockLegs } from "./retour";
  * - `forbidden`: someone asked is not a person of the device (C2.4).
  * - `personGone`: with a well-formed token, someone asked, `goneIds`, is no longer a person of
  *   the event: removed since the page showed her (RP5.4). Nobody is placed.
+ * - `stopsOff`: a Stop is asked and the event's option « Points de RDV » is off, turned off
+ *   since the page loaded (RV8.3): nothing is written, and no seat is taken.
  * - `rideGone`: the car is no longer offered on that leg (C6.8).
  * - `alreadyInCar`: someone asked is in another car on the leg, or drives on it (C5.6).
  * - `seatTaken`: one person asked, and the last seat was just taken (C5.7).
  * - `notEnoughSeats`: fewer seats left than persons asked, `freeSeats` of them (C6.5).
+ * - `stopGone` on success: the Stop asked is no longer a Stop of the Ride (deleted, of another
+ *   Ride, none on the retour): the persons board at the Ride's start, none loses her seat (RV3.4).
  */
 export type SeatsOutcome =
-  | { ok: true }
-  | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" }
+  | { ok: true; stopGone?: true }
+  | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "stopsOff" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
@@ -38,13 +43,21 @@ interface SeatsRequest {
   rideId: string;
   leg: Leg;
   personIds: string[];
+  /** The Stop where they board; `null`: at the Ride's start. */
+  stopId: string | null;
 }
 
 /** The request as a page sends it, or nothing: at least one person, every id well-formed. */
-function seatsRequest(rideId: unknown, leg: unknown, personIds: unknown): SeatsRequest | undefined {
-  if (!isCreationId(rideId) || !LEGS.some((known) => known === leg)) return undefined;
+function seatsRequest(
+  rideId: unknown,
+  leg: unknown,
+  personIds: unknown,
+  stopId: unknown,
+): SeatsRequest | undefined {
+  const stop = requestedStop(stopId);
+  if (!isCreationId(rideId) || !LEGS.some((known) => known === leg) || stop === undefined) return undefined;
   if (!Array.isArray(personIds) || personIds.length === 0 || !personIds.every(isCreationId)) return undefined;
-  return { rideId, leg: leg as Leg, personIds: [...new Set<string>(personIds)] };
+  return { rideId, leg: leg as Leg, personIds: [...new Set<string>(personIds)], stopId: stop };
 }
 
 /** What the transaction gives: an unknown event has no state to give with its outcome. */
@@ -60,10 +73,11 @@ async function placeInRide(
   trx: Kysely<Database>,
   eventId: string,
   token: unknown,
-  { rideId, leg, personIds }: SeatsRequest,
+  { rideId, leg, personIds, stopId }: SeatsRequest,
 ): Promise<Written<SeatsOutcome>> {
   const legs = await lockLegs(trx, eventId, [leg]);
   if (!legs.ok) return legs;
+  if (stopId !== null && !legs.stopsEnabled) return { ok: false, error: "stopsOff" };
   const access = deviceAccess(token, await readTokenHolders(trx, eventId), personIds);
   if (access.kind === "forbidden") return { ok: false, error: "forbidden" };
   if (access.kind === "personGone") return { ok: false, error: "personGone", goneIds: access.goneIds };
@@ -85,8 +99,13 @@ async function placeInRide(
   if (!decision.ok) {
     return decision.error === "notEnoughSeats" && personIds.length === 1 ? { ok: false, error: "seatTaken" } : decision;
   }
-  for (const personId of decision.place) await setPlacement(trx, { personId, eventId, leg, rideId });
-  return { ok: true };
+  // Read under the Ride's lock, which every write of a Stop takes: it holds until the commit.
+  // Said only when someone is placed: those already in the car keep their point, whatever is asked.
+  const stopGone = decision.place.length > 0 && stopId !== null && !(await isStopOfRide(trx, ride, stopId));
+  // `stopId` on every write: without it, `setPlacement` puts the person back at the start.
+  const boardsAt = stopGone ? null : stopId;
+  for (const personId of decision.place) await setPlacement(trx, { personId, eventId, leg, rideId, stopId: boardsAt });
+  return stopGone ? { ok: true, stopGone: true } : { ok: true };
 }
 
 /**
@@ -109,9 +128,10 @@ export async function takeSeats(
   rideId: unknown,
   leg: unknown,
   personIds: unknown,
+  stopId?: unknown,
 ): Promise<TakeSeatsResult | EventNotFound> {
   if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
-  const request = seatsRequest(rideId, leg, personIds);
+  const request = seatsRequest(rideId, leg, personIds, stopId);
   const outcome: Written<SeatsOutcome> = request
     ? await atomically(db, (trx) => placeInRide(trx, eventId, token, request))
     : { ok: false, error: "invalid" };

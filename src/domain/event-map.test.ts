@@ -8,7 +8,10 @@ import {
   framing,
   freeSeatsOf,
   mapOf,
+  routeOf,
   SAME_POSITION_METRES,
+  stopPointsOf,
+  stopsOf,
   type EventMapPoints,
   type Framing,
 } from "./event-map";
@@ -367,6 +370,136 @@ describe("bubbleMaxHeight", () => {
     expect(bubbleMaxHeight(240, 24)).toBe(196);
     expect(bubbleMaxHeight(280, 24)).toBe(236);
     expect(bubbleMaxHeight(240, 48)).toBe(172);
+  });
+});
+
+/** A car with Stops: `stops` are `[id, time, position]`, in the order the test writes them. */
+function stopped(id: string, position: Position | null, ...stops: [string, string, Position | null][]) {
+  return { id, position, stops: stops.map(([stopId, time, at]) => ({ id: stopId, time, position: at })) };
+}
+
+describe("stopsOf: the Stops that are on the map (RV5.1, RV5.3)", () => {
+  it("gives each positioned Stop of each positioned car, with its car and its position, cars then times in order", () => {
+    const marc = stopped("marc", BRINDAS, ["m2", "08:35:00", ECULLY], ["m1", "08:25:00", VAUGNERAY]);
+    const nina = stopped("nina", ECULLY, ["n1", "09:00:00", BRINDAS]);
+
+    const { stops, stopsNotOnMap } = stopsOf([marc, nina]);
+
+    expect(stops.map(({ car, stop, position }) => [car.id, stop.id, position])).toEqual([
+      ["marc", "m1", VAUGNERAY],
+      ["marc", "m2", ECULLY],
+      ["nina", "n1", BRINDAS],
+    ]);
+    expect(stopsNotOnMap).toBe(0);
+  });
+
+  it("counts a Stop without a position and leaves it out (RV5.3)", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", null], ["m2", "08:35:00", ECULLY], ["m3", "08:45:00", null]);
+
+    const { stops, stopsNotOnMap } = stopsOf([marc]);
+
+    expect(stops.map(({ stop }) => stop.id)).toEqual(["m2"]);
+    expect(stopsNotOnMap).toBe(2);
+  });
+
+  it("counts every Stop of a car without a position, even a positioned one (RV5.3)", () => {
+    const marc = stopped("marc", null, ["m1", "08:25:00", ECULLY], ["m2", "08:35:00", null]);
+
+    expect(stopsOf([marc])).toEqual({ stops: [], stopsNotOnMap: 2 });
+  });
+
+  it("keeps two Stops 10 m apart as two: grouping them is stopPointsOf's (RV5.6)", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", ECULLY]);
+    const nina = stopped("nina", VAUGNERAY, ["n1", "08:25:00", north(ECULLY, 10)]);
+
+    expect(stopsOf([marc, nina]).stops).toHaveLength(2);
+  });
+
+  it("never enters mapOf: a Stop is not grouped with a car, nor with the flag", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", north(FLAG, 5)], ["m2", "08:35:00", north(BRINDAS, 5)]);
+
+    const map = mapOf(FLAG, [marc]);
+
+    expect(map.points).toHaveLength(1);
+    expect(map.points[0]).toMatchObject({ cars: [marc], atFlag: false });
+    expect(map.notOnMap).toBe(0);
+  });
+});
+
+describe("stopPointsOf: the rounds of the Stops (RV5.4, RV5.6)", () => {
+  const rounds = (...cars: ReturnType<typeof stopped>[]) => stopPointsOf(stopsOf(cars).stops);
+
+  it("makes one round of two cars' Stops 10 m apart, at the first one's position, cars in order", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", ECULLY]);
+    const nina = stopped("nina", VAUGNERAY, ["n1", "08:30:00", north(ECULLY, 10)]);
+
+    const [round, ...others] = rounds(marc, nina);
+
+    expect(others).toEqual([]);
+    expect(round.position).toEqual(ECULLY);
+    expect(round.stops.map(({ car, stop }) => [car.id, stop.id])).toEqual([
+      ["marc", "m1"],
+      ["nina", "n1"],
+    ]);
+  });
+
+  it("keeps two Stops 25 m apart or more as two rounds", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", ECULLY]);
+    const nina = stopped("nina", VAUGNERAY, ["n1", "08:30:00", north(ECULLY, SAME_POSITION_METRES + 1)]);
+
+    expect(rounds(marc, nina).map(({ stops }) => stops.length)).toEqual([1, 1]);
+  });
+
+  it("never puts two Stops of one car in a round, 10 m apart or not", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", ECULLY], ["m2", "08:30:00", north(ECULLY, 10)]);
+    const nina = stopped("nina", VAUGNERAY, ["n1", "08:35:00", north(ECULLY, 5)]);
+
+    expect(rounds(marc, nina).map(({ stops }) => stops.map(({ stop }) => stop.id))).toEqual([["m1", "n1"], ["m2"]]);
+  });
+
+  it("keeps a Stop 10 m from a car on its own: only Stops make a round, and mapOf never sees them", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", north(VAUGNERAY, 10)]);
+    const nina = stopped("nina", VAUGNERAY);
+
+    expect(rounds(marc, nina)).toHaveLength(1);
+    expect(mapOf(FLAG, [marc, nina]).points.map(({ cars }) => cars.map(({ id }) => id))).toEqual([["marc"], ["nina"]]);
+  });
+});
+
+describe("routeOf: the line of a car with Stops (RV5.2)", () => {
+  it("goes from the car through its Stops in the order of their times to the flag", () => {
+    const marc = stopped("marc", BRINDAS, ["m2", "08:50:00", ECULLY], ["m1", "08:25:00", VAUGNERAY]);
+
+    expect(routeOf(marc, FLAG)).toEqual([BRINDAS, VAUGNERAY, ECULLY, FLAG]);
+  });
+
+  it("leaves out a Stop without a position", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", null], ["m2", "08:35:00", ECULLY]);
+
+    expect(routeOf(marc, FLAG)).toEqual([BRINDAS, ECULLY, FLAG]);
+  });
+
+  it("keeps Stops at one time in the order they come in", () => {
+    const marc = stopped("marc", BRINDAS, ["m1", "08:25:00", ECULLY], ["m2", "08:25:00", VAUGNERAY]);
+
+    expect(routeOf(marc, FLAG)).toEqual([BRINDAS, ECULLY, VAUGNERAY, FLAG]);
+  });
+
+  it("is the car and the flag for a car without a positioned Stop, and nothing for a car without a position", () => {
+    expect(routeOf(stopped("marc", BRINDAS, ["m1", "08:25:00", null]), FLAG)).toEqual([BRINDAS, FLAG]);
+    expect(routeOf(stopped("marc", null, ["m1", "08:25:00", ECULLY]), FLAG)).toEqual([]);
+  });
+});
+
+describe("framing: the Stops (RV5.1)", () => {
+  it("takes the Stops into its box", () => {
+    const far = { lat: 45.9, lng: 4.9 };
+
+    expect(framing(FLAG, [{ position: BRINDAS, atFlag: false }], 24, 0, [{ position: far }])).toMatchObject({
+      north: 45.9,
+      east: 4.9,
+      south: BRINDAS.lat,
+    });
   });
 });
 

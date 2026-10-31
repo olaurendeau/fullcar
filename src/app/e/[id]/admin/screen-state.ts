@@ -2,12 +2,13 @@ import { whyOf, type NotDone, type Why } from "@/components/event/failure-words"
 import type { LegCounts } from "@/db/legs";
 import type { EventErrors, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
-import type { OrganiserLeg } from "@/domain/organiser-panel";
+import type { OrganiserLeg, OrganiserPerson } from "@/domain/organiser-panel";
+import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { positionOf } from "@/domain/place";
 import { isWallClock } from "@/domain/wall-clock";
 import type { EventState } from "../event-state";
 import { stateRead, type ActionProblem, type Sent } from "../run-action";
-import type { OrganiserCheck } from "./admin-token-store";
+import type { OrganiserCheck, Refusal } from "./admin-token-store";
 
 /*
  * The organiser area's state (epic #154, #182), pure: the first read of the panel and its
@@ -18,11 +19,13 @@ import type { OrganiserCheck } from "./admin-token-store";
 
 /**
  * The panel as last read: the link to share, and its legs, or `null` once withdrawn (O1.10):
- * the link stays, the sections go. There is no organiser's link any more (OA7.3).
+ * the link stays, the sections go. There is no organiser's link any more (OA7.3). `pending`, the
+ * notice « Confirmez votre adresse » of an event awaiting confirmation (OA1.7, OA2.1).
  */
 export interface Panel {
   publicUrl: string;
   legs: OrganiserLeg[] | null;
+  pending?: PendingNotice;
 }
 
 /** The two lists of a leg's section (O5.6). */
@@ -34,13 +37,19 @@ export const listKey = (leg: Leg, list: OrganiserList) => `${leg}:${list}`;
 /** The lines a long list shows before « Afficher les {n} autres » (O5.6). */
 export const FOLDED_LINES = 5;
 
+/** The list of « Personnes inscrites » in `expanded` (#672, RP4.3): the panel's rules for long lists. */
+export const PERSONS_LIST = "persons";
+
 export type ScreenState =
   | { state: "loading" }
-  | { state: "refused" }
+  /** Refused, with the screen of why (#598). */
+  | { state: "refused"; refusal: Refusal }
   | { state: "failed"; retrying: boolean }
   | {
       state: "ready";
       panel: Panel;
+      /** Every person of the event, as the last panel read gives them (RP4.1): kept while the panel is withdrawn. */
+      persons: OrganiserPerson[];
       /** The number of the read running, if one is. */
       refreshing: number | null;
       /** The failures in a row, said by the alert until the next read starts. */
@@ -56,6 +65,8 @@ export type ScreenState =
        * buttons alone; kept through the reads, the panel withdrawn and the card folded, in memory alone.
        */
       unfolded: ReadonlySet<Leg>;
+      /** « Personnes inscrites » unfolded (RP4.1): folded as the panel appears, then changed by its button alone, in memory alone. */
+      personsOpen: boolean;
     };
 
 export type ScreenEvent =
@@ -66,37 +77,45 @@ export type ScreenEvent =
   | { type: "checked"; check: OrganiserCheck; folded?: boolean }
   | { type: "toggleFolded" }
   | { type: "refreshStarted"; read: number }
-  /** With the panel's legs on a success; without, a failure. */
-  | { type: "refreshEnded"; read: number; legs?: OrganiserLeg[] }
+  /** With the panel's legs and persons on a success; without, a failure. */
+  | { type: "refreshEnded"; read: number; legs?: OrganiserLeg[]; persons?: OrganiserPerson[] }
   /** The panel read again after an action of the board, the latest such read (O1.10): with its legs, or without on a failure. */
-  | { type: "reread"; legs?: OrganiserLeg[] }
+  | { type: "reread"; legs?: OrganiserLeg[]; persons?: OrganiserPerson[] }
   | { type: "listToggled"; key: string }
-  | { type: "legToggled"; leg: Leg };
+  | { type: "legToggled"; leg: Leg }
+  | { type: "personsToggled" }
+  /** The notice read again while its email is on its way (OA1.7): without one, it goes (OA2.6). */
+  | { type: "pendingRead"; pending?: PendingNotice }
+  /** No result read in 30 s (POLL_READS): the notice still « sending » reads as a failure, as the server's rule says. */
+  | { type: "pendingGaveUp" };
 
 function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
   switch (check.state) {
     case "checking":
       return { state: "loading" };
     case "refused":
-      return { state: "refused" };
+      return { state: "refused", refusal: check.refusal };
     case "failed":
       return { state: "failed", retrying: check.retrying ?? false };
     case "valid": {
-      const { publicUrl, legs } = check;
-      const panel = { publicUrl, legs };
-      return { state: "ready", panel, refreshing: null, refreshFailed: 0, refreshed: false, expanded: new Set(), folded, unfolded: new Set() };
+      const { publicUrl, legs, persons, pending } = check;
+      const panel = { publicUrl, legs, ...(pending && { pending }) };
+      const fresh = { expanded: new Set<string>(), unfolded: new Set<Leg>(), personsOpen: false };
+      return { state: "ready", panel, persons, refreshing: null, refreshFailed: 0, refreshed: false, folded, ...fresh };
     }
   }
 }
 
-/** The lists still unfolded once `legs` are applied: one of 5 lines or fewer has no button, and folds for what follows (O5.7). */
-function stillExpanded(expanded: ReadonlySet<string>, legs: OrganiserLeg[]): ReadonlySet<string> {
+/** The lists still unfolded once `legs` are applied: one of 5 lines or fewer has no button, and folds for what follows (O5.7, RP4.3). */
+function stillExpanded(expanded: ReadonlySet<string>, legs: OrganiserLeg[], persons: OrganiserPerson[]): ReadonlySet<string> {
   const lists = ["withoutCar", "carsWithoutPhone"] as const;
-  return new Set(
-    legs.flatMap((leg) =>
+  const long = expanded.has(PERSONS_LIST) && persons.length > FOLDED_LINES ? [PERSONS_LIST] : [];
+  return new Set([
+    ...legs.flatMap((leg) =>
       lists.filter((list) => expanded.has(listKey(leg.leg, list)) && leg[list].length > FOLDED_LINES).map((list) => listKey(leg.leg, list)),
     ),
-  );
+    ...long,
+  ]);
 }
 
 type Ready = Extract<ScreenState, { state: "ready" }>;
@@ -108,12 +127,13 @@ function stillUnfolded(unfolded: ReadonlySet<Leg>, legs: OrganiserLeg[]): Readon
 
 /**
  * `legs` applied, the alert and the announcement gone, no read running: the panel, its unfolded
- * lists and legs. Withdrawn (`legs` null), both are kept for the read that gives the panel back (decision 58).
+ * lists and legs. Withdrawn (`legs` null), all, persons too, are kept for the read that gives the panel back (decision 58).
  */
-function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean): Ready {
-  const expanded = legs ? stillExpanded(state.expanded, legs) : state.expanded;
+function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean, read: OrganiserPerson[] = []): Ready {
+  const persons = legs ? read : state.persons;
+  const expanded = legs ? stillExpanded(state.expanded, legs, persons) : state.expanded;
   const unfolded = legs ? stillUnfolded(state.unfolded, legs) : state.unfolded;
-  return { ...state, panel: { ...state.panel, legs }, expanded, unfolded, refreshing: null, refreshFailed: 0, refreshed };
+  return { ...state, panel: { ...state.panel, legs }, persons, expanded, unfolded, refreshing: null, refreshFailed: 0, refreshed };
 }
 
 /**
@@ -122,7 +142,8 @@ function applied(state: Ready, legs: OrganiserLeg[] | null, refreshed: boolean):
  * checked again. A read after an action says nothing (O1.10): a success replaces the panel, a
  * failure withdraws it and empties the alert, so that one message is left, the action's in the
  * bar. Whether the card is folded, only its button changes (O8.6): no read, action nor failure;
- * whether a leg is, its button, or the read that takes that leg away (O9.5).
+ * whether a leg is, its button, or the read that takes that leg away (O9.5); whether
+ * « Personnes inscrites » is, its button alone (RP4.1).
  * It also ends a refresh still running, whose board was read before the action: the
  * organiser who asked for it hears its outcome, « actualisé » or the alert, withdrawn.
  */
@@ -130,10 +151,19 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   if (event.type === "checked") return fromCheck(event.check, event.folded);
   if (state.state !== "ready") return state;
   if (event.type === "toggleFolded") return { ...state, folded: !state.folded };
+  if (event.type === "personsToggled") return { ...state, personsOpen: !state.personsOpen };
+  if (event.type === "pendingRead") {
+    const { publicUrl, legs } = state.panel;
+    return { ...state, panel: { publicUrl, legs, ...(event.pending && { pending: event.pending }) } };
+  }
+  if (event.type === "pendingGaveUp") {
+    const { pending } = state.panel;
+    return pending?.send === "sending" ? { ...state, panel: { ...state.panel, pending: { ...pending, send: "failed" } } } : state;
+  }
   if (event.type === "reread") {
     // Ending a refresh, it is that refresh's outcome, said as a refresh says it (O1.9, O5.4).
     const refreshing = state.refreshing !== null;
-    if (event.legs || !refreshing) return applied(state, event.legs ?? null, refreshing);
+    if (event.legs || !refreshing) return applied(state, event.legs ?? null, refreshing, event.persons);
     return { ...applied(state, null, false), refreshFailed: state.refreshFailed + 1 };
   }
   if (event.type === "legToggled") {
@@ -151,41 +181,89 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   }
   if (state.refreshing !== event.read) return state;
   if (!event.legs) return { ...state, refreshing: null, refreshFailed: state.refreshFailed + 1 };
-  return applied(state, event.legs, true);
+  return applied(state, event.legs, true, event.persons);
 }
 
-/** The panel's legs of a read of the panel, or nothing when it failed or the link is no longer valid. */
-export function panelRead(panel: Sent<unknown>): OrganiserLeg[] | undefined {
-  if (!panel.ok) return undefined;
-  const answer = panel.value as { state?: unknown; legs?: unknown } | null | undefined;
-  return answer?.state === "panel" && Array.isArray(answer.legs) ? (answer.legs as OrganiserLeg[]) : undefined;
+/** How often the notice is read again while its email is on its way (OA1.7: its result within 15 s of the arrival). */
+export const POLL_MS = 2_000;
+
+/** Whether the notice is read again: on the panel, while its email is on its way. */
+export function pollsPending(state: ScreenState): boolean {
+  return state.state === "ready" && state.panel.pending?.send === "sending";
 }
 
 /**
- * What a read of the screen gives, once both reads have ended: the panel's legs and the
- * board's state together, or nothing at all when either failed (O1.9). A link no longer
+ * The notice of a read of the panel, `{}` for a panel without one (OA2.6); nothing to apply
+ * when the read failed or did not answer the panel.
+ */
+export function pendingRead(panel: Sent<unknown>): { pending?: PendingNotice } | undefined {
+  if (!panel.ok) return undefined;
+  const answer = panel.value as { state?: unknown; pending?: unknown } | null | undefined;
+  if (answer?.state !== "panel") return undefined;
+  const pending = pendingNoticeOf(answer.pending);
+  return pending ? { pending } : {};
+}
+
+/**
+ * What « Renvoyer l’e-mail » came to (OA2.4): the notice the server answers, `sent` or
+ * `failed`; the limit, which sent nothing; an event no longer awaiting confirmation; an event
+ * that ended (anonymised), which the page then reads as such; or not resent, for want of a
+ * connection (`offline`) or any other reason, a refusal included.
+ */
+export type ResendAnswer =
+  | { kind: "answered"; pending: PendingNotice }
+  | { kind: "tooMany" | "notPending" | "eventEnded" }
+  | { kind: "notResent"; offline: boolean };
+
+/** The answer of `resendEmail`, as the page takes it: anything it does not know is « not resent ». */
+export function resendAnswer(sent: Sent<unknown>): ResendAnswer {
+  if (!sent.ok) return { kind: "notResent", offline: sent.problem === "offline" };
+  const answer = sent.value as { ok?: unknown; pending?: unknown; error?: unknown } | null | undefined;
+  const pending = answer?.ok === true ? pendingNoticeOf(answer.pending) : undefined;
+  if (pending && (pending.send === "sent" || pending.send === "failed")) return { kind: "answered", pending };
+  if (answer?.ok === false && (answer.error === "tooMany" || answer.error === "notPending" || answer.error === "eventEnded")) return { kind: answer.error };
+  return { kind: "notResent", offline: false };
+}
+
+/** What a read of the panel shows: its legs, and every person (none from a server before #671). */
+export interface PanelBody {
+  legs: OrganiserLeg[];
+  persons: OrganiserPerson[];
+}
+
+/** The panel's legs and persons of a read of the panel, or nothing when it failed or the link is no longer valid. */
+export function panelRead(panel: Sent<unknown>): PanelBody | undefined {
+  if (!panel.ok) return undefined;
+  const answer = panel.value as { state?: unknown; legs?: unknown; persons?: unknown } | null | undefined;
+  if (answer?.state !== "panel" || !Array.isArray(answer.legs)) return undefined;
+  return { legs: answer.legs as OrganiserLeg[], persons: Array.isArray(answer.persons) ? (answer.persons as OrganiserPerson[]) : [] };
+}
+
+/**
+ * What a read of the screen gives, once both reads have ended: the panel's legs and persons and
+ * the board's state together, or nothing at all when either failed (O1.9). A link no longer
  * valid, or a board's state `undefined`, is a failure too.
  */
-export function screenRead(
-  panel: Sent<unknown>,
-  board: Sent<EventState | undefined>,
-): { legs: OrganiserLeg[]; board: EventState } | undefined {
-  const legs = panelRead(panel);
+export function screenRead(panel: Sent<unknown>, board: Sent<EventState | undefined>): (PanelBody & { board: EventState }) | undefined {
+  const body = panelRead(panel);
   const state = stateRead(board);
-  if (!legs || !state) return undefined;
-  return { legs, board: state };
+  if (!body || !state) return undefined;
+  return { ...body, board: state };
 }
 
 /**
  * What came of « Valider » in « Modifier l’événement » (organizer-view v3.3.6, « Enregistrer »):
- * saved, with the values the server stored; a field refused; changed on another device, with
- * the values stored (M6.1); the retour unchecked still holding these, to confirm (M3.2); the
- * link refused (M8.2) or the event gone (M8.3); or a problem, said in the sheet.
+ * saved, with the values the server stored, the option « Points de RDV » among them (`stops`,
+ * absent from a server before it); a field refused; changed on another device, with the values
+ * stored (M6.1); the retour unchecked still holding these, to confirm (M3.2); the option turned
+ * off while `cars` cars have Stops (RV9.3); the link refused (M8.2) or the event gone (M8.3); or a
+ * problem, said in the sheet.
  */
 export type EditAnswer =
-  | { kind: "saved"; event: EventHeader }
+  | { kind: "saved"; event: EventHeader; stops?: boolean }
   | { kind: "errors"; errors: EventErrors }
-  | { kind: "changed"; event: EventHeader }
+  | { kind: "changed"; event: EventHeader; stops?: boolean }
+  | { kind: "stopsLocked"; cars: number }
   | { kind: "confirmRetour"; counts: LegCounts }
   | { kind: "refused"; reason: "invalid" | "eventNotFound" }
   | { kind: "problem"; problem: ActionProblem };
@@ -213,10 +291,15 @@ const isCount = (value: unknown): value is number => Number.isSafeInteger(value)
  * What the change did not do, then why, once its sheet is closed (« Une réponse qui arrive
  * feuille fermée », M2.8, M2.9), in the bar. A `removal` confirmed did not remove the retour
  * either, and new numbers are said with what to use again (M3.7). `invalid`, which only a forged
- * request gets, takes the generic reason (decision 46).
+ * request gets, takes the generic reason (decision 46). A change that only touched the option
+ * « Points de RDV » (`optionOnly`) says so (RV9.4).
  */
-export function editFailure(answer: Exclude<EditAnswer, { kind: "saved" }>, removal: boolean): { notDone: NotDone; why: Why } {
-  const notDone: NotDone = { kind: removal ? "removeRetour" : "editEvent" };
+export function editFailure(
+  answer: Exclude<EditAnswer, { kind: "saved" }>,
+  removal: boolean,
+  optionOnly = false,
+): { notDone: NotDone; why: Why } {
+  const notDone: NotDone = { kind: removal ? "removeRetour" : optionOnly ? "editStops" : "editEvent" };
   switch (answer.kind) {
     case "problem":
       return { notDone, why: whyOf(answer.problem) };
@@ -226,6 +309,8 @@ export function editFailure(answer: Exclude<EditAnswer, { kind: "saved" }>, remo
       return { notDone, why: whyOf("editErrors") };
     case "changed":
       return { notDone, why: whyOf("eventChanged") };
+    case "stopsLocked":
+      return { notDone, why: { kind: "stopsStillLocked" } };
     case "confirmRetour":
       return { notDone, why: removal ? { kind: "retourChanged", ...answer.counts, where: "bar" } : whyOf("retourNotConfirmed") };
   }
@@ -235,17 +320,20 @@ export function editFailure(answer: Exclude<EditAnswer, { kind: "saved" }>, remo
 export function editAnswer(sent: Sent<unknown>): EditAnswer {
   if (!sent.ok) return { kind: "problem", problem: sent.problem };
   const answer = sent.value as
-    | { ok?: unknown; event?: unknown; errors?: unknown; error?: unknown; cars?: unknown; persons?: unknown }
+    | { ok?: unknown; event?: unknown; stops?: unknown; errors?: unknown; error?: unknown; cars?: unknown; persons?: unknown }
     | null
     | undefined;
   if (answer?.ok === false && answer.error === "confirmRetour" && isCount(answer.cars) && isCount(answer.persons)) {
     return { kind: "confirmRetour", counts: { cars: answer.cars, persons: answer.persons } };
   }
-  if (answer?.ok === true && isHeader(answer.event)) return { kind: "saved", event: answer.event };
+  if (answer?.ok === false && answer.error === "stopsLocked" && isCount(answer.cars)) return { kind: "stopsLocked", cars: answer.cars };
+  // The option stored, when the server says it: a server from before it says none.
+  const stops = typeof answer?.stops === "boolean" ? { stops: answer.stops } : {};
+  if (answer?.ok === true && isHeader(answer.event)) return { kind: "saved", event: answer.event, ...stops };
   if (answer?.ok === false && typeof answer.errors === "object" && answer.errors !== null) {
     return { kind: "errors", errors: answer.errors as EventErrors };
   }
-  if (answer?.ok === false && answer.error === "changed" && isHeader(answer.event)) return { kind: "changed", event: answer.event };
+  if (answer?.ok === false && answer.error === "changed" && isHeader(answer.event)) return { kind: "changed", event: answer.event, ...stops };
   if (answer?.ok === false && (answer.error === "invalid" || answer.error === "eventNotFound")) {
     return { kind: "refused", reason: answer.error };
   }

@@ -22,8 +22,12 @@ export type NotDone =
   /** « Retirer de l’événement » (remove-person v2): the person, as her sheet showed her. */
   | { kind: "removePerson"; firstName: string }
   | { kind: "editRide"; driver: string; leg: Leg }
+  /** « Changer le point » (RV4.3): the person, as the sheet showed her. */
+  | { kind: "stop"; firstName: string }
   | { kind: "readDevice" }
   | { kind: "editEvent" }
+  /** « Modifier l’événement » that only changed the option « Points de RDV » (RV9.4). */
+  | { kind: "editStops" }
   | { kind: "removeRetour" };
 
 /**
@@ -39,6 +43,7 @@ type Plain =
   | "forbidden"
   | "eventNotFound"
   | "eventEnded"
+  | "noOrganiserAccess"
   | "noRetour"
   | "driverWithoutPhone"
   | "editErrors"
@@ -60,7 +65,9 @@ export type Why =
   /** Her number emptied while she drives (v4.8, rule 8): named as the send showed her. */
   | { kind: "phoneWhileDriving"; firstName: string }
   /** The retour changed while its removal was confirmed (M3.7): what to use again, `where` the answer is said. */
-  | { kind: "retourChanged"; cars: number; persons: number; where: "sheet" | "bar" };
+  | { kind: "retourChanged"; cars: number; persons: number; where: "sheet" | "bar" }
+  /** The option « Points de RDV » stays on: cars have Stops (RV9.3, D1). */
+  | { kind: "stopsStillLocked" };
 
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
@@ -136,15 +143,17 @@ export function cellNotDone(action: Exclude<CellAction, "seeCar">, { firstName, 
 
 /**
  * Why a cell's action was not done: as `whyOf`, `drives` names who drives, on the cell's leg, and
- * `personGone` the person, removed meanwhile (RP5.4).
+ * `personGone` the person, removed meanwhile (RP5.4); `phoneWhileDriving`, which only a change of
+ * her number meets (v4.8 rule 8), the generic reason.
  */
-export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personGone", { firstName, leg }: Cell): Why {
+export function cellWhy(error: Parameters<typeof whyOf>[0] | "drives" | "personGone" | "phoneWhileDriving", { firstName, leg }: Cell): Why {
   if (error === "personGone") return { kind: "personGone", firstName };
+  if (error === "phoneWhileDriving") return whyOf("invalid");
   return error === "drives" ? { kind: "drives", firstName, leg } : whyOf(error);
 }
 
-/** A refusal of « Retirer de l’événement » that sending it again would not change (remove-person v2, « Refus et échecs »). */
-export type FinalRefusal = "forbidden" | "eventNotFound" | "eventEnded";
+/** A refusal of « Retirer de l’événement » that sending it again would not change (remove-person v2.1, « Refus et échecs »): `noOrganiserAccess` from the panel (RP4.7). */
+export type FinalRefusal = "forbidden" | "eventNotFound" | "eventEnded" | "noOrganiserAccess";
 
 /** What a removal that failed says in its confirmation while it is open (`removalProblem`). */
 export type RemovalProblem = { problem: "offline" | "failed"; final: false } | { problem: FinalRefusal; final: true };
@@ -222,6 +231,14 @@ export function undoneText(words: Words, { names, undone, driver }: { names: rea
   return words.t(key, { names: nameList(words, said), count: said.length, driver });
 }
 
+/**
+ * The bar's success when the point chosen was gone at the send (RV3.4): `names` board at the
+ * departure, in the car all the same. Not a refusal: no « Annuler » is lost, no seat.
+ */
+export function stopGoneText(words: Words, names: readonly string[]): string {
+  return words.t("Sheet.stop.gone", { names: nameList(words, names), count: names.length });
+}
+
 function notDoneText(words: Words, notDone: NotDone): string {
   const { t } = words;
   switch (notDone.kind) {
@@ -233,6 +250,10 @@ function notDoneText(words: Words, notDone: NotDone): string {
       const choice = notDone.choice === "notConcerned" ? t(`DevicePersons.notConcerned.${notDone.leg}`) : t("DevicePersons.lookingForSeat");
       return t("Actions.notDone.choice", { person, choice });
     }
+    case "editStops":
+      return t("EditEvent.stops.failed");
+    case "stop":
+      return t("Sheet.stop.failed", { firstName: notDone.firstName });
     default: {
       const { kind, ...values } = notDone;
       return t(`Actions.notDone.${kind}`, values);
@@ -248,6 +269,8 @@ function whyText(words: Words, why: Why): string {
       return t(`Actions.why.${why.kind}`, { names: nameList(words, why.names), count: why.names.length });
     case "notEnoughSeats":
       return t("Actions.why.notEnoughSeats", { free: why.free });
+    case "stopsStillLocked":
+      return t("EditEvent.stops.stillLocked");
     default: {
       const { kind, ...values } = why;
       return t(`Actions.why.${kind}`, values);
@@ -255,7 +278,11 @@ function whyText(words: Words, why: Why): string {
   }
 }
 
-/** The failure's line in the bar: « {notDone} {why} ». */
+/**
+ * The failure's line in the bar: « {notDone} {why} ». The option kept on says it alone: its reason
+ * is already « L’option reste active » (RV9.3), and `EditEvent.stops.failed` would only repeat it.
+ */
 export function failureText(words: Words, notDone: NotDone, why: Why): string {
+  if (notDone.kind === "editStops" && why.kind === "stopsStillLocked") return whyText(words, why);
   return words.t("Actions.failure", { notDone: notDoneText(words, notDone), why: whyText(words, why) });
 }

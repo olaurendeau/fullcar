@@ -172,7 +172,10 @@ en bout utilisent :
   fenêtre jusqu'au plafond avec des envois validés. Jamais une horloge avancée hors de la
   fenêtre à la place. `whileHeld` (`src/db/test-committed.ts`) passe à `second` une
   connexion à lui, et n'attend que sa session : une session d'un autre fichier, bloquée sur
-  le même verrou du plafond global, ne prouve rien du test.
+  le même verrou du plafond global, ne prouve rien du test. Depuis #856, c'est le seul
+  moyen d'attendre une session bloquée, sans copie locale ; pour plusieurs sessions,
+  `whileHeldInTurn` en lance une par connexion, chacune une fois la précédente en attente,
+  deux de moins que les connexions du pool (`POOL_SIZE`, `src/db/client.ts`), trois aujourd'hui.
 - `fullcar_migrations_test`, dont l'URL vient de `MIGRATIONS_TEST_DATABASE_URL`, pour le
   seul test d'aller-retour des migrations (`src/db/migrations.test.ts` : montée, descente,
   remontée, puis descente complète sans table restante). Le `globalSetup` la vide (et la
@@ -299,6 +302,17 @@ prend à l'insertion, **avant** la Person `FOR UPDATE`. Une écriture qui aurait
 avec une prise de place. Ces verrous se prouvent par des tests de concurrence (voir « Base
 de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts`,
 `src/db/participant-tables.test.ts` et `src/app/e/[id]/offer-ride.test.ts`.
+
+**Les Arrêts** (épic #881) suivent la même règle : un Arrêt ne s'écrit que sous le verrou de son
+Ride (`lockRide`), après l'Event et avant les Persons ; la clé `placement.stop_id` ne prend
+l'Arrêt (`FOR KEY SHARE`) que sous ce même verrou, donc aucune attente nouvelle. `editEvent`
+(`FOR NO KEY UPDATE`) recompte les Arrêts de l'événement (`countStopRides`) sous son verrou de
+l'Event : désactiver l'option alors que des Arrêts existent est refusé (`stopsLocked`), l'activer
+ne l'est jamais ; l'option est la seule que « Modifier l'événement » touche, et seulement quand
+`stops` est envoyé (D1, #888). Toute écriture qui porte un Arrêt (`offerRide`, `updateRide`,
+`takeSeats` avec un point, `setBoardingStop`) lit `stops_enabled` sur la ligne que rend
+`lockLegs` : option désactivée, refus `stopsOff` et rien n'est écrit. La base, elle, accepte les
+Arrêts dès `0006_stops`.
 
 ### L'Event d'abord (#260)
 
@@ -478,7 +492,10 @@ deviné l'est aussi.
   `{ adminToken, session }`, et la réponse est le panneau ou l'état que décide
   `organiser-access.ts`, sans aucune autre donnée : `invalid` pour un événement inconnu,
   `signIn`, `notYours` avec l'adresse de la session du visiteur, `pending`, `orphan` ou
-  `ended`. Le panneau n'est jamais dans le HTML.
+  `ended`, qui porte, pour la seule session de l'organisateur, le titre, le lieu, les dates et
+  la date du jour 30 (OA8.4, #598). Le panneau n'est jamais dans le HTML. Chaque refus a son
+  écran (`src/components/event/admin-states.tsx`), à la place du panneau et du tableau ; un
+  événement anonymisé n'a pas de tableau, et son lieu n'est pas dans le HTML.
   À partir de #263, c'est aussi celui d'`updateEvent`, la modification de l'événement : un
   jeton refusé répond `invalid` sans rien écrire, et aucune réponse ne porte le jeton.
   - lien admin : `/e/{id}/admin#{token}`, jusqu'à #597 ; ensuite il n'y a plus de lien
@@ -534,7 +551,7 @@ ci-dessus valent pour chacun.
   `event.admin_token_hash` pour le jeton d'admin. À partir de #586, `admin_token_hash` peut
   être nul, et un hash nul se lit « pas de jeton » : aucun jeton ne lui correspond.
 - **Dans le corps seulement.** Le jeton de session et le jeton d'admin voyagent dans le corps
-  de la server action qui en a besoin (la visite, Mes événements, l'espace organisateur, la
+  de la server action qui en a besoin (la visite, Mes événements, `organiserLink`, l'espace organisateur, la
   création, « Se déconnecter », « Supprimer mon compte »), jamais dans un chemin, une query
   string, un en-tête ou un cookie. Le jeton de session ne revient dans une réponse qu'une
   fois, dans le corps de l'action qui ouvre la session. Le HTML d'une page ne dépend
@@ -566,6 +583,13 @@ ci-dessus valent pour chacun.
   encore le panneau, un rechargement non. Le jeton est révoqué (son hash passe à
   nul) par « Se déconnecter » dans ce navigateur, qui envoie les jetons d'admin qu'il garde
   et les efface, par l'anonymisation, et par la suppression du compte.
+- **La suppression du compte** (`deleteAccount` et `eraseAccount`, `src/db/accounts.ts`, #610) :
+  une seule transaction, tout ou rien. Ordre des verrous, celui de « Se déconnecter » et
+  d'`editEvent` : les sessions du compte par clé, ses événements par identifiant, ses liens
+  par clé, l'adresse, puis le compte. Ses événements anonymisés sont supprimés, les autres
+  restent ouverts sans compte ni jeton ; les événements en attente créés avec son adresse la
+  perdent : elle n'est plus dans aucune table (OA9.5). Une impasse (40P01) avec le nettoyage
+  des liens est reprise une fois.
 - **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et
   celui-ci ne rattache que son propre événement. Chacun ne sert qu'une fois, et plusieurs
   liens non utilisés restent valables ensemble. La page du lien lit le jeton dans
@@ -584,11 +608,12 @@ ci-dessus valent pour chacun.
   le décide de nouveau sous ce verrou, en lisant l'événement, la session et le compte dans
   la même transaction (#836). Une déconnexion, une suppression de compte ou un jeton
   révoqué validés pendant l'attente refusent alors l'écriture (`invalid`). C'est le cas
-  d'`editEvent` ; les autres écritures de l'organisateur (#672, #675) suivront ce chemin.
+  d'`editEvent`, et du retrait par l'organisateur (#672), qui répond alors `noOrganiserAccess`.
 - **Le retrait d'une personne par l'organisateur** (#645, `removeAsOrganiser`,
-  `src/app/e/[id]/remove-person.ts`). Le droit de retirer vient du seul jeton d'admin,
-  comparé par `adminTokenMatches` sous le verrou de l'Event ; il passera par
-  `organiser-access.ts` seul, comme `editEvent` aujourd'hui (#675). La requête porte
+  `src/app/e/[id]/remove-person.ts`, server action `removePersonAsOrganiser`). Le droit de
+  retirer vient d'`organiser-access.ts` seul, décidé avant le verrou de l'Event puis sous lui,
+  comme `editEvent` (#672) ; l'autorisation marquée, que seule cette règle produit, est #675.
+  Le corps porte `{ adminToken, session }`. La requête porte
   aussi le jeton personnel de l'appareil, mais seulement pour
   relire le tableau que la page montre (`readEventState`), dont « Vos inscriptions » et les
   numéros visibles dépendent de ce jeton. Ce jeton ne donne aucun droit sur ce chemin : un
@@ -794,6 +819,7 @@ qu'elle.
 |---|---|---|
 | `PHOTON_URL` | `https://photon.komoot.io/api/` | l'adresse de recherche de Photon ; chaque slot pointe vers son faux Photon |
 | `PLACES_BREAKER_MS` | `60000` (aussi pour une valeur qui n'est pas un entier) | la durée minimale du disjoncteur, en millisecondes ; `0` le coupe (les slots) |
+| `PLACES_CALLS_PER_SECOND` | `5` (aussi pour une valeur qui n'est pas un entier positif) | le plafond d'appels à Photon par seconde et par instance ; `1000` dans les slots, où les tests d'une même exécution le partagent |
 
 ### Dans le navigateur
 
@@ -810,7 +836,12 @@ pour l'écran, les mots, les critères et la table « Mises à jour et focus »)
 serveur ne reçoit rien de nouveau, sauf les demandes de tuiles : la carte lit la position de l'événement
 (`EventHeader.locationPosition`, que `headerFrom` lit, `src/app/e/[id]/event.ts`) et celle de
 chaque voiture (`BoardCar.position`, voir « La position d'une voiture »), dans l'état que la
-page applique déjà. Les Arrêts (#68) ne sont pas sur la carte.
+page applique déjà. Les Arrêts (#68, #887) sont sur la carte de l'aller, quand
+l'option « Points de RDV » est activée : `stopsOf`, `routeOf` et le paramètre `stops` de
+`framing` (`src/domain/event-map.ts`) sont des fonctions pures, et un Arrêt n'entre jamais dans
+`mapOf`. Un Arrêt positionné d'une voiture positionnée a son rond et son étiquette ; la voiture
+trace un seul trait par ses Arrêts, à la place du trait droit ; les autres sont comptés sous la
+carte. Un Arrêt qui change de position ne recadre pas la carte (`reframe`).
 
 ### Les tuiles : `/tuiles/{z}/{x}/{y}` (#473, #474, #554)
 
@@ -1130,6 +1161,14 @@ d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu,
   seulement sur le `sending` que cette création a écrit : un renvoi écrit depuis garde le
   sien. Une session envoyée mais terminée, sans adresse, ne crée rien et répond
   `sessionEnded` sur le champ e-mail (OA1.5).
+- **« Renvoyer l'e-mail »** (OA2.4, #601) : `resendConfirmation` (`src/app/e/[id]/pending-email.ts`),
+  appelée par l'action `resendEmail`, ne sert que le navigateur de création (`decideOrganiserAccess`,
+  décidé avant le verrou puis sous le verrou de l'Event). Dans la transaction, `claimConfirmation`
+  inscrit l'envoi sous les limites (3 par heure pour l'événement, 5 pour l'adresse, le plafond
+  global) et crée un lien de plus, sans toucher aux précédents ; une limite n'écrit rien (`tooMany`).
+  `send_status` passe à `sending`, ce qui remplace le résultat gardé (OA1.10), puis, après la
+  validation et sans verrou, `sendConfirmation` (le même envoi que la création) appelle Brevo
+  et la réponse attend ses 10 s au plus. Un échec de Brevo n'est pas une erreur : l'avis le dit.
 - **Les limites** se comptent sous verrou, Event puis adresse (voir « L'adresse après
   l'Event »).
 - **Journal** : en mots fixes seulement, `email: no key`, `email: no sender`,
@@ -1160,7 +1199,9 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   chaque événement dont le jour 30 a commencé à Paris (`purgeCutoff`, voir « Heures sans
   fuseau ») est traité dans **sa propre transaction**, sous `lockEvent(trx, id,
   "noKeyUpdate")`. Avec un compte, il est **anonymisé** : ses Persons, Rides, Placements,
-  Arrêts et liens de confirmation sont supprimés, sa position, sa description et le hash de
+  Arrêts et liens de confirmation sont supprimés (les Arrêts partent avec leurs Rides
+  par la cascade `stop_ride_fk` / `stop_event_fk`, #883 ; `deleteEvent` les emporte par
+  la cascade de `stop.event_id`), sa position, sa description et le hash de
   son jeton d'admin passent à nul, et `anonymised_at` est écrit. Sans compte, en attente ou laissé par un
   compte supprimé, il est **supprimé**, et la cascade emporte le reste. Une exécution
   interrompue laisse chaque événement intact ou traité en entier, et une deuxième exécution
@@ -1301,15 +1342,17 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | jetons tirés par le serveur | `src/domain/server-token.ts`, à partir de #593 | seul tirage des jetons d'admin, de session et de lien, 128 bits de `randomBytes` ; `newAdminToken` s'en sert |
 | règles du compte | `src/domain/email-address.ts`, `account-rules.ts` et `send-limits.ts`, à partir de #593 | la lecture d'une adresse, les durées (lien de connexion 1 h, de confirmation 7 jours, session 90 jours, inactivité 3 ans) et le résultat d'un lien ; la limite par événement, la limite par adresse et le plafond global horaire, à partir de #623 ; la limite des demandes de connexion par adresse (OA4.5, `LOGINS_PER_ADDRESS`), à partir de #594 |
 | accès à l'espace organisateur | `src/domain/organiser-access.ts`, à partir de #596 | la seule règle d'accès : session du compte de l'événement, ou jeton d'admin du navigateur de création ; seule à produire l'autorisation que `withOrganiserPhones` accepte |
-| retrait d'une personne | `src/app/e/[id]/remove-person.ts` et `src/domain/person-removal.ts`, à partir de #665 | le cas d'usage, sans server action exportée : `removeFromDevice` (le droit par `devicePersonIds`) et `removeAsOrganiser` (le droit par le seul jeton d'admin, puis `organiser-access.ts`, #675), l'ordre des réponses (RP3.4) et celui des verrous (voir « Retirer une personne ») ; le domaine, en fonctions pures : ce que devient chaque leg, et les lignes de la confirmation, lues dans l'état que la page montre |
+| retrait d'une personne | `src/app/e/[id]/remove-person.ts` et `src/domain/person-removal.ts`, à partir de #665 | le cas d'usage, sans server action exportée : `removeFromDevice` (le droit par `devicePersonIds`) et `removeAsOrganiser` (le droit par `organiser-access.ts` seul, #672 ; l'autorisation marquée, #675), l'ordre des réponses (RP3.4) et celui des verrous (voir « Retirer une personne ») ; le domaine, en fonctions pures : ce que devient chaque leg, et les lignes de la confirmation, lues dans l'état que la page montre |
 | compte dans la base | `src/db/accounts.ts`, `sessions.ts`, `email-links.ts`, `email-sends.ts`, à partir de #594 ; `src/db/my-events.ts`, à partir de #606 | les comptes, les sessions, les liens (un seul usage, même en concurrence) et les envois (limites sous verrou, Event puis adresse) ; Mes événements en agrégats, sans aucun téléphone |
 | connexion | `src/app/connexion/` (`page.tsx`, `actions.ts`, `lien/`, `confirmer/`), à partir de #603 ; `src/app/mes-evenements/` : `actions.ts` et `my-events.ts`, à partir de #606, la page à partir de #607 | les pages et actions de connexion et des liens ; Mes événements : l'action `myEvents`, qui reçoit le jeton de session dans le corps et lit la session et ses événements sur un seul instantané, sans rien écrire, et la page |
 | Mes événements | `src/domain/my-events.ts`, à partir de #606 | les deux sections et leur ordre (« À venir » par début croissant, « Passés » par début décroissant), « passé » et le jour 30 par `day-thirty.ts` ; une ligne n'est listée que si `organiser-access.ts`, avec la session seule, l'ouvre ou la dit terminée : jamais un événement en attente (OA2.3) |
 | création | `src/app/create-event.ts`, à partir de #599 | le cas d'usage de la création, avec une adresse ou une session ; l'envoi de la confirmation par `after()` |
+| avis « Confirmez votre adresse » | `src/domain/pending-send.ts`, `src/components/event/pending-notice.tsx` et `src/app/e/[id]/admin/pending-poll.ts`, à partir de #600 | le résultat gardé de l'envoi tel que l'avis le lit (un `sending` de plus de 30 s est un échec, OA1.7) ; l'adresse et ce résultat ne sont lus qu'une fois l'accès accordé, et ne voyagent que dans la réponse du panneau ; l'avis est relu toutes les 2 s tant que l'envoi est en cours, 30 s au plus, puis se lit comme un échec ; un changement pendant qu'une feuille cache la page attend qu'elle se montre |
 | e-mails | `src/email/brevo.ts`, à partir de #591 ; `src/email/messages.ts`, à partir de #592 | seul `brevo.ts` lit `BREVO_URL`, `BREVO_API_KEY` et `EMAIL_FROM` et appelle Brevo ; `messages.ts` écrit les quatre e-mails, sans aucun texte saisi (voir « Les e-mails ») |
 | jour 30 et « passé » | `src/domain/day-thirty.ts`, à partir de #587 | le seul calcul de « aujourd'hui », « passé » et du jour 30, à l'heure de Paris (voir « Heures sans fuseau ») |
 | purge | `src/app/api/purge/` (`route.ts`, `handle.ts`, `day-thirty.ts`, `inactive-accounts.ts`), à partir de #589 ; `src/db/day-thirty.ts`, à partir de #588 ; `src/db/expired-rows.ts`, à partir de #589 | la route n'exporte que `GET` et vérifie `CRON_SECRET` ; l'anonymisation et la suppression au jour 30, le nettoyage par âge, les comptes inactifs (voir « La purge ») |
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones ; à partir de #776, `hasPhone` (`src/db/persons.ts`) n'en lit que la présence, un booléen, sous le verrou de la Person |
+| Arrêts | `src/db/stops.ts`, à partir de #883 ; `src/domain/stop.ts`, à partir de #885 | `stops.ts` lit les Arrêts d'un Ride (`rideStops`, par heure puis rang), en compte les Rides (`countStopRides`) et les écrit sous le verrou du Ride : `insertStops` à l'offre, `replaceStops` à la modification (la liste complète, un Arrêt retiré remettant ses passagers au départ, un `id` déjà pris par un autre Ride répondant `false`, jamais une erreur). `stop.ts`, en fonctions pures, lit la liste envoyée (`stopsOf`) et porte les règles (`validateStops` : 6 au plus, strictement après le départ, tri par heure) ; l'aller seulement, l'option « Points de RDV » et l'heure de départ sont lus sous les verrous de l'Event et du Ride, par `offer-ride.ts` et `change-ride.ts` |
 | lieu | `src/domain/place.ts`, à partir de #418 | un lieu est `{ text, position }` ; `positionOf` lit et arrondit une position ; `samePlace` compare deux lieux (texte et position) |
 | description | `src/domain/description.ts`, à partir de #707 | `DESCRIPTION_MAX` (1000 points de code) ; `normalizeDescription`, la seule normalisation, partagée par le serveur (`description`, les règles de `text()`) et le compteur (`descriptionCount`) ; `guessFolds`, la devinette du pli que rend le serveur |
 | propositions de lieux | `src/domain/suggestion.ts` ; `src/app/api/lieux/` (`route.ts`, `handle.ts`, `photon.ts`), à partir de #425 | le domaine lit la requête, écrit l'URL de Photon et les libellés ; la route n'exporte que `POST` ; seul `photon.ts` appelle Photon, avec son cache, son plafond et son disjoncteur (voir « Auto-complétion des lieux ») |
@@ -1319,6 +1362,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | liens de la description | `src/domain/description-links.ts`, à partir de #708 | `descriptionPieces` découpe la description en texte et en liens `http(s)` stricts ; une URL trompeuse (un `@` où que ce soit, décision du coordinateur sur #725 ; un caractère Cf, Cc ou bidirectionnel, hôte non ASCII ou `xn--`, `host` de `new URL()` différent de l'autorité tapée) reste du texte ; aucun appel réseau, `URL.host` seul est lu |
 | carte | `src/domain/event-map.ts` ; `src/components/event/event-map.tsx`, `event-map-state.ts` et `leaflet-map.ts`, à partir de #476 | les points et le cadrage en fonctions pures ; les mises à jour, le chargement et les tuiles en fonctions pures ; seul `leaflet-map.ts` importe `leaflet`, et seulement par `import()` |
 | composants | `src/components/<domaine>/` (ex. `src/components/event/`, que #21 crée) | n'importent pas `src/db`, ni par `@/db` ni par un chemin relatif, en `import` comme en `import()` |
+| retour arrière des feuilles | `src/components/event/sheet-history.ts` et `SheetStep` (`bottom-sheet.tsx`), à partir de #768 ; la pile est créée par `src/instrumentation-client.ts`, qui ne sert donc plus seulement à Sentry | une entrée d'historique par feuille ouverte, une de plus par étape ; repose sur trois comportements internes de Next 16.4, à revérifier à chaque mise à jour : l'App Router pose son écouteur `popstate` dans un `useEffect` (le nôtre, posé avant l'hydratation, passe donc avant lui ; il n'arrête que les pas qui quittent les entrées d'une feuille encore ouverte, et le `go` qu'elle lance elle-même, à leur adresse) ; un `popstate` qu'il entend abandonne l'action serveur en cours (`discarded`) ; son `pushState` patché copie `__NA` et l'arbre dans nos entrées (`copyNextJsInternalHistoryState`), sans quoi un pas vers l'entrée d'une feuille fermée rechargerait la page. Risque accepté : un retour pendant un envoi (G1.11), puis « Suivant » avant la réponse, laisse Next lancer `ACTION_RESTORE` et abandonner l'action en cours ; c'est rare, et c'est le prix de laisser à Next tout pas hors d'une feuille ouverte |
 | shadcn/ui | `src/components/ui/` | générés par `make npm ARGS="exec shadcn add …"` |
 | rapports d'erreur | `src/observability/`, à partir de #234 | Sentry, seulement avec `NEXT_PUBLIC_SENTRY_DSN` : `register()` (`src/instrumentation.ts`) et `src/instrumentation-client.ts` importent le SDK dynamiquement, et sans DSN ne le chargent pas ; `options.ts` coupe `dataCollection`, la propagation de trace et toute intégration hors d'une liste exacte (`server.ts`, `client.ts`) ; les hooks de `scrub.ts` reconstruisent chaque envoi, et `registerHooks` y ajoute `createDsc` et `beforeEnvelope` ; une erreur de base part en `database error (SQLSTATE x)` |
 | mesure d'audience | `src/components/analytics/web-analytics.tsx` et `src/observability/analytics.ts`, à partir de #346 | `<Analytics />` de `@vercel/analytics/next`, monté par le layout racine seulement si `NEXT_PUBLIC_VERCEL_ENV` vaut `production` ; `analyticsBeforeSend` réduit chaque page vue à l'origine et à la route (`/`, `/nouveau`, `/e/[id]`, `/e/[id]/admin`), sans query ni fragment, et ne laisse partir ni une autre page ni un événement personnalisé |
@@ -1402,10 +1446,11 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
 
   | clé | `ON DELETE` | pourquoi |
   |---|---|---|
-  | `stop.ride_id` | `CASCADE` | un Arrêt appartient à son Ride |
+  | `stop (ride_id, event_id, leg)` → `ride (id, event_id, leg)` (`stop_ride_fk`) | `CASCADE` | un Arrêt appartient à son Ride, qui est sur l'aller (`stop_leg`) et dans le même événement ; supprimer le Ride emporte ses Arrêts (#883) |
+  | `stop.event_id` → `event` (`stop_event_fk`) | `CASCADE` | la règle de la purge : supprimer l'événement emporte ses Arrêts, quel que soit le chemin |
   | `placement (person_id, event_id)` → `person (id, event_id)` | `CASCADE` | un Placement appartient à sa Person, du même événement |
   | `placement (ride_id, event_id, leg)` → `ride (id, event_id, leg)` | `SET NULL (ride_id)` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » ; seule `ride_id` est remise à `null`, `event_id` et `leg` restent |
-  | `placement.stop_id` | `SET NULL` | quand un Arrêt est supprimé, le passager monte (ou descend) au lieu du Ride |
+  | `placement.stop_id` → `stop (id)` (`placement_stop_fk`) | `SET NULL` | quand un Arrêt est supprimé, le passager reste dans le Ride et monte à son départ (`stop_id` à `null`) ; le déclencheur `placement_stop_on_ride` accompagne cette clé (voir plus bas) |
   | `ride (driver_id, event_id)` → `person (id, event_id)` | `CASCADE` | supprimer le conducteur retire sa voiture, et ses passagers repassent « sans voiture » par la clé `placement → ride` ; à partir de #645, le retrait d'une personne supprime sa Person, mais verrouille et supprime d'abord ses Rides, pour garder l'ordre Ride, puis Person (voir « Retirer une personne ») |
   | `event.account_id` | `SET NULL` | un événement survit à son compte : il reste ouvert aux participants, sans organisateur, jusqu'à son jour 30 (OA9.5) ; il garde `confirmed_at` (#586) |
   | `session.account_id` | `CASCADE` | une session appartient à son compte : le supprimer ferme toutes ses sessions (#586) |
@@ -1413,7 +1458,8 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   | `email_link.return_event_id` | `SET NULL` | la page d'arrivée d'un lien de connexion, `/e/{id}/admin` de cet Event (OA4.4) ; l'Event supprimé, le lien sert encore et mène à `/mes-evenements`, l'arrivée par défaut. Un lien de confirmation n'en a pas : il mène à son propre Event (OA5.3) (#586) |
   | `email_send.event_id` | `SET NULL` | un envoi ne tient pas à son événement : supprimé, l'Event laisse l'envoi compté dans la limite de son adresse et dans le plafond global, jusqu'à son nettoyage par âge (#586) |
 
-  Les clés de `ride` et de `placement`, hors `stop_id`, arrivent avec #66. Les clés
+  Les clés de `ride` et de `placement`, hors `stop_id`, arrivent avec #66, celles de `stop`
+  et `placement.stop_id` avec la migration `0006_stops` (#883). Les clés
   composites empêchent un Placement de pointer vers un Ride d'un autre événement ou d'un
   autre leg (C12.7), et un Ride ou un Placement de pointer vers une Person d'un autre
   événement. Leurs cibles sont `unique (id, event_id)`
@@ -1436,6 +1482,17 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   toutes les deux, et lève `23514` avec un nom de contrainte. Quand `ride_id` est
   renseigné, `placement_driver_on_leg` verrouille d'abord le Ride (`FOR KEY SHARE`) :
   l'ordre reste Ride, puis Person (voir « Concurrence »).
+
+  Un troisième déclencheur, `placement_stop_on_ride` (#883, avant insertion, ou mise à jour de
+  `ride_id` ou de `stop_id`), ne verrouille rien : (a) si `ride_id` change sans que `stop_id`
+  change, il remet `stop_id` à `null` ; (b) si `stop_id` n'est pas un Arrêt de `ride_id`, il lève
+  `23514` avec la contrainte `placement_stop_on_ride`. Sans Ride, c'est le `check`
+  `placement_stop_in_car` (`stop_id is null or ride_id is not null`) qui refuse. Une clé composite
+  `(stop_id, ride_id)` est écartée : avec le `SET NULL (ride_id)` de `placement_ride_fk`, l'ordre
+  des deux actions de clé déciderait si `stop_id` reste sur un Arrêt disparu ; le déclencheur le
+  rend indifférent. Un Arrêt a au plus 6 rangs par Ride (`rank` de 0 à 5, `stop_ride_rank_unique`
+  différée, pour qu'un reclassement ne se heurte pas à lui-même). Il ne porte ni numéro ni
+  prénom : lieu, position, heure, rang (RV8.2).
 - **Mesure d'audience** : à partir de #346, Vercel Web Analytics, sur le déploiement de
   production seulement, sans cookie, et une page vue ne porte que son origine et sa route
   (voir « Emplacement du code »). Speed Insights reste désactivé.

@@ -1,6 +1,6 @@
 import { useTranslations } from "next-intl";
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { createContext, useCallback, useContext, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { createPortal, flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { HidesPage } from "./hidden-page";
 import { keepPagePlace } from "./page-scroll";
 import { MARGIN, revealBy, sheetFrame, type SheetFrame, type SheetFrameInput } from "./sheet-frame";
+import { sheetHistory } from "./sheet-history";
 
 /**
  * What Radix's FocusScope does when a sheet's content mounts: the first element the Tab key
@@ -100,6 +101,49 @@ export function SheetBar({ messages, children }: { messages?: ReactNode; childre
       {targets.actions && createPortal(children, targets.actions)}
     </>
   );
+}
+
+/** How a step tells the sheet it is in that it is open, until the function it gets back is called. */
+const StepsOfSheet = createContext<((back: () => void) => () => void) | null>(null);
+
+/**
+ * A step of the sheet it is in, while mounted (v4.7, rules 3, 3 bis): one entry more in the history,
+ * however it opened, and the browser's « back » calls `onBack`, as its « Annuler ». A new round keeps it mounted.
+ */
+export function SheetStep({ onBack }: { onBack: () => void }) {
+  const add = useContext(StepsOfSheet);
+  const back = useEffectEvent(onBack);
+  useEffect(() => add?.(() => back()), [add]);
+  return null;
+}
+
+/**
+ * The sheet's entries in the history while it is open (v4.7): its own, then one per step in it. The
+ * browser's « back » leaves the step on top as its « Annuler » does, or closes the sheet as Escape
+ * does, and as a key would, at once: the focus goes where it would. Closed otherwise, they go too.
+ */
+function useBackCloses(open: boolean, onOpenChange: (open: boolean) => void) {
+  const close = useEffectEvent(() => onOpenChange(false));
+  const steps = useRef<(() => void)[]>([]);
+  const sheetBack = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const back = () => flushSync(() => (steps.current.at(-1) ?? close)());
+    const entry = sheetHistory().add(back);
+    sheetBack.current = back;
+    return () => {
+      sheetBack.current = null;
+      sheetHistory().remove(entry);
+    };
+  }, [open]);
+  return useCallback((stepBack: () => void) => {
+    steps.current.push(stepBack);
+    const entry = sheetBack.current && sheetHistory().add(sheetBack.current);
+    return () => {
+      steps.current = steps.current.filter((step) => step !== stepBack);
+      if (entry) sheetHistory().remove(entry);
+    };
+  }, []);
 }
 
 /** The most of the visible height the bar's messages take before they scroll (v4.6, rule 1). */
@@ -225,6 +269,7 @@ function frameStyle(frame: SheetFrame | null, fixed: { header: number; bar: numb
  * body scrolls between them. The sheet is the one element that scrolls, so that a list of places
  * can still cover the bar (rule 6). It stands in the visible area, above an iPhone's keyboard
  * (`sheet-frame.ts`); on a phone, a `fullHeight` sheet fills it. Closed, the page is where it was.
+ * The browser's « back » closes it as Escape does, or leaves its `SheetStep`, on the same page (v4.7).
  */
 export function BottomSheet({
   open,
@@ -264,6 +309,7 @@ export function BottomSheet({
   const [messagesTarget, setMessagesTarget] = useState<HTMLDivElement | null>(null);
   const [actionsTarget, setActionsTarget] = useState<HTMLDivElement | null>(null);
   const targets = useMemo(() => ({ messages: messagesTarget, actions: actionsTarget }), [messagesTarget, actionsTarget]);
+  const addStep = useBackCloses(open, onOpenChange);
   const area = useVisibleArea(open);
   const frame = area && sheetFrame({ ...area, fullHeight });
   const fixed = useFixedHeights(header, bar);
@@ -327,7 +373,9 @@ export function BottomSheet({
           {description && <SheetDescription>{description}</SheetDescription>}
         </SheetHeader>
         <div className="flex flex-col gap-3.5 px-4 pt-1 pb-4">
-          <BarOfSheet.Provider value={targets}>{children}</BarOfSheet.Provider>
+          <StepsOfSheet.Provider value={addStep}>
+            <BarOfSheet.Provider value={targets}>{children}</BarOfSheet.Provider>
+          </StepsOfSheet.Provider>
         </div>
         {/* Hidden while nothing is in it. Under a list of places, z-20, which can cover it (rule 6). */}
         <SheetFooter

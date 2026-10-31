@@ -13,13 +13,13 @@ type Problem = "failed" | "cookiesBlocked";
 
 /**
  * The footer's line 1 (#113, #489): `before`, the home link (#232), then a button that names
- * the other language in that language. Line 2 comes after it, in the footer. A tap asks the
- * server to remember the language; its answer is the page already rendered in it, applied in
- * place, without reloading the document.
+ * the other language in that language, then `after`, the privacy link (#612). Line 2 comes
+ * after it, in the footer. A tap asks the server to remember the language; its answer is the
+ * page already rendered in it, applied in place, without reloading the document.
  * Nothing else happens on the client: no refresh, no navigation, and nothing read from the URL.
  * When it does not work, a message above line 1 says why, in the language asked for (#129).
  */
-export function LanguageSwitch({ before }: { before?: ReactNode }) {
+export function LanguageSwitch({ before, after }: { before?: ReactNode; after?: ReactNode }) {
   const t = useTranslations("LanguageSwitch");
   const locale = useLocale();
   const next = otherLocale(isLocale(locale) ? locale : defaultLocale);
@@ -87,6 +87,7 @@ export function LanguageSwitch({ before }: { before?: ReactNode }) {
           <Globe aria-hidden="true" className="size-[15px] shrink-0" />
           {t("label")}
         </button>
+        {after}
       </div>
     </>
   );

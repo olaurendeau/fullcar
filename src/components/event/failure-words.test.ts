@@ -203,6 +203,12 @@ describe("cellNotDone and cellWhy: a cell's failure names the person, the leg an
     const offered = Object.values(states).filter((state) => cellActions(state).includes("leaveCar"));
     expect(offered.map((state) => state.kind)).toEqual(["passenger"]);
   });
+
+  // v4.8, rule 8: only a change of her number meets it; a cell's action gets the generic reason.
+  it("gives `phoneWhileDriving` the generic reason", () => {
+    const { state } = CELLS["Cellule, « Sortir de la voiture » : Léa, voiture de Claire"];
+    expect(cellWhy("phoneWhileDriving", { firstName: "Léa", leg: "aller", state })).toEqual(whyOf("invalid"));
+  });
 });
 
 // #225: « Modifier » names the fields it sent; a refusal of a person's form says its reason.
@@ -548,5 +554,14 @@ describe("removalProblem: « Retirer de l’événement »", () => {
     expect(said("fr", "eventEnded")).toBe("Léa fait toujours partie de l’événement. Cet événement est terminé : ses inscriptions ont été effacées.");
     expect(said("en", "forbidden")).toBe("Léa is still part of the event. This device cannot make this change: reload the page.");
     expect(said("en", "invalid")).toBe("Léa is still part of the event. Something went wrong: try again in a moment.");
+  });
+
+  // RP4.7 (amended by #854): from the panel, no access is a refusal that sending again would not change.
+  it("RP4.7: noOrganiserAccess is final, and says the organiser area is no longer open, word for word", () => {
+    expect(removalProblem("noOrganiserAccess")).toEqual({ problem: "noOrganiserAccess", final: true });
+    const notDone: NotDone = { kind: "removePerson", firstName: "Léa" };
+    const said = (locale: Locale) => failureText(words(locale), notDone, whyOf(removalProblem("noOrganiserAccess").problem));
+    expect(said("fr")).toBe("Léa fait toujours partie de l’événement. L’espace organisateur ne vous est plus ouvert : rechargez la page.");
+    expect(said("en")).toBe("Léa is still part of the event. The organiser area is no longer open to you: reload the page.");
   });
 });

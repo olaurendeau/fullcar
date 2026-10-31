@@ -6,6 +6,7 @@ export interface Database {
   person: PersonTable;
   ride: RideTable;
   placement: PlacementTable;
+  stop: StopTable;
   account: AccountTable;
   session: SessionTable;
   email_link: EmailLinkTable;
@@ -91,10 +92,30 @@ export interface RideTable {
 }
 
 /**
+ * A Stop of a Ride on the aller (epic #881): a place, a time and a rank in the Ride, from 0
+ * to 5, so at most 6 Stops. `id` is drawn by the browser, like a Ride's. `stop_time` is a
+ * wall-clock `HH:MM:SS` string on the date of the aller. `location_lat` and `location_lng`
+ * are the position of `location`, as on a Ride. Nothing of a person is kept.
+ */
+export interface StopTable {
+  id: string;
+  event_id: string;
+  ride_id: string;
+  leg: "aller";
+  location: string;
+  location_lat: number | null;
+  location_lng: number | null;
+  stop_time: string;
+  rank: number;
+  created_at: ColumnType<Date, never, never>;
+}
+
+/**
  * One per person and leg. `ride_id` null: the person is without a car on that leg.
  * `placed_at` gives the boarding order: set by the database on insert. Its update type
  * lets the code write it, as a Date too; src/db/placements.ts only ever sets it back to the
- * database's `now()`, when `ride_id` changes.
+ * database's `now()`, when `ride_id` changes. `stop_id` is the Stop of the Ride where the
+ * person boards, null for the Ride's start; never set without a Ride.
  */
 export interface PlacementTable {
   person_id: string;
@@ -102,6 +123,7 @@ export interface PlacementTable {
   leg: LegColumn;
   ride_id: string | null;
   placed_at: ColumnType<Date, never, Date>;
+  stop_id: string | null;
 }
 
 /** What a link from an email opens, as the domain's `LinkKind`. */

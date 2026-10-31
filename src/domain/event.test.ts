@@ -316,13 +316,27 @@ describe("validateEventChange", () => {
       expect(changeErrors({ ...kept, retourTime: "07:00" })).toEqual({ retourTime: "notAfterAller" });
     });
 
-    it("returns the header, trimmed, and no option: a change does not touch them", () => {
-      expect(changed({ ...valid, title: " Tournoi de Rennes U13 ", boosters: true, stops: true })).toEqual({
+    it("returns the header, trimmed, nor the boosters, nor the participation: a change does not touch them", () => {
+      expect(changed({ ...valid, title: " Tournoi de Rennes U13 ", boosters: true, participation: true })).toEqual({
         title: "Tournoi de Rennes U13",
         location: "Gymnase Jean Macé",
         allerAt: "2026-12-12 07:30:00",
         retourAt: "2026-12-12 18:00:00",
       });
+    });
+
+    it.each([true, false])("D1: keeps `stops` when it is sent (%s), and only it", (stops) => {
+      expect(changed({ ...valid, boosters: true, participation: true, stops })).toEqual({
+        title: "Match à Lyon",
+        location: "Gymnase Jean Macé",
+        allerAt: "2026-12-12 07:30:00",
+        retourAt: "2026-12-12 18:00:00",
+        stops,
+      });
+    });
+
+    it("D1: `stops` not sent is not in the change, so that the option stays", () => {
+      expect(changed(valid)).not.toHaveProperty("stops");
     });
 
     it("returns no retour without the retour box", () => {
@@ -466,7 +480,7 @@ describe("eventFieldsOf: a forged request", () => {
   });
 
   it.each([null, undefined, "title", 42, true])("reads %s as an empty form", (input) => {
-    expect(eventFieldsOf(input)).toEqual({ retour: false, boosters: false, participation: false, stops: false });
+    expect(eventFieldsOf(input)).toEqual({ retour: false, boosters: false, participation: false });
   });
 
   it("reads a field that is not a string as missing", () => {
@@ -474,17 +488,21 @@ describe("eventFieldsOf: a forged request", () => {
       retour: true,
       boosters: false,
       participation: false,
-      stops: false,
     });
   });
 
   it("enables a box only for a true boolean", () => {
-    expect(eventFieldsOf({ retour: "true", boosters: 1, participation: "on", stops: {} })).toMatchObject({
+    expect(eventFieldsOf({ retour: "true", boosters: 1, participation: "on", stops: "true" })).toMatchObject({
       retour: false,
       boosters: false,
       participation: false,
-      stops: false,
     });
+  });
+
+  it("D1: reads `stops` as sent only for a boolean; anything else is not sent", () => {
+    expect(eventFieldsOf({ stops: true }).stops).toBe(true);
+    expect(eventFieldsOf({ stops: false }).stops).toBe(false);
+    for (const forged of [undefined, null, "true", 1, {}]) expect(eventFieldsOf({ stops: forged }).stops).toBeUndefined();
   });
 });
 

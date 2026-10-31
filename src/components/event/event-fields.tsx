@@ -350,7 +350,9 @@ export function EventFormFields({
 
 /**
  * A box with its name and a one-line explanation. The whole row is its label, a target of
- * 44 px at least; its accessible name is the name alone, the explanation its description.
+ * 44 px at least; its accessible name is the name alone, the explanation its description. A
+ * `reason` why it cannot be changed shows under the explanation, in a grey block, and is
+ * described too (RV9.3): #595959, as `--muted-foreground` is under 4.5:1 on `--muted` (RV7.3).
  */
 export function Box({
   id,
@@ -360,6 +362,7 @@ export function Box({
   onChange,
   invalid,
   locked,
+  reason,
 }: {
   id: string;
   label: ReactNode;
@@ -370,6 +373,8 @@ export function Box({
   invalid?: boolean;
   /** Reachable and read, but not to be changed now: `aria-disabled`, its form ignoring what `onChange` says. */
   locked?: boolean;
+  /** Why the box is locked, said under it and described by it. */
+  reason?: string;
 }) {
   return (
     <label htmlFor={id} className="flex min-h-11 cursor-pointer items-start gap-2.5 py-1">
@@ -379,7 +384,7 @@ export function Box({
         checked={checked}
         onCheckedChange={(value) => onChange(value === true)}
         aria-labelledby={`${id}-label`}
-        aria-describedby={`${id}-hint`}
+        aria-describedby={reason === undefined ? `${id}-hint` : `${id}-hint ${id}-reason`}
         aria-invalid={invalid || undefined}
         aria-disabled={locked || undefined}
       />
@@ -390,6 +395,11 @@ export function Box({
         <span id={`${id}-hint`} className="text-[13px] leading-[18px] text-muted-foreground">
           {hint}
         </span>
+        {reason !== undefined && (
+          <span id={`${id}-reason`} className="rounded-md bg-muted px-2 py-1 text-[13px] leading-[18px] text-[#595959]">
+            {reason}
+          </span>
+        )}
       </span>
     </label>
   );

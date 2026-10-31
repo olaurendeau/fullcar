@@ -24,11 +24,12 @@ export function organiserPath({ id }: Pick<SeededEvent, "id">): string {
 }
 
 /**
- * The organiser area refused (#597, until each state has its own screen, #598): its title alone,
- * in the panel's place. Not the panel's own title, which is a button.
+ * The organiser area refused to a browser without the seeded event's token (#598): the event is
+ * pending, and its screen « Adresse pas encore confirmée » (OA7.7), `name` in another language,
+ * takes the place of the panel and of the board.
  */
-export const areaRefused = (page: Page, name = "Espace organisateur") =>
-  page.getByRole("main").getByRole("heading", { level: 2, name, exact: true }).filter({ hasNot: page.getByRole("button") });
+export const areaRefused = (page: Page, name = "Adresse pas encore confirmée") =>
+  page.getByRole("main").getByRole("heading", { level: 1, name, exact: true });
 
 export { adminTokenKey };
 
@@ -165,6 +166,9 @@ export async function seedCrowd(db: Kysely<Database>, eventId: string): Promise<
 
 /** The button of a leg's title in the organiser's panel (O9.1), in any language. */
 export const legButton = (page: Page, leg: Leg) => page.locator(`[id="organiser-leg-${leg}"] > button`);
+
+/** The legs' titles (h3), not « Personnes inscrites »', the panel's other section (#672). */
+export const LEG_HEADINGS = 'h3[id^="organiser-leg-"]';
 
 /**
  * Unfolds the panel's sections of `legs`, both by default, once the panel shows (O9.4): every
@@ -575,7 +579,7 @@ export const test = creatorTest.extend<{ organiserTraffic: OrganiserTraffic }>({
       // Every number of the event, by the only query that reads them, named by its person's
       // rank in the event, as the scene names them by letter: never shown.
       const numbersNow = async () => {
-        const { persons, phonesById } = await readEventRows(db, id);
+        const { persons, phonesById } = await readEventRows(db, id, { stops: false });
         return persons.flatMap(({ id: personId }, n): [string, string][] => {
           const phone = phonesById.get(personId);
           return phone ? digitsOf(phone).map((form) => [`the number of person ${n + 1}`, form]) : [];

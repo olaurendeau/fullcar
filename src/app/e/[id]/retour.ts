@@ -14,7 +14,7 @@ import { eventLegs, type Leg } from "@/domain/leg";
 /** Why a write on a leg was not even tried. */
 export type LegRefusal = "eventNotFound" | "eventEnded" | "noRetour";
 
-export type LockedLegs = { ok: true; legs: Leg[] } | { ok: false; error: LegRefusal };
+export type LockedLegs = { ok: true; legs: Leg[]; stopsEnabled: boolean } | { ok: false; error: LegRefusal };
 
 /**
  * The first step of every write on a leg: the Event under `lockEvent(…, "share")`, then
@@ -24,14 +24,15 @@ export type LockedLegs = { ok: true; legs: Leg[] } | { ok: false; error: LegRefu
  * transaction, or in it after this lock, as `addPerson` and `setPersonLeg` do; and the
  * field errors, read before the transaction. Before `noRetour`, an anonymised event gives
  * `eventEnded` (#588, `Actions.why.eventEnded`): a write that waited for the purge sees
- * `anonymised_at`. Gives the event's legs.
+ * `anonymised_at`. Gives the event's legs, and whether its option « Points de RDV » is on, as
+ * the lock reads it: a write that carries Stops decides on it (RV8.3).
  */
 export async function lockLegs(trx: Kysely<Database>, eventId: string, touched: readonly Leg[]): Promise<LockedLegs> {
   const event = await lockEvent(trx, eventId, "share");
   if (event === undefined) return { ok: false, error: "eventNotFound" };
   if (event.anonymised_at !== null) return { ok: false, error: "eventEnded" };
   const legs = eventLegs(event.retour_at);
-  return touched.every((leg) => legs.includes(leg)) ? { ok: true, legs } : { ok: false, error: "noRetour" };
+  return touched.every((leg) => legs.includes(leg)) ? { ok: true, legs, stopsEnabled: event.stops_enabled } : { ok: false, error: "noRetour" };
 }
 
 /** `confirmRetour`: the retour holds these now, and nothing was deleted. */

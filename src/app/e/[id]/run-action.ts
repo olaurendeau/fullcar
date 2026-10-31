@@ -25,11 +25,12 @@ export async function sendAction<T>(
 }
 
 /**
- * What an action changes on the page: the board, and the bar's information, which goes once an
- * action that began after it ends (rule 4): `begins` is told as it leaves, what it returns once it ends.
+ * What an action changes on the page: the board, given with the answer it came in, and the bar's
+ * information, which goes once an action that began after it ends (rule 4): `begins` is told as it
+ * leaves, what it returns once it ends.
  */
 export interface ActionPage {
-  state: (state: EventState) => void;
+  state: (state: EventState, answer: unknown) => void;
   begins: () => () => void;
 }
 
@@ -56,7 +57,7 @@ export function actionRunner(page: ActionPage, online?: () => boolean) {
     try {
       const sent = await sendAction(action, online);
       const state = sent.ok && stateOf(sent.value);
-      if (state) page.state(state);
+      if (state) page.state(state, sent.value);
       return sent;
     } finally {
       inFlight.delete(key);
@@ -107,6 +108,49 @@ export function devicePersonsGone(shown: EventState, next: EventState): string[]
 }
 
 /**
+ * The cars `shown` had, on each leg `next` still has, whose driver `next` has nowhere: removed with
+ * her, here or elsewhere, whoever's device she was on. What the bar says about them has no subject
+ * any more, as when « Retirer la voiture » takes a car (#850's review).
+ */
+export function carsOfPersonsGone(shown: EventState, next: EventState): string[] {
+  const legs = new Set(next.legs.map(({ leg }) => leg));
+  const present = new Set(
+    next.legs.flatMap((leg) => [
+      ...leg.cars.flatMap((car) => [car.driver, ...car.passengers]),
+      ...leg.withoutCar,
+      ...leg.device,
+    ]).map((person) => person.id),
+  );
+  return shown.legs
+    .filter(({ leg }) => legs.has(leg))
+    .flatMap((leg) => leg.cars)
+    .filter((car) => !present.has(car.driver.id))
+    .map((car) => car.id);
+}
+
+const refusedGone = (answer: unknown): answer is { error: "personGone" } =>
+  typeof answer === "object" && answer !== null && "error" in answer && answer.error === "personGone";
+
+/**
+ * The persons an answer refused by `personGone` names (RP5.4), its `goneIds`: its failure says
+ * they are no longer part of the event. Nobody else: another person gone with that answer, removed
+ * elsewhere, is news (RP5.3).
+ */
+export function goneNamed(answer: unknown): string[] {
+  if (!refusedGone(answer) || !("goneIds" in answer) || !Array.isArray(answer.goneIds)) return [];
+  return answer.goneIds.filter((id): id is string => typeof id === "string");
+}
+
+/**
+ * The answer of an action about one person (`updatePerson`, `setPersonLeg`), whose refusal
+ * `personGone` names nobody: it names her, `personId` (`goneNamed`). Any other answer as it was.
+ */
+export function aboutPerson<T>(answer: T, personId: string): T {
+  if (!refusedGone(answer) || "goneIds" in answer) return answer;
+  return { ...answer, goneIds: [personId] };
+}
+
+/**
  * What the page shows of `next` while a sheet hides it, when `next` makes the tabs go or come
  * (epic #250, § 5): `next`, with `shown`'s end and retour leg, or none. A sheet on the retour
  * closes over it rather than going with it (rule 9); one on the aller is not mounted anew with
@@ -115,7 +159,7 @@ export function devicePersonsGone(shown: EventState, next: EventState): string[]
 export function withTabsHeld(shown: EventState, next: EventState): EventState | undefined {
   if (!shown.event.retourAt === !next.event.retourAt) return undefined;
   const legs = [...next.legs.filter(({ leg }) => leg !== "retour"), ...shown.legs.filter(({ leg }) => leg === "retour")];
-  return { event: { ...next.event, retourAt: shown.event.retourAt }, legs };
+  return { event: { ...next.event, retourAt: shown.event.retourAt }, options: next.options, legs };
 }
 
 /** The state an action's answer carries back, refusal included (C5.7, C11.6), if any. */

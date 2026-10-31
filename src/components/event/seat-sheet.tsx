@@ -4,10 +4,12 @@ import { useEffect, useId, useRef, useState } from "react";
 import { storageAvailable } from "@/app/e/[id]/device-token";
 import { Button } from "@/components/ui/button";
 import type { Leg } from "@/domain/leg";
+import { phonePrefill } from "@/domain/phone-prefill";
 import type { VisibleCar, VisibleLegBoard } from "@/domain/phone-visibility";
 import { sheetCandidates, sheetSubmit, tapOutcome } from "@/domain/tap";
+import type { WallDate } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
-import { BottomSheet } from "./bottom-sheet";
+import { BottomSheet, SheetStep } from "./bottom-sheet";
 import { Box } from "./create-event-form";
 import { nameList, personGone, whyOf, wordsOf, type Why } from "./failure-words";
 import { focusCar, focusCarTitle, focusFirstShown } from "./focus";
@@ -15,6 +17,7 @@ import { aboutOf, sendAbout, useSends, type FromSheet } from "./hidden-page";
 import type { BoardDevice } from "./leg-panel";
 import type { BarProblem } from "./message-bar";
 import { PersonForm, StorageNotice, type AddPerson } from "./person-form";
+import { StopChoice } from "./stop-choice";
 
 /** A refusal said in the sheet: the car gone (C6.8), too few seats left (C6.5), someone in a car already. */
 export type SeatRefusal = "rideGone" | "notEnoughSeats" | "alreadyInCar";
@@ -24,7 +27,7 @@ export type SeatRefusal = "rideGone" | "notEnoughSeats" | "alreadyInCar";
  * in the bar, `why` after the persons who could not get in (C11.11).
  */
 export type SeatsTaken =
-  | { kind: "done" }
+  | { kind: "done"; stopGone?: true }
   | { kind: "refused"; refusal: SeatRefusal; why: Why }
   | { kind: "problem"; problem: BarProblem; why: Why }
   /** The car's retour is gone: the sheet closes, and the bar says why (rule 9). */
@@ -34,8 +37,8 @@ export type SeatsTaken =
 
 /** What the server answers `takeSeats`, an unknown event included. */
 type SeatsAnswer =
-  | { ok: true }
-  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "eventEnded" | "noRetour" }
+  | { ok: true; stopGone?: true }
+  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "eventEnded" | "noRetour" | "stopsOff" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
@@ -51,7 +54,7 @@ export function seatsTaken(
 ): SeatsTaken {
   if (!sent.ok) return { kind: "problem", problem: sent.problem, why: whyOf(sent.problem) };
   const answer = sent.value;
-  if (answer.ok) return { kind: "done" };
+  if (answer.ok) return answer.stopGone ? { kind: "done", stopGone: true } : { kind: "done" };
   switch (answer.error) {
     case "personGone": {
       const persons = personIds.map((id, index) => ({ id, firstName: names[index] ?? "" }));
@@ -68,7 +71,7 @@ export function seatsTaken(
     case "noRetour":
       return { kind: "noRetour", why: whyOf("noRetour") };
     default:
-      return { kind: "problem", problem: "failed", why: whyOf(answer.error) };
+      return { kind: "problem", problem: "failed", why: whyOf(answer.error === "stopsOff" ? "invalid" : answer.error) };
   }
 }
 
@@ -89,7 +92,16 @@ export interface Seated {
 }
 
 /** Takes seats in a car for persons of the device (R6); `undefined` when seats are already on their way. */
-export type TakeSeats = (seats: { rideId: string; leg: Leg; persons: Seated[] }, sheet: SendingSheet) => Promise<SeatsTaken | undefined>;
+export type TakeSeats = (
+  seats: {
+    rideId: string;
+    leg: Leg;
+    persons: Seated[];
+    /** The Stop where they board; `null` or none: at the car's start (RV3.3). */
+    stopId?: string | null;
+  },
+  sheet: SendingSheet,
+) => Promise<SeatsTaken | undefined>;
 
 /** The car's title, or the active tab once it is gone. */
 const toCar = (leg: Leg, rideId: string) => focusFirstShown([() => focusCarTitle(leg, rideId)]);
@@ -120,7 +132,7 @@ type Opening = { kind: "sheet" | "register"; rideId: string; driver: string; sea
  * known (C5.9). The sheets live on the leg, not on the car: the car may go while one is open
  * (C6.8). A success closes the sheet that sent it, never one opened since.
  */
-export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRetour: boolean) {
+export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRetour: boolean, date: WallDate) {
   const t = useTranslations();
   const [opening, setOpening] = useState<Opening | null>(null);
   // Once the page shows what a tap's answer carried, the focus goes to the car, if the seat
@@ -150,7 +162,7 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
   }
 
   function tap(car: VisibleCar, seat: HTMLElement) {
-    const outcome = tapOutcome(device.status, board.device);
+    const outcome = tapOutcome(device.status, board.device, car);
     if (outcome.kind === "wait") return;
     const person = outcome.kind === "place" && board.device.find(({ id }) => id === outcome.personId);
     if (person) void place(car, seat, person);
@@ -169,6 +181,7 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
         leg={board.leg}
         opening={opening}
         car={board.cars.find((car) => car.id === opening.rideId)}
+        date={date}
         persons={board.device}
         onOpenChange={onOpenChange(opening.count)}
         device={device}
@@ -241,7 +254,7 @@ function RegisterSheet({
     >
       {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
       <PersonForm
-        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
+        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId), driver }}
         open={() => isOpen.current}
         onDone={() => onOpenChange(false)}
         onGone={() => onOpenChange(false)}
@@ -256,7 +269,10 @@ function RegisterSheet({
  * no car on the leg, her state under her name (C6.1); « Ajouter une personne », whose form
  * takes the list's place and comes back to it with the new person ticked and focused (C6.6);
  * then « Placer n personnes », inactive at none ticked, beyond the seats left and while it is
- * sent, but focusable all along (C6.2, C6.3), and « Fermer ». A success closes it and says so
+ * sent, but focusable all along (C6.2, C6.3), and « Fermer ». A car with Stops adds, under the
+ * persons, « Point de montée »: the departure ticked and focused as it opens, one choice for all
+ * those ticked, kept after a failure with the ticks, and sent with « Placer » (RV3.2, RV3.3, RV3.6).
+ * A success closes it and says so
  * in the bar, the focus on the car's title; a refusal keeps it open with the ticks and its
  * message (C6.5, C6.8). Closed without effect, the focus goes back to the seat that opened it.
  */
@@ -264,6 +280,7 @@ function SeatSheet({
   leg,
   opening: { rideId, driver, seat, open },
   car,
+  date,
   persons,
   onOpenChange,
   device: { takeSeats, addPerson },
@@ -273,6 +290,8 @@ function SeatSheet({
   opening: Opening;
   /** The car as the page now shows it; gone when it is no longer offered. */
   car: VisibleCar | undefined;
+  /** The leg's date, with which the Stops' times are shown. */
+  date: WallDate;
   /** The device's persons on the leg, as the page now shows them. */
   persons: VisibleLegBoard["device"];
   onOpenChange: (open: boolean) => void;
@@ -284,8 +303,11 @@ function SeatSheet({
   const ids = useId();
   const boxId = (personId: string) => `${ids}-${personId}`;
   const candidates = sheetCandidates(persons);
+  const hasStops = (car?.stops.length ?? 0) > 0;
   // What the person changed; the others keep their default (C6.1), a person added since included.
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
+  // The point where they board: the departure (`null`) as the sheet opens (RV3.2). One for everyone ticked.
+  const [stopId, setStopId] = useState<string | null>(null);
   const chosen = candidates.filter((candidate) => ticked[candidate.id] ?? candidate.checked);
   const gone = car === undefined;
   const submit = sheetSubmit(chosen.length, car?.freeSeats ?? 0);
@@ -295,9 +317,13 @@ function SeatSheet({
   const body = useRef<HTMLDivElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const afterClose = useRef(() => (seat.isConnected ? seat.focus() : focusFirstShown([focusCar(leg, rideId)])));
+  const placeFooter = () => body.current?.closest('[role="dialog"]')?.querySelector<HTMLElement>("[data-slot=sheet-footer] button");
   // What gets the focus once the sheet shows it: the form's first field, « Ajouter une personne »,
-  // a new person's box, or « Fermer » when the car is gone with the button that had it.
+  // a new person's box, « Placer » after a failure, or « Fermer » when the car is gone with the
+  // button that had it.
   const focusNext = useRef<(() => HTMLElement | null | undefined) | null>(null);
+  // A car with Stops opens on the point chosen, the departure (RV7.2): once, never when the list comes back from « Ajouter une personne ».
+  const [opensOnStops, setOpensOnStops] = useState(true);
   const isOpen = useRef(open);
   // Each opening is a new sheet (`key`): the one that sent may be gone. What it says is about the
   // car, and the persons the send carried: a send of all of them withdraws what an earlier one left.
@@ -305,6 +331,11 @@ function SeatSheet({
   useEffect(() => {
     isOpen.current = open;
   }, [open]);
+  // The form of « Ajouter une personne » shows, not the list: what is typed there keeps the focus.
+  const isAdding = useRef(false);
+  useEffect(() => {
+    isAdding.current = adding !== null;
+  }, [adding]);
   useEffect(() => {
     const target = focusNext.current?.();
     if (!target) return;
@@ -330,7 +361,9 @@ function SeatSheet({
       names.length === 1 ? t("Seat.placed", { firstName: names[0], driver }) : t("Sheet.placed", { names: nameList(words, names), driver });
     // Ticked by default exactly when without a car (C6.1): unticked, she did not do the leg.
     const persons = chosen.map(({ id, checked }): Seated => ({ personId: id, before: checked ? "withoutCar" : "notConcerned" }));
-    const taken = await takeSeats({ rideId, leg, persons }, { ...sheet, sending: setSending, seats: { names, driver }, placed });
+    // Sent with a car that has Stops only, and as the sheet showed it: the Stop chosen, or the departure.
+    const stop = hasStops ? { stopId } : {};
+    const taken = await takeSeats({ rideId, leg, persons, ...stop }, { ...sheet, sending: setSending, seats: { names, driver }, placed });
     // Not the sheet opened since: what came back is the bar's.
     if (taken === undefined || !sheet.inSheet()) return;
     if (taken.kind === "done") {
@@ -342,10 +375,18 @@ function SeatSheet({
     // focus back on the seat, which shows until then, and the bar says why.
     if (taken.kind === "noRetour" || taken.kind === "personGone") return onOpenChange(false);
     setRefused(said(taken, names.length));
-    if (taken.kind === "refused" && taken.refusal === "rideGone") {
-      focusNext.current = () => body.current?.closest('[role="dialog"]')?.querySelector<HTMLElement>("[data-slot=sheet-footer] button");
-    }
+    // « Placer » has the focus again on a car with Stops (RV3.6), the car gone, its button is gone and
+    // « Fermer » has it. Otherwise only the car gone moves it: one who opened « Ajouter une personne »
+    // since keeps typing where she is.
+    const carGone = taken.kind === "refused" && taken.refusal === "rideGone";
+    if (carGone || (hasStops && !isAdding.current)) focusNext.current = placeFooter;
   }
+
+  // Back to the list, what was typed lost, the focus on « Ajouter une personne »: « Annuler », and the browser's « back » (v4.7, rule 3).
+  const cancelAdding = () => {
+    focusNext.current = () => addButton.current;
+    setAdding(null);
+  };
 
   const message = refused ?? (gone && t("Actions.rideGone"));
   // After a refusal for want of seats, the seats left are fewer than those ticked: red too.
@@ -393,19 +434,17 @@ function SeatSheet({
       <div ref={body} className="contents">
         {adding ? (
           <>
+            <SheetStep onBack={cancelAdding} />
             {!adding.kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
             <PersonForm
-              mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId) }}
+              mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId), prefill: phonePrefill(persons), driver }}
               open={() => isOpen.current}
               onGone={() => onOpenChange(false)}
               onDone={(personId) => {
                 focusNext.current = () => document.getElementById(boxId(personId));
                 setAdding(null);
               }}
-              onCancel={() => {
-                focusNext.current = () => addButton.current;
-                setAdding(null);
-              }}
+              onCancel={cancelAdding}
             />
           </>
         ) : (
@@ -428,12 +467,24 @@ function SeatSheet({
                   ))}
                 </div>
               )}
+              {car && hasStops && candidates.length > 0 && (
+                <StopChoice
+                  legend={t("Sheet.stop.legend")}
+                  date={date}
+                  start={{ location: car.location, time: car.departureTime }}
+                  stops={car.stops}
+                  value={stopId}
+                  onChange={setStopId}
+                  autoFocus={opensOnStops}
+                />
+              )}
               <Button
                 ref={addButton}
                 variant="outline"
                 className="h-11 w-full"
                 onClick={() => {
                   focusNext.current = () => body.current?.querySelector("input");
+                  setOpensOnStops(false);
                   setAdding({ kept: storageAvailable() });
                 }}
               >

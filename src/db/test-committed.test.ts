@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { sql, type Kysely } from "kysely";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createDb, getDb } from "./client";
+import { createDb, getDb, POOL_SIZE } from "./client";
 import type { Database } from "./schema";
-import { whileHeld, withCommittedEvent } from "./test-committed";
+import { whileHeld, whileHeldInTurn, withCommittedEvent } from "./test-committed";
 
 // A pool of its own: a second connection, which only sees what was committed.
 let observer: Kysely<Database>;
@@ -130,6 +130,7 @@ describe("whileHeld", () => {
     let holding = 0;
     let ownPid = 0;
     let waiting = 0;
+    let stillHolding = 0;
     const answer = await whileHeld(
       getDb(),
       async (trx) => {
@@ -141,10 +142,14 @@ describe("whileHeld", () => {
         await takeKey(own);
         return "second";
       },
-      async (pid) => void (waiting = pid),
+      async (pid, trx) => {
+        waiting = pid;
+        stillHolding = await pidOf(trx);
+      },
     );
     expect(answer).toBe("second");
     expect(waiting).toBe(ownPid);
+    expect(stillHolding).toBe(holding);
     expect(ownPid).not.toBe(holding);
   });
 
@@ -156,6 +161,8 @@ describe("whileHeld", () => {
         (trx) => takeKey(trx),
         async (own) => {
           await takeKey(own);
+          // Still running once the key is given back: a whileHeld that does not wait for second loses.
+          await new Promise((resolve) => setTimeout(resolve, 100));
           secondOver = true;
         },
         async () => {
@@ -182,5 +189,87 @@ describe("whileHeld", () => {
       ),
     ).rejects.toThrow("whileHeld: second ended without waiting for first");
     await stranger;
+  });
+
+  describe("whileHeldInTurn", () => {
+    it("starts each second once the one before waits, each on a connection of its own, then gives what each gives", async () => {
+      let holding = 0;
+      const pids: number[] = [];
+      let earlierWaited = false;
+      const answers = await whileHeldInTurn(
+        getDb(),
+        async (trx) => {
+          holding = await pidOf(trx);
+          await takeKey(trx);
+        },
+        [
+          async (own) => {
+            pids.push(await pidOf(own));
+            await takeKey(own);
+            return "earlier";
+          },
+          async (own) => {
+            pids.push(await pidOf(own));
+            const { rows } = await sql<{ waits: boolean }>`
+              select ${holding}::int = any(pg_blocking_pids(${pids[0]}::int)) as waits`.execute(observer);
+            earlierWaited = rows[0]!.waits;
+            // Queued behind the earlier one for the same key.
+            await takeKey(own);
+            return "later";
+          },
+        ],
+      );
+      expect(answers).toEqual(["earlier", "later"]);
+      expect(earlierWaited).toBe(true);
+      expect(new Set([holding, ...pids]).size).toBe(3);
+    });
+
+    it("fails when a later second never waits, and gives back each connection once its second is over", async () => {
+      let earlierOver = false;
+      await expect(
+        whileHeldInTurn(getDb(), (trx) => takeKey(trx), [
+          async (own) => {
+            await takeKey(own);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            earlierOver = true;
+          },
+          async () => {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          },
+        ]),
+      ).rejects.toThrow("whileHeld: second ended without waiting for first");
+      expect(earlierOver).toBe(true);
+    });
+
+    it("takes a later second blocked only by an earlier one, which holds what it waits for", async () => {
+      const takeOtherKey = (db: Kysely<Database>) => sql`select pg_advisory_xact_lock(5950, 1)`.execute(db);
+      const answers = await whileHeldInTurn(getDb(), (trx) => takeKey(trx), [
+        // Holds the other key, then waits for first's.
+        (own) =>
+          own.transaction().execute(async (trx) => {
+            await takeOtherKey(trx);
+            await takeKey(trx);
+            return "earlier";
+          }),
+        // Waits for the other key, which first does not hold.
+        async (own) => {
+          await takeOtherKey(own);
+          return "later";
+        },
+      ]);
+      expect(answers).toEqual(["earlier", "later"]);
+    });
+
+    it("refuses more seconds than the pool leaves room for, before anything starts", async () => {
+      const first = vi.fn(async (trx: Kysely<Database>) => takeKey(trx));
+      const second = vi.fn(async (own: Kysely<Database>) => takeKey(own));
+      // One for the holder, one to look at the waiting sessions: one second too many.
+      const seconds = Array.from({ length: POOL_SIZE - 1 }, () => second);
+      await expect(whileHeldInTurn(getDb(), first, seconds)).rejects.toThrow(
+        `whileHeldInTurn: at most ${POOL_SIZE - 2} seconds, the pool has ${POOL_SIZE} connections (${POOL_SIZE - 1} given)`,
+      );
+      expect(first).not.toHaveBeenCalled();
+      expect(second).not.toHaveBeenCalled();
+    });
   });
 });

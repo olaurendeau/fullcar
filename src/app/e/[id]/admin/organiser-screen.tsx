@@ -3,30 +3,49 @@
 import { LoaderCircle } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { readSessionToken } from "@/app/session-token";
+import { MyEventsLink } from "@/components/account/my-events-link";
 import { AdminLinkProblem, AdminPanel } from "@/components/event/admin-panel";
-import { EditEventSheet, LONG_WAIT } from "@/components/event/edit-event-sheet";
-import { failureText, wordsOf } from "@/components/event/failure-words";
+import { OrganiserRefused } from "@/components/event/admin-states";
+import { EditEventSheet, LONG_WAIT, type EditEvent } from "@/components/event/edit-event-sheet";
+import { eventFieldsChanged, loadedEventFields } from "@/components/event/event-fields";
+import { failureText, wordsOf, type RemovalProblem } from "@/components/event/failure-words";
 import { focusLandmark, focusMapHint, focusMapToggle } from "@/components/event/focus";
 import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import { legHeadingId } from "@/components/event/organiser-leg";
+import { focusPersonRemoval, OrganiserPersons, personName } from "@/components/event/organiser-persons";
+import type { RemovePerson } from "@/components/event/remove-person-dialog";
 import type { LegCounts } from "@/db/legs";
-import type { EventFields, EventHeader } from "@/domain/event";
+import type { EventBefore, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import type { EventState } from "../event-state";
 import { ParticipantBoard, type BoardHandle } from "../participant-board";
+import { cn } from "@/lib/utils";
 import { useOrganiserCheck } from "./admin-token-store";
 import { useKeepBoardInPlace } from "./keep-board-in-place";
 import { keepFolded, readFolded } from "./organiser-fold";
-import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRead, screenReducer, type EditAnswer } from "./screen-state";
+import { usePendingPoll } from "./pending-poll";
+import {
+  alertShown,
+  announcement,
+  editAnswer,
+  editFailure,
+  panelRead,
+  PERSONS_LIST,
+  resendAnswer,
+  screenRead,
+  screenReducer,
+  type EditAnswer,
+} from "./screen-state";
 
 /**
  * The organiser's screen (epic #154): the organiser area, then the event's board, with
  * `children` under it.
  *
  * - The area: the panel once the server has accepted this browser's session or admin token
- *   (C4.9, #596), the area's title alone when it refuses them (#597, until #598), and a status
- *   line while the first check runs (O5.1). Hidden without JavaScript, where the page says why
- *   instead (O5.5).
+ *   (C4.9, #596), and a status line while the first check runs (O5.1). Refused, the screen of
+ *   why, in place of the panel and of the board (admin-states.tsx, #598): « Voir l’événement »
+ *   leads to the board. Hidden without JavaScript, where the page says why instead (O5.5).
  * - After « Réessayer », the focus goes to the button of the panel's title, or to the area's
  *   title when refused, before the browser paints, and stays on the button on a new failure (O5.8).
  * - The panel arrives folded or not as the device kept it, read as it is applied, never before
@@ -38,6 +57,8 @@ import { alertShown, announcement, editAnswer, editFailure, panelRead, screenRea
  *   title, or to the button of its section's title when the list went too (O5.8 amended,
  *   decision 60); in a section gone, the retour's, to Aller's button (decision 57); never to
  *   `<body>`.
+ * - While the notice « Confirmez votre adresse » says « Envoi du lien… », it alone is read again,
+ *   every 2 s, until the email's result is kept, for 30 s at most (OA1.7).
  * - Its frame keeps the board in place on screen as it changes height (O1.11).
  * - While a sheet hides the page, the live regions keep what they said: their next words wait
  *   for it to show. The legs' dates are the page's, from the header of the state the board
@@ -63,8 +84,13 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const [shown, setShown] = useState(state);
   const { event } = shown;
   const carsOn = (leg: Leg) => shown.legs.find((each) => each.leg === leg)?.cars.length ?? 0;
-  const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null)[] } | null>(null);
+  // The cars of the leg that have Stops, which hold the option « Points de RDV » on (RV9.3).
+  const stopCarsOn = (leg: Leg) => shown.legs.find((each) => each.leg === leg)?.cars.filter((car) => car.stops.length > 0).length ?? 0;
+  const focused = useRef<{ element: Element; fallbacks: (HTMLElement | null | (() => HTMLElement | null))[] } | null>(null);
   useKeepBoardInPlace(frame);
+
+  // « Envoi du lien… » is read again until the email's result is kept (OA1.7).
+  usePendingPoll(screen, link.read, dispatch);
 
   const { check } = link;
   useLayoutEffect(() => {
@@ -84,20 +110,23 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   useLayoutEffect(() => {
     const noted = focused.current;
     focused.current = null;
-    if (noted && !noted.element.isConnected) noted.fallbacks.find((each) => each?.isConnected)?.focus();
+    if (noted && !noted.element.isConnected) noted.fallbacks.map((each) => (typeof each === "function" ? each() : each)).find((each) => each?.isConnected)?.focus();
   }, [screen]);
 
   /**
    * Notes, before a panel is applied, the focus in the panel: its list's title, the button of its
-   * section's title, Aller's button, then the panel's title's.
+   * section's title, a leg's or « Personnes inscrites » (decision 60), Aller's button, then the
+   * panel's title's.
    */
   function noteFocus() {
     const element = document.activeElement;
     if (!element || !frame.current?.contains(element)) return;
     const list = element.closest("[data-organiser-list]")?.querySelector("h4");
-    const section = element.closest('section[aria-labelledby^="organiser-leg-"]')?.querySelector<HTMLElement>("h3 > button");
+    const section = element.closest('section[aria-labelledby^="organiser-"]')?.querySelector<HTMLElement>("h3 > button");
     const aller = section && document.getElementById(legHeadingId("aller"))?.querySelector<HTMLElement>("button");
-    focused.current = { element, fallbacks: [list ?? null, section ?? null, aller ?? null, title.current] };
+    // A line of « Personnes inscrites »: the first names around it, as the panel applied shows them (RP4.6).
+    const around = (element.closest<HTMLElement>("[data-around]")?.dataset.around ?? "").split(" ").filter(Boolean).map((id) => () => personName(id));
+    focused.current = { element, fallbacks: [...around, list ?? null, section ?? null, aller ?? null, title.current] };
   }
 
   // The screen now, not when the action left: one sent during « Chargement » may end after it.
@@ -110,10 +139,10 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   async function reread() {
     if (current.current.state !== "ready") return;
     const read = ++latest.current;
-    const legs = panelRead(await link.read());
+    const body = panelRead(await link.read());
     if (read !== latest.current) return;
     noteFocus();
-    dispatch({ type: "reread", legs });
+    dispatch({ type: "reread", legs: body?.legs, persons: body?.persons });
   }
 
   const now = announcement(screen);
@@ -141,7 +170,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
   const [editSending, setEditSending] = useState(false);
   const editWaits = useRef(0);
   // The sheet opened since a change left, to which its late `ok` gives the values saved (decision 51).
-  const lateSaved = useRef<((event: EventHeader) => void) | null>(null);
+  const lateSaved = useRef<((event: EventHeader, stops?: boolean) => void) | null>(null);
   const focusEdit = () => {
     editButton.current?.focus();
     return !!editButton.current && document.activeElement === editButton.current;
@@ -170,7 +199,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
    * (M3.7). After 10 s with no answer, the button opens a sheet again; a late `ok` gives that
    * sheet the values saved (decision 51).
    */
-  async function edit(fields: EventFields, before: EventHeader, removal?: LegCounts): Promise<EditAnswer> {
+  async function edit(fields: Parameters<EditEvent>[0], before: EventBefore, removal?: LegCounts): Promise<EditAnswer> {
     const send = sendAbout(["event:edit"]);
     const from = openSheet.current;
     // The landmark of « Événement modifié. », from where the sheet that sends was opened.
@@ -187,19 +216,62 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     if (!handle) return answer;
     const sheetSays = from !== null && openSheet.current === from;
     if (answer.kind === "saved" || answer.kind === "changed") {
-      handle.applyEvent(answer.event);
+      handle.applyEvent(answer.event, answer.stops);
       void readScreen(handle);
     }
+    // Cars got Stops meanwhile: the page reads them, and shows the option locked (RV9.3).
+    if (answer.kind === "stopsLocked") void readScreen(handle);
     if (answer.kind === "saved") {
-      if (!sheetSays) lateSaved.current?.(answer.event);
+      if (!sheetSays) lateSaved.current?.(answer.event, answer.stops);
       send.whenClosed(() => handle.succeed({ text: tEdit("saved"), landmark: savedLandmark }));
     } else if (!sheetSays) {
-      const { notDone, why } = editFailure(answer, removal !== undefined);
+      // Of the fields, only the option changed: the bar says the option was not changed (RV9.4).
+      const optionOnly = !eventFieldsChanged(fields, loadedEventFields(before).values);
+      const { notDone, why } = editFailure(answer, removal !== undefined, optionOnly);
       const text = failureText(words, notDone, why);
       const failure = { text, landmark: focusEdit, offline: why.kind === "offline", about: send.about, sent: send.seq };
       send.whenClosed(() => handle.fail(failure), true);
     }
     return answer;
+  }
+
+  /**
+   * « Renvoyer l’e-mail » (OA2.4): the notice says « Envoi du lien… » while the email is on its
+   * way, then what the server kept; the bar says `resent`, or why nothing went (`tooMany`,
+   * `offline`) once no sheet hides the page, and the focus stays on the button. A failure of
+   * Brevo is the notice's alert alone. An event ended meanwhile has the page read again, as the
+   * other actions do: the creation browser's token is revoked, and the refused screen
+   * (`EndedOrganiserScreen`, « Espace organisateur ») comes. Decision: any other refusal or a server error takes the
+   * words of `offline`, and the notice is as it was. — Reason: the design has no other sentence for an
+   * email not sent again, and the organiser can only try again. An event no longer awaiting
+   * confirmation loses its notice.
+   */
+  async function resend() {
+    const handle = boardRef.current;
+    const before = current.current.state === "ready" ? current.current.panel.pending : undefined;
+    if (!handle || !before) return;
+    const send = sendAbout(["pending:resend"]);
+    send.leaves();
+    dispatch({ type: "pendingRead", pending: { ...before, send: "sending" } });
+    const answer = resendAnswer(await link.resend());
+    send.answered();
+    const kept = answer.kind === "answered" ? answer.pending : answer.kind === "notPending" ? undefined : before;
+    dispatch({ type: "pendingRead", ...(kept && { pending: kept }) });
+    // Anonymised meanwhile: the page is read again, and the refused screen (`EndedOrganiserScreen`) comes.
+    if (answer.kind === "eventEnded") return void readScreen(handle);
+    const landmark = () => {
+      const button = document.querySelector<HTMLElement>("[data-pending-action=resend]");
+      button?.focus();
+      return !!button && document.activeElement === button;
+    };
+    if (answer.kind === "answered" && answer.pending.send === "sent") {
+      const email = answer.pending.email;
+      send.whenClosed(() => handle.succeed({ text: t("pending.resent", { email }), landmark }));
+    } else if (answer.kind === "tooMany" || answer.kind === "notResent") {
+      const text = answer.kind === "tooMany" ? t("pending.tooMany") : t("pending.offline");
+      const offline = answer.kind === "notResent" && answer.offline;
+      send.whenClosed(() => handle.fail({ text, landmark, offline, about: send.about, sent: send.seq }), true);
+    }
   }
 
   async function readScreen(handle: BoardHandle) {
@@ -210,7 +282,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     const outcome = screenRead(panel, board);
     noteFocus();
     if (outcome) handle.apply(outcome.board);
-    dispatch({ type: "reread", legs: outcome?.legs });
+    dispatch({ type: "reread", legs: outcome?.legs, persons: outcome?.persons });
   }
 
   async function refresh() {
@@ -226,8 +298,18 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
       noteFocus();
       handle.apply(outcome.board);
     }
-    dispatch({ type: "refreshEnded", read, legs: outcome?.legs });
+    dispatch({ type: "refreshEnded", read, legs: outcome?.legs, persons: outcome?.persons });
   }
+
+  // « Retirer » of « Personnes inscrites » (#672): the board's removal, sent with the organiser's
+  // proof. A refusal that sending again would not change is kept for that person, in memory, until
+  // the page reloads: each opening of her confirmation shows it, and sends nothing (decision 17).
+  const [refusals, setRefusals] = useState<ReadonlyMap<string, RemovalProblem>>(new Map());
+  const removePerson: RemovePerson = async (removal, confirmation) => {
+    const said = await boardRef.current?.removeAsOrganiser(removal, confirmation, { send: link.remove, landmark: focusPersonRemoval });
+    if (said?.final) setRefusals((kept) => new Map(kept).set(removal.personId, said));
+    return said;
+  };
 
   let area: ReactNode;
   if (screen.state === "ready") {
@@ -253,6 +335,18 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         editRef={editButton}
         editSending={editSending}
         onEdit={() => openEdit(null)}
+        onResend={resend}
+        persons={
+          <OrganiserPersons
+            persons={screen.persons}
+            legs={shown.legs}
+            open={screen.personsOpen}
+            onToggle={() => dispatch({ type: "personsToggled" })}
+            fold={{ expanded: screen.expanded.has(PERSONS_LIST), onToggle: () => dispatch({ type: "listToggled", key: PERSONS_LIST }) }}
+            removePerson={removePerson}
+            refused={(personId) => refusals.get(personId)}
+          />
+        }
       />
     );
   } else if (screen.state === "loading") {
@@ -265,12 +359,12 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         {t("loading")}
       </p>
     );
+  } else if (screen.state === "refused") {
+    area = <OrganiserRefused id={id} refusal={screen.refusal} headingRef={refused} />;
   } else {
     area = (
       <AdminLinkProblem
-        ref={refused}
-        problem={screen.state}
-        retrying={screen.state === "failed" && screen.retrying}
+        retrying={screen.retrying}
         onRetry={() => {
           retried.current = true;
           link.retry();
@@ -281,7 +375,10 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
 
   return (
     <>
-      <div ref={frame} className="flex flex-col">
+      {/* Refused, its screen takes the board's room too, and centres there. */}
+      <div ref={frame} className={cn("flex flex-col", screen.state === "refused" && "flex-1")}>
+        {/* With « une session gardée », the way back to the list (OA7.3): read once the panel is applied, after hydration. */}
+        {screen.state === "ready" && readSessionToken() !== undefined && <MyEventsLink />}
         {area}
       </div>
       {screen.state === "ready" && (
@@ -289,6 +386,7 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           open={editing}
           onOpenChange={setEditing}
           event={event}
+          stops={{ on: shown.options.stops, cars: stopCarsOn("aller") }}
           cars={{ aller: carsOn("aller"), retour: carsOn("retour") }}
           onEdit={edit}
           // Its place gone (the retour removed under a sentence), the active tab or the title: never `<body>`.
@@ -298,18 +396,71 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
         />
       )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">
-        <ParticipantBoard
-          ref={boardRef}
-          id={id}
-          state={state}
-          onAction={reread}
-          onState={setShown}
-          hint={screen.state === "ready" ? { onEdit: openEdit, sending: editSending } : undefined}
-          // The screen's, not `link.check`'s: the check is applied in a layout effect, and the area with it.
-          linkChecking={screen.state === "loading"}
-        />
+        {screen.state !== "refused" && (
+          <ParticipantBoard
+            ref={boardRef}
+            id={id}
+            state={state}
+            onAction={reread}
+            onState={setShown}
+            hint={screen.state === "ready" ? { onEdit: openEdit, sending: editSending } : undefined}
+            // The screen's, not `link.check`'s: the check is applied in a layout effect, and the area with it.
+            linkChecking={screen.state === "loading"}
+          />
+        )}
         {children}
       </div>
+    </>
+  );
+}
+
+/**
+ * `/e/{id}/admin` of an anonymised event (OA8.4, #598): no board is left, and the HTML says
+ * nothing of the event but what the metadata does. The check decides, as on any event: its
+ * organiser's session reads what is left, its place included, and « Inscriptions effacées »;
+ * anyone else, the screen the rule gives. A failed check has « Réessayer », the focus going to
+ * the screen's title once it answers (O5.8). The rule never opens the panel here: should an
+ * answer say otherwise, the area's title alone.
+ */
+export function EndedOrganiserScreen({ id, children }: { id: string; children: ReactNode }) {
+  const t = useTranslations("Admin");
+  const { check, retry } = useOrganiserCheck(id);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const retried = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!retried.current || check.state === "checking" || check.state === "failed") return;
+    retried.current = false;
+    heading.current?.focus();
+  }, [check.state]);
+
+  let area: ReactNode;
+  if (check.state === "checking") {
+    area = (
+      <p role="status" className="mx-auto flex w-full max-w-board items-center gap-2 text-sm text-muted-foreground noscript:hidden">
+        <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
+        {t("loading")}
+      </p>
+    );
+  } else if (check.state === "failed") {
+    area = (
+      <AdminLinkProblem
+        retrying={check.retrying}
+        onRetry={() => {
+          retried.current = true;
+          retry();
+        }}
+      />
+    );
+  } else {
+    const refusal = check.state === "refused" ? check.refusal : ({ kind: "invalid" } as const);
+    area = <OrganiserRefused id={id} refusal={refusal} headingRef={heading} />;
+  }
+
+  return (
+    <>
+      <div className={cn("flex flex-col", check.state === "refused" && "flex-1")}>{area}</div>
+      <div className="mx-auto flex w-full max-w-board flex-col gap-6">{children}</div>
     </>
   );
 }

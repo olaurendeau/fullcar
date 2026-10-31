@@ -89,6 +89,81 @@ export function mapOf<Car extends MapCar>(flag: Position, cars: readonly Car[]):
   return { flag, points, onMap: cars.length - notOnMap, notOnMap };
 }
 
+/** What `stopsOf` and `routeOf` read of a Stop: its id, its time (`HH:MM:SS`), its position or `null`. */
+export interface MapStop {
+  id: string;
+  time: string;
+  position: Position | null;
+}
+
+/** A car with its Stops, the aller's only (epic #881). */
+export interface StoppedCar extends MapCar {
+  stops: readonly MapStop[];
+}
+
+/** A Stop on the map: its car, itself, and its position. */
+export interface PlacedStop<Car extends StoppedCar> {
+  car: Car;
+  stop: Car["stops"][number];
+  position: Position;
+}
+
+/** Stably: Stops at one time stay in the order they came in. */
+function byTime<Stop extends MapStop>(stops: readonly Stop[]): Stop[] {
+  return [...stops].sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+}
+
+/**
+ * The Stops of the cars on the map (RV5.1, RV5.3): each positioned Stop of each car with a
+ * position, the cars in the order of the cards, a car's Stops in the order of their times; and
+ * `stopsNotOnMap`, the others: a Stop without a position, or any Stop of a car without one.
+ * A Stop never goes through `mapOf`: it is grouped with no car and not with the flag, and two
+ * Stops 10 m apart stay two (their grouping is `stopPointsOf`'s, RV5.6).
+ */
+export function stopsOf<Car extends StoppedCar>(cars: readonly Car[]): { stops: PlacedStop<Car>[]; stopsNotOnMap: number } {
+  const stops: PlacedStop<Car>[] = [];
+  let stopsNotOnMap = 0;
+  for (const car of cars) {
+    for (const stop of byTime<Car["stops"][number]>(car.stops)) {
+      if (car.position === null || stop.position === null) stopsNotOnMap += 1;
+      else stops.push({ car, stop, position: stop.position });
+    }
+  }
+  return { stops, stopsNotOnMap };
+}
+
+/** One round of Stops on the map: the Stops of different cars less than 25 m apart, at the position of the first. */
+export interface StopGroup<Car extends StoppedCar> {
+  position: Position;
+  /** In the order they came in: the cars of the cards, then their times. Never two of one car. */
+  stops: PlacedStop<Car>[];
+}
+
+/**
+ * The rounds of the Stops of `stopsOf` (RV5.4, RV5.6, Q2 of #881): a Stop joins the first round,
+ * in order, whose position (its first Stop's) is less than 25 m from its own and which holds no
+ * Stop of its car; otherwise it opens a round. Two Stops of one car stay two, 10 m apart or not.
+ * A round is never grouped with a car nor with the flag: it does not go through `mapOf`.
+ */
+export function stopPointsOf<Car extends StoppedCar>(stops: readonly PlacedStop<Car>[]): StopGroup<Car>[] {
+  const groups: StopGroup<Car>[] = [];
+  for (const placed of stops) {
+    const group = groups.find((each) => each.stops.every(({ car }) => car.id !== placed.car.id) && samePoint(each.position, placed.position));
+    if (group) group.stops.push(placed);
+    else groups.push({ position: placed.position, stops: [placed] });
+  }
+  return groups;
+}
+
+/**
+ * The line of a car through its Stops (RV5.2, Q4 of #881): its position, its positioned Stops in
+ * the order of their times, then the flag. Nothing for a car without a position.
+ */
+export function routeOf(car: StoppedCar, flag: Position): Position[] {
+  if (car.position === null) return [];
+  return [car.position, ...byTime(car.stops).flatMap((stop) => (stop.position ? [stop.position] : [])), flag];
+}
+
 /**
  * The free seats a point shows on its label (#655, CA1.21): its car's, or, grouped, the sum of
  * its cars', 0 when all are full. Each car's are the board's `freeSeats`, its card's.
@@ -116,11 +191,18 @@ export type Framing =
  * two), and 32 px more again when the flag has a point under it (v22): after a framing, no
  * point, label or point's button is under the credits (CA3.7). On the left and right, half the
  * widest label `halfLabel` when it is more, a label being centred on its point: its badge, at
- * its right end, is not cut by the map's edge (#655, CA1.3).
+ * its right end, is not cut by the map's edge (#655, CA1.3). The Stops (`stops`) are in the box
+ * as the points are (RV5.1).
  */
-export function framing(flag: Position, points: readonly { position: Position; atFlag: boolean }[], credits: number, halfLabel = 0): Framing {
-  if (points.length === 0) return { kind: "flag", center: flag, zoom: FLAG_ZOOM };
-  const all = [flag, ...points.map((point) => point.position)];
+export function framing(
+  flag: Position,
+  points: readonly { position: Position; atFlag: boolean }[],
+  credits: number,
+  halfLabel = 0,
+  stops: readonly { position: Position }[] = [],
+): Framing {
+  if (points.length === 0 && stops.length === 0) return { kind: "flag", center: flag, zoom: FLAG_ZOOM };
+  const all = [flag, ...points.map((point) => point.position), ...stops.map((stop) => stop.position)];
   const lats = all.map((each) => each.lat);
   const lngs = all.map((each) => each.lng);
   const bottom = credits + (points.some((point) => point.atFlag) ? FLAG_POINT_PADDING : FIT_PADDING);

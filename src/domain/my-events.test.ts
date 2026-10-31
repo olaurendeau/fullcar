@@ -144,6 +144,22 @@ function clockCases() {
       const past = row({ id: "past", allerAt: "2026-12-01 23:30:00", retourAt: null });
       expect(listMyEvents([past], ACCOUNT, NOW).past[0]).toMatchObject({ state: "past", erasedOn: "2026-12-31" });
     });
+
+    // #607: the purge runs at 03:00 UTC, and may fail. Day 30 begun, the date is no longer in the future.
+    it("gives no date once day 30 has begun in Paris, before the purge has anonymised it", () => {
+      const dayThirtyToday = row({ id: "today", allerAt: "2026-11-12 07:30:00", retourAt: "2026-11-12 18:00:00" });
+      const dayThirtyPassed = row({ id: "passed", allerAt: "2026-11-01 07:30:00", retourAt: null });
+      const dayThirtyTomorrow = row({ id: "tomorrow", allerAt: "2026-11-13 07:30:00", retourAt: null });
+      const past = listMyEvents([dayThirtyToday, dayThirtyPassed, dayThirtyTomorrow], ACCOUNT, NOW).past;
+      expect(past.map((event) => [event.id, event.state === "past" && event.erasedOn])).toEqual([
+        ["tomorrow", "2026-12-13"],
+        ["today", null],
+        ["passed", null],
+      ]);
+      // From Paris's midnight on: 00:30 in Paris is still 23:30 UTC of the day before.
+      const justAfterMidnight = new Date("2026-12-11T23:30:00Z");
+      expect(listMyEvents([dayThirtyToday], ACCOUNT, justAfterMidnight).past[0]).toMatchObject({ erasedOn: null });
+    });
   });
 
   describe("OA6.4: anonymised", () => {

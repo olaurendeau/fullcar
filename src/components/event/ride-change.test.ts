@@ -37,6 +37,23 @@ describe("rideChange", () => {
     });
   });
 
+  it("#889, RV1.7: no Stop shown or held, nothing is sent", () => {
+    expect(rideChange({ ...SHOWN, stops: [] }, { ...SHOWN, stops: [] })).toEqual({ fields: [], ride: {} });
+  });
+
+  it("#889: a Stop changed alone is a change, sent whole with the others, the car's fields left out", () => {
+    const stop = { id: "00000000-0000-4000-8000-000000000001", location: "Prelles", position: null, time: "08:25" };
+    const shown = { ...SHOWN, stops: [stop] };
+    const edited = { ...stop, time: "08:30" };
+    expect(rideChange(shown, { ...shown, stops: [edited] })).toEqual({ fields: ["stops"], ride: { stops: [edited] } });
+  });
+
+  it("#889: a Stop left as it was is not sent", () => {
+    const stop = { id: "00000000-0000-4000-8000-000000000001", location: "Prelles", position: null, time: "08:25" };
+    const shown = { ...SHOWN, stops: [stop] };
+    expect(rideChange(shown, { ...shown, note: "Coffre plein", stops: [{ ...stop }] })).toEqual({ fields: ["note"], ride: { note: "Coffre plein" } });
+  });
+
   it("#208: a field left as it was is not sent, the place included", () => {
     expect(rideChange(SHOWN, { ...SHOWN, time: "09:30", note: "Coffre plein" })).toEqual({
       fields: ["time", "note"],

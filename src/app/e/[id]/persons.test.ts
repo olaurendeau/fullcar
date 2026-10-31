@@ -1,15 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { sql, type Kysely } from "kysely";
+import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { getDb } from "@/db/client";
-import { readTokenHolders } from "@/db/persons";
+import { lockPersons, readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
-import { whileHeld, withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, whileHeldInTurn, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { readEventState, type DeviceState, type EventState } from "./event-state";
+import { offerRide } from "./offer-ride";
 import { addPerson, setPersonLeg, updatePerson, type PersonOutcome } from "./persons";
 import { stillOpen } from "./test-state";
 
@@ -429,46 +430,24 @@ describe("setPersonLeg", () => {
 });
 
 describe("C12.4: the same creation sent twice at once", () => {
-  /**
-   * Resolves once a session waits on a lock (`wait_event_type = 'Lock'`) that the session
-   * `pid` holds. Within 3 s, under Vitest's 5 s: a send that never waits fails on this
-   * message, and `first` is rolled back before the test ends.
-   */
-  async function waitingForLockOf(db: Db, pid: number) {
-    for (let attempt = 0; attempt < 120; attempt++) {
-      const { rows } = await sql<{ pid: number }>`
-        select pid from pg_stat_activity
-        where wait_event_type = 'Lock' and ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
-      if (rows.length > 0) return;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    throw new Error("the second send never waited for the first");
-  }
-
   it("the second waits for the first's insert, then writes nothing: she stays in the car she boarded", async () => {
     await withCommittedEvent(async (db, eventId) => {
       const marc = await seedPerson(db, eventId, { firstName: "Marc" });
       const ride = await seedRide(db, eventId, marc.id, { leg: "aller" });
       const sent = registration();
-      // The first send, not committed yet: she is stored, and boards Marc's car.
-      const first = await db.startTransaction().execute();
-      let second: Promise<PersonOutcome>;
-      try {
-        await seedPerson(first, eventId, { id: sent.id, firstName: sent.firstName }, NEW_TOKEN);
-        await seedPlacement(first, { personId: sent.id, eventId, leg: "aller", rideId: ride });
-        await seedPlacement(first, { personId: sent.id, eventId, leg: "retour", rideId: null });
-        const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(first);
-        second = addPerson(db, eventId, NEW_TOKEN, sent);
-        second.catch(() => {});
-        // The second has reached its insert, which waits on the first's id until it commits.
-        await waitingForLockOf(db, rows[0].pid);
-        await first.commit().execute();
-      } catch (error) {
-        await first.rollback().execute();
-        throw error;
-      }
+      const second = await whileHeld(
+        db,
+        // The first send, not committed yet: she is stored, and boards Marc's car.
+        async (first) => {
+          await seedPerson(first, eventId, { id: sent.id, firstName: sent.firstName }, NEW_TOKEN);
+          await seedPlacement(first, { personId: sent.id, eventId, leg: "aller", rideId: ride });
+          await seedPlacement(first, { personId: sent.id, eventId, leg: "retour", rideId: null });
+        },
+        // The second reaches its insert, which waits on the first's id until it commits.
+        (own) => addPerson(own, eventId, NEW_TOKEN, sent),
+      );
 
-      const state = stateOf(await second);
+      const state = stateOf(second);
       expect(standing(state, sent.id)).toEqual({ aller: "passenger", retour: "withoutCar" });
       expect((await personIds(db, eventId)).sort()).toEqual([marc.id, sent.id].sort());
     });
@@ -581,6 +560,118 @@ describe("on a person removed meanwhile", () => {
       );
       expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "personGone" }));
       expect(await personIds(db, eventId)).toEqual([]);
+    });
+  });
+});
+
+const CLAIRE_PHONE = "06 98 76 54 32";
+const OTHER_PHONE = "07 13 13 13 13";
+
+/** Whether `personId`'s number is `phone`, `null` for none: an assertion prints a boolean, never a number. */
+async function hasNumber(db: Db, personId: string, phone: string | null) {
+  const row = await db.selectFrom("person").select(["phone"]).where("id", "=", personId).executeTakeFirstOrThrow();
+  return row.phone === phone;
+}
+
+/** Claire, with a number, drives on `leg`; she is without a car on the other leg. */
+async function aDrivingClaire(db: Db, leg: Leg) {
+  const { id: eventId } = await seedEvent(db);
+  const claire = await seedPerson(db, eventId, { firstName: "Claire", phone: CLAIRE_PHONE });
+  await seedRide(db, eventId, claire.id, { leg });
+  await seedPlacement(db, { personId: claire.id, eventId, leg: leg === "aller" ? "retour" : "aller", rideId: null });
+  return { eventId, claire };
+}
+
+// v4.8 rule 8: a number is not removed while its person drives, on either leg (#778).
+describe("T5.5: updatePerson, the number of who drives", () => {
+  it.each<[string, Leg, Record<string, unknown>]>([
+    ["on the aller", "aller", {}],
+    ["on the retour alone", "retour", {}],
+    ["with her first name changed in the same request", "aller", { firstName: "Clara" }],
+    ["of spaces", "aller", { phone: "   " }],
+  ])("T5.5: emptied by a person who drives %s, it is refused by phoneWhileDriving, with the state, and nothing is written", async (_, leg, fields) => {
+    await withRollback(async (trx) => {
+      const { eventId, claire } = await aDrivingClaire(trx, leg);
+      const before = await readEventState(trx, eventId, claire.token);
+      const outcome = await updatePerson(trx, eventId, claire.token, { personId: claire.id, phone: "", ...fields });
+      expect(outcome).toEqual({ ok: false, error: "phoneWhileDriving", state: before });
+      expect(await readEventState(trx, eventId, claire.token)).toEqual(before);
+      expect(await hasNumber(trx, claire.id, CLAIRE_PHONE)).toBe(true);
+    });
+  });
+
+  it("T5.5: another valid number is written", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, claire } = await aDrivingClaire(trx, "aller");
+      stateOf(await updatePerson(trx, eventId, claire.token, { personId: claire.id, phone: OTHER_PHONE }));
+      expect(await hasNumber(trx, claire.id, OTHER_PHONE)).toBe(true);
+    });
+  });
+
+  it("T5.5: her number left out, nothing is refused: a driver from before, without one, changes her first name", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const claire = await seedPerson(trx, eventId, { firstName: "Claire" });
+      await seedRide(trx, eventId, claire.id);
+      stateOf(await updatePerson(trx, eventId, claire.token, { personId: claire.id, firstName: "Clara" }));
+      const row = await trx.selectFrom("person").select(["first_name"]).where("id", "=", claire.id).executeTakeFirstOrThrow();
+      expect(row.first_name).toBe("Clara");
+      expect(await hasNumber(trx, claire.id, null)).toBe(true);
+    });
+  });
+
+  it("T5.5: for a person who does not drive, an empty number is removed, as before", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea } = await seedScene(trx);
+      stateOf(await updatePerson(trx, eventId, lea.token, { personId: lea.id, phone: "" }));
+      expect(await hasNumber(trx, lea.id, null)).toBe(true);
+    });
+  });
+});
+
+// T5.6: an offer that makes Claire drive, and a change that empties her number, sent together.
+// Her Person is held first; each send then waits for it, in the order they arrive, and the
+// second sees what the first committed: exactly one of them is done (v4.8-18).
+describe("T5.6: an offer and the removal of the driver's number, at once", () => {
+  it.each(["the offer", "the removal"] as const)("T5.6: %s first, exactly one of them is done", async (first) => {
+    await withCommittedEvent(async (db, eventId) => {
+      const claire = await seedPerson(db, eventId, { firstName: "Claire", phone: CLAIRE_PHONE });
+      for (const leg of ["aller", "retour"] as const) await seedPlacement(db, { personId: claire.id, eventId, leg, rideId: null });
+      const offer = {
+        rideId: randomUUID(),
+        leg: "aller",
+        driver: { kind: "device", personId: claire.id },
+        location: "Gare de Cesson",
+        time: "08:00",
+        seats: "3",
+        note: "",
+      };
+      const sends: Record<"offer" | "removal", (own: Db) => Promise<{ ok: boolean; error?: string }>> = {
+        offer: (own) => offerRide(own, eventId, claire.token, offer),
+        removal: (own) => updatePerson(own, eventId, claire.token, { personId: claire.id, phone: "" }),
+      };
+      const order = first === "the offer" ? (["offer", "removal"] as const) : (["removal", "offer"] as const);
+
+      // The later send waits behind the earlier one, for Claire's Person.
+      const answers = await whileHeldInTurn(
+        db,
+        (holder) => lockPersons(holder, eventId, [claire.id]),
+        order.map((name) => sends[name]),
+      );
+
+      const [offered, removed] = first === "the offer" ? answers : answers.reverse();
+      const rides = await db.selectFrom("ride").select("id").where("event_id", "=", eventId).execute();
+      if (first === "the offer") {
+        expect(offered).toMatchObject({ ok: true });
+        expect(removed).toMatchObject({ ok: false, error: "phoneWhileDriving" });
+        expect(rides.length).toBe(1);
+        expect(await hasNumber(db, claire.id, CLAIRE_PHONE)).toBe(true);
+      } else {
+        expect(removed).toMatchObject({ ok: true });
+        expect(offered).toMatchObject({ ok: false, error: "driverWithoutPhone" });
+        expect(rides.length).toBe(0);
+        expect(await hasNumber(db, claire.id, null)).toBe(true);
+      }
     });
   });
 });

@@ -13,7 +13,12 @@ import {
   editAnswer,
   editFailure,
   listKey,
+  PERSONS_LIST,
   panelRead,
+  pendingRead,
+  pollsPending,
+  resendAnswer,
+  POLL_MS,
   screenRead,
   screenReducer,
   type EditAnswer,
@@ -31,17 +36,19 @@ const leg = (withoutCar: number): OrganiserLeg => ({
 const before = [leg(2)];
 const after = [leg(3)];
 const links = { publicUrl: "https://fullcar.example/e/Ab3dEf7h" };
-const valid: OrganiserCheck = { state: "valid", ...links, legs: before };
+const valid: OrganiserCheck = { state: "valid", ...links, legs: before, persons: [] };
 
 const ready = (fields: Partial<Extract<ScreenState, { state: "ready" }>> = {}): ScreenState => ({
   state: "ready",
   panel: { ...links, legs: before },
+  persons: [],
   refreshing: null,
   refreshFailed: 0,
   refreshed: false,
   expanded: new Set(),
   folded: false,
   unfolded: new Set(),
+  personsOpen: false,
   ...fields,
 });
 /** A panel withdrawn after an action whose read failed (O1.10): the links stay. */
@@ -51,7 +58,12 @@ describe("screenReducer", () => {
   it.each<[string, ScreenState, ScreenEvent, ScreenState]>([
     // The first read (O5.1, O5.2, O5.3).
     ["loading, the panel", { state: "loading" }, { type: "checked", check: valid }, ready()],
-    ["loading, the area refused", { state: "loading" }, { type: "checked", check: { state: "refused" } }, { state: "refused" }],
+    [
+      "loading, the area refused, with its screen (#598)",
+      { state: "loading" },
+      { type: "checked", check: { state: "refused", refusal: { kind: "notYours", email: "a@b.fr" } } },
+      { state: "refused", refusal: { kind: "notYours", email: "a@b.fr" } },
+    ],
     [
       "loading, a failed check",
       { state: "loading" },
@@ -107,7 +119,7 @@ describe("screenReducer", () => {
     ],
     ["the end of a read after the link was checked again", ready(), { type: "refreshEnded", read: 1, legs: after }, ready()],
     ["a refresh while one runs", ready({ refreshing: 1 }), { type: "refreshStarted", read: 2 }, ready({ refreshing: 1 })],
-    ["a refresh without the panel", { state: "refused" }, { type: "refreshStarted", read: 1 }, { state: "refused" }],
+    ["a refresh without the panel", { state: "refused", refusal: { kind: "pending" } }, { type: "refreshStarted", read: 1 }, { state: "refused", refusal: { kind: "pending" } }],
     // The panel read again after an action of the board (O1.10): no announcement either way.
     [
       "a read after an action replaces the panel, and says nothing",
@@ -186,7 +198,8 @@ describe("screenReducer, the folded card", () => {
   });
 
   it("does nothing without the panel", () => {
-    expect(screenReducer({ state: "refused" }, { type: "toggleFolded" })).toStrictEqual({ state: "refused" });
+    const refused = { state: "refused", refusal: { kind: "orphan" } } as const;
+    expect(screenReducer(refused, { type: "toggleFolded" })).toStrictEqual(refused);
   });
 });
 
@@ -295,9 +308,41 @@ describe("screenReducer, the unfolded legs", () => {
   });
 });
 
+// #672 (remove-person v2, RP4.1): « Personnes inscrites », folded at every appearance, its persons those of the last read.
+describe("screenReducer, « Personnes inscrites »", () => {
+  const named = (n: number) => ({ id: `p${n}`, firstName: `Guest ${n}`, cells: [] });
+  const persons = (count: number) => Array.from({ length: count }, (_, n) => named(n));
+  const through = (state: ScreenState, ...events: ScreenEvent[]) => events.reduce(screenReducer, state);
+  const of = (state: ScreenState) => (state.state === "ready" ? { open: state.personsOpen, persons: state.persons, expanded: state.expanded } : undefined);
+
+  it("arrives folded with the panel's persons, unfolds and folds by its button alone, and nothing else changes", () => {
+    const shown = screenReducer({ state: "loading" }, { type: "checked", check: { ...valid, persons: persons(2) } });
+    expect(shown).toStrictEqual(ready({ persons: persons(2) }));
+    const open = screenReducer(shown, { type: "personsToggled" });
+    expect(open).toStrictEqual(ready({ persons: persons(2), personsOpen: true }));
+    expect(screenReducer(open, { type: "personsToggled" })).toStrictEqual(shown);
+    expect(of(through(open, { type: "legToggled", leg: "aller" }, { type: "toggleFolded" }))?.open).toBe(true);
+  });
+
+  it("stays unfolded through the reads, takes their persons, and keeps them while the panel is withdrawn", () => {
+    const open = ready({ persons: persons(3), personsOpen: true });
+    expect(of(through(open, { type: "reread", legs: after, persons: persons(2) }))).toStrictEqual({ open: true, persons: persons(2), expanded: new Set() });
+    expect(of(through(open, { type: "reread" }))).toMatchObject({ open: true, persons: persons(3) });
+    const refreshed = through(open, { type: "refreshStarted", read: 1 }, { type: "refreshEnded", read: 1, legs: after, persons: persons(1) });
+    expect(of(refreshed)).toMatchObject({ open: true, persons: persons(1) });
+    expect(of(screenReducer(open, { type: "checked", check: valid }))).toMatchObject({ open: false, persons: [] });
+  });
+
+  it("keeps its long list unfolded while it has more than 5 lines (O5.6, O5.7)", () => {
+    const long = ready({ persons: persons(8), expanded: new Set([PERSONS_LIST]) });
+    expect(of(through(long, { type: "reread", legs: after, persons: persons(6) }))?.expanded).toStrictEqual(new Set([PERSONS_LIST]));
+    expect(of(through(long, { type: "reread", legs: after, persons: persons(5) }))?.expanded).toStrictEqual(new Set());
+  });
+});
+
 describe("panelRead", () => {
-  it("is the panel's legs when it answered the panel", () => {
-    expect(panelRead({ ok: true, value: { state: "panel", legs: after } })).toStrictEqual(after);
+  it("is the panel's legs and persons when it answered the panel", () => {
+    expect(panelRead({ ok: true, value: { state: "panel", legs: after, persons: [] } })).toStrictEqual({ legs: after, persons: [] });
   });
 
   it.each<[string, unknown]>([
@@ -311,11 +356,11 @@ describe("panelRead", () => {
 
 describe("screenRead", () => {
   const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPosition: null, allerAt: "2026-12-12 07:30:00", retourAt: null, description: null };
-  const board: EventState = { event: header, legs: [] };
-  const panel = { state: "panel", legs: after };
+  const board: EventState = { event: header, options: { stops: false }, legs: [] };
+  const panel = { state: "panel", legs: after, persons: [] };
 
   it("is the panel's legs and the board's state when both reads answered", () => {
-    expect(screenRead({ ok: true, value: panel }, { ok: true, value: board })).toStrictEqual({ legs: after, board });
+    expect(screenRead({ ok: true, value: panel }, { ok: true, value: board })).toStrictEqual({ legs: after, persons: [], board });
   });
 
   // O1.9: one failure, and nothing is applied.
@@ -392,6 +437,32 @@ describe("editAnswer", () => {
     });
   });
 
+  // D1: the option stored comes with the answer, from a server that says it.
+  it("carries the option stored on `ok` and on `changed`, when the server says it", () => {
+    expect(editAnswer({ ok: true, value: { ok: true, event, stops: true } })).toStrictEqual({ kind: "saved", event, stops: true });
+    expect(editAnswer({ ok: true, value: { ok: false, error: "changed", event, stops: false } })).toStrictEqual({
+      kind: "changed",
+      event,
+      stops: false,
+    });
+  });
+
+  it("ignores an option that is no boolean", () => {
+    expect(editAnswer({ ok: true, value: { ok: true, event, stops: "yes" } })).toStrictEqual({ kind: "saved", event });
+  });
+
+  // RV9.3: the option stays on, and the number of cars that hold it.
+  it("is the number of cars on `stopsLocked`", () => {
+    expect(editAnswer({ ok: true, value: { ok: false, error: "stopsLocked", cars: 2 } })).toStrictEqual({ kind: "stopsLocked", cars: 2 });
+  });
+
+  it.each<[string, unknown]>([
+    ["without its number", { ok: false, error: "stopsLocked" }],
+    ["with a number that is no count", { ok: false, error: "stopsLocked", cars: -1 }],
+  ])("is the failure on `stopsLocked` %s", (_, value) => {
+    expect(editAnswer({ ok: true, value })).toStrictEqual({ kind: "problem", problem: "failed" });
+  });
+
   // Nothing was written, and the sheet says the generic failure.
   it.each<[string, unknown]>([
     ["`changed` without a header", { ok: false, error: "changed" }],
@@ -463,6 +534,53 @@ describe("editFailure: the sheet closed before the answer, word for word", () =>
   }
 });
 
+// RV9.4, RV9.3 (docs/design/meeting-points, section 1 bis): the sheet closed before the answer of a
+// change that only touched the option « Points de RDV ».
+describe("editFailure: the option « Points de RDV », word for word", () => {
+  const words = (locale: "fr" | "en") =>
+    wordsOf(createTranslator<Messages>({ locale, messages: locale === "fr" ? fr : en }), createFormatter({ locale }));
+  const said = (answer: Exclude<EditAnswer, { kind: "saved" }>, optionOnly: boolean, locale: "fr" | "en" = "fr") => {
+    const { notDone, why } = editFailure(answer, false, optionOnly);
+    return failureText(words(locale), notDone, why);
+  };
+
+  it.each<[string, Exclude<EditAnswer, { kind: "saved" }>, string, string]>([
+    [
+      "offline",
+      { kind: "problem", problem: "offline" },
+      "L’option « Points de RDV » n’a pas été modifiée. Vérifiez la connexion, puis réessayez.",
+      "The “Meeting points” option was not changed. Check your connection, then try again.",
+    ],
+    [
+      "a server error",
+      { kind: "problem", problem: "failed" },
+      "L’option « Points de RDV » n’a pas été modifiée. Une erreur est survenue : réessayez dans un instant.",
+      "The “Meeting points” option was not changed. Something went wrong: try again in a moment.",
+    ],
+    [
+      "cars that have meeting points (RV9.3)",
+      { kind: "stopsLocked", cars: 2 },
+      "L’option « Points de RDV » reste active : des voitures ont des points de RDV.",
+      "The “Meeting points” option stays on: cars have meeting points.",
+    ],
+  ])("%s: the option alone", (_, answer, inFrench, inEnglish) => {
+    expect(said(answer, true)).toBe(inFrench);
+    expect(said(answer, true, "en")).toBe(inEnglish);
+  });
+
+  it("another field changed too: the event was not changed, and the option stays on as the reason says", () => {
+    expect(said({ kind: "stopsLocked", cars: 1 }, false)).toBe(
+      "L’événement n’a pas été modifié. L’option « Points de RDV » reste active : des voitures ont des points de RDV.",
+    );
+    expect(said({ kind: "problem", problem: "offline" }, false)).toBe("L’événement n’a pas été modifié. Vérifiez la connexion, puis réessayez.");
+  });
+
+  it("a removal of the retour keeps its own words", () => {
+    const { notDone } = editFailure({ kind: "stopsLocked", cars: 1 }, true, true);
+    expect(notDone).toEqual({ kind: "removeRetour" });
+  });
+});
+
 describe("announcement", () => {
   it.each<[string, ScreenState, ReturnType<typeof announcement>]>([
     ["nothing before a refresh", ready(), ""],
@@ -485,8 +603,124 @@ describe("alertShown", () => {
     ["the body still while the next read runs", ready({ refreshFailed: 1, refreshing: 2 }), "body"],
     ["the withdrawn body, the panel withdrawn", ready({ panel: withdrawn, refreshFailed: 1, refreshing: 2 }), "bodyWithdrawn"],
     ["nothing withdrawn without a failure: the sentence instead", ready({ panel: withdrawn }), ""],
-    ["nothing without the panel", { state: "refused" }, ""],
+    ["nothing without the panel", { state: "refused", refusal: { kind: "signIn" } }, ""],
   ])("%s", (_, state, shown) => {
     expect(alertShown(state)).toBe(shown);
+  });
+});
+
+describe("the notice « Confirmez votre adresse » (OA1.7)", () => {
+  const sending = { email: "claire.martin@exemple.fr", send: "sending" } as const;
+  const sent = { ...sending, send: "sent" } as const;
+
+  it("comes with the panel, and is in the panel only when the server sent one", () => {
+    expect(screenReducer({ state: "loading" }, { type: "checked", check: { ...valid, pending: sending } })).toStrictEqual(
+      ready({ panel: { ...links, legs: before, pending: sending } }),
+    );
+    expect(screenReducer({ state: "loading" }, { type: "checked", check: valid })).toStrictEqual(ready());
+  });
+
+  it("a read while sending replaces it, and only it; without one, the notice goes (OA2.6)", () => {
+    const registered = [
+      { id: "p0", firstName: "Guest 0", cells: [] },
+      { id: "p1", firstName: "Guest 1", cells: [] },
+    ];
+    const shown = ready({
+      panel: { ...links, legs: before, pending: sending },
+      persons: registered,
+      personsOpen: true,
+      expanded: new Set(["aller:withoutCar"]),
+    });
+    const replaced = screenReducer(shown, { type: "pendingRead", pending: sent });
+    expect(replaced).toStrictEqual({ ...shown, panel: { ...links, legs: before, pending: sent } });
+    // The persons of « Personnes inscrites » are not the notice's business: kept, and still unfolded.
+    expect(replaced).toMatchObject({ persons: registered, personsOpen: true });
+    expect(screenReducer(shown, { type: "pendingRead" })).toStrictEqual({ ...shown, panel: { ...links, legs: before } });
+    // Withdrawn, the sections stay withdrawn.
+    const away = ready({ panel: { ...withdrawn, pending: sending } });
+    expect(screenReducer(away, { type: "pendingRead", pending: sent })).toStrictEqual(ready({ panel: { ...withdrawn, pending: sent } }));
+  });
+
+  it("given up while sending, reads as a failure, as the server reads a send left « sending » after 30 s", () => {
+    const shown = ready({ panel: { ...links, legs: before, pending: sending } });
+    expect(screenReducer(shown, { type: "pendingGaveUp" })).toStrictEqual(
+      ready({ panel: { ...links, legs: before, pending: { ...sending, send: "failed" } } }),
+    );
+    // A result kept meanwhile, or no notice, stays as it is.
+    const kept = ready({ panel: { ...links, legs: before, pending: sent } });
+    expect(screenReducer(kept, { type: "pendingGaveUp" })).toBe(kept);
+    const none = ready();
+    expect(screenReducer(none, { type: "pendingGaveUp" })).toBe(none);
+  });
+
+  it("does nothing without the panel", () => {
+    const refused: ScreenState = { state: "refused", refusal: { kind: "pending" } };
+    for (const state of [{ state: "loading" }, refused, { state: "failed", retrying: false }] as ScreenState[]) {
+      expect(screenReducer(state, { type: "pendingRead", pending: sent })).toBe(state);
+    }
+  });
+
+  it("is read again, every POLL_MS, only while the email is on its way", () => {
+    expect(POLL_MS).toBe(2_000);
+    expect(pollsPending(ready({ panel: { ...links, legs: before, pending: sending } }))).toBe(true);
+    for (const send of ["sent", "failed", "addressLimit"] as const) {
+      expect(pollsPending(ready({ panel: { ...links, legs: before, pending: { ...sending, send } } }))).toBe(false);
+    }
+    expect(pollsPending(ready())).toBe(false);
+    expect(pollsPending({ state: "loading" })).toBe(false);
+  });
+
+  it("pendingRead: the notice of a panel read, none on a panel without one, and nothing to apply otherwise", () => {
+    expect(pendingRead({ ok: true, value: { state: "panel", legs: after, pending: sent } })).toStrictEqual({ pending: sent });
+    expect(pendingRead({ ok: true, value: { state: "panel", legs: after } })).toStrictEqual({});
+    expect(pendingRead({ ok: true, value: { state: "panel", legs: after, pending: { email: 1 } } })).toStrictEqual({});
+    expect(pendingRead({ ok: false, problem: "offline" })).toBeUndefined();
+    expect(pendingRead({ ok: true, value: { state: "pending" } })).toBeUndefined();
+    expect(pendingRead({ ok: true, value: undefined })).toBeUndefined();
+  });
+});
+
+describe("resendAnswer (OA2.4)", () => {
+  it("is the notice the server answers, sent or failed", () => {
+    for (const send of ["sent", "failed"] as const) {
+      const pending = { email: "camille@exemple.fr", send };
+      expect(resendAnswer({ ok: true, value: { ok: true, pending } })).toStrictEqual({ kind: "answered", pending });
+    }
+  });
+
+  it("reads the limit, a confirmed event, and an event that ended", () => {
+    expect(resendAnswer({ ok: true, value: { ok: false, error: "tooMany" } })).toStrictEqual({ kind: "tooMany" });
+    expect(resendAnswer({ ok: true, value: { ok: false, error: "notPending" } })).toStrictEqual({ kind: "notPending" });
+    expect(resendAnswer({ ok: true, value: { ok: false, error: "eventEnded" } })).toStrictEqual({ kind: "eventEnded" });
+  });
+
+  it("is not resent offline, nor on any other problem or refusal, nor on an answer it does not know", () => {
+    expect(resendAnswer({ ok: false, problem: "offline" })).toStrictEqual({ kind: "notResent", offline: true });
+    expect(resendAnswer({ ok: false, problem: "failed" })).toStrictEqual({ kind: "notResent", offline: false });
+    for (const error of ["invalid", "eventNotFound", "other"]) {
+      expect(resendAnswer({ ok: true, value: { ok: false, error } })).toStrictEqual({ kind: "notResent", offline: false });
+    }
+    for (const value of [undefined, null, {}, { ok: true }, { ok: true, pending: { email: "a@b.fr", send: "sending" } }]) {
+      expect(resendAnswer({ ok: true, value })).toStrictEqual({ kind: "notResent", offline: false });
+    }
+  });
+
+  it("has its three sentences, in French and in English, as the design words them", () => {
+    const words = {
+      fr: [
+        "E-mail renvoyé à {email}.",
+        "L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
+        "Trop d’envois. Réessayez dans une heure.",
+      ],
+      en: [
+        "Email sent again to {email}.",
+        "The email was not sent again. Check your connection, then try again.",
+        "Too many emails. Try again in an hour.",
+      ],
+    };
+    for (const [locale, messages] of [["fr", fr], ["en", en]] as const) {
+      const { resent, offline, tooMany } = messages.Admin.pending;
+      expect([resent, offline, tooMany]).toEqual(words[locale]);
+    }
   });
 });

@@ -6,6 +6,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { failActions, holdActions, holdFirst, holdToken, messages, newToken } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { keepAdminToken } from "./organiser";
 
 leaveNoToken();
 
@@ -230,6 +231,8 @@ test.describe("device persons", () => {
   });
 
   test("C11.7: the same section on the organiser's page", async ({ page, seededEvent }) => {
+    // The creation browser's: refused, the page shows no board (#598).
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
     await page.goto(`/e/${seededEvent.id}/admin`);
     await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
     expect(await cells(page)).toEqual(MATRIX);

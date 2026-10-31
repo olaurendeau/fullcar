@@ -19,24 +19,33 @@ const ABOVE_BAR = "scroll-mb-[calc(1rem+var(--message-bar-height,0px)+12px+env(s
  * known (C5.9) and without JavaScript; its tap takes a seat or opens a sheet (`onTakeSeat`, #92). Long
  * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
  * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
- * removes it (C8.1); `near`, the event's position, brings its place's suggestions closer (AL4.1).
+ * removes it (C8.1); on a car with points, each passenger of the device says where she boards and
+ * has « Changer le point » (RV4.1, #892); `near`, the event's position, brings its place's suggestions closer (AL4.1).
  */
 export function RideCard({
   car,
   date,
   seatsActive,
   onTakeSeat,
+  devicePassengers = [],
+  onChangeStop,
   updateRide,
   removeRide,
   near = null,
+  stopsOn,
 }: {
   car: VisibleCar;
   date: WallDate;
   seatsActive: boolean;
   onTakeSeat: (seat: HTMLElement) => void;
+  /** The passengers of this car who are the device's: on a car with points, each has « Changer le point » (RV4.1). */
+  devicePassengers?: readonly string[];
+  onChangeStop?: (passenger: { id: string; firstName: string }, button: HTMLElement) => void;
   updateRide?: UpdateRide;
   removeRide?: RemoveRide;
   near?: Position | null;
+  /** The option « Points de RDV » is on: « Modifier la voiture » has its section on the aller. */
+  stopsOn?: boolean;
 }) {
   const t = useTranslations("Board.car");
   const format = useFormatter();
@@ -76,17 +85,52 @@ export function RideCard({
         </p>
         {car.note && <p className="text-muted-foreground wrap-anywhere">{car.note}</p>}
       </div>
+      {car.stops.length > 0 && (
+        // None, no list and no title (RV2.1): the departure keeps its line above.
+        <ul aria-label={t("stops")} className="ml-2 flex min-w-0 flex-col gap-1.5 border-l-2 pl-3 text-sm">
+          {car.stops.map((stop) => (
+            <li key={stop.id} className="flex min-w-0 items-baseline gap-2">
+              <time dateTime={`${date}T${stop.time.slice(0, 5)}`} className="min-w-11 shrink-0 font-semibold tabular-nums">
+                {format.dateTime(wallClockAsUtc(`${date} ${stop.time}`), { timeStyle: "short" })}
+              </time>
+              <span className="min-w-0 wrap-anywhere">{stop.location}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <ul aria-label={t("seats")} className="flex flex-col gap-2">
-        {car.passengers.map((passenger) => (
-          <li
-            key={passenger.id}
-            className="flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg bg-muted px-3 text-sm"
-          >
-            <User aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 wrap-anywhere">{passenger.firstName}</span>
-            {passenger.phone && <PhoneLink firstName={passenger.firstName} phone={passenger.phone} />}
-          </li>
-        ))}
+        {car.passengers.map((passenger) => {
+          // Where she boards, if at a point: at the departure, nothing (RV2.2).
+          const stop = car.stops.find(({ passengerIds }) => passengerIds.includes(passenger.id));
+          // Hers to change: the device's passenger of a car with points, told where she boards even at the departure (RV4.1).
+          const changes = onChangeStop !== undefined && car.stops.length > 0 && devicePassengers.includes(passenger.id);
+          return (
+            <li
+              key={passenger.id}
+              className={cn("flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg bg-muted px-3 text-sm", (stop || changes) && "py-1.5")}
+            >
+              <User aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 wrap-anywhere">{passenger.firstName}</span>
+              {passenger.phone && <PhoneLink firstName={passenger.firstName} phone={passenger.phone} />}
+              {changes && (
+                <button
+                  type="button"
+                  aria-label={t("changeStopName", { firstName: passenger.firstName })}
+                  onClick={(event) => onChangeStop?.(passenger, event.currentTarget)}
+                  className="inline-flex min-h-11 items-center rounded-md px-1 text-sm font-medium text-primary underline underline-offset-3 focus-visible:focus-ring"
+                >
+                  {t("changeStop")}
+                </button>
+              )}
+              {/* #595959 on `muted`: 6,4:1 where `muted-foreground` makes 4,35:1 (RV7.3). */}
+              {(stop || changes) && (
+                <span className="basis-full text-xs text-[#595959] wrap-anywhere">
+                  {stop ? t("boardsAt", { place: stop.location }) : t("boardsAtStart")}
+                </span>
+              )}
+            </li>
+          );
+        })}
         {Array.from({ length: car.freeSeats }, (_, seat) => (
           <li key={`free-${seat}`} className="flex">
             <button
@@ -110,7 +154,7 @@ export function RideCard({
       </ul>
       {(updateRide || removeRide) && (
         <div className="flex gap-2">
-          {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} near={near} />}
+          {updateRide && <EditRideButton car={car} at={`${date} ${car.departureTime}`} updateRide={updateRide} near={near} stopsOn={stopsOn} />}
           {removeRide && (
             <RemoveRideButton
               car={{ id: car.id, leg: car.leg, driverId: car.driver.id, driver: car.driver.firstName, passengers: car.passengers.length }}

@@ -5,7 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { expect, leaveNoToken, test } from "./fixtures";
-import { hideToken, htmlByLegSection, keepAdminToken, organiserPath } from "./organiser";
+import { areaRefused, hideToken, htmlByLegSection, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -189,7 +189,10 @@ test.describe("board, with a retour", () => {
   });
 
   test("C11.7: the organiser's page shows the same board", async ({ page, seededEvent }) => {
+    // The creation browser's: refused, the page shows no board once the check answers (#598).
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
     await page.goto(`/e/${seededEvent.id}/admin`);
+    await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
     const panel = page.getByRole("tabpanel");
     await expect(car(panel, "Marc").getByRole("listitem")).toHaveText(["Léa", "Place libre", "Place libre"]);
     await expect(withoutCar(panel).getByRole("listitem")).toHaveText(["Tom"]);
@@ -351,8 +354,12 @@ for (const javaScriptEnabled of [true, false]) {
         if (javaScriptEnabled && organiser) {
           await expect(page.getByRole("region", { name: "Espace organisateur" })).toBeVisible();
         }
+        // Refused, the screen of a pending event takes the board's place (#598): the HTML had the board.
+        const refused = javaScriptEnabled && !organiser && path(seededEvent).endsWith("/admin");
+        if (refused) await expect(areaRefused(page)).toBeVisible();
 
         const dom = await page.content();
+        // Refused or not, the HTML had the board, and its payload stays in the DOM.
         expect(dom.includes("Marc"), "the DOM holds Marc").toBe(true);
         if (javaScriptEnabled && organiser) {
           // The panel's sections list Tom's and Léa's numbers (#179, DO1), each in its own leg's

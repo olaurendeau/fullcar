@@ -1,8 +1,10 @@
 import type { Kysely, Selectable } from "kysely";
 import type { NewEvent } from "@/domain/event";
 import type { OrganiserAccessEvent } from "@/domain/organiser-access";
+import type { PendingSendRow } from "@/domain/pending-send";
 import { generatePublicId } from "@/domain/public-id";
 import type { Database, EventTable } from "./schema";
+import { tokenKey } from "./token-key";
 
 /**
  * Ids drawn before giving up. With 57⁸ ids, even one collision is rare: several in a row
@@ -58,6 +60,29 @@ export async function readAdminTokenHash(db: Kysely<Database>, id: string): Prom
 }
 
 /**
+ * Revokes the admin tokens of `tokens`, as they came in a request's body (OA9.1, « Se
+ * déconnecter »): each event whose token is one of them has its hash set to null, which no
+ * token matches. A value that is not a string matches nothing. The events are locked in id
+ * order first, as `lockEvent` locks one: a write of the organiser that waited on one then reads
+ * the token revoked. Gives how many were revoked. Never log a token, nor its hash.
+ */
+export async function revokeAdminTokens(db: Kysely<Database>, tokens: readonly unknown[]): Promise<number> {
+  const keys = tokens.map(tokenKey).filter((key): key is Buffer => key !== null);
+  if (keys.length === 0) return 0;
+  const held = await db
+    .selectFrom("event")
+    .select("id")
+    .where("admin_token_hash", "in", keys)
+    .orderBy("id")
+    .forNoKeyUpdate()
+    .execute();
+  if (held.length === 0) return 0;
+  const ids = held.map((row) => row.id);
+  const revoked = await db.updateTable("event").set({ admin_token_hash: null }).where("id", "in", ids).executeTakeFirst();
+  return Number(revoked.numUpdatedRows);
+}
+
+/**
  * What the organiser-access rule reads of the event (organiser-access.ts): its account, whether
  * it was confirmed and anonymised, and its admin token's hash in lowercase hex, `null` once
  * revoked. Nothing for an unknown id. Never sent to a browser.
@@ -76,6 +101,20 @@ export async function readOrganiserAccessEvent(db: Kysely<Database>, id: string)
     anonymised: row.anonymised_at !== null,
     adminTokenHash: row.admin_token_hash?.toString("hex") ?? null,
   };
+}
+
+/**
+ * The address awaiting confirmation and the result kept of its email (OA1.7), for the notice
+ * of the organiser's panel only: never read before the access is granted. Nothing for an
+ * unknown id.
+ */
+export async function readPendingSend(db: Kysely<Database>, id: string): Promise<PendingSendRow | undefined> {
+  const row = await db
+    .selectFrom("event")
+    .select(["pending_email", "send_status", "send_status_at"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+  return row && { email: row.pending_email, status: row.send_status, at: row.send_status_at };
 }
 
 /**
@@ -143,12 +182,12 @@ export async function holdEventKey(db: Kysely<Database>, id: string): Promise<bo
 }
 
 /**
- * What the organiser changes: the options and the token are not among them. Without
- * `locationPosition`, the position stored stays as it is; without `description`, the
- * description stored does.
+ * What the organiser changes: the token is not among them, nor the options but « Points de RDV »
+ * (`stops`, D1). Without `locationPosition`, the position stored stays as it is; without
+ * `description`, the description stored does; without `stops`, the option does.
  */
 export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" | "retourAt"> &
-  Partial<Pick<NewEvent, "locationPosition" | "description">>;
+  Partial<Pick<NewEvent, "locationPosition" | "description">> & { stops?: boolean };
 
 /**
  * Whether the event existed, and now has these fields. A retour removed has its Rides and
@@ -156,7 +195,7 @@ export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" 
  * (`removeRetour`): no row of the retour stays under a `retour_at` null.
  */
 export async function writeEventFields(db: Kysely<Database>, id: string, fields: EventFieldsChange): Promise<boolean> {
-  const { locationPosition: position, description } = fields;
+  const { locationPosition: position, description, stops } = fields;
   const result = await db
     .updateTable("event")
     .set({ title: fields.title, location: fields.location, aller_at: fields.allerAt, retour_at: fields.retourAt })
@@ -164,6 +203,7 @@ export async function writeEventFields(db: Kysely<Database>, id: string, fields:
       update.set({ location_lat: position?.lat ?? null, location_lng: position?.lng ?? null }),
     )
     .$if(description !== undefined, (update) => update.set({ description }))
+    .$if(stops !== undefined, (update) => update.set({ stops_enabled: stops }))
     .where("id", "=", id)
     .executeTakeFirst();
   return Number(result.numUpdatedRows) > 0;

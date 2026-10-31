@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { sql, TableNode, type ControlledTransaction, type Kysely, type KyselyPlugin } from "kysely";
+import { sql, TableNode, type Kysely, type KyselyPlugin } from "kysely";
 import { describe, expect, it } from "vitest";
 import { removePassengers } from "@/db/placements";
+import { anonymiseEvent } from "@/db/day-thirty";
 import { deleteRide, lockRide, ridePassengers } from "@/db/rides";
 import type { Database } from "@/db/schema";
-import { withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
+import { atomically } from "@/db/transaction";
 import { removeSeededRetour, seedEvent } from "@/db/test-events";
-import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { deleteSeededPerson, seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { readEventState, type EventState } from "./event-state";
 import { takeSeats, undoSeats } from "./seats";
@@ -30,7 +32,8 @@ const NOBODYS_TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
  * Léa, Hugo and Inès are the persons of one device; Marc, Zoé and Tom each have their own.
  */
 async function seedScene(db: Db) {
-  const { id: eventId } = await seedEvent(db);
+  // The option « Points de RDV » is on: the points the tests send are the event's (RV8.3).
+  const { id: eventId } = await seedEvent(db, { stopsEnabled: true });
   const marc = await seedPerson(db, eventId, { firstName: "Marc" });
   const zoe = await seedPerson(db, eventId, { firstName: "Zoé" });
   const tom = await seedPerson(db, eventId, { firstName: "Tom" });
@@ -64,44 +67,6 @@ function passengersOf(result: object, leg: Leg, rideId: string): string[] {
   const car = state?.find((board) => board.leg === leg)?.cars.find((found) => found.id === rideId);
   if (car === undefined) throw new Error(`no car ${rideId} on the ${leg} in the state`);
   return car.passengers.map((person) => person.firstName);
-}
-
-// Two sessions on committed data: the first holds its transaction open, the second goes
-// through the use case on the connection, as the application does, and must wait for it.
-async function backendPid(trx: ControlledTransaction<Database>) {
-  const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx);
-  return rows[0]!.pid;
-}
-
-/** Resolves once some session waits for a lock that the session `pid` holds. */
-async function someoneBlockedBy(db: Db, pid: number) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const { rows } = await sql<{ pid: number }>`
-      select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))`.execute(db);
-    if (rows.length > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error("no session ever waited for the first one");
-}
-
-/** `first` in a transaction held open until `second` waits for it, then committed. */
-async function whileHeld<T>(db: Db, first: (trx: Db) => Promise<unknown>, second: () => Promise<T>): Promise<T> {
-  const holder = await db.startTransaction().setIsolationLevel("repeatable read").execute();
-  try {
-    await first(holder);
-    const pid = await backendPid(holder);
-    const pending = second();
-    pending.catch(() => {});
-    await someoneBlockedBy(db, pid);
-    await holder.commit().execute();
-    return await pending;
-  } finally {
-    try {
-      await holder.rollback().execute();
-    } catch {
-      // Already committed: nothing to give back.
-    }
-  }
 }
 
 describe("takeSeats", () => {
@@ -345,7 +310,7 @@ describe("takeSeats", () => {
         const second = await whileHeld(
           db,
           (trx) => takeSeats(trx, eventId, lea.token, rideId, "aller", [lea.id]),
-          () => takeSeats(db, eventId, tom.token, rideId, "aller", [tom.id]),
+          (own) => takeSeats(own, eventId, tom.token, rideId, "aller", [tom.id]),
         );
 
         expect(second).toMatchObject({ ok: false, error: "seatTaken" });
@@ -366,7 +331,7 @@ describe("takeSeats", () => {
         const second = await whileHeld(
           db,
           (trx) => takeSeats(trx, eventId, tom.token, rideId, "aller", [tom.id]),
-          () => takeSeats(db, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
+          (own) => takeSeats(own, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
         );
 
         expect(second).toMatchObject({ ok: false, error: "notEnoughSeats", freeSeats: 1 });
@@ -383,7 +348,7 @@ describe("takeSeats", () => {
         const second = await whileHeld(
           db,
           (trx) => deleteRide(trx, { id: rideId, eventId, leg: "aller" }),
-          () => takeSeats(db, eventId, lea.token, rideId, "aller", [lea.id]),
+          (own) => takeSeats(own, eventId, lea.token, rideId, "aller", [lea.id]),
         );
 
         expect(second).toMatchObject({ ok: false, error: "rideGone" });
@@ -400,7 +365,7 @@ describe("takeSeats", () => {
         const second = await whileHeld(
           db,
           (trx) => takeSeats(trx, eventId, lea.token, first, "aller", [lea.id]),
-          () => takeSeats(db, eventId, lea.token, other, "aller", [lea.id]),
+          (own) => takeSeats(own, eventId, lea.token, other, "aller", [lea.id]),
         );
 
         expect(second).toMatchObject({ ok: false, error: "alreadyInCar" });
@@ -648,7 +613,7 @@ describe("undoSeats", () => {
             await lockRide(trx, { id: r1, eventId, leg: "aller" });
             await seedPlacement(trx, { personId: lea.id, eventId, leg: "aller", rideId: r2 });
           },
-          () => undoSeats(db, eventId, lea.token, r1, "aller", undo),
+          (own) => undoSeats(own, eventId, lea.token, r1, "aller", undo),
         );
 
         expect(result).toMatchObject({ ok: true, undoneIds: [ines.id] });
@@ -664,7 +629,7 @@ describe("undoSeats", () => {
         const result = await whileHeld(
           db,
           (trx) => lockRide(trx, { id: r1, eventId, leg: "aller" }),
-          () => undoSeats(db, eventId, lea.token, r1, "aller", undo),
+          (own) => undoSeats(own, eventId, lea.token, r1, "aller", undo),
         );
 
         expect(result).toMatchObject({ ok: true, undoneIds: [lea.id, ines.id] });
@@ -750,7 +715,7 @@ describe("on a person removed meanwhile", () => {
       const result = await whileHeld(
         db,
         (trx) => deleteSeededPerson(trx, eventId, hugo.id),
-        () => takeSeats(db, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
+        (own) => takeSeats(own, eventId, lea.token, rideId, "aller", [lea.id, hugo.id]),
       );
 
       expect(result).toMatchObject({ ok: false, error: "personGone", goneIds: [hugo.id] });
@@ -803,6 +768,235 @@ describe("on a person removed meanwhile", () => {
       const asked = [...undo, { personId: tom.id, before: "withoutCar" }];
       expect(await undoSeats(trx, eventId, lea.token, r1, "aller", asked)).toMatchObject({ ok: false, error: "forbidden" });
       expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+});
+
+/** Where each person of the aller boards: the Stop of her Placement, `null` at the Ride's start. */
+async function boardingOf(db: Db, eventId: string): Promise<Record<string, string | null>> {
+  const rows = await db
+    .selectFrom("placement")
+    .select(["person_id", "stop_id"])
+    .where("event_id", "=", eventId)
+    .where("leg", "=", "aller")
+    .execute();
+  return Object.fromEntries(rows.map((row) => [row.person_id, row.stop_id]));
+}
+
+/** What the organiser's write does to a Ride's Stop: the Ride's lock first, then the delete. */
+async function removeStopUnderRide(db: Db, eventId: string, rideId: string, stopId: string): Promise<void> {
+  await atomically(db, async (trx) => {
+    await lockRide(trx, { id: rideId, eventId, leg: "aller" });
+    await trx.deleteFrom("stop").where("id", "=", stopId).execute();
+  });
+}
+
+// RV3.3 to RV3.5: a seat taken at a meeting point of the aller.
+describe("takeSeats at a stop", () => {
+  it("RV3.3: places two persons at the second point in one write, and at the start without a point", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, ines, r1 } = await seedScene(trx);
+      await seedStop(trx, eventId, r1, { time: "07:10:00" });
+      const second = await seedStop(trx, eventId, r1, { time: "07:20:00" });
+
+      const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id, hugo.id], second);
+
+      expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
+      expect(await boardingOf(trx, eventId)).toMatchObject({ [lea.id]: second, [hugo.id]: second });
+      expect(await takeSeats(trx, eventId, lea.token, r1, "aller", [ines.id])).toMatchObject({ ok: true });
+      expect((await boardingOf(trx, eventId))[ines.id]).toBeNull();
+    });
+  });
+
+  it("RV3.3: null is the start, as no point is", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      await seedStop(trx, eventId, r1);
+      expect(await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], null)).toEqual({
+        ok: true,
+        state: await readEventState(trx, eventId, lea.token),
+      });
+      expect((await boardingOf(trx, eventId))[lea.id]).toBeNull();
+    });
+  });
+
+  it.each([
+    ["a number", 42],
+    ["a word", "Mairie"],
+    ["an empty string", ""],
+  ])("refuses %s as a point as invalid, and writes nothing", async (_, stopId) => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const before = await placementsOf(trx, eventId);
+      const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], stopId);
+      expect(result).toMatchObject({ ok: false, error: "invalid" });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("RV3.4: a point deleted before the send puts the persons at the start, with stopGone, and no seat is lost", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, r1 } = await seedScene(trx);
+      const stop = await seedStop(trx, eventId, r1);
+      await trx.deleteFrom("stop").where("id", "=", stop).execute();
+
+      const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id, hugo.id], stop);
+
+      expect(result).toEqual({ ok: true, stopGone: true, state: await readEventState(trx, eventId, lea.token) });
+      expect(await boardingOf(trx, eventId)).toMatchObject({ [lea.id]: null, [hugo.id]: null });
+      expect(await ridePassengers(trx, { id: r1, eventId, leg: "aller" })).toHaveLength(2);
+    });
+  });
+
+  it("RV3.4: everyone asked already in the car: nothing is written, the point asked is ignored and no stopGone is said", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const stop = await seedStop(trx, eventId, r1);
+      await trx.deleteFrom("stop").where("id", "=", stop).execute();
+      expect(await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], null)).toMatchObject({ ok: true });
+      const before = await placementsOf(trx, eventId);
+
+      const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], stop);
+
+      expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+    });
+  });
+
+  it("RV8.3: with the option off, a point is refused by stopsOff and nothing is written; no point is a seat as before", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, r1 } = await seedScene(trx);
+      const stop = await seedStop(trx, eventId, r1);
+      await trx.updateTable("event").set({ stops_enabled: false }).where("id", "=", eventId).execute();
+      const before = await placementsOf(trx, eventId);
+
+      const refused = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], stop);
+
+      expect(refused).toMatchObject({ ok: false, error: "stopsOff" });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+      expect(await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id, hugo.id], null)).toEqual({
+        ok: true,
+        state: await readEventState(trx, eventId, lea.token),
+      });
+    });
+  });
+
+  it("RV3.4: a point of another car is no point of this one", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r1, r2 } = await seedScene(trx);
+      const elsewhere = await seedStop(trx, eventId, r2);
+
+      const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], elsewhere);
+
+      expect(result).toMatchObject({ ok: true, stopGone: true });
+      expect((await boardingOf(trx, eventId))[lea.id]).toBeNull();
+    });
+  });
+
+  it("RV3.4: the retour has no points: a point sent for it is gone", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r3 } = await seedScene(trx);
+      const result = await takeSeats(trx, eventId, lea.token, r3, "retour", [lea.id], randomUUID());
+      expect(result).toMatchObject({ ok: true, stopGone: true });
+    });
+  });
+
+  it("RV3.5: alreadyInCar, rideGone, forbidden and personGone keep their keys with a point, and nobody is placed", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, tom, r1 } = await seedScene(trx);
+      const stop = await seedStop(trx, eventId, r1);
+      const before = await placementsOf(trx, eventId);
+
+      const alreadyInCar = await takeSeats(trx, eventId, tom.token, r1, "aller", [tom.id], stop);
+      expect(alreadyInCar).toMatchObject({ ok: false, error: "alreadyInCar" });
+      const rideGone = await takeSeats(trx, eventId, lea.token, randomUUID(), "aller", [lea.id], stop);
+      expect(rideGone).toMatchObject({ ok: false, error: "rideGone" });
+      const forbidden = await takeSeats(trx, eventId, lea.token, r1, "aller", [tom.id], stop);
+      expect(forbidden).toMatchObject({ ok: false, error: "forbidden" });
+      expect(await takeSeats(trx, eventId, NOBODYS_TOKEN, r1, "aller", [lea.id], stop)).toMatchObject({ error: "forbidden" });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+
+      await deleteSeededPerson(trx, eventId, hugo.id);
+      const personGone = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id, hugo.id], stop);
+      expect(personGone).toMatchObject({ ok: false, error: "personGone", goneIds: [hugo.id] });
+      expect((await boardingOf(trx, eventId))[lea.id]).toBeNull();
+    });
+  });
+
+  it("RV3.5: notEnoughSeats and seatTaken are kept with a point, and nobody is placed by the refusal", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, ines } = await seedScene(trx);
+      const paul = await seedPerson(trx, eventId, { firstName: "Paul" });
+      const small = await seedRide(trx, eventId, paul.id, { leg: "aller", seats: 1 });
+      const stop = await seedStop(trx, eventId, small);
+
+      const two = await takeSeats(trx, eventId, lea.token, small, "aller", [lea.id, hugo.id], stop);
+      expect(two).toMatchObject({ ok: false, error: "notEnoughSeats", freeSeats: 1 });
+      expect((await boardingOf(trx, eventId))[hugo.id]).toBeNull();
+      expect((await ridePassengers(trx, { id: small, eventId, leg: "aller" })).length).toBe(0);
+
+      expect(await takeSeats(trx, eventId, lea.token, small, "aller", [lea.id], stop)).toMatchObject({ ok: true });
+      const taken = await takeSeats(trx, eventId, lea.token, small, "aller", [ines.id], stop);
+      expect(taken).toMatchObject({ ok: false, error: "seatTaken" });
+      expect(await ridePassengers(trx, { id: small, eventId, leg: "aller" })).toHaveLength(1);
+    });
+  });
+
+  it("eventEnded comes before every other refusal, with a point", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const stop = await seedStop(trx, eventId, r1);
+      await anonymiseEvent(trx, eventId);
+      expect(await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], stop)).toMatchObject({ error: "eventEnded" });
+      expect(await takeSeats(trx, eventId, NOBODYS_TOKEN, randomUUID(), "aller", [lea.id], stop)).toMatchObject({
+        error: "eventEnded",
+      });
+    });
+  });
+
+  // Committed data, both orders: the Stop is deleted under the Ride's lock, or chosen under it.
+  describe("at the same time as the Stop's deletion, on committed data", () => {
+    async function aCarWithStop(db: Db, eventId: string) {
+      await db.updateTable("event").set({ stops_enabled: true }).where("id", "=", eventId).execute();
+      const driver = await seedPerson(db, eventId, { firstName: "Marc" });
+      const rideId = await seedRide(db, eventId, driver.id, { seats: 3 });
+      return { rideId, stopId: await seedStop(db, eventId, rideId) };
+    }
+
+    it("RV3.4: a Stop deleted while the take waits for the Ride gives stopGone, at the start, never failed", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { rideId, stopId } = await aCarWithStop(db, eventId);
+        const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+
+        const second = await whileHeld(
+          db,
+          (trx) => removeStopUnderRide(trx, eventId, rideId, stopId),
+          (own) => takeSeats(own, eventId, lea.token, rideId, "aller", [lea.id], stopId),
+        );
+
+        expect(second).toMatchObject({ ok: true, stopGone: true });
+        expect(await boardingOf(db, eventId)).toEqual({ [lea.id]: null });
+      });
+    });
+
+    it("RV3.4: a Stop taken first, then deleted under the Ride's lock, leaves the person at the start, never 23503", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const { rideId, stopId } = await aCarWithStop(db, eventId);
+        const lea = await seedPerson(db, eventId, { firstName: "Léa" });
+
+        await whileHeld(
+          db,
+          (trx) => takeSeats(trx, eventId, lea.token, rideId, "aller", [lea.id], stopId),
+          (own) => removeStopUnderRide(own, eventId, rideId, stopId),
+          // The point was written in the first, which waits: a take that writes none would end the same.
+          async (_pid, trx) => {
+            expect(await boardingOf(trx, eventId)).toEqual({ [lea.id]: stopId });
+          },
+        );
+
+        expect(await boardingOf(db, eventId)).toEqual({ [lea.id]: null });
+        expect(await ridePassengers(db, { id: rideId, eventId, leg: "aller" })).toHaveLength(1);
+      });
     });
   });
 });

@@ -20,6 +20,13 @@ const daysAgo = (days: number) => new Date(Date.now() - days * DAY);
 
 const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
 
+/**
+ * The visit among a page's actions: its body is the token alone. An event's page sends another
+ * with the session's token, `organiserLink` (OA7.4), whose body also holds the event's id, and
+ * which can be answered first.
+ */
+const isVisit = (request: Request, token: string) => request.method() === "POST" && request.postData() === JSON.stringify([token]);
+
 /** Keeps `token` under fullcar:session before any script of each page runs. */
 async function holdSession(page: Page, token: string) {
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [KEY, token]);
@@ -69,17 +76,18 @@ test.describe("the visit of a page load", () => {
       page.on("request", (request) => {
         if (isAction(request)) sent.push(request);
       });
-      const answered = page.waitForResponse((response) => isAction(response.request()));
+      const answered = page.waitForResponse((response) => isVisit(response.request(), token));
       const before = Date.now();
       await page.goto(path(seededEvent.id));
       expect((await answered).ok(), "the visit is answered").toBe(true);
 
-      expect(sent.length, "one visit for one page load").toBe(1);
-      const [visit] = sent;
-      expect(visit!.postData()?.includes(token), "the token is in the body").toBe(true);
-      expect(visit!.url().includes(token), "the token is not in the URL").toBe(false);
-      const headers = await visit!.allHeaders();
-      expect(Object.values(headers).some((value) => value.includes(token)), "the token is in no header").toBe(false);
+      expect(sent.filter((request) => isVisit(request, token)).length, "one visit for one page load").toBe(1);
+      for (const request of sent) {
+        expect(request.postData()?.includes(token), "the token is in the body").toBe(true);
+        expect(request.url().includes(token), "the token is not in the URL").toBe(false);
+        const headers = await request.allHeaders();
+        expect(Object.values(headers).some((value) => value.includes(token)), "the token is in no header").toBe(false);
+      }
 
       const { account, session } = await datesOf(db, accountId);
       expect(session.created_at).toEqual(opened);

@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { messages } from "./device";
 import { editEventInDb } from "./event-db";
 import { leaveNoToken } from "./fixtures";
-import { areaEditButton, expect, holdActionsWith, isAction, oneCharOff, organiserPath, test } from "./organiser";
+import { areaEditButton, expect, holdActionsWith, isAction, LEG_HEADINGS, oneCharOff, organiserPath, test } from "./organiser";
 
 /*
  * #270, epic #250 (organizer-view v3.3.8, « Supprimer le retour »): unchecking « Retour » on a
@@ -22,6 +22,7 @@ test.use({ locale: "fr-FR" });
 const WORDS = {
   fr: {
     edit: "Modifier l’événement",
+    retourBox: "Retour",
     question: "Supprimer le retour ?",
     confirm: "Supprimer le retour",
     cancel: "Annuler",
@@ -34,6 +35,7 @@ const WORDS = {
   },
   en: {
     edit: "Edit the event",
+    retourBox: "Return",
     question: "Remove the return trip?",
     confirm: "Remove the return trip",
     cancel: "Cancel",
@@ -160,7 +162,7 @@ async function expectRemoved(page: Page, db: Kysely<Database>, eventId: string) 
   await expect(messages(page)).toHaveText([FR.saved]);
   await expect(header(page).locator("dt")).toHaveText(["Début"]);
   await expect(page.getByRole("tab")).toHaveCount(0);
-  await expect(panel(page).getByRole("heading", { level: 3 })).toHaveCount(1);
+  await expect(panel(page).locator(LEG_HEADINGS)).toHaveCount(1);
   expect(await retourRows(db, eventId)).toEqual({ retourAt: null, rides: 0, placements: 0 });
 }
 
@@ -460,7 +462,7 @@ test.describe("M9: the confirmation, readable everywhere", () => {
         for (const size of ["100%", "125%"]) {
           await page.evaluate((size) => (document.documentElement.style.fontSize = size), size);
           await editButton(page, words.edit).click();
-          await sheet(page, words.edit).getByRole("checkbox").click();
+          await sheet(page, words.edit).getByRole("checkbox", { name: words.retourBox, exact: true }).click();
           await sheet(page, words.edit).getByRole("button", { name: words.submit, exact: true }).click();
           const dialog = confirmation(page, words.question);
           await expect(dialog).toBeVisible();

@@ -22,6 +22,7 @@ const WRONG_TOKEN = "q3Vx9kLmN2pR7sT1uW4yZQ";
 const FR = {
   home: "Accueil",
   switch: "English",
+  privacy: "Confidentialité",
   source: "Code source sur GitHub (s’ouvre dans un nouvel onglet)",
   contact: "Nous contacter (s’ouvre dans un nouvel onglet)",
   panel: "Espace organisateur",
@@ -30,6 +31,7 @@ type Words = typeof FR;
 const EN: Words = {
   home: "Home",
   switch: "Français",
+  privacy: "Privacy",
   source: "Source code on GitHub (opens in a new tab)",
   contact: "Contact us (opens in a new tab)",
   panel: "Organiser area",
@@ -42,8 +44,9 @@ const PAGES: [string, (event: SeededEvent) => string, string, ((event: SeededEve
   ["the event not found", () => `/e/${UNKNOWN_ID}`, "Événement introuvable"],
   ["the event's page", ({ id }) => `/e/${id}`, "Tournoi de Rennes"],
   ["the organiser's page", organiserPath, "Tournoi de Rennes", ({ token }) => token],
-  ["the organiser's page, wrong token", organiserPath, "Tournoi de Rennes", () => WRONG_TOKEN],
-  ["the organiser's page, no token", organiserPath, "Tournoi de Rennes"],
+  // Refused, the screen of a pending event takes the board's place, and its title is the page's (#598).
+  ["the organiser's page, wrong token", organiserPath, "Adresse pas encore confirmée", () => WRONG_TOKEN],
+  ["the organiser's page, no token", organiserPath, "Adresse pas encore confirmée"],
 ];
 
 /** G8: GitHub's hosts, the ones a badge, a logo or a script of GitHub would come from. */
@@ -94,7 +97,7 @@ async function open(page: Page, path: string, heading: string, token: string) {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
     await expect(
-      page.getByRole("region", { name: FR.panel }).or(areaRefused(page, FR.panel)),
+      page.getByRole("region", { name: FR.panel }).or(areaRefused(page)),
     ).toBeVisible();
   }
   // Hydrated: the language switch is inactive until then.
@@ -103,6 +106,7 @@ async function open(page: Page, path: string, heading: string, token: string) {
 
 const sourceLink = (page: Page, words: Words) => page.getByRole("link", { name: words.source, exact: true });
 const contactLink = (page: Page, words: Words) => page.getByRole("link", { name: words.contact, exact: true });
+const privacyLink = (page: Page, words: Words) => page.locator("footer").getByRole("link", { name: words.privacy, exact: true });
 const homeLink = (page: Page, words: Words) => page.getByRole("link", { name: words.home, exact: true });
 const languageSwitch = (page: Page, words: Words) => page.getByRole("button", { name: words.switch, exact: true });
 
@@ -205,6 +209,28 @@ async function expectHomeLink(page: Page) {
   expect(await link.getAttribute("target")).toBeNull();
 }
 
+/**
+ * OA10.3: exactly one link « Confidentialité » in the page, in the footer, to /confidentialite, in the same
+ * tab, on line 1 after the language, as small as « Nous contacter » and 44 px high, with line 2 below it.
+ */
+async function expectPrivacyOnFirstLine(page: Page, words: Words) {
+  const link = privacyLink(page, words);
+  await expect(link).toHaveCount(1);
+  await expect(link).toHaveAttribute("href", "/confidentialite");
+  expect(await link.getAttribute("target")).toBeNull();
+  const [size, contactSize] = await Promise.all(
+    [link, contactLink(page, words)].map((each) => each.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))),
+  );
+  expect(size).toBe(contactSize);
+  const [privacy, language, below] = await Promise.all(
+    [link, languageSwitch(page, words), contactLink(page, words)].map(async (each) => (await each.boundingBox())!),
+  );
+  expect(privacy.height).toBeGreaterThanOrEqual(44);
+  expect(privacy.y).toBe(language.y);
+  expect(privacy.x).toBeGreaterThan(language.x);
+  expect(below.y - privacy.y).toBeGreaterThanOrEqual(44);
+}
+
 /** A3.4: as small as « Nous contacter », 44 px high, on line 1 with the switch, and line 2 below them (G5). */
 async function expectHomeOnFirstLine(page: Page) {
   const link = homeLink(page, FR);
@@ -226,7 +252,7 @@ test.describe("the footer, in a browser set to French", () => {
   for (const [where, path, heading, kept] of PAGES) {
     // « Accueil » is on every page but the home page itself (A3.2, in home-link.spec.ts).
     const onHome = where === "the home page";
-    const ids = ["G1", "G2", "G3", "G4", "G8", "K1", "K2", "K3", "K5"]
+    const ids = ["G1", "G2", "G3", "G4", "G8", "K1", "K2", "K3", "K5", "OA10.3"]
       .concat(onHome ? [] : ["A3.1", "A3.3", "A3.4"])
       .concat(["A3.6", "L1.1", "L1.2", "L3.6"]);
 
@@ -239,9 +265,13 @@ test.describe("the footer, in a browser set to French", () => {
       if (kept) await keepAdminToken(page, seededEvent.id, kept(seededEvent));
       await open(page, path(seededEvent), heading, seededEvent.token);
 
-      await test.step("G3, A3.3: « Accueil » (not on /), the language, the source code, « Nous contacter »", async () => {
+      await test.step("G3, A3.3, OA10.3: « Accueil » (not on /), the language, « Confidentialité », the source code, « Nous contacter »", async () => {
         const home = onHome ? [] : [FR.home];
-        expect(await footerRow(page)).toEqual([...home, FR.switch, FR.source, FR.contact]);
+        expect(await footerRow(page)).toEqual([...home, FR.switch, FR.privacy, FR.source, FR.contact]);
+      });
+
+      await test.step("OA10.3: one link « Confidentialité » to /confidentialite, same tab, on line 1", async () => {
+        await expectPrivacyOnFirstLine(page, FR);
       });
 
       await test.step("G1, G2, G4: one link to the repository, in a new tab, not in the panel, as discreet as « Nous contacter »", async () => {
@@ -284,6 +314,7 @@ test.describe("the footer, in a browser set to French", () => {
         await expect(link).toHaveAttribute("href", before!);
         await expectLastAndDiscreet(page, link);
         await expectDiscreet(languageSwitch(page, EN));
+        await expectPrivacyOnFirstLine(page, EN);
       });
 
       // G8, K5: the page asked nothing of GitHub, nor of Crisp, in either language.

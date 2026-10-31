@@ -5,14 +5,17 @@ import { anonymiseEvent } from "@/db/day-thirty";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
-import { seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { seedSession } from "@/db/test-accounts";
+import { confirmSeededEvent, seedEvent } from "@/db/test-events";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import {
   addPerson,
   loadEventState,
   offerRide,
+  organiserLink,
   removePerson,
   removeRide,
+  setBoardingStop,
   setPersonLeg,
   takeSeats,
   undoSeats,
@@ -58,7 +61,8 @@ const failingDb = new Proxy({} as Kysely<Database>, {
 
 /** Marc drives Léa at the aller; Tom is without a car. Each has their own device. */
 async function seedScene(trx: Transaction<Database>) {
-  const { id: eventId } = await seedEvent(trx);
+  // The option « Points de RDV » is on: the points the tests send are the event's (RV8.3).
+  const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
   const marc = await seedPerson(trx, eventId, { firstName: "Marc", phone: "06 11 11 11 11" });
   const lea = await seedPerson(trx, eventId, { firstName: "Léa", phone: "06 22 22 22 22" });
   const tom = await seedPerson(trx, eventId, { firstName: "Tom", phone: "06 33 33 33 33" });
@@ -67,6 +71,40 @@ async function seedScene(trx: Transaction<Database>) {
   await seedPlacement(trx, { personId: tom.id, eventId, leg: "aller", rideId: null });
   return { eventId, marc, lea, tom, r1 };
 }
+
+describe("organiserLink", () => {
+  it("OA7.4: says whether this browser's session is the event's organiser's, and nothing more", async () => {
+    await inTransaction(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const session = await seedSession(trx, await confirmSeededEvent(trx, id));
+      expect(await organiserLink(id, session)).toBe(true);
+      expect(await organiserLink(id, undefined)).toBe(false);
+      expect(await organiserLink(42, session)).toBe(false);
+    });
+  });
+
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    const session = "AAAAAAAAAAAAAAAAAAAAAA";
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await organiserLink("Ab3dEf7h", session).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack]) {
+        expect(text).not.toContain("06 22");
+        expect(text).not.toContain(session);
+      }
+      expect(cause).toBeUndefined();
+      expect(log.mock.calls).toEqual([["organiserLink: the link could not be read (SQLSTATE 57P01)"]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
 
 describe("loadEventState", () => {
   it("gives the state the device sees, as readEventState reads it, in plain data", async () => {
@@ -172,6 +210,16 @@ describe("takeSeats", () => {
     });
   });
 
+  it("RV3.3: passes the point on, and the person boards there", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, tom, r1 } = await seedScene(trx);
+      const stopId = await seedStop(trx, eventId, r1);
+      expect(await takeSeats(eventId, tom.token, r1, "aller", [tom.id], stopId)).toMatchObject({ ok: true });
+      const row = await trx.selectFrom("placement").select("stop_id").where("person_id", "=", tom.id).where("leg", "=", "aller").executeTakeFirst();
+      expect(row?.stop_id).toBe(stopId);
+    });
+  });
+
   it("C2.4: a refusal gives the state too, and places nobody", async () => {
     await inTransaction(async (trx) => {
       const { eventId, lea, tom, r1 } = await seedScene(trx);
@@ -215,6 +263,48 @@ describe("takeSeats", () => {
       }
       expect(cause).toBeUndefined();
       expect(log.mock.calls).toEqual([["takeSeats: the seats could not be taken (SQLSTATE 57P01)"]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe("setBoardingStop", () => {
+  it("RV4.2: changes the point of a passenger and gives the state the device now sees, in plain data", async () => {
+    await inTransaction(async (trx) => {
+      const { eventId, lea, r1 } = await seedScene(trx);
+      const stopId = await seedStop(trx, eventId, r1);
+      const result = await setBoardingStop(eventId, lea.token, r1, lea.id, stopId);
+      expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
+      expect(JSON.parse(JSON.stringify(result))).toStrictEqual(result);
+      const row = await trx.selectFrom("placement").select("stop_id").where("person_id", "=", lea.id).where("leg", "=", "aller").executeTakeFirst();
+      expect(row?.stop_id).toBe(stopId);
+    });
+  });
+
+  it("refuses an unknown event as eventNotFound", async () => {
+    await inTransaction(async (trx) => {
+      const { lea, r1 } = await seedScene(trx);
+      expect(await setBoardingStop("Zz9yXw8v", lea.token, r1, lea.id, null)).toEqual(EVENT_NOT_FOUND);
+    });
+  });
+
+  it("refuses a malformed event id as eventNotFound, and reads and writes nothing", async () => {
+    connection.current = untouchable;
+    await expect(setBoardingStop("Ab3dEf70", undefined, undefined, undefined, undefined)).resolves.toEqual(EVENT_NOT_FOUND);
+  });
+
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await setBoardingStop("Ab3dEf7h", "AAAAAAAAAAAAAAAAAAAAAA", randomUUID(), randomUUID(), null).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).not.toContain("06 22");
+      expect(log.mock.calls).toEqual([["setBoardingStop: the boarding point could not be changed (SQLSTATE 57P01)"]]);
     } finally {
       log.mockRestore();
     }
@@ -591,6 +681,7 @@ type Scene = Awaited<ReturnType<typeof seedScene>>;
 // #806, OA8.3: anyone holding the link may call these actions; the place, which stays in the row, may be someone's address.
 describe.each<[string, (scene: Scene) => Promise<unknown>]>([
   ["takeSeats", ({ eventId, tom, r1 }) => takeSeats(eventId, tom.token, r1, "aller", [tom.id])],
+  ["setBoardingStop", ({ eventId, lea, r1 }) => setBoardingStop(eventId, lea.token, r1, lea.id, null)],
   ["undoSeats", ({ eventId, lea, r1 }) => undoSeats(eventId, lea.token, r1, "aller", [{ personId: lea.id, before: "withoutCar" }])],
   [
     "addPerson",

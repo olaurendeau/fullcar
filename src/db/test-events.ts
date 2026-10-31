@@ -4,7 +4,7 @@ import { hashAdminToken, newAdminToken } from "@/domain/admin-token";
 import type { NewEvent } from "@/domain/event";
 import { insertEvent } from "./events";
 import { deleteLegRows } from "./legs";
-import type { Database } from "./schema";
+import type { Database, SendStatusColumn } from "./schema";
 
 const SEED: NewEvent = {
   title: "Tournoi de Rennes",
@@ -56,4 +56,20 @@ export async function confirmSeededEvent(db: Kysely<Database>, eventId: string):
     .executeTakeFirstOrThrow();
   await db.updateTable("event").set({ account_id: id, confirmed_at: new Date() }).where("id", "=", eventId).execute();
   return id;
+}
+
+/**
+ * The event pending for `email`, its confirmation email's result kept as `status` since `at`
+ * (OA1.7, OA1.10): a date in the past, never a clock moved forward.
+ */
+export async function seedPendingSend(
+  db: Kysely<Database>,
+  eventId: string,
+  { email, status, at = new Date() }: { email: string; status: SendStatusColumn; at?: Date },
+): Promise<void> {
+  await db
+    .updateTable("event")
+    .set({ pending_email: email, send_status: status, send_status_at: at })
+    .where("id", "=", eventId)
+    .execute();
 }

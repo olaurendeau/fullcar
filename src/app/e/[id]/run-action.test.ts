@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventState } from "./event-state";
-import { actionRunner, devicePersonsGone, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
+import { aboutPerson, actionRunner, carsOfPersonsGone, devicePersonsGone, goneNamed, readEnded, sendAction, stateOf, stateRead, stateShown, withTabsHeld } from "./run-action";
 
 describe("sendAction", () => {
   it("offline: sends nothing, and says so", async () => {
@@ -93,8 +93,8 @@ describe("readEnded", () => {
 });
 
 describe("stateShown", () => {
-  const withRetour: EventState = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [] };
-  const withoutRetour: EventState = { event: header, legs: [] };
+  const withRetour: EventState = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, options: { stops: false }, legs: [] };
+  const withoutRetour: EventState = { event: header, options: { stops: false }, legs: [] };
 
   it("shows nothing that is not a state: the legs alone change nothing, and throw nothing", () => {
     expect(stateShown(withRetour, [])).toBeUndefined();
@@ -115,22 +115,35 @@ describe("stateShown", () => {
 // #266: nor does a retour come, which would mount the aller's panel anew, and its sheet with it.
 describe("withTabsHeld", () => {
   const leg = (name: "aller" | "retour", rideId: string) => ({ leg: name, cars: [], withoutCar: [], device: [], rideId });
-  const shown = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, legs: [leg("aller", "old"), leg("retour", "old")] } as never as EventState;
-  const next = { event: { ...header, title: "Tournoi de Vannes" }, legs: [leg("aller", "new")] } as never as EventState;
+  const shown = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, options: { stops: false }, legs: [leg("aller", "old"), leg("retour", "old")] } as never as EventState;
+  const next = { event: { ...header, title: "Tournoi de Vannes" }, options: { stops: false }, legs: [leg("aller", "new")] } as never as EventState;
 
   it("the retour removed: shows the next state, with the end and the retour leg shown", () => {
     expect(withTabsHeld(shown, next)).toStrictEqual({
       event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-12 18:00:00" },
+      options: { stops: false },
       legs: [leg("aller", "new"), leg("retour", "old")],
     });
   });
 
   it("a retour added: shows the next state, without its end nor its retour leg", () => {
-    const added = { event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-13 19:00:00" }, legs: [leg("aller", "new"), leg("retour", "new")] };
+    const added = { event: { ...header, title: "Tournoi de Vannes", retourAt: "2026-12-13 19:00:00" }, options: { stops: false }, legs: [leg("aller", "new"), leg("retour", "new")] };
     expect(withTabsHeld(next, added as never as EventState)).toStrictEqual({
       event: { ...header, title: "Tournoi de Vannes", retourAt: null },
+      options: { stops: false },
       legs: [leg("aller", "new")],
     });
+  });
+
+  // #888: the option « Points de RDV » comes with the next state, never the shown one's.
+  it("the option turned on with the retour removed: shows it on, as the next state has it", () => {
+    const withStops = { ...next, options: { stops: true } } as never as EventState;
+    expect(withTabsHeld(shown, withStops)).toMatchObject({ options: { stops: true }, legs: [leg("aller", "new"), leg("retour", "old")] });
+  });
+
+  it("the option turned on with a retour added: shows it on too", () => {
+    const added = { event: { ...header, retourAt: "2026-12-13 19:00:00" }, options: { stops: true }, legs: [leg("aller", "new"), leg("retour", "new")] };
+    expect(withTabsHeld(next, added as never as EventState)).toMatchObject({ options: { stops: true }, legs: [leg("aller", "new")] });
   });
 
   it("holds nothing when the tabs stay", () => {
@@ -164,17 +177,76 @@ describe("devicePersonsGone", () => {
   });
 });
 
+// #850's review, on #670: a person removed takes her cars with her; what the bar says about them goes.
+describe("carsOfPersonsGone", () => {
+  const someone = (id: string) => ({ id, firstName: id });
+  const car = (id: string, driver: string, passengers: string[] = []) => ({ id, driver: someone(driver), passengers: passengers.map(someone) });
+  type Leg = { cars?: ReturnType<typeof car>[]; withoutCar?: string[]; device?: string[] };
+  const leg = (name: "aller" | "retour", { cars = [], withoutCar = [], device = [] }: Leg) => ({
+    leg: name,
+    cars,
+    withoutCar: withoutCar.map(someone),
+    device: device.map((id) => ({ ...someone(id), phone: null, state: { kind: "withoutCar" as const } })),
+  });
+  const state = (aller: Leg, retour?: Leg) =>
+    ({ event: header, legs: [leg("aller", aller), ...(retour ? [leg("retour", retour)] : [])] }) as never as EventState;
+
+  it("the cars of a driver the next state has nowhere, on each leg it still has, whoever's device she was on", () => {
+    const shown = state({ cars: [car("r1", "marc", ["ines"]), car("r2", "claire")] }, { cars: [car("r3", "marc"), car("r4", "sophie", ["lea"])] });
+    const next = state({ cars: [car("r2", "claire")], withoutCar: ["ines"] }, { cars: [car("r4", "sophie", ["lea"])] });
+    expect(carsOfPersonsGone(shown, next)).toEqual(["r1", "r3"]);
+  });
+
+  it("none for a driver still there: in a car, without a car, or on the device; nor for a leg gone", () => {
+    const shown = state({ cars: [car("r1", "marc"), car("r2", "claire"), car("r3", "tom")] }, { cars: [car("r4", "sophie")] });
+    const next = state({ cars: [car("r5", "lea", ["marc"])], withoutCar: ["claire"], device: ["tom"] });
+    expect(carsOfPersonsGone(shown, next)).toEqual([]);
+    expect(carsOfPersonsGone(state({}), state({}))).toEqual([]);
+  });
+});
+
+// RP5.4: a refusal `personGone` names those it was sent about; its failure says it, the information
+// does not. The others gone with it are news (RP5.3): Marc removed, then Tom, Tom's refusal names Tom alone.
+describe("goneNamed", () => {
+  it("the persons a refusal `personGone` names: its `goneIds`, and nobody else", () => {
+    expect(goneNamed({ ok: false, error: "personGone", goneIds: ["tom"] })).toEqual(["tom"]);
+    expect(goneNamed({ ok: false, error: "personGone", goneIds: ["tom", "lea"] })).toEqual(["tom", "lea"]);
+    expect(goneNamed({ ok: false, error: "personGone", state: {} })).toEqual([]);
+  });
+
+  it("nobody for any other answer", () => {
+    for (const answer of [{ ok: true }, { ok: false, error: "forbidden" }, { ok: false, error: "rideGone" }, null, "personGone", undefined]) {
+      expect(goneNamed(answer)).toEqual([]);
+    }
+  });
+
+  it("an action about one person (« Modifier », a cell's choice): her refusal `personGone` names her alone", () => {
+    expect(goneNamed(aboutPerson({ ok: false, error: "personGone", state: {} }, "tom"))).toEqual(["tom"]);
+    expect(aboutPerson({ ok: false, error: "personGone", state: {} }, "tom")).toEqual({ ok: false, error: "personGone", state: {}, goneIds: ["tom"] });
+  });
+
+  it("any other answer of an action about one person is left as it was", () => {
+    for (const answer of [{ ok: true, state: {} }, { ok: false, error: "forbidden" }, { ok: false, error: "personGone", goneIds: ["lea"] }]) {
+      expect(aboutPerson(answer, "tom")).toBe(answer);
+    }
+  });
+});
+
 describe("actionRunner", () => {
-  const state: EventState = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
+  const state: EventState = { event: header, options: { stops: false }, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
 
   /** A page that records the states the runner gives it and each action that begins and ends, and a connection that can be cut. */
   function page() {
-    const told = { states: [] as EventState[], begun: 0, ended: 0, connected: true };
+    const told = { states: [] as EventState[], answers: [] as unknown[], begun: 0, ended: 0, connected: true };
     const begins = () => {
       told.begun += 1;
       return () => void (told.ended += 1);
     };
-    const run = actionRunner({ state: (next) => told.states.push(next), begins }, () => told.connected);
+    const shows = (next: EventState, answer: unknown) => {
+      told.states.push(next);
+      told.answers.push(answer);
+    };
+    const run = actionRunner({ state: shows, begins }, () => told.connected);
     return { told, run };
   }
 
@@ -206,10 +278,11 @@ describe("actionRunner", () => {
     expect(told).toMatchObject({ begun: 2, ended: 2 });
   });
 
-  it("an answer gives the page the state the server sends, refusal included", async () => {
+  it("an answer gives the page the state the server sends, refusal included, with the answer it came in", async () => {
     const { told, run } = page();
     await run("seat", async () => ({ ok: false, error: "seatTaken", state }));
     expect(told.states).toEqual([state]);
+    expect(told.answers).toEqual([{ ok: false, error: "seatTaken", state }]);
   });
 
   it("the control is sending until the answer, and a second tap meanwhile sends nothing", async () => {

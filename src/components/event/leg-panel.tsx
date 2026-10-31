@@ -1,6 +1,7 @@
 import { useTranslations } from "next-intl";
 import { coverage, coverageBanner, hasBanner } from "@/domain/coverage";
 import type { Leg } from "@/domain/leg";
+import { phonePrefill } from "@/domain/phone-prefill";
 import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
 import { deviceKnown, type DeviceStatus } from "@/domain/tap";
@@ -17,6 +18,7 @@ import type { RemovePerson } from "./remove-person-dialog";
 import type { RemoveRide } from "./remove-ride-dialog";
 import { OfferRideButton, type OfferRide, type OtherLegOf, type UpdateRide } from "./ride-form";
 import { useSeatSheet, type TakeSeats } from "./seat-sheet";
+import { useStopSheet, type SetBoardingStop } from "./stop-sheet";
 import { WithoutCarList } from "./without-car-list";
 
 /** What the page knows of the device's persons, and how to read them again after a failure. */
@@ -40,6 +42,8 @@ export interface BoardDevice {
   offerRide: OfferRide;
   /** Seats in a car for persons of the device, from a tap (#92) or the sheet (#91). */
   takeSeats: TakeSeats;
+  /** Puts a passenger of the device at another point of her car (RV4.2), with the device's token. */
+  setBoardingStop: SetBoardingStop;
   /** Changes a car driven by one of the device's persons (C8.2), with the device's token. */
   updateRide: UpdateRide;
   /** Removes a car driven by one of the device's persons (C8.6), with the device's token. */
@@ -80,6 +84,7 @@ export function LegPanel({
   hasRetour,
   other,
   near,
+  stopsOn,
   map,
   hint,
 }: {
@@ -91,6 +96,8 @@ export function LegPanel({
   other?: OtherLegOf;
   /** The event's position, for the suggestions of a car's places (AL4.1). */
   near: Position | null;
+  /** The option « Points de RDV » is on: the forms of a car on the aller have their section. */
+  stopsOn?: boolean;
   /** The event's place and the page's open or folded map; none without a position (CA2.1). */
   map?: LegMap;
   /** The organiser's sentence, shown without a map. */
@@ -100,7 +107,8 @@ export function LegPanel({
   const tBoard = useTranslations("Board");
   const { leg, cars, withoutCar } = board;
   const legDate = wallClockParts(at).date;
-  const seats = useSeatSheet(board, device, hasRetour);
+  const seats = useSeatSheet(board, device, hasRetour, legDate);
+  const stops = useStopSheet(board, device, legDate);
   // A car is the device's when one of its persons drives it on this leg (C8.1).
   const drivesIt = (rideId: string) => board.device.some(({ state }) => state.kind === "driver" && state.rideId === rideId);
 
@@ -113,6 +121,7 @@ export function LegPanel({
           hasRetour={hasRetour}
           disabled={!deviceKnown(device.status)}
           addPerson={device.addPerson}
+          prefill={phonePrefill(board.device)}
         />
         <OfferRideButton
           leg={leg}
@@ -120,6 +129,7 @@ export function LegPanel({
           persons={board.device}
           other={other}
           near={near}
+          stopsOn={stopsOn}
           main={coverageBanner(coverage(board)).kind === "missingSeats"}
           disabled={!deviceKnown(device.status)}
           offerRide={device.offerRide}
@@ -128,7 +138,7 @@ export function LegPanel({
       <noscript>
         <p className="text-sm text-muted-foreground">{tBoard("needsJavaScript")}</p>
       </noscript>
-      {map ? <EventMap leg={leg} map={map} cars={cars} /> : hint && <OrganiserHint leg={leg} hint={hint} />}
+      {map ? <EventMap leg={leg} map={map} cars={cars} date={legDate} /> : hint && <OrganiserHint leg={leg} hint={hint} />}
       {hasBanner(board) ? (
         <>
           {cars.length > 0 ? (
@@ -139,9 +149,12 @@ export function LegPanel({
                 date={legDate}
                 seatsActive={deviceKnown(device.status)}
                 onTakeSeat={(seat) => seats.tap(car, seat)}
+                devicePassengers={board.device.filter(({ state }) => state.kind === "passenger" && state.rideId === car.id).map(({ id }) => id)}
+                onChangeStop={(person, button) => stops.change(car, person, button)}
                 updateRide={drivesIt(car.id) ? device.updateRide : undefined}
                 removeRide={drivesIt(car.id) ? device.removeRide : undefined}
                 near={near}
+                stopsOn={stopsOn}
               />
             ))
           ) : (
@@ -153,6 +166,7 @@ export function LegPanel({
         <EmptyLeg leg={leg} />
       )}
       {seats.sheet}
+      {stops.sheet}
     </div>
   );
 }
