@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedRide, seedStop } from "@/db/test-participants";
-import { holdToken, newToken } from "./device";
+import { animationsDone, holdToken, newToken } from "./device";
 import { DRIVER_PHONE, numbersHidden } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { answerFor } from "./photon";
@@ -344,6 +344,7 @@ test.describe("« Points de RDV » du formulaire de la voiture", () => {
     }
     await page.goto(`/e/${seededEvent.id}`);
     const form = await openEdit(page);
+    await animationsDone(form);
     await numbersHidden(async () => {
       await expect(point(form, 6)).toBeVisible();
       expect(await form.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
