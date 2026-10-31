@@ -3,14 +3,16 @@
 import { CircleCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
-import { takeAccountDeleted } from "./account-deleted";
+import { forgetAccountDeleted, peekAccountDeleted } from "./account-deleted";
 
 /** `Home.accountDeleted` above the home page, once, after « Supprimer mon compte » (OA9.5); it takes the focus. */
 export function AccountDeletedNotice() {
   const t = useTranslations("Home");
-  const [deleted] = useState(takeAccountDeleted);
+  const [deleted] = useState(peekAccountDeleted);
   const line = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
+    // Once committed, not as it renders: a render React throws away must leave the note for the next.
+    forgetAccountDeleted();
     if (deleted) line.current?.focus();
   }, [deleted]);
 

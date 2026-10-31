@@ -105,6 +105,9 @@
       "takeSeat": "Place libre : prendre une place dans la voiture de {driver}",
       "stops": "Points de RDV",
       "boardsAt": "monte à {place}",
+      "boardsAtStart": "monte au départ",
+      "changeStop": "Changer le point",
+      "changeStopName": "Changer le point de montée de {firstName}",
       "edit": "Modifier",
       "remove": "Retirer la voiture"
     },
@@ -329,6 +332,10 @@
     "placed": "{names} sont dans la voiture de {driver}",
     "stop": {
       "legend": "Point de montée",
+      "title": "Où monte {firstName} ?",
+      "changed": "{firstName} monte à {place}",
+      "changedStart": "{firstName} monte au lieu de départ",
+      "failed": "Le point de {firstName} n’a pas été changé.",
       "start": "{place} · {time} · Lieu de départ",
       "option": "{place} · {time}",
       "gone": "{count, plural, one {Ce point n’existe plus : {names} monte au lieu de départ.} other {Ce point n’existe plus : {names} montent au lieu de départ.}}"
@@ -686,6 +693,9 @@
     "groupTitle": "{count, plural, other {# voitures}}, {seats}",
     "notOnMap": "{count, plural, one {# voiture n’est pas sur la carte : son lieu n’a pas de position.} other {# voitures ne sont pas sur la carte : leurs lieux n’ont pas de position.}}",
     "stop": "Point de RDV de {driver} : {place}, {time}",
+    "stopTitle": "{place}, {time}",
+    "stopLineAt": "{line} · {place}, {time}",
+    "stopCars": "{count, plural, one {# voiture} other {# voitures}}",
     "stopsNotOnMap": "{count, plural, one {# point de RDV n’est pas sur la carte : son lieu n’a pas de position.} other {# points de RDV ne sont pas sur la carte : leurs lieux n’ont pas de position.}}",
     "touchHint": "Deux doigts pour déplacer ou zoomer la carte.",
     "organiserHint": "Pour afficher la carte, choisissez le lieu de l’événement parmi les propositions.",

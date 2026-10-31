@@ -108,6 +108,14 @@ test.describe("Se déconnecter", () => {
     const texts = [...sent.map((each) => each.url()), ...(await Promise.all(headers)).flat()];
     expect(texts.filter((text) => text.includes(session) || text.includes(created.token)).length, "URLs and headers with a token").toBe(0);
 
+    // Once, without a reload (memory is not cleared): to the form and back, /connexion says nothing.
+    await page.getByRole("link", { name: "Créer un événement" }).click();
+    await expectUrl(page, /\/nouveau$/, "the link leads to /nouveau");
+    await page.goBack();
+    await expectUrl(page, /\/connexion$/, "back leads to /connexion");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Se connecter");
+    await expect(page.getByText("Session fermée.")).toHaveCount(0);
+
     // Then: /mes-evenements leads to /connexion, without the line, and the event created here no longer opens its panel.
     await page.goto("/mes-evenements");
     await expectUrl(page, /\/connexion$/, "/mes-evenements leads to /connexion");

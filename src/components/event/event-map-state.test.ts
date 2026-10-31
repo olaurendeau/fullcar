@@ -12,6 +12,8 @@ import {
   POINT_LAYERS,
   pointKey,
   pointLayer,
+  STOP_LAYERS,
+  stopLayer,
   TILES_QUIET,
   tilesStep,
   type LeafletEvent,
@@ -656,5 +658,28 @@ describe("a point's layer (#722, CA1.23)", () => {
     expect(still).toBeLessThan(raised);
     expect(raised).toBeLessThan(flag);
     expect(open).toBeGreaterThan(flag);
+  });
+});
+
+describe("a Stop's layer (#893, RV5.4, WCAG 2.4.11)", () => {
+  it.each([
+    [false, false, false, "z-1!"],
+    [true, false, false, "z-999!"],
+    [false, true, false, "z-999!"],
+    [true, true, false, "z-999!"],
+    [false, false, true, "z-1001!"],
+    [true, true, true, "z-1001!"],
+  ] as const)("hovered: %s, focused: %s, open: %s: %s", (hovered, focused, open, layer) => {
+    expect(stopLayer({ hovered, focused, open })).toBe(layer);
+    expect(STOP_LAYERS).toContain(layer);
+  });
+
+  it("at rest above the labels of the cars, which are at auto, and under one raised; hovered or focused, under the flag", () => {
+    const zOf = (layer: string) => (layer === "z-auto!" ? 0 : Number(/^z-(\d+)!$/.exec(layer)?.[1]));
+    const rest = zOf(stopLayer({ hovered: false, focused: false, open: false }));
+    expect(STOP_LAYERS[0]).toBe("z-1!");
+    expect(rest).toBeGreaterThan(zOf(pointLayer({ hovered: false, focused: false, open: false })));
+    expect(rest).toBeLessThan(zOf(pointLayer({ hovered: true, focused: false, open: false })));
+    expect(Number(/(\d+)/.exec(stopLayer({ hovered: true, focused: false, open: false }))![1])).toBeLessThan(Number(/(\d+)/.exec(FLAG_LAYER)![1]));
   });
 });

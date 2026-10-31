@@ -158,7 +158,8 @@ test.describe("meeting points on the card and in the seat sheet", () => {
     await placeButton(sheet(page, "Nina")).click();
     await expect(messages(page)).toHaveText(["Tom est dans la voiture de Nina"]);
     expect(await placementOf(db, seededEvent.id, scene.persons.Tom)).toEqual({ rideId: scene.cars.nina, stopId: null });
-    await numbersHidden(() => expect(car(page, "Nina").getByRole("listitem").filter({ hasText: "Tom" })).not.toContainText("monte"));
+    // Tom is of the device: where he boards is said even at the departure (RV4.1, #892).
+    await numbersHidden(() => expect(car(page, "Nina").getByRole("listitem").filter({ hasText: "Tom" })).toContainText("monte au départ"));
   });
 
   test("RV3.4: the point deleted while the sheet is open, Tom boards at the departure, the sheet closes, the bar says it", async ({ db, page, seededEvent }) => {
@@ -264,9 +265,29 @@ test.describe("meeting points on the card and in the seat sheet", () => {
     await expect(name).toHaveValue("Inès");
   });
 
+  test("RV3.6: a car with points, a refusal of « Placer » leaves the focus in the name field being typed, not on « Placer »", async ({ db, page, seededEvent }) => {
+    await visit(page, db, seededEvent.id, ["Tom", "Léa"]);
+    const answer = await holdFirst(page, scene.cars.nina, true);
+    await seat(page, "Nina").click();
+    const dialog = sheet(page, "Nina");
+    await placeButton(dialog).click();
+    await dialog.getByRole("button", { name: "Ajouter une personne", exact: true }).click();
+    const name = page.getByRole("dialog", { name: "Ajouter une personne" }).getByLabel("Prénom");
+    await name.fill("Inès");
+    await expect(name).toBeFocused();
+    await failHeld(page, answer);
+    // The page takes the failure after the response, and moves the focus in the commit that says it: given the time to, in the page's own clock.
+    await page.evaluate(() => new Promise<void>((done) => setTimeout(done, 250)));
+
+    await expect(name).toBeFocused();
+    await expect(name).toHaveValue("Inès");
+  });
+
   test("RV7.2: the focus enters on the ticked choice, ringed 2 px; arrows move the choice; the point chosen is sent", async ({ db, page, seededEvent }) => {
     await visit(page, db, seededEvent.id, ["Tom"]);
     // By the keyboard, so that the ring shows as it does for a keyboard user.
+    // The seat is disabled until the device is read: Enter on it before does nothing.
+    await expect(seat(page, "Nina")).toBeEnabled();
     await seat(page, "Nina").focus();
     await page.keyboard.press("Enter");
     const dialog = sheet(page, "Nina");

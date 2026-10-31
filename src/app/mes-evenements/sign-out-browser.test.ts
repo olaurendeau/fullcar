@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Sent } from "@/app/e/[id]/run-action";
-import { noteSignedOut, takeSignedOut } from "@/app/connexion/signed-out";
+import { noteSignedOut, peekSignedOut, forgetSignedOut } from "@/app/connexion/signed-out";
 import { signOutBrowser, type BrowserTokens } from "./sign-out-browser";
 
 const SESSION = "kP3x-Vb7_Zq9Lt2Wn8Rc4g";
@@ -50,12 +50,15 @@ describe("signOutBrowser", () => {
   });
 });
 
-describe("noteSignedOut and takeSignedOut", () => {
+describe("noteSignedOut, peekSignedOut and forgetSignedOut", () => {
   // OA9.1: « Session fermée. » on /connexion, once, after « Se déconnecter » only.
-  it("says signed out once after the note, and never without it", () => {
-    expect(takeSignedOut()).toBe(false);
+  it("says signed out after the note until the page that showed it forgets it, and never without the note", () => {
+    expect(peekSignedOut()).toBe(false);
     noteSignedOut();
-    expect(takeSignedOut()).toBe(true);
-    expect(takeSignedOut()).toBe(false);
+    expect(peekSignedOut()).toBe(true);
+    // React may render a page twice (a transition thrown away and rendered again): reading takes nothing.
+    expect(peekSignedOut()).toBe(true);
+    forgetSignedOut();
+    expect(peekSignedOut()).toBe(false);
   });
 });

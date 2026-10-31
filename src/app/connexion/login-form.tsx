@@ -13,7 +13,7 @@ import { EMAIL_MAX, emailAddress, type EmailError } from "@/domain/email-address
 import { cn } from "@/lib/utils";
 import { requestLink, signedInAs } from "./actions";
 import { CheckEmail } from "./check-email";
-import { takeSignedOut } from "./signed-out";
+import { forgetSignedOut, peekSignedOut } from "./signed-out";
 import { loginOutcome, type LoginAlert, type LoginOutcome } from "./login-outcome";
 
 const noSubscription = () => () => {};
@@ -75,11 +75,13 @@ export function LoginForm({
 
   // OA9.1: led here by « Se déconnecter », the line says so once, and takes the focus (« Le focus »).
   // Only the App Router's navigation leads here so: the server, and a document loaded, find nothing.
-  const [signedOut] = useState(() => !inArea && takeSignedOut());
+  const [signedOut] = useState(() => !inArea && peekSignedOut());
   const signedOutRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
+    // Once committed, not as it renders: a render React throws away must leave the note for the next.
+    if (!inArea) forgetSignedOut();
     if (signedOut) signedOutRef.current?.focus();
-  }, [signedOut]);
+  }, [inArea, signedOut]);
 
   useEffect(() => {
     const token = readSessionToken();

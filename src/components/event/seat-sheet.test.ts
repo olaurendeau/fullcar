@@ -47,7 +47,7 @@ describe("seatsTaken", () => {
   it("RV3.5: a refusal says nothing of the point", () => {
     const words = wordsOf(createTranslator<Messages>({ locale: "fr", messages: fr }), createFormatter({ locale: "fr" }));
     const point = "Prelles boucherie";
-    // The send as the page keeps it, the point chosen with it: the words must not pick it up.
+    // A send that carried its point: the page never puts one in `notDone` (participant-board.tsx), and `failureText` ignores a `stop` if it did.
     const sent = { kind: "seats" as const, names: ["Paul"], driver: "Nina", stop: { id: "s1", location: point } };
     const answers = [
       { ok: false as const, error: "seatTaken" as const },

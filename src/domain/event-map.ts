@@ -118,7 +118,7 @@ function byTime<Stop extends MapStop>(stops: readonly Stop[]): Stop[] {
  * position, the cars in the order of the cards, a car's Stops in the order of their times; and
  * `stopsNotOnMap`, the others: a Stop without a position, or any Stop of a car without one.
  * A Stop never goes through `mapOf`: it is grouped with no car and not with the flag, and two
- * Stops 10 m apart stay two (their grouping is the bubble's, RV5.6).
+ * Stops 10 m apart stay two (their grouping is `stopPointsOf`'s, RV5.6).
  */
 export function stopsOf<Car extends StoppedCar>(cars: readonly Car[]): { stops: PlacedStop<Car>[]; stopsNotOnMap: number } {
   const stops: PlacedStop<Car>[] = [];
@@ -130,6 +130,29 @@ export function stopsOf<Car extends StoppedCar>(cars: readonly Car[]): { stops: 
     }
   }
   return { stops, stopsNotOnMap };
+}
+
+/** One round of Stops on the map: the Stops of different cars less than 25 m apart, at the position of the first. */
+export interface StopGroup<Car extends StoppedCar> {
+  position: Position;
+  /** In the order they came in: the cars of the cards, then their times. Never two of one car. */
+  stops: PlacedStop<Car>[];
+}
+
+/**
+ * The rounds of the Stops of `stopsOf` (RV5.4, RV5.6, Q2 of #881): a Stop joins the first round,
+ * in order, whose position (its first Stop's) is less than 25 m from its own and which holds no
+ * Stop of its car; otherwise it opens a round. Two Stops of one car stay two, 10 m apart or not.
+ * A round is never grouped with a car nor with the flag: it does not go through `mapOf`.
+ */
+export function stopPointsOf<Car extends StoppedCar>(stops: readonly PlacedStop<Car>[]): StopGroup<Car>[] {
+  const groups: StopGroup<Car>[] = [];
+  for (const placed of stops) {
+    const group = groups.find((each) => each.stops.every(({ car }) => car.id !== placed.car.id) && samePoint(each.position, placed.position));
+    if (group) group.stops.push(placed);
+    else groups.push({ position: placed.position, stops: [placed] });
+  }
+  return groups;
 }
 
 /**

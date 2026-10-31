@@ -102,6 +102,14 @@ export function watchMap(page: Page) {
   return { leaflet: () => leafletCount(requests), tiles: () => requests.filter(isTile).length };
 }
 
+/**
+ * The wait for what an arrival leads to: the page hydrates, a server action checks the link and
+ * reads the persons, then Leaflet's code and the first tiles come. Each step is the last one's
+ * effect, with nothing in the page to tell it apart (CA1.14): on a loaded machine the chain takes
+ * longer than an assertion's 5 s. The criterion stays the same, the wait is longer.
+ */
+export const ARRIVAL = { timeout: 20_000 };
+
 /** Once what the page did so far has sent what it would: two frames for its effects, then half a second. */
 export async function idle(page: Page) {
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));

@@ -149,6 +149,14 @@ test.describe("Supprimer mon compte", () => {
     const texts = [...sent.map((each) => each.url()), ...(await Promise.all(headers)).flat()];
     expect(texts.filter((text) => text.includes(session) || text.includes(pending.token)).length, "URLs and headers with a token").toBe(0);
 
+    // Once, without a reload (memory is not cleared): to the form and back, `/` says nothing.
+    await page.getByRole("link", { name: "Créer un événement" }).click();
+    await expectUrl(page, /\/nouveau$/, "the link leads to /nouveau");
+    await page.goBack();
+    await expectUrl(page, /\/$/, "back leads to /");
+    await expect(page.getByRole("heading", { level: 1, name: "Fullcar" })).toBeVisible();
+    await expect(page.getByText("Votre compte a été supprimé.")).toHaveCount(0);
+
     // Once: a reload says nothing.
     await page.reload();
     await expect(page.getByRole("heading", { level: 1, name: "Fullcar" })).toBeVisible();
