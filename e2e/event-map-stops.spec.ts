@@ -17,7 +17,8 @@ leaveNoToken();
 
 /** The Stops of `map`, in the DOM's order. */
 const stops = (map: Locator) => map.locator("button[data-map-stop]");
-const stopName = (driver: string, place: string, time: string) => `Point de RDV de ${driver} : ${place}, ${time}`;
+/** Its visible text first (WCAG 2.5.3, #893), then « Point de RDV de … » (RV5.1). */
+const stopName = (driver: string, place: string, time: string) => `${time} ${driver}, Point de RDV de ${driver} : ${place}, ${time}`;
 const ONE_NOT_ON_MAP = "1 point de RDV n’est pas sur la carte : son lieu n’a pas de position.";
 const TWO_NOT_ON_MAP = "2 points de RDV ne sont pas sur la carte : leurs lieux n’ont pas de position.";
 
@@ -86,18 +87,6 @@ test("RV5.1: a round and a label « heure + prénom » for each Stop with a posi
   await expect(retour.locator(".leaflet-tile-loaded").first()).toBeVisible();
   await expect(stops(retour)).toHaveCount(0);
   await expect(page.getByRole("tabpanel").getByText(/de RDV/)).toHaveCount(0);
-});
-
-test("RV5.1: a Stop leads to the card of its car, as a point does, until its bubble comes (#893)", async ({ db, page, placed }) => {
-  const marc = await seedCar(db, placed.id, "Marc", { position: around(placed.place, { east: 3000 }), departureTime: "08:00:00" });
-  await seedStop(db, placed.id, marc, { location: "Prelles boucherie", time: "08:25:00", position: around(placed.place, { north: 1500 }) });
-
-  await page.goto(`/e/${placed.id}`);
-  const map = await openMap(page, mapName("aller", "1 voiture"));
-  // On its round: its label may lie under Marc's, 1 km from it.
-  await map.getByRole("button", { name: stopName("Marc", "Prelles boucherie", "08:25"), exact: true }).locator("[data-map-stop-dot]").tap();
-
-  await expect(page.getByRole("tabpanel").getByRole("heading", { name: "Voiture de Marc", exact: true })).toBeFocused();
 });
 
 test("RV5.2: the line of a car goes from the car through its Stops, in the order of their times, to the flag, and replaces the straight one", async ({ db, page, placed }) => {

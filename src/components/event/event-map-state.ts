@@ -169,6 +169,20 @@ export function pointLayer({ hovered, focused, open }: PointRaise): PointLayer {
 }
 
 /**
+ * A Stop's icon classes, one at a time (#893, RV5.4): under the labels of the cars; with the
+ * focus in its icon, above them and under the flag, so that its focus ring is not hidden under a
+ * label (WCAG 2.4.11); its bubble open, above the flag, as a point's.
+ */
+export const STOP_LAYERS = ["-z-1!", "z-999!", "z-1001!"] as const;
+export type StopLayer = (typeof STOP_LAYERS)[number];
+
+/** The one class of a Stop's icon: it replaces the one before, as a point's (`pointLayer`). */
+export function stopLayer({ focused, open }: { focused: boolean; open: boolean }): StopLayer {
+  if (open) return "z-1001!";
+  return focused ? "z-999!" : "-z-1!";
+}
+
+/**
  * Leaflet's import, one for the page and both legs (CA2.10, `leaflet-import`): not asked for
  * yet, « Chargement de la carte… », the notice, or the map.
  */

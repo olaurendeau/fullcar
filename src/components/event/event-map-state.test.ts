@@ -12,6 +12,8 @@ import {
   POINT_LAYERS,
   pointKey,
   pointLayer,
+  STOP_LAYERS,
+  stopLayer,
   TILES_QUIET,
   tilesStep,
   type LeafletEvent,
@@ -656,5 +658,22 @@ describe("a point's layer (#722, CA1.23)", () => {
     expect(still).toBeLessThan(raised);
     expect(raised).toBeLessThan(flag);
     expect(open).toBeGreaterThan(flag);
+  });
+});
+
+describe("a Stop's layer (#893, RV5.4, WCAG 2.4.11)", () => {
+  it.each([
+    [false, false, "-z-1!"],
+    [true, false, "z-999!"],
+    [false, true, "z-1001!"],
+    [true, true, "z-1001!"],
+  ] as const)("focused: %s, open: %s: %s", (focused, open, layer) => {
+    expect(stopLayer({ focused, open })).toBe(layer);
+    expect(STOP_LAYERS).toContain(layer);
+  });
+
+  it("under the labels of the cars, which are at 0; focused, above them and under the flag", () => {
+    expect(STOP_LAYERS[0]).toBe("-z-1!");
+    expect(Number(/(\d+)/.exec(stopLayer({ focused: true, open: false }))![1])).toBeLessThan(Number(/(\d+)/.exec(FLAG_LAYER)![1]));
   });
 });
