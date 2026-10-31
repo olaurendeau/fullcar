@@ -307,10 +307,12 @@ de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts`,
 Ride (`lockRide`), après l'Event et avant les Persons ; la clé `placement.stop_id` ne prend
 l'Arrêt (`FOR KEY SHARE`) que sous ce même verrou, donc aucune attente nouvelle. `editEvent`
 (`FOR NO KEY UPDATE`) recompte les Arrêts de l'événement (`countStopRides`) sous son verrou de
-l'Event : désactiver l'option alors que des Arrêts existent est refusé (`stopsLocked`). Toute
-écriture qui porte un Arrêt lit `stops_enabled` sur la ligne que rend `lockLegs` : option
-désactivée, refus `stopsOff` et rien n'est écrit. Ces écritures arrivent avec les tâches
-suivantes de l'épic ; la base, elle, les accepte dès `0006_stops`.
+l'Event : désactiver l'option alors que des Arrêts existent est refusé (`stopsLocked`), l'activer
+ne l'est jamais ; l'option est la seule que « Modifier l'événement » touche, et seulement quand
+`stops` est envoyé (D1, #888). Toute écriture qui porte un Arrêt (`offerRide`, `updateRide`,
+`takeSeats` avec un point, `setBoardingStop`) lit `stops_enabled` sur la ligne que rend
+`lockLegs` : option désactivée, refus `stopsOff` et rien n'est écrit. La base, elle, accepte les
+Arrêts dès `0006_stops`.
 
 ### L'Event d'abord (#260)
 

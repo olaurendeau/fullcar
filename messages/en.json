@@ -446,6 +446,13 @@
       "title": "The event has just been changed from another device.",
       "body": "Nothing was saved. The fields you had not changed now show the saved version: check them, then confirm again."
     },
+    "stops": {
+      "label": "Meeting points",
+      "hint": "Drivers of the outbound trip can add meeting points to their car.",
+      "locked": "{count, plural, one {# car has meeting points: the option stays on as long as they exist.} other {# cars have meeting points: the option stays on as long as they exist.}}",
+      "failed": "The “Meeting points” option was not changed.",
+      "stillLocked": "The “Meeting points” option stays on: cars have meeting points."
+    },
     "removeRetour": {
       "title": "Remove the return trip?",
       "body": "{cars, plural, =0 {No car is offered for the return trip.} one {The car offered for the return trip will be removed.} other {The # cars offered for the return trip will be removed.}} {persons, plural, =0 {} one {# person will no longer be signed up for the return trip.} other {# people will no longer be signed up for the return trip.}}",

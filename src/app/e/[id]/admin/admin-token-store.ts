@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readSessionToken } from "@/app/session-token";
 import type { LegCounts } from "@/db/legs";
-import type { EventFields, EventHeader } from "@/domain/event";
+import type { EventBefore, EventFields } from "@/domain/event";
 import type { EndedHeader, OrganiserLeg, OrganiserPanelAnswer, OrganiserPerson } from "@/domain/organiser-panel";
 import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { isWallClock, isWallDate, type WallDate } from "@/domain/wall-clock";
@@ -208,7 +208,7 @@ export function useOrganiserCheck(id: string): {
   check: OrganiserCheck;
   retry: () => void;
   read: () => Promise<Sent<OrganiserPanelAnswer>>;
-  edit: (fields: EventFields, before: EventHeader, removal?: LegCounts) => Promise<Sent<EditEventOutcome>>;
+  edit: (fields: EventFields, before: EventBefore, removal?: LegCounts) => Promise<Sent<EditEventOutcome>>;
   remove: (personId: string, deviceToken: string | undefined) => Promise<RemovePersonOutcome>;
 } {
   const [check, setCheck] = useState<OrganiserCheck>({ state: "checking" });
@@ -245,7 +245,7 @@ export function useOrganiserCheck(id: string): {
   const read = useCallback(() => sendAction<OrganiserPanelAnswer>(() => loadOrganiserPanel(id, organiserProof(id))), [id]);
 
   const edit = useCallback(
-    (fields: EventFields, before: EventHeader, removal?: LegCounts) => {
+    (fields: EventFields, before: EventBefore, removal?: LegCounts) => {
       const proof = organiserProof(id);
       return sendAction<EditEventOutcome>(() =>
         removal ? updateEvent(id, proof, fields, before, removal) : updateEvent(id, proof, fields, before),

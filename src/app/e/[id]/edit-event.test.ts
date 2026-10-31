@@ -11,7 +11,7 @@ import { seedAccount, seedSession, withCommittedAddresses } from "@/db/test-acco
 import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { confirmSeededEvent, removeSeededRetour, seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import { hashAdminToken, newAdminToken } from "@/domain/admin-token";
 import { DESCRIPTION_MAX } from "@/domain/description";
 import { eventFieldsOf, serverBounds, validateEventChange, type EventHeader } from "@/domain/event";
@@ -124,24 +124,205 @@ function onSeeded<T>(edit: (trx: Db, eventId: string, token: string) => Promise<
 
 describe("editEvent", () => {
   describe("M2.1", () => {
-    it("writes the title, the location and the start, answers them, and leaves the options as they were", async () => {
+    it("writes the title, the location and the start, answers them, and changes the option « Points de RDV » only, as D1 says", async () => {
       await onSeeded(
         async (trx, eventId, token) => {
           const before = await findEventById(trx, eventId);
           const fields = { ...FORM, title: "Tournoi de Rennes U13", location: "Salle Carrel", allerTime: "14:00" };
-          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...fields, boosters: false, stops: true }, BEFORE);
+          const answer = await editEvent(
+            trx,
+            eventId,
+            { adminToken: token },
+            { ...fields, boosters: false, participation: false, stops: true },
+            BEFORE,
+          );
 
           const event = { ...BEFORE, title: "Tournoi de Rennes U13", location: "Salle Carrel", allerAt: "2026-12-12 14:00:00" };
-          expect(answer).toEqual({ ok: true, event });
+          expect(answer).toEqual({ ok: true, stops: true, event });
           expect(await findEventById(trx, eventId)).toEqual({
             ...before,
             title: event.title,
             location: event.location,
             aller_at: event.allerAt,
+            stops_enabled: true,
           });
         },
         { boostersEnabled: true, participationEnabled: true },
       );
+    });
+  });
+
+  describe("RV9: the option « Points de RDV » (D1)", () => {
+    const optionOf = async (db: Db, eventId: string) => (await findEventById(db, eventId))?.stops_enabled;
+
+    /** An aller Ride with one Stop, on an event whose option is on. */
+    async function seedCarWithStop(db: Db, eventId: string) {
+      const marc = await seedPerson(db, eventId, { firstName: "Marc" });
+      await seedStop(db, eventId, await seedRide(db, eventId, marc.id, { leg: "aller" }));
+    }
+
+    const stopsOf = (db: Db, eventId: string) => db.selectFrom("stop").select("id").where("event_id", "=", eventId).execute();
+
+    it("RV9.1: sent true, turns the option on, and answers it; nothing existing is touched", async () => {
+      await onSeeded(async (trx, eventId, token) => {
+        const marc = await seedPerson(trx, eventId, { firstName: "Marc" });
+        await seedRide(trx, eventId, marc.id, { leg: "aller" });
+        const before = await rowsOf(trx, eventId);
+
+        const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, stops: true }, BEFORE);
+
+        expect(answer).toEqual({ ok: true, stops: true, event: BEFORE });
+        expect(await optionOf(trx, eventId)).toBe(true);
+        expect({ ...(await rowsOf(trx, eventId)), event: undefined }).toEqual({ ...before, event: undefined });
+      });
+    });
+
+    it.each([true, false])("not sent, leaves the option as it is (%s), and answers it", async (stored) => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE);
+          expect(answer).toMatchObject({ ok: true, stops: stored });
+          expect(await optionOf(trx, eventId)).toBe(stored);
+        },
+        { stopsEnabled: stored },
+      );
+    });
+
+    it.each<[string, unknown]>([
+      ["a string", "true"],
+      ["null", null],
+      ["a number", 1],
+    ])("%s sent as the option is no change of it", async (_, stops) => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, stops }, BEFORE);
+          expect(answer).toMatchObject({ ok: true, stops: true });
+          expect(await optionOf(trx, eventId)).toBe(true);
+        },
+        { stopsEnabled: true },
+      );
+    });
+
+    it("RV9.2: sent false with no Stop, turns the option off and deletes nothing", async () => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const marc = await seedPerson(trx, eventId, { firstName: "Marc" });
+          await seedRide(trx, eventId, marc.id, { leg: "aller" });
+          const before = await rowsOf(trx, eventId);
+
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, stops: false }, { ...BEFORE, stops: true });
+
+          expect(answer).toEqual({ ok: true, stops: false, event: BEFORE });
+          expect(await optionOf(trx, eventId)).toBe(false);
+          expect({ ...(await rowsOf(trx, eventId)), event: undefined }).toEqual({ ...before, event: undefined });
+        },
+        { stopsEnabled: true },
+      );
+    });
+
+    it("RV9.3: sent false while a car has Stops, answers stopsLocked with their number and writes nothing", async () => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          await seedCarWithStop(trx, eventId);
+          const second = await seedPerson(trx, eventId, { firstName: "Zoé" });
+          const other = await seedRide(trx, eventId, second.id, { leg: "aller" });
+          await seedStop(trx, eventId, other);
+          await seedStop(trx, eventId, other, { time: "07:40:00" });
+          const before = { ...(await rowsOf(trx, eventId)), stops: await stopsOf(trx, eventId) };
+
+          const answer = await editEvent(
+            trx,
+            eventId,
+            { adminToken: token },
+            { ...FORM, title: "Tournoi de Rennes U13", stops: false },
+            BEFORE,
+          );
+
+          // Two cars, not three Stops: a car counts once.
+          expect(answer).toEqual({ ok: false, error: "stopsLocked", cars: 2 });
+          expect(await optionOf(trx, eventId)).toBe(true);
+          expect({ ...(await rowsOf(trx, eventId)), stops: await stopsOf(trx, eventId) }).toEqual(before);
+        },
+        { stopsEnabled: true },
+      );
+    });
+
+    it("RV9.3: sent true while a car has Stops is no change, and the Stops stay", async () => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          await seedCarWithStop(trx, eventId);
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, stops: true }, { ...BEFORE, stops: true });
+          expect(answer).toEqual({ ok: true, stops: true, event: BEFORE });
+          expect(await stopsOf(trx, eventId)).toHaveLength(1);
+        },
+        { stopsEnabled: true },
+      );
+    });
+
+    it("RV9.3: the retour is not removed when the option cannot be turned off", async () => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          await seedCarWithStop(trx, eventId);
+          const before = await rowsOf(trx, eventId);
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...WITHOUT_RETOUR, stops: false }, BEFORE, SEEN);
+          expect(answer).toEqual({ ok: false, error: "stopsLocked", cars: 1 });
+          expect(await rowsOf(trx, eventId)).toEqual(before);
+        },
+        { stopsEnabled: true },
+      );
+    });
+
+    it("RV9.5: without access, answers invalid as it does, and the option stays", async () => {
+      await onSeeded(async (trx, eventId) => {
+        const answer = await editEvent(trx, eventId, { adminToken: newAdminToken() }, { ...FORM, stops: true }, BEFORE);
+        expect(answer).toEqual({ ok: false, error: "invalid" });
+        expect(await optionOf(trx, eventId)).toBe(false);
+      });
+    });
+
+    it("RV9.5: without access, a refusal to turn off does not tell whether cars have Stops", async () => {
+      await onSeeded(
+        async (trx, eventId) => {
+          await seedCarWithStop(trx, eventId);
+          const answer = await editEvent(trx, eventId, { adminToken: newAdminToken() }, { ...FORM, stops: false }, BEFORE);
+          expect(answer).toEqual({ ok: false, error: "invalid" });
+        },
+        { stopsEnabled: true },
+      );
+    });
+
+    it("`before.stops`, when sent, is compared: the option turned on elsewhere answers changed with the one stored, and writes nothing", async () => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const answer = await editEvent(
+            trx,
+            eventId,
+            { adminToken: token },
+            { ...FORM, title: "Tournoi de Rennes U13", stops: true },
+            { ...BEFORE, stops: false },
+          );
+          expect(answer).toEqual({ ok: false, error: "changed", stops: true, event: BEFORE });
+          expect((await findEventById(trx, eventId))?.title).toBe(BEFORE.title);
+        },
+        { stopsEnabled: true },
+      );
+    });
+
+    it("`before.stops` not sent is not compared (a page from before the option)", async () => {
+      await onSeeded(
+        async (trx, eventId, token) => {
+          const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, BEFORE);
+          expect(answer).toMatchObject({ ok: true, stops: true });
+        },
+        { stopsEnabled: true },
+      );
+    });
+
+    it("`before.stops` that is no boolean is invalid", async () => {
+      await onSeeded(async (trx, eventId, token) => {
+        const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, stops: true }, { ...BEFORE, stops: "no" });
+        expect(answer).toEqual({ ok: false, error: "invalid" });
+      });
     });
   });
 
@@ -182,7 +363,7 @@ describe("editEvent", () => {
       const saved = { ...BEFORE, allerAt: `${date} 07:30:00`, retourAt: `${date} 18:00:00` };
       const fields = { ...FORM, title: "Tournoi de Rennes U13", allerDate: date, retourDate: date };
       const answer = await onSeeded((trx, eventId, token) => editEvent(trx, eventId, { adminToken: token }, fields, saved), saved);
-      expect(answer).toEqual({ ok: true, event: { ...saved, title: "Tournoi de Rennes U13" } });
+      expect(answer).toEqual({ ok: true, stops: false, event: { ...saved, title: "Tournoi de Rennes U13" } });
     });
   });
 
@@ -243,7 +424,7 @@ describe("editEvent", () => {
         const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE, SEEN);
 
         const event = { ...BEFORE, title: "Tournoi de Rennes U13", retourAt: null };
-        expect(answer).toEqual({ ok: true, event });
+        expect(answer).toEqual({ ok: true, stops: false, event });
         const after = await rowsOf(trx, eventId);
         expect(after).toEqual({
           event: { ...before.event, title: event.title, retour_at: null },
@@ -280,6 +461,7 @@ describe("editEvent", () => {
         await seedPerson(trx, eventId);
         expect(await editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, BEFORE)).toEqual({
           ok: true,
+          stops: false,
           event: { ...BEFORE, retourAt: null },
         });
         expect((await findEventById(trx, eventId))?.retour_at).toBeNull();
@@ -290,7 +472,7 @@ describe("editEvent", () => {
       await withRollback(async (trx) => {
         const { id: eventId, token } = await seedEvent(trx);
         await seedScene(trx, eventId);
-        expect(await editEvent(trx, eventId, { adminToken: token }, FORM, BEFORE, SEEN)).toEqual({ ok: true, event: BEFORE });
+        expect(await editEvent(trx, eventId, { adminToken: token }, FORM, BEFORE, SEEN)).toEqual({ ok: true, stops: false, event: BEFORE });
         expect(await countLegRows(trx, eventId, "retour")).toEqual(SEEN);
       });
     });
@@ -326,12 +508,13 @@ describe("editEvent", () => {
 
         const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE);
 
-        expect(answer).toEqual({ ok: false, error: "changed", event: stored });
+        expect(answer).toEqual({ ok: false, error: "changed", stops: false, event: stored });
         expect(await rowsOf(trx, eventId)).toEqual(rows);
         // Sent again from what is stored, it is written.
         const again = { ...fields, title: stored.title };
         expect(await editEvent(trx, eventId, { adminToken: token }, again, stored)).toEqual({
           ok: true,
+          stops: false,
           event: { ...BEFORE, title: stored.title, location: "Salle B" },
         });
       });
@@ -345,10 +528,11 @@ describe("editEvent", () => {
         const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE);
 
         const stored = { ...BEFORE, retourAt: null };
-        expect(answer).toEqual({ ok: false, error: "changed", event: stored });
+        expect(answer).toEqual({ ok: false, error: "changed", stops: false, event: stored });
         expect(await findEventById(trx, eventId)).toMatchObject({ title: BEFORE.title, retour_at: null });
         expect(await editEvent(trx, eventId, { adminToken: token }, { ...fields, retour: false }, stored)).toEqual({
           ok: true,
+          stops: false,
           event: { ...stored, title: "Tournoi de Rennes U13" },
         });
         expect((await findEventById(trx, eventId))?.retour_at).toBeNull();
@@ -360,7 +544,7 @@ describe("editEvent", () => {
         async (trx, eventId, token) => {
           await writeEventFields(trx, eventId, BEFORE);
           const answer = await editEvent(trx, eventId, { adminToken: token }, WITHOUT_RETOUR, { ...BEFORE, retourAt: null });
-          expect(answer).toEqual({ ok: false, error: "changed", event: BEFORE });
+          expect(answer).toEqual({ ok: false, error: "changed", stops: false, event: BEFORE });
           expect((await findEventById(trx, eventId))?.retour_at).toBe(BEFORE.retourAt);
         },
         { retourAt: null },
@@ -376,7 +560,7 @@ describe("editEvent", () => {
         const answer = await editEvent(trx, eventId, { adminToken: token }, fields, BEFORE);
 
         const locationPosition = { lat: 48.1173, lng: -1.67779 };
-        expect(answer).toEqual({ ok: true, event: { ...BEFORE, location: "Salle Carrel", locationPosition } });
+        expect(answer).toEqual({ ok: true, stops: false, event: { ...BEFORE, location: "Salle Carrel", locationPosition } });
         expect(await findEventById(trx, eventId)).toMatchObject({ location: "Salle Carrel", location_lat: 48.1173, location_lng: -1.67779 });
       });
     });
@@ -388,7 +572,7 @@ describe("editEvent", () => {
 
           const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, locationPosition: null }, before);
 
-          expect(answer).toEqual({ ok: true, event: BEFORE });
+          expect(answer).toEqual({ ok: true, stops: false, event: BEFORE });
           expect(await findEventById(trx, eventId)).toMatchObject({ location_lat: null, location_lng: null });
         },
         { locationPosition: LYON },
@@ -403,7 +587,7 @@ describe("editEvent", () => {
         async (trx, eventId, token) => {
           const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, location: "Salle Carrel" }, before);
 
-          expect(answer).toEqual({ ok: true, event: { ...BEFORE, location: "Salle Carrel", locationPosition: LYON } });
+          expect(answer).toEqual({ ok: true, stops: false, event: { ...BEFORE, location: "Salle Carrel", locationPosition: LYON } });
           expect(await findEventById(trx, eventId)).toMatchObject({
             location: "Salle Carrel",
             location_lat: LYON.lat,
@@ -426,7 +610,7 @@ describe("editEvent", () => {
 
           const answer = await editEvent(trx, eventId, { adminToken: token }, fields, { ...BEFORE, locationPosition: loaded });
 
-          expect(answer).toEqual({ ok: false, error: "changed", event: { ...BEFORE, locationPosition: stored } });
+          expect(answer).toEqual({ ok: false, error: "changed", stops: false, event: { ...BEFORE, locationPosition: stored } });
           expect(await rowsOf(trx, eventId)).toEqual(rows);
         },
         { locationPosition: stored },
@@ -464,7 +648,7 @@ describe("editEvent", () => {
 
         const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, description: `  ${full}\r\n` }, BEFORE);
 
-        expect(answer).toEqual({ ok: true, event: { ...BEFORE, description: full } });
+        expect(answer).toEqual({ ok: true, stops: false, event: { ...BEFORE, description: full } });
         expect((await findEventById(trx, eventId))?.description).toBe(full);
       });
     });
@@ -477,7 +661,7 @@ describe("editEvent", () => {
         async (trx, eventId, token) => {
           const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, description }, { ...BEFORE, description: SAVED });
 
-          expect(answer).toEqual({ ok: true, event: BEFORE });
+          expect(answer).toEqual({ ok: true, stops: false, event: BEFORE });
           expect((await findEventById(trx, eventId))?.description).toBeNull();
         },
         { description: SAVED },
@@ -492,7 +676,7 @@ describe("editEvent", () => {
         async (trx, eventId, token) => {
           const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, before);
 
-          expect(answer).toEqual({ ok: true, event: { ...BEFORE, title: "Tournoi de Rennes U13", description: SAVED } });
+          expect(answer).toEqual({ ok: true, stops: false, event: { ...BEFORE, title: "Tournoi de Rennes U13", description: SAVED } });
           expect(await findEventById(trx, eventId)).toMatchObject({ title: "Tournoi de Rennes U13", description: SAVED });
         },
         { description: SAVED },
@@ -511,7 +695,7 @@ describe("editEvent", () => {
 
           const answer = await editEvent(trx, eventId, { adminToken: token }, fields, { ...BEFORE, description: loaded });
 
-          expect(answer).toEqual({ ok: false, error: "changed", event: { ...BEFORE, description: stored } });
+          expect(answer).toEqual({ ok: false, error: "changed", stops: false, event: { ...BEFORE, description: stored } });
           expect(await rowsOf(trx, eventId)).toEqual(rows);
         },
         { description: stored },
@@ -525,11 +709,11 @@ describe("editEvent", () => {
         await onSeeded(async (trx, eventId, token) => {
           const written = `Le plan : ${link}`;
           const answer = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, description: written }, BEFORE);
-          expect(answer).toEqual({ ok: true, event: { ...BEFORE, description: written } });
+          expect(answer).toEqual({ ok: true, stops: false, event: { ...BEFORE, description: written } });
 
           // Changed again without a description sent: the link is kept, and still not called.
           const kept = await editEvent(trx, eventId, { adminToken: token }, { ...FORM, title: "Tournoi de Rennes U13" }, { ...BEFORE, description: written });
-          expect(kept).toEqual({ ok: true, event: { ...BEFORE, title: "Tournoi de Rennes U13", description: written } });
+          expect(kept).toEqual({ ok: true, stops: false, event: { ...BEFORE, title: "Tournoi de Rennes U13", description: written } });
         });
         expect(network).not.toHaveBeenCalled();
       } finally {
@@ -891,6 +1075,66 @@ describe("M3.6: editEvent removing the retour while a write on the retour runs, 
       expect(written).toMatchObject({ ok: false, error: "noRetour" });
       expect((await findEventById(db, eventId))?.retour_at).toBeNull();
       expect(await countLegRows(db, eventId, "retour")).toEqual({ cars: 0, persons: 0 });
+    });
+  });
+});
+
+/**
+ * RV9.3 through the change itself, in both orders, on committed data (as M3.6): the Event's lock
+ * orders the turning off and a car that carries Stops. The count is made again under it; counted
+ * before, a car committed while the change waited would leave Stops under an option turned off.
+ * The only two outcomes are `stopsLocked` or `stopsOff`: never a Stop under a disabled option.
+ */
+describe("RV9.3: editEvent turning the option off while a car offered with Stops runs, on committed data", () => {
+  const STOP = randomUUID();
+
+  async function seedDriver(db: Db, eventId: string) {
+    await db.updateTable("event").set({ stops_enabled: true }).where("id", "=", eventId).execute();
+    return seedPerson(db, eventId, { firstName: "Tom", phone: "06 33 33 33 33" });
+  }
+
+  const withStops = (tom: { id: string }) => ({
+    rideId: randomUUID(),
+    leg: "aller" as const,
+    driver: { kind: "device" as const, personId: tom.id },
+    location: "Salle Paul Bert",
+    time: "07:00",
+    seats: "3",
+    note: "",
+    stops: [{ id: STOP, location: "Mairie", time: "07:30" }],
+  });
+
+  const storedStops = (db: Db, eventId: string) => db.selectFrom("stop").select("id").where("event_id", "=", eventId).execute();
+
+  it("the car first: the change waits for it, counts its Stops under the lock, and answers stopsLocked", async () => {
+    await withCommittedEvent(async (db, eventId, token) => {
+      const tom = await seedDriver(db, eventId);
+
+      const answer = await whileHeld(
+        db,
+        (trx) => offerRide(trx, eventId, tom.token, withStops(tom)),
+        (own) => editEvent(own, eventId, { adminToken: token }, { ...FORM, stops: false }, { ...BEFORE, stops: true }),
+      );
+
+      expect(answer).toEqual({ ok: false, error: "stopsLocked", cars: 1 });
+      expect((await findEventById(db, eventId))?.stops_enabled).toBe(true);
+      expect(await storedStops(db, eventId)).toHaveLength(1);
+    });
+  });
+
+  it("the change first: the car waits for it, then is refused by stopsOff, and no Stop is written", async () => {
+    await withCommittedEvent(async (db, eventId, token) => {
+      const tom = await seedDriver(db, eventId);
+
+      const written = await whileHeld(
+        db,
+        (trx) => editEvent(trx, eventId, { adminToken: token }, { ...FORM, stops: false }, { ...BEFORE, stops: true }),
+        (own) => offerRide(own, eventId, tom.token, withStops(tom)),
+      );
+
+      expect(written).toEqual({ ok: false, error: "stopsOff" });
+      expect((await findEventById(db, eventId))?.stops_enabled).toBe(false);
+      expect(await storedStops(db, eventId)).toEqual([]);
     });
   });
 });
