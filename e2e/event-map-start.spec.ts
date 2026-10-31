@@ -5,7 +5,7 @@ import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { holdToken, newToken } from "./device";
-import { idle, watchMap } from "./event-map-points";
+import { ARRIVAL, idle, watchMap } from "./event-map-points";
 import { leaveNoToken } from "./fixtures";
 import { expect, foldKey, holdActionsWith, isAction, keepAdminToken, organiserPath, test as organiserTest } from "./organiser";
 import { answerTiles, placeOf, tileAt } from "./tiles";
@@ -59,7 +59,7 @@ async function expectNothingAsked(page: Page, watch: ReturnType<typeof watchMap>
  * Every tile of the view loaded: the page left while a tile loads cuts its answer, which
  * `organiserTraffic` reads.
  */
-const tilesLoaded = (page: Page) => expect(page.locator("img.leaflet-tile:not(.leaflet-tile-loaded)")).toHaveCount(0);
+const tilesLoaded = (page: Page) => expect(page.locator("img.leaflet-tile:not(.leaflet-tile-loaded)")).toHaveCount(0, ARRIVAL);
 
 /** The box scrolled into the screen: Leaflet's code asked for, then tiles. */
 async function expectStartedByScroll(page: Page, watch: ReturnType<typeof watchMap>) {
@@ -252,7 +252,7 @@ const arrivals: [route: string, open: (page: Page, event: Placed) => Promise<voi
     async (page, event) => {
       await page.addInitScript((key) => localStorage.setItem(key, "1"), foldKey(event.id));
       await page.goto(organiserPath(event));
-      await expect(area(page)).toHaveAttribute("aria-expanded", "false");
+      await expect(area(page)).toHaveAttribute("aria-expanded", "false", ARRIVAL);
     },
   ],
 ];
@@ -269,7 +269,7 @@ for (const [route, open] of arrivals) {
       test(`${what}: the focus on <body>, scrollY 0`, async ({ page, placed }) => {
         await prepare(page, placed);
         await open(page, placed);
-        await expect(shown(page)).toBeVisible();
+        await expect(shown(page)).toBeVisible(ARRIVAL);
         if (what === "Leaflet loaded") await tilesLoaded(page);
         await idle(page);
         expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);

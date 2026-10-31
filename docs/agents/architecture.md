@@ -819,6 +819,7 @@ qu'elle.
 |---|---|---|
 | `PHOTON_URL` | `https://photon.komoot.io/api/` | l'adresse de recherche de Photon ; chaque slot pointe vers son faux Photon |
 | `PLACES_BREAKER_MS` | `60000` (aussi pour une valeur qui n'est pas un entier) | la durée minimale du disjoncteur, en millisecondes ; `0` le coupe (les slots) |
+| `PLACES_CALLS_PER_SECOND` | `5` (aussi pour une valeur qui n'est pas un entier positif) | le plafond d'appels à Photon par seconde et par instance ; `1000` dans les slots, où les tests d'une même exécution le partagent |
 
 ### Dans le navigateur
 
