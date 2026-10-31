@@ -103,6 +103,24 @@ export async function claimConfirmation(
   });
 }
 
+/**
+ * Deletes every confirmation link of the event but the one of `keptToken`: the correction of
+ * the address (#602, OA2.5) makes the links sent to the old one answer « Ce lien n'est pas
+ * valide ». In the transaction of `claimConfirmation`, under the Event's lock, once the new
+ * link is made; a login link is never one of them. Gives how many it deleted.
+ */
+export async function deleteOtherConfirmationLinks(db: Kysely<Database>, eventId: string, keptToken: string): Promise<number> {
+  const kept = tokenKey(keptToken);
+  if (kept === null) throw new Error("deleteOtherConfirmationLinks: the kept token is not a token");
+  const deleted = await db
+    .deleteFrom("email_link")
+    .where("event_id", "=", eventId)
+    .where("kind", "=", "confirmation")
+    .where("token_hash", "<>", kept)
+    .executeTakeFirst();
+  return Number(deleted.numDeletedRows);
+}
+
 /** The token's link, used or not, expired or not; `null` for an unknown token or a value that is not a string. */
 export async function findLink(db: Kysely<Database>, token: unknown): Promise<Link | null> {
   const key = tokenKey(token);

@@ -19,8 +19,8 @@ const ABOVE_BAR = "scroll-mb-[calc(1rem+var(--message-bar-height,0px)+12px+env(s
  * known (C5.9) and without JavaScript; its tap takes a seat or opens a sheet (`onTakeSeat`, #92). Long
  * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
  * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
- * removes it (C8.1); on a car with points, each passenger of the device says where she boards and
- * has « Changer le point » (RV4.1, #892); `near`, the event's position, brings its place's suggestions closer (AL4.1).
+ * removes it (C8.1); on a car with points, each passenger says where she boards, « monte à {lieu} » or « monte
+ * au départ », on every device (RV2.2), and each one of the device has « Changer le point » (RV4.1, #892); `near`, the event's position, brings its place's suggestions closer (AL4.1).
  */
 export function RideCard({
   car,
@@ -100,17 +100,19 @@ export function RideCard({
       )}
       <ul aria-label={t("seats")} className="flex flex-col gap-2">
         {car.passengers.map((passenger) => {
-          // Where she boards, if at a point: at the departure, nothing (RV2.2).
+          // Where she boards: a point, or the departure; told on a car with points only, none without (RV2.2).
           const stop = car.stops.find(({ passengerIds }) => passengerIds.includes(passenger.id));
-          // Hers to change: the device's passenger of a car with points, told where she boards even at the departure (RV4.1).
-          const changes = onChangeStop !== undefined && car.stops.length > 0 && devicePassengers.includes(passenger.id);
+          const withPoints = car.stops.length > 0;
+          // Hers to change: the device's passenger of a car with points (RV4.1).
+          const changes = onChangeStop !== undefined && withPoints && devicePassengers.includes(passenger.id);
           return (
             <li
               key={passenger.id}
-              className={cn("flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg bg-muted px-3 text-sm", (stop || changes) && "py-1.5")}
+              className={cn("flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg bg-muted px-3 text-sm", withPoints && "py-1.5")}
             >
               <User aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 wrap-anywhere">{passenger.firstName}</span>
+              {/* 12 characters at least: the number or the button goes under it, not the name down to a column (RV2.4, RV7.1). */}
+              <span className="min-w-[min(12ch,100%)] flex-[1_1_12ch] wrap-anywhere">{passenger.firstName}</span>
               {passenger.phone && <PhoneLink firstName={passenger.firstName} phone={passenger.phone} />}
               {changes && (
                 <button
@@ -123,7 +125,7 @@ export function RideCard({
                 </button>
               )}
               {/* #595959 on `muted`: 6,4:1 where `muted-foreground` makes 4,35:1 (RV7.3). */}
-              {(stop || changes) && (
+              {withPoints && (
                 <span className="basis-full text-xs text-[#595959] wrap-anywhere">
                   {stop ? t("boardsAt", { place: stop.location }) : t("boardsAtStart")}
                 </span>

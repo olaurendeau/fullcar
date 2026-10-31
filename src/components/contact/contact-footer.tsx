@@ -12,7 +12,8 @@ export const CRISP_CHAT_URL = "https://go.crisp.chat/chat/embed/?website_id=3c4a
 /** The public repository of Fullcar (#489): a fixed address, nothing of the page taken along. */
 export const SOURCE_CODE_URL = "https://github.com/olaurendeau/fullcar";
 
-const inLink =
+/** A link of the page's last lines: 14 px, grey, 44 px tall at least, as wide as its text. */
+export const inLink =
   "inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-muted-foreground underline underline-offset-4 focus-visible:focus-ring";
 
 const outLink = "inline-flex min-h-11 items-center px-3 text-sm text-muted-foreground underline underline-offset-4";

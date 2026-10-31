@@ -13,17 +13,17 @@ celui qui écrit le code.
 - Jamais dans le chemin ni dans la query string : uniquement dans le fragment (`#…`) ou dans
   le corps d'une requête. Un jeton dans un chemin finit dans les journaux de Vercel.
 - Comparaison à temps constant.
-- Le jeton d'admin n'entre que dans le corps de six server actions : `loadOrganiserPanel`
+- Le jeton d'admin n'entre que dans le corps de sept server actions : `loadOrganiserPanel`
   (à partir de #154), `updateEvent` (#263), `removePersonAsOrganiser` (#672), `resendEmail`
-  (#901), `signOut` (#895) et `deleteAccount` (#905). Une septième, ou un jeton d'admin
-  reçu par une autre action, est bloquant. Les quatre premières le reçoivent avec la session,
+  (#901), `fixEmail` (#602), `signOut` (#895) et `deleteAccount` (#905). Une huitième, ou un
+  jeton d'admin reçu par une autre action, est bloquant. Les cinq premières le reçoivent avec la session,
   `{ adminToken, session }` (à partir de #596) ; `signOut` et `deleteAccount` reçoivent la
   session et **tous** les jetons d'admin que le navigateur garde (`MAX_ADMIN_TOKENS` à la
   fois, le reste est ignoré), pour les révoquer : elles ne décident aucun accès, et ne
   répondent jamais de jeton. `removeAsOrganiser` n'est pas un point d'entrée : c'est le cas
   d'usage derrière `removePersonAsOrganiser`, comme `editEvent` derrière `updateEvent`. Les
-  listes de ces six actions dans les commentaires de `src/app/e/[id]/admin/admin-token-store.ts`
-  et de `src/app/e/[id]/admin/actions.ts` disent les mêmes six. Seul
+  listes de ces sept actions dans les commentaires de `src/app/e/[id]/admin/admin-token-store.ts`
+  et de `src/app/e/[id]/admin/actions.ts` disent les mêmes sept. Seul
   `src/domain/organiser-access.ts` décide qui
   administre (épique #581). La règle n'ouvre le panneau qu'à la session du compte de
   l'événement ou au jeton d'admin du navigateur qui l'a créé, et jamais sur un événement
@@ -50,13 +50,18 @@ celui qui écrit le code.
     événement anonymisé, puis `"invalid"` quand la règle n'ouvre rien ; ensuite seulement
     `"notPending"` (rien n'attend de confirmation) et `"tooMany"` (une limite d'envoi), qui
     supposent l'accès accordé.
+  - `fixEmail` : les mêmes trois refus, dans le même ordre (`"eventNotFound"`, `"eventEnded"`,
+    `"invalid"`) ; ensuite seulement `"address"` (ce qui est saisi n'est pas une adresse : la
+    réponse porte le code de l'erreur, jamais l'adresse), `"notPending"` et `"tooMany"`, qui
+    supposent l'accès accordé. Aucun lien n'est supprimé, aucun envoi n'est inscrit tant que
+    l'accès est refusé.
   - `deleteAccount` : `{ deleted: false }` pour une session inconnue, mal formée, expirée ou
     fermée entre-temps ; les jetons d'admin reçus ne sont alors pas révoqués.
   - `signOut` : ne refuse rien, répond toujours `{ signedOut: true }`, quelle que soit la
     session, et révoque les jetons reçus.
 
   À partir de #843, `updateEvent` décide l'accès une seconde fois sous
-  `lockEvent(trx, id, "noKeyUpdate")`, avant toute écriture, comme `resendEmail` ;
+  `lockEvent(trx, id, "noKeyUpdate")`, avant toute écriture, comme `resendEmail` et `fixEmail` ;
   `removePersonAsOrganiser` le fait sous le verrou de l'Event aussi (partagé, puis
   `noKeyUpdate` à la reprise) : une session fermée, un compte supprimé ou un jeton révoqué
   pendant l'attente du verrou y est vu. Une écriture de l'organisateur qui ne décide l'accès
@@ -179,7 +184,7 @@ celui qui écrit le code.
 - Aucune adresse e-mail ni aucun jeton dans un journal ou un événement Sentry (OA11.1), et
   le journal de la purge ne porte que des nombres.
 - Les e-mails ne portent aucun texte saisi par quelqu'un (ni titre, ni lieu, ni prénom),
-  aucune image, et la requête à Brevo ne demande aucun suivi (OA3.3). Un cinquième e-mail est
+  aucune image, et la requête à Brevo ne demande aucun suivi (OA3.3). Un sixième e-mail est
   bloquant.
 - Aucune requête du navigateur vers un tiers, aucun script distant, aucune police web : la
   pile de polices système suffit. Speed Insights reste désactivé.

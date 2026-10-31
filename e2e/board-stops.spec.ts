@@ -81,7 +81,7 @@ test.describe("meeting points on the card and in the seat sheet", () => {
     await page.goto(`/e/${eventId}`);
   }
 
-  test("RV2.1, RV2.2: the points under the place, by time; « monte à » for a passenger of a point alone; none, no list", async ({ db, page, seededEvent }) => {
+  test("RV2.1, RV2.2: the points under the place, by time; every passenger of a car with points says « monte à … » or « monte au départ »; none, no list", async ({ db, page, seededEvent }) => {
     await visit(page, db, seededEvent.id, ["Tom"]);
     const nina = car(page, "Nina");
     const points = nina.getByRole("list", { name: "Points de RDV" });
@@ -94,8 +94,11 @@ test.describe("meeting points on the card and in the seat sheet", () => {
     })).toBe(true);
     const seats = nina.getByRole("list", { name: "Places" }).getByRole("listitem");
     await numbersHidden(() => expect(seats.filter({ hasText: "Paul" })).toContainText(`monte à ${PRELLES}`));
-    await numbersHidden(() => expect(seats.filter({ hasText: "Zoé" })).not.toContainText("monte"));
+    // Zoé is of another device, at the departure: the line says it all the same.
+    await numbersHidden(() => expect(seats.filter({ hasText: "Zoé" })).toContainText("monte au départ"));
     await numbersHidden(() => expect(car(page, "Sam").getByRole("list", { name: "Points de RDV" })).toHaveCount(0));
+    // A car without a point says nothing of where its passengers board.
+    await numbersHidden(() => expect(car(page, "Sam").getByRole("list", { name: "Places" })).not.toContainText("monte"));
     await numbersHidden(() => expect(car(page, "Sam")).not.toContainText("Points de RDV"));
   });
 
@@ -353,8 +356,9 @@ test.describe("meeting points at 360 px", () => {
     for (let index = 0; index < 6; index++) {
       stops.push(await seedStop(db, seededEvent.id, nina, { location: index % 2 ? WORDS : LONG, time: `08:${10 + index * 5}:00` }));
     }
+    // Zoé boards at the departure: she says it too (RV2.2).
     for (const [index, firstName] of ["Paul", "Zoé", "Léo"].entries()) {
-      await seedPlacement(db, { personId: await other(firstName), eventId: seededEvent.id, leg: "aller", rideId: nina, stopId: stops[index] });
+      await seedPlacement(db, { personId: await other(firstName), eventId: seededEvent.id, leg: "aller", rideId: nina, stopId: index === 1 ? null : stops[index] });
     }
     const tom = (await seedPerson(db, seededEvent.id, { firstName: "Tom" }, token)).id;
     await seedPlacement(db, { personId: tom, eventId: seededEvent.id, leg: "aller", rideId: null });
@@ -368,6 +372,19 @@ test.describe("meeting points at 360 px", () => {
     expect(await overflow(card)).toBeLessThanOrEqual(0);
     const lines = card.getByRole("list", { name: "Places" }).getByRole("listitem");
     for (const line of await lines.all()) expect((await line.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    // Each line says where it boards, the phrase on its own line, wrapped and within the line (RV2.4).
+    await numbersHidden(() => expect(lines.filter({ hasText: "Zoé" })).toContainText("monte au départ"));
+    await numbersHidden(() => expect(lines.filter({ hasText: "Paul" })).toContainText("monte à "));
+    await numbersHidden(() => expect(lines.filter({ hasText: "Léo" })).toContainText("monte à "));
+    const passengers = lines.filter({ has: page.locator("span.basis-full") });
+    await numbersHidden(() => expect(passengers).toHaveCount(3));
+    for (const line of await passengers.all()) {
+      expect(await overflow(line)).toBeLessThanOrEqual(0);
+      const row = (await line.boundingBox())!;
+      const said = (await line.locator("span.basis-full").boundingBox())!;
+      expect(said.x).toBeGreaterThanOrEqual(row.x);
+      expect(said.x + said.width).toBeLessThanOrEqual(row.x + row.width);
+    }
 
     await seat(page, "Nina").click();
     const dialog = sheet(page, "Nina");

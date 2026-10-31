@@ -367,3 +367,187 @@ test.describe("OA2.4: « Renvoyer l’e-mail »", () => {
     expect(await mailTo(email)).toEqual([]);
   });
 });
+
+test.describe("OA2.5: « Corriger l’adresse »", () => {
+  // Each test its own addresses; their sends are deleted after it, so that the global hourly cap never meets them.
+  let addresses: string[] = [];
+  const address = () => {
+    const email = newAddress();
+    addresses.push(email);
+    return email;
+  };
+  test.afterEach(async ({ db }) => {
+    if (addresses.length > 0) await db.deleteFrom("email_send").where("email", "in", addresses).execute();
+    addresses = [];
+  });
+
+  const sheet = (page: Page) => page.getByRole("dialog", { name: FR.fix });
+  const field = (page: Page) => sheet(page).getByLabel("Votre adresse e-mail", { exact: true });
+  const send = (page: Page) => sheet(page).getByRole("button", { name: "Envoyer le lien", exact: true });
+  const cancel = (page: Page) => sheet(page).getByRole("button", { name: "Annuler", exact: true });
+  const sheetAlerts = (page: Page) => sheet(page).getByRole("alert").filter({ hasText: /\S/ });
+  const note = (email: string) => `Le lien envoyé à ${email} ne marchera plus.`;
+
+  test("opens on the address, the field has the focus, with the note, « Envoyer le lien » and « Annuler »", async ({ page, db, seededEvent }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.fix).click();
+
+    await expect(sheet(page)).toBeVisible();
+    await expect(field(page)).toHaveValue(email);
+    await expect(field(page)).toBeFocused();
+    await expect(sheet(page).getByText(note(email))).toBeVisible();
+    for (const control of [send(page), cancel(page)]) expect((await box(control)).height).toBeGreaterThanOrEqual(44);
+    await expect(sheet(page).getByRole("button", { name: "Fermer" })).toHaveCount(0);
+  });
+
+  test("sends the link to the new address: the sheet closes, the focus is back on the button, the notice shows the address, after a reload too", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    const fixed = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "failed", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.fix).click();
+    await field(page).fill(fixed);
+    await send(page).click();
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(button(page, FR.fix)).toBeFocused();
+    await expectNotice(page, "polite", FR.title, FR.body(fixed));
+    expect(await mailTo(fixed)).toHaveLength(1);
+    expect(await mailTo(email)).toEqual([]);
+    await page.reload();
+    await expectNotice(page, "polite", FR.title, FR.body(fixed));
+  });
+
+  test("« Annuler » and Escape change nothing, send nothing, and give the focus back to the button", async ({ page, db, seededEvent }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    for (const close of [() => cancel(page).click(), () => page.keyboard.press("Escape")]) {
+      await button(page, FR.fix).click();
+      await field(page).fill(address());
+      await close();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(button(page, FR.fix)).toBeFocused();
+      await expectNotice(page, "polite", FR.title, FR.body(email));
+    }
+    expect(await mailTo(email)).toEqual([]);
+    // Reopened, the field is loaded with the address again.
+    await button(page, FR.fix).click();
+    await expect(field(page)).toHaveValue(email);
+  });
+
+  test("an address that is not one: the error under the field, which has the focus, the sheet open, nothing sent", async ({ page, db, seededEvent }) => {
+    const email = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.fix).click();
+    await field(page).fill("camille.exemple.fr");
+    await send(page).click();
+
+    await expect(sheet(page).getByText("Adresse e-mail non valide.")).toBeVisible();
+    await expect(field(page)).toBeFocused();
+    await expect(field(page)).toHaveAttribute("aria-invalid", "true");
+    expect(await mailTo(email)).toEqual([]);
+  });
+
+  test("offline: « L’e-mail n’est pas parti » above « Envoyer le lien », which has the focus, the sheet open with what was typed", async ({
+    page,
+    context,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    const fixed = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.fix).click();
+    await field(page).fill(fixed);
+    await context.setOffline(true);
+    try {
+      await send(page).click();
+      await expect(sheetAlerts(page)).toHaveText(["L’e-mail n’est pas parti. Vérifiez la connexion, puis réessayez."]);
+    } finally {
+      await context.setOffline(false);
+    }
+    await expect(send(page)).toBeFocused();
+    await expect(field(page)).toHaveValue(fixed);
+    expect((await box(sheetAlerts(page))).y).toBeLessThan((await box(send(page))).y);
+    expect(await mailTo(fixed)).toEqual([]);
+  });
+
+  test("a failure of Brevo: the sheet stays open with « L’e-mail n’est pas parti » and what was typed, the retry from the sheet sends and closes it, one link serves", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    const fixed = address();
+    await answerMail([fixed], { kind: "error" });
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.fix).click();
+    await field(page).fill(fixed);
+    await send(page).click();
+
+    await expect(sheetAlerts(page)).toHaveText(["L’e-mail n’est pas parti. Vérifiez la connexion, puis réessayez."]);
+    await expect(sheet(page)).toBeVisible();
+    await expect(send(page)).toBeFocused();
+    await expect(field(page)).toHaveValue(fixed);
+    expect(await mailTo(fixed)).toHaveLength(1);
+
+    await answerMail([fixed], { kind: "ok" });
+    await send(page).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(button(page, FR.fix)).toBeFocused();
+    await expectNotice(page, "polite", FR.title, FR.body(fixed));
+    expect(await mailTo(fixed)).toHaveLength(2);
+    // The failed attempt's link is gone with the first email's: the last email's alone serves.
+    const links = await db.selectFrom("email_link").select("kind").where("event_id", "=", seededEvent.id).execute();
+    expect(links).toEqual([{ kind: "confirmation" }]);
+  });
+
+  test("past 3 emails in the hour for the event: « Trop d’envois » in the same place, nothing sent, the notice as it was", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    const fixed = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await seedSends(db, CONFIRMATIONS_PER_EVENT, { kind: "confirmation", email, eventId: seededEvent.id });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.fix).click();
+    await field(page).fill(fixed);
+    await send(page).click();
+
+    await expect(sheetAlerts(page)).toHaveText([FR.tooMany]);
+    await expect(send(page)).toBeFocused();
+    expect(await mailTo(fixed)).toEqual([]);
+    await cancel(page).click();
+    await expectNotice(page, "polite", FR.title, FR.body(email));
+  });
+
+  test("a correction counts in the limit of OA2.4: « Renvoyer l’e-mail » is then stopped", async ({ page, db, seededEvent }) => {
+    const email = address();
+    const fixed = address();
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await seedSends(db, CONFIRMATIONS_PER_EVENT - 2, { kind: "confirmation", email, eventId: seededEvent.id });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.fix).click();
+    await field(page).fill(fixed);
+    await send(page).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // The third email of the hour is this resend's; the fourth would not go.
+    await button(page, FR.resend).click();
+    await expect(messages(page)).toHaveText([FR.resent(fixed)]);
+    await button(page, FR.resend).click();
+    await expect(messages(page).filter({ hasText: FR.tooMany })).toHaveCount(1);
+    expect(await mailTo(fixed)).toHaveLength(2);
+  });
+});
