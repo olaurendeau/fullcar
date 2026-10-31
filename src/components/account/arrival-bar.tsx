@@ -15,28 +15,35 @@ const TITLE_WAIT_MS = 5_000;
 
 /**
  * Puts the focus on the title of the page a link has just led to (OA5.2, « Le focus »): the
- * `h1` that takes the focus (`tabindex="-1"`). A page that reads before it shows it (the admin's) is waited for.
+ * `h1` that takes the focus (`tabindex="-1"`). A page that reads before it shows it (the admin's) is waited
+ * for, and so is the title that replaces the first one (the board's, shown while the admin reads, gives way
+ * to the refusal's or the notice's): when the title that has the focus leaves the page and the focus fell
+ * back on `<body>`, the next one takes it. Once the focus has gone elsewhere on purpose, it is left alone.
  * Returns what stops the wait.
  */
 function focusTitle(): () => void {
   const find = () => document.querySelector<HTMLElement>('main h1[tabindex="-1"]');
-  const found = find();
-  if (found) {
-    found.focus();
-    return () => {};
-  }
-  const observer = new MutationObserver(() => {
+  let focused: HTMLElement | undefined;
+  const take = () => {
+    if (focused?.isConnected) {
+      // Still there: if the focus is no longer on it, someone moved it, and the wait is over.
+      if (document.activeElement !== focused) stop();
+      return;
+    }
     const title = find();
-    if (!title) return;
-    observer.disconnect();
+    if (!title || (focused && document.activeElement !== document.body)) return;
+    focused = title;
     title.focus();
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
-  const giveUp = setTimeout(() => observer.disconnect(), TITLE_WAIT_MS);
-  return () => {
+  };
+  const observer = new MutationObserver(take);
+  const giveUp = setTimeout(() => stop(), TITLE_WAIT_MS);
+  function stop() {
     observer.disconnect();
     clearTimeout(giveUp);
-  };
+  }
+  take();
+  observer.observe(document.body, { childList: true, subtree: true });
+  return stop;
 }
 
 /**
@@ -53,12 +60,15 @@ export function ArrivalBar() {
   const [email, setEmail] = useState<string>();
   // Set by the arrival, taken by the first page that is not a link's: its title takes the focus.
   const focusPending = useRef(false);
+  // The session token the bar's email was asked with: the bar speaks of that session only.
+  const shownFor = useRef<string>(undefined);
 
   useEffect(
     () =>
       onArrival(() => {
         const token = readSessionToken();
         focusPending.current = true;
+        shownFor.current = token;
         setEmail(undefined);
         if (token === undefined) return;
         void sendAction(() => signedInAs(token)).then((sent) => {
@@ -68,6 +78,15 @@ export function ArrivalBar() {
       }),
     [],
   );
+
+  // Once the session it speaks of is gone from the browser (« Se déconnecter », « Supprimer mon compte »),
+  // the bar goes with it: no « Session ouverte avec … » under « Session fermée. », nor on `/` after the deletion.
+  useEffect(() => {
+    if (shownFor.current !== undefined && readSessionToken() !== shownFor.current) {
+      shownFor.current = undefined;
+      setEmail(undefined);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     if (!focusPending.current || pathname.startsWith("/connexion/")) return;

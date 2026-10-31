@@ -42,7 +42,8 @@ const FR = {
   confirmBody:
     "Nous avons envoyé un nouveau lien de confirmation à l’adresse qui a créé l’événement. Il est valable 7 jours. Ouvrez-le dans le navigateur où vous voulez administrer l’événement.",
   tooMany: "Trop d’envois. Réessayez dans une heure.",
-  notSent: "L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
+  resendFailed: "Le lien n’a peut-être pas été envoyé. Une erreur est survenue : réessayez dans quelques minutes.",
+  notSent:"L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
   signedInAs: (email: string) => `Session ouverte avec ${email}.`,
   needsJavaScript: "Se connecter nécessite JavaScript : activez-le, puis rechargez la page.",
 };
@@ -50,6 +51,9 @@ const FR = {
 const heading = (page: Page) => page.getByRole("heading", { level: 1 });
 const isAction = (request: Request) => request.method() === "POST" && request.headers()["next-action"] !== undefined;
 const keptSession = (page: Page) => page.evaluate((key) => localStorage.getItem(key), SESSION_KEY);
+const hasSession = async (page: Page) => (await keptSession(page)) !== null;
+/** The address bar's path, never its fragment: a failure prints what was received, and a link's token is in the fragment. */
+const onPath = (page: Page, path: RegExp) => expect.poll(() => new URL(page.url()).pathname).toMatch(path);
 
 let accounts: string[] = [];
 let events: string[] = [];
@@ -113,27 +117,27 @@ test.describe("La page du lien", () => {
     await expect(page.getByRole("button", { name: FR.loginButton })).toBeEnabled();
 
     // OA5.1: nothing asked of the server, no session, the link still unused.
-    expect(requests.filter(isAction)).toHaveLength(0);
+    expect(requests.filter(isAction).length, "nothing is asked of the server by opening the page").toBe(0);
     expect((await findLink(db, token))?.usedAt, "the link is not used by opening the page").toBeNull();
     expect(await sessionsOf(db, id), "no session is opened by opening the page").toBe(0);
-    expect(await keptSession(page)).toBeNull();
+    expect(await hasSession(page), "no session is kept by opening the page").toBe(false);
 
     // Back through the history to know whether the fragment stays in it afterwards (OA5.2).
     await page.getByRole("button", { name: FR.loginButton }).click();
-    await expect(page).toHaveURL(/\/mes-evenements$/);
+    await onPath(page, /\/mes-evenements$/);
 
     expect(await sessionsOf(db, id)).toBe(1);
     expect((await findLink(db, token))?.usedAt).not.toBeNull();
-    expect(await keptSession(page)).not.toBeNull();
+    expect(await hasSession(page), "the session is kept").toBe(true);
     // OA5.2: the focus is on the title, the bar says whose session it is, and the fragment is gone.
     await expect(heading(page)).toHaveText(FR.myEvents);
     await expect(heading(page)).toBeFocused();
     await expect(page.getByRole("status").getByText(FR.signedInAs(email), { exact: true })).toBeVisible();
-    expect(new URL(page.url()).hash).toBe("");
+    expect(new URL(page.url()).hash.length, "the fragment is gone from the address").toBe(0);
 
     // OA5.10: the token is in the body of the one action that carries it, and nowhere else.
     const carrying = requests.filter((request) => (request.postData() ?? "").includes(token));
-    expect(carrying).toHaveLength(1);
+    expect(carrying.length, "one request carries the token").toBe(1);
     expect(isAction(carrying[0])).toBe(true);
     expect(new URL(carrying[0].url()).pathname).toBe("/connexion/lien");
     expect(requests.some((request) => request.url().includes(token)), "a request's URL carries the token").toBe(false);
@@ -147,9 +151,9 @@ test.describe("La page du lien", () => {
     await page.goto("/nouveau");
     await page.goto(`/connexion/lien#${token}`);
     await page.getByRole("button", { name: FR.loginButton }).click();
-    await expect(page).toHaveURL(/\/mes-evenements$/);
+    await onPath(page, /\/mes-evenements$/);
     await page.goBack();
-    await expect(page).toHaveURL(/\/nouveau$/);
+    await onPath(page, /\/nouveau$/);
   });
 
   test("OA4.4: a sign-in asked from an event leads to the admin of that event", async ({ page, db }) => {
@@ -159,7 +163,9 @@ test.describe("La page du lien", () => {
     const token = await seedLink(db, { kind: "login", accountId: id, returnEventId: event.id });
     await page.goto(`/connexion/lien#${token}`);
     await page.getByRole("button", { name: FR.loginButton }).click();
-    await expect(page).toHaveURL(new RegExp(`/e/${event.id}/admin$`));
+    await onPath(page, new RegExp(`/e/${event.id}/admin$`));
+    // The event is not this account's: whatever the admin screen shows in the end, the focus is on its title, not lost on <body>.
+    await expect(heading(page)).toBeFocused();
     await expect(page.getByRole("status").getByText(FR.signedInAs((await db.selectFrom("account").select("email").where("id", "=", id).executeTakeFirstOrThrow()).email))).toBeVisible();
   });
 
@@ -170,14 +176,15 @@ test.describe("La page du lien", () => {
     await page.goto(`/connexion/confirmer#${pending.link}`);
     await expect(heading(page)).toHaveText(FR.confirmTitle);
     await page.getByRole("button", { name: FR.confirmButton }).click();
-    await expect(page).toHaveURL(new RegExp(`/e/${pending.id}/admin$`));
+    await onPath(page, new RegExp(`/e/${pending.id}/admin$`));
+    await expect(heading(page)).toBeFocused();
     const row = await db.selectFrom("event").select(["account_id", "confirmed_at"]).where("id", "=", pending.id).executeTakeFirstOrThrow();
     expect(row.confirmed_at).not.toBeNull();
     const created = await db.selectFrom("account").select("id").where("email", "=", email).executeTakeFirstOrThrow();
     accounts.push(created.id);
     expect(row.account_id).toBe(created.id);
     await expect(page.getByRole("status").getByText(FR.signedInAs(email), { exact: true })).toBeVisible();
-    expect(new URL(page.url()).hash).toBe("");
+    expect(new URL(page.url()).hash.length, "the fragment is gone from the address").toBe(0);
   });
 
   test("OA5.9: a link of B used in the browser of A makes the session B's", async ({ page, db }) => {
@@ -187,14 +194,41 @@ test.describe("La page du lien", () => {
     const second = await seedLink(db, { kind: "login", accountId: b.id, returnEventId: null });
     await page.goto(`/connexion/lien#${first}`);
     await page.getByRole("button", { name: FR.loginButton }).click();
-    await expect(page).toHaveURL(/\/mes-evenements$/);
+    await onPath(page, /\/mes-evenements$/);
     const sessionOfA = await keptSession(page);
     await page.goto(`/connexion/lien#${second}`);
     await page.getByRole("button", { name: FR.loginButton }).click();
-    await expect(page).toHaveURL(/\/mes-evenements$/);
-    expect(await keptSession(page)).not.toBe(sessionOfA);
+    await onPath(page, /\/mes-evenements$/);
+    expect((await keptSession(page)) === sessionOfA, "the session is still the first one's").toBe(false);
     await expect(page.getByText(`Session ouverte avec ${b.email}`, { exact: true })).toBeVisible();
     await expect(page.getByText(`Session ouverte avec ${a.email}`)).toHaveCount(0);
+  });
+
+  test("OA5.2: the bar does not outlive the session: « Se déconnecter » and « Supprimer mon compte » take it away", async ({ page, db }) => {
+    const first = await account(db);
+    const link = await seedLink(db, { kind: "login", accountId: first.id, returnEventId: null });
+    await page.goto(`/connexion/lien#${link}`);
+    await page.getByRole("button", { name: FR.loginButton }).click();
+    await onPath(page, /\/mes-evenements$/);
+    await expect(page.getByText(FR.signedInAs(first.email), { exact: true })).toBeVisible();
+
+    await page.getByRole("main").getByRole("button", { name: "Se déconnecter" }).click();
+    await onPath(page, /\/connexion$/);
+    await expect(page.getByRole("status").filter({ hasText: "Session fermée." })).toBeVisible();
+    await expect(page.getByText("Session ouverte avec")).toHaveCount(0);
+
+    const second = await account(db);
+    const again = await seedLink(db, { kind: "login", accountId: second.id, returnEventId: null });
+    await page.goto(`/connexion/lien#${again}`);
+    await page.getByRole("button", { name: FR.loginButton }).click();
+    await onPath(page, /\/mes-evenements$/);
+    await expect(page.getByText(FR.signedInAs(second.email), { exact: true })).toBeVisible();
+
+    await page.getByRole("main").getByRole("button", { name: "Supprimer mon compte" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Supprimer mon compte" }).click();
+    await onPath(page, /\/$/);
+    await expect(page.getByText("Votre compte a été supprimé.")).toBeVisible();
+    await expect(page.getByText("Session ouverte avec")).toHaveCount(0);
   });
 
   test("OA5.4: a link used a second time says so, with « Mes événements » (and a new link for a sign-in)", async ({ page, db }) => {
@@ -207,7 +241,7 @@ test.describe("La page du lien", () => {
     await expect(page.getByText(FR.usedLogin, { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: FR.myEvents })).toHaveAttribute("href", "/mes-evenements");
     await expect(page.getByRole("link", { name: FR.newLink })).toHaveAttribute("href", "/connexion");
-    expect(await keptSession(page)).toBeNull();
+    expect(await hasSession(page)).toBe(false);
 
     // A confirmation link whose event is already confirmed: one button.
     const email = newAddress();
@@ -230,7 +264,7 @@ test.describe("La page du lien", () => {
     await expect(heading(page)).toHaveText(FR.expired);
     await expect(page.getByText(FR.expiredLogin, { exact: true })).toBeVisible();
     await page.getByRole("link", { name: FR.newLink }).click();
-    await expect(page).toHaveURL(/\/connexion$/);
+    await onPath(page, /\/connexion$/);
     expect(await sessionsOf(db, id)).toBe(0);
   });
 
@@ -245,7 +279,7 @@ test.describe("La page du lien", () => {
     await page.getByRole("button", { name: FR.confirmButton }).click();
     await expect(heading(page)).toHaveText(FR.expired);
     await expect(page.getByText(FR.expiredConfirm, { exact: true })).toBeVisible();
-    expect(await mailTo(email)).toHaveLength(0);
+    expect((await mailTo(email)).length).toBe(0);
 
     await page.getByRole("button", { name: FR.newLink }).click();
     await expect(heading(page)).toHaveText(FR.check);
@@ -253,7 +287,7 @@ test.describe("La page du lien", () => {
     await expect(page.getByText(FR.confirmBody, { exact: true })).toBeVisible();
     await expect(page.getByText(email)).toHaveCount(0);
     await expect(page.getByText("1 heure")).toHaveCount(0);
-    expect(await mailTo(email)).toHaveLength(1);
+    expect((await mailTo(email)).length).toBe(1);
     // The expired link stays what it was; the event is not confirmed by it.
     expect((await db.selectFrom("event").select("confirmed_at").where("id", "=", pending.id).executeTakeFirstOrThrow()).confirmed_at).toBeNull();
   });
@@ -269,7 +303,7 @@ test.describe("La page du lien", () => {
     await expect(page.getByRole("alert").filter({ hasText: FR.tooMany })).toBeVisible();
     await expect(page.getByRole("button", { name: FR.newLink })).not.toHaveAttribute("aria-disabled", "true");
     await expect(page.getByRole("button", { name: FR.newLink })).toBeFocused();
-    expect(await mailTo(email)).toHaveLength(0);
+    expect((await mailTo(email)).length).toBe(0);
   });
 
   test("OA5.6: offline, the resend says the email did not go, and the button is back", async ({ page, db, context }) => {
@@ -285,6 +319,21 @@ test.describe("La page du lien", () => {
     await expect(page.getByRole("button", { name: FR.newLink })).toBeFocused();
   });
 
+  test("OA5.6: a server error on the resend says the email may not have gone, not « Vérifiez la connexion »", async ({ page, db }) => {
+    const email = newAddress();
+    addresses.push(email);
+    const pending = await pendingEvent(db, email, 7 * DAY + MINUTE);
+    await page.goto(`/connexion/confirmer#${pending.link}`);
+    await page.getByRole("button", { name: FR.confirmButton }).click();
+    await expect(page.getByRole("button", { name: FR.newLink })).toBeVisible();
+    await page.route("**/connexion/confirmer", (route) =>
+      isAction(route.request()) ? route.fulfill({ status: 500, contentType: "text/plain", body: "error" }) : route.continue(),
+    );
+    await page.getByRole("button", { name: FR.newLink }).click();
+    await expect(page.getByRole("alert").filter({ hasText: FR.resendFailed })).toBeVisible();
+    await expect(page.getByRole("button", { name: FR.newLink })).toBeFocused();
+  });
+
   test("OA5.7, OA2.5: no fragment, a fragment cut by a character, or a link taken away says it is not valid", async ({ page, db }) => {
     const { id } = await account(db);
     const token = await seedLink(db, { kind: "login", accountId: id, returnEventId: null });
@@ -296,7 +345,7 @@ test.describe("La page du lien", () => {
       await expect(heading(page)).toHaveText(FR.invalid);
       await expect(page.getByRole("link", { name: FR.newLink })).toHaveAttribute("href", "/connexion");
     }
-    expect(sent, "a fragment that is no token asks the server nothing").toHaveLength(0);
+    expect(sent.length, "a fragment that is no token asks the server nothing").toBe(0);
 
     // Well formed but unknown, or taken away by a correction of the address (OA2.5): the server says so on the press.
     await db.deleteFrom("email_link").where("account_id", "=", id).execute();
@@ -345,7 +394,7 @@ test.describe("La page du lien", () => {
     // Then it works: nothing was used up.
     fail = false;
     await button.click();
-    await expect(page).toHaveURL(/\/mes-evenements$/);
+    await onPath(page, /\/mes-evenements$/);
   });
 
   test("OA5.8: offline, the page says the session was not opened, and the button is back with the focus", async ({ page, db, context }) => {
@@ -357,10 +406,10 @@ test.describe("La page du lien", () => {
     await page.getByRole("button", { name: FR.loginButton }).click();
     await expect(page.getByRole("alert").filter({ hasText: FR.offline })).toBeVisible();
     await expect(page.getByRole("button", { name: FR.loginButton })).toBeFocused();
-    expect(await keptSession(page)).toBeNull();
+    expect(await hasSession(page)).toBe(false);
     await context.setOffline(false);
     await page.getByRole("button", { name: FR.loginButton }).click();
-    await expect(page).toHaveURL(/\/mes-evenements$/);
+    await onPath(page, /\/mes-evenements$/);
   });
 
   test.describe("without JavaScript", () => {

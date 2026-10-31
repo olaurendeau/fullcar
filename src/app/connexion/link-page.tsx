@@ -122,11 +122,15 @@ export function LinkPage({ kind }: { kind: "login" | "confirm" }) {
     else goTo(outcome.kind === "sent" ? "sent" : outcome.screen);
   }
 
-  // The press of « Se connecter » opens a session (`LinkPage.offline`, `failed`); that of « Recevoir un
-  // nouveau lien » sends an email (`Admin.pending.offline`, `tooMany`, OA5.6).
+  // The press of « Recevoir un nouveau lien » sends an email (OA5.6): `Admin.pending.tooMany` at the
+  // limit, `Admin.pending.offline` when the request did not reach the server, and `Login.failed` when it
+  // did and the server (or the provider) failed: « Vérifiez la connexion » would blame the wrong party.
+  const resendAlert = (found: OpenAlert | ResendAlert) =>
+    found === "tooMany" ? tAdmin("tooMany") : found === "offline" ? tAdmin("offline") : tLogin("failed");
+  // The press of « Se connecter » opens a session (`LinkPage.offline`, `failed`).
   const alertLine = alert && (
     <p key={alert.n} role="alert" className="text-sm text-destructive">
-      {shown === "expired" ? (alert.alert === "tooMany" ? tAdmin("tooMany") : tAdmin("offline")) : t(alert.alert === "tooMany" ? "failed" : alert.alert)}
+      {shown === "expired" ? resendAlert(alert.alert) : t(alert.alert === "tooMany" ? "failed" : alert.alert)}
     </p>
   );
 
@@ -140,7 +144,7 @@ export function LinkPage({ kind }: { kind: "login" | "confirm" }) {
           if (outcome.kind === "sent") return { kind: "sent" };
           return { kind: "alert", alert: outcome.kind === "alert" ? outcome.alert : "failed" };
         }}
-        alertText={(found) => (found === "tooMany" ? tAdmin("tooMany") : tAdmin("offline"))}
+        alertText={resendAlert}
       />
     );
   }
