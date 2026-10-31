@@ -286,6 +286,8 @@ test.describe("meeting points on the card and in the seat sheet", () => {
   test("RV7.2: the focus enters on the ticked choice, ringed 2 px; arrows move the choice; the point chosen is sent", async ({ db, page, seededEvent }) => {
     await visit(page, db, seededEvent.id, ["Tom"]);
     // By the keyboard, so that the ring shows as it does for a keyboard user.
+    // The seat is disabled until the device is read: Enter on it before does nothing.
+    await expect(seat(page, "Nina")).toBeEnabled();
     await seat(page, "Nina").focus();
     await page.keyboard.press("Enter");
     const dialog = sheet(page, "Nina");
