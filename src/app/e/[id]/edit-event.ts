@@ -3,6 +3,7 @@ import { lockEvent, readOrganiserAccessEvent, writeEventFields } from "@/db/even
 import type { LegCounts } from "@/db/legs";
 import type { Database } from "@/db/schema";
 import { findSession } from "@/db/sessions";
+import { countStopRides } from "@/db/stops";
 import { atomically } from "@/db/transaction";
 import {
   eventFieldsOf,
@@ -21,9 +22,11 @@ import { headerFrom } from "./event";
 import { removeRetour } from "./retour";
 
 /**
- * - `ok`: written, with the values now stored.
+ * - `ok`: written, with the values now stored, the option « Points de RDV » included.
  * - `errors`: a field refused, by the rules of the creation (M2.3).
- * - `changed`: `before` is no longer what is stored, given in `event` (M6.1, M6.2).
+ * - `changed`: `before` is no longer what is stored, given in `event` and `stops` (M6.1, M6.2).
+ * - `stopsLocked`: the option « Points de RDV » is turned off while `cars` cars have Stops, counted
+ *   under the Event's lock (RV9.3, D1): the option stays, and nothing is written.
  * - `confirmRetour`: the retour unchecked still holds these, and `removal` is not them (M3.5).
  * - `invalid`: organiser-access.ts grants no access (M8.2, OA7.1–OA7.9), before the lock or under
  *   it (#836), or a request no page sends.
@@ -34,9 +37,10 @@ import { removeRetour } from "./retour";
  * Nothing but `ok` has written anything, and no answer carries the token.
  */
 export type EditEventOutcome =
-  | { ok: true; event: EventHeader }
+  | { ok: true; event: EventHeader; stops: boolean }
   | { ok: false; errors: EventErrors }
-  | { ok: false; error: "changed"; event: EventHeader }
+  | { ok: false; error: "changed"; event: EventHeader; stops: boolean }
+  | { ok: false; error: "stopsLocked"; cars: number }
   | ({ ok: false; error: "confirmRetour" } & LegCounts)
   | { ok: false; error: "invalid" | "eventNotFound" | "eventEnded" };
 
@@ -65,16 +69,19 @@ async function accessRefusal(db: Kysely<Database>, eventId: string, proof: unkno
 /**
  * `before` as a page sends it, the values it loaded, or nothing: `validateEventChange` throws on
  * another shape. A page from before the positions sends no `locationPosition`, one from before
- * the description no `description`: each is then compared without it.
+ * the description no `description`, one from before the option no `stops`: each is then compared
+ * without it.
  */
 function headerOf(input: unknown): EventChange | undefined {
   if (typeof input !== "object" || input === null) return undefined;
-  const { title, location, allerAt, retourAt, locationPosition, description } = input as Record<string, unknown>;
+  const { title, location, allerAt, retourAt, locationPosition, description, stops } = input as Record<string, unknown>;
   if (typeof title !== "string" || typeof location !== "string" || !isWallClock(allerAt)) return undefined;
   if (retourAt !== null && !isWallClock(retourAt)) return undefined;
   if (description !== undefined && description !== null && typeof description !== "string") return undefined;
+  if (stops !== undefined && typeof stops !== "boolean") return undefined;
   const header: EventChange = { title, location, allerAt, retourAt };
   if (description !== undefined) header.description = description;
+  if (stops !== undefined) header.stops = stops;
   if (locationPosition === undefined) return header;
   const position = positionOf(locationPosition);
   return "error" in position ? undefined : { ...header, locationPosition: position.value };
@@ -94,16 +101,18 @@ function countsOf(input: unknown): { ok: true; counts?: LegCounts } | { ok: fals
 
 /**
  * `loaded` without a position, from a page before the positions, is compared without it; without
- * a description, from a page before the description, too.
+ * a description, from a page before the description, too; without `stops`, from a page before the
+ * option, `stopsEnabled` is not compared.
  */
-function sameHeader(stored: EventHeader, loaded: EventChange): boolean {
+function sameHeader(stored: EventHeader, stopsEnabled: boolean, loaded: EventChange): boolean {
   return (
     stored.title === loaded.title &&
     stored.location === loaded.location &&
     stored.allerAt === loaded.allerAt &&
     stored.retourAt === loaded.retourAt &&
     (loaded.locationPosition === undefined || samePosition(stored.locationPosition, loaded.locationPosition)) &&
-    (loaded.description === undefined || stored.description === loaded.description)
+    (loaded.description === undefined || stored.description === loaded.description) &&
+    (loaded.stops === undefined || stopsEnabled === loaded.stops)
   );
 }
 
@@ -127,8 +136,11 @@ function sameHeader(stored: EventHeader, loaded: EventChange): boolean {
  * change waited for it (M3.6). `before` is compared with the row the lock gives, never
  * with a snapshot taken before it. A transaction passed in is for tests only: in REPEATABLE
  * READ, as withRollback opens it, the count would miss such a write, and leave its row
- * under a `retour_at` null. The options are not touched. The tokens are only compared, never
- * logged, kept nor answered.
+ * under a `retour_at` null. Of the options, only « Points de RDV » is touched (D1), when `stops`
+ * is sent: turned on, always; turned off, only while no car has Stops, counted again under the
+ * Event's lock like the retour's (RV9.3), so that no Stop is ever left under a disabled option: a
+ * car offered with Stops that waits for the lock finds it off (`stopsOff`). The answer carries the
+ * option stored. The tokens are only compared, never logged, kept nor answered.
  */
 export async function editEvent(
   db: Kysely<Database>,
@@ -157,7 +169,14 @@ export async function editEvent(
     const refusedNow = await accessRefusal(trx, eventId, proof);
     if (refusedNow) return refusedNow;
     const stored = headerFrom(row);
-    if (!sameHeader(stored, loaded)) return { ok: false, error: "changed", event: stored };
+    if (!sameHeader(stored, row.stops_enabled, loaded)) {
+      return { ok: false, error: "changed", event: stored, stops: row.stops_enabled };
+    }
+    // Counted under the lock: a car offered with Stops that committed while this waited is seen.
+    if (event.stops === false && row.stops_enabled) {
+      const cars = await countStopRides(trx, eventId);
+      if (cars > 0) return { ok: false, error: "stopsLocked", cars };
+    }
     if (event.retourAt === null && stored.retourAt !== null) {
       const removed = await removeRetour(trx, eventId, confirmed.counts);
       if (!removed.ok) return removed;
@@ -165,6 +184,7 @@ export async function editEvent(
     if (!(await writeEventFields(trx, eventId, event))) return EVENT_NOT_FOUND;
     // Not sent, the position stored is kept (D6, AL5.6), and the description stored: the answer says it.
     const { locationPosition = stored.locationPosition, description = stored.description } = event;
-    return { ok: true, event: { ...event, locationPosition, description } };
+    const { stops, ...header } = event;
+    return { ok: true, event: { ...header, locationPosition, description }, stops: stops ?? row.stops_enabled };
   });
 }

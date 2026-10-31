@@ -30,7 +30,8 @@ const NOBODYS_TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
  * without a car. Léa, Hugo and Inès are the persons of one device; the others have their own.
  */
 async function seedScene(db: Db) {
-  const { id: eventId } = await seedEvent(db);
+  // The option « Points de RDV » is on: the points of the scene are the event's (RV8.3).
+  const { id: eventId } = await seedEvent(db, { stopsEnabled: true });
   const marc = await seedPerson(db, eventId, { firstName: "Marc" });
   const zoe = await seedPerson(db, eventId, { firstName: "Zoé" });
   const tom = await seedPerson(db, eventId, { firstName: "Tom" });
@@ -100,6 +101,19 @@ describe("setBoardingStop", () => {
       // No point given is the start too.
       expect(await setBoardingStop(trx, eventId, lea.token, r1, hugo.id, undefined)).toMatchObject({ ok: true });
       expect(await stopOf(hugo.id)).toBeNull();
+    });
+  });
+
+  it("RV8.3: with the option off, any change of point is refused by stopsOff and nothing is written", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, r1, s2 } = await seedScene(trx);
+      await trx.updateTable("event").set({ stops_enabled: false }).where("id", "=", eventId).execute();
+      const before = await rowsOf(trx, eventId);
+
+      expect(await setBoardingStop(trx, eventId, lea.token, r1, lea.id, s2)).toMatchObject({ ok: false, error: "stopsOff" });
+      expect(await setBoardingStop(trx, eventId, lea.token, r1, hugo.id, null)).toMatchObject({ ok: false, error: "stopsOff" });
+
+      expect(await rowsOf(trx, eventId)).toEqual(before);
     });
   });
 
@@ -254,6 +268,7 @@ describe("setBoardingStop", () => {
   // Committed data, both orders: the Stop is deleted under the Ride's lock, or chosen under it.
   describe("at the same time as the Stop's deletion, on committed data", () => {
     async function aBoardedCar(db: Db, eventId: string) {
+      await db.updateTable("event").set({ stops_enabled: true }).where("id", "=", eventId).execute();
       const driver = await seedPerson(db, eventId, { firstName: "Marc" });
       const lea = await seedPerson(db, eventId, { firstName: "Léa" });
       const rideId = await seedRide(db, eventId, driver.id, { seats: 3 });

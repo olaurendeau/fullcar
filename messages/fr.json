@@ -402,6 +402,9 @@
       "body": "Nous avons envoyé un lien à {email}. Ouvrez-le, sur n’importe quel appareil, pour retrouver cet événement dans Mes événements. D’ici là, l’espace organisateur ne s’ouvre que dans ce navigateur.",
       "resend": "Renvoyer l’e-mail",
       "fix": "Corriger l’adresse",
+      "resent": "E-mail renvoyé à {email}.",
+      "offline": "L’e-mail n’a pas été renvoyé. Vérifiez la connexion, puis réessayez.",
+      "tooMany": "Trop d’envois. Réessayez dans une heure.",
       "sendFailed": {
         "title": "L’e-mail n’a peut-être pas été envoyé",
         "body": "Votre événement est créé, mais le lien pour confirmer {email} n’a peut-être pas été envoyé. Utilisez « Renvoyer l’e-mail » : si le premier arrive quand même, les deux liens restent valables. D’ici là, l’espace organisateur ne s’ouvre que dans ce navigateur."
@@ -445,6 +448,13 @@
     "changed": {
       "title": "L’événement vient d’être modifié depuis un autre appareil.",
       "body": "Rien n’a été enregistré. Les champs que vous n’aviez pas changés montrent maintenant la version enregistrée : vérifiez, puis validez de nouveau."
+    },
+    "stops": {
+      "label": "Points de RDV",
+      "hint": "Les conducteurs de l’aller peuvent ajouter des points de RDV à leur voiture.",
+      "locked": "{count, plural, one {# voiture a des points de RDV : l’option reste active tant qu’ils existent.} other {# voitures ont des points de RDV : l’option reste active tant qu’ils existent.}}",
+      "failed": "L’option « Points de RDV » n’a pas été modifiée.",
+      "stillLocked": "L’option « Points de RDV » reste active : des voitures ont des points de RDV."
     },
     "removeRetour": {
       "title": "Supprimer le retour ?",
