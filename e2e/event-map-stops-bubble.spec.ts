@@ -32,6 +32,35 @@ async function tabbed(page: Page, map: Locator, count: number): Promise<string[]
   return names;
 }
 
+/**
+ * Two Stops of two cars 40 m apart, the label of the one over the round of the other: the one
+ * drawn last, the later one, is on top at rest (both at z-1), so the earlier one is covered. Its
+ * car's name is longer, for its button to show past the other's, where a mouse can reach it. Returns the
+ * covered Stop and the other, and `shows`: whether the element at the centre of a Stop's round is
+ * in its button.
+ */
+async function coveredStop(db: Parameters<typeof seedCar>[0], page: Page, eventId: string, place: Parameters<typeof around>[0]) {
+  const bernadette = await seedCar(db, eventId, "Bernadette", { position: around(place, { east: 3000 }), departureTime: "08:00:00" });
+  const marc = await seedCar(db, eventId, "Marc", { position: around(place, { east: 3000, north: 400 }), departureTime: "09:00:00" });
+  const spot = around(place, { north: 1200 });
+  await seedStop(db, eventId, bernadette, { location: "Prelles boucherie", time: "08:25:00", position: spot });
+  await seedStop(db, eventId, marc, { location: "Prelles église", time: "09:20:00", position: around(spot, { north: 40 }) });
+
+  await page.goto(`/e/${eventId}`);
+  const map = await openMap(page, mapName("aller", "2 voitures"));
+  await expect(stops(map)).toHaveCount(2);
+  const shows = (stop: Locator) =>
+    stop.locator("[data-map-stop-dot]").evaluate((element) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return !!element.closest("[data-map-stop]")?.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+    });
+  await stops(map).first().locator("[data-map-stop-dot]").scrollIntoViewIfNeeded();
+  const [first, second] = [stops(map).first(), stops(map).last()];
+  const [firstShows, secondShows] = [await shows(first), await shows(second)];
+  expect([firstShows, secondShows].filter(Boolean), "one Stop shows at rest, the other is covered").toHaveLength(1);
+  return { map, covered: firstShows ? second : first, over: firstShows ? first : second, shows };
+}
+
 test("RV5.4: a press on a Stop opens its bubble, titled « lieu, heure », with a button that leads to the card of its car", async ({ db, page, placed }) => {
   const marc = await seedCar(db, placed.id, "Marc", { position: around(placed.place, { east: 3000 }), location: "Champcella", departureTime: "08:00:00", seats: 3 });
   await seedStop(db, placed.id, marc, { location: "Prelles boucherie", time: "08:25:00", position: around(placed.place, { north: 1500 }) });
@@ -125,6 +154,19 @@ test("RV5.4, WCAG 2.4.11, #918: at 360 px, a Stop at 10 m from a car, whose labe
   expect(await shows()).toBe(true);
 });
 
+test("RV5.4, WCAG 2.4.11, #918: a Stop covered by another one goes above it while it has the focus, and under it again when the focus leaves", async ({ db, page, placed }) => {
+  const { covered, over, shows } = await coveredStop(db, page, placed.id, placed.place);
+
+  await covered.evaluate((button: HTMLElement) => button.focus({ preventScroll: true }));
+  await expect(covered).toBeFocused();
+  expect(await shows(covered), "the focused Stop shows over the other").toBe(true);
+
+  await over.evaluate((button: HTMLElement) => button.focus({ preventScroll: true }));
+  await expect(over).toBeFocused();
+  expect(await shows(covered), "the Stop goes under the other once the focus has left").toBe(false);
+  expect(await shows(over)).toBe(true);
+});
+
 test.describe("with a mouse", () => {
   // The hover in a context with a mouse, the project being a touch Pixel 7 (CA1.23, amendment 4).
   test.use({ hasTouch: false, isMobile: false });
@@ -179,6 +221,30 @@ test.describe("with a mouse", () => {
     // The mouse out of the map: the round shows again.
     await page.mouse.move(away.x + 10, Math.max(1, away.y - 30));
     expect(await shows()).toBe(true);
+  });
+
+  test("RV5.4, CA1.23, #918: a Stop covered by another one goes above it while a mouse is over a part of it that shows, and under it again when the mouse leaves", async ({ db, page, placed }) => {
+    const { map, covered, shows } = await coveredStop(db, page, placed.id, placed.place);
+    const away = (await map.boundingBox())!;
+    await page.mouse.move(away.x + 10, Math.max(1, away.y - 30));
+
+    /** A spot of the covered Stop's button where it is the element, relative to it, for Playwright's `position`. */
+    const visibleSpot = () =>
+      covered.evaluate((button) => {
+        const box = button.getBoundingClientRect();
+        for (let x = box.right - 2; x > box.x; x -= 2) {
+          const y = box.y + box.height / 2;
+          if (button.contains(document.elementFromPoint(x, y))) return { x: x - box.x, y: y - box.y };
+        }
+        return null;
+      });
+    const position = await visibleSpot();
+    expect(position, "a part of the covered Stop shows").not.toBeNull();
+    await covered.hover({ position: position! });
+    expect(await shows(covered), "the hovered Stop shows over the other").toBe(true);
+
+    await page.mouse.move(away.x + 10, Math.max(1, away.y - 30));
+    expect(await shows(covered), "the Stop goes under the other once the mouse has left").toBe(false);
   });
 });
 

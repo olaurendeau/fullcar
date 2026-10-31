@@ -503,7 +503,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     const icon = entry.marker.getElement();
     if (!icon) return;
     const focused = !!focusTo && icon.contains(focusTo);
-    // A Stop is under the labels, but for a mouse over it or the focus in it (#893, WCAG 2.4.11).
+    // A Stop is just above the labels of the cars at rest, and above those raised too while a mouse is over it or the focus in it (#893, #918, WCAG 2.4.11).
     const layers = entry.kind === "stop" ? STOP_LAYERS : POINT_LAYERS;
     icon.classList.remove(...layers);
     icon.classList.add(
