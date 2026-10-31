@@ -247,6 +247,23 @@ test.describe("meeting points on the card and in the seat sheet", () => {
     await expect(messages(page)).toHaveText(["Tom n’a pas pu monter dans la voiture de Nina. Une erreur est survenue : réessayez dans un instant."]);
   });
 
+  test("RV3.6: a car without a point, a refusal of « Placer » leaves the focus in the name field being typed", async ({ db, page, seededEvent }) => {
+    await visit(page, db, seededEvent.id, ["Tom", "Léa"]);
+    const answer = await holdFirst(page, scene.cars.sam, true);
+    await seat(page, "Sam").click();
+    const dialog = sheet(page, "Sam");
+    await placeButton(dialog).click();
+    await dialog.getByRole("button", { name: "Ajouter une personne", exact: true }).click();
+    const form = page.getByRole("dialog", { name: "Ajouter une personne" });
+    const name = form.getByLabel("Prénom");
+    await name.fill("Inès");
+    await expect(name).toBeFocused();
+    await failHeld(page, answer);
+
+    await expect(name).toBeFocused();
+    await expect(name).toHaveValue("Inès");
+  });
+
   test("RV7.2: the focus enters on the ticked choice, ringed 2 px; arrows move the choice; the point chosen is sent", async ({ db, page, seededEvent }) => {
     await visit(page, db, seededEvent.id, ["Tom"]);
     // By the keyboard, so that the ring shows as it does for a keyboard user.
@@ -268,11 +285,15 @@ test.describe("meeting points on the card and in the seat sheet", () => {
     await expect(choice(dialog, /Monétier/)).toBeChecked();
     await page.keyboard.press("ArrowUp", { delay: 50 });
     await expect(choice(dialog, /Briançon/)).toBeChecked();
+    // Space ticks a choice that is not: the focus put on Monétier without ticking it (a click would).
+    await choice(dialog, /Monétier/).focus();
+    await expect(choice(dialog, /Monétier/)).not.toBeChecked();
     await page.keyboard.press("Space");
-    await expect(choice(dialog, /Briançon/)).toBeChecked();
+    await expect(choice(dialog, /Monétier/)).toBeChecked();
+    await expect(choice(dialog, /Briançon/)).not.toBeChecked();
     await placeButton(dialog).click();
     await expect(messages(page)).toHaveText(["Tom est dans la voiture de Nina"]);
-    expect(await placementOf(db, seededEvent.id, scene.persons.Tom)).toEqual({ rideId: scene.cars.nina, stopId: scene.stops.briancon });
+    expect(await placementOf(db, seededEvent.id, scene.persons.Tom)).toEqual({ rideId: scene.cars.nina, stopId: scene.stops.monetier });
   });
 
   test("RV7.3: the text of the passengers' lines and of the ticked choice makes 4,5:1 on its ground", async ({ db, page, seededEvent }) => {

@@ -331,6 +331,11 @@ function SeatSheet({
   useEffect(() => {
     isOpen.current = open;
   }, [open]);
+  // The form of « Ajouter une personne » shows, not the list: what is typed there keeps the focus.
+  const isAdding = useRef(false);
+  useEffect(() => {
+    isAdding.current = adding !== null;
+  }, [adding]);
   useEffect(() => {
     const target = focusNext.current?.();
     if (!target) return;
@@ -370,8 +375,11 @@ function SeatSheet({
     // focus back on the seat, which shows until then, and the bar says why.
     if (taken.kind === "noRetour" || taken.kind === "personGone") return onOpenChange(false);
     setRefused(said(taken, names.length));
-    // « Placer » has the focus again (RV3.6); the car gone, its button is gone and « Fermer » has it.
-    focusNext.current = placeFooter;
+    // « Placer » has the focus again on a car with Stops (RV3.6), the car gone, its button is gone and
+    // « Fermer » has it. Otherwise only the car gone moves it: one who opened « Ajouter une personne »
+    // since keeps typing where she is.
+    const carGone = taken.kind === "refused" && taken.refusal === "rideGone";
+    if (carGone || (hasStops && !isAdding.current)) focusNext.current = placeFooter;
   }
 
   // Back to the list, what was typed lost, the focus on « Ajouter une personne »: « Annuler », and the browser's « back » (v4.7, rule 3).
