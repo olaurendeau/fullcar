@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { BrandMark } from "@/components/brand/brand-mark";
 import { ContactFooter } from "@/components/contact/contact-footer";
 import { Button } from "@/components/ui/button";
+import { AccountDeletedNotice } from "./account-deleted-notice";
 import { publicPageMetadata } from "./site";
 
 export const metadata: Metadata = publicPageMetadata("/");
@@ -20,6 +21,7 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 p-4">
+      <AccountDeletedNotice />
       <div className="flex flex-col gap-1">
         {/* The mark beside the h1, outside it: the h1's name stays « Fullcar » (#651, VI4.3). */}
         <div className="flex items-start gap-2.5">
