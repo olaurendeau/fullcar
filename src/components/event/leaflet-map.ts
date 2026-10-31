@@ -32,6 +32,11 @@ export interface CarPoint {
   position: Position;
   /** The flag's point: no line, and the label under the flag. */
   atFlag: boolean;
+  /**
+   * Its straight line to the flag is drawn: not at the flag, and not when each of its cars draws
+   * its own through its Stops (`CarRoute`, Q4 of #881).
+   */
+  direct: boolean;
   label: string;
   name: string;
   /** Its bubble's title, which names it, « 2 voitures, 3 places libres » (v30, CA1.22); one car's, its name, with no bubble. */
@@ -42,13 +47,39 @@ export interface CarPoint {
   cars: PointCar[];
 }
 
-/** What a state of the page puts on the map: the event's place, its name, and the points of `mapOf`. */
+/**
+ * A Stop with a position, on the aller (epic #881, RV5.1): a round and a label, never grouped
+ * with a car, nor with the flag. Its press is `onCar`: the car's card, until #893 gives it a bubble.
+ */
+export interface StopPoint {
+  /** The Stop's id. */
+  key: string;
+  /** Its car's id. */
+  car: string;
+  position: Position;
+  /** « 08:25 Nina ». */
+  label: string;
+  /** « Point de RDV de Nina : Prelles boucherie, 08:25 ». */
+  name: string;
+}
+
+/** The line of a car with Stops (`routeOf`, RV5.2): its position, its Stops by time, the flag. */
+export interface CarRoute {
+  car: string;
+  positions: Position[];
+}
+
+/** What a state of the page puts on the map: the event's place, its name, and the points of `mapOf`, the Stops and the routes. */
 export interface MapState {
   flag: Position;
   /** The flag's name, « Lieu de l’événement : {location} ». */
   flagLabel: string;
   /** In the order of their first car's card. */
   points: CarPoint[];
+  /** In the order of their cars' cards, then of their times; empty on the retour. */
+  stops: StopPoint[];
+  /** One for each car with a positioned Stop. */
+  routes: CarRoute[];
 }
 
 export interface EventMapOptions {
@@ -192,6 +223,41 @@ function seatsBadge(className: string): { badge: HTMLSpanElement; number: HTMLSp
   const number = document.createElement("span");
   badge.append(number);
   return { badge, number };
+}
+
+/** The icon class of a Stop: under the labels of the cars, which paint over a round. */
+const STOP_LAYER = "-z-1!";
+/** Half the width of a Stop's round slot, in CSS pixels: its button starts that far left of the Stop's place. */
+const STOP_ANCHOR = 22;
+
+/** What `drawStop` draws on: a Stop's button and the text of its label. */
+type StopElements = { button: HTMLButtonElement; text: HTMLSpanElement };
+
+/**
+ * A Stop (RV5.1): a real `<button>`, 44 px high, its white round with a #171717 border centred
+ * on the Stop's place in a 44 px slot, then its label « heure + prénom ». Its name is the whole one.
+ * Made once per Stop, and drawn again at each state (`drawStop`): the same element.
+ */
+function stopButton(onPress: () => void): StopElements {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.mapStop = "";
+  button.className =
+    "group pointer-events-auto absolute top-0 left-0 flex min-h-11 w-max -translate-x-5.5 -translate-y-1/2 items-center focus-visible:outline-hidden";
+  const slot = document.createElement("span");
+  slot.className = "grid size-11 shrink-0 place-items-center";
+  const dot = document.createElement("span");
+  dot.dataset.mapStopDot = "";
+  dot.className = "size-3 rounded-full border-2 border-[#171717] bg-white group-focus-visible:focus-ring";
+  slot.append(dot);
+  const text = document.createElement("span");
+  text.dataset.mapStopLabel = "";
+  text.className =
+    "-ml-2 max-w-30 truncate rounded-full border border-[#171717] bg-background px-2 text-xs leading-5 font-semibold whitespace-nowrap text-foreground shadow-sm group-focus-visible:focus-ring";
+  button.append(slot, text);
+  holdPress(button);
+  button.addEventListener("click", onPress);
+  return { button, text };
 }
 
 /** What `drawPoint` draws on: a point's button, the text of its label, and its badge's number. */
@@ -365,6 +431,8 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
 
   /** A point on the map, named by its key (`pointKey`): its marker, its button, its line to the flag (none at the flag). */
   type Drawn = PointElements & { key: string; point: CarPoint; marker: L.Marker; line: L.Polyline | null; hovered: boolean };
+  /** A Stop on the map, kept by its id. */
+  type DrawnStop = StopElements & { point: StopPoint; marker: L.Marker };
   /** The open bubble, of `entry`'s point: its buttons by car, then « Fermer ». */
   type Open = BubbleElements & { entry: Drawn; cars: Map<string, HTMLButtonElement>; close: HTMLButtonElement };
 
@@ -481,7 +549,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     entry.point = point;
     drawPoint(entry, point, open?.entry === entry);
     entry.marker.setLatLng(spot(point));
-    if (point.atFlag) {
+    if (point.atFlag || !point.direct) {
       entry.line?.remove();
       entry.line = null;
     } else if (entry.line) entry.line.setLatLngs([flagAt(), spot(point)]);
@@ -507,6 +575,51 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
     return entry;
   };
   let drawn = state.points.map((point) => add(pointKey(point), point));
+
+  // The Stops and the routes: kept, moved or created by their ids, and those gone removed. They
+  // never take part in `mapUpdate`: the points and the reframing do not depend on them (RV5.5).
+  const drawnStops = new Map<string, DrawnStop>();
+  const drawnRoutes = new Map<string, L.Polyline>();
+  const drawStop = (entry: DrawnStop, point: StopPoint) => {
+    entry.point = point;
+    entry.button.setAttribute("aria-label", point.name);
+    entry.text.textContent = point.label;
+    entry.marker.setLatLng([point.position.lat, point.position.lng]);
+  };
+  const addStop = (point: StopPoint): DrawnStop => {
+    const { button, text } = stopButton(() => options.onCar(entry.point.car));
+    const icon = L.divIcon({ html: button, className: STOP_LAYER, iconSize: [0, 0] });
+    const marker = L.marker([point.position.lat, point.position.lng], { icon, keyboard: false, interactive: false }).addTo(map);
+    const entry: DrawnStop = { button, text, point, marker };
+    drawStop(entry, point);
+    return entry;
+  };
+  const drawStops = (next: MapState) => {
+    const keys = new Set(next.stops.map(({ key }) => key));
+    for (const [key, entry] of drawnStops) {
+      if (keys.has(key)) continue;
+      entry.marker.remove();
+      drawnStops.delete(key);
+    }
+    for (const point of next.stops) {
+      const entry = drawnStops.get(point.key);
+      if (entry) drawStop(entry, point);
+      else drawnStops.set(point.key, addStop(point));
+    }
+    const cars = new Set(next.routes.map(({ car }) => car));
+    for (const [car, line] of drawnRoutes) {
+      if (cars.has(car)) continue;
+      line.remove();
+      drawnRoutes.delete(car);
+    }
+    for (const { car, positions } of next.routes) {
+      const latLngs = positions.map((each): L.LatLngTuple => [each.lat, each.lng]);
+      const line = drawnRoutes.get(car);
+      if (line) line.setLatLngs(latLngs);
+      else drawnRoutes.set(car, L.polyline(latLngs, LINE).addTo(map));
+    }
+  };
+  drawStops(state);
 
   /** What has the focus in the map: a point, a button of the bubble (the bubble itself as its « Fermer »), else the container. */
   const focusNow = (): MapFocus | null => {
@@ -556,9 +669,15 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
    * `offsetWidth` would round 104.3 px to 104, a margin of 52 px for half a label of 52.15
    * (#829). `framing` rounds the margin up. 0 for a button not in the page yet.
    */
-  const halfLabel = () => Math.max(0, ...drawn.map(({ button }) => button.getBoundingClientRect().width / 2));
+  const halfLabel = () =>
+    Math.max(
+      0,
+      ...drawn.map(({ button }) => button.getBoundingClientRect().width / 2),
+      // A Stop's label runs to the right of its place: its button's width less the slot's half.
+      ...[...drawnStops.values()].map(({ button }) => button.getBoundingClientRect().width - STOP_ANCHOR),
+    );
   const fit = () => {
-    const view = framing(state.flag, state.points, creditsHeight(), halfLabel());
+    const view = framing(state.flag, state.points, creditsHeight(), halfLabel(), state.stops);
     still(() => {
       if (view.kind === "flag") map.setView([view.center.lat, view.center.lng], view.zoom, { animate: false });
       else {
@@ -605,6 +724,7 @@ export function createEventMap(container: HTMLElement, options: EventMapOptions)
       redraw(entry, next.points[n]);
       return entry;
     });
+    drawStops(next);
     // Still open: the same cars, their names and their order as the cards say now.
     if (open) fill(open);
     if (change.reorder) {

@@ -835,7 +835,12 @@ pour l'écran, les mots, les critères et la table « Mises à jour et focus »)
 serveur ne reçoit rien de nouveau, sauf les demandes de tuiles : la carte lit la position de l'événement
 (`EventHeader.locationPosition`, que `headerFrom` lit, `src/app/e/[id]/event.ts`) et celle de
 chaque voiture (`BoardCar.position`, voir « La position d'une voiture »), dans l'état que la
-page applique déjà. Les Arrêts (#68) ne sont pas sur la carte.
+page applique déjà. Les Arrêts (#68, #887) sont sur la carte de l'aller, quand
+l'option « Points de RDV » est activée : `stopsOf`, `routeOf` et le paramètre `stops` de
+`framing` (`src/domain/event-map.ts`) sont des fonctions pures, et un Arrêt n'entre jamais dans
+`mapOf`. Un Arrêt positionné d'une voiture positionnée a son rond et son étiquette ; la voiture
+trace un seul trait par ses Arrêts, à la place du trait droit ; les autres sont comptés sous la
+carte. Un Arrêt qui change de position ne recadre pas la carte (`reframe`).
 
 ### Les tuiles : `/tuiles/{z}/{x}/{y}` (#473, #474, #554)
 

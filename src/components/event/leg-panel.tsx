@@ -134,7 +134,7 @@ export function LegPanel({
       <noscript>
         <p className="text-sm text-muted-foreground">{tBoard("needsJavaScript")}</p>
       </noscript>
-      {map ? <EventMap leg={leg} map={map} cars={cars} /> : hint && <OrganiserHint leg={leg} hint={hint} />}
+      {map ? <EventMap leg={leg} map={map} cars={cars} date={legDate} /> : hint && <OrganiserHint leg={leg} hint={hint} />}
       {hasBanner(board) ? (
         <>
           {cars.length > 0 ? (
