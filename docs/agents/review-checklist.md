@@ -13,27 +13,51 @@ celui qui écrit le code.
 - Jamais dans le chemin ni dans la query string : uniquement dans le fragment (`#…`) ou dans
   le corps d'une requête. Un jeton dans un chemin finit dans les journaux de Vercel.
 - Comparaison à temps constant.
-- À partir de #154, le jeton d'admin n'entre que dans le corps de `loadOrganiserPanel`, et,
-  à partir de #263, dans celui d'`updateEvent` ; à partir de #596, la session y entre avec
-  lui (`{ adminToken, session }`). Seul `src/domain/organiser-access.ts` décide qui
+- Le jeton d'admin n'entre que dans le corps de six server actions : `loadOrganiserPanel`
+  (à partir de #154), `updateEvent` (#263), `removePersonAsOrganiser` (#672), `resendEmail`
+  (#901), `signOut` (#895) et `deleteAccount` (#905). Une septième, ou un jeton d'admin
+  reçu par une autre action, est bloquant. Les quatre premières le reçoivent avec la session,
+  `{ adminToken, session }` (à partir de #596) ; `signOut` et `deleteAccount` reçoivent la
+  session et **tous** les jetons d'admin que le navigateur garde (`MAX_ADMIN_TOKENS` à la
+  fois, le reste est ignoré), pour les révoquer : elles ne décident aucun accès, et ne
+  répondent jamais de jeton. `removeAsOrganiser` n'est pas un point d'entrée : c'est le cas
+  d'usage derrière `removePersonAsOrganiser`, comme `editEvent` derrière `updateEvent`. Les
+  listes de ces six actions dans les commentaires de `src/app/e/[id]/admin/admin-token-store.ts`
+  et de `src/app/e/[id]/admin/actions.ts` disent les mêmes six. Seul
+  `src/domain/organiser-access.ts` décide qui
   administre (épique #581). La règle n'ouvre le panneau qu'à la session du compte de
   l'événement ou au jeton d'admin du navigateur qui l'a créé, et jamais sur un événement
   orphelin (`orphan`) ni anonymisé, quel que soit le jeton : sur un événement anonymisé, la
-  session du compte lit `ended`, une autre session `notYours`, personne `signIn`. Hors du
-  panneau, la réponse de `loadOrganiserPanel` ne contient que l'état que la règle décide
-  (`orphan`, `ended`, `pending`, `notYours`, `signIn`) et aucune donnée du panneau ;
-  `notYours` n'ajoute que l'adresse de la session du visiteur. `loadOrganiserPanel` ne
-  répond `{ state: "invalid" }` qu'à un identifiant inconnu ou mal formé. `updateEvent`
-  répond `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement inconnu ou mal
-  formé, puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un événement
-  anonymisé, quels que soient le jeton et la session : l'anonymisation a effacé le hash du
-  jeton (« La purge » dans `architecture.md`) ; puis `{ ok: false, error: "invalid" }` quand
-  la règle n'ouvre rien. Ces refus n'écrivent rien. À partir de #843, `updateEvent` décide
-  l'accès une seconde fois sous `lockEvent(trx, id, "noKeyUpdate")`, avant toute écriture :
-  une session fermée, un compte supprimé ou un jeton révoqué pendant l'attente du verrou y
-  est vu. Une écriture de l'organisateur qui ne décide l'accès qu'avant le verrou est
-  bloquante. La réponse du panneau n'est ni stockée dans le navigateur, ni journalisée
-  (O6.4).
+  session du compte lit `ended`, une autre session `notYours`, personne `signIn`. Ce que
+  chaque action répond quand l'accès est refusé, et n'écrit rien alors :
+  - `loadOrganiserPanel` : hors du panneau, ne contient que l'état que la règle décide
+    (`orphan`, `ended`, `pending`, `notYours`, `signIn`) et aucune donnée du panneau ;
+    `notYours` n'ajoute que l'adresse de la session du visiteur. Elle ne répond
+    `{ state: "invalid" }` qu'à un identifiant inconnu ou mal formé.
+  - `updateEvent` : `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement
+    inconnu ou mal formé, puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un
+    événement anonymisé, quels que soient le jeton et la session : l'anonymisation a effacé
+    le hash du jeton (« La purge » dans `architecture.md`) ; puis
+    `{ ok: false, error: "invalid" }` quand la règle n'ouvre rien.
+  - `removePersonAsOrganiser` : `{ ok: false, error: "eventNotFound" }` à un identifiant
+    d'événement inconnu ou mal formé, puis `{ ok: false, error: "noOrganiserAccess" }` quand
+    la règle n'ouvre rien, y compris sur un événement anonymisé.
+  - `resendEmail` : `{ ok: false, error: "eventNotFound" }`, puis `"eventEnded"` à un
+    événement anonymisé, puis `"invalid"` quand la règle n'ouvre rien ; ensuite seulement
+    `"notPending"` (rien n'attend de confirmation) et `"tooMany"` (une limite d'envoi), qui
+    supposent l'accès accordé.
+  - `deleteAccount` : `{ deleted: false }` pour une session inconnue, mal formée, expirée ou
+    fermée entre-temps ; les jetons d'admin reçus ne sont alors pas révoqués.
+  - `signOut` : ne refuse rien, répond toujours `{ signedOut: true }`, quelle que soit la
+    session, et révoque les jetons reçus.
+
+  À partir de #843, `updateEvent` décide l'accès une seconde fois sous
+  `lockEvent(trx, id, "noKeyUpdate")`, avant toute écriture, comme `resendEmail` ;
+  `removePersonAsOrganiser` le fait sous le verrou de l'Event aussi (partagé, puis
+  `noKeyUpdate` à la reprise) : une session fermée, un compte supprimé ou un jeton révoqué
+  pendant l'attente du verrou y est vu. Une écriture de l'organisateur qui ne décide l'accès
+  qu'avant le verrou est bloquante. La réponse du panneau n'est ni stockée dans le navigateur,
+  ni journalisée (O6.4).
 - À partir de #855, il n'y a plus de lien d'organisateur. Seul
   `src/app/e/[id]/admin/admin-token-store.ts` touche au jeton d'admin dans le navigateur :
   celui qui a créé l'événement le garde dans `localStorage` sous `fullcar:admin-token:{id}`
