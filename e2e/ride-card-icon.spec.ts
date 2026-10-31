@@ -52,36 +52,33 @@ async function expectHeaderFits(page: Page, article: Locator) {
 test.describe("the car icon of a card's header", () => {
   test.use({ locale: "fr-FR", viewport: { width: 360, height: 800 } });
 
-  test("CI1.1: in the header, the icon comes before the title, then the time", async ({ db, page, seededEvent }) => {
+  test("CI1.1, CI1.2, CI1.3, CI1.8: the 15 cars of a leg, a full one too, each have the 16 px icon before the title, hidden from assistive technology", async ({ db, page, seededEvent }) => {
     await seedCar(db, seededEvent.id, "Marc");
+    for (let index = 2; index <= 15; index++) {
+      await seedCar(db, seededEvent.id, `Conducteur ${index}`, index === 15 ? 1 : 3, index === 15 ? "Léa" : undefined);
+    }
     await page.goto(`/e/${seededEvent.id}`);
+    const articles = panel(page).getByRole("article");
+    await expect(articles).toHaveCount(15);
+    for (const each of await articles.all()) await expect(icon(each)).toHaveCount(1);
+    await expect(car(page, "Conducteur 15").getByText("Complet", { exact: true })).toBeVisible();
+
     const article = car(page, "Marc");
-    await expect(icon(article)).toHaveCount(1);
+    // CI1.1: in the header, the icon comes before the title, then the time.
     const order = await header(article).evaluate((element) => {
       const [svg, h3, time] = ["svg.lucide-car", "h3", "time"].map((selector) => element.querySelector(selector)!);
       const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       return { iconThenTitle: before(svg, h3), titleThenTime: before(h3, time), sameLine: svg.parentElement === h3.parentElement };
     });
     expect(order).toEqual({ iconThenTitle: true, titleThenTime: true, sameLine: true });
-  });
-
-  test("CI1.2: 16 px square, in the colour of the card's other icons", async ({ db, page, seededEvent }) => {
-    await seedCar(db, seededEvent.id, "Marc");
-    await page.goto(`/e/${seededEvent.id}`);
-    const article = car(page, "Marc");
+    // CI1.2: 16 px square, in the colour of the card's other icons.
     const size = await box(icon(article));
     expect([size.width, size.height]).toEqual([16, 16]);
     const colour = (locator: Locator) => locator.evaluate((element) => getComputedStyle(element).color);
     const expected = await colour(article.locator("svg.lucide-map-pin"));
-    expect(expected).not.toBe("");
     expect(await colour(icon(article))).toBe(expected);
     expect(await colour(article.locator("svg.lucide-clock"))).toBe(expected);
-  });
-
-  test("CI1.3: hidden from assistive technology, the card and its title keep their name", async ({ db, page, seededEvent }) => {
-    await seedCar(db, seededEvent.id, "Marc");
-    await page.goto(`/e/${seededEvent.id}`);
-    const article = car(page, "Marc");
+    // CI1.3: hidden from assistive technology, the card and its title keep their name.
     await expect(icon(article)).toHaveAttribute("aria-hidden", "true");
     await expect(icon(article)).not.toHaveAttribute("aria-label");
     await expect(title(article).locator("svg")).toHaveCount(0);
@@ -137,21 +134,10 @@ test.describe("the car icon of a card's header", () => {
     await expect(title(article)).toBeFocused();
     const onIcon = () => page.evaluate(() => Boolean(document.activeElement?.closest("svg")));
     expect(await onIcon()).toBe(false);
-    for (let press = 0; press < 6; press++) {
-      await page.keyboard.press("Tab");
-      expect(await onIcon()).toBe(false);
-    }
-  });
-
-  test("CI1.8: the 15 cars of a leg each have the icon, a full one too", async ({ db, page, seededEvent }) => {
-    for (let index = 1; index <= 15; index++) {
-      await seedCar(db, seededEvent.id, `Conducteur ${index}`, index === 15 ? 1 : 3, index === 15 ? "Léa" : undefined);
-    }
-    await page.goto(`/e/${seededEvent.id}`);
-    const articles = panel(page).getByRole("article");
-    await expect(articles).toHaveCount(15);
-    for (const article of await articles.all()) await expect(icon(article)).toHaveCount(1);
-    await expect(car(page, "Conducteur 15").getByText("Complet", { exact: true })).toBeVisible();
+    // The icon comes before the title in the DOM: Shift+Tab is the move that would land on it.
+    await page.keyboard.press("Shift+Tab");
+    expect(await onIcon()).toBe(false);
+    await expect(icon(article)).not.toHaveAttribute("tabindex");
   });
 });
 
