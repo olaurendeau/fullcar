@@ -551,7 +551,7 @@ ci-dessus valent pour chacun.
   `event.admin_token_hash` pour le jeton d'admin. À partir de #586, `admin_token_hash` peut
   être nul, et un hash nul se lit « pas de jeton » : aucun jeton ne lui correspond.
 - **Dans le corps seulement.** Le jeton de session et le jeton d'admin voyagent dans le corps
-  de la server action qui en a besoin (la visite, Mes événements, l'espace organisateur, la
+  de la server action qui en a besoin (la visite, Mes événements, `organiserLink`, l'espace organisateur, la
   création, « Se déconnecter », « Supprimer mon compte »), jamais dans un chemin, une query
   string, un en-tête ou un cookie. Le jeton de session ne revient dans une réponse qu'une
   fois, dans le corps de l'action qui ouvre la session. Le HTML d'une page ne dépend

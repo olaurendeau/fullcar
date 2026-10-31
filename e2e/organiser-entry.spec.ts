@@ -43,15 +43,20 @@ async function holdSession(page: Page, token: string) {
   await page.addInitScript((value) => localStorage.setItem("fullcar:session", value), token);
 }
 
-/** Every request the page sent that has finished, for `leaks` once the page is idle. */
+/**
+ * Every request the page sent, recorded when it is sent, for `whereTokenWent` once the page is
+ * idle. Not only those that `requestfinished` reports: Chromium marks a server action
+ * `net::ERR_ABORTED` after its answer has arrived (#303), and such a request would be dropped,
+ * with its URL and its headers unchecked.
+ */
 function recordRequests(page: Page): Request[] {
-  const finished: Request[] = [];
-  page.on("requestfinished", (request) => finished.push(request));
-  return finished;
+  const sent: Request[] = [];
+  page.on("request", (request) => sent.push(request));
+  return sent;
 }
 
 /**
- * Where `token` went among the finished requests (never printed): in a URL, in a header, in how
+ * Where `token` went among the requests sent (never printed): in a URL, in a header, in how
  * many bodies. Headers are read with `allHeaders`, the ones the browser added included. A page
  * that keeps a session sends it in two bodies: its visit (session-visit.tsx), and the question
  * whether it is the event's organiser's; one only when that question is not asked.
@@ -60,7 +65,9 @@ async function whereTokenWent(requests: Request[], token: string) {
   const went = { url: false, headers: false, bodies: 0 };
   for (const request of requests) {
     if (request.url().includes(token)) went.url = true;
-    const headers = Object.values(await request.allHeaders());
+    // `allHeaders` needs the request finished or answered; one that failed with no answer has the headers the page set.
+    const answered = (await request.response()) !== null;
+    const headers = Object.values(answered ? await request.allHeaders() : request.headers());
     if (headers.some((value) => value.includes(token))) went.headers = true;
     if (request.postData()?.includes(token)) went.bodies += 1;
   }
