@@ -5,12 +5,14 @@ import { anonymiseEvent } from "@/db/day-thirty";
 import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
 import { withRollback } from "@/db/test-db";
-import { seedEvent } from "@/db/test-events";
+import { seedSession } from "@/db/test-accounts";
+import { confirmSeededEvent, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import {
   addPerson,
   loadEventState,
   offerRide,
+  organiserLink,
   removePerson,
   removeRide,
   setBoardingStop,
@@ -68,6 +70,40 @@ async function seedScene(trx: Transaction<Database>) {
   await seedPlacement(trx, { personId: tom.id, eventId, leg: "aller", rideId: null });
   return { eventId, marc, lea, tom, r1 };
 }
+
+describe("organiserLink", () => {
+  it("OA7.4: says whether this browser's session is the event's organiser's, and nothing more", async () => {
+    await inTransaction(async (trx) => {
+      const { id } = await seedEvent(trx);
+      const session = await seedSession(trx, await confirmSeededEvent(trx, id));
+      expect(await organiserLink(id, session)).toBe(true);
+      expect(await organiserLink(id, undefined)).toBe(false);
+      expect(await organiserLink(42, session)).toBe(false);
+    });
+  });
+
+  it("fails with a generic error, without the database's detail nor the token, when the database fails", async () => {
+    const session = "AAAAAAAAAAAAAAAAAAAAAA";
+    connection.current = failingDb;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await organiserLink("Ab3dEf7h", session).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      const { message, stack, cause } = failure as Error;
+      for (const text of [message, stack]) {
+        expect(text).not.toContain("06 22");
+        expect(text).not.toContain(session);
+      }
+      expect(cause).toBeUndefined();
+      expect(log.mock.calls).toEqual([["organiserLink: the link could not be read (SQLSTATE 57P01)"]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
 
 describe("loadEventState", () => {
   it("gives the state the device sees, as readEventState reads it, in plain data", async () => {

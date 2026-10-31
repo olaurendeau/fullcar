@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import type { Kysely } from "kysely";
 import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
@@ -14,8 +14,9 @@ leaveNoToken();
  * #611, organizer-account v4: the way in and out of the organiser area. OA7.1 (the sign-in form
  * under « Espace organisateur », which brings the link back to the area, OA4.4), OA7.3 and
  * OA8.4 (« Mes événements » above the panel and above « Inscriptions effacées »), OA7.4
- * (« Espace organisateur » on /e/{id}, after the board, for a browser that keeps a session or
- * the event's admin token, for nobody else; the area decides on arrival). Sessions are held as session-token.ts keeps them.
+ * (« Espace organisateur » on /e/{id}, after the board, for the browser that keeps the event's
+ * admin token, or for a session of the event's account, which the server says; for nobody else,
+ * another account's session included). Sessions are held as session-token.ts keeps them.
  */
 
 const FR = {
@@ -40,6 +41,28 @@ const titles = (page: Page) => main(page).getByRole("heading", { level: 1 });
 /** From the next document on, the browser keeps `token` as its session (session-token.ts). */
 async function holdSession(page: Page, token: string) {
   await page.addInitScript((value) => localStorage.setItem("fullcar:session", value), token);
+}
+
+/** Every request the page sent that has finished, for `leaks` once the page is idle. */
+function recordRequests(page: Page): Request[] {
+  const finished: Request[] = [];
+  page.on("requestfinished", (request) => finished.push(request));
+  return finished;
+}
+
+/**
+ * Where `token` went among the finished requests (never printed): in a URL, in a header, in a body.
+ * Headers are read with `allHeaders`, the ones the browser added included.
+ */
+async function whereTokenWent(requests: Request[], token: string) {
+  const went = { url: false, headers: false, body: false };
+  for (const request of requests) {
+    if (request.url().includes(token)) went.url = true;
+    const headers = Object.values(await request.allHeaders());
+    if (headers.some((value) => value.includes(token))) went.headers = true;
+    if (request.postData()?.includes(token)) went.body = true;
+  }
+  return went;
 }
 
 /** The accounts and sends of a test, deleted after it: links and sessions go with the account, and the hourly cap never meets the sends. */
@@ -140,16 +163,24 @@ test.describe("in French", () => {
     expect((await mailTo(email)).length).toBe(1);
   });
 
-  test("OA7.4: a kept session: « Espace organisateur » on /e/{id}, after the board", async ({ page, db, seededEvent }) => {
+  test("OA7.4: the account's own session, from another browser: « Espace organisateur » on /e/{id}, after the board", async ({ page, db, seededEvent }) => {
     const organiser = await account(db);
     await organisedBy(db, seededEvent.id, organiser);
-    await holdSession(page, await seedSession(db, organiser));
+    const session = await seedSession(db, organiser);
+    await holdSession(page, session);
+    const requests = recordRequests(page);
     await page.goto(`/e/${seededEvent.id}`);
     const link = main(page).getByRole("link", { name: FR.area, exact: true });
     await expect(link).toHaveAttribute("href", organiserPath(seededEvent));
     expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    // After the board: its 44 px push nothing that was drawn (CA1.19, DS2.9).
-    expect((await link.boundingBox())!.y).toBeGreaterThan((await titles(page).boundingBox())!.y);
+    // After the board, not only after the title: its 44 px push nothing that was drawn (CA1.19, DS2.9).
+    const board = page.getByRole("tabpanel");
+    await expect(board).toBeVisible();
+    const boardBox = (await board.boundingBox())!;
+    expect((await link.boundingBox())!.y).toBeGreaterThanOrEqual(boardBox.y + boardBox.height);
+    // The session went in a body, and in no URL nor header.
+    await page.waitForLoadState("networkidle");
+    expect(await whereTokenWent(requests, session)).toEqual({ url: false, headers: false, body: true });
     await link.click();
     await expect(page).toHaveURL(organiserPath(seededEvent));
     await expect(main(page).getByRole("button", { name: "Actualiser" })).toBeVisible();
@@ -169,17 +200,40 @@ test.describe("in French", () => {
     expect(posts).toEqual([]);
   });
 
-  test("OA7.4: another account's session is a kept session: the link, and the area says it is not theirs", async ({ page, db, seededEvent }) => {
+  test("OA7.4: another account's session: no link, the session sent in a body only", async ({ page, db, seededEvent }) => {
     await organisedBy(db, seededEvent.id, await account(db));
-    await holdSession(page, await seedSession(db, await account(db)));
+    const other = await seedSession(db, await account(db));
+    await holdSession(page, other);
+    const requests = recordRequests(page);
     await page.goto(`/e/${seededEvent.id}`);
-    await main(page).getByRole("link", { name: FR.area, exact: true }).click();
-    await expect(titles(page)).toHaveText(FR.notYours);
+    await expect(page.getByRole("tabpanel")).toBeVisible();
+    // The server answers after the load: wait for it before saying that no link came.
+    await page.waitForLoadState("networkidle");
+    await expect(main(page).getByRole("link", { name: FR.area })).toHaveCount(0);
+    expect(await whereTokenWent(requests, other)).toEqual({ url: false, headers: false, body: true });
   });
 
-  creatorTest("OA7.4: the creation browser: the link, the event pending", async ({ page, seededEvent }) => {
+  creatorTest("OA7.4: the creation browser: the link, the event pending, and nothing sent for it", async ({ page, seededEvent }) => {
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST") posts.push(request.url());
+    });
     await page.goto(`/e/${seededEvent.id}`);
     await expect(main(page).getByRole("link", { name: FR.area, exact: true })).toHaveAttribute("href", organiserPath(seededEvent));
+    await page.waitForLoadState("networkidle");
+    expect(posts).toEqual([]);
+  });
+
+  creatorTest("OA7.4: the creation browser with another account's session: the link, and still nothing sent", async ({ page, db, seededEvent }) => {
+    await holdSession(page, await seedSession(db, await account(db)));
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST") posts.push(request.url());
+    });
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(main(page).getByRole("link", { name: FR.area, exact: true })).toHaveAttribute("href", organiserPath(seededEvent));
+    await page.waitForLoadState("networkidle");
+    expect(posts).toEqual([]);
   });
 
   creatorTest("OA7.9: without an organiser, the token left behind shows the link, and the area says there is none", async ({ page, db, seededEvent }) => {
