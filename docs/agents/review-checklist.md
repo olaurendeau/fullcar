@@ -179,7 +179,7 @@ celui qui écrit le code.
 - Aucune adresse e-mail ni aucun jeton dans un journal ou un événement Sentry (OA11.1), et
   le journal de la purge ne porte que des nombres.
 - Les e-mails ne portent aucun texte saisi par quelqu'un (ni titre, ni lieu, ni prénom),
-  aucune image, et la requête à Brevo ne demande aucun suivi (OA3.3). Un cinquième e-mail est
+  aucune image, et la requête à Brevo ne demande aucun suivi (OA3.3). Un sixième e-mail est
   bloquant.
 - Aucune requête du navigateur vers un tiers, aucun script distant, aucune police web : la
   pile de polices système suffit. Speed Insights reste désactivé.

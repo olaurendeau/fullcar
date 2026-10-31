@@ -41,9 +41,9 @@ reproduire, dans cet ordre.
   inscriptions, et la description de l'événement. Restent le titre, le lieu et les dates,
   dans l'historique de l'organisateur, jusqu'à la suppression de son compte, par lui ou
   après 3 ans sans visite. Un événement sans compte est supprimé en entier.
-- **Des e-mails, pas de courrier.** Quatre e-mails seulement : confirmer l'adresse, se
-  connecter, la réponse à une demande de connexion sans compte, et l'avertissement avant la
-  suppression d'un compte inactif. Aucun texte saisi par quelqu'un, aucune image, aucun suivi.
+- **Des e-mails, pas de courrier.** Cinq e-mails seulement : confirmer l'adresse, se
+  connecter, la réponse à une demande de connexion sans compte, l'avertissement avant la
+  suppression d'un compte inactif, et la cession d'un événement. Aucun texte saisi par quelqu'un, aucune image, aucun suivi.
 
 ## Règles d'interaction
 
@@ -129,6 +129,6 @@ l'itinéraire, la distance, la durée, et les Arrêts sur la carte (#68).
 ## Hors périmètre V1
 
 Notifications, appariement automatique, paiement, messagerie, comptes pour les
-participants, co-organisateurs. Les quatre e-mails du compte ne sont pas des
+participants, co-organisateurs. Les cinq e-mails du compte ne sont pas des
 notifications. Proposer l'un de ces sujets est une décision produit : remonter à l'humain,
 ne pas le glisser dans une PR.
