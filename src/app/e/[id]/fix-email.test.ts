@@ -118,6 +118,42 @@ describe("correctAddress (OA2.5)", () => {
     });
   });
 
+  it("OA2.5: a retry after a failure of Brevo is one more send and one more correction: the failed attempt's link is gone, one link serves", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof, firstLink } = await pendingEvent(trx);
+      const fixed = anAddress();
+      const failed = sending(trx, async () => ({ state: "failed" }));
+      expect(await correctAddress(id, proof, fixed, failed.deps)).toEqual({ ok: true, pending: { email: fixed, send: "failed" } });
+      const retried = sending(trx);
+      expect(await correctAddress(id, proof, fixed, retried.deps)).toEqual({ ok: true, pending: { email: fixed, send: "sent" } });
+      expect(await eventRow(trx, id)).toMatchObject({ pending_email: fixed, send_status: "sent" });
+      // Each attempt counted, as a resend after a failure is.
+      expect(await sendsFor(trx, id)).toEqual([{ email: fixed }, { email: fixed }]);
+      for (const gone of [firstLink, tokenIn(failed.sent[0]!)]) expect(await findLink(trx, gone)).toBeNull();
+      expect(await linksOf(trx, id)).toEqual([{ kind: "confirmation" }]);
+      expect(await spendLink(trx, tokenIn(retried.sent[0]!), "confirmation")).toMatchObject({ outcome: "valid", link: { eventId: id } });
+    });
+  });
+
+  it("OA2.5: a retry that a limit stops leaves the failed attempt's link as the only one, and the address it was sent to", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, email, proof } = await pendingEvent(trx);
+      // The creation's email counts too: this one is the event's third email of the hour.
+      await seedSends(trx, 1, { kind: "confirmation", email, eventId: id, sentAt: new Date() });
+      const fixed = anAddress();
+      const failed = sending(trx, async () => ({ state: "failed" }));
+      expect(await correctAddress(id, proof, fixed, failed.deps)).toMatchObject({ ok: true });
+      const retried = sending(trx);
+      expect(await correctAddress(id, proof, fixed, retried.deps)).toMatchObject({ ok: true });
+      const stopped = sending(trx);
+      expect(await correctAddress(id, proof, fixed, stopped.deps)).toEqual({ ok: false, error: "tooMany" });
+      expect(stopped.sent).toEqual([]);
+      expect(await eventRow(trx, id)).toMatchObject({ pending_email: fixed, send_status: "sent" });
+      expect(await linksOf(trx, id)).toEqual([{ kind: "confirmation" }]);
+      expect(await spendLink(trx, tokenIn(retried.sent[0]!), "confirmation")).toMatchObject({ outcome: "valid" });
+    });
+  });
+
   it.each([
     ["not an address", "camille", "invalid"],
     ["blank", "  ", "required"],

@@ -17,9 +17,10 @@ import { removeAsOrganiser, type RemovePersonOutcome } from "../remove-person";
  * The organiser area of event `id` (#3 C4.9 amended, C8.4; epic #154, O6.1; #596): the panel
  * when organiser-access.ts grants the access, the state it decides and nothing else
  * otherwise, `{ state: "invalid" }` for an unknown event. `proof` is `{ adminToken, session }`,
- * in the request's body: with `updateEvent`, `removePersonAsOrganiser`, `signOut`
- * (mes-evenements/actions.ts), `resendEmail` and `fixEmail`, the only actions that receive the admin token.
- * The client still reads that token from the URL's fragment, and sends no session yet (#597).
+ * in the request's body: with `updateEvent`, `removePersonAsOrganiser`, `resendEmail`, `fixEmail`,
+ * and `signOut` and `deleteAccount` (mes-evenements/actions.ts, which receive every admin token
+ * the browser keeps), the seven actions that receive the admin token.
+ * The browser sends the token it keeps (admin-token-store.ts) and its session's (#597), never one read from a URL.
  * A malformed id reads nothing; a token that is not a string is refused by the comparison.
  * Never logs a token nor the panel, never puts either in an error.
  */

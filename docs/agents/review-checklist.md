@@ -13,16 +13,68 @@ celui qui écrit le code.
 - Jamais dans le chemin ni dans la query string : uniquement dans le fragment (`#…`) ou dans
   le corps d'une requête. Un jeton dans un chemin finit dans les journaux de Vercel.
 - Comparaison à temps constant.
-- À partir de #154, le jeton d'admin n'entre que dans le corps de `loadOrganiserPanel`, et,
-  à partir de #263, dans celui d'`updateEvent`. Pour un jeton d'admin faux, absent ou mal
-  formé, la réponse ne contient que `{ state: "invalid" }` pour `loadOrganiserPanel`, et,
-  sur un événement qui n'est pas anonymisé, que `{ ok: false, error: "invalid" }` pour
-  `updateEvent`, qui n'écrit alors rien. Avant la vérification du jeton, `updateEvent` répond
-  `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement inconnu ou mal formé,
-  puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un événement anonymisé,
-  quel que soit le jeton, sans rien écrire : l'anonymisation a effacé le hash du jeton
-  (« La purge » dans `architecture.md`). La réponse du panneau n'est ni stockée dans le
-  navigateur, ni journalisée (O6.4).
+- Le jeton d'admin n'entre que dans le corps de sept server actions : `loadOrganiserPanel`
+  (à partir de #154), `updateEvent` (#263), `removePersonAsOrganiser` (#672), `resendEmail`
+  (#901), `fixEmail` (#602), `signOut` (#895) et `deleteAccount` (#905). Une huitième, ou un
+  jeton d'admin reçu par une autre action, est bloquant. Les cinq premières le reçoivent avec la session,
+  `{ adminToken, session }` (à partir de #596) ; `signOut` et `deleteAccount` reçoivent la
+  session et **tous** les jetons d'admin que le navigateur garde (`MAX_ADMIN_TOKENS` à la
+  fois, le reste est ignoré), pour les révoquer : elles ne décident aucun accès, et ne
+  répondent jamais de jeton. `removeAsOrganiser` n'est pas un point d'entrée : c'est le cas
+  d'usage derrière `removePersonAsOrganiser`, comme `editEvent` derrière `updateEvent`. Les
+  listes de ces sept actions dans les commentaires de `src/app/e/[id]/admin/admin-token-store.ts`
+  et de `src/app/e/[id]/admin/actions.ts` disent les mêmes sept. Seul
+  `src/domain/organiser-access.ts` décide qui
+  administre (épique #581). La règle n'ouvre le panneau qu'à la session du compte de
+  l'événement ou au jeton d'admin du navigateur qui l'a créé, et jamais sur un événement
+  orphelin (`orphan`) ni anonymisé, quel que soit le jeton : sur un événement anonymisé, la
+  session du compte lit `ended`, une autre session `notYours`, personne `signIn`. Ce que
+  chaque action répond quand l'accès est refusé, et n'écrit rien alors :
+  - `loadOrganiserPanel` : hors du panneau, ne contient que l'état que la règle décide
+    (`orphan`, `ended`, `pending`, `notYours`, `signIn`) et aucune donnée du panneau, sauf
+    deux : `notYours` n'ajoute que l'adresse de la session du visiteur, et, depuis #868,
+    `ended` répond à la session du compte de l'événement ce qu'il en reste (titre, lieu,
+    dates) et le jour 30 (`erasedOn`), jamais à une autre session ni à un jeton seul. Elle
+    ne répond `{ state: "invalid" }` qu'à un identifiant inconnu ou mal formé.
+  - `updateEvent` : `{ ok: false, error: "eventNotFound" }` à un identifiant d'événement
+    inconnu ou mal formé, puis, à partir de #772, `{ ok: false, error: "eventEnded" }` à un
+    événement anonymisé, quels que soient le jeton et la session : l'anonymisation a effacé
+    le hash du jeton (« La purge » dans `architecture.md`) ; puis
+    `{ ok: false, error: "invalid" }` quand la règle n'ouvre rien.
+  - `removePersonAsOrganiser` : `{ ok: false, error: "invalid" }` à un identifiant de
+    personne mal formé, avant tout contrôle de l'accès (RP3.4) ; puis
+    `{ ok: false, error: "eventNotFound" }` à un identifiant
+    d'événement inconnu ou mal formé, puis `{ ok: false, error: "noOrganiserAccess" }` quand
+    la règle n'ouvre rien, y compris sur un événement anonymisé.
+  - `resendEmail` : `{ ok: false, error: "eventNotFound" }`, puis `"eventEnded"` à un
+    événement anonymisé, puis `"invalid"` quand la règle n'ouvre rien ; ensuite seulement
+    `"notPending"` (rien n'attend de confirmation) et `"tooMany"` (une limite d'envoi), qui
+    supposent l'accès accordé.
+  - `fixEmail` : les mêmes trois refus, dans le même ordre (`"eventNotFound"`, `"eventEnded"`,
+    `"invalid"`) ; ensuite seulement `"address"` (ce qui est saisi n'est pas une adresse : la
+    réponse porte le code de l'erreur, jamais l'adresse), `"notPending"` et `"tooMany"`, qui
+    supposent l'accès accordé. Aucun lien n'est supprimé, aucun envoi n'est inscrit tant que
+    l'accès est refusé.
+  - `deleteAccount` : `{ deleted: false }` pour une session inconnue, mal formée, expirée ou
+    fermée entre-temps ; les jetons d'admin reçus ne sont alors pas révoqués.
+  - `signOut` : ne refuse rien, répond toujours `{ signedOut: true }`, quelle que soit la
+    session, et révoque les jetons reçus.
+
+  À partir de #843, `updateEvent` décide l'accès une seconde fois sous
+  `lockEvent(trx, id, "noKeyUpdate")`, avant toute écriture, comme `resendEmail` et `fixEmail` ;
+  `removePersonAsOrganiser` le fait sous le verrou de l'Event aussi (partagé, puis
+  `noKeyUpdate` à la reprise) : une session fermée, un compte supprimé ou un jeton révoqué
+  pendant l'attente du verrou y est vu. Une écriture de l'organisateur qui ne décide l'accès
+  qu'avant le verrou est bloquante. La réponse du panneau n'est ni stockée dans le navigateur,
+  ni journalisée (O6.4).
+- À partir de #855, il n'y a plus de lien d'organisateur. Seul
+  `src/app/e/[id]/admin/admin-token-store.ts` touche au jeton d'admin dans le navigateur :
+  celui qui a créé l'événement le garde dans `localStorage` sous `fullcar:admin-token:{id}`
+  et nulle part ailleurs (sans `localStorage`, dans la mémoire de la page). Il n'est jamais
+  lu dans l'URL, et un fragment sur `/e/{id}/admin` est ignoré (OA7.5). Un jeton d'admin lu
+  dans l'URL, fragment compris, ou rangé sous une autre clé, est bloquant. Ce point ne vaut
+  que pour le jeton d'admin : les liens de connexion et de confirmation
+  (`src/email/messages.ts`) portent toujours leur jeton dans le fragment.
 - À partir de #66, le jeton personnel est tiré **par le navigateur** avec
   `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
   avant l'envoi. Un jeton personnel tiré
@@ -61,8 +113,8 @@ celui qui écrit le code.
   l'un ni l'autre.
 - La réponse de l'espace organisateur ne porte aucun numéro de conducteur, de passager
   placé ni de personne pas concernée. Du numéro de son conducteur, une voiture ne dit que
-  s'il existe. Pour un jeton d'admin faux, absent ou mal formé, elle ne porte ni numéro ni
-  donnée du panneau : `withOrganiserPhones` ne rend rien. Un booléen « vérifié » passé à la
+  s'il existe. Quand `organiser-access.ts` n'accorde pas l'accès, elle ne porte ni numéro
+  ni donnée du panneau : `withOrganiserPhones` ne rend rien. Un booléen « vérifié » passé à la
   règle est bloquant. Jusqu'à #596, elle reçoit le jeton et le vérifie elle-même ; à partir
   de #596, elle ne reçoit qu'une autorisation, d'un type que seul
   `src/domain/organiser-access.ts` produit, et une autorisation fabriquée ailleurs est
@@ -279,12 +331,13 @@ celui qui écrit le code.
   87 % du temps de la CI, mesuré avant #652.
 - Un test de bout en bout amorce ses données par une fixture, directement en base, et
   possède son événement. Une route HTTP réservée aux tests est bloquante.
-- À partir de #365, aucune vérification de bout en bout n'affiche un jeton, un lien
-  administrateur ou un numéro en échouant, ni par ce qu'elle compare, ni par le message
+- À partir de #365, aucune vérification de bout en bout n'affiche un jeton, un lien qui en
+  porte un (de connexion ou de confirmation ; depuis #855, il n'y a plus de lien
+  d'organisateur) ou un numéro en échouant, ni par ce qu'elle compare, ni par le message
   qu'elle passe à `expect`. Un tableau rempli depuis le réseau (`Request`, corps, en-têtes,
-  ou textes filtrés sur un jeton) qui peut porter un jeton, un lien administrateur ou un
+  ou textes filtrés sur un jeton) qui peut porter un jeton, un lien qui en porte un ou un
   numéro ne s'affirme que par son nombre (`.length`), jamais par `toHaveLength` ni
-  `toEqual`. Une chaîne qui peut contenir un jeton, un lien administrateur ou un numéro ne
+  `toEqual`. Une chaîne qui peut contenir un jeton, un lien qui en porte un ou un numéro ne
   s'affirme que par un booléen. Un texte dont chaque jeton a d'abord été remplacé
   (`hideToken`, `hide`) et qui ne porte aucun numéro n'est plus concerné. Seule exception
   pour un numéro semé : celui qu'on attend à l'écran (`toHaveText`, `href="tel:…"`) ou

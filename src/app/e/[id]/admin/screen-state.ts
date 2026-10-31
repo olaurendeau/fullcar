@@ -228,7 +228,8 @@ export function resendAnswer(sent: Sent<unknown>): ResendAnswer {
 
 /**
  * What « Envoyer le lien » of « Corriger l’adresse » came to (OA2.5): the notice the server
- * answers, `sent` or `failed`; the address it refused, with the code the field shows; the limit,
+ * answers, `sent` (the sheet closes) or `failed` (the sheet stays open, with `FixEmail.offline`,
+ * the correction being kept all the same); the address it refused, with the code the field shows; the limit,
  * which sent nothing; an event no longer awaiting confirmation; an event that ended, which the
  * page then reads as such; or not sent, for want of a connection or any other reason, a refusal
  * included: the sheet then says `FixEmail.offline`.

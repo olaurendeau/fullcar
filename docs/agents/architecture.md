@@ -595,7 +595,12 @@ ci-dessus valent pour chacun.
   liens non utilisés restent valables ensemble. La page du lien lit le jeton dans
   `location.hash` et ne l'envoie qu'à l'appui sur le bouton, jamais au chargement : un
   scanner d'e-mails qui suit le lien ne l'use pas (OA5.1). Elle retire ensuite le fragment
-  de la barre d'adresse et de l'historique (OA5.2). « Corriger l'adresse » supprime les
+  de la barre d'adresse et de l'historique (OA5.2). Côté serveur (`src/app/connexion/use-link.ts`,
+  actions `openLoginLink`, `openConfirmationLink`, `resendConfirmationLink`, #605) : l'usage
+  du lien et la session qu'il ouvre sont dans une seule transaction ; une confirmation prend
+  l'Event, le lien, l'adresse, puis le compte, rattache cet Event seul et vide son adresse en
+  attente et le résultat gardé de l'envoi ; un Event déjà confirmé répond « déjà servi ».
+  Le jeton de la nouvelle session ne sort que dans cette réponse. « Corriger l'adresse » supprime les
   liens de l'événement envoyés à l'ancienne adresse (OA2.5). Le jeton d'un lien de
   connexion ou de confirmation passe aussi par Brevo et par la boîte de l'organisateur, où
   il est en clair. Le lien perso, et le lien admin jusqu'à #597, sont en clair partout où
@@ -1175,6 +1180,8 @@ d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu,
   l'envoi inscrit (les limites de l'événement et de la nouvelle adresse), `deleteOtherConfirmationLinks`
   supprime les liens de confirmation précédents de l'événement : seul le nouveau sert, et une
   limite qui arrête la correction les laisse valables. `pending_email` prend la nouvelle adresse.
+  Un échec de Brevo vient après la validation : la correction reste, et un nouvel essai depuis la
+  feuille est une correction de plus (un envoi de plus compté, le lien de l'essai échoué supprimé).
 - **Les limites** se comptent sous verrou, Event puis adresse (voir « L'adresse après
   l'Event »).
 - **Journal** : en mots fixes seulement, `email: no key`, `email: no sender`,

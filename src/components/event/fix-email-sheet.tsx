@@ -60,15 +60,18 @@ export function FixEmailSheet({
  * field is read-only, and a second tap or Enter sends nothing. Sent for good, the sheet closes;
  * an address the server refuses shows under the field too. Otherwise the sheet says why above
  * « Envoyer le lien », which gets the focus, and what was typed stays: the limit
- * (`Admin.pending.tooMany`), or any other reason, a refusal included (`FixEmail.offline`). An event
+ * (`Admin.pending.tooMany`), or any other reason, a refusal included (`FixEmail.offline`), and a
+ * failure of Brevo too: the correction is kept and the notice behind shows the new address, but the
+ * sheet stays open for a retry, which counts as one more email. An event
  * no longer awaiting confirmation, or ended, closes the sheet: the page says the rest.
  */
 function FixEmailForm({ email, onFix, onDone }: { email: string; onFix: FixEmail; onDone: () => void }) {
   const t = useTranslations("FixEmail");
   const tPending = useTranslations("Admin.pending");
   const ids = useId();
-  // The address the link was sent to, as the note says it, whatever the notice shows meanwhile.
-  const [was] = useState(email);
+  // The address the link was sent to, as the note says it, whatever the notice shows meanwhile;
+  // after a failure of Brevo, the address of the attempt: a retry makes its link stop working too.
+  const [was, setWas] = useState(email);
   const [value, setValue] = useState(email);
   const [problem, setProblem] = useState<EmailProblem>();
   const [said, setSaid] = useState<"offline" | "tooMany">();
@@ -106,7 +109,11 @@ function FixEmailForm({ email, onFix, onDone }: { email: string; onFix: FixEmail
       setProblem(answer.reason);
       return field.current?.focus();
     }
-    if (answer.kind === "tooMany" || answer.kind === "notSent") {
+    // A failure of Brevo came after the correction was kept: the page behind shows the new address,
+    // and a retry from the sheet is one more correction, which deletes the failed attempt's link.
+    const failed = answer.kind === "answered" && answer.pending.send === "failed";
+    if (failed) setWas(answer.pending.email);
+    if (answer.kind === "tooMany" || answer.kind === "notSent" || failed) {
       setSaid(answer.kind === "tooMany" ? "tooMany" : "offline");
       return submitButton.current?.focus();
     }

@@ -293,7 +293,8 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
    * what the server answers, the new address with its result. A bar message about the address's
    * earlier emails goes with it (`pending:resend`). An event no longer awaiting confirmation
    * loses its notice; one that ended has the page read again, as for « Renvoyer l’e-mail ». The
-   * sheet says the rest: the address refused, the limit, the email not sent.
+   * sheet says the rest: the address refused, the limit, the email not sent. A failure of Brevo
+   * is the notice's alert behind the sheet, which stays open for a retry (FixEmailSheet).
    */
   async function fix(typed: string): Promise<FixAnswer> {
     const send = sendAbout(["pending:resend"]);

@@ -211,7 +211,8 @@ export async function writeEventFields(db: Kysely<Database>, id: string, fields:
 
 /**
  * Who a new event is for (#599), written in the transaction that creates it: the account of
- * a live session, confirmed at once (OA1.3); or an address awaiting confirmation, with the
+ * a live session, confirmed at once (OA1.3), or by the use of its confirmation link (OA5.3),
+ * which clears the address and the result kept; or an address awaiting confirmation, with the
  * first result of its email: `sending` once the send is recorded, `address_limit` when the
  * limit of the address or the global cap stopped it (OA1.9, decision of the review of #623).
  */
@@ -222,7 +223,8 @@ export type EventOwner =
 export async function writeEventOwner(db: Kysely<Database>, id: string, owner: EventOwner): Promise<void> {
   const columns =
     "accountId" in owner
-      ? { account_id: owner.accountId, confirmed_at: owner.confirmedAt }
+      ? // Confirmed: no address awaits, and no email is left to report on.
+        { account_id: owner.accountId, confirmed_at: owner.confirmedAt, pending_email: null, send_status: null, send_status_at: null }
       : { pending_email: owner.pendingEmail, send_status: owner.sendStatus, send_status_at: owner.sendStatusAt };
   await db.updateTable("event").set(columns).where("id", "=", id).execute();
 }

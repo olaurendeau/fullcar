@@ -481,6 +481,37 @@ test.describe("OA2.5: « Corriger l’adresse »", () => {
     expect(await mailTo(fixed)).toEqual([]);
   });
 
+  test("a failure of Brevo: the sheet stays open with « L’e-mail n’est pas parti » and what was typed, the retry from the sheet sends and closes it, one link serves", async ({
+    page,
+    db,
+    seededEvent,
+  }) => {
+    const email = address();
+    const fixed = address();
+    await answerMail([fixed], { kind: "error" });
+    await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    await page.goto(organiserPath(seededEvent));
+    await button(page, FR.fix).click();
+    await field(page).fill(fixed);
+    await send(page).click();
+
+    await expect(sheetAlerts(page)).toHaveText(["L’e-mail n’est pas parti. Vérifiez la connexion, puis réessayez."]);
+    await expect(sheet(page)).toBeVisible();
+    await expect(send(page)).toBeFocused();
+    await expect(field(page)).toHaveValue(fixed);
+    expect(await mailTo(fixed)).toHaveLength(1);
+
+    await answerMail([fixed], { kind: "ok" });
+    await send(page).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(button(page, FR.fix)).toBeFocused();
+    await expectNotice(page, "polite", FR.title, FR.body(fixed));
+    expect(await mailTo(fixed)).toHaveLength(2);
+    // The failed attempt's link is gone with the first email's: the last email's alone serves.
+    const links = await db.selectFrom("email_link").select("kind").where("event_id", "=", seededEvent.id).execute();
+    expect(links).toEqual([{ kind: "confirmation" }]);
+  });
+
   test("past 3 emails in the hour for the event: « Trop d’envois » in the same place, nothing sent, the notice as it was", async ({
     page,
     db,
