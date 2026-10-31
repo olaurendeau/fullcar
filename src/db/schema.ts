@@ -14,8 +14,9 @@ export interface Database {
 }
 
 /**
- * The result of the confirmation email sent at creation (OA1.7), kept with the pending
- * event: `address_limit` when the per-address limit or the global cap stopped it.
+ * The result of an email sent for an event and kept with it: the confirmation email sent
+ * at creation (OA1.7, `pending_email`) and, from #940, the transfer email
+ * (`transfer_email`). `address_limit` when the per-address limit or the global cap stopped it.
  */
 export type SendStatusColumn = "sending" | "sent" | "failed" | "address_limit";
 
