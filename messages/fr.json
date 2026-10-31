@@ -473,6 +473,13 @@
     "title": "Inscriptions effacées",
     "body": "Le {date}, 30 jours après l’événement, les prénoms, les numéros, les voitures et les inscriptions ont été effacés. Il reste le titre, le lieu et les dates."
   },
+  "FixEmail": {
+    "title": "Corriger l’adresse",
+    "note": "Le lien envoyé à {email} ne marchera plus.",
+    "send": "Envoyer le lien",
+    "cancel": "Annuler",
+    "offline": "L’e-mail n’est pas parti. Vérifiez la connexion, puis réessayez."
+  },
   "EditEvent": {
     "title": "Modifier l’événement",
     "saved": "Événement modifié. Personne n’est prévenu : pensez à le dire au groupe.",

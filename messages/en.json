@@ -473,6 +473,13 @@
     "title": "Sign-ups erased",
     "body": "On {date}, 30 days after the event, first names, phone numbers, cars and sign-ups were erased. The title, place and dates remain."
   },
+  "FixEmail": {
+    "title": "Fix the address",
+    "note": "The link sent to {email} will stop working.",
+    "send": "Send the link",
+    "cancel": "Cancel",
+    "offline": "The email did not go out. Check your connection, then try again."
+  },
   "EditEvent": {
     "title": "Edit the event",
     "saved": "Event updated. Nobody is notified: remember to tell the group.",

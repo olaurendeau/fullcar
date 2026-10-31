@@ -56,6 +56,7 @@ export function AdminPanel({
   editSending = false,
   onEdit,
   onResend,
+  onFix,
   persons,
 }: {
   publicUrl: string;
@@ -63,6 +64,8 @@ export function AdminPanel({
   pending?: Notice;
   /** « Renvoyer l’e-mail » of that notice (OA2.4); without it, the button is inactive. */
   onResend?: () => void;
+  /** « Corriger l’adresse » of that notice (OA2.5), which opens its sheet; without it, the button is inactive. */
+  onFix?: () => void;
   titleRef: RefObject<HTMLButtonElement | null>;
   legs: OrganiserLeg[] | null;
   allerAt: WallClock;
@@ -153,7 +156,7 @@ export function AdminPanel({
               <ShareButton url={publicUrl} />
             </CopyableLink>
           </LinkGroup>
-          {pending && <PendingNotice pending={pending} onResend={onResend} />}
+          {pending && <PendingNotice pending={pending} onResend={onResend} onFix={onFix} />}
         </div>
         {/* After the link to share, before the sections; from 1024 px, under both columns, at its width (v3.3). */}
         <Button

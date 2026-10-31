@@ -130,12 +130,12 @@ export async function createEventFor(input: unknown, creation: Creation): Promis
  * The confirmation email, after the answer (OA1.7): Brevo answers within 10 s, sent or
  * failed, and its answer replaces the `sending` the creation wrote at `since`; a resend
  * (#601) sends it the same way, and has the answer. Throws nothing: there is nobody left to
- * answer. What it logs begins with `by`, the action that sends: « createEvent » or « resendEmail ».
+ * answer. What it logs begins with `by`, the action that sends: « createEvent », « resendEmail » or « fixEmail ».
  */
 export async function sendConfirmation(
   { db, brevo, locale, origin }: Pick<Creation, "db" | "brevo" | "locale" | "origin">,
   { id, email, token, since }: { id: string; email: string; token: string; since: Date },
-  by: "createEvent" | "resendEmail" = "createEvent",
+  by: "createEvent" | "resendEmail" | "fixEmail" = "createEvent",
 ): Promise<SendAnswer["state"]> {
   let answer: SendAnswer = { state: "failed" };
   try {

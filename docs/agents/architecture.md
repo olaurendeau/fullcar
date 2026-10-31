@@ -1174,6 +1174,14 @@ d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu,
   `send_status` passe à `sending`, ce qui remplace le résultat gardé (OA1.10), puis, après la
   validation et sans verrou, `sendConfirmation` (le même envoi que la création) appelle Brevo
   et la réponse attend ses 10 s au plus. Un échec de Brevo n'est pas une erreur : l'avis le dit.
+- **« Corriger l'adresse »** (OA2.5, #602) : `correctAddress` (même fichier), appelée par l'action
+  `fixEmail`, est ce renvoi vers une autre adresse, lue par `emailAddress` après l'accès
+  (`address` et son code, rien n'est envoyé ni changé). Dans la même transaction, une fois
+  l'envoi inscrit (les limites de l'événement et de la nouvelle adresse), `deleteOtherConfirmationLinks`
+  supprime les liens de confirmation précédents de l'événement : seul le nouveau sert, et une
+  limite qui arrête la correction les laisse valables. `pending_email` prend la nouvelle adresse.
+  Un échec de Brevo vient après la validation : la correction reste, et un nouvel essai depuis la
+  feuille est une correction de plus (un envoi de plus compté, le lien de l'essai échoué supprimé).
 - **Les limites** se comptent sous verrou, Event puis adresse (voir « L'adresse après
   l'Event »).
 - **Journal** : en mots fixes seulement, `email: no key`, `email: no sender`,
