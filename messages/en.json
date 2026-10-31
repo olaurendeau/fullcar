@@ -106,7 +106,7 @@
       "boardsAt": "boards at {place}",
       "boardsAtStart": "boards at the departure",
       "changeStop": "Change the point",
-      "changeStopName": "Change {firstName}’s boarding point",
+      "changeStopName": "Change the point where {firstName} boards",
       "edit": "Edit",
       "remove": "Remove the car"
     },

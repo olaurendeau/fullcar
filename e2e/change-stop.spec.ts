@@ -183,7 +183,8 @@ test.describe("« Changer le point »", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
     await expect(messages(page)).toHaveCount(0);
-    expect(sent).toEqual([]);
+    // The count only: a body carries the device's token, and a failed `toEqual` would print it.
+    expect(sent.length).toBe(0);
     expect(await placementOf(db, seededEvent.id, scene.persons.Tom)).toEqual({ rideId: scene.cars.nina, stopId: scene.stops.prelles });
   });
 
@@ -312,6 +313,12 @@ test.describe("« Changer le point »", () => {
       const row = line(page, "Nina", firstName);
       await numbersHidden(async () => expect(await contrast(row.getByText(text), row)).toBeGreaterThanOrEqual(4.5));
     }
+    const dialog = await openTom(page);
+    for (const name of [START_CHOICE, /Briançon/]) {
+      await choice(dialog, name).check();
+      const row = choice(dialog, name).locator("xpath=ancestor::label");
+      expect(await contrast(row.locator("span[id$='-label']"), row)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   test("RV6.2: the driver changes a point's place and time: its passengers keep it, and the card says « monte à » the new place", async ({ db, page, seededEvent }) => {
@@ -390,5 +397,22 @@ test.describe("« Changer le point » at 360 px", () => {
     for (const button of [cancel(dialog), validate(dialog)]) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     // « Valider » stays reachable in the bar of the sheet, whatever the list's length.
     await expect(validate(dialog)).toBeInViewport();
+  });
+});
+
+test.describe("« Changer le point », in a browser set to English", () => {
+  test.use({ locale: "en-GB", eventFields: { stopsEnabled: true } });
+  const token = newToken();
+
+  test("WCAG 2.5.3: the accessible name of the button contains its visible text", async ({ db, page, seededEvent }) => {
+    await seedScene(db, seededEvent.id, token);
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const nina = page.getByRole("tabpanel").getByRole("article", { name: "Nina’s car" });
+    await numbersHidden(async () => {
+      const button = nina.getByRole("button", { name: "Change the point where Tom boards", exact: true });
+      await expect(button).toHaveText("Change the point");
+      expect(await button.getAttribute("aria-label")).toContain((await button.innerText()).trim());
+    });
   });
 });
