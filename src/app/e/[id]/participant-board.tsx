@@ -81,15 +81,15 @@ import {
 /**
  * What the organiser's screen asks of the board (#182): `read()` reads the state this device
  * sees and applies nothing, `apply(state)` shows it. The personal token stays in this file.
- * `applyEvent(event)` shows the header the organiser just saved, on the legs it keeps (epic
- * #250), and `succeed(message)` and `fail(failure)` write the success or the failure of the
+ * `applyEvent(event, stops?)` shows the header the organiser just saved, on the legs it keeps (epic
+ * #250), with the option « Points de RDV » stored when the answer says it (#888), and `succeed(message)` and `fail(failure)` write the success or the failure of the
  * organiser's action in the bar. `removeAsOrganiser` is « Retirer » of « Personnes inscrites »
  * (#672): the board's own removal, sent by the organiser's action, with this device's token.
  */
 export interface BoardHandle {
   read(): Promise<Sent<EventState | undefined>>;
   apply(state: EventState): void;
-  applyEvent(event: EventHeader): void;
+  applyEvent(event: EventHeader, stops?: boolean): void;
   succeed(message: Message): void;
   fail(failure: Failure): void;
   removeAsOrganiser(...removal: [...Parameters<RemovePerson>, OrganiserRemoval]): ReturnType<RemovePerson>;
@@ -227,10 +227,10 @@ export function ParticipantBoard({
         return sent.ok ? { ok: true, value: stateRead(sent) } : sent;
       },
       apply: setBoard,
-      applyEvent: (event) =>
+      applyEvent: (event, stops) =>
         setBoard({
           event,
-          options: latest.current.options,
+          options: stops === undefined ? latest.current.options : { ...latest.current.options, stops },
           legs: latest.current.legs.filter(({ leg }) => leg === "aller" || event.retourAt),
         }),
       succeed,

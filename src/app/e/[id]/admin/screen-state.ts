@@ -253,14 +253,17 @@ export function screenRead(panel: Sent<unknown>, board: Sent<EventState | undefi
 
 /**
  * What came of « Valider » in « Modifier l’événement » (organizer-view v3.3.6, « Enregistrer »):
- * saved, with the values the server stored; a field refused; changed on another device, with
- * the values stored (M6.1); the retour unchecked still holding these, to confirm (M3.2); the
- * link refused (M8.2) or the event gone (M8.3); or a problem, said in the sheet.
+ * saved, with the values the server stored, the option « Points de RDV » among them (`stops`,
+ * absent from a server before it); a field refused; changed on another device, with the values
+ * stored (M6.1); the retour unchecked still holding these, to confirm (M3.2); the option turned
+ * off while `cars` cars have Stops (RV9.3); the link refused (M8.2) or the event gone (M8.3); or a
+ * problem, said in the sheet.
  */
 export type EditAnswer =
-  | { kind: "saved"; event: EventHeader }
+  | { kind: "saved"; event: EventHeader; stops?: boolean }
   | { kind: "errors"; errors: EventErrors }
-  | { kind: "changed"; event: EventHeader }
+  | { kind: "changed"; event: EventHeader; stops?: boolean }
+  | { kind: "stopsLocked"; cars: number }
   | { kind: "confirmRetour"; counts: LegCounts }
   | { kind: "refused"; reason: "invalid" | "eventNotFound" }
   | { kind: "problem"; problem: ActionProblem };
@@ -288,10 +291,15 @@ const isCount = (value: unknown): value is number => Number.isSafeInteger(value)
  * What the change did not do, then why, once its sheet is closed (« Une réponse qui arrive
  * feuille fermée », M2.8, M2.9), in the bar. A `removal` confirmed did not remove the retour
  * either, and new numbers are said with what to use again (M3.7). `invalid`, which only a forged
- * request gets, takes the generic reason (decision 46).
+ * request gets, takes the generic reason (decision 46). A change that only touched the option
+ * « Points de RDV » (`optionOnly`) says so (RV9.4).
  */
-export function editFailure(answer: Exclude<EditAnswer, { kind: "saved" }>, removal: boolean): { notDone: NotDone; why: Why } {
-  const notDone: NotDone = { kind: removal ? "removeRetour" : "editEvent" };
+export function editFailure(
+  answer: Exclude<EditAnswer, { kind: "saved" }>,
+  removal: boolean,
+  optionOnly = false,
+): { notDone: NotDone; why: Why } {
+  const notDone: NotDone = { kind: removal ? "removeRetour" : optionOnly ? "editStops" : "editEvent" };
   switch (answer.kind) {
     case "problem":
       return { notDone, why: whyOf(answer.problem) };
@@ -301,6 +309,8 @@ export function editFailure(answer: Exclude<EditAnswer, { kind: "saved" }>, remo
       return { notDone, why: whyOf("editErrors") };
     case "changed":
       return { notDone, why: whyOf("eventChanged") };
+    case "stopsLocked":
+      return { notDone, why: { kind: "stopsStillLocked" } };
     case "confirmRetour":
       return { notDone, why: removal ? { kind: "retourChanged", ...answer.counts, where: "bar" } : whyOf("retourNotConfirmed") };
   }
@@ -310,17 +320,20 @@ export function editFailure(answer: Exclude<EditAnswer, { kind: "saved" }>, remo
 export function editAnswer(sent: Sent<unknown>): EditAnswer {
   if (!sent.ok) return { kind: "problem", problem: sent.problem };
   const answer = sent.value as
-    | { ok?: unknown; event?: unknown; errors?: unknown; error?: unknown; cars?: unknown; persons?: unknown }
+    | { ok?: unknown; event?: unknown; stops?: unknown; errors?: unknown; error?: unknown; cars?: unknown; persons?: unknown }
     | null
     | undefined;
   if (answer?.ok === false && answer.error === "confirmRetour" && isCount(answer.cars) && isCount(answer.persons)) {
     return { kind: "confirmRetour", counts: { cars: answer.cars, persons: answer.persons } };
   }
-  if (answer?.ok === true && isHeader(answer.event)) return { kind: "saved", event: answer.event };
+  if (answer?.ok === false && answer.error === "stopsLocked" && isCount(answer.cars)) return { kind: "stopsLocked", cars: answer.cars };
+  // The option stored, when the server says it: a server from before it says none.
+  const stops = typeof answer?.stops === "boolean" ? { stops: answer.stops } : {};
+  if (answer?.ok === true && isHeader(answer.event)) return { kind: "saved", event: answer.event, ...stops };
   if (answer?.ok === false && typeof answer.errors === "object" && answer.errors !== null) {
     return { kind: "errors", errors: answer.errors as EventErrors };
   }
-  if (answer?.ok === false && answer.error === "changed" && isHeader(answer.event)) return { kind: "changed", event: answer.event };
+  if (answer?.ok === false && answer.error === "changed" && isHeader(answer.event)) return { kind: "changed", event: answer.event, ...stops };
   if (answer?.ok === false && (answer.error === "invalid" || answer.error === "eventNotFound")) {
     return { kind: "refused", reason: answer.error };
   }

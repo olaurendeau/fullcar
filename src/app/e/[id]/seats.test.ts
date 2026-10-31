@@ -32,7 +32,8 @@ const NOBODYS_TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
  * Léa, Hugo and Inès are the persons of one device; Marc, Zoé and Tom each have their own.
  */
 async function seedScene(db: Db) {
-  const { id: eventId } = await seedEvent(db);
+  // The option « Points de RDV » is on: the points the tests send are the event's (RV8.3).
+  const { id: eventId } = await seedEvent(db, { stopsEnabled: true });
   const marc = await seedPerson(db, eventId, { firstName: "Marc" });
   const zoe = await seedPerson(db, eventId, { firstName: "Zoé" });
   const tom = await seedPerson(db, eventId, { firstName: "Tom" });
@@ -847,6 +848,24 @@ describe("takeSeats at a stop", () => {
     });
   });
 
+  it("RV8.3: with the option off, a point is refused by stopsOff and nothing is written; no point is a seat as before", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, hugo, r1 } = await seedScene(trx);
+      const stop = await seedStop(trx, eventId, r1);
+      await trx.updateTable("event").set({ stops_enabled: false }).where("id", "=", eventId).execute();
+      const before = await placementsOf(trx, eventId);
+
+      const refused = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id], stop);
+
+      expect(refused).toMatchObject({ ok: false, error: "stopsOff" });
+      expect(await placementsOf(trx, eventId)).toEqual(before);
+      expect(await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id, hugo.id], null)).toEqual({
+        ok: true,
+        state: await readEventState(trx, eventId, lea.token),
+      });
+    });
+  });
+
   it("RV3.4: a point of another car is no point of this one", async () => {
     await withRollback(async (trx) => {
       const { eventId, lea, r1, r2 } = await seedScene(trx);
@@ -923,6 +942,7 @@ describe("takeSeats at a stop", () => {
   // Committed data, both orders: the Stop is deleted under the Ride's lock, or chosen under it.
   describe("at the same time as the Stop's deletion, on committed data", () => {
     async function aCarWithStop(db: Db, eventId: string) {
+      await db.updateTable("event").set({ stops_enabled: true }).where("id", "=", eventId).execute();
       const driver = await seedPerson(db, eventId, { firstName: "Marc" });
       const rideId = await seedRide(db, eventId, driver.id, { seats: 3 });
       return { rideId, stopId: await seedStop(db, eventId, rideId) };

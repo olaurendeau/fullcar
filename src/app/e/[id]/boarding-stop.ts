@@ -43,13 +43,14 @@ export async function isStopOfRide(db: Kysely<Database>, ride: RideRef, stopId: 
  * - `invalid`: a request no page sends (an id malformed).
  * - `forbidden`: the person is not one of the device (C2.4).
  * - `personGone`: the person is no longer one of the event (RP5.4).
+ * - `stopsOff`: the event's option « Points de RDV » is off (RV8.3): nothing is written.
  * - `rideGone`: the car is no longer offered on the aller.
  * - `notInCar`: the person is no longer in that car: she left it, or took another.
  * - `stopGone` on success: the Stop is gone, and the person boards at the Ride's start (RV4.3).
  */
 export type BoardingStopOutcome =
   | { ok: true; stopGone?: true }
-  | { ok: false; error: "eventEnded" | "invalid" | "forbidden" | "rideGone" | "notInCar" }
+  | { ok: false; error: "eventEnded" | "invalid" | "forbidden" | "rideGone" | "notInCar" | "stopsOff" }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
 /** The outcome, and the event's state as the device now sees it, refusal or not. */
@@ -74,6 +75,7 @@ async function changeBoarding(
   const legs = await lockLegs(trx, eventId, ["aller"]);
   // The aller always exists: `noRetour` cannot come from it.
   if (!legs.ok) return legs as { ok: false; error: "eventNotFound" | "eventEnded" };
+  if (!legs.stopsEnabled) return { ok: false, error: "stopsOff" };
   const requested = requestedStop(stopId);
   if (!isCreationId(rideId) || !isCreationId(personId) || requested === undefined) return { ok: false, error: "invalid" };
   const access = deviceAccess(token, await readTokenHolders(trx, eventId), [personId]);

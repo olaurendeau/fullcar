@@ -141,7 +141,7 @@ test.describe("without JavaScript", () => {
   });
 });
 
-test("M1.5: the sheet opens with no request, on the saved values, no option, the focus on « Titre »", async ({ page, seededEvent }) => {
+test("M1.5: the sheet opens with no request, on the saved values, no option but « Points de RDV » (D1), the focus on « Titre »", async ({ page, seededEvent }) => {
   await page.goto(organiserPath(seededEvent));
   await expect(editButton(page)).toBeVisible();
   await page.waitForLoadState("networkidle");
@@ -162,8 +162,10 @@ test("M1.5: the sheet opens with no request, on the saved values, no option, the
     await expect(field(page, label)).toHaveValue(value);
   }
   await expect(retourBox(page)).toBeChecked();
-  await expect(sheet(page).getByText(/Rehausseurs|Participation aux frais|Points de RDV|Options/)).toHaveCount(0);
-  await expect(sheet(page).getByRole("checkbox")).toHaveCount(1);
+  await expect(sheet(page).getByText(/Rehausseurs|Participation aux frais|Options/)).toHaveCount(0);
+  // « Retour », and « Points de RDV », the only option a change touches (#888).
+  await expect(sheet(page).getByRole("checkbox")).toHaveCount(2);
+  await expect(sheet(page).getByRole("checkbox", { name: "Points de RDV", exact: true })).not.toBeChecked();
   await page.waitForLoadState("networkidle");
   expect(sent, "requests sent by opening the sheet").toBe(0);
 });
