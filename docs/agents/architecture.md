@@ -307,10 +307,12 @@ de test (Vitest) ») : `src/db/rides.test.ts`, `src/db/placements.test.ts`,
 Ride (`lockRide`), après l'Event et avant les Persons ; la clé `placement.stop_id` ne prend
 l'Arrêt (`FOR KEY SHARE`) que sous ce même verrou, donc aucune attente nouvelle. `editEvent`
 (`FOR NO KEY UPDATE`) recompte les Arrêts de l'événement (`countStopRides`) sous son verrou de
-l'Event : désactiver l'option alors que des Arrêts existent est refusé (`stopsLocked`). Toute
-écriture qui porte un Arrêt lit `stops_enabled` sur la ligne que rend `lockLegs` : option
-désactivée, refus `stopsOff` et rien n'est écrit. Ces écritures arrivent avec les tâches
-suivantes de l'épic ; la base, elle, les accepte dès `0006_stops`.
+l'Event : désactiver l'option alors que des Arrêts existent est refusé (`stopsLocked`), l'activer
+ne l'est jamais ; l'option est la seule que « Modifier l'événement » touche, et seulement quand
+`stops` est envoyé (D1, #888). Toute écriture qui porte un Arrêt (`offerRide`, `updateRide`,
+`takeSeats` avec un point, `setBoardingStop`) lit `stops_enabled` sur la ligne que rend
+`lockLegs` : option désactivée, refus `stopsOff` et rien n'est écrit. La base, elle, accepte les
+Arrêts dès `0006_stops`.
 
 ### L'Event d'abord (#260)
 
@@ -1153,6 +1155,14 @@ d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu,
   seulement sur le `sending` que cette création a écrit : un renvoi écrit depuis garde le
   sien. Une session envoyée mais terminée, sans adresse, ne crée rien et répond
   `sessionEnded` sur le champ e-mail (OA1.5).
+- **« Renvoyer l'e-mail »** (OA2.4, #601) : `resendConfirmation` (`src/app/e/[id]/pending-email.ts`),
+  appelée par l'action `resendEmail`, ne sert que le navigateur de création (`decideOrganiserAccess`,
+  décidé avant le verrou puis sous le verrou de l'Event). Dans la transaction, `claimConfirmation`
+  inscrit l'envoi sous les limites (3 par heure pour l'événement, 5 pour l'adresse, le plafond
+  global) et crée un lien de plus, sans toucher aux précédents ; une limite n'écrit rien (`tooMany`).
+  `send_status` passe à `sending`, ce qui remplace le résultat gardé (OA1.10), puis, après la
+  validation et sans verrou, `sendConfirmation` (le même envoi que la création) appelle Brevo
+  et la réponse attend ses 10 s au plus. Un échec de Brevo n'est pas une erreur : l'avis le dit.
 - **Les limites** se comptent sous verrou, Event puis adresse (voir « L'adresse après
   l'Event »).
 - **Journal** : en mots fixes seulement, `email: no key`, `email: no sender`,

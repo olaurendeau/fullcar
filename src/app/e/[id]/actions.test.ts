@@ -61,7 +61,8 @@ const failingDb = new Proxy({} as Kysely<Database>, {
 
 /** Marc drives Léa at the aller; Tom is without a car. Each has their own device. */
 async function seedScene(trx: Transaction<Database>) {
-  const { id: eventId } = await seedEvent(trx);
+  // The option « Points de RDV » is on: the points the tests send are the event's (RV8.3).
+  const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
   const marc = await seedPerson(trx, eventId, { firstName: "Marc", phone: "06 11 11 11 11" });
   const lea = await seedPerson(trx, eventId, { firstName: "Léa", phone: "06 22 22 22 22" });
   const tom = await seedPerson(trx, eventId, { firstName: "Tom", phone: "06 33 33 33 33" });

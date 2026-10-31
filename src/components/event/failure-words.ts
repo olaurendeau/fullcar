@@ -24,6 +24,8 @@ export type NotDone =
   | { kind: "editRide"; driver: string; leg: Leg }
   | { kind: "readDevice" }
   | { kind: "editEvent" }
+  /** « Modifier l’événement » that only changed the option « Points de RDV » (RV9.4). */
+  | { kind: "editStops" }
   | { kind: "removeRetour" };
 
 /**
@@ -61,7 +63,9 @@ export type Why =
   /** Her number emptied while she drives (v4.8, rule 8): named as the send showed her. */
   | { kind: "phoneWhileDriving"; firstName: string }
   /** The retour changed while its removal was confirmed (M3.7): what to use again, `where` the answer is said. */
-  | { kind: "retourChanged"; cars: number; persons: number; where: "sheet" | "bar" };
+  | { kind: "retourChanged"; cars: number; persons: number; where: "sheet" | "bar" }
+  /** The option « Points de RDV » stays on: cars have Stops (RV9.3, D1). */
+  | { kind: "stopsStillLocked" };
 
 /**
  * The reason of a problem or of a refusal that names nobody. `invalid` and `idTaken`, which
@@ -236,6 +240,8 @@ function notDoneText(words: Words, notDone: NotDone): string {
       const choice = notDone.choice === "notConcerned" ? t(`DevicePersons.notConcerned.${notDone.leg}`) : t("DevicePersons.lookingForSeat");
       return t("Actions.notDone.choice", { person, choice });
     }
+    case "editStops":
+      return t("EditEvent.stops.failed");
     default: {
       const { kind, ...values } = notDone;
       return t(`Actions.notDone.${kind}`, values);
@@ -251,6 +257,8 @@ function whyText(words: Words, why: Why): string {
       return t(`Actions.why.${why.kind}`, { names: nameList(words, why.names), count: why.names.length });
     case "notEnoughSeats":
       return t("Actions.why.notEnoughSeats", { free: why.free });
+    case "stopsStillLocked":
+      return t("EditEvent.stops.stillLocked");
     default: {
       const { kind, ...values } = why;
       return t(`Actions.why.${kind}`, values);
@@ -258,7 +266,11 @@ function whyText(words: Words, why: Why): string {
   }
 }
 
-/** The failure's line in the bar: « {notDone} {why} ». */
+/**
+ * The failure's line in the bar: « {notDone} {why} ». The option kept on says it alone: its reason
+ * is already « L’option reste active » (RV9.3), and `EditEvent.stops.failed` would only repeat it.
+ */
 export function failureText(words: Words, notDone: NotDone, why: Why): string {
+  if (notDone.kind === "editStops" && why.kind === "stopsStillLocked") return whyText(words, why);
   return words.t("Actions.failure", { notDone: notDoneText(words, notDone), why: whyText(words, why) });
 }
