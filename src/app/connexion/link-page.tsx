@@ -48,6 +48,7 @@ export function LinkPage({ kind }: { kind: "login" | "confirm" }) {
   const tLogin = useTranslations("Login");
   const tCheck = useTranslations("Check");
   const tAdmin = useTranslations("Admin.pending");
+  const tFixEmail = useTranslations("FixEmail");
   const tMyEvents = useTranslations("MyEvents");
   const router = useRouter();
   const hash = useSyncExternalStore(
@@ -123,10 +124,10 @@ export function LinkPage({ kind }: { kind: "login" | "confirm" }) {
   }
 
   // The press of « Recevoir un nouveau lien » sends an email (OA5.6): `Admin.pending.tooMany` at the
-  // limit, `Admin.pending.offline` when the request did not reach the server, and `Login.failed` when it
+  // limit, `FixEmail.offline` when the request did not reach the server, and `Login.failed` when it
   // did and the server (or the provider) failed: « Vérifiez la connexion » would blame the wrong party.
   const resendAlert = (found: OpenAlert | ResendAlert) =>
-    found === "tooMany" ? tAdmin("tooMany") : found === "offline" ? tAdmin("offline") : tLogin("failed");
+    found === "tooMany" ? tAdmin("tooMany") : found === "offline" ? tFixEmail("offline") : tLogin("failed");
   // The press of « Se connecter » opens a session (`LinkPage.offline`, `failed`).
   const alertLine = alert && (
     <p key={alert.n} role="alert" className="text-sm text-destructive">
