@@ -6,18 +6,19 @@ import type { EndedHeader, OrganiserLeg, OrganiserPanelAnswer, OrganiserPerson }
 import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { isWallClock, isWallDate, type WallDate } from "@/domain/wall-clock";
 import type { EditEventOutcome } from "../edit-event";
+import type { ResendOutcome } from "../pending-email";
 import { sendAction, type Sent } from "../run-action";
 import type { RemovePersonOutcome } from "../remove-person";
-import { loadOrganiserPanel, removePersonAsOrganiser, updateEvent } from "./actions";
+import { loadOrganiserPanel, removePersonAsOrganiser, resendEmail, updateEvent } from "./actions";
 
 /*
  * The only browser code that touches the organiser's admin token (docs/agents/architecture.md,
  * « Session, liens et jeton d'admin », #597), as session-token.ts is for the session's. The
  * browser that created the event keeps the token the server drew, in `localStorage` under its
  * event's key, `fullcar:admin-token:{id}`; without `localStorage`, the page's memory keeps it.
- * It travels in the body of `loadOrganiserPanel`, `updateEvent`, `removePersonAsOrganiser` and
- * `signOut` only, with the session's: never in a URL, a header, a cookie, a log, an error or the
- * page. There is no organiser's
+ * It travels in the body of `loadOrganiserPanel`, `updateEvent`, `removePersonAsOrganiser`,
+ * `signOut` and `resendEmail` only, with the session's: never in a URL, a header, a cookie, a log,
+ * an error or the page. There is no organiser's
  * link any more: a fragment on `/e/{id}/admin` is ignored (OA7.5). It is compared on the
  * server only.
  */
@@ -200,7 +201,8 @@ export function retryFrom(check: OrganiserCheck): OrganiserCheck | undefined {
  * page (O5.3). `read()` reads the panel again, and applies nothing (#182). `edit()` sends the
  * organiser's change of the event (epic #250) with the same proof, `before`, the values the
  * form loaded, and `removal`, the numbers a confirmation of the retour's removal showed (#270).
- * Without one, the argument is omitted, never `null`. `remove()` sends « Retirer » of
+ * Without one, the argument is omitted, never `null`. `resend()` sends the pending event's
+ * confirmation email again (OA2.4), with the same proof. `remove()` sends « Retirer » of
  * « Personnes inscrites » (#672) with the same proof, and the page's personal token, which only
  * chooses the board answered; the board sends it, as its own actions (`sendAction`).
  */
@@ -209,6 +211,7 @@ export function useOrganiserCheck(id: string): {
   retry: () => void;
   read: () => Promise<Sent<OrganiserPanelAnswer>>;
   edit: (fields: EventFields, before: EventHeader, removal?: LegCounts) => Promise<Sent<EditEventOutcome>>;
+  resend: () => Promise<Sent<ResendOutcome>>;
   remove: (personId: string, deviceToken: string | undefined) => Promise<RemovePersonOutcome>;
 } {
   const [check, setCheck] = useState<OrganiserCheck>({ state: "checking" });
@@ -254,10 +257,12 @@ export function useOrganiserCheck(id: string): {
     [id],
   );
 
+  const resend = useCallback(() => sendAction<ResendOutcome>(() => resendEmail(id, organiserProof(id))), [id]);
+
   const remove = useCallback(
     (personId: string, deviceToken: string | undefined) => removePersonAsOrganiser(id, organiserProof(id), deviceToken, personId),
     [id],
   );
 
-  return { check, retry, read, edit, remove };
+  return { check, retry, read, edit, resend, remove };
 }

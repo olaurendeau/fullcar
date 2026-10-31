@@ -418,6 +418,9 @@
       "body": "We sent a link to {email}. Open it, on any device, to find this event in My events. Until then, the organiser area only opens in this browser.",
       "resend": "Resend the email",
       "fix": "Fix the address",
+      "resent": "Email sent again to {email}.",
+      "offline": "The email was not sent again. Check your connection, then try again.",
+      "tooMany": "Too many emails. Try again in an hour.",
       "sendFailed": {
         "title": "The email may not have been sent",
         "body": "Your event is created, but the link to confirm {email} may not have been sent. Use “Resend the email”: if the first one arrives anyway, both links stay valid. Until then, the organiser area only opens in this browser."
