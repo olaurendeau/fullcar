@@ -17,6 +17,7 @@ import {
   personGone,
   personWhy,
   removalProblem,
+  stopGoneText,
   undoWhy,
   undoneText,
   whyOf,
@@ -505,7 +506,7 @@ export function ParticipantBoard({
   // once a send made since has succeeded in changing one of its persons on its leg (v4.4.5).
   const takeSeats: TakeSeats = async (request, { sending, seats, placed, ...sheet }) => {
     const { rideId, leg, persons } = request;
-    const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, persons.map(({ personId }) => personId));
+    const send = () => storeSeats(id, readDeviceToken(id), rideId, leg, persons.map(({ personId }) => personId), request.stopId);
     const sent = await runAction(`takeSeats:${sheet.key}`, send, sending, sheet.leaves);
     if (sent === undefined) return undefined;
     sheet.answered();
@@ -519,7 +520,9 @@ export function ParticipantBoard({
       const seated = persons.map(({ personId }) => personLeg(personId, leg));
       sheet.changed(seated);
       const personIds = persons.map(({ personId }) => personId);
-      sheet.whenStillTrue(seated, () => messages.succeed({ text: placed, landmark, undo: undoOf(sheet.seq, request, seats), persons: personIds, car: rideId }));
+      // A point gone at the send is not a refusal: the persons are in the car, at its start (RV3.4).
+      const text = taken.stopGone ? stopGoneText(words, seats.names) : placed;
+      sheet.whenStillTrue(seated, () => messages.succeed({ text, landmark, undo: undoOf(sheet.seq, request, seats), persons: personIds, car: rideId }));
     } else {
       const closes = taken.kind === "noRetour" || taken.kind === "personGone";
       failedIn(sheet, { notDone: { kind: "seats", ...seats }, why: taken.why, landmark, closes, leg });

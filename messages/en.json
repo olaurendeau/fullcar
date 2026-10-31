@@ -103,6 +103,8 @@
       "seats": "Seats",
       "freeSeat": "Free seat",
       "takeSeat": "Free seat: take a seat in {driver}’s car",
+      "stops": "Meeting points",
+      "boardsAt": "boards at {place}",
       "edit": "Edit",
       "remove": "Remove the car"
     },
@@ -323,7 +325,13 @@
       "retour": "All your people are already in a car for the return trip."
     },
     "notEnoughSeats": "There are no longer enough seats: nobody was seated.",
-    "placed": "{names} are in {driver}’s car"
+    "placed": "{names} are in {driver}’s car",
+    "stop": {
+      "legend": "Boarding point",
+      "start": "{place} · {time} · Departure place",
+      "option": "{place} · {time}",
+      "gone": "{count, plural, one {This point no longer exists: {names} boards at the departure place.} other {This point no longer exists: {names} board at the departure place.}}"
+    }
   },
   "Seat": {
     "placed": "{firstName} is in {driver}’s car",
