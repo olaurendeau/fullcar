@@ -162,7 +162,7 @@ test("RV5.1, RV5.3: two Stops 10 m apart stay two; one without a position is cou
   await expect(stops(again)).toHaveCount(2);
 });
 
-test("RV5.3: no Stop with a position: the map as before, a car and its straight line, and the sentence", async ({ db, page, placed }) => {
+test("RV5.7: no Stop with a position: the map as before, a car and its straight line, and the sentence", async ({ db, page, placed }) => {
   const marc = await seedCar(db, placed.id, "Marc", { position: around(placed.place, { east: 3000 }), departureTime: "08:00:00" });
   await seedStop(db, placed.id, marc, { location: "Prelles boucherie", time: "08:25:00" });
   await seedStop(db, placed.id, marc, { location: "Briançon carrefour", time: "08:35:00" });
@@ -195,7 +195,8 @@ test("RV5.5: a position added to a Stop, then removed, shows at the next state o
   const marcPoint = map.getByRole("button", { name: /^Voiture de Marc, départ : / });
   const before = await anchorIn(map, marcPoint);
 
-  const position = around(placed.place, { east: 2000, north: 500 });
+  // Outside the frame of the cars: a new framing would move the map.
+  const position = around(placed.place, { east: 2000, north: 4000 });
   await db.updateTable("stop").set({ location_lat: position.lat, location_lng: position.lng }).where("id", "=", stop).execute();
   const panel = page.getByRole("tabpanel");
   await panel.getByRole("article", { name: "Voiture de Sophie", exact: true }).getByRole("button", { name: /^Place libre/ }).first().click();
