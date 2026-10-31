@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { STOPS_MAX } from "@/domain/stop";
-import { addStop, atMaximum, lineErrors, removeStop, sortByTime, stopsToSend, type StopLine } from "./stops-state";
+import { addStop, atMaximum, lineErrors, removeStop, removedWithPassengers, sortByTime, stopsToSend, type KnownStop, type StopLine } from "./stops-state";
 
 // #889, epic #881: the lines of « Points de RDV » in the car's form (RV1.2 to RV1.7), as pure functions.
 
@@ -107,5 +107,29 @@ describe("stopsToSend", () => {
 
   it("only the order changed is a change", () => {
     expect(stopsToSend(shown, [shown[1], shown[0]])).toHaveLength(2);
+  });
+});
+
+describe("removedWithPassengers", () => {
+  const known = (n: number, passengers: number): KnownStop => ({ id: ID(n), location: `Lieu ${n}`, passengers });
+
+  it("RV6.1: a point removed that people chose has its number of people, in the order of the car", () => {
+    const cars = [known(1, 2), known(2, 1), known(3, 3)];
+    expect(removedWithPassengers(cars, [line(2, "08:35")])).toEqual([known(1, 2), known(3, 3)]);
+    expect(removedWithPassengers(cars, [])).toEqual(cars);
+  });
+
+  it("RV6.1: a point removed that nobody chose has no note", () => {
+    expect(removedWithPassengers([known(1, 0), known(2, 0)], [])).toEqual([]);
+  });
+
+  it("RV6.2: a point kept or changed, its place or its time, has no note", () => {
+    const cars = [known(1, 2), known(2, 1)];
+    expect(removedWithPassengers(cars, [line(1, "08:25"), line(2, "08:35")])).toEqual([]);
+    expect(removedWithPassengers(cars, [line(1, "09:00", "Autre lieu", AT), line(2, "08:35")])).toEqual([]);
+  });
+
+  it("a point added is not a removed one, even if it takes the place of one", () => {
+    expect(removedWithPassengers([known(1, 2)], [line(2, "08:25")])).toEqual([known(1, 2)]);
   });
 });
