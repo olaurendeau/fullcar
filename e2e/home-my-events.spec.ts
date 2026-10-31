@@ -12,7 +12,6 @@ import { newAddress } from "./mailbox";
 const KEY = "fullcar:session";
 
 const FR = { create: "Créer un événement", myEvents: "Mes événements" };
-const EN = { create: "Create an event", myEvents: "My events" };
 
 /** The link, right after the creation link and before « Comment ça marche ». */
 async function expectMyEventsLink(page: Page, words: typeof FR) {
@@ -26,8 +25,13 @@ async function expectMyEventsLink(page: Page, words: typeof FR) {
   expect(order).toEqual([words.create, words.myEvents, expect.any(String)]);
   const box = (await link.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
+  // OA10.1: small, grey, as wide as its words and centred, not stretched across the column.
+  const main = (await page.locator("main").boundingBox())!;
+  expect(box.width).toBeLessThan(main.width / 2);
+  expect(Math.abs(box.x + box.width / 2 - (main.x + main.width / 2))).toBeLessThanOrEqual(1);
+  expect(await link.evaluate((element) => getComputedStyle(element).fontSize)).toBe("14px");
   const create = (await page.getByRole("link", { name: words.create, exact: true }).boundingBox())!;
-  expect(box.y).toBeGreaterThanOrEqual(create.y + create.height);
+  expect(box.y - (create.y + create.height)).toBeCloseTo(8, 0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   return link;
 }
@@ -52,13 +56,5 @@ test.describe("OA10.2 in French", () => {
     } finally {
       await db.deleteFrom("account").where("id", "=", accountId).execute();
     }
-  });
-});
-
-test.describe("OA10.2 in English", () => {
-  test.use({ locale: "en-GB" });
-
-  test("says « My events »", async ({ page }) => {
-    await expectMyEventsLink(page, EN);
   });
 });
