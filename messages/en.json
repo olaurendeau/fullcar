@@ -745,6 +745,14 @@
       "validity": "It is valid for 1 hour and works once. Do not forward it: it gives access to your events.",
       "notYou": "Didn’t ask for anything? Ignore this email: without a click, nobody is signed in."
     },
+    "transfer": {
+      "subject": "An event is being handed over to you on Fullcar",
+      "intro": "Someone would like to hand over the organising of a carpooling event on Fullcar to you. Open the link to accept it: the event will join My events, on any device.",
+      "button": "See the event handed over",
+      "validity": "This link is valid for 7 days and works once. Do not forward it: it opens the organiser area, which shows phone numbers.",
+      "notYou": "Not for you? Ignore this email: until you open the link, nothing changes for you and no account is created. If the link no longer works, the person who sent it may have cancelled it.",
+      "address": "Your address: we keep it on the event while the handover is pending, 30 days after its date at the latest, then we erase it from the event. It also stays in the list of emails sent, which is used to limit how many go out. The details are on the privacy page, below."
+    },
     "noAccount": {
       "subject": "Signing in to Fullcar",
       "intro": "Someone asked to sign in to Fullcar with this address, but no account is linked to it. An account is created with a first event:",

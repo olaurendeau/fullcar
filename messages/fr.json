@@ -745,6 +745,14 @@
       "validity": "Il est valable 1 heure et ne sert qu’une fois. Ne le transférez pas : il donne accès à vos événements.",
       "notYou": "Vous n’avez rien demandé ? Ignorez cet e-mail : sans clic, aucune session ne s’ouvre."
     },
+    "transfer": {
+      "subject": "Un événement vous est cédé sur Fullcar",
+      "intro": "Quelqu’un souhaite vous céder l’organisation d’un événement de covoiturage sur Fullcar. Ouvrez le lien pour l’accepter : l’événement rejoindra Mes événements, sur n’importe quel appareil.",
+      "button": "Voir l’événement cédé",
+      "validity": "Ce lien est valable 7 jours et ne sert qu’une fois. Ne le transférez pas : il ouvre l’espace organisateur, qui montre des numéros de téléphone.",
+      "notYou": "Cet événement ne vous concerne pas ? Ignorez cet e-mail : tant que vous n’ouvrez pas le lien, rien ne change pour vous et aucun compte n’est créé. Si le lien ne marche plus, la personne qui vous l’a envoyé l’a peut-être annulé.",
+      "address": "Votre adresse : nous la gardons sur l’événement tant que la cession attend, 30 jours après sa date au plus, puis nous l’en effaçons. Elle reste aussi dans la liste des e-mails envoyés, qui sert à limiter les envois. Le détail est dans la page de confidentialité, ci-dessous."
+    },
     "noAccount": {
       "subject": "Connexion à Fullcar",
       "intro": "Quelqu’un a demandé à se connecter à Fullcar avec cette adresse, mais aucun compte n’y est rattaché. Un compte se crée avec un premier événement :",

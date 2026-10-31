@@ -1137,11 +1137,16 @@ l'arrivée dans `event-map-start.spec.ts`, CA1.20 et CA2.11 ; `arriveWaiting`, d
 
 ## Les e-mails (#581)
 
-Quatre e-mails, et aucun autre : la confirmation d'une adresse, le lien de connexion, la
-réponse à une demande de connexion pour une adresse sans compte, et l'avertissement avant la
-suppression d'un compte inactif. Leurs textes sont dans `src/email/messages.ts` (#592), dans
-la langue de la page qui les demande, l'avertissement dans celle du compte. Leur type
-d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu, ni prénom.
+Cinq e-mails, et aucun autre : la confirmation d'une adresse, le lien de connexion, la
+réponse à une demande de connexion pour une adresse sans compte, l'avertissement avant la
+suppression d'un compte inactif, et la cession d'un événement (#935, #943). Leurs textes sont
+dans `src/email/messages.ts` (#592), dans la langue de la page qui les demande, l'avertissement
+dans celle du compte. Leur type d'entrée n'a aucun champ pour un texte saisi par quelqu'un :
+ni titre, ni lieu, ni prénom. La cession (`{ kind: "transfer", locale, origin, token }`) ne
+nomme ni l'événement ni le premier organisateur (OT6.2) : son lien est
+`/connexion/cession#{jeton}`, le jeton après `#` comme les autres, valable 7 jours, un seul
+usage. Son texte dit que l'adresse du destinataire reste dans `email_send`, pour les limites,
+et renvoie à `/confidentialite` sans annoncer de durée (OT7.3).
 
 - **L'appel à Brevo** : `src/email/brevo.ts` (#591), sur le modèle de `photon.ts` et de
   `geoapify.ts`. Un e-mail, un destinataire, `POST {BREVO_URL}` avec la clé dans l'en-tête
@@ -1198,7 +1203,7 @@ d'entrée n'a aucun champ pour un texte saisi par quelqu'un : ni titre, ni lieu,
 |---|---|---|
 | `BREVO_URL` | `https://api.brevo.com/v3/smtp/email` (aussi quand elle est vide) | l'adresse d'envoi de Brevo ; chaque slot pointe vers son faux Brevo |
 | `BREVO_API_KEY` | aucune clé : aucun appel, chaque envoi `failed`, `email: no key` (aussi quand elle est vide ou blanche) | la clé de Brevo, réservée au serveur, rognée ; les slots ont une clé de test |
-| `EMAIL_FROM` | aucun expéditeur : aucun appel, chaque envoi `failed`, `email: no sender` (aussi quand elle n'a pas la forme `Nom <adresse>`, `<adresse>` ou `adresse`) | l'expéditeur des quatre e-mails |
+| `EMAIL_FROM` | aucun expéditeur : aucun appel, chaque envoi `failed`, `email: no sender` (aussi quand elle n'a pas la forme `Nom <adresse>`, `<adresse>` ou `adresse`) | l'expéditeur des cinq e-mails |
 
 ## La purge (#581)
 
@@ -1361,7 +1366,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | Mes événements | `src/domain/my-events.ts`, à partir de #606 | les deux sections et leur ordre (« À venir » par début croissant, « Passés » par début décroissant), « passé » et le jour 30 par `day-thirty.ts` ; une ligne n'est listée que si `organiser-access.ts`, avec la session seule, l'ouvre ou la dit terminée : jamais un événement en attente (OA2.3) |
 | création | `src/app/create-event.ts`, à partir de #599 | le cas d'usage de la création, avec une adresse ou une session ; l'envoi de la confirmation par `after()` |
 | avis « Confirmez votre adresse » | `src/domain/pending-send.ts`, `src/components/event/pending-notice.tsx` et `src/app/e/[id]/admin/pending-poll.ts`, à partir de #600 | le résultat gardé de l'envoi tel que l'avis le lit (un `sending` de plus de 30 s est un échec, OA1.7) ; l'adresse et ce résultat ne sont lus qu'une fois l'accès accordé, et ne voyagent que dans la réponse du panneau ; l'avis est relu toutes les 2 s tant que l'envoi est en cours, 30 s au plus, puis se lit comme un échec ; un changement pendant qu'une feuille cache la page attend qu'elle se montre |
-| e-mails | `src/email/brevo.ts`, à partir de #591 ; `src/email/messages.ts`, à partir de #592 | seul `brevo.ts` lit `BREVO_URL`, `BREVO_API_KEY` et `EMAIL_FROM` et appelle Brevo ; `messages.ts` écrit les quatre e-mails, sans aucun texte saisi (voir « Les e-mails ») |
+| e-mails | `src/email/brevo.ts`, à partir de #591 ; `src/email/messages.ts`, à partir de #592 | seul `brevo.ts` lit `BREVO_URL`, `BREVO_API_KEY` et `EMAIL_FROM` et appelle Brevo ; `messages.ts` écrit les cinq e-mails, sans aucun texte saisi (voir « Les e-mails ») |
 | jour 30 et « passé » | `src/domain/day-thirty.ts`, à partir de #587 | le seul calcul de « aujourd'hui », « passé » et du jour 30, à l'heure de Paris (voir « Heures sans fuseau ») |
 | purge | `src/app/api/purge/` (`route.ts`, `handle.ts`, `day-thirty.ts`, `inactive-accounts.ts`), à partir de #589 ; `src/db/day-thirty.ts`, à partir de #588 ; `src/db/expired-rows.ts`, à partir de #589 | la route n'exporte que `GET` et vérifie `CRON_SECRET` ; l'anonymisation et la suppression au jour 30, le nettoyage par âge, les comptes inactifs (voir « La purge ») |
 | téléphone | `src/db/event-rows.ts` et `src/domain/phone-visibility.ts`, à partir de #66 | la seule requête qui lit la colonne `phone`, qui renvoie les téléphones à part (`phonesById`) sans exporter sa liste de colonnes, et le seul endroit de la règle de visibilité, dont `withVisiblePhones` et `withOrganiserPhones` sont les seuls à recevoir ces téléphones ; à partir de #776, `hasPhone` (`src/db/persons.ts`) n'en lit que la présence, un booléen, sous le verrou de la Person |
