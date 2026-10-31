@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BoardCar, DevicePerson, DeviceState } from "./board";
+import type { BoardCar, BoardStop, DevicePerson, DeviceState } from "./board";
 import { afterRegistration, currentDriver, deviceKnown, driverChoice, findSeat, NEW_DRIVER, passengerCandidates, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
 
 function of(id: string, state: DeviceState): DevicePerson {
@@ -76,6 +76,33 @@ describe("tapOutcome: what a tap on a free seat does", () => {
   it("C5.6: the driver on the leg is never counted among the persons to place", () => {
     expect(tapOutcome("ready", [driver("marc"), withoutCar("lea")])).toEqual({ kind: "place", personId: "lea" });
     expect(tapOutcome("ready", [driver("marc")])).toEqual({ kind: "sheet" });
+  });
+});
+
+describe("tapOutcome on a car with Stops (RV3.1, RV3.2, D2)", () => {
+  const stop: BoardStop = { id: "s1", location: "Prelles", time: "08:25:00", position: null, passengerIds: [] };
+  const withStops = { stops: [stop] };
+  const noStops = { stops: [] };
+
+  it("RV3.2: opens the sheet for the only person without a car, who would board in one tap elsewhere", () => {
+    expect(tapOutcome("ready", [withoutCar("lea")], noStops)).toEqual({ kind: "place", personId: "lea" });
+    expect(tapOutcome("ready", [withoutCar("lea")], withStops)).toEqual({ kind: "sheet" });
+  });
+
+  it("RV3.2: opens the sheet whoever the device's persons are", () => {
+    expect(tapOutcome("ready", [withoutCar("lea"), withoutCar("tom")], withStops)).toEqual({ kind: "sheet" });
+    expect(tapOutcome("ready", [notConcerned("tom"), passenger("zoe")], withStops)).toEqual({ kind: "sheet" });
+  });
+
+  it("RV3.1: a car without a Stop behaves as before, and so does a call that names no car", () => {
+    expect(tapOutcome("ready", [withoutCar("lea"), withoutCar("tom")], noStops)).toEqual({ kind: "sheet" });
+    expect(tapOutcome("ready", [withoutCar("lea")])).toEqual({ kind: "place", personId: "lea" });
+  });
+
+  it("Q3: a device without a person still registers, which places at the departure; and nothing before its persons are known", () => {
+    expect(tapOutcome("none", [], withStops)).toEqual({ kind: "register" });
+    expect(tapOutcome("ready", [], withStops)).toEqual({ kind: "register" });
+    expect(tapOutcome("loading", [withoutCar("lea")], withStops)).toEqual({ kind: "wait" });
   });
 });
 
