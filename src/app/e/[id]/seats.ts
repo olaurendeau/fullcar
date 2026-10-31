@@ -21,6 +21,8 @@ import { lockLegs } from "./retour";
  * - `forbidden`: someone asked is not a person of the device (C2.4).
  * - `personGone`: with a well-formed token, someone asked, `goneIds`, is no longer a person of
  *   the event: removed since the page showed her (RP5.4). Nobody is placed.
+ * - `stopsOff`: a Stop is asked and the event's option « Points de RDV » is off, turned off
+ *   since the page loaded (RV8.3): nothing is written, and no seat is taken.
  * - `rideGone`: the car is no longer offered on that leg (C6.8).
  * - `alreadyInCar`: someone asked is in another car on the leg, or drives on it (C5.6).
  * - `seatTaken`: one person asked, and the last seat was just taken (C5.7).
@@ -30,7 +32,7 @@ import { lockLegs } from "./retour";
  */
 export type SeatsOutcome =
   | { ok: true; stopGone?: true }
-  | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" }
+  | { ok: false; error: "eventEnded" | "noRetour" | "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "stopsOff" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
@@ -75,6 +77,7 @@ async function placeInRide(
 ): Promise<Written<SeatsOutcome>> {
   const legs = await lockLegs(trx, eventId, [leg]);
   if (!legs.ok) return legs;
+  if (stopId !== null && !legs.stopsEnabled) return { ok: false, error: "stopsOff" };
   const access = deviceAccess(token, await readTokenHolders(trx, eventId), personIds);
   if (access.kind === "forbidden") return { ok: false, error: "forbidden" };
   if (access.kind === "personGone") return { ok: false, error: "personGone", goneIds: access.goneIds };

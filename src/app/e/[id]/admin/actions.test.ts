@@ -268,7 +268,7 @@ describe("updateEvent", () => {
         return { answer, token, title: row.title };
       }),
     );
-    expect(answer).toEqual({ ok: true, event: { ...BEFORE, title: FIELDS.title, description: null } });
+    expect(answer).toEqual({ ok: true, stops: false, event: { ...BEFORE, title: FIELDS.title, description: null } });
     expect(title).toBe(FIELDS.title);
     expect(JSON.stringify(answer).includes(token)).toBe(false);
   });

@@ -182,12 +182,12 @@ export async function holdEventKey(db: Kysely<Database>, id: string): Promise<bo
 }
 
 /**
- * What the organiser changes: the options and the token are not among them. Without
- * `locationPosition`, the position stored stays as it is; without `description`, the
- * description stored does.
+ * What the organiser changes: the token is not among them, nor the options but « Points de RDV »
+ * (`stops`, D1). Without `locationPosition`, the position stored stays as it is; without
+ * `description`, the description stored does; without `stops`, the option does.
  */
 export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" | "retourAt"> &
-  Partial<Pick<NewEvent, "locationPosition" | "description">>;
+  Partial<Pick<NewEvent, "locationPosition" | "description">> & { stops?: boolean };
 
 /**
  * Whether the event existed, and now has these fields. A retour removed has its Rides and
@@ -195,7 +195,7 @@ export type EventFieldsChange = Pick<NewEvent, "title" | "location" | "allerAt" 
  * (`removeRetour`): no row of the retour stays under a `retour_at` null.
  */
 export async function writeEventFields(db: Kysely<Database>, id: string, fields: EventFieldsChange): Promise<boolean> {
-  const { locationPosition: position, description } = fields;
+  const { locationPosition: position, description, stops } = fields;
   const result = await db
     .updateTable("event")
     .set({ title: fields.title, location: fields.location, aller_at: fields.allerAt, retour_at: fields.retourAt })
@@ -203,6 +203,7 @@ export async function writeEventFields(db: Kysely<Database>, id: string, fields:
       update.set({ location_lat: position?.lat ?? null, location_lng: position?.lng ?? null }),
     )
     .$if(description !== undefined, (update) => update.set({ description }))
+    .$if(stops !== undefined, (update) => update.set({ stops_enabled: stops }))
     .where("id", "=", id)
     .executeTakeFirst();
   return Number(result.numUpdatedRows) > 0;

@@ -135,6 +135,17 @@ describe("withTabsHeld", () => {
     });
   });
 
+  // #888: the option « Points de RDV » comes with the next state, never the shown one's.
+  it("the option turned on with the retour removed: shows it on, as the next state has it", () => {
+    const withStops = { ...next, options: { stops: true } } as never as EventState;
+    expect(withTabsHeld(shown, withStops)).toMatchObject({ options: { stops: true }, legs: [leg("aller", "new"), leg("retour", "old")] });
+  });
+
+  it("the option turned on with a retour added: shows it on too", () => {
+    const added = { event: { ...header, retourAt: "2026-12-13 19:00:00" }, options: { stops: true }, legs: [leg("aller", "new"), leg("retour", "new")] };
+    expect(withTabsHeld(next, added as never as EventState)).toMatchObject({ options: { stops: true }, legs: [leg("aller", "new")] });
+  });
+
   it("holds nothing when the tabs stay", () => {
     expect(withTabsHeld(shown, shown)).toBeUndefined();
     expect(withTabsHeld(next, next)).toBeUndefined();

@@ -38,7 +38,7 @@ export type SeatsTaken =
 /** What the server answers `takeSeats`, an unknown event included. */
 type SeatsAnswer =
   | { ok: true; stopGone?: true }
-  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "eventEnded" | "noRetour" }
+  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "eventEnded" | "noRetour" | "stopsOff" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
@@ -71,7 +71,7 @@ export function seatsTaken(
     case "noRetour":
       return { kind: "noRetour", why: whyOf("noRetour") };
     default:
-      return { kind: "problem", problem: "failed", why: whyOf(answer.error) };
+      return { kind: "problem", problem: "failed", why: whyOf(answer.error === "stopsOff" ? "invalid" : answer.error) };
   }
 }
 
