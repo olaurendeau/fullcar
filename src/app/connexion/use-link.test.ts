@@ -5,7 +5,7 @@ import { findLink } from "@/db/email-links";
 import type { Database } from "@/db/schema";
 import { findSession } from "@/db/sessions";
 import { anAddress, seedAccount, seedLink, seedSends, seedSession, withCommittedAddresses, withRollbackRecordingSends } from "@/db/test-accounts";
-import { withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { confirmSeededEvent, seedEvent, seedPendingSend } from "@/db/test-events";
 import { CONFIRMATIONS_PER_EVENT } from "@/domain/send-limits";
 import type { Brevo, Email, SendAnswer } from "@/email/brevo";
@@ -146,13 +146,28 @@ describe("openWithLoginLink (OA5.2, OA5.4, OA5.5, OA5.7, OA5.9)", () => {
     });
   });
 
-  it("lands on Mes événements when the return event has been deleted since", async () => {
+  it("lands on Mes événements when the return event was deleted before the link is used (the foreign key emptied it)", async () => {
     await withRollbackRecordingSends(async (trx) => {
       const accountId = await seedAccount(trx);
       const { id } = await seedEvent(trx);
       const token = await seedLink(trx, { kind: "login", accountId, returnEventId: id });
       await trx.deleteFrom("event").where("id", "=", id).execute();
       expect(await openWithLoginLink(trx, token)).toMatchObject({ state: "opened", eventId: null });
+    });
+  });
+
+  it("lands on Mes événements when the return event is deleted after the link is read, before its key is held", async () => {
+    await withCommittedAddresses(async (db, address) => {
+      const accountId = await seedAccount(db, { email: address() });
+      const { id } = await seedEvent(db);
+      const token = await seedLink(db, { kind: "login", accountId, returnEventId: id });
+      // The deletion is not committed yet: the link still names the event, and the key waits for it.
+      const answer = await whileHeld(
+        db,
+        (trx) => trx.deleteFrom("event").where("id", "=", id).execute(),
+        (own) => openWithLoginLink(own, token),
+      );
+      expect(answer).toMatchObject({ state: "opened", eventId: null });
     });
   });
 
