@@ -8,7 +8,7 @@
  */
 
 /** What is used of `localStorage`. */
-export type TokenStorage = Pick<Storage, "getItem" | "removeItem">;
+export type TokenStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 const KEY = "fullcar:session";
 
@@ -17,6 +17,9 @@ const KEY = "fullcar:session";
  * last character can only be A, Q, g or w. Anything else kept under the key is no token.
  */
 const FORMAT = /^[A-Za-z0-9_-]{21}[AQgw]$/;
+
+/** Whether `value` has the shape of a token the server draws: a session's, or a link's (connexion/link-fragment.ts). */
+export const isTokenShaped = (value: string): boolean => FORMAT.test(value);
 
 /** What became of a page load's visit: none sent, the session open, ended, or no answer that says. */
 export type VisitOutcome = "none" | "open" | "ended" | "failed";
@@ -33,6 +36,21 @@ export function sessionTokens({ storage }: { storage: () => TokenStorage }) {
       return typeof token === "string" && FORMAT.test(token) ? token : undefined;
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * Keeps the token a link just opened a session with, in place of the one kept, whoever's it
+   * was (OA5.9). Says whether it did: a storage that refuses leaves the browser without the
+   * session, and the page must not say it opened.
+   */
+  function keepSessionToken(token: string): boolean {
+    if (!FORMAT.test(token)) return false;
+    try {
+      storage().setItem(KEY, token);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -72,7 +90,7 @@ export function sessionTokens({ storage }: { storage: () => TokenStorage }) {
   /** « Se déconnecter » (OA9.1): the browser forgets the token it sent, unless another tab has replaced it. */
   const forgetSessionToken = forget;
 
-  return { readSessionToken, sendVisit, forgetSessionToken };
+  return { readSessionToken, keepSessionToken, sendVisit, forgetSessionToken };
 }
 
-export const { readSessionToken, sendVisit, forgetSessionToken } = sessionTokens({ storage: () => window.localStorage });
+export const { readSessionToken, keepSessionToken, sendVisit, forgetSessionToken } = sessionTokens({ storage: () => window.localStorage });

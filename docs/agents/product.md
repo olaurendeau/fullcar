@@ -72,7 +72,8 @@ reproduire, dans cet ordre.
     Arrêt, le geste reste unique et place directement ;
   - l'option s'active à la création, et aussi dans « Modifier l'événement » (D1) ; elle ne se
     désactive jamais tant que des Arrêts existent ;
-  - un Arrêt retiré laisse ses passagers dans la voiture, qui montent au départ.
+  - un Arrêt retiré laisse ses passagers dans la voiture, qui montent au départ ;
+  - sur une voiture qui a des Arrêts, chaque passager dit où il monte, « monte au départ » ou « monte à {lieu} », sur tous les appareils (RV2.2 amendé, épic #881) ; seules les personnes de l'appareil peuvent changer leur point ; sur une voiture sans Arrêt, rien n'est dit.
 - **Le conducteur retire sa voiture** : ses passagers repassent « sans voiture » sur ce leg,
   et le bandeau de couverture le reflète.
 - **Le conducteur réduit ses places** sous le nombre d'occupants : il choisit qui sort ; les

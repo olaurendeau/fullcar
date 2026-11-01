@@ -106,6 +106,61 @@ describe("migrations", () => {
     }
   });
 
+  // #940 (epic #935): the down of 0007 gives back exactly what 0006 left: columns, constraints
+  // and indexes, the four checks that accept the handover kind among them.
+  it("0007 goes down to the schema 0006 left", async () => {
+    const migrator = createMigrator(db);
+    expectSuccess(await migrator.migrateTo("0006_stops"));
+    const before = await schemaOf(db);
+    expectSuccess(await migrator.migrateTo("0007_transfer"));
+    expect(await schemaOf(db)).not.toEqual(before);
+    expectSuccess(await migrator.migrateTo("0006_stops"));
+    expect(await schemaOf(db)).toEqual(before);
+    expectSuccess(await migrator.migrateToLatest());
+  });
+
+  // The down loses a handover waiting, with its links and its sends, and keeps the rest.
+  it("0007 goes down with a handover, its links and its sends in the database", async () => {
+    const migrator = createMigrator(db);
+    expectSuccess(await migrator.migrateToLatest());
+    const { id: eventId } = await seedEvent(db);
+    try {
+      const { id: accountId } = await db
+        .insertInto("account")
+        .values({ email: "camille@exemple.fr", locale: "fr" })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+      await db
+        .updateTable("event")
+        .set({
+          account_id: accountId,
+          confirmed_at: new Date(),
+          transfer_email: "alex@exemple.fr",
+          transfer_status: "sent",
+          transfer_status_at: new Date(),
+        })
+        .where("id", "=", eventId)
+        .execute();
+      const [kept, lost] = [Buffer.alloc(32, 1), Buffer.alloc(32, 2)];
+      await db.insertInto("email_link").values({ token_hash: kept, kind: "confirmation", event_id: eventId }).execute();
+      await sql`insert into email_link (token_hash, kind, event_id) values (${lost}, 'transfer', ${eventId})`.execute(db);
+      await db.insertInto("email_send").values({ kind: "confirmation", email: "kept@exemple.fr", event_id: eventId }).execute();
+      await sql`insert into email_send (kind, email, event_id) values ('transfer', 'alex@exemple.fr', ${eventId})`.execute(db);
+
+      expectSuccess(await migrator.migrateTo("0006_stops"));
+      const links = await db.selectFrom("email_link").select("token_hash").where("event_id", "=", eventId).execute();
+      expect(links.map((link) => link.token_hash)).toEqual([kept]);
+      const sends = await db.selectFrom("email_send").select("email").where("event_id", "=", eventId).execute();
+      expect(sends).toEqual([{ email: "kept@exemple.fr" }]);
+      expect(await db.selectFrom("event").select("id").where("id", "=", eventId).execute()).toHaveLength(1);
+    } finally {
+      expectSuccess(await migrator.migrateToLatest());
+      await db.deleteFrom("event").where("id", "=", eventId).execute();
+      await db.deleteFrom("account").where("email", "=", "camille@exemple.fr").execute();
+      await db.deleteFrom("email_send").where("email", "in", ["kept@exemple.fr", "alex@exemple.fr"]).execute();
+    }
+  });
+
   // #883 (epic #881): the down of 0006 gives back exactly what 0005 left: columns, constraints,
   // indexes, and no trigger function behind.
   it("0006 goes down to the schema 0005 left", async () => {
