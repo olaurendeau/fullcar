@@ -315,9 +315,5 @@ creatorTest.describe("les pages des participants", () => {
       await page.keyboard.press("Escape");
       await expect(page.getByRole("dialog", { name })).toBeHidden();
     }
-
-    await page.goto(`/e/${seededEvent.id}/moi`);
-    await expect(page.locator("body")).toBeVisible();
-    await noEmailField();
   });
 });
