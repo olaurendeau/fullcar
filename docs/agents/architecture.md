@@ -412,10 +412,26 @@ relit donc sous ses verrous ce qu'il a lu avant eux :
 
 Les autres écritures voient un retrait de la même façon. Avec une requête et un jeton bien
 formés, une personne absente de l'événement donne `personGone`, avec l'état, et non plus
-`forbidden`. La personne d'un autre jeton garde `forbidden`, et `noRetour` passe toujours
-avant les deux. C'est le cas d'`updatePerson` et de `setPersonLeg` (`persons.ts`), de
-`takeSeats` (`seats.ts`, tout ou rien : une seule personne retirée refuse tout) et
-d'`offerRide` (`offer-ride.ts`, un conducteur ou un passager coché retiré). Le contrôle se
+`forbidden`. Pour les écritures d'identité, la personne d'un autre jeton garde `forbidden`,
+et `noRetour` passe toujours avant les deux. C'est le cas d'`updatePerson` (`persons.ts`) et
+d'`offerRide` (`offer-ride.ts`, un conducteur ou un passager coché retiré). `updateRide` et
+`removeRide` (`change-ride.ts`) et `removePerson` gardent aussi `forbidden`.
+
+**Placer, sortir et changer le point : « qui a le lien » (épique #973).** `setPersonLeg`
+(`persons.ts`), `takeSeats` et `undoSeats` (`seats.ts`) et `setBoardingStop`
+(`boarding-stop.ts`) ne comparent plus aucun jeton : ils exigent que les personnes envoyées
+soient des personnes de l'événement (`eventAccess`, `device.ts`, à côté de `deviceAccess`,
+qui ne change pas). Elles n'ont donc plus `forbidden`. Un jeton absent, mal formé ou que
+personne ne détient place aussi : un appareil sans inscription n'a pas de jeton (PL2.7), et
+en tirer un pour lui toucherait à la génération des jetons. Le jeton ne sert plus qu'à
+`readEventState`, qui rend l'état tel que cet appareil le voit : aucune personne d'appareil
+et aucun numéro sans jeton (C10.6), et pour les autres les seuls numéros de `phoneVisible`
+(C10.1, PL7.2). Aucune écriture de placement n'enregistre qui a placé (PL4.1, PL4.4) : rien
+n'est stocké en plus, et la PR ne porte aucune migration. L'identité reste à l'appareil qui
+a inscrit la personne : prénom, numéro, rehausseur, « Retirer la personne », et la voiture
+et ses passagers cochés (`offerRide`). Un test fige l'autre côté (PL7.1, `actions.test.ts`).
+
+`personGone` garde son rang (avant `rideGone`). Le contrôle final se
 fait sur ce que rend `lockPersons`, jamais sur la seule lecture d'avant le verrou : une
 personne retirée pendant que l'écriture attendait sa Person est vue absente. Une prise de
 place n'insère donc jamais un Placement vers une Person supprimée, ce qui serait une

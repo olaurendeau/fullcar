@@ -220,12 +220,13 @@ describe("takeSeats", () => {
     });
   });
 
-  it("C2.4: a refusal gives the state too, and places nobody", async () => {
+  it("PL2.9: places the person of another device, and gives the state the placing device sees", async () => {
     await inTransaction(async (trx) => {
       const { eventId, lea, tom, r1 } = await seedScene(trx);
       const result = await takeSeats(eventId, lea.token, r1, "aller", [tom.id]);
-      expect(result).toEqual({ ok: false, error: "forbidden", state: await readEventState(trx, eventId, lea.token) });
-      expect(stateOf(result)?.[0].withoutCar.map((person) => person.firstName)).toEqual(["Tom"]);
+      expect(result).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
+      expect(stateOf(result)?.[0].withoutCar).toEqual([]);
+      expect(stateOf(result)?.[0].cars[0].passengers.map((person) => person.firstName).sort()).toEqual(["Léa", "Tom"]);
     });
   });
 
@@ -614,12 +615,14 @@ describe("undoSeats", () => {
     });
   });
 
-  it("C7.3: refuses another device's token, and Léa stays in the car", async () => {
+  it("PL4.3: gives Léa back from another device's token, and nobody is undone when she is out already", async () => {
     await inTransaction(async (trx) => {
       const { eventId, lea, tom, r1 } = await seedScene(trx);
-      const result = await undoSeats(eventId, tom.token, r1, "aller", [{ personId: lea.id, before: "withoutCar" }]);
-      expect(result).toMatchObject({ ok: false, error: "forbidden" });
-      expect(stateOf(result)?.[0].cars[0].passengers.map((person) => person.firstName)).toEqual(["Léa"]);
+      const request = [{ personId: lea.id, before: "withoutCar" }];
+      const result = await undoSeats(eventId, tom.token, r1, "aller", request);
+      expect(result).toMatchObject({ ok: true, undoneIds: [lea.id] });
+      expect(stateOf(result)?.[0].cars[0].passengers).toEqual([]);
+      expect(await undoSeats(eventId, tom.token, r1, "aller", request)).toMatchObject({ ok: true, undoneIds: [] });
     });
   });
 
@@ -670,6 +673,46 @@ describe("undoSeats", () => {
     } finally {
       log.mockRestore();
     }
+  });
+});
+
+// PL7.1 (epic #973): placing is open to anyone with the link, identity is not. With Tom's token, on persons
+// and Rides of Marc and Léa, the five identity writes stay forbidden, and nothing is written.
+describe("PL7.1: the identity writes keep forbidden for another device's persons", () => {
+  const offer = (fields: Record<string, unknown>) => ({
+    rideId: randomUUID(),
+    leg: "aller",
+    location: "Salle Paul Bert",
+    time: "07:00",
+    seats: "3",
+    note: "",
+    ...fields,
+  });
+
+  it.each<[string, (scene: Scene) => Promise<unknown>]>([
+    ["updatePerson", ({ eventId, lea, tom }) => updatePerson(eventId, tom.token, { personId: lea.id, firstName: "Intrus", phone: "" })],
+    ["removePerson", ({ eventId, lea, tom }) => removePerson(eventId, tom.token, lea.id)],
+    ["offerRide, A drives", ({ eventId, lea, tom }) => offerRide(eventId, tom.token, offer({ driver: { kind: "device", personId: lea.id } }))],
+    [
+      "offerRide, A ticked as passenger",
+      ({ eventId, lea, tom }) =>
+        offerRide(eventId, tom.token, offer({ driver: { kind: "device", personId: tom.id }, passengerIds: [lea.id] })),
+    ],
+    ["updateRide", ({ eventId, tom, r1 }) => updateRide(eventId, tom.token, r1, "aller", rideForm())],
+    ["removeRide", ({ eventId, tom, r1 }) => removeRide(eventId, tom.token, r1, "aller")],
+  ])("%s", async (_, action) => {
+    await inTransaction(async (trx) => {
+      const scene = await seedScene(trx);
+      const rows = () =>
+        trx.selectFrom("placement").select(["person_id", "ride_id", "leg"]).where("event_id", "=", scene.eventId).orderBy("person_id").orderBy("leg").execute();
+      const people = () => trx.selectFrom("person").select(["id", "first_name", "phone"]).where("event_id", "=", scene.eventId).orderBy("id").execute();
+      const rides = () => trx.selectFrom("ride").select("id").where("event_id", "=", scene.eventId).execute();
+      const before = [await rows(), await people(), await rides()];
+
+      expect(await action(scene)).toMatchObject({ ok: false, error: "forbidden" });
+
+      expect([await rows(), await people(), await rides()]).toEqual(before);
+    });
   });
 });
 

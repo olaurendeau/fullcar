@@ -51,7 +51,8 @@ export async function organiserLink(id: unknown, session: unknown): Promise<bool
 }
 
 /**
- * Takes seats in a Ride for persons of the device (C5.2, C6.4), and always gives the state
+ * Takes seats in a Ride for persons of the event, whoever holds them (C5.2, C6.4; epic #973:
+ * the token is not needed to place), and always gives the state
  * the device now sees, refusal included. The token arrives in the body, never in the URL;
  * it is only compared, never logged. `eventNotFound` for an unknown event; a malformed id
  * is never looked up.
@@ -74,7 +75,7 @@ export async function takeSeats(
 }
 
 /**
- * « Changer le point » (RV4.2): a person of the device, in a car of the aller, boards at
+ * « Changer le point » (RV4.2): a person of the event, whoever holds her (epic #973), in a car of the aller, boards at
  * another point of it, or at its start with `null`. « Annuler » calls it again with the point
  * before. As for takeSeats: the token arrives in the body, never in the URL, and is only
  * compared, never logged; `eventNotFound` for an unknown event.
@@ -127,7 +128,7 @@ export async function updatePerson(id: unknown, token: unknown, fields: unknown)
   return changePerson("updatePerson", persons.updatePerson, id, token, fields);
 }
 
-/** Without a car, or not concerned, on one leg, for one of the device's persons. */
+/** Without a car, or not concerned, on one leg, for any person of the event (epic #973). */
 export async function setPersonLeg(id: unknown, token: unknown, fields: unknown): Promise<persons.PersonOutcome> {
   return changePerson("setPersonLeg", persons.setPersonLeg, id, token, fields);
 }
@@ -211,7 +212,7 @@ export async function offerRide(id: unknown, token: unknown, offer: unknown): Pr
 }
 
 /**
- * « Annuler » after a placement (C5.10): each person asked, of the device, gets back her
+ * « Annuler » after a placement (C5.10): each person asked, of the event (epic #973), gets back her
  * state before on that leg if she is still in that car, and the state the device now sees
  * comes back, refusal included. The token arrives in the body, never in the URL; it is only
  * compared, never logged. `eventNotFound` for an unknown event; a malformed id is never

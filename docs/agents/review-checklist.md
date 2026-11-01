@@ -87,7 +87,16 @@ celui qui écrit le code.
   avant l'envoi. Un jeton personnel tiré
   par le serveur, ou par un autre générateur, est bloquant.
 - Le serveur refuse tout jeton personnel qui n'a pas exactement cette forme (trop court,
-  trop long, hors alphabet, absent, autre chose qu'une chaîne).
+  trop long, hors alphabet, absent, autre chose qu'une chaîne), sauf pour les quatre
+  écritures de placement ci-dessous, qui ne le lisent pas.
+- À partir de #977 (épique #973), les quatre écritures de placement (`setPersonLeg`,
+  `takeSeats`, `undoSeats`, `setBoardingStop`) ne contrôlent que l'appartenance à
+  l'événement (`eventAccess`) : une personne d'un autre jeton, un jeton absent ou mal formé,
+  place. Une écriture d'identité (`updatePerson`, `removePerson`, `offerRide`, `updateRide`,
+  `removeRide`) qui perd le contrôle du jeton (`deviceAccess`, ou la propriété du conducteur)
+  est bloquante. Aucune écriture de placement n'enregistre qui a placé, ni dans une colonne,
+  ni dans un journal, ni dans Sentry (PL4.1, PL4.4) ; l'état qu'elle rend ne porte que les
+  numéros de `phoneVisible` (PL7.2).
 - À partir de #66, seul `src/app/e/[id]/device-token.ts` touche au jeton personnel dans le
   navigateur.
 - `Referrer-Policy: no-referrer` présent sur toutes les pages.

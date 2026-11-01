@@ -293,18 +293,34 @@ describe("C2.4, C7.3, C12.3: only the device that created the person changes her
     });
   });
 
-  it.each(STRANGERS)("setPersonLeg refuses %s", async (_, tokenOf) => {
+  it.each(STRANGERS)("setPersonLeg, a placement and not an identity, accepts %s", async (_, tokenOf) => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
       const other = await seedScene(trx);
-      const before = await readEventState(trx, scene.eventId, scene.lea.token);
-      const outcome = await setPersonLeg(trx, scene.eventId, tokenOf(scene, other.lea.token), {
+      const token = tokenOf(scene, other.lea.token);
+      const outcome = await setPersonLeg(trx, scene.eventId, token, {
         personId: scene.lea.id,
         leg: "aller",
         kind: "withoutCar",
       });
-      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
-      expect(await readEventState(trx, scene.eventId, scene.lea.token)).toEqual(before);
+      expect(outcome).toEqual({ ok: true, state: await readEventState(trx, scene.eventId, token) });
+      // C10.6: a token that is nobody's gets no device person and no number back.
+      expect(JSON.stringify(outcome)).not.toContain("22 22 22");
+      const mine = await readEventState(trx, scene.eventId, scene.lea.token);
+      expect(standing(mine, scene.lea.id)).toEqual({ aller: "withoutCar", retour: "withoutCar" });
+      // Her identity is the creating device's: the same token on the same person is still refused.
+      expect(
+        await updatePerson(trx, scene.eventId, token, { personId: scene.lea.id, firstName: "Intrus", phone: "" }),
+      ).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
+    });
+  });
+
+  it("PL2.5: notConcerned on a person of another device, from the token of B", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, tom } = await seedScene(trx);
+      const outcome = await setPersonLeg(trx, eventId, tom.token, { personId: lea.id, leg: "aller", kind: "notConcerned" });
+      expect(outcome).toEqual({ ok: true, state: await readEventState(trx, eventId, tom.token) });
+      expect(standing(await readEventState(trx, eventId, lea.token), lea.id)).toEqual({ aller: "notConcerned", retour: "withoutCar" });
     });
   });
 
