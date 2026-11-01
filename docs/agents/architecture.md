@@ -587,7 +587,8 @@ ci-dessus valent pour chacun.
 - **La suppression du compte** (`deleteAccount` et `eraseAccount`, `src/db/accounts.ts`, #610) :
   une seule transaction, tout ou rien. Ordre des verrous, celui de « Se déconnecter » et
   d'`editEvent` : les sessions du compte par clé, ses événements par identifiant, ses liens
-  par clé, l'adresse, puis le compte. Ses événements anonymisés sont supprimés, les autres
+  par clé, l'adresse, puis, une fois l'adresse tenue, les événements et les liens qui l'ont
+  écrite entre-temps (`clearLateAddress`, #986), puis le compte. Ses événements anonymisés sont supprimés, les autres
   restent ouverts sans compte ni jeton ; les événements en attente créés avec son adresse la
   perdent : elle n'est plus dans aucune table (OA9.5). La cession qui attend sur un de ses
   événements est annulée (OT7.2) : l'adresse du destinataire et son résultat sont effacés, ses
@@ -598,6 +599,15 @@ ci-dessus valent pour chacun.
   table. Ces événements entrent dans la lecture `forNoKeyUpdate` des événements, par
   identifiant, et leurs liens dans le verrou des liens par clé. Une impasse (40P01) avec le
   nettoyage des liens est reprise une fois.
+  `clearLateAddress` prend l'événement **après** l'adresse, alors que tout autre chemin la prend
+  avant l'événement (`recordSend`, `lockAddress` : « jamais avant l'événement »). Un seul
+  chemin peut s'y croiser : `confirmAgain` (`src/app/e/[id]/pending-email.ts`, renvoi et
+  correction de l'adresse), qui tient l'événement et attend l'adresse que la suppression tient
+  en attendant l'événement. Postgres fait échouer l'une des deux (40P01) : si c'est la
+  suppression, `deleteAccountOf` la reprend une fois ; si c'est `confirmAgain`, `resendEmail` ou
+  `fixEmail` lèvent `databaseFailure`, que la page montre comme « failed » : l'organisateur
+  renvoie ou corrige de nouveau. Quiconque ajoute un chemin qui prend un événement puis
+  l'adresse doit connaître ce second risque d'impasse.
 - **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et
   celui-ci ne rattache que son propre événement. Chacun ne sert qu'une fois, et plusieurs
   liens non utilisés restent valables ensemble. La page du lien lit le jeton dans

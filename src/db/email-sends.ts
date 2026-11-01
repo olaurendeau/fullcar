@@ -27,7 +27,11 @@ export const SEND_LOCK_CLASS = { address: 5941, global: 5942 } as const;
 /**
  * Locks the address, as email-address.ts reads it, until the transaction ends: an address
  * without an account is limited too (OA3.5). Two addresses whose hashes meet only wait for
- * each other. Never before the Event.
+ * each other. After the Event, except for the account deletion: `clearLateAddress` (accounts.ts)
+ * locks the events and the links once it holds the address (#986), so a path that locks an event
+ * then the address, `confirmAgain` (app/e/[id]/pending-email.ts) here, can deadlock with it
+ * (40P01). Postgres cancels one: `deleteAccountOf` tries the deletion once more, and `confirmAgain`
+ * fails as a `databaseFailure`, shown as « failed » for the organiser to resend or correct again.
  */
 export async function lockAddress(db: Kysely<Database>, email: string): Promise<void> {
   await sql`select pg_advisory_xact_lock(${SEND_LOCK_CLASS.address}::int, hashtext(${email}))`.execute(db);
