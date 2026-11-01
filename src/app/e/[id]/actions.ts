@@ -54,7 +54,7 @@ export async function organiserLink(id: unknown, session: unknown): Promise<bool
  * Takes seats in a Ride for persons of the event, whoever holds them (C5.2, C6.4; epic #973:
  * the token is not needed to place), and always gives the state
  * the device now sees, refusal included. The token arrives in the body, never in the URL;
- * it is only compared, never logged. `eventNotFound` for an unknown event; a malformed id
+ * it only decides which numbers that state shows, and is never logged. `eventNotFound` for an unknown event; a malformed id
  * is never looked up.
  */
 export async function takeSeats(
@@ -77,8 +77,8 @@ export async function takeSeats(
 /**
  * « Changer le point » (RV4.2): a person of the event, whoever holds her (epic #973), in a car of the aller, boards at
  * another point of it, or at its start with `null`. « Annuler » calls it again with the point
- * before. As for takeSeats: the token arrives in the body, never in the URL, and is only
- * compared, never logged; `eventNotFound` for an unknown event.
+ * before. As for takeSeats: the token arrives in the body, never in the URL, and only
+ * decides which numbers the state shows, never logged; `eventNotFound` for an unknown event.
  */
 export async function setBoardingStop(
   id: unknown,

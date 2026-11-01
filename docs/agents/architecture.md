@@ -419,9 +419,11 @@ d'`offerRide` (`offer-ride.ts`, un conducteur ou un passager coché retiré). `u
 
 **Placer, sortir et changer le point : « qui a le lien » (épique #973).** `setPersonLeg`
 (`persons.ts`), `takeSeats` et `undoSeats` (`seats.ts`) et `setBoardingStop`
-(`boarding-stop.ts`) ne comparent plus aucun jeton : ils exigent que les personnes envoyées
+(`boarding-stop.ts`) ne comparent plus aucun jeton. Trois exigent que les personnes envoyées
 soient des personnes de l'événement (`eventAccess`, `device.ts`, à côté de `deviceAccess`,
-qui ne change pas). Elles n'ont donc plus `forbidden`. Un jeton absent, mal formé ou que
+qui ne change pas) ; `undoSeats` ne l'appelle pas, car chacune de ses écritures filtre sur
+`ride_id` et `event_id` : une personne d'un autre événement ou retirée n'est dans aucune
+voiture de celui-ci et reste de côté. Elles n'ont donc plus `forbidden`. Un jeton absent, mal formé ou que
 personne ne détient place aussi : un appareil sans inscription n'a pas de jeton (PL2.7), et
 en tirer un pour lui toucherait à la génération des jetons. Le jeton ne sert plus qu'à
 `readEventState`, qui rend l'état tel que cet appareil le voit : aucune personne d'appareil

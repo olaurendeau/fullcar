@@ -43,7 +43,9 @@ export function deviceAccess(token: unknown, persons: readonly TokenHolder[], id
  * Whether `ids` may be placed (epic #973): `event` when all of them are persons of the event,
  * whoever holds them and with or without a token; otherwise `personGone`, with those no person
  * of the event has any more, in the order asked: removed since the page showed them. Used by
- * the four placement writes only; every identity write goes through `deviceAccess`.
+ * three of the four placement writes (`setPersonLeg`, `takeSeats`, `setBoardingStop`);
+ * `undoSeats` does not call it, its writes filter on the Ride and the event. Every identity
+ * write goes through `deviceAccess`.
  */
 export type EventAccess = { kind: "event" } | { kind: "personGone"; goneIds: string[] };
 

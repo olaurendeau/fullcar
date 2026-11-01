@@ -207,6 +207,17 @@ describe("takeSeats", () => {
         expect(await placementsOf(trx, eventId)).toEqual(before);
       });
     });
+
+    it("a real person of another event is personGone, and nothing is written to either event", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, lea, r1 } = await seedScene(trx);
+        const other = await seedScene(trx);
+        const before = [await placementsOf(trx, eventId), await placementsOf(trx, other.eventId)];
+        const result = await takeSeats(trx, eventId, lea.token, r1, "aller", [lea.id, other.lea.id]);
+        expect(result).toMatchObject({ ok: false, error: "personGone", goneIds: [other.lea.id] });
+        expect([await placementsOf(trx, eventId), await placementsOf(trx, other.eventId)]).toEqual(before);
+      });
+    });
   });
 
   it.each<[string, (scene: Awaited<ReturnType<typeof seedScene>>) => [string, string, Leg]]>([
@@ -450,6 +461,26 @@ describe("undoSeats", () => {
       expect(await standing(trx, eventId, "aller")).toEqual({ [lea.id]: null, [hugo.id]: null, [tom.id]: r2 });
       expect(Object.keys(await standing(trx, eventId, "aller"))).not.toContain(ines.id);
       expect((await placementsOf(trx, eventId)).filter((row) => row.leg === "retour")).toEqual(retour);
+    });
+  });
+
+  it("C5.10: a real person of another event, in a car of hers, is not undone, and nothing is written to either event", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, ines, r1 } = await seatedScene(trx);
+      const other = await seatedScene(trx);
+      await sql`update placement set placed_at = now() - interval '1 hour' where event_id in (${eventId}, ${other.eventId})`.execute(trx);
+      const before = [await placementsOf(trx, eventId), await placementsOf(trx, other.eventId)];
+
+      const result = await undoSeats(trx, eventId, lea.token, r1, "aller", [
+        { personId: other.lea.id, before: "withoutCar" },
+        { personId: other.ines.id, before: "notConcerned" },
+      ]);
+
+      expect(result).toMatchObject({ ok: true, undoneIds: [] });
+      expect([await placementsOf(trx, eventId), await placementsOf(trx, other.eventId)]).toEqual(before);
+      // Her own event's seats are still taken, and so are the other event's.
+      expect(await standing(trx, eventId, "aller")).toMatchObject({ [lea.id]: r1, [ines.id]: r1 });
+      expect(await standing(trx, other.eventId, "aller")).toMatchObject({ [other.lea.id]: other.r1, [other.ines.id]: other.r1 });
     });
   });
 

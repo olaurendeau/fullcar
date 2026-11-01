@@ -90,9 +90,11 @@ celui qui écrit le code.
   trop long, hors alphabet, absent, autre chose qu'une chaîne), sauf pour les quatre
   écritures de placement ci-dessous, qui ne le lisent pas.
 - À partir de #977 (épique #973), les quatre écritures de placement (`setPersonLeg`,
-  `takeSeats`, `undoSeats`, `setBoardingStop`) ne contrôlent que l'appartenance à
-  l'événement (`eventAccess`) : une personne d'un autre jeton, un jeton absent ou mal formé,
-  place. Une écriture d'identité (`updatePerson`, `removePerson`, `offerRide`, `updateRide`,
+  `takeSeats`, `undoSeats`, `setBoardingStop`) ne contrôlent pas le jeton. Trois
+  vérifient l'appartenance à l'événement (`eventAccess`) ; `undoSeats` ne l'appelle pas, car
+  chacune de ses écritures filtre sur `ride_id` et `event_id` : une personne d'un autre
+  événement ou retirée n'y est dans aucune voiture. Une personne d'un autre jeton, un jeton
+  absent ou mal formé, place. Une écriture d'identité (`updatePerson`, `removePerson`, `offerRide`, `updateRide`,
   `removeRide`) qui perd le contrôle du jeton (`deviceAccess`, ou la propriété du conducteur)
   est bloquante. Aucune écriture de placement n'enregistre qui a placé, ni dans une colonne,
   ni dans un journal, ni dans Sentry (PL4.1, PL4.4) ; l'état qu'elle rend ne porte que les

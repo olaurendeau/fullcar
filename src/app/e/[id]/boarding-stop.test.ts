@@ -247,6 +247,19 @@ describe("setBoardingStop", () => {
     });
   });
 
+  it("a real person of another event is personGone, and nothing is written to either event", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r1, s2 } = await seedScene(trx);
+      const other = await seedScene(trx);
+      const before = [await rowsOf(trx, eventId), await rowsOf(trx, other.eventId)];
+
+      const result = await setBoardingStop(trx, eventId, lea.token, r1, other.hugo.id, s2);
+
+      expect(result).toMatchObject({ ok: false, error: "personGone", goneIds: [other.hugo.id] });
+      expect([await rowsOf(trx, eventId), await rowsOf(trx, other.eventId)]).toEqual(before);
+    });
+  });
+
   it.each<[string, (scene: Awaited<ReturnType<typeof seedScene>>) => unknown[]]>([
     ["a ride id that is not a creation id", ({ lea, s1 }) => [42, lea.id, s1]],
     ["a person id that is not a creation id", ({ r1, s1 }) => [r1, "Léa", s1]],

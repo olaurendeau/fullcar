@@ -222,7 +222,8 @@ async function giveBackSeats(
  * before on that leg, if she is still in that Ride, then reads the event's state for it.
  * `eventNotFound` for an unknown event, forged request or not; a malformed id is never
  * looked up. As for takeSeats, the write commits in its own transaction and the state is
- * read after the commit; the token is only compared, never logged nor kept.
+ * read after the commit; the token only decides which numbers the state shows, never who may
+ * be given back, and is never logged nor kept.
  */
 export async function undoSeats(
   db: Kysely<Database>,
