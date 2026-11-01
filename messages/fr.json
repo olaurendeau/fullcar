@@ -569,7 +569,7 @@
       },
       "sends": {
         "title": "Pour limiter les envois d’e-mails",
-        "body": "Pour chaque e-mail de confirmation ou de connexion : l’adresse du destinataire, la sorte d’e-mail, l’événement s’il y en a un, et la date. Cela vaut aussi pour une adresse sans compte, quand quelqu’un demande à se connecter avec elle. C’est ce qui empêche d’inonder une adresse."
+        "body": "Pour chaque e-mail de confirmation, de connexion ou de cession : l’adresse du destinataire, la sorte d’e-mail, l’événement s’il y en a un, et la date. Cela vaut aussi pour une adresse sans compte, quand quelqu’un demande à se connecter avec elle. C’est ce qui empêche d’inonder une adresse."
       },
       "logs": {
         "title": "Les journaux",

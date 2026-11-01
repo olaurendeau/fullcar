@@ -569,7 +569,7 @@
       },
       "sends": {
         "title": "To limit emails",
-        "body": "For each confirmation or sign-in email: the recipient’s address, the kind of email, the event if there is one, and the date. This also applies to an address with no account, when someone asks to sign in with it. This is what stops anyone from flooding an address."
+        "body": "For each confirmation, sign-in or handover email: the recipient’s address, the kind of email, the event if there is one, and the date. This also applies to an address with no account, when someone asks to sign in with it. This is what stops anyone from flooding an address."
       },
       "logs": {
         "title": "Logs",
