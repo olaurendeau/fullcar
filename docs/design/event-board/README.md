@@ -1,6 +1,6 @@
 # Écran d’un événement : s’inscrire, proposer une voiture, prendre une place
 
-- Artifact : https://claude.ai/artifact/RV9ktAqKxrgzmumgn22AEj
+- Artifact : https://claude.ai/artifact/RV9ktAqKxrgzmumgn22AEj (en ligne : v4.8 ; v4.9 et v5.0 locales, pas encore republiées : la republication exige de relire les 2147 lignes de la version en ligne, dont l'écart avec la page locale se limite à la v4.9, vérifié par diff)
 - Epic : https://github.com/olaurendeau/fullcar/issues/66
 - Décision de l’humain pour la v4 : https://github.com/olaurendeau/fullcar/issues/66#issuecomment-6250124984
 - Tâches : #86 (PR #141), #87 (PR #152, adaptée ensuite), #88 à #93, #95, #216 (la barre
@@ -52,10 +52,344 @@
   « J’emmène aussi des personnes » (décision du propriétaire sur #649, 26/10)
 - v4.9 : une icône de voiture devant « Voiture de… » dans l’en-tête de la fiche (demande du
   propriétaire). Aucun mot nouveau. Voir « Ce qui change en v4.9 »
+- v5.0 : n'importe qui place n'importe qui (option A du propriétaire). Qui a le lien place une
+  personne dans une voiture, l'en sort, la met « sans voiture » ou « ne fait pas… », et change
+  son point de montée ; l'identité reste à l'appareil qui l'a inscrite ; aucune trace. Epic :
+  texte dans « Ce qui change en v5.0 » (issue à créer). Une décision attend le propriétaire
+  (numéros de téléphone). Voir « Ce qui change en v5.0 »
 - Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
   la maquette `language-switch` depuis sa v3 (#236)
+- Révisions : v5.1 — revue de design de la v5.0 appliquée (voir « Ce qui change en v5.1 ») ; v5.0 — première version de « n'importe qui place n'importe qui » (option A), à relire ; une décision en attente (numéros). Le détail des revues de v4.x est dans leurs sections.
 - Page : `index.html` (autonome, maquettes à 360 px de large)
 - Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
+
+## Ce qui change en v5.2, v5.1 (revue de la v5.0) et v5.0 : n’importe qui place n’importe qui
+
+**v5.1** (revue de design de la v5.0, locale, non publiée) : la page dessine maintenant chaque
+critère nommé par la revue (états 2, 4, 6, 7, 9, 13, 15 à 25) ; le texte d’aide des numéros est
+écrit partout ; les variantes `phoneHintForSeat`, `phoneHintDriving` et `RideForm.phoneHint` ont
+leurs chaînes exactes (table « Les mots ») ; PL3.2 : plus de « Voir la voiture » dans la feuille
+ouverte depuis une fiche (on y est) ; PL3.5 : le numéro d’une personne de la voiture de
+l’appareil est dit ; PL3.8 : la ligne d’information disparaît quand le mode prend fin ; PL1.3 :
+un chevron après le prénom, au lieu du soulignement pâle (voir D8) ; D7 gardée, avec son coût.
+Un désaccord avec la revue : aucun.
+Les critères de la v4.8 (T2 à T4, C1.2) qui citent « Visible par l’organisateur… Toute personne qui a le lien… » sont remplacés : le texte
+fait foi dans la table « Les mots de la v5.0 », pas dans ces citations.
+
+Demande du propriétaire (projet fullcar) : « Pour le prochain week-end j’emmène mes enfants,
+donc je suis inscrit et eux aussi avec ma session, mais c’est leur maman qui va gérer leur
+retour. Comme elle ne peut pas inscrire des personnes qui ne sont pas contrôlées par sa
+session, elle va devoir les dupliquer. Je suis ouvert à l’idée que n’importe qui puisse
+modifier les passagers d’une voiture. » **Cette section est le texte de l’épic** (aucune
+issue n’est créée par le designer : le coordinateur la crée depuis ce texte).
+
+### Le problème
+
+Un parent inscrit ses enfants depuis son appareil. Le retour, c’est l’autre parent qui
+l’assure, depuis un autre appareil. Cet autre parent ne peut ni placer ces enfants dans sa
+voiture, ni les sortir d’une autre, ni dire qu’ils ne font pas le retour : seules les
+personnes d’un appareil se placent depuis cet appareil. Il les inscrit donc une seconde fois
+(doublons : le bandeau compte deux fois les mêmes enfants, et le premier parent voit
+toujours « sans voiture » ceux qui sont partis). Ça touche tous les groupes où deux personnes
+se partagent les mêmes passagers : couples, grands-parents, un club dont le trésorier
+inscrit tout le monde.
+
+### Le cadre, tranché par le propriétaire
+
+- **Option A.** Qui a le lien de l’événement place n’importe quelle personne dans une voiture,
+  la sort d’une voiture, ou la met « sans voiture » ou « ne fait pas l’aller / le retour »,
+  **sur chaque leg indépendamment** ; sur une voiture à Arrêts, il change aussi son point de
+  montée (« Point de montée »).
+- **L’identité reste à l’appareil qui a inscrit la personne** : prénom, téléphone, rehausseur,
+  « Retirer la personne ». Aussi : qui conduit (« Qui conduit ? »), et modifier ou retirer
+  une voiture, restent aux appareils des personnes concernées.
+- **Aucune trace.** Rien n’indique qu’une personne a été placée depuis un autre appareil ;
+  rien de nouveau n’est stocké sur qui a placé qui ; aucune notification.
+- Rejetés, et hors de cette épic : « seul le conducteur gère sa voiture » (B) ; le « lien
+  perso » `/e/{id}/moi` (C, non construit).
+
+### Ce que ça rend faux dans `docs/agents/product.md` (origin/main)
+
+À amender dans la tâche. **Fausses :**
+
+1. « Règles d’interaction », **Prendre une place** : « une feuille s’ouvre avec **les
+   personnes de l’appareil** qui ne sont pas dans une voiture : celles « sans voiture »
+   précochées, celles « pas concernées » décochées ». La feuille liste désormais aussi les
+   personnes des autres appareils (PL2).
+2. « Règles d’interaction », **Arrêts**, dernière puce : « **seules les personnes de
+   l’appareil peuvent changer leur point** ». Tout passager peut changer le point de
+   montée de tout passager (PL5).
+3. « Promesses », **Un geste** : « le tap ouvre la feuille pour choisir qui monte » quand
+   l’appareil n’a pas exactement une personne sans voiture : vrai, mais incomplet ; la règle
+   des appareils sans personne sans voiture est écrite en PL2.7. **À compléter, pas fausse**
+   (le texte reste vrai pour les personnes de l’appareil).
+4. « Ce qui compte comme fait », ligne 2 : la preuve reste vraie (un clic avec une personne de
+   l’appareil sans voiture, aucun Arrêt). **À compléter** par la ligne « un appareil place
+   une personne d’un autre appareil » (PL2.9).
+
+Aussi à amender hors de product.md :
+
+- **glossaire**, « Jeton personnel » : « Permet de modifier **toutes** les personnes créées
+  avec lui ». Faux tel quel : le jeton garde l’identité (prénom, numéro, rehausseur, retrait),
+  mais plus les Placements, qui sont ouverts à tout porteur du lien. « Pas concernée »,
+  « Retirer une personne » : inchangés.
+- **architecture.md**, « Les autres écritures voient un retrait… » : « La personne d’un autre
+  jeton garde `forbidden` » est faux pour `setPersonLeg`, `takeSeats` (ses `personIds`), la
+  sortie d’une voiture et le changement de point : ils n’exigent plus que les personnes
+  envoyées soient celles du jeton. `updatePerson`, `removePerson`, `offerRide` (conducteur),
+  `updateRide`, `removeRide` gardent `forbidden`. `personGone` reste.
+- **event-board** (cette maquette), en v4 : C3.4 (la liste « Sans voiture » est du texte,
+  non interactive), C5.6 (le tap ne compte que les personnes de l’appareil), C6.1 et C6.7
+  (candidats de la feuille, message de feuille vide), RV4.1 de `meeting-points` (« les
+  autres passagers n’ont pas le bouton »).
+- **`PersonForm.phoneHint`** et ses variantes : voir « Décision à prendre ».
+
+### Les histoires
+
+- **Le parent qui prend le relais.** Camille propose la voiture du retour ; elle y place Tom et
+  Léa, que Marc a inscrits, sans les inscrire une seconde fois.
+- **Le parent qui laisse partir.** Marc a placé Léa dans une voiture qui n’est plus la
+  bonne ; Camille la sort de là, ou la met « Ne fait pas le retour », sans devoir le demander
+  à Marc.
+- **Le conducteur qui complète.** Sophie voit trois « sans voiture » et deux places libres dans sa
+  voiture : elle en place deux, sans connaître leurs appareils.
+- **Le retardataire.** Quelqu’un arrive sur un appareil neuf, sans personne : il voit encore
+  qui cherche une place.
+- **Marc, qui ne veut pas être dépossédé.** Tom et Léa restent à Marc : lui seul change leur
+  prénom, leur numéro, ou les retire de l’événement.
+
+### Les critères
+
+Préfixe PL. Un critère est un test (Playwright, ou Vitest pour les règles de `src/domain`).
+Scène : Marc (appareil A) a inscrit Marc, Tom et Léa. Camille (appareil B) a inscrit Camille,
+qui conduit au retour (17:30, 3 places, Inès à bord). Hugo (appareil C) est « sans voiture »
+au retour. Marc ne fait pas le retour.
+
+**PL1, le tableau d’un leg**
+- PL1.1 Chaque entrée de la liste « Sans voiture » d’un leg est un `button` d’au moins 44 px,
+  `aria-haspopup="dialog"`, nommé par le seul prénom. Il ouvre la feuille « {prénom} · {leg} »
+  (PL3), pour une personne de l’appareil comme pour une autre.
+- PL1.2 Sous la liste « Sans voiture » d’un leg, un bouton `aria-expanded="false"` dit
+  « Ne font pas le retour (1) » (« l’aller » sur l’aller) ; déplié, il montre les prénoms en
+  boutons comme PL1.1. Il compte les personnes sans Placement qui ne conduisent pas sur ce
+  leg. Il est absent du DOM à 0.
+- PL1.3 Sur la fiche d’une voiture, le prénom de chaque passager est un bouton de 44 px
+  (`aria-haspopup="dialog"`, nom = le prénom, suivi d’un chevron décoratif `aria-hidden` de 14 px,
+  `text-muted-foreground`, comme les prénoms de « Vos inscriptions ») qui ouvre la feuille PL3, quel que soit
+  l’appareil. Le prénom du conducteur n’en est pas un.
+- PL1.3b Le cue de PL1.3 ne dit rien de la propriété (D7) : la feuille ouverte depuis un prénom a « Modifier »
+  et « Retirer la personne » **seulement** si la personne est de l’appareil (test : même fiche, un
+  passager de l’appareil et un d’un autre appareil ; « Modifier » présent pour le premier, absent
+  pour le second, qui a la phrase PL3.4).
+- PL1.4 La lecture du tableau d’un leg porte, pour les personnes sans voiture et celles qui
+  ne font pas ce leg, le prénom et l’identifiant, et rien d’autre (ni numéro, ni rehausseur, ni
+  appareil). Un test lit la charge utile et compare ses clés.
+- PL1.5 Quand un autre appareil déplace une personne, la page la déplace à l’actualisation
+  suivante (15 s, ou retour au premier plan) : aucun message, aucune annonce `status`,
+  aucune ligne de barre.
+
+**PL2, « Qui monte dans la voiture de {conducteur} ? »**
+- PL2.1 Candidats : toute personne de l’événement qui ne conduit pas sur ce leg et n’est dans
+  aucune voiture de ce leg. Une personne dans une voiture n’est pas listée (on la sort
+  d’abord, PL3).
+- PL2.2 Ordre : **les personnes de l’appareil d’abord**, dans l’ordre de l’appareil (sans
+  voiture et « ne fait pas le leg » mêlées, comme aujourd’hui) ; puis les **autres
+  personnes sans voiture**, dans l’ordre où elles l’ont déclaré ; puis, repliées, les **autres
+  personnes qui ne font pas ce leg**, dans l’ordre de l’événement.
+- PL2.3 Cases cochées à l’ouverture : les personnes de l’appareil « sans voiture » ; jamais une
+  personne d’un autre appareil, ni une personne qui ne fait pas ce leg.
+- PL2.4 Les intitulés « Vos personnes » et « Autres personnes sans voiture » n’existent que
+  si la feuille liste au moins une personne d’un autre appareil ; « Vos personnes » seulement
+  si l’appareil en a une à lister. Sinon la feuille est celle d’aujourd’hui, sans intitulé.
+- PL2.5 « Autres personnes qui ne font pas le retour (n) » est un bouton `aria-expanded`,
+  replié, absent à n = 0. Replier ou déplier ne change pas les cases cochées.
+- PL2.6 Le bouton « Placer » dit « Placer n personnes » pour n cochées ; il est inactif à 0
+  ou au-delà des places libres (C6.2, C6.3, avec « Il reste n places dans cette voiture »).
+  Les personnes d’autres appareils comptent comme les autres.
+- PL2.7 **Le tap sur une place libre**, hors mode PL3.8 :
+
+  | l’appareil a | personne(s) de l’appareil sans voiture sur ce leg | voiture à Arrêts | le tap |
+  |---|---|---|---|
+  | aucune personne | sans objet | oui ou non | la première inscription (prénom, téléphone facultatif), qui place directement ; si d’autres personnes sont sans voiture ou ne font pas ce leg, le lien « Placer une personne déjà inscrite » ouvre la feuille, rien de coché |
+  | une personne ou plus | exactement une | non | place cette personne, en un tap (la règle d’aujourd’hui, y compris quand d’autres appareils ont des personnes sans voiture) |
+  | une personne ou plus | exactement une | oui | la feuille, départ coché, cette personne cochée |
+  | une personne ou plus | zéro | oui ou non | la feuille, rien de coché ; si personne ne peut être listé : le message de PL2.8 |
+  | une personne ou plus | deux ou plus | oui ou non | la feuille, les personnes de l’appareil sans voiture cochées |
+
+- PL2.8 Aucun candidat : le corps de la feuille dit « Tout le monde est déjà dans une voiture
+  pour le retour. » (« l’aller » sur l’aller), avec « Ajouter une personne » et « Fermer ».
+- PL2.9 « Placer » envoie les identifiants cochés, de n’importe quel appareil, en une
+  écriture tout ou rien. Un test d’intégration place, depuis le jeton de B, Tom et Léa
+  (jeton de A) : les deux Placements existent. Un identifiant inconnu de l’événement est
+  refusé comme aujourd’hui (`personGone` ou `invalid`).
+- PL2.10 « Qui monte avec vous ? » de « Proposer une voiture » ne change pas (personnes de
+  l’appareil seulement, hors périmètre).
+
+**PL3, la feuille d’une personne**
+- PL3.1 Le titre est « {prénom} · {leg} ». L’encadré dit l’état (amber pour « Sans voiture »).
+- PL3.2 Actions pour une personne **sans voiture** d’un autre appareil, dans cet ordre :
+  « Trouver une place » (principale), « Ne fait pas le retour ». Pour une personne **dans une
+  voiture** : « Sortir de la voiture », « Ne fait pas le retour » (jamais « Voir la voiture » : la
+  feuille s’ouvre depuis la fiche de la voiture, où l’on est déjà). Pour une
+  personne **qui ne fait pas ce leg** : « Passer sans voiture » (seule). Une personne qui
+  conduit n’a pas de feuille depuis la fiche (son prénom n’est pas un bouton, PL1.3).
+- PL3.3 Pour une personne de l’appareil, rien ne change (matrice « Vos inscriptions », ses
+  actions et ses mots, y compris « Je cherche une place »).
+- PL3.4 La feuille d’une personne d’un autre appareil ne contient ni « Modifier », ni « Retirer
+  la personne ». Elle contient la phrase « Seul l’appareil qui a inscrit cette personne peut
+  changer son prénom ou son numéro, ou la retirer. »
+- PL3.5 Elle ne montre un numéro que si la règle de la même voiture le permet déjà (C10.1) : pour une
+  personne qui est dans la voiture d’une personne de l’appareil, un lien `tel:` de 44 px sous l’état
+  (état 9) ; pour toute autre, rien (états 8 et 10) ;
+  voir « Décision à prendre ». Elle ne dit pas quel appareil a placé la personne, ni quand.
+- PL3.6 Chaque action réussie ferme la feuille, le tableau suit (bandeau, pastilles, listes) ;
+  un échec garde la feuille ouverte avec son message (`Actions.offline`, `Actions.failed`).
+- PL3.7 « Sortir de la voiture » sur une personne déjà sortie entre-temps : la barre dit
+  `Seat.alreadyOut` ; « Passer sans voiture » et « Ne fait pas le retour » sur une personne
+  déjà dans cet état réussissent sans message.
+- PL3.8 « Trouver une place » sur une personne d’un autre appareil ferme la feuille, active
+  l’onglet, fait défiler jusqu’à la première voiture ayant une place libre, y place le focus, et
+  la barre dit « Touchez une place libre pour y placer {prénom}. ». Le tap suivant sur une
+  place libre place **cette seule personne**, sans la feuille (avec la feuille, elle seule
+  cochée, sur une voiture à Arrêts) et n’applique pas la règle PL2.7 ; la barre dit alors
+  `Seat.placed` avec « Annuler ». Le mode prend fin au tap, à « Fermer » de la barre, ou à
+  l’ouverture d’une autre feuille ; la ligne « Touchez une place libre… » est alors retirée de la
+  barre (état 12), et seule la réussite reste.
+- PL3.9 Sans place libre sur le leg, la barre dit `DevicePersons.noFreeSeat.{leg}` comme pour
+  une personne de l’appareil.
+
+**PL4, aucune trace**
+- PL4.1 Aucune colonne, table ou valeur nouvelle : le schéma ne change pas (test sur les
+  migrations : aucune migration).
+- PL4.2 Aucune barre de message, `status`, titre ou texte ne dit qu’une personne a été placée,
+  sortie ou déplacée depuis un autre appareil. `Sheet.placed`, `Seat.placed`, `Seat.undone`,
+  `Seat.alreadyOut` gardent leurs mots.
+- PL4.3 « Annuler » défait le placement fait ici, pour les personnes de n’importe quel
+  appareil, sans écraser un changement fait entre-temps ailleurs (`Seat.alreadyOut`).
+- PL4.4 Aucun e-mail, aucune notification, aucun journal ne porte l’appareil ou le jeton qui a
+  placé.
+- PL4.5 Une personne placée par un autre appareil entre-temps : les mots d’aujourd’hui
+  (`Actions.notDone.seats` + `Actions.why.alreadyInCar`, ou `seatTaken`) ; le dernier geste
+  gagne.
+
+**PL5, Arrêts**
+- PL5.1 Sur une voiture à Arrêts, chaque ligne de passager porte « Changer le point de montée
+  de {prénom} » (visible : « Changer le point »), pour toutes les personnes, avec « monte au
+  départ » ou « monte à {lieu} ».
+- PL5.2 « Où monte {prénom} ? », « Valider » et les mots de `meeting-points` v3.1 ne changent pas.
+- PL5.3 Le groupe « Point de montée » de « Qui monte… ? » s’applique à toutes les personnes
+  cochées, d’où qu’elles viennent ; le départ est coché par défaut.
+- PL5.4 Changer le point ne change ni la place ni la couverture (RV4.4).
+
+**PL6, mots, 360 px, anglais**
+- PL6.1 Chaque chaîne de « Les mots de la v5.0 » existe en français et en anglais, mot pour mot.
+- PL6.2 Fenêtre de test 360 × 640 (`page.setViewportSize({ width: 360, height: 640 })`), avec 40 personnes dans la feuille « Qui monte… ? » : le corps défile, « Placer »
+  et « Fermer » restent visibles, aucun débordement horizontal.
+- PL6.3 À 360 px, un prénom de 40 caractères sans espace, dans la liste « Sans voiture », dans
+  une ligne de passager et dans la feuille : il passe à la ligne, aucun débordement.
+- PL6.4 Contraste des intitulés de groupe (13 px, `--app-muted` sur blanc) : 4,5:1 au moins.
+
+**PL7, ce qui reste à l’appareil**
+- PL7.1 `updatePerson` (prénom, numéro, rehausseur), `removePerson`, « Qui conduit ? »,
+  `updateRide` et `removeRide` d’une personne d’un autre appareil restent refusés
+  (`forbidden`) avec le message d’aujourd’hui. Un test les appelle avec le jeton de B sur
+  des personnes de A.
+- PL7.2 Le jeton de B ne lit aucun numéro de plus que C10.1 ne le permet (test de la charge
+  utile) : voir « Décision à prendre ».
+
+### Les mots de la v5.0
+
+| clé | `messages/fr.json` | `messages/en.json` | état |
+|---|---|---|---|
+| `Board.notConcerned.aller` | Ne font pas l’aller ({count}) | Not on the outbound trip ({count}) | nouveau |
+| `Board.notConcerned.retour` | Ne font pas le retour ({count}) | Not on the return trip ({count}) | nouveau |
+| `Sheet.group.own` | Vos personnes | Your people | nouveau |
+| `Sheet.group.others` | Autres personnes sans voiture | Other people without a car | nouveau |
+| `Sheet.group.notConcerned.aller` | Autres personnes qui ne font pas l’aller ({count}) | Other people not on the outbound trip ({count}) | nouveau |
+| `Sheet.group.notConcerned.retour` | Autres personnes qui ne font pas le retour ({count}) | Other people not on the return trip ({count}) | nouveau |
+| `Sheet.nobody.aller` | Tout le monde est déjà dans une voiture pour l’aller. | Everyone is already in a car for the outbound trip. | **changé** (était « Toutes vos personnes… ») |
+| `Sheet.nobody.retour` | Tout le monde est déjà dans une voiture pour le retour. | Everyone is already in a car for the return trip. | **changé** |
+| `PersonForm.phoneHintForSeat` | Pour que {driver} puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | So that {driver} can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | changé |
+| `PersonForm.phoneHintDriving` et `RideForm.phoneHint` | Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | changé |
+| `PersonForm.phoneHint` | Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | **changé** (décision 01/11)  |
+| `PersonForm.placeOthers` | Placer une personne déjà inscrite | Seat someone already signed up | nouveau |
+| `OtherPerson.setWithoutCar` | Passer sans voiture | Mark as without a car | nouveau |
+| `OtherPerson.note` | Seul l’appareil qui a inscrit cette personne peut changer son prénom ou son numéro, ou la retirer. | Only the device that signed this person up can change their name or number, or remove them. | nouveau |
+| `OtherPerson.pickSeat` | Touchez une place libre pour y placer {firstName}. | Tap a free seat to seat {firstName}. | nouveau (barre, information) |
+
+Inchangés, réemployés tels quels : `DevicePersons.sheetTitle`, `findSeat`, `seeCar`, `leaveCar`,
+`notConcerned.*`, `state.*`, `noFreeSeat.*`, `Sheet.title`, `remaining`, `submit`, `placed`,
+`Seat.placed`, `undo`, `undone`, `alreadyOut`, `Actions.*` (dont `notDone.seats`,
+`why.alreadyInCar`, `why.seatTaken`, `why.drives`), `Board.withoutCar`, et ceux des Arrêts.
+Pas de nouveau mot au glossaire : « Placement », « Sans voiture », « Pas concernée ».
+
+### Décision du propriétaire (01/11, relayée par le coordinateur) : numéro de téléphone, option 1
+
+**La question.** Aujourd’hui un numéro n’est vu que de l’organisateur et des personnes de la
+même voiture (C10.1). Avec l’option A, un porteur du lien peut placer **n’importe quelle**
+personne dans une voiture où il est lui-même, lire son numéro, puis la ressortir, sans
+trace. Le numéro de **tous** est donc lisible par qui a le lien. Ce n’est pas un défaut de
+l’implémentation : c’est ce que l’option A, sans trace, rend possible. Ça touche « qui peut
+voir un numéro », qui est réservé à l’humain.
+
+**Options.**
+1. *Accepter, et le dire.* C10.1 reste la règle écrite et testée ; `PersonForm.phoneHint`
+   (et `phoneHintForSeat`, `phoneHintDriving`) disent le fait. Texte proposé :
+   « Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui
+   a le lien peut placer quelqu’un dans une voiture. » / « Visible to the organiser and to
+   the people in the same car. Anyone with the link can put someone in a car. »
+2. *Fermer.* Un numéro n’est vu d’une voiture que par les personnes qui y étaient avant le
+   geste : impossible sans stocker qui a placé qui, donc contraire au cadre « aucune trace ».
+3. *Garder l’identité complète à l’appareil.* Le numéro d’une personne n’est jamais montré à
+   un autre appareil, même dans la même voiture : casse « appeler le conducteur » (v4.8), donc
+   non.
+
+**Décision : option 1, accepter et le dire.** C10.1 est inchangée. Raison : aujourd'hui, un porteur du lien lit déjà le numéro de toute personne dont la voiture a une place libre, en prenant cette place ; l'option A élargit une exposition existante, elle n'en crée pas. **Recommandation initiale : 1.** Un lien d’événement est déjà un secret partagé par le groupe, et
+un porteur de lien peut déjà lire les numéros de la voiture où il prend une place libre.
+Cette page et ces critères supposent 1 sans changer C10.1 (PL3.5, PL7.2) ; la formule du
+texte d’aide est la seule dépendance. Les autres décisions sont ci-dessous.
+
+### Décisions prises par le designer (réversibles, à signaler)
+
+- **D1. Le tap d’un appareil sans personne reste la première inscription** (PL2.7), avec un
+  lien « Placer une personne déjà inscrite ». Raison : c’est le geste le plus fréquent, et un
+  nouveau venu qui voit des « sans voiture » veut d’abord s’inscrire. Alternative écartée :
+  ouvrir directement la feuille, qui ferait de l’inscription l’exception.
+- **D2. Avec exactement une personne de l’appareil sans voiture, le tap place cette personne**
+  même si d’autres appareils ont des personnes sans voiture : sinon le geste unique
+  disparaît dès qu’un second appareil a quelqu’un sans voiture, c’est-à-dire presque
+  toujours. Les autres se placent par leur feuille (« Trouver une place », PL3.8).
+- **D3. Les personnes qui ne font pas un leg sont lues par tous** (prénom et identifiant
+  seulement, PL1.4) : sans cela, on ne peut pas dire « sans voiture » une personne dont
+  l’appareil l’a mise « ne fait pas le retour ». Conséquence : le prénom d’une personne qui
+  ne fait ni l’aller ni le retour devient visible de qui a le lien. Il n’y a aucun autre
+  champ.
+- **D4. Aucun mode caché**, mais le mode PL3.8 existe : il est dit dans la barre, il prend
+  fin sans effort, il ne dure pas d’un onglet à l’autre.
+- **D5. Passer d’une voiture à une autre se fait en deux gestes** (« Sortir », puis la place).
+- **D6. « Qui conduit ? », « Qui monte avec vous ? » de « Proposer une voiture » restent aux
+  personnes de l’appareil.** Conduire engage un numéro et une voiture, hors de cette épic.
+- **D7. Les listes ne disent pas à qui sont les personnes** (pas de « (vous) »), puisque la
+  feuille s’ouvre de la même façon : seule la phrase PL3.4 le dit. **Coût, gardé** : on ne sait qu’en touchant si une personne est « à soi » (sa feuille a « Modifier », ou la phrase PL3.4) ; la matrice « Vos inscriptions » reste la liste fiable des siens.
+- **D8. Le signe d’un prénom qui s’ouvre est un chevron** (PL1.3), celui des prénoms de « Vos inscriptions ». Raison : un soulignement pâle ne se voit pas, et une icône de crayon dirait « modifier », ce que la feuille d’une personne d’un autre appareil ne permet pas.
+
+### Hors périmètre
+
+Le « lien perso » `/e/{id}/moi` ; « seul le conducteur gère sa voiture » ; tout journal de
+qui a placé qui, toute notification ou verrou de concurrence ; changer le prénom, le numéro ou
+le rehausseur d’une personne d’un autre appareil, la retirer ; faire conduire une personne d’un
+autre appareil ; déplacer une personne d’une voiture à une autre en un geste ; placer en un
+tap plusieurs personnes depuis la fiche ; la matrice « Vos inscriptions » (inchangée) ;
+l’organisateur (son espace garde ses droits).
+
+### Pour le développement
+
+Le tableau d’un leg (`LegBoard`) gagne `notConcerned: BoardPerson[]`. Les actions
+`setPersonLeg`, `takeSeats`, `leaveCar` et `changeStop` vérifient que les personnes existent
+dans l’événement, plus qu’elles sont du jeton ; `personGone` reste. `updatePerson`,
+`removePerson`, `offerRide` (conducteur), `updateRide`, `removeRide` gardent le jeton. La
+maquette : `index.html`, section « N’importe qui place n’importe qui (v5.0) ».
+
 
 ## Ce qui change en v4.9 : l’icône de voiture de l’en-tête
 
@@ -102,7 +436,7 @@ la page n’a pas de défilement horizontal.
 - CI1.3 L’icône a `aria-hidden="true"` et n’est pas dans le `h3` ; `getByRole('article', { name:
   'Voiture de Marc' })` et `getByRole('heading', { name: 'Voiture de Marc' })` trouvent chacun une
   seule fiche, nom inchangé ; le texte du `h3` est exactement « Voiture de Marc ».
-- CI1.4 À 360 px de large, un prénom de 40 caractères sans espace, l’heure et « Complet » : les
+- CI1.4 À 360 px de large, un prénom de 50 caractères sans espace, l’heure et « Complet » : les
   boîtes de l’icône, du `h3` et du côté droit ne se recouvrent pas, la boîte du `h3` ne dépasse
   pas celle de la fiche, et `document.documentElement.scrollWidth` n’excède pas la largeur de
   la fenêtre.
@@ -112,7 +446,8 @@ la page n’a pas de défilement horizontal.
   près celui de cette ligne, avec un titre sur une seule ligne et avec un titre sur plusieurs.
 - CI1.7 Le focus donné par script au `h3` (« Voir la voiture ») ne change pas, et l’icône ne
   reçoit jamais le focus.
-- CI1.8 Les 15 voitures d’un leg ont chacune l’icône ; une voiture avec « Complet » ne la perd pas.
+- CI1.8 Les 15 voitures d’un leg ont chacune l’icône ; une voiture sans heure ou avec « Complet »
+  ne la perd pas.
 
 ### Hors périmètre de la v4.9
 
@@ -158,7 +493,7 @@ ses passagers n’ont pas laissé de numéro.
 - `PersonForm.phone` « Téléphone (facultatif) » dans « Ajouter une personne », dans la
   première inscription depuis une place libre, dans « Modifier {prénom} », et pour « Une
   nouvelle personne » de « Proposer une voiture ». Toujours la même aide :
-  « Visible seulement par l’organisateur et par les personnes de la même voiture. »
+  « Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. »
 - `offerRide` accepte une nouvelle personne sans numéro (`validatePerson`, téléphone
   facultatif) et une personne de l’appareil sans numéro.
 - `updatePerson` accepte un numéro vidé pour toute personne, y compris une personne qui
@@ -247,8 +582,7 @@ Modifiez-le si besoin. »
 
 **5. Depuis une place libre, l’aide dit pourquoi.** Dans le formulaire « Ajouter une
 personne » ouvert depuis une place libre, l’aide du téléphone devient « Pour que {driver}
-puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même
-voiture. » C’est vrai dans la première inscription (`RegisterSheet`, C5.4) et dans « Ajouter
+puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. » C’est vrai dans la première inscription (`RegisterSheet`, C5.4) et dans « Ajouter
 une personne » de la feuille d’une place (C6.6). Le libellé reste « Téléphone (facultatif) » :
 un passager n’est pas obligé d’en donner un. C5.4 tient toujours en trois actions : place
 libre, prénom, « Valider ».
@@ -256,8 +590,7 @@ libre, prénom, « Valider ».
 **6. Proposer une voiture demande un numéro à une nouvelle personne.** Pour « Une nouvelle
 personne », ou sans personne sur l’appareil :
 - le champ devient « Téléphone », sans « (facultatif) » ;
-- son aide devient « Pour que les personnes à bord puissent vous joindre. Visible seulement
-  par l’organisateur et par les personnes de la même voiture. » ;
+- son aide devient « Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. » ;
 - vide, « Valider » ne crée rien. L’erreur « Un numéro est requis pour proposer une
   voiture. » s’affiche sous le champ, avant l’aide, et le focus va au premier champ en
   erreur, dans l’ordre du formulaire (C4.7) ;
@@ -359,7 +692,7 @@ La numérotation est celle de la page.
 | 9 | 360 px, un conducteur au prénom de 40 caractères | la phrase passe à la ligne, le bouton tient, aucun débordement | T1.9 |
 | 10 | « Ajouter une personne », Tom a le dernier numéro | le champ prérempli, « Même numéro que Tom. Modifiez-le si besoin. », puis l’aide | T2.1, T2.2 |
 | 11 | le numéro changé | la ligne « Même numéro que Tom » est partie | T2.3 |
-| 12 | première inscription depuis une place libre de Marc | « Pour que Marc puisse vous joindre. Visible seulement… », le libellé « Téléphone (facultatif) » | T3.1 |
+| 12 | première inscription depuis une place libre de Marc | « Pour que Marc puisse vous joindre. Visible par l’organisateur… Toute personne qui a le lien… », le libellé « Téléphone (facultatif) » | T3.1 |
 | 13 | « Proposer une voiture », nouvelle personne | « Téléphone », l’aide pour qui conduit | T4.1 |
 | 14 | le même, numéro vide, « Valider » | « Un numéro est requis pour proposer une voiture. », le focus dans le champ | T4.1 |
 | 15 | « Qui conduit ? » : Claire, sans numéro | « Téléphone de Claire » sous les boutons radio | T4.4 |
@@ -383,12 +716,12 @@ Apostrophes typographiques (’), comme dans le reste de `messages/fr.json`.
 | `Board.car.addPhone` | Ajouter un numéro | Add a number | texte visible du bouton |
 | `Board.car.addPhoneLabel` | Ajouter un numéro pour {firstName} | Add a number for {firstName} | nom accessible du bouton (v4.8-5) |
 | `PersonForm.samePhone` | Même numéro que {firstName}. Modifiez-le si besoin. | Same number as {firstName}. Change it if needed. | « Ajouter une personne », règle 4 (texte de l’epic) |
-| `PersonForm.phoneHintForSeat` | Pour que {driver} puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that {driver} can reach you. Only visible to the organiser and to the people in the same car. | depuis une place libre, règle 5 |
+| `PersonForm.phoneHintForSeat` | Pour que {driver} puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | So that {driver} can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | depuis une place libre, règle 5 |
 | `PersonForm.phoneDriving` | Téléphone | Phone | « Modifier {prénom} » d’une personne qui conduit, règle 8 |
-| `PersonForm.phoneHintDriving` | Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that the people on board can reach you. Only visible to the organiser and to the people in the same car. | même texte que `RideForm.phoneHint` |
+| `PersonForm.phoneHintDriving` | Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | même texte que `RideForm.phoneHint` |
 | `RideForm.phone` | Téléphone | Phone | nouvelle personne qui conduit, règle 6 |
 | `RideForm.driverPhone` | Téléphone de {firstName} | {firstName}’s phone | personne de l’appareil sans numéro, règle 7 |
-| `RideForm.phoneHint` | Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that the people on board can reach you. Only visible to the organiser and to the people in the same car. | règles 6 et 7 |
+| `RideForm.phoneHint` | Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | règles 6 et 7 |
 | `FormErrors.driverPhone` | Un numéro est requis pour proposer une voiture. | A number is needed to offer a car. | règles 6 et 7 (v4.8-11) |
 | `FormErrors.phoneWhileDriving` | Un numéro est requis tant que {firstName} conduit. | A number is needed while {firstName} is driving. | règle 8 |
 | `Actions.why.driverWithoutPhone` | Un numéro est requis pour proposer une voiture. | A number is needed to offer a car. | barre, refus `driverWithoutPhone`, feuille fermée (règle 7, v4.8-19) |
@@ -405,14 +738,11 @@ Apostrophes typographiques (’), comme dans le reste de `messages/fr.json`.
 
 Ordre d’une description accessible de champ, comme aujourd’hui : l’erreur, puis la ligne
 « Même numéro que… » s’il y en a une, puis l’aide. Exemples, mot pour mot :
-- règle 4 : « Même numéro que Tom. Modifiez-le si besoin. Visible seulement par
-  l’organisateur et par les personnes de la même voiture. » ;
+- règle 4 : « Même numéro que Tom. Modifiez-le si besoin. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. » ;
 - règles 4 et 5 ensemble (feuille d’une place) : « Même numéro que Claire. Modifiez-le si
-  besoin. Pour que Marc puisse vous joindre. Visible seulement par l’organisateur et par les
-  personnes de la même voiture. » ;
+  besoin. Pour que Marc puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. » ;
 - règle 6 en erreur : « Un numéro est requis pour proposer une voiture. Pour que les
-  personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les
-  personnes de la même voiture. »
+  personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. »
 
 Les deux refus, feuille fermée, dans la barre (table « Chaque échec, mot pour mot ») :
 - « La voiture de Claire pour l’aller n’a pas été proposée. Un numéro est requis pour
@@ -522,8 +852,7 @@ constantes du test. Toute vérification qui pourrait les imprimer passe par `wit
   personne » sur l’onglet Aller.
   - « Prénom » a le focus.
   - « Téléphone (facultatif) » a pour valeur `CLAIRE_PHONE`, et pour description exactement
-    « Même numéro que Claire. Modifiez-le si besoin. Visible seulement par l’organisateur et
-    par les personnes de la même voiture. »
+    « Même numéro que Claire. Modifiez-le si besoin. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. »
   - On tape « Inès », puis « Valider » : en base, Inès a `CLAIRE_PHONE`.
   - Sur `main`, le champ est vide : le test échoue.
 - **T2.2** La dernière qui en a un. Claire a `CLAIRE_PHONE`, Léa aucun, Tom `TOM_PHONE`,
@@ -544,23 +873,19 @@ constantes du test. Toute vérification qui pourrait les imprimer passe par `wit
   voiture. On touche une place libre de Marc : la feuille « Qui monte dans la voiture de
   Marc ? » s’ouvre. On touche « Ajouter une personne ». Le champ a `CLAIRE_PHONE`, et sa
   description est exactement « Même numéro que Claire. Modifiez-le si besoin. Pour que Marc
-  puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même
-  voiture. »
-- **T2.6** En anglais, scène de T2.1 : « Same number as Claire. Change it if needed. Only
-  visible to the organiser and to the people in the same car. »
+  puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. »
+- **T2.6** En anglais, scène de T2.1 : « Same number as Claire. Change it if needed. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. »
 
 **T3 : l’aide depuis une place libre** (`e2e/phone-prefill.spec.ts`).
 
 - **T3.1** Appareil sans personne. Un clic sur une place libre de Marc ouvre la première
   inscription.
   - Le champ a pour libellé exactement « Téléphone (facultatif) ». Sa description est
-    exactement « Pour que Marc puisse vous joindre. Visible seulement par l’organisateur et
-    par les personnes de la même voiture. »
+    exactement « Pour que Marc puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. »
   - « Inès », puis « Valider », sans numéro : Inès est dans la voiture de Marc. Ce sont
     trois actions, comme C5.4.
 - **T3.2** « Ajouter une personne » depuis le bouton du leg, appareil sans personne : la
-  description reste exactement « Visible seulement par l’organisateur et par les personnes
-  de la même voiture. » C’est une garde : sur `main`, elle passe déjà.
+  description reste exactement « Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. » Ce test échoue avant la tâche (`main` a l’ancien texte) et passe après (v5.2 : réécrit, ce n’est plus une garde).
 
 **T4 : un numéro pour proposer une voiture** (`e2e/phone-driver.spec.ts`, et Vitest pour
 T4.7 et T4.8).
@@ -569,7 +894,7 @@ T4.7 et T4.8).
   - Le groupe « Qui conduit ? » contient « Prénom » et un champ de libellé exactement
     « Téléphone ». Aucun champ ne s’appelle « Téléphone (facultatif) ».
   - Sa description est exactement « Pour que les personnes à bord puissent vous joindre.
-    Visible seulement par l’organisateur et par les personnes de la même voiture. »
+    Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. »
   - On remplit « Marc », le lieu et l’heure, sans numéro, puis « Valider » : aucune
     requête. Le champ a `aria-invalid="true"`, sa description commence par « Un numéro est
     requis pour proposer une voiture. », et il a le focus. En base, aucune personne et aucun
@@ -624,8 +949,7 @@ T4.7 et T4.8).
     pour proposer une voiture. »
 - **T4.9** « Je ramène aussi des personnes » avec une nouvelle personne : une seule saisie
   du numéro crée les deux voitures. Sans numéro, aucune des deux n’est créée.
-- **T4.10** En anglais : « Phone », “So that the people on board can reach you. Only visible
-  to the organiser and to the people in the same car.”, « A number is needed to offer a
+- **T4.10** En anglais : « Phone », “So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car.”, « A number is needed to offer a
   car. », et « Claire’s phone » pour T4.4.
 - **T4.11** Les conducteurs d’avant restent tels quels. Claire, sans numéro, conduit
   (`seedRide`).
@@ -1635,7 +1959,7 @@ Aucun mot nouveau, changé ou retiré. Ceux des états dessinés, tels qu’ils 
 | titre | « Qui monte dans la voiture de {driver} ? » | “Who gets in {driver}’s car?” |
 | titre | « {firstName} · {leg} » (« Tom · Aller ») | “{firstName} · {leg}” |
 | champs | « Prénom », « Téléphone (facultatif) » | “First name”, “Phone (optional)” |
-| aide | « Visible seulement par l’organisateur et par les personnes de la même voiture. » | “Only visible to the organiser and to the people in the same car.” |
+| aide | « Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. » | “Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car.” |
 | champs | « Lieu de départ » / « Lieu de dépose », « Heure de départ », « Places, sans compter qui conduit », « Note (facultatif) » | “Departure place” / “Drop-off place”, “Departure time”, “Seats, driver not included”, “Note (optional)” |
 | autre leg (v4.5) | « Au retour », « Le retour part du lieu de l’événement, {location}, le {date}. », « Je ramène aussi des personnes » | “On the return trip”, “The return trip leaves {location} on {date}.”, “I bring people back too” |
 | barre | « Valider », « Fermer », « Annuler » | “Confirm”, “Close”, “Cancel” |
@@ -4067,7 +4391,7 @@ ou changé dans cette version.
 | `PersonForm.forSeat` | Cette personne prendra une place dans la voiture de {driver}. | This person will take a seat in {driver}’s car. | C5.4, revue (épicène) — v4 | #92 |
 | `PersonForm.firstName` | Prénom | First name | R1 | #88 |
 | `PersonForm.phone` | Téléphone (facultatif) | Phone (optional) | R1 | #88 |
-| `PersonForm.phoneHint` | Visible seulement par l’organisateur et par les personnes de la même voiture. | Only visible to the organiser and to the people in the same car. | C1.2 | #88 |
+| `PersonForm.phoneHint` | Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | C1.2 | #88 |
 | `PersonForm.both` | Aller et retour | Outbound and return | R1, C1.3 | #88 |
 | `PersonForm.bothHint.aller` | Décochez si cette personne ne fait que l’aller. | Untick if this person only makes the outbound trip. | nouveau (C1.3) | #88 |
 | `PersonForm.bothHint.retour` | Décochez si cette personne ne fait que le retour. | Untick if this person only makes the return trip. | nouveau (C1.3) | #88 |
@@ -4166,12 +4490,12 @@ ou changé dans cette version.
 | `Board.car.addPhone` | Ajouter un numéro | Add a number | texte visible du bouton — v4.8 | #766 |
 | `Board.car.addPhoneLabel` | Ajouter un numéro pour {firstName} | Add a number for {firstName} | nom accessible du bouton (v4.8-5) — v4.8 | #766 |
 | `PersonForm.samePhone` | Même numéro que {firstName}. Modifiez-le si besoin. | Same number as {firstName}. Change it if needed. | « Ajouter une personne », règle 4 — v4.8 | #766 |
-| `PersonForm.phoneHintForSeat` | Pour que {driver} puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that {driver} can reach you. Only visible to the organiser and to the people in the same car. | depuis une place libre, règle 5 — v4.8 | #766 |
+| `PersonForm.phoneHintForSeat` | Pour que {driver} puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | So that {driver} can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | depuis une place libre, règle 5 — v4.8 | #766 |
 | `PersonForm.phoneDriving` | Téléphone | Phone | « Modifier » de qui conduit, règle 8 — v4.8 | #766 |
-| `PersonForm.phoneHintDriving` | Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that the people on board can reach you. Only visible to the organiser and to the people in the same car. | règle 8 — v4.8 | #766 |
+| `PersonForm.phoneHintDriving` | Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | règle 8 — v4.8 | #766 |
 | `RideForm.phone` | Téléphone | Phone | nouvelle personne qui conduit, règle 6 — v4.8 | #766 |
 | `RideForm.driverPhone` | Téléphone de {firstName} | {firstName}’s phone | personne de l’appareil sans numéro, règle 7 — v4.8 | #766 |
-| `RideForm.phoneHint` | Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture. | So that the people on board can reach you. Only visible to the organiser and to the people in the same car. | règles 6 et 7 — v4.8 | #766 |
+| `RideForm.phoneHint` | Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture. | So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car. | règles 6 et 7 — v4.8 | #766 |
 | `FormErrors.driverPhone` | Un numéro est requis pour proposer une voiture. | A number is needed to offer a car. | règles 6 et 7 (v4.8-11) — v4.8 | #766 |
 | `FormErrors.phoneWhileDriving` | Un numéro est requis tant que {firstName} conduit. | A number is needed while {firstName} is driving. | règle 8 — v4.8 | #766 |
 | `Actions.why.driverWithoutPhone` | Un numéro est requis pour proposer une voiture. | A number is needed to offer a car. | refus `driverWithoutPhone`, règle 7 — v4.8 (suite) | #766 |
@@ -4813,7 +5137,7 @@ v4.5-7. Décision du coordinateur sur #649 : en français, la ligne dit « Le re
   une personne de l’appareil sans numéro en donne un (v4.8, #766) ».
 - **C2.3** : « Vider le téléphone le supprime. » devient « Vider le téléphone le supprime,
   sauf pour une personne qui conduit (v4.8, T5). »
-- **C1.2** : la phrase « Visible seulement… » reste sous le téléphone. Depuis une place
+- **C1.2** : la phrase « Visible par l’organisateur… Toute personne qui a le lien… » reste sous le téléphone. Depuis une place
   libre et pour qui conduit, une phrase la précède (v4.8, règles 5 et 6).
 - **Table des états**, ligne « conducteur sans téléphone : aucun lien `tel:` sur sa carte » :
   elle ne vaut plus que pour un conducteur d’avant la v4.8. La fiche demande un numéro à son
