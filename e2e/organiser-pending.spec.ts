@@ -445,6 +445,8 @@ test.describe("OA2.5: « Corriger l’adresse »", () => {
   test("an address that is not one: the error under the field, which has the focus, the sheet open, nothing sent", async ({ page, db, seededEvent }) => {
     const email = address();
     await seedPendingSend(db, seededEvent.id, { email, status: "sent", at: ago(HOUR) });
+    const sends = () => db.selectFrom("email_send").select("id").where("event_id", "=", seededEvent.id).execute();
+    const before = await sends();
     await page.goto(organiserPath(seededEvent));
     await button(page, FR.fix).click();
     await field(page).fill("camille.exemple.fr");
@@ -453,6 +455,8 @@ test.describe("OA2.5: « Corriger l’adresse »", () => {
     await expect(sheet(page).getByText("Adresse e-mail non valide.")).toBeVisible();
     await expect(field(page)).toBeFocused();
     await expect(field(page)).toHaveAttribute("aria-invalid", "true");
+    // What would leave by mistake goes to the typed address: the event's sends are counted, not the old address's mailbox.
+    expect(await sends()).toEqual(before);
     expect(await mailTo(email)).toEqual([]);
   });
 

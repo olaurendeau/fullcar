@@ -83,7 +83,10 @@ export function MyEventsScreen() {
   return (
     <>
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">{t("title")}</h1>
+        {/* The focus lands here once a link has opened the session (OA5.2, arrival-bar.tsx). */}
+        <h1 tabIndex={-1} className="self-start rounded-sm text-2xl font-bold focus-visible:focus-ring">
+          {t("title")}
+        </h1>
         {screen.state === "events" && (
           <p className="text-[13px] leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">
             {t("signedInAs", { email: screen.list.email })}

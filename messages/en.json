@@ -790,7 +790,41 @@
     "spam": "Nothing? Check your spam folder.",
     "resend": "Resend the email",
     "change": "Use another address",
-    "resent": "Email sent again."
+    "resent": "Email sent again.",
+    "confirmBody": "We sent a new confirmation link to the address that created the event. It is valid for 7 days. Open it in the browser where you want to manage the event."
+  },
+  "LinkPage": {
+    "login": {
+      "title": "Sign in to Fullcar",
+      "body": "The session will open in this browser. On a shared device, close it afterwards with “Sign out”, in My events.",
+      "button": "Sign in"
+    },
+    "confirm": {
+      "title": "Confirm your email address",
+      "body": "The event will be added to My events, and the session will open in this browser.",
+      "button": "Confirm and sign in"
+    },
+    "working": "Signing in…",
+    "offline": "You were not signed in. Check your connection, then try again.",
+    "failed": "You were not signed in. Something went wrong: try again in a few minutes.",
+    "expired": {
+      "title": "This link has expired",
+      "login": "A sign-in link is valid for 1 hour. Ask for a new one.",
+      "confirm": "A confirmation link is valid for 7 days. We can send a new one to the same address."
+    },
+    "newLink": "Send me a new link",
+    "used": {
+      "title": "This link has already been used",
+      "login": "A link works only once. If you have just used it, you may already be signed in.",
+      "confirm": "This address is already confirmed, and the event is in My events."
+    },
+    "invalid": {
+      "title": "This link is not valid",
+      "body": "Check that it was copied in full, or ask for a new link."
+    }
+  },
+  "Session": {
+    "signedInAs": "Signed in as {email}."
   },
   "MyEvents": {
     "title": "My events",
