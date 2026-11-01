@@ -589,8 +589,15 @@ ci-dessus valent pour chacun.
   d'`editEvent` : les sessions du compte par clé, ses événements par identifiant, ses liens
   par clé, l'adresse, puis le compte. Ses événements anonymisés sont supprimés, les autres
   restent ouverts sans compte ni jeton ; les événements en attente créés avec son adresse la
-  perdent : elle n'est plus dans aucune table (OA9.5). Une impasse (40P01) avec le nettoyage
-  des liens est reprise une fois.
+  perdent : elle n'est plus dans aucune table (OA9.5). La cession qui attend sur un de ses
+  événements est annulée (OT7.2) : l'adresse du destinataire et son résultat sont effacés, ses
+  liens de cession supprimés, et le lien du destinataire répond « non valide ». Il le faut
+  avant `account_id = null`, que la contrainte `event_transfer_open` refuserait sinon. De même la
+  cession qui attend **l'adresse du compte supprimé**, sur l'événement d'un autre organisateur
+  (décision 4 de la conception, #935) : elle est annulée, et l'adresse n'est plus dans aucune
+  table. Ces événements entrent dans la lecture `forNoKeyUpdate` des événements, par
+  identifiant, et leurs liens dans le verrou des liens par clé. Une impasse (40P01) avec le
+  nettoyage des liens est reprise une fois.
 - **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et
   celui-ci ne rattache que son propre événement. Chacun ne sert qu'une fois, et plusieurs
   liens non utilisés restent valables ensemble. La page du lien lit le jeton dans
@@ -1221,7 +1228,9 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   Arrêts et liens de confirmation sont supprimés (les Arrêts partent avec leurs Rides
   par la cascade `stop_ride_fk` / `stop_event_fk`, #883 ; `deleteEvent` les emporte par
   la cascade de `stop.event_id`), sa position, sa description et le hash de
-  son jeton d'admin passent à nul, et `anonymised_at` est écrit. Sans compte, en attente ou laissé par un
+  son jeton d'admin passent à nul, la cession en attente est effacée avec son adresse et ses
+  liens de cession (OT7.1 ; `event_transfer_open` refuserait sinon l'anonymisation), et
+  `anonymised_at` est écrit. Sans compte, en attente ou laissé par un
   compte supprimé, il est **supprimé**, et la cascade emporte le reste. Une exécution
   interrompue laisse chaque événement intact ou traité en entier, et une deuxième exécution
   ne change rien (OA8.2). Aucune transaction ne couvre toute la purge.
@@ -1259,7 +1268,13 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
     et il part avec son événement au jour 30, par la cascade ou par `anonymiseEvent`. Une fois
     l'événement confirmé, la règle des liens de connexion s'applique : 30 jours après son
     expiration, soit 37 jours après l'envoi, ou au jour 30 de l'événement si celui-ci vient
-    avant. Le nettoyage lit `event` sans verrou : l'ordre Event, puis lien, reste entier.
+    avant. Le nettoyage lit `event` sans verrou : l'ordre Event, puis lien, reste entier ;
+  - un **lien de cession** : **tant que la cession de son événement attend**
+    (`event.transfer_email` non nul), **jamais** par âge, car l'avis lit le dernier pour dire
+    « expiré » (OT2.6). Une cession qui attend part au plus tard au jour 30 de l'événement
+    (anonymisation) ou à la suppression du compte du cédant, avec ses liens. Quand rien n'attend
+    plus (acceptée ou annulée), la règle des liens de connexion s'applique : 30 jours après son
+    expiration, soit 37 jours après l'envoi.
 
   Un lien ne garde aucune adresse.
 - **La route** (`handle.ts`) : un en-tête faux ou absent, ou un `CRON_SECRET` vide ou non
@@ -1280,7 +1295,7 @@ refusé sans rien purger. Le journal de la purge ne porte que des nombres.
   (décision 4 du coordinateur sur #581), ferme toutes ses sessions et révoque les jetons
   d'admin de ses événements. Ses événements anonymisés sont supprimés ; les autres restent
   ouverts aux participants, sans organisateur, jusqu'à leur jour 30 (`event.account_id` en
-  `SET NULL`).
+  `SET NULL`), leur cession en attente annulée (voir « Session, liens et jeton d'admin »).
 
 | variable | sans elle | effet |
 |---|---|---|
@@ -1472,7 +1487,7 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   | `placement (ride_id, event_id, leg)` → `ride (id, event_id, leg)` | `SET NULL (ride_id)` | quand un Ride est supprimé, ses passagers repassent « sans voiture » sur ce leg, au lieu de devenir « pas concernés » ; seule `ride_id` est remise à `null`, `event_id` et `leg` restent |
   | `placement.stop_id` → `stop (id)` (`placement_stop_fk`) | `SET NULL` | quand un Arrêt est supprimé, le passager reste dans le Ride et monte à son départ (`stop_id` à `null`) ; le déclencheur `placement_stop_on_ride` accompagne cette clé (voir plus bas) |
   | `ride (driver_id, event_id)` → `person (id, event_id)` | `CASCADE` | supprimer le conducteur retire sa voiture, et ses passagers repassent « sans voiture » par la clé `placement → ride` ; à partir de #645, le retrait d'une personne supprime sa Person, mais verrouille et supprime d'abord ses Rides, pour garder l'ordre Ride, puis Person (voir « Retirer une personne ») |
-  | `event.account_id` | `SET NULL` | un événement survit à son compte : il reste ouvert aux participants, sans organisateur, jusqu'à son jour 30 (OA9.5) ; il garde `confirmed_at` (#586) |
+  | `event.account_id` | `SET NULL` | un événement survit à son compte : il reste ouvert aux participants, sans organisateur, jusqu'à son jour 30 (OA9.5) ; il garde `confirmed_at` (#586). Une cession en attente ne lui survit pas : `eraseHeld` l'efface avant (`event_transfer_open`, OT7.2) |
   | `session.account_id` | `CASCADE` | une session appartient à son compte : le supprimer ferme toutes ses sessions (#586) |
   | `email_link.account_id` | `CASCADE` | un lien de connexion appartient à son compte ; un lien de confirmation, lui, appartient à son Event (`email_link.event_id`, en `CASCADE` comme toute table qui tient à un événement) (#586) |
   | `email_link.return_event_id` | `SET NULL` | la page d'arrivée d'un lien de connexion, `/e/{id}/admin` de cet Event (OA4.4) ; l'Event supprimé, le lien sert encore et mène à `/mes-evenements`, l'arrivée par défaut. Un lien de confirmation n'en a pas : il mène à son propre Event (OA5.3) (#586) |

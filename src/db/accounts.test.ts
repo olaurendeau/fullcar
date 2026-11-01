@@ -4,8 +4,9 @@ import { signOutBrowser } from "@/app/mes-evenements/sign-out";
 import { SESSION_LIFETIME_MS } from "@/domain/account-rules";
 import { decideOrganiserAccess } from "@/domain/organiser-access";
 import { accountForEmail, deleteAccount, eraseAccount, findAccount, findAccountByEmail } from "./accounts";
+import { useLink } from "./email-links";
 import { recordSend } from "./email-sends";
-import { readAdminTokenHash, readOrganiserAccessEvent, writeEventOwner } from "./events";
+import { readAdminTokenHash, readOrganiserAccessEvent, readTransfer, writeEventOwner, writeTransfer } from "./events";
 import type { Database } from "./schema";
 import { findSession } from "./sessions";
 import { anAddress, seedAccount, seedLink, seedSends, seedSession, withCommittedAddresses, withRollbackRecordingSends } from "./test-accounts";
@@ -92,6 +93,80 @@ describe("deleteAccount (OA9.3 to OA9.5)", () => {
       const event = (await readOrganiserAccessEvent(trx, open.id))!;
       expect(decideOrganiserAccess(event, { adminToken: open.token, account: undefined })).toEqual({ state: "orphan" });
       expect(await trx.selectFrom("person").select("id").where("event_id", "=", open.id).execute()).toEqual([{ id: person.id }]);
+    });
+  });
+
+  // OT7.2: without it, `event_transfer_open` refuses the `account_id = null` of the deletion.
+  it("OT7.2: cancels the handover that waits on its events: links deleted, address erased, the event open without organiser, the recipient's link invalid", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const session = await seedSession(trx, accountId);
+      const handed = await confirmedBy(trx, accountId);
+      const recipient = anAddress();
+      await writeTransfer(trx, handed.id, { email: recipient, status: "sent", at: new Date() });
+      const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
+      const used = await seedLink(trx, { kind: "transfer", eventId: handed.id }, { usedAt: new Date() });
+      const calm = await confirmedBy(trx, accountId);
+      const otherAccount = await seedAccount(trx);
+      const elsewhere = await confirmedBy(trx, otherAccount);
+      const elsewhereEmail = anAddress();
+      await writeTransfer(trx, elsewhere.id, { email: elsewhereEmail, status: "sent", at: new Date() });
+      const elsewhereLink = await seedLink(trx, { kind: "transfer", eventId: elsewhere.id });
+
+      expect(await deleteAccount(trx, session, [])).toBe(true);
+
+      const row = await trx
+        .selectFrom("event")
+        .select(["account_id", "admin_token_hash", "transfer_email", "transfer_status", "transfer_status_at", "anonymised_at"])
+        .where("id", "=", handed.id)
+        .executeTakeFirstOrThrow();
+      expect(row).toEqual({
+        account_id: null,
+        admin_token_hash: null,
+        transfer_email: null,
+        transfer_status: null,
+        transfer_status_at: null,
+        anonymised_at: null,
+      });
+      expect((await useLink(trx, link, "transfer")).outcome).toBe("invalid");
+      expect((await useLink(trx, used, "transfer")).outcome).toBe("invalid");
+      expect(await readTransfer(trx, calm.id)).toEqual({ email: null, status: null, at: null, lastLinkAt: null });
+      // The handover of another organiser is not touched.
+      expect((await readTransfer(trx, elsewhere.id))?.email).toBe(elsewhereEmail);
+      expect((await useLink(trx, elsewhereLink, "transfer")).outcome).toBe("valid");
+    });
+  });
+
+  // Decision 4 on #935: the address of the recipient who deletes their account is in no table.
+  it("cancels the handover that waits on its address, on an event of another organiser, and erases the address from every table", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const email = anAddress();
+      const accountId = await seedAccount(trx, { email });
+      const session = await seedSession(trx, accountId);
+      const organiser = await seedAccount(trx);
+      const handed = await confirmedBy(trx, organiser);
+      await writeTransfer(trx, handed.id, { email, status: "sent", at: new Date() });
+      const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
+      await seedSends(trx, 1, { kind: "transfer", email, eventId: handed.id });
+      const otherEmail = anAddress();
+      const kept = await confirmedBy(trx, organiser);
+      await writeTransfer(trx, kept.id, { email: otherEmail, status: "sent", at: new Date() });
+
+      expect(await deleteAccount(trx, session, [])).toBe(true);
+
+      const row = await trx
+        .selectFrom("event")
+        .select(["account_id", "transfer_email", "transfer_status", "transfer_status_at"])
+        .where("id", "=", handed.id)
+        .executeTakeFirstOrThrow();
+      expect(row).toEqual({ account_id: organiser, transfer_email: null, transfer_status: null, transfer_status_at: null });
+      expect((await useLink(trx, link, "transfer")).outcome).toBe("invalid");
+      expect((await readTransfer(trx, kept.id))?.email).toBe(otherEmail);
+      for (const table of ["account", "event", "email_send", "email_link", "session"] as const) {
+        const { rows } = await sql<{ found: number }>`
+          select count(*)::int as found from ${sql.table(table)} t where t::text like ${"%" + email + "%"}`.execute(trx);
+        expect(rows[0]!.found, table).toBe(0);
+      }
     });
   });
 
@@ -201,6 +276,21 @@ describe("deleteAccount (OA9.3 to OA9.5)", () => {
 });
 
 describe("eraseAccount", () => {
+  it("OT7.2, 3 years without a visit: cancels the handover that waits, as the deletion of the account does", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const handed = await confirmedBy(trx, accountId);
+      await writeTransfer(trx, handed.id, { email: anAddress(), status: "sent", at: new Date() });
+      const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
+
+      expect(await eraseAccount(trx, accountId, [])).toBe(true);
+
+      expect(await readTransfer(trx, handed.id)).toEqual({ email: null, status: null, at: null, lastLinkAt: null });
+      expect((await useLink(trx, link, "transfer")).outcome).toBe("invalid");
+      expect(await readOrganiserAccessEvent(trx, handed.id)).toBeDefined();
+    });
+  });
+
   it("erases an account by its id, with no session to show (the inactivity deletion of #611), once", async () => {
     await withRollbackRecordingSends(async (trx) => {
       const accountId = await seedAccount(trx);

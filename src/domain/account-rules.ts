@@ -68,7 +68,10 @@ export const LINK_KEPT_AFTER_EXPIRY_MS = 30 * DAY;
 /**
  * The first instant the daily task may delete the link: 30 days after its expiry. Not for
  * the confirmation link of a pending event, which stays as long as its event (OA5.6), nor for a
- * transfer link while its event is being handed over (the notice reads the latest one to say « expiré »).
+ * transfer link while the handover of its event waits (the notice reads the latest one to say
+ * « expiré »): `deleteExpiredRows` keeps it as long as `event.transfer_email` is set, and the
+ * handover goes, with its links, on day 30 of the event or with the deletion of the account.
+ * Once nothing waits on it, this instant applies.
  */
 export function linkDeletedAt(kind: LinkKind, createdAt: Date): Date {
   return new Date(linkExpiresAt(kind, createdAt).getTime() + LINK_KEPT_AFTER_EXPIRY_MS);
