@@ -1,5 +1,6 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
 import { expect, expectUrl, leaveNoToken, test } from "./fixtures";
+import { fillAddress } from "./mailbox";
 import { adminTokenKey } from "./organiser";
 
 leaveNoToken();
@@ -74,11 +75,13 @@ function creations(page: Page): Request[] {
   return sent;
 }
 
+/** The aller's four fields, then the address that a creation without a session requires (OA1.1): five actions. */
 async function fillAller(page: Page, { title = "Sortie ski du club", days = 7 } = {}) {
   await field(page, FR.title).fill(title);
   await field(page, FR.location).fill("Chalet des Écureuils, La Clusaz");
   await field(page, FR.allerDate).fill(await deviceDate(page, days));
   await field(page, FR.allerTime).fill("07:30");
+  await fillAddress(page);
 }
 
 async function horizontalOverflow(page: Page): Promise<number> {
@@ -157,15 +160,15 @@ test.describe("creating an event from /nouveau", () => {
     await expect(field(page, FR.retourDate)).toHaveValue(inThreeWeeks);
   });
 
-  test("C1.4, C1.5, C4.6, D2.3: six actions from /nouveau to the organiser's arrival, in less than 30 s", async ({
+  test("C1.4, C1.5, C4.6, D2.3: seven actions from /nouveau to the organiser's arrival, in less than 30 s", async ({
     page,
   }) => {
     const sent = creations(page);
     const start = Date.now();
     await openForm(page);
-    await fillAller(page); // title, place, start date, start time: 4 actions
-    await field(page, FR.retourTime).fill("18:00"); // end time: 5
-    await createButton(page).click(); // 6
+    await fillAller(page); // title, place, start date, start time, address: 5 actions
+    await field(page, FR.retourTime).fill("18:00"); // end time: 6
+    await createButton(page).click(); // 7
 
     await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();
@@ -229,16 +232,16 @@ test.describe("creating an event from /nouveau", () => {
     expect(texts.filter((text) => text.includes(token)).length, "URLs and headers holding the token").toBe(0);
   });
 
-  test("C2.1, C2.2, D2.3: unchecking Retour hides both end fields, and six actions create an event without a retour", async ({
+  test("C2.1, C2.2, D2.3: unchecking Retour hides both end fields, and seven actions, the address included, create an event without a retour", async ({
     page,
   }) => {
     await openForm(page);
     await fillAller(page);
-    await field(page, FR.retour).click(); // 5
+    await field(page, FR.retour).click(); // 6
     await expect(field(page, FR.retour)).not.toBeChecked();
     await expect(field(page, FR.retourDate)).toHaveCount(0);
     await expect(field(page, FR.retourTime)).toHaveCount(0);
-    await createButton(page).click(); // 6
+    await createButton(page).click(); // 7
 
     await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("region", { name: FR.panel })).toBeVisible();

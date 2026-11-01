@@ -168,7 +168,7 @@ test.describe("the home link, in a browser set to French", () => {
     expect(ring).toEqual(await outlineOf(button));
 
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: FR.privacy, exact: true })).toBeFocused();
+    await expect(page.locator("footer").getByRole("link", { name: FR.privacy, exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: FR.source, exact: true })).toBeFocused();
     await page.keyboard.press("Tab");

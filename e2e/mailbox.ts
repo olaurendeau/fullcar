@@ -8,6 +8,7 @@
  * its text or its HTML when it fails (#365). Compare a boolean, or a count.
  */
 import { randomUUID } from "node:crypto";
+import type { Page } from "@playwright/test";
 
 /**
  * What the fake answers to a message for an address: by default (`ok`) a 201 with a message id;
@@ -52,9 +53,32 @@ async function post(path: string, body: unknown): Promise<Response> {
   });
 }
 
+/** The addresses this worker has handed out since the last sweep. */
+const issued = new Set<string>();
+
 /** An address no other test uses, on `.test`, which no mail ever reaches. */
 export function newAddress(): string {
-  return `boite-${randomUUID()}@mailbox.test`;
+  const address = `boite-${randomUUID()}@mailbox.test`;
+  issued.add(address);
+  return address;
+}
+
+/**
+ * The addresses handed out by `newAddress` since the last call, and forgotten: their sends
+ * are deleted after each test (fixtures.ts), so that the events created through the form
+ * never fill the hour's global cap (GLOBAL_SENDS_PER_HOUR) for the tests that follow.
+ */
+export function takeIssuedAddresses(): string[] {
+  const taken = [...issued];
+  issued.clear();
+  return taken;
+}
+
+/** The address field of /nouveau, whose label is `label`, filled with an address of its own: what the creation requires without a session (OA1.1). */
+export async function fillAddress(page: Page, label = "Votre adresse e-mail"): Promise<string> {
+  const address = newAddress();
+  await page.getByLabel(label, { exact: true }).fill(address);
+  return address;
 }
 
 /** From now on, the fake answers `answer` to each message for one of `addresses`, and to them only. */

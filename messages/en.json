@@ -51,6 +51,7 @@
     "create": "Create",
     "email": {
       "label": "Your email address",
+      "hint": "To find your events again, with no password. Participants never have to give one.",
       "invalid": "Invalid email address.",
       "sessionEnded": "Your session has ended: enter your email address, then “Create”."
     },

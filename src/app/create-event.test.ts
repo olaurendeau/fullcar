@@ -74,20 +74,21 @@ async function created(db: Kysely<Database>, input: unknown, deps: Creation) {
   return result;
 }
 
-describe("createEventFor, without an address nor a session", () => {
-  // Until « adresse obligatoire » (#614), the form that sends neither still creates.
-  it("creates the event without an organiser, and sends nothing", async () => {
+describe("createEventFor, without an address nor a session (OA1.4, OA1.1)", () => {
+  it.each<[string, Record<string, unknown>]>([
+    ["no address, no session", {}],
+    ["an empty address", { email: "" }],
+    ["a null address", { email: null }],
+    ["an empty session and no address", { session: null }],
+  ])("creates nothing for %s, and asks for the address", async (_, extra) => {
     await withRollbackRecordingSends(async (trx) => {
-      const { deps, sent, later } = creation(trx);
-      const { id } = await created(trx, fields(), deps);
-      expect(await eventRow(trx, id)).toEqual({
-        account_id: null,
-        confirmed_at: null,
-        pending_email: null,
-        send_status: null,
-        send_status_at: null,
+      const { deps, later, sent } = creation(trx);
+      expect(await createEventFor(fields(extra), deps)).toEqual({ ok: false, errors: { email: "required" } });
+      expect(await createEventFor(fields({ ...extra, title: "" }), deps)).toEqual({
+        ok: false,
+        errors: { title: "required", email: "required" },
       });
-      expect(await linksOf(trx, id)).toEqual([]);
+      expect(await eventsTitled(trx)).toBe(0);
       expect(later).toEqual([]);
       expect(sent).toEqual([]);
     });
