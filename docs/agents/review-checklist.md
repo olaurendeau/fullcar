@@ -75,11 +75,13 @@ celui qui écrit le code.
   dans l'URL, fragment compris, ou rangé sous une autre clé, est bloquant. Ce point ne vaut
   que pour le jeton d'admin : les liens de connexion et de confirmation
   (`src/email/messages.ts`) portent toujours leur jeton dans le fragment. Seul
-  `src/app/connexion/link-fragment.ts` (`linkTokenOf`) en extrait le jeton dans le navigateur :
-  il lit la chaîne du fragment qu'on lui donne, au clic du bouton, et la page
-  (`link-page.tsx`) ne fait que lui passer `window.location.hash` ; il servira aussi aux liens
-  de cession (#950). Un jeton de lien extrait du fragment ailleurs, lu dans le chemin ou la
-  requête, ou rangé dans `localStorage`, est bloquant.
+  `src/app/connexion/link-fragment.ts` (`linkTokenOf`) extrait le jeton de lien de la chaîne
+  du fragment dans le navigateur ; il servira aussi aux liens de cession (#950). Il ne lit pas
+  l'adresse : `link-page.tsx` lit `window.location.hash` et le lui donne, à l'affichage
+  (pour savoir si le fragment a la forme d'un jeton, sans rien envoyer) et à l'appui sur le
+  bouton, par `link-browser.ts` qui envoie le jeton dans le corps de l'action. Un jeton de lien
+  extrait du fragment ailleurs, lu dans le chemin ou la requête, ou rangé dans `localStorage`,
+  est bloquant.
 - À partir de #66, le jeton personnel est tiré **par le navigateur** avec
   `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
   avant l'envoi. Un jeton personnel tiré
