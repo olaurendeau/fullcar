@@ -478,6 +478,7 @@ describe("deleteAccount, concurrently", () => {
   // (40P01) that Postgres breaks by cancelling one of the two. Whether the two meet depends on which wakes first when
   // the correction commits, so this test cannot force the deadlock. It holds in every outcome: deleteAccountOf deletes
   // the account (after its retry when it was the one cancelled), and a resend that was cancelled is a 40P01 the page shows as « failed ».
+  // Explicit timeout: it relies on deadlock_timeout (1 s per detection, twice at worst, plus the retry), too close to the 5 s default.
   it("deletes the account after a resend of the event moved to its address, whichever of the two Postgres cancels in a deadlock", async () => {
     await withCommittedEvent(async (db, eventId, token) => {
       await withCommittedAddresses(async (_db, address) => {
@@ -515,5 +516,5 @@ describe("deleteAccount, concurrently", () => {
         expect(await findAccount(db, accountId)).toBeUndefined();
       });
     });
-  });
+  }, 10_000);
 });
