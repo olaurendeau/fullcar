@@ -9,6 +9,7 @@ import { parisToday } from "@/domain/day-thirty";
 import type { NewEvent } from "@/domain/event";
 import { addDays, wallClockAsUtc, type WallClock, type WallDate } from "@/domain/wall-clock";
 import { formatDate } from "@/i18n/format-date";
+import { startTransferInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { newAddress } from "./mailbox";
 
@@ -46,6 +47,7 @@ const FR = {
   login: "Se connecter",
   loginLink: "Mes événements",
   account: "Mon compte",
+  transferPending: (email: string) => `Cession en attente de ${email}`,
 };
 
 const KEY = "fullcar:session";
@@ -346,6 +348,42 @@ test.describe("Mes événements", () => {
       expect(box.x + box.width).toBeLessThanOrEqual(viewport);
     }
   });
+
+  // Epic #935 (organiser transfer): screens 22 and 25.
+  test("OT2.8: a handover pending and one expired say the same, on a row that stays a link of 44 px at least", async ({ page, db }) => {
+    const { accountId } = await signIn(page, db);
+    const waiting = await eventOf(db, accountId, { title: "Week-end ski", allerAt: dayFromToday(7), retourAt: null });
+    const expired = await eventOf(db, accountId, { title: "Camp d’été", allerAt: dayFromToday(14), retourAt: null });
+    await eventOf(db, accountId, { title: "Sortie vélo", allerAt: dayFromToday(21), retourAt: null });
+    await startTransferInDb(db, waiting, "marie.dupont@mailbox.test");
+    await startTransferInDb(db, expired, "marie.dupont@mailbox.test", new Date(Date.now() - 8 * 24 * 60 * 60_000));
+    await page.goto("/mes-evenements");
+
+    const text = FR.transferPending("marie.dupont@mailbox.test");
+    await expect(rowOf(page, "Week-end ski").getByText(text, { exact: true })).toBeVisible();
+    await expect(rowOf(page, "Camp d’été").getByText(text, { exact: true })).toBeVisible();
+    await expect(rowOf(page, "Sortie vélo")).not.toContainText("Cession en attente");
+    for (const title of ["Week-end ski", "Camp d’été"]) {
+      const link = rowOf(page, title).getByRole("link");
+      await expect(link).toHaveAttribute("href", /^\/e\/[^/]+\/admin$/);
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("OT8.3: an address of 60 characters wraps whole on the row, at 360 px, without overflowing", async ({ page, db }) => {
+    const address = `${"d".repeat(60 - "@mailbox.test".length)}@mailbox.test`;
+    const { accountId } = await signIn(page, db);
+    const id = await eventOf(db, accountId, { title: "Week-end ski", allerAt: dayFromToday(7), retourAt: null });
+    await startTransferInDb(db, id, address);
+    await page.goto("/mes-evenements");
+    const pill = rowOf(page, "Week-end ski").getByText(FR.transferPending(address), { exact: true });
+    await expect(pill).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+    const box = (await pill.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    const row = (await rowOf(page, "Week-end ski").boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(row.x + row.width);
+  });
 });
 
 test.describe("My events, in English", () => {
@@ -359,6 +397,7 @@ test.describe("My events, in English", () => {
       retourAt: dayFromToday(7, "18:00:00"),
     });
     await withoutCar(db, soon, "retour", 2);
+    await startTransferInDb(db, soon, "marie.dupont@mailbox.test");
     await eventOf(db, accountId, { title: "Vitré match", allerAt: dayFromToday(-1), retourAt: null });
     await eventOf(db, accountId, { title: "Autumn hike", allerAt: dayFromToday(-31), retourAt: null });
     await eventOf(db, accountId, { title: "Scouts outing", allerAt: dayFromToday(-60), retourAt: null }, true);
@@ -370,6 +409,7 @@ test.describe("My events, in English", () => {
     await expect(page.getByRole("main").getByRole("heading", { level: 2 })).toHaveText(["Upcoming (1)", "Past (3)", "My account"]);
     await expect(rowOf(page, "Rennes tournament")).toContainText("2 people signed up");
     await expect(rowOf(page, "Rennes tournament")).toContainText("Return: 2 without a car");
+    await expect(rowOf(page, "Rennes tournament")).toContainText("Handover pending to marie.dupont@mailbox.test");
     await expect(rowOf(page, "Vitré match")).toContainText("Nobody has signed up yet.");
     await expect(rowOf(page, "Vitré match")).toContainText(`Sign-ups will be erased on ${shownDate("en", addDays(today(), 29))}.`);
     await expect(rowOf(page, "Autumn hike")).toContainText("Sign-ups will be erased shortly.");

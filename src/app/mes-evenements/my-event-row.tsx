@@ -15,7 +15,8 @@ const SMALL = "text-[13px] leading-[18px] text-muted-foreground";
 /**
  * One event of « Mes événements » (OA6.2 to OA6.4): a link to its organiser area, 44 px at
  * least, with its title, start and place. Not anonymised: its persons, and an amber pill per
- * leg with someone without a car; past, the day its sign-ups are erased, or « sous peu » once
+ * leg with someone without a car; a handover waiting, whose pill wraps and grows (OT2.8, OT8.3),
+ * its link expired or not; past, the day its sign-ups are erased, or « sous peu » once
  * day 30 has begun before the purge has run (#607). Anonymised: « Inscriptions effacées »,
  * with neither count nor pill. Every text wraps, even without a space (OA6.9).
  */
@@ -51,6 +52,11 @@ export function MyEventRow({ event, linkRef }: { event: UpcomingEvent | PastEven
         ) : (
           <>
             <span className={SMALL}>{t("persons", { count: event.persons })}</span>
+            {event.transferEmail !== null && (
+              <span className="mt-0.5 w-fit max-w-full rounded-xl border bg-muted px-2 py-0.5 text-xs leading-4 font-medium [overflow-wrap:anywhere]">
+                {t("transferPending", { email: event.transferEmail })}
+              </span>
+            )}
             {event.withoutCar.length > 0 && (
               <span className="mt-0.5 flex flex-wrap gap-1.5">
                 {event.withoutCar.map(({ leg, count }) => (
