@@ -75,6 +75,10 @@ function columns(trx: Trx, table: string) {
 
 const TIMESTAMP = "timestamp with time zone";
 
+// #940: the database accepts the handover kind; the column types learn it with the domain's
+// LinkKind (#941). Until then a test writes it through the type of a kind they know.
+const TRANSFER = "transfer" as "confirmation";
+
 // Addresses as src/domain/email-address.ts writes them, typed in several scripts: the
 // database must accept every one, since one address is one account. Since #626 the local
 // part is ASCII and the domain is in punycode: the domain writes nothing but ASCII.
@@ -162,6 +166,9 @@ describe("account tables", () => {
     expectTypeOf<Selectable<EmailLinkTable>["kind"]>().toEqualTypeOf<"login" | "confirmation">();
     expectTypeOf<Selectable<EmailSendTable>["kind"]>().toEqualTypeOf<"confirmation" | "login">();
     expectTypeOf<Selectable<EventTable>["send_status"]>().toEqualTypeOf<
+      "sending" | "sent" | "failed" | "address_limit" | null
+    >();
+    expectTypeOf<Selectable<EventTable>["transfer_status"]>().toEqualTypeOf<
       "sending" | "sent" | "failed" | "address_limit" | null
     >();
     expectTypeOf<Selectable<EventTable>["admin_token_hash"]>().toEqualTypeOf<Buffer | null>();
@@ -329,7 +336,7 @@ describe("account tables", () => {
       );
     });
 
-    it("refuses a kind that is neither login nor confirmation", async () => {
+    it("refuses a kind that is none of login, confirmation and transfer", async () => {
       await expectRefusedBy(
         async (trx) =>
           sql`insert into email_link (token_hash, kind, account_id)
@@ -345,6 +352,10 @@ describe("account tables", () => {
       ["a confirmation link without an event", "confirmation", { account: false, event: false, back: false }],
       ["a confirmation link with an account", "confirmation", { account: true, event: true, back: false }],
       ["a confirmation link with an event to return to", "confirmation", { account: false, event: true, back: true }],
+      // #940 (OT5): a handover link attaches only its own event, as a confirmation link does.
+      ["a handover link without an event", TRANSFER, { account: false, event: false, back: false }],
+      ["a handover link with an account", TRANSFER, { account: true, event: true, back: false }],
+      ["a handover link with an event to return to", TRANSFER, { account: false, event: true, back: true }],
     ] as const)("refuses %s", async (_, kind, has) => {
       await expectRefusedBy(async (trx) => {
         const { id: eventId } = await seedEvent(trx);
@@ -406,11 +417,21 @@ describe("account tables", () => {
       expect(seeded?.sent_at).toEqual(sentAt);
     });
 
-    it("refuses a kind that is neither confirmation nor login", async () => {
+    it("refuses a kind that is none of confirmation, login and transfer", async () => {
       await expectRefusedBy(
         (trx) => sql`insert into email_send (kind, email) values ('warning', ${anAddress()})`.execute(trx),
         "email_send_kind",
       );
+    });
+
+    // #940: a handover email is counted with its event, as a confirmation email is.
+    it("holds a handover email with its event", async () => {
+      const { eventId, send } = await withRollback(async (trx) => {
+        const { id } = await seedEvent(trx);
+        const sendId = await addSend(trx, { kind: TRANSFER, event_id: id });
+        return { eventId: id, send: await trx.selectFrom("email_send").selectAll().where("id", "=", sendId).executeTakeFirst() };
+      });
+      expect(send).toMatchObject({ kind: TRANSFER, event_id: eventId });
     });
 
     it("refuses an event on the answer to a sign-in request", async () => {
@@ -438,14 +459,14 @@ describe("account tables", () => {
     });
 
     // Its address and the global cap still count it: the event is gone, the email went out.
-    it("outlives its event, without it", async () => {
+    it.each(["confirmation", TRANSFER] as const)("outlives its event, without it, as a %s email", async (kind) => {
       const row = await withRollback(async (trx) => {
         const { id: eventId } = await seedEvent(trx);
-        const id = await addSend(trx, { kind: "confirmation", event_id: eventId });
+        const id = await addSend(trx, { kind, event_id: eventId });
         await trx.deleteFrom("event").where("id", "=", eventId).execute();
         return trx.selectFrom("email_send").selectAll().where("id", "=", id).executeTakeFirst();
       });
-      expect(row).toMatchObject({ kind: "confirmation", event_id: null });
+      expect(row).toMatchObject({ kind, event_id: null });
     });
   });
 
@@ -507,6 +528,106 @@ describe("account tables", () => {
           await trx.updateTable("event").set({ pending_email: email }).where("id", "=", id).execute();
         }, "event_pending_email_length");
       }
+    });
+
+    // #940 (epic #935): the handover of an event, OT5.1 to OT5.3 in the database.
+    describe("handover", () => {
+      const AT = new Date("2026-10-31T08:00:00Z");
+
+      async function hand(trx: Trx, id: string, fields: Updateable<EventTable> = {}) {
+        await trx
+          .updateTable("event")
+          .set({ transfer_email: anAddress(), transfer_status: "sending", transfer_status_at: AT, ...fields })
+          .where("id", "=", id)
+          .execute();
+      }
+
+      it("starts with none", async () => {
+        const row = await withRollback(async (trx) => eventRow(trx, (await seedEvent(trx)).id));
+        expect(row).toMatchObject({ transfer_email: null, transfer_status: null, transfer_status_at: null });
+      });
+
+      it.each(["sending", "sent", "failed", "address_limit"] as const)(
+        "waits on a confirmed event, with the status %s",
+        async (status) => {
+          const email = anAddress();
+          const row = await withRollback(async (trx) => {
+            const { eventId } = await aConfirmedEvent(trx);
+            await hand(trx, eventId, { transfer_email: email, transfer_status: status });
+            return eventRow(trx, eventId);
+          });
+          expect(row).toMatchObject({ transfer_email: email, transfer_status: status, transfer_status_at: AT });
+        },
+      );
+
+      it("refuses another status", async () => {
+        await expectRefusedBy(async (trx) => {
+          const { eventId } = await aConfirmedEvent(trx);
+          await hand(trx, eventId, { transfer_status: "queued" as "sent" });
+        }, "event_transfer_status");
+      });
+
+      it("refuses an address of 255 code points, or none", async () => {
+        for (const email of ["🚗".repeat(255), ""]) {
+          await expectRefusedBy(async (trx) => {
+            const { eventId } = await aConfirmedEvent(trx);
+            await hand(trx, eventId, { transfer_email: email });
+          }, "event_transfer_email_length");
+        }
+      });
+
+      it("refuses an address that is not written as an account's is", async () => {
+        for (const email of ["Camille@exemple.fr", " camille@exemple.fr"]) {
+          await expectRefusedBy(async (trx) => {
+            const { eventId } = await aConfirmedEvent(trx);
+            await hand(trx, eventId, { transfer_email: email });
+          }, "event_transfer_email_normalised");
+        }
+      });
+
+      // The three are null together: a status without an address, or an address without a status.
+      it.each([
+        ["a status without an address", { transfer_email: null }],
+        ["an address without a status", { transfer_status: null }],
+        ["an address without a date", { transfer_status_at: null }],
+        ["a date without an address", { transfer_email: null, transfer_status: null }],
+      ] as const)("refuses %s", async (_, fields) => {
+        await expectRefusedBy(async (trx) => {
+          const { eventId } = await aConfirmedEvent(trx);
+          await hand(trx, eventId, fields);
+        }, "event_transfer_trio");
+      });
+
+      it("refuses a pending event (OT5.1)", async () => {
+        await expectRefusedBy(async (trx) => hand(trx, (await seedEvent(trx)).id), "event_transfer_open");
+      });
+
+      it("refuses an event without an account (OT5.3)", async () => {
+        await expectRefusedBy(async (trx) => {
+          const { eventId } = await aConfirmedEvent(trx);
+          await trx.updateTable("event").set({ account_id: null }).where("id", "=", eventId).execute();
+          await hand(trx, eventId);
+        }, "event_transfer_open");
+      });
+
+      it("refuses an anonymised event (OT5.2)", async () => {
+        await expectRefusedBy(async (trx) => {
+          const { eventId } = await aConfirmedEvent(trx);
+          const bare = { admin_token_hash: null, location_lat: null, location_lng: null };
+          await trx.updateTable("event").set({ ...bare, anonymised_at: new Date() }).where("id", "=", eventId).execute();
+          await hand(trx, eventId);
+        }, "event_transfer_open");
+      });
+
+      it("makes an event with a handover refuse to lose its account, or to be anonymised", async () => {
+        for (const fields of [{ account_id: null }, { anonymised_at: new Date(), admin_token_hash: null }]) {
+          await expectRefusedBy(async (trx) => {
+            const { eventId } = await aConfirmedEvent(trx);
+            await hand(trx, eventId);
+            await trx.updateTable("event").set(fields).where("id", "=", eventId).execute();
+          }, "event_transfer_open");
+        }
+      });
     });
 
     it("belongs to an existing account, when it has one", async () => {

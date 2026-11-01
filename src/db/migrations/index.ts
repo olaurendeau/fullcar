@@ -5,6 +5,7 @@ import * as positions from "./0003_positions";
 import * as accounts from "./0004_accounts";
 import * as eventDescription from "./0005_event_description";
 import * as stops from "./0006_stops";
+import * as transfer from "./0007_transfer";
 
 /**
  * Every migration, in order. Listed statically rather than read from the folder,
@@ -18,4 +19,5 @@ export const migrations: Record<string, Migration> = {
   "0004_accounts": accounts,
   "0005_event_description": eventDescription,
   "0006_stops": stops,
+  "0007_transfer": transfer,
 };

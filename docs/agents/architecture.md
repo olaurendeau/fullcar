@@ -1487,7 +1487,7 @@ Le jeton revient dans le corps de la réponse, et c'est le client qui navigue ve
   voiture » (`ride_id` à `null`) ne l'est pas. `SET NULL (ride_id)`, limité à une colonne,
   exige Postgres 15 ou plus : 18 en local, 17 ou plus chez Neon.
 
-  Une adresse e-mail (`account.email`, `event.pending_email`, `email_send.email`) n'est
+  Une adresse e-mail (`account.email`, `event.pending_email`, `event.transfer_email`, `email_send.email`) n'est
   acceptée en base que telle que `src/domain/email-address.ts` l'écrit : rognée, en
   minuscules, en NFC, 254 points de code au plus (#586). Une adresse, un compte :
   `account.email` est unique. Les minuscules se vérifient avec la collation `pg_c_utf8`,
