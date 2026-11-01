@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { getDb } from "@/db/client";
 import { lockPersons, readTokenHolders } from "@/db/persons";
@@ -293,18 +293,64 @@ describe("C2.4, C7.3, C12.3: only the device that created the person changes her
     });
   });
 
-  it.each(STRANGERS)("setPersonLeg refuses %s", async (_, tokenOf) => {
+  it.each(STRANGERS)("setPersonLeg, a placement and not an identity, accepts %s", async (_, tokenOf) => {
     await withRollback(async (trx) => {
       const scene = await seedScene(trx);
       const other = await seedScene(trx);
-      const before = await readEventState(trx, scene.eventId, scene.lea.token);
-      const outcome = await setPersonLeg(trx, scene.eventId, tokenOf(scene, other.lea.token), {
+      const token = tokenOf(scene, other.lea.token);
+      // C10.6, PL7.2: Léa is still in Marc's car, so Marc sees her number; none of these tokens is
+      // a person of that car, so none gets it back, and one that no one holds gets no device person.
+      expect(JSON.stringify(await readEventState(trx, scene.eventId, scene.marc.token))).toContain("22 22 22");
+      const unrelated = await setPersonLeg(trx, scene.eventId, token, {
+        personId: scene.tom.id,
+        leg: "aller",
+        kind: "withoutCar",
+      });
+      expect(JSON.stringify(unrelated)).not.toContain("22 22 22");
+      const outcome = await setPersonLeg(trx, scene.eventId, token, {
         personId: scene.lea.id,
         leg: "aller",
         kind: "withoutCar",
       });
-      expect(outcome).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
-      expect(await readEventState(trx, scene.eventId, scene.lea.token)).toEqual(before);
+      expect(outcome).toEqual({ ok: true, state: await readEventState(trx, scene.eventId, token) });
+      const mine = await readEventState(trx, scene.eventId, scene.lea.token);
+      expect(standing(mine, scene.lea.id)).toEqual({ aller: "withoutCar", retour: "withoutCar" });
+      // Her identity is the creating device's: the same token on the same person is still refused.
+      expect(
+        await updatePerson(trx, scene.eventId, token, { personId: scene.lea.id, firstName: "Intrus", phone: "" }),
+      ).toEqual(expect.objectContaining({ ok: false, error: "forbidden" }));
+    });
+  });
+
+  it("setPersonLeg: a real person of another event is personGone, and nothing is written to either event", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      const other = await seedScene(trx);
+      const placements = async (eventId: string) =>
+        trx
+          .selectFrom("placement")
+          .select(["person_id", "leg", "ride_id", "placed_at"])
+          .where("event_id", "=", eventId)
+          .orderBy("person_id")
+          .orderBy("leg")
+          .execute();
+      await sql`update placement set placed_at = now() - interval '1 hour' where event_id in (${scene.eventId}, ${other.eventId})`.execute(trx);
+      const before = [await placements(scene.eventId), await placements(other.eventId)];
+
+      for (const kind of ["withoutCar", "notConcerned"]) {
+        const outcome = await setPersonLeg(trx, scene.eventId, scene.lea.token, { personId: other.tom.id, leg: "aller", kind });
+        expect(outcome).toMatchObject({ ok: false, error: "personGone" });
+      }
+      expect([await placements(scene.eventId), await placements(other.eventId)]).toEqual(before);
+    });
+  });
+
+  it("PL2.5: notConcerned on a person of another device, from the token of B", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, tom } = await seedScene(trx);
+      const outcome = await setPersonLeg(trx, eventId, tom.token, { personId: lea.id, leg: "aller", kind: "notConcerned" });
+      expect(outcome).toEqual({ ok: true, state: await readEventState(trx, eventId, tom.token) });
+      expect(standing(await readEventState(trx, eventId, lea.token), lea.id)).toEqual({ aller: "notConcerned", retour: "withoutCar" });
     });
   });
 

@@ -164,12 +164,12 @@
     "remember": "Sans compte ni e-mail : cet appareil s’en souviendra pour cet événement.",
     "forSeat": "Cette personne prendra une place dans la voiture de {driver}.",
     "samePhone": "Même numéro que {firstName}. Modifiez-le si besoin.",
-    "phoneHintForSeat": "Pour que {driver} puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.",
+    "phoneHintForSeat": "Pour que {driver} puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.",
     "firstName": "Prénom",
     "phone": "Téléphone (facultatif)",
-    "phoneHint": "Visible seulement par l’organisateur et par les personnes de la même voiture.",
+    "phoneHint": "Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.",
     "phoneDriving": "Téléphone",
-    "phoneHintDriving": "Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.",
+    "phoneHintDriving": "Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.",
     "both": "Aller et retour",
     "bothHint": {
       "aller": "Décochez si cette personne ne fait que l’aller.",
@@ -193,7 +193,7 @@
     "newDriver": "Une nouvelle personne",
     "phone": "Téléphone",
     "driverPhone": "Téléphone de {firstName}",
-    "phoneHint": "Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.",
+    "phoneHint": "Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.",
     "leavesCar": "Quittera la voiture de {driver}",
     "otherLeg": {
       "title": {

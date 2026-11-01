@@ -25,9 +25,9 @@ const FR = {
   add: "Ajouter une personne",
   firstName: "Prénom",
   phone: "Téléphone (facultatif)",
-  hint: "Visible seulement par l’organisateur et par les personnes de la même voiture.",
+  hint: "Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.",
   same: (firstName: string) => `Même numéro que ${firstName}. Modifiez-le si besoin.`,
-  forSeat: (driver: string) => `Pour que ${driver} puisse vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.`,
+  forSeat: (driver: string) => `Pour que ${driver} puisse vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.`,
   offer: "Proposer une voiture",
   newDriver: "Une nouvelle personne",
   driverPhone: "Téléphone",
@@ -181,7 +181,7 @@ test.describe("« Ajouter une personne » takes the device's number", () => {
       await panel(page).getByRole("button", { name: "Add a person", exact: true }).click();
       const phone = page.getByRole("dialog", { name: "Add a person" }).getByLabel("Phone (optional)", { exact: true });
       await numbersHidden(() => expect(phone).toHaveAccessibleDescription(
-        "Same number as Claire. Change it if needed. Only visible to the organiser and to the people in the same car.",
+        "Same number as Claire. Change it if needed. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car.",
       ));
     });
   });

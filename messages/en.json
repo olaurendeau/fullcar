@@ -164,12 +164,12 @@
     "remember": "No account, no e-mail: this device will remember it for this event.",
     "forSeat": "This person will take a seat in {driver}’s car.",
     "samePhone": "Same number as {firstName}. Change it if needed.",
-    "phoneHintForSeat": "So that {driver} can reach you. Only visible to the organiser and to the people in the same car.",
+    "phoneHintForSeat": "So that {driver} can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car.",
     "firstName": "First name",
     "phone": "Phone (optional)",
-    "phoneHint": "Only visible to the organiser and to the people in the same car.",
+    "phoneHint": "Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car.",
     "phoneDriving": "Phone",
-    "phoneHintDriving": "So that the people on board can reach you. Only visible to the organiser and to the people in the same car.",
+    "phoneHintDriving": "So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car.",
     "both": "Outbound and return",
     "bothHint": {
       "aller": "Untick if this person only makes the outbound trip.",
@@ -193,7 +193,7 @@
     "newDriver": "Someone new",
     "phone": "Phone",
     "driverPhone": "{firstName}’s phone",
-    "phoneHint": "So that the people on board can reach you. Only visible to the organiser and to the people in the same car.",
+    "phoneHint": "So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car.",
     "leavesCar": "Will leave {driver}’s car",
     "otherLeg": {
       "title": {

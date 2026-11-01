@@ -5,7 +5,7 @@ import { findDrivenRide, findDrivenRides } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
-import { deviceAccess } from "@/domain/device";
+import { deviceAccess, eventAccess } from "@/domain/device";
 import { initialLegs, LEGS, type Leg } from "@/domain/leg";
 import { validatePerson, validatePersonChange, type PersonErrors, type PersonField } from "@/domain/person";
 import { isPersonalToken } from "@/domain/personal-token";
@@ -87,7 +87,7 @@ async function writeThenRead(
 
 /**
  * Why `personId` may not be changed with `token`, nothing when she is the device's: every change
- * goes through here (C2.4, C7.3). `forbidden` for another token's, `personGone` when no person of
+ * of her identity goes through here (C2.4, C7.3); a placement does not (epic #973). `forbidden` for another token's, `personGone` when no person of
  * the event has the id any more (RP5.4).
  */
 async function refusalFor(trx: Kysely<Database>, eventId: string, token: unknown, personId: string) {
@@ -169,7 +169,8 @@ export async function updatePerson(
 }
 
 /**
- * Where one of the device's persons stands on one leg, the other leg untouched (C3.5):
+ * Where any person of the event stands on one leg, the other leg untouched (C3.5; whoever
+ * holds her, since epic #973):
  * `withoutCar` covers « Je cherche une place » and « Sortir de la voiture », `notConcerned`
  * « Pas concernée ». Done twice, the second time changes nothing (C7.4). Refused for the
  * driver of a Ride on that leg (C12.8), and on a retour the event no longer has (M7.3).
@@ -187,8 +188,9 @@ export async function setPersonLeg(
     const leg = LEGS.find((known) => known === fields.leg);
     if (kind === undefined || leg === undefined || !isCreationId(personId)) return INVALID;
     if (!legs.includes(leg)) return NO_RETOUR;
-    const refused = await refusalFor(trx, eventId, token, personId);
-    if (refused) return refused;
+    // A placement, open to whoever has the link (epic #973): the token is not looked at, and a
+    // device with none may place. Only the person's being of the event is checked.
+    if (eventAccess(await readTokenHolders(trx, eventId), [personId]).kind === "personGone") return PERSON_GONE;
     // Her Person locked (lock order: Event, then Person), no removal can take her away meanwhile;
     // removed after the read, while this waited, she is not there to place (RP5.4).
     if ((await lockPersons(trx, eventId, [personId])).length === 0) return PERSON_GONE;
