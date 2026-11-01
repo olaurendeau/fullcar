@@ -12,7 +12,15 @@ export const SEND_WINDOW_MS = 60 * 60_000;
 export const CONFIRMATIONS_PER_EVENT = 3;
 
 /**
- * Confirmation emails per address and per hour, all events together (OA1.9, OA2.4), so
+ * Transfer emails per event and per hour: sending, resends and changes of address included
+ * (OT6.5). Counted apart from the confirmations of the event: an event is never both pending
+ * and handed over (OT5.1).
+ */
+export const TRANSFERS_PER_EVENT = 3;
+
+/**
+ * Confirmation and transfer emails per address and per hour, together, all events together (OA1.9, OA2.4,
+ * decision 3 of the design of #935), so
  * that nobody can flood an address by creating events. At creation it does not stop the
  * event: the event exists, the email does not go out.
  */
@@ -45,11 +53,13 @@ export const GLOBAL_SENDS_PER_HOUR = 50;
 export type SendLimit = "event" | "address" | "global";
 
 /**
- * Emails sent in the window. `event` and `address` count confirmation emails, `login` the
- * answers to sign-in requests to the address, `global` both kinds together.
+ * Emails sent in the window. `event` counts the confirmation emails of the event, `transfer`
+ * its transfer emails, `address` the confirmation and transfer emails to the address, `login`
+ * the answers to sign-in requests to the address, `global` all kinds together.
  */
 export interface RecentSends {
   event?: number;
+  transfer?: number;
   address?: number;
   login?: number;
   global: number;
@@ -63,6 +73,7 @@ export function inSendWindow(sentAt: Date, now: Date): boolean {
 /** The limit one more email would cross, or `null` when it may go. */
 export function sendLimitReached(recent: RecentSends): SendLimit | null {
   if ((recent.event ?? 0) >= CONFIRMATIONS_PER_EVENT) return "event";
+  if ((recent.transfer ?? 0) >= TRANSFERS_PER_EVENT) return "event";
   if ((recent.address ?? 0) >= CONFIRMATIONS_PER_ADDRESS) return "address";
   if ((recent.login ?? 0) >= LOGINS_PER_ADDRESS) return "address";
   if (recent.global >= GLOBAL_SENDS_PER_HOUR) return "global";

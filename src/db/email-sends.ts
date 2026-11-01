@@ -10,8 +10,13 @@ import { atomically } from "./transaction";
  * here: they count in no limit. Never log an address.
  */
 
-/** A confirmation email for a pending event, or the answer to a sign-in request (OA3.5). */
-export type SendRequest = { kind: "confirmation"; eventId: string; email: string } | { kind: "login"; email: string };
+/**
+ * A confirmation email for a pending event, a transfer email for an event being handed over
+ * (epic #935), or the answer to a sign-in request (OA3.5).
+ */
+export type SendRequest =
+  | { kind: "confirmation" | "transfer"; eventId: string; email: string }
+  | { kind: "login"; email: string };
 
 /** The send recorded, the limit that stops it, or the event gone before its confirmation email. */
 export type SendClaim = "recorded" | SendLimit | "eventGone";
@@ -41,25 +46,27 @@ export async function lockGlobalSends(db: Kysely<Database>): Promise<void> {
  */
 export async function recordSend(db: Kysely<Database>, request: SendRequest, now = new Date()): Promise<SendClaim> {
   return atomically(db, async (trx) => {
-    if (request.kind === "confirmation" && !(await lockEvent(trx, request.eventId, "noKeyUpdate"))) {
-      return "eventGone";
-    }
+    const eventId = request.kind === "login" ? null : request.eventId;
+    if (eventId !== null && !(await lockEvent(trx, eventId, "noKeyUpdate"))) return "eventGone";
     await lockAddress(trx, request.email);
     await lockGlobalSends(trx);
-    const eventId = request.kind === "confirmation" ? request.eventId : null;
-    // Sent less than an hour ago: the rule of inSendWindow.
+    const addressKinds = request.kind === "login" ? ["login"] : ["confirmation", "transfer"];
+    // Sent less than an hour ago: the rule of inSendWindow. The address counts the confirmation and
+    // transfer emails together (decision 3 of the design of #935); a sign-in request counts apart.
     const { rows } = await sql<{ event: number; address: number; global: number }>`
       select
-        count(*) filter (where kind = 'confirmation' and event_id = ${eventId})::int as event,
-        count(*) filter (where kind = ${request.kind} and email = ${request.email})::int as address,
+        count(*) filter (where kind = ${request.kind} and event_id = ${eventId})::int as event,
+        count(*) filter (where email = ${request.email} and kind in (${sql.join(addressKinds)}))::int as address,
         count(*)::int as global
       from email_send
       where sent_at > ${new Date(now.getTime() - SEND_WINDOW_MS)}`.execute(trx);
     const recent = rows[0]!;
     const limit = sendLimitReached(
-      request.kind === "confirmation"
-        ? { event: recent.event, address: recent.address, global: recent.global }
-        : { login: recent.address, global: recent.global },
+      request.kind === "login"
+        ? { login: recent.address, global: recent.global }
+        : request.kind === "transfer"
+          ? { transfer: recent.event, address: recent.address, global: recent.global }
+          : { event: recent.event, address: recent.address, global: recent.global },
     );
     if (limit !== null) return limit;
     await trx.insertInto("email_send").values({ kind: request.kind, email: request.email, event_id: eventId }).execute();

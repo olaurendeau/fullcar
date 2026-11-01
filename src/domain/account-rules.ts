@@ -13,6 +13,8 @@ const DAY = 24 * HOUR;
 export const LOGIN_LINK_LIFETIME_MS = HOUR;
 /** A confirmation link: opened once the organiser has shared the event (OA5.6). */
 export const CONFIRMATION_LINK_LIFETIME_MS = 7 * DAY;
+/** A transfer link: the event changes hands once the recipient opens it (OT2.6). */
+export const TRANSFER_LINK_LIFETIME_MS = 7 * DAY;
 /** A session, after the last visit, not after the sign-in: every page load slides it (OA9.6). */
 export const SESSION_LIFETIME_MS = 90 * DAY;
 /** An account without a visit for 3 calendar years is deleted (OA9.7). */
@@ -20,11 +22,12 @@ export const ACCOUNT_INACTIVITY_YEARS = 3;
 /** The inactivity warning goes out 30 days before the deletion, once (OA9.7). */
 export const INACTIVITY_WARNING_DAYS = 30;
 
-export type LinkKind = "login" | "confirmation";
+export type LinkKind = "login" | "confirmation" | "transfer";
 
 const LINK_LIFETIME_MS: Record<LinkKind, number> = {
   login: LOGIN_LINK_LIFETIME_MS,
   confirmation: CONFIRMATION_LINK_LIFETIME_MS,
+  transfer: TRANSFER_LINK_LIFETIME_MS,
 };
 
 /** What the database keeps of a link, its token aside. */
@@ -46,7 +49,7 @@ export function linkExpiresAt(kind: LinkKind, createdAt: Date): Date {
  * The outcome of using `link` on the page for links of kind `expected`. `null` is a
  * link that is not found: unknown token, truncated, or replaced by a correction of the
  * address (OA2.5). A link of the other kind is invalid, not expired: a sign-in link
- * confirms nothing. A used link says so whatever its age, since that is what helps.
+ * confirms nothing, nor does a transfer link. A used link says so whatever its age, since that is what helps.
  */
 export function linkOutcome(link: StoredLink | null, expected: LinkKind, now: Date): LinkOutcome {
   if (link === null || link.kind !== expected) return "invalid";
@@ -64,7 +67,8 @@ export const LINK_KEPT_AFTER_EXPIRY_MS = 30 * DAY;
 
 /**
  * The first instant the daily task may delete the link: 30 days after its expiry. Not for
- * the confirmation link of a pending event, which stays as long as its event (OA5.6).
+ * the confirmation link of a pending event, which stays as long as its event (OA5.6), nor for a
+ * transfer link while its event is being handed over (the notice reads the latest one to say « expiré »).
  */
 export function linkDeletedAt(kind: LinkKind, createdAt: Date): Date {
   return new Date(linkExpiresAt(kind, createdAt).getTime() + LINK_KEPT_AFTER_EXPIRY_MS);

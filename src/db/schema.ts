@@ -135,10 +135,10 @@ export interface PlacementTable {
 }
 
 /** What a link from an email opens, as the domain's `LinkKind`. */
-type LinkKindColumn = "login" | "confirmation";
+type LinkKindColumn = "login" | "confirmation" | "transfer";
 
-/** What a send counts in: a confirmation email, or the answer to a sign-in request. */
-type SendKindColumn = "confirmation" | "login";
+/** What a send counts in: a confirmation email, a transfer email, or the answer to a sign-in request. */
+type SendKindColumn = "confirmation" | "login" | "transfer";
 
 /**
  * An organiser (epic #581). `email` is written as src/domain/email-address.ts reads it:
@@ -169,13 +169,14 @@ export interface SessionTable {
 
 /**
  * A link sent by email, keyed by the 32-byte SHA-256 of its token. A sign-in link has an
- * account, a confirmation link an event, never both. `used_at` is written once: a link
+ * account, a confirmation or transfer link an event, never both. `used_at` is written once: a link
  * serves once. A seeded test may write `created_at` in the past, to expire it.
  *
  * A confirmation link keeps no address: it confirms its event's `pending_email`. So
  * OA2.5 holds only because « Corriger l'adresse » deletes the event's confirmation links
  * in the same transaction as it writes the new address: a link left behind would
- * confirm the new address with a link sent to the old one.
+ * confirm the new address with a link sent to the old one. The same holds for a transfer
+ * link and the event's `transfer_email` (epic #935).
  *
  * `return_event_id` is where a sign-in link lands (OA4.4): `/e/{id}/admin` of that
  * event, or `/mes-evenements` when null, the event deleted since included. A confirmation
@@ -193,7 +194,7 @@ export interface EmailLinkTable {
 
 /**
  * An email we tried to send, for the limits (src/domain/send-limits.ts). `email` is the
- * address, written as an account's is. `event_id` is the event of a confirmation email,
+ * address, written as an account's is. `event_id` is the event of a confirmation or transfer email,
  * null for the answer to a sign-in request, and null again once the event is gone: the
  * send still counts for its address and in the global cap. The id is drawn by the database.
  */

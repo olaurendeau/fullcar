@@ -2,6 +2,7 @@ import { sql, type Kysely, type Selectable } from "kysely";
 import {
   CONFIRMATION_LINK_LIFETIME_MS,
   LOGIN_LINK_LIFETIME_MS,
+  TRANSFER_LINK_LIFETIME_MS,
   linkOutcome,
   type LinkKind,
   type LinkOutcome,
@@ -23,7 +24,7 @@ import { atomically } from "./transaction";
 /** A sign-in link lands on `/e/{returnEventId}/admin`, or on `/mes-evenements` when null (OA4.4). */
 export type NewLink =
   | { kind: "login"; accountId: string; returnEventId: string | null }
-  | { kind: "confirmation"; eventId: string };
+  | { kind: "confirmation" | "transfer"; eventId: string };
 
 /** What the database keeps of a link, its token aside. */
 export interface Link extends StoredLink {
@@ -35,7 +36,11 @@ export interface Link extends StoredLink {
 /** What using a link gives: the link, used now, or why it cannot be used (OA5.4 to OA5.7). */
 export type LinkUse = { outcome: "valid"; link: Link } | { outcome: Exclude<LinkOutcome, "valid"> };
 
-const LIFETIME_MS = { login: LOGIN_LINK_LIFETIME_MS, confirmation: CONFIRMATION_LINK_LIFETIME_MS };
+const LIFETIME_MS = {
+  login: LOGIN_LINK_LIFETIME_MS,
+  confirmation: CONFIRMATION_LINK_LIFETIME_MS,
+  transfer: TRANSFER_LINK_LIFETIME_MS,
+};
 
 const LINK_COLUMNS = ["token_hash", "kind", "created_at", "used_at", "account_id", "event_id", "return_event_id"] as const;
 
@@ -56,14 +61,14 @@ export function linkRow(link: NewLink, token: string) {
     token_hash: tokenKey(token)!,
     kind: link.kind,
     account_id: link.kind === "login" ? link.accountId : null,
-    event_id: link.kind === "confirmation" ? link.eventId : null,
+    event_id: link.kind === "login" ? null : link.eventId,
     return_event_id: link.kind === "login" ? link.returnEventId : null,
   };
 }
 
 /**
  * Stores a new link, and gives its token: the only time it is anywhere but in the email.
- * A confirmation link goes through `claimConfirmation` only: under `lockEvent(…,
+ * A confirmation or transfer link goes through `claimConfirmation` or `claimTransfer` only: under `lockEvent(…,
  * "noKeyUpdate")`, after an accepted `recordSend`, in the same transaction. The insert alone
  * takes the Event `FOR KEY SHARE`, by its foreign key, which the purge's lock does not wait
  * for: a link inserted while its event is anonymised would outlive the anonymisation.
@@ -74,10 +79,13 @@ export async function createLink(db: Kysely<Database>, link: NewLink): Promise<s
   return token;
 }
 
-/** What claiming a confirmation email gives: the token of its new link, or why nothing goes out. */
+/** What claiming a confirmation or transfer email gives: the token of its new link, or why nothing goes out. */
 export type ConfirmationClaim =
   | { claim: "recorded"; token: string }
   | { claim: Exclude<SendClaim, "recorded"> | "eventEnded" };
+
+/** What claiming a transfer email gives: as for a confirmation email. */
+export type TransferClaim = ConfirmationClaim;
 
 /**
  * Claims a confirmation email for the event, to `email`, in one READ COMMITTED transaction,
@@ -93,14 +101,62 @@ export async function claimConfirmation(
   email: string,
   now = new Date(),
 ): Promise<ConfirmationClaim> {
+  return claimLink(db, "confirmation", eventId, email, now);
+}
+
+/**
+ * Claims a transfer email for the event, to `email` (epic #935): as `claimConfirmation` does,
+ * for a link of kind `transfer`. The caller then writes the address and its result under the
+ * same lock (`writeTransfer`), and deletes the links of the address it replaces
+ * (`deleteTransferLinks`), in the same transaction.
+ */
+export async function claimTransfer(db: Kysely<Database>, eventId: string, email: string, now = new Date()): Promise<TransferClaim> {
+  return claimLink(db, "transfer", eventId, email, now);
+}
+
+async function claimLink(
+  db: Kysely<Database>,
+  kind: "confirmation" | "transfer",
+  eventId: string,
+  email: string,
+  now: Date,
+): Promise<ConfirmationClaim> {
   return atomically(db, async (trx) => {
     const event = await lockEvent(trx, eventId, "noKeyUpdate");
     if (!event) return { claim: "eventGone" };
     if (event.anonymised_at !== null) return { claim: "eventEnded" };
-    const claim = await recordSend(trx, { kind: "confirmation", eventId, email }, now);
+    const claim = await recordSend(trx, { kind, eventId, email }, now);
     if (claim !== "recorded") return { claim };
-    return { claim, token: await createLink(trx, { kind: "confirmation", eventId }) };
+    return { claim, token: await createLink(trx, { kind, eventId }) };
   });
+}
+
+/**
+ * Deletes the transfer links of the event, but the one of `except` if given (epic #935): the
+ * links sent to the address a change replaces (OT2.4), all of them when the transfer is
+ * cancelled (OT2.5). Under `lockEvent(…, "noKeyUpdate")`, in the caller's transaction, once the
+ * new link is made. The links are locked in the order of their keys before they go, as the
+ * daily clean-up and `eraseHeld` take them (40P01); one deleted meanwhile is not counted.
+ * Gives how many it deleted. A login or confirmation link is never one of them.
+ */
+export async function deleteTransferLinks(db: Kysely<Database>, eventId: string, options: { except?: string } = {}): Promise<number> {
+  const kept = options.except === undefined ? null : tokenKey(options.except);
+  if (options.except !== undefined && kept === null) throw new Error("deleteTransferLinks: the kept token is not a token");
+  const links = await db
+    .selectFrom("email_link")
+    .select("token_hash")
+    .where("event_id", "=", eventId)
+    .where("kind", "=", "transfer")
+    .$if(kept !== null, (query) => query.where("token_hash", "<>", kept!))
+    .orderBy("token_hash")
+    .forUpdate()
+    .execute();
+  if (links.length === 0) return 0;
+  const deleted = await db
+    .deleteFrom("email_link")
+    .where("token_hash", "in", links.map((link) => link.token_hash))
+    .executeTakeFirst();
+  return Number(deleted.numDeletedRows);
 }
 
 /**

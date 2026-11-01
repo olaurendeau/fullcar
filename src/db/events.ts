@@ -1,8 +1,9 @@
-import type { Kysely, Selectable } from "kysely";
+import { sql, type Kysely, type Selectable } from "kysely";
 import type { NewEvent } from "@/domain/event";
 import type { OrganiserAccessEvent } from "@/domain/organiser-access";
 import type { PendingSendRow } from "@/domain/pending-send";
 import { generatePublicId } from "@/domain/public-id";
+import type { TransferRow } from "@/domain/transfer";
 import type { Database, EventTable } from "./schema";
 import { tokenKey } from "./token-key";
 
@@ -248,4 +249,88 @@ export async function writeSendResult(
     .where("send_status_at", "=", since)
     .executeTakeFirst();
   return Number(written.numUpdatedRows) > 0;
+}
+
+/**
+ * The address the event is being handed to, the result kept of its email, and the date of the
+ * most recent transfer link (epic #935, OT2.2), read in one statement, for the notice of the
+ * organiser's panel and the list of Mes événements only: never read before the access is
+ * granted. Nothing for an unknown id; an event that is not being handed over gives an empty row.
+ */
+export async function readTransfer(db: Kysely<Database>, id: string): Promise<TransferRow | undefined> {
+  const row = await db
+    .selectFrom("event")
+    .select([
+      "transfer_email",
+      "transfer_status",
+      "transfer_status_at",
+      (eb) =>
+        eb
+          .selectFrom("email_link")
+          .select(sql<Date | null>`max(created_at)`.as("created_at"))
+          .whereRef("email_link.event_id", "=", "event.id")
+          .where("email_link.kind", "=", "transfer")
+          .as("last_link_at"),
+    ])
+    .where("id", "=", id)
+    .executeTakeFirst();
+  return (
+    row && { email: row.transfer_email, status: row.transfer_status, at: row.transfer_status_at, lastLinkAt: row.last_link_at }
+  );
+}
+
+/**
+ * Hands the event over to `email` (OT1.5, OT2.7): the address, with the first result of its
+ * email, `sending` once the send is recorded or `address_limit` when the limit of the address
+ * or the global cap stopped it (OT1.6). It replaces the handover that waited. Under
+ * `lockEvent(…, "noKeyUpdate")`, in the transaction of `claimTransfer`; the database refuses an
+ * event that is pending, anonymised or without account (`event_transfer_open`). The account and
+ * the admin token stay as they are.
+ */
+export async function writeTransfer(
+  db: Kysely<Database>,
+  id: string,
+  transfer: { email: string; status: "sending" | "address_limit"; at: Date },
+): Promise<void> {
+  await db
+    .updateTable("event")
+    .set({ transfer_email: transfer.email, transfer_status: transfer.status, transfer_status_at: transfer.at })
+    .where("id", "=", id)
+    .execute();
+}
+
+/**
+ * The result of the transfer email once Brevo has answered, written only over the `sending`
+ * this send wrote at `since`, as `writeSendResult` does: a handover replaced, cancelled or
+ * stopped since leaves it as it is. Says whether it was written.
+ */
+export async function writeTransferResult(
+  db: Kysely<Database>,
+  id: string,
+  since: Date,
+  result: "sent" | "failed",
+): Promise<boolean> {
+  const written = await db
+    .updateTable("event")
+    .set({ transfer_status: result, transfer_status_at: new Date() })
+    .where("id", "=", id)
+    .where("transfer_status", "=", "sending")
+    .where("transfer_status_at", "=", since)
+    .executeTakeFirst();
+  return Number(written.numUpdatedRows) > 0;
+}
+
+/**
+ * Ends the handover without giving the event away (OT2.5): the address and its result are
+ * cleared. Says whether one was waiting. Its links are deleted with `deleteTransferLinks`, in
+ * the same transaction.
+ */
+export async function clearTransfer(db: Kysely<Database>, id: string): Promise<boolean> {
+  const cleared = await db
+    .updateTable("event")
+    .set({ transfer_email: null, transfer_status: null, transfer_status_at: null })
+    .where("id", "=", id)
+    .where("transfer_email", "is not", null)
+    .executeTakeFirst();
+  return Number(cleared.numUpdatedRows) > 0;
 }
