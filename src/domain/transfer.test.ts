@@ -72,6 +72,10 @@ describe("transferNotice", () => {
     expect(transferNotice(row({ status: "address_limit", at: ago(30 * DAY), lastLinkAt: null }), NOW)?.send).toBe("addressLimit");
   });
 
+  it("says the address limit even when the latest link is older than 7 days: the limit wins over expired", () => {
+    expect(transferNotice(row({ status: "address_limit", lastLinkAt: ago(8 * DAY) }), NOW)?.send).toBe("addressLimit");
+  });
+
   it("keeps the address in full", () => {
     expect(transferNotice(row({ email: "a@b.fr" }), NOW)?.email).toBe("a@b.fr");
   });
