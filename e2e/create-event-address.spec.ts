@@ -46,20 +46,10 @@ const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
 const idOf = (page: Page) => ARRIVAL.exec(new URL(page.url()).pathname)![1]!;
 
 let created: string[] = [];
-let addresses: string[] = [];
 test.afterEach(async ({ db }) => {
   if (created.length > 0) await db.deleteFrom("event").where("id", "in", created).execute();
-  if (addresses.length > 0) await db.deleteFrom("email_send").where("email", "in", addresses).execute();
   created = [];
-  addresses = [];
 });
-
-/** An address no other test uses, whose events and sends are deleted after the test. */
-function anAddress(): string {
-  const address = newAddress();
-  addresses.push(address);
-  return address;
-}
 
 /** The device's date, in a week, as an `<input type="date">` takes it. */
 const inAWeek = (page: Page) =>
@@ -159,7 +149,7 @@ test.describe("l’adresse, sans session", () => {
   });
 
   test("OA1.2: from /, eight actions reach the link to share in less than 30 s, the provider answering never", async ({ page }) => {
-    const address = anAddress();
+    const address = newAddress();
     await answerMail([address], { kind: "never" });
     const start = Date.now();
     await page.goto("/");
@@ -189,7 +179,7 @@ test.describe("l’adresse, sans session", () => {
   });
 
   test("OA1.6: one email to the address, with a link to confirm, and the arrival has no fragment", async ({ page, db }) => {
-    const address = anAddress();
+    const address = newAddress();
     const id = await createWith(page, address);
     expect(new URL(page.url()).hash, "the arrival's fragment").toBe("");
     const token = await confirmationToken(address);
@@ -200,7 +190,7 @@ test.describe("l’adresse, sans session", () => {
   });
 
   test("OA1.7: the provider held, « Envoi du lien… », then released, the notice says the link went", async ({ page }) => {
-    const address = anAddress();
+    const address = newAddress();
     await answerMail([address], { kind: "hold" });
     await createWith(page, address);
     await expect(notice(page)).toContainText(FR.sending(address));
@@ -211,7 +201,7 @@ test.describe("l’adresse, sans session", () => {
   test("OA1.7: the provider never answering, the notice becomes « n’a peut-être pas été envoyé » within 15 s of the arrival, without a reload", async ({
     page,
   }) => {
-    const address = anAddress();
+    const address = newAddress();
     await answerMail([address], { kind: "never" });
     await createWith(page, address);
     await expect(notice(page)).toContainText(FR.sending(address));
@@ -225,8 +215,8 @@ test.describe("l’adresse, sans session", () => {
     page,
     context,
   }) => {
-    const ok = anAddress();
-    const failing = anAddress();
+    const ok = newAddress();
+    const failing = newAddress();
     await answerMail([ok, failing], { kind: "hold" });
     for (const [address, release, expected] of [
       [ok, { kind: "ok" }, FR.body(ok)],
@@ -247,7 +237,7 @@ test.describe("l’adresse, sans session", () => {
     browser,
     baseURL,
   }) => {
-    const address = anAddress();
+    const address = newAddress();
     const id = await createWith(page, address);
     await page.goto(`/e/${id}`);
     const area = page.getByRole("link", { name: FR.panel, exact: true });
@@ -274,7 +264,7 @@ test.describe("l’adresse, sans session", () => {
     browser,
     baseURL,
   }) => {
-    const address = anAddress();
+    const address = newAddress();
     const id = await createWith(page, address);
     const token = await confirmationToken(address);
     await expect(notice(page)).toBeVisible();
@@ -311,8 +301,23 @@ test.describe("l’adresse, en anglais", () => {
 
 creatorTest.describe("les pages des participants", () => {
   creatorTest("OA1.1: no participant page has an email field", async ({ page, seededEvent }) => {
+    const noEmailField = () => expect(page.locator('input[type="email"]')).toHaveCount(0);
+
     await page.goto(`/e/${seededEvent.id}`);
     await expect(page.getByRole("main")).toBeVisible();
-    await expect(page.locator('input[type="email"]')).toHaveCount(0);
+    await noEmailField();
+
+    // The sheets reachable from the page: each one open, none asks for an address.
+    for (const name of ["Proposer une voiture", "Ajouter une personne"]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      await expect(page.getByRole("dialog", { name })).toBeVisible();
+      await noEmailField();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog", { name })).toBeHidden();
+    }
+
+    await page.goto(`/e/${seededEvent.id}/moi`);
+    await expect(page.locator("body")).toBeVisible();
+    await noEmailField();
   });
 });

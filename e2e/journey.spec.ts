@@ -360,11 +360,11 @@ test.describe("the organiser's token on the network", () => {
 test.describe("an event with its three options", () => {
   test.use({ locale: "fr-FR" });
 
-  /** The same address for both events: the pages compared name it (« Envoi du lien à … »). */
-  const address = newAddress();
-
-  /** Creates the same event by the form, with or without its options: its organiser's URL. */
-  async function create(page: Page, db: Kysely<Database>, withOptions: boolean): Promise<string> {
+  /**
+   * Creates the same event by the form, with or without its options: its organiser's URL.
+   * `address` is the same for both events: the pages compared name it (« Envoi du lien à … »).
+   */
+  async function create(page: Page, db: Kysely<Database>, address: string, withOptions: boolean): Promise<string> {
     const arrived = async (url: string) => {
       // The notice names the send's result: both events are compared once it is « sent ».
       await expect
@@ -497,7 +497,9 @@ test.describe("an event with its three options", () => {
         .where("id", "=", new URL(url).pathname.split("/")[2])
         .executeTakeFirstOrThrow();
 
-    const plainUrl = await create(page, db, false);
+    // Taken in the test, so that its sends are swept after it.
+    const address = newAddress();
+    const plainUrl = await create(page, db, address, false);
     expect(await options(plainUrl)).toEqual({
       boosters_enabled: false,
       participation_enabled: false,
@@ -506,7 +508,7 @@ test.describe("an event with its three options", () => {
     const plain = await markup(page, plainUrl);
 
     // Stored with its three options: otherwise, two events without any would compare equal.
-    const withOptionsUrl = await create(page, db, true);
+    const withOptionsUrl = await create(page, db, address, true);
     expect(await options(withOptionsUrl)).toEqual({
       boosters_enabled: true,
       participation_enabled: true,
