@@ -1,5 +1,7 @@
 import { sql, type Kysely, type Transaction } from "kysely";
 import { describe, expect, it } from "vitest";
+import { resendConfirmation } from "@/app/e/[id]/pending-email";
+import { deleteAccountOf } from "@/app/mes-evenements/delete-account";
 import { signOutBrowser } from "@/app/mes-evenements/sign-out";
 import { SESSION_LIFETIME_MS } from "@/domain/account-rules";
 import { decideOrganiserAccess } from "@/domain/organiser-access";
@@ -7,10 +9,11 @@ import { accountForEmail, deleteAccount, eraseAccount, findAccount, findAccountB
 import { claimConfirmation, claimTransfer, useLink } from "./email-links";
 import { recordSend } from "./email-sends";
 import { readAdminTokenHash, readOrganiserAccessEvent, readTransfer, writeEventOwner, writeTransfer } from "./events";
+import { errorCode } from "./failure";
 import type { Database } from "./schema";
 import { findSession } from "./sessions";
 import { anAddress, seedAccount, seedLink, seedSends, seedSession, withCommittedAddresses, withRollbackRecordingSends } from "./test-accounts";
-import { whileHeld, withCommittedEvent } from "./test-committed";
+import { whileHeld, whileHeldInTurn, withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent, seedPendingSend } from "./test-events";
 import { seedPerson } from "./test-participants";
@@ -467,6 +470,49 @@ describe("deleteAccount, concurrently", () => {
         expect(deleted).toBe(true);
         const row = await db.selectFrom("event").select(["account_id", "admin_token_hash"]).where("id", "=", eventId).executeTakeFirstOrThrow();
         expect(row).toEqual({ account_id: null, admin_token_hash: null });
+      });
+    });
+  });
+
+  // #986: clearLateAddress locks the event after the address, `confirmAgain` the address after the event: a deadlock
+  // (40P01) that Postgres breaks by cancelling one of the two. Whether the two meet depends on which wakes first when
+  // the correction commits, so this test cannot force the deadlock. It holds in every outcome: deleteAccountOf deletes
+  // the account (after its retry when it was the one cancelled), and a resend that was cancelled is a 40P01 the page shows as « failed ».
+  it("deletes the account after a resend of the event moved to its address, whichever of the two Postgres cancels in a deadlock", async () => {
+    await withCommittedEvent(async (db, eventId, token) => {
+      await withCommittedAddresses(async (_db, address) => {
+        const email = address();
+        const accountId = await seedAccount(db, { email });
+        const session = await seedSession(db, accountId);
+        await seedPendingSend(db, eventId, { email: address(), status: "sent", at: new Date(Date.now() - 60 * 60_000) });
+        const brevo = { send: async () => ({ state: "sent" as const }) };
+        const resend = async (own: Kysely<Database>) => {
+          try {
+            return await resendConfirmation(eventId, { adminToken: token }, { db: own, now: new Date(), locale: "fr", origin: "https://fullcar.test", brevo });
+          } catch (error) {
+            return { cancelled: errorCode(error) };
+          }
+        };
+        const [deleted, resent] = await whileHeldInTurn<unknown>(
+          db,
+          // The correction F to E, not yet committed: the first read of the events of the deletion does not see it.
+          async (trx) => {
+            expect(await claimConfirmation(trx, eventId, email)).toMatchObject({ claim: "recorded" });
+            await writeEventOwner(trx, eventId, { pendingEmail: email, sendStatus: "sending", sendStatusAt: new Date() });
+          },
+          [(own) => deleteAccountOf(own, session, []), resend],
+        );
+        expect(deleted).toEqual({ deleted: true });
+        expect([
+          { ok: true, pending: { email, send: "sent" } },
+          { ok: false, error: "notPending" },
+          { cancelled: "SQLSTATE 40P01" },
+        ]).toContainEqual(resent);
+        const row = await db.selectFrom("event").select("pending_email").where("id", "=", eventId).executeTakeFirstOrThrow();
+        expect(row.pending_email).toBeNull();
+        expect(await sendsTo(db, email)).toEqual([]);
+        expect(await db.selectFrom("email_link").select("token_hash").where("event_id", "=", eventId).execute()).toEqual([]);
+        expect(await findAccount(db, accountId)).toBeUndefined();
       });
     });
   });
