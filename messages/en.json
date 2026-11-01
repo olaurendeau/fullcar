@@ -1,7 +1,7 @@
 {
   "Home": {
     "title": "Fullcar",
-    "tagline": "Group carpooling, there and back, no account needed.",
+    "tagline": "Group carpooling, there and back, no account for participants.",
     "intro": "A match, a wedding, a ski weekend: share one link, and everyone sees who is driving, where seats are free and who still has no car.",
     "create": "Create an event",
     "myEvents": "My events",
@@ -9,18 +9,18 @@
     "steps": {
       "create": {
         "title": "Create the event",
-        "text": "A title, a place, the start time and, if there is a return trip, the end time. No account, no email address."
+        "text": "A title, a place, the start time and, if there is a return trip, the end time. And your email address, to find your events again."
       },
       "share": {
         "title": "Share the link",
-        "text": "By text message or in the group chat. Everyone signs up, offers a car or takes a free seat."
+        "text": "By text message or in the group chat. Everyone signs up without an account, offers a car or takes a free seat."
       },
       "follow": {
         "title": "See who still has no car",
         "text": "A banner shows how many people still have no car, and whether seats are missing."
       }
     },
-    "deleted": "Events are deleted 30 days after their date.",
+    "deleted": "30 days after the event, sign-ups are erased.",
     "accountDeleted": "Your account has been deleted."
   },
   "CreateEvent": {

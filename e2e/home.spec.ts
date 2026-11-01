@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 /** The home page's words (#232, design v2.1, docs/design/home/README.md). */
 const FR = {
-  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
   intro:
     "Un match, un mariage, un week-end au ski : partagez un seul lien, et chacun voit qui conduit, où il reste des places et qui n’a pas encore de voiture.",
   create: "Créer un événement",
@@ -11,20 +11,19 @@ const FR = {
   steps: [
     [
       "Créez l’événement",
-      "Un titre, un lieu, l’heure de début et, s’il y a un retour, l’heure de fin. Sans compte ni adresse e-mail.",
+      "Un titre, un lieu, l’heure de début et, s’il y a un retour, l’heure de fin. Et votre adresse e-mail, pour retrouver vos événements.",
     ],
-    ["Partagez le lien", "Par SMS ou dans le groupe. Chacun s’inscrit, propose une voiture ou prend une place libre."],
+    ["Partagez le lien", "Par SMS ou dans le groupe. Chacun s’inscrit sans compte, propose une voiture ou prend une place libre."],
     [
       "Suivez qui reste sans voiture",
       "Un bandeau dit combien de personnes sont encore sans voiture, et s’il manque des places.",
     ],
   ],
-  // A non-breaking space, as in « Événement introuvable »: « 30 » never ends a line alone.
-  deleted: "Les événements sont supprimés 30 jours après leur date.",
+  deleted: "30 jours après l’événement, les inscriptions sont effacées.",
 };
 type Words = typeof FR;
 const EN: Words = {
-  tagline: "Group carpooling, there and back, no account needed.",
+  tagline: "Group carpooling, there and back, no account for participants.",
   intro:
     "A match, a wedding, a ski weekend: share one link, and everyone sees who is driving, where seats are free and who still has no car.",
   create: "Create an event",
@@ -33,12 +32,12 @@ const EN: Words = {
   steps: [
     [
       "Create the event",
-      "A title, a place, the start time and, if there is a return trip, the end time. No account, no email address.",
+      "A title, a place, the start time and, if there is a return trip, the end time. And your email address, to find your events again.",
     ],
-    ["Share the link", "By text message or in the group chat. Everyone signs up, offers a car or takes a free seat."],
+    ["Share the link", "By text message or in the group chat. Everyone signs up without an account, offers a car or takes a free seat."],
     ["See who still has no car", "A banner shows how many people still have no car, and whether seats are missing."],
   ],
-  deleted: "Events are deleted 30 days after their date.",
+  deleted: "30 days after the event, sign-ups are erased.",
 };
 
 const createLink = (page: Page, words: Words) => page.getByRole("link", { name: words.create, exact: true });
