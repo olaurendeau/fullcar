@@ -842,6 +842,7 @@
     "withoutCar": "{leg} : {count} sans voiture",
     "erasedOn": "Les inscriptions seront effacées le {date}.",
     "erasedSoon": "Les inscriptions seront effacées sous peu.",
+    "transferPending": "Cession en attente de {email}",
     "erased": "Inscriptions effacées",
     "more": "{count, plural, one {Afficher l’autre} other {Afficher les # autres}}",
     "loading": "Chargement de vos événements…",

@@ -842,6 +842,7 @@
     "withoutCar": "{leg}: {count} without a car",
     "erasedOn": "Sign-ups will be erased on {date}.",
     "erasedSoon": "Sign-ups will be erased shortly.",
+    "transferPending": "Handover pending to {email}",
     "erased": "Sign-ups erased",
     "more": "{count, plural, one {Show the other one} other {Show the # others}}",
     "loading": "Loading your events…",

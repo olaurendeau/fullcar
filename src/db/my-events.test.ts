@@ -46,9 +46,27 @@ describe("readMyEventRows", () => {
           anonymised: false,
           persons: 0,
           withoutCar: { aller: 0, retour: 0 },
+          transferEmail: null,
         },
         expect.objectContaining({ id: allerOnly, allerAt: "2026-12-19 09:00:00", retourAt: null }),
       ]);
+    });
+  });
+
+  // OT2.8: the address stays whether the link still serves or not: the row reads only the column.
+  it("reads the address the event is handed to, and none for an event without a handover", async () => {
+    await withRollback(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const handed = await seedEventOf(trx, accountId, { allerAt: "2026-12-19 09:00:00", retourAt: null });
+      const kept = await seedEventOf(trx, accountId, { allerAt: "2026-12-20 09:00:00", retourAt: null });
+      await trx
+        .updateTable("event")
+        .set({ transfer_email: "dominique@exemple.fr", transfer_status: "sent", transfer_status_at: new Date() })
+        .where("id", "=", handed)
+        .execute();
+      const rows = await readMyEventRows(trx, accountId);
+      expect(rows.find((row) => row.id === handed)).toMatchObject({ transferEmail: "dominique@exemple.fr" });
+      expect(rows.find((row) => row.id === kept)).toMatchObject({ transferEmail: null });
     });
   });
 

@@ -29,6 +29,8 @@ export interface MyEventRow {
   persons: number;
   /** The persons without a car, on each leg. */
   withoutCar: Record<Leg, number>;
+  /** The address the event is being handed to, while the handover waits, its link expired or not (OT2.8). */
+  transferEmail: string | null;
 }
 
 /** The persons without a car on one leg, for the amber badge (`MyEvents.withoutCar`). */
@@ -50,6 +52,8 @@ interface CountedEvent extends ListedEvent {
   persons: number;
   /** One per leg of the event with at least one person without a car, aller first (OA6.2). */
   withoutCar: LegWithoutCar[];
+  /** `MyEvents.transferPending`: who the event is being handed to, or null (OT2.8). */
+  transferEmail: string | null;
 }
 
 /** Not past yet (OA6.2). */
@@ -90,7 +94,7 @@ function counted(row: MyEventRow): CountedEvent {
   const withoutCar = eventLegs(row.retourAt)
     .map((leg) => ({ leg, count: row.withoutCar[leg] }))
     .filter(({ count }) => count > 0);
-  return { id: row.id, title: row.title, start: row.allerAt, location: row.location, persons: row.persons, withoutCar };
+  return { id: row.id, title: row.title, start: row.allerAt, location: row.location, persons: row.persons, withoutCar, transferEmail: row.transferEmail };
 }
 
 function byStart(a: ListedEvent, b: ListedEvent): number {
