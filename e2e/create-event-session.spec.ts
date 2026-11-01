@@ -44,6 +44,9 @@ async function signedIn(page: Page, db: Kysely<Database>) {
   return { email, accountId, session };
 }
 
+const HINT = "Pour retrouver vos événements, sans mot de passe. Les participants n’ont jamais à en donner.";
+const HINT_EN = "To find your events again, with no password. Participants never have to give one.";
+
 const field = (page: Page, label: string) => page.getByLabel(label, { exact: true });
 const createButton = (page: Page) => page.getByRole("button", { name: "Créer", exact: true });
 const emailField = (page: Page) => field(page, "Votre adresse e-mail");
@@ -160,7 +163,8 @@ test.describe("Créer avec une session", () => {
     await expect(emailField(page)).toHaveValue("");
     const message = "Votre session a pris fin : saisissez votre adresse e-mail, puis « Créer ».";
     await expect(page.getByText(message, { exact: true })).toBeVisible();
-    await expect(emailField(page)).toHaveAccessibleDescription(message);
+    // The hint of the field, then the words of the ended session (OA1.1, OA1.5).
+    await expect(emailField(page)).toHaveAccessibleDescription(`${HINT} ${message}`);
     await expect(field(page, "Titre")).toHaveValue(ENDED_TITLE);
     await expect(field(page, "Heure de fin")).toHaveValue("18:00");
     expect(new URL(page.url()).pathname).toBe(NEW_EVENT);
@@ -242,7 +246,7 @@ test.describe("Create with a session, in English", () => {
     await page.getByRole("button", { name: "Create", exact: true }).click();
     const message = "Your session has ended: enter your email address, then “Create”.";
     await expect(page.getByText(message, { exact: true })).toBeVisible();
-    await expect(page.getByLabel("Your email address", { exact: true })).toHaveAccessibleDescription(message);
+    await expect(page.getByLabel("Your email address", { exact: true })).toHaveAccessibleDescription(`${HINT_EN} ${message}`);
     await expect(page.getByText(`Signed in as ${email}`, { exact: false })).toHaveCount(0);
   });
 });

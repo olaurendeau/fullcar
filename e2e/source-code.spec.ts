@@ -141,7 +141,7 @@ test.describe("the source code link, in a browser set to French", () => {
     await open(page, "/nouveau", "Créer un événement");
     await pressUntil(page, "Tab", languageSwitch(page, FR));
     await press(page, "Tab");
-    await expect(page.getByRole("link", { name: "Confidentialité", exact: true })).toBeFocused();
+    await expect(page.locator("footer").getByRole("link", { name: "Confidentialité", exact: true })).toBeFocused();
     await press(page, "Tab");
     const link = sourceLink(page, FR);
     await expect(link).toBeFocused();

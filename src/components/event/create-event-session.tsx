@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleCheck } from "lucide-react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { Ref } from "react";
 import { Input } from "@/components/ui/input";
@@ -70,8 +71,9 @@ export function SessionLine({
 }
 
 /**
- * The address field, just above « Créer » (OA1.1, OA1.4, OA1.5): shown once a session has ended
- * or been closed here. Its error, or the words of the ended session, shows under it and
+ * The address field, just above « Créer » (OA1.1, OA1.4, OA1.5): without a session. With `hint`,
+ * the sentence that says what it is for and that no participant gives one, then the link to
+ * « Confidentialité » (OA1.1). Its error, or the words of the ended session, shows under it and
  * describes it.
  */
 export function EmailField({
@@ -81,6 +83,7 @@ export function EmailField({
   inputRef,
   onChange,
   readOnly = false,
+  hint = false,
 }: {
   id: string;
   value: string;
@@ -89,10 +92,14 @@ export function EmailField({
   onChange: (value: string) => void;
   /** While the address is being sent (« Corriger l’adresse », OA2.5): it is shown, not changed. */
   readOnly?: boolean;
+  hint?: boolean;
 }) {
   const t = useTranslations("CreateEvent");
+  const tContact = useTranslations("Contact");
   const tErrors = useTranslations("FormErrors");
   const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+  const describedBy = [hint && hintId, problem && errorId].filter(Boolean).join(" ") || undefined;
   const message =
     problem === "sessionEnded"
       ? t("email.sessionEnded")
@@ -112,13 +119,22 @@ export function EmailField({
         id={id}
         type="email"
         autoComplete="email"
+        required
         className="h-10"
         value={value}
         readOnly={readOnly}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={problem ? true : undefined}
-        aria-describedby={problem ? errorId : undefined}
+        aria-describedby={describedBy}
       />
+      {hint && (
+        <p className="text-[13px] leading-[18px] text-muted-foreground">
+          <span id={hintId}>{t("email.hint")}</span>{" "}
+          <Link href="/confidentialite" prefetch={false} className="rounded-sm underline underline-offset-4 focus-visible:focus-ring">
+            {tContact("privacy")}
+          </Link>
+        </p>
+      )}
       {message && (
         <p id={errorId} className="text-[13px] leading-[18px] text-destructive">
           {message}

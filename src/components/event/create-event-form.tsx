@@ -33,8 +33,10 @@ const noSubscription = () => () => {};
  *
  * With a session open in the browser (#613, OA1.3), the token of session-token.ts goes to
  * `createEvent` in the body, and a line says whose the event will be, asked after the load:
- * the HTML depends on no session. The address field is shown once a session has ended (OA1.5)
- * or been closed here (OA1.8); the values typed are kept in both cases.
+ * the HTML depends on no session. Without a session the address field is there, required
+ * (OA1.1, OA1.4): it is hidden only for an open session, or while the server has not yet said
+ * whether the one kept is open. It comes back once a session has ended (OA1.5) or been closed
+ * here (OA1.8); the values typed are kept in both cases.
  */
 export function CreateEventForm() {
   const t = useTranslations("CreateEvent");
@@ -53,8 +55,11 @@ export function CreateEventForm() {
   const [errors, setErrors] = useState<EventErrors>({});
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
-  // The open session's address, once the server has said; and what asks for the address field instead (OA1.5, OA1.8).
+  // The open session's address, once the server has said; and what put the line of the session in its place (OA1.5, OA1.8).
   const [account, setAccount] = useState<string>();
+  // A session token is kept in this browser, and whether the server has answered about it.
+  const keepsSession = useSyncExternalStore(noSubscription, () => readSessionToken() !== undefined, () => false);
+  const [answered, setAnswered] = useState(false);
   const [emailAsked, setEmailAsked] = useState<"sessionEnded" | "signedOut">();
   const [email, setEmail] = useState("");
   const [emailProblem, setEmailProblem] = useState<EmailProblem>();
@@ -71,7 +76,9 @@ export function CreateEventForm() {
     if (token === undefined) return;
     let current = true;
     void sendAction(() => signedInAs(token)).then((sent) => {
-      if (!current || !sent.ok) return;
+      if (!current) return;
+      setAnswered(true);
+      if (!sent.ok) return;
       const answer = sent.value as { email?: unknown } | null;
       if (typeof answer?.email === "string") setAccount(answer.email);
       // A session the server says ended never comes back: the form is the one of no session.
@@ -87,6 +94,9 @@ export function CreateEventForm() {
     focusEmail.current = false;
     emailRef.current?.focus();
   });
+
+  // Required without a session (OA1.1); hidden for an open one, and until the server has said if the one kept is.
+  const showEmail = account === undefined && !(keepsSession && !answered);
 
   // The place and its position go together, both among the values, `null` without one (« Un lieu, une valeur »).
   const fields: EventFields = { ...eventFields.values, ...options };
@@ -119,7 +129,7 @@ export function CreateEventForm() {
     if (inFlight.current) return;
     setFailed(false);
     const checked = validateEvent(fields, deviceBounds(new Date()));
-    const address = emailAsked ? emailAddress(email) : undefined;
+    const address = showEmail ? emailAddress(email) : undefined;
     const addressError = address && "error" in address ? address.error : undefined;
     if (!checked.ok || addressError) return showErrors(checked.ok ? {} : checked.errors, addressError);
     // The fields are right now: an earlier error, from either side, no longer holds.
@@ -130,7 +140,7 @@ export function CreateEventForm() {
     try {
       // Read now, not at the load: a session closed or ended meanwhile is no longer kept (OA1.5).
       const session = readSessionToken();
-      const result = await createEvent({ ...fields, ...(session !== undefined && { session }), ...(emailAsked && { email }) });
+      const result = await createEvent({ ...fields, ...(session !== undefined && { session }), ...(showEmail && { email }) });
       if (result.ok) {
         // This browser created it: it keeps the token, then goes to the area, no fragment (OA1.6).
         keepAdminToken(result.id, result.token);
@@ -177,8 +187,8 @@ export function CreateEventForm() {
           />
         ))}
       </div>
-      {emailAsked && (
-        <EmailField id={idOf("email")} value={email} problem={emailProblem} inputRef={emailRef} onChange={setEmail} />
+      {showEmail && (
+        <EmailField id={idOf("email")} value={email} problem={emailProblem} inputRef={emailRef} onChange={setEmail} hint />
       )}
       {failed && (
         <p role="alert" className="text-sm text-destructive">

@@ -51,6 +51,7 @@
     "create": "Créer",
     "email": {
       "label": "Votre adresse e-mail",
+      "hint": "Pour retrouver vos événements, sans mot de passe. Les participants n’ont jamais à en donner.",
       "invalid": "Adresse e-mail non valide.",
       "sessionEnded": "Votre session a pris fin : saisissez votre adresse e-mail, puis « Créer »."
     },

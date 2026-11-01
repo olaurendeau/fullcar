@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import type { BrowserContext, Page, Response } from "@playwright/test";
+import type { Kysely } from "kysely";
+import type { Database } from "@/db/schema";
 import { formatDate } from "@/i18n/format-date";
 import { expect, expectText, expectUrl, leaveNoToken, test } from "./fixtures";
+import { newAddress } from "./mailbox";
 import { adminTokenKey, keepAdminToken } from "./organiser";
 
 leaveNoToken();
@@ -35,6 +38,7 @@ const WORDS = {
     allerTime: "Heure de début",
     retour: "Retour",
     retourTime: "Heure de fin",
+    email: "Votre adresse e-mail",
     options: ["Rehausseurs", "Participation aux frais", "Points de RDV"],
     create: "Créer",
     newEvent: "Créer un événement",
@@ -55,6 +59,7 @@ const WORDS = {
     allerTime: "Start time",
     retour: "Return",
     retourTime: "End time",
+    email: "Your email address",
     options: ["Booster seats", "Cost sharing", "Meeting points"],
     create: "Create",
     newEvent: "Create an event",
@@ -110,7 +115,7 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
   test.describe(`the organiser's journey, ${name}`, () => {
     test.use({ locale, timezoneId });
 
-    test("A2.2, C1.4, C1.12, C5.9, C7.1: at most seven actions from /, six of them on /nouveau, to the link to share, in less than 30 s, in one language", async ({
+    test("A2.2, C1.4, C1.12, C5.9, C7.1: at most eight actions from /, seven of them on /nouveau (OA1.2), to the link to share, in less than 30 s, in one language", async ({
       page,
       baseURL,
     }) => {
@@ -135,10 +140,12 @@ for (const { locale, lang, timezoneId, retour } of JOURNEYS) {
         () => field(page, words.allerDate).fill(allerDate),
         () => field(page, words.allerTime).fill("07:30"),
         retour ? () => field(page, words.retourTime).fill("18:00") : () => field(page, words.retour).click(),
+        // OA1.2: the address, required without a session.
+        () => field(page, words.email).fill(newAddress()),
         () => page.getByRole("button", { name: words.create }).click(),
       ];
-      expect(onForm.length).toBeLessThanOrEqual(6);
-      expect([toForm, ...onForm].length).toBeLessThanOrEqual(7);
+      expect(onForm.length).toBeLessThanOrEqual(7);
+      expect([toForm, ...onForm].length).toBeLessThanOrEqual(8);
       await toForm();
       // Hydrated: "Créer" stays inactive until then. Waiting is not an action.
       await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
@@ -274,6 +281,7 @@ test.describe("the organiser's token on the network", () => {
     await field(page, words.allerDate).fill(await deviceDate(page, 7));
     await field(page, words.allerTime).fill("07:30");
     await field(page, words.retourTime).fill("18:00");
+    await field(page, words.email).fill(newAddress());
     // Waited for, rather than the network going idle: a leak in an answer the page never
     // reads must fail on the token, not on a timeout.
     let checked = page.waitForResponse(isCheck);
@@ -352,8 +360,18 @@ test.describe("the organiser's token on the network", () => {
 test.describe("an event with its three options", () => {
   test.use({ locale: "fr-FR" });
 
+  /** The same address for both events: the pages compared name it (« Envoi du lien à … »). */
+  const address = newAddress();
+
   /** Creates the same event by the form, with or without its options: its organiser's URL. */
-  async function create(page: Page, withOptions: boolean): Promise<string> {
+  async function create(page: Page, db: Kysely<Database>, withOptions: boolean): Promise<string> {
+    const arrived = async (url: string) => {
+      // The notice names the send's result: both events are compared once it is « sent ».
+      await expect
+        .poll(async () => (await db.selectFrom("event").select("send_status").where("pending_email", "=", address).execute()).every((row) => row.send_status === "sent"))
+        .toBe(true);
+      return url;
+    };
     const words = WORDS.fr;
     await page.goto("/nouveau");
     await expect(page.getByRole("button", { name: words.create })).toBeEnabled({ timeout: 15_000 });
@@ -362,11 +380,12 @@ test.describe("an event with its three options", () => {
     await field(page, words.allerDate).fill(await deviceDate(page, 7));
     await field(page, words.allerTime).fill("07:30");
     await field(page, words.retourTime).fill("18:00");
+    await field(page, words.email).fill(address);
     if (withOptions) for (const option of words.options) await field(page, option).check();
     await page.getByRole("button", { name: words.create }).click();
     await expectUrl(page, ARRIVAL, "the organiser's link");
     await expect(page.getByRole("region", { name: words.panel })).toBeVisible();
-    return page.url();
+    return arrived(page.url());
   }
 
   /**
@@ -478,7 +497,7 @@ test.describe("an event with its three options", () => {
         .where("id", "=", new URL(url).pathname.split("/")[2])
         .executeTakeFirstOrThrow();
 
-    const plainUrl = await create(page, false);
+    const plainUrl = await create(page, db, false);
     expect(await options(plainUrl)).toEqual({
       boosters_enabled: false,
       participation_enabled: false,
@@ -487,7 +506,7 @@ test.describe("an event with its three options", () => {
     const plain = await markup(page, plainUrl);
 
     // Stored with its three options: otherwise, two events without any would compare equal.
-    const withOptionsUrl = await create(page, true);
+    const withOptionsUrl = await create(page, db, true);
     expect(await options(withOptionsUrl)).toEqual({
       boosters_enabled: true,
       participation_enabled: true,

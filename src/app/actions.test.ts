@@ -90,7 +90,7 @@ async function create(fields: unknown) {
       ? await trx.selectFrom("event").selectAll().where("id", "=", result.id).executeTakeFirstOrThrow()
       : undefined;
     return { result, row, added: (await countEvents(trx)) - before };
-  });
+  }, withRollbackRecordingSends);
 }
 
 async function created(fields: unknown) {
@@ -116,7 +116,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const valid: EventFields = {
+// The address is required (OA1.4): every event here is created with one, its send recorded.
+const valid: EventFields & { email: string } = {
+  email: anAddress(),
   title: "  Match à Lyon ",
   location: "Gymnase Jean Macé",
   allerDate: "2026-12-12",
@@ -148,7 +150,16 @@ describe("createEvent", () => {
         allerTime: "required",
         retourDate: "required",
         retourTime: "required",
+        email: "required",
       });
+    });
+
+    it("OA1.4: creates nothing without an address nor a session, whatever else is right", async () => {
+      const withoutAddress: Partial<typeof valid> = { ...valid };
+      delete withoutAddress.email;
+      expect(await refused(withoutAddress)).toEqual({ email: "required" });
+      expect(await refused({ ...valid, email: "abc" })).toEqual({ email: "invalid" });
+      expect(await refused({ ...valid, email: "a".repeat(255) })).toEqual({ email: "tooLong" });
     });
 
     it("creates nothing when the retour does not follow the aller", async () => {
@@ -188,6 +199,7 @@ describe("createEvent", () => {
         location: "required",
         allerDate: "required",
         allerTime: "required",
+        email: "required",
       });
     });
 

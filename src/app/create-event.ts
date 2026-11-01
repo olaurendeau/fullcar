@@ -15,8 +15,8 @@ import type { Locale } from "@/i18n/locales";
 /*
  * Creating an event (epic #3; epic #581, OA1): with the session of an account, the event is
  * the account's at once (OA1.3); with an address, it is pending, and a confirmation link
- * goes to the address once the answer has gone (OA1.6, OA1.7). Until « adresse obligatoire »
- * (#614), a request with neither still creates an event without an organiser.
+ * goes to the address once the answer has gone (OA1.6, OA1.7). A request with neither
+ * creates nothing: the address is required (OA1.4, #614).
  * Never log a token nor an address: fixed words only, and a database error's code.
  */
 
@@ -38,8 +38,8 @@ export interface Creation {
   later: (task: () => Promise<void>) => void;
 }
 
-/** Who the event is for, once read: the account of a live session, an address, or nobody (until #614). */
-type Organiser = { accountId: string } | { email: string } | null;
+/** Who the event is for, once read: the account of a live session, or an address. */
+type Organiser = { accountId: string } | { email: string };
 
 /** An own field of the body, as it came: anything else carries nothing. */
 function ownField(input: unknown, key: string): unknown {
@@ -53,7 +53,7 @@ function ownField(input: unknown, key: string): unknown {
  * after a session ended included. Otherwise a session sent has ended (OA1.5). Decision: a
  * session that is not a string, or unknown, reads as ended too. — Reason: the server cannot
  * tell it from a session deleted in the database, and either way the form must ask for the
- * address.
+ * address. Otherwise there is no organiser, and the address is required (OA1.4).
  */
 async function organiserOf(input: unknown, { db, now }: Creation): Promise<{ organiser: Organiser } | { error: CreationErrors["email"] }> {
   const session = ownField(input, "session");
@@ -63,11 +63,9 @@ async function organiserOf(input: unknown, { db, now }: Creation): Promise<{ org
     const account = await findSession(db, session, now);
     if (account) return { organiser: { accountId: account.id } };
   }
-  if (email !== undefined) {
-    const address = emailAddress(email);
-    return "error" in address ? { error: address.error } : { organiser: { email: address.value } };
-  }
-  return sent(session) ? { error: "sessionEnded" } : { organiser: null };
+  if (sent(session) && email === undefined) return { error: "sessionEnded" };
+  const address = emailAddress(email);
+  return "error" in address ? { error: address.error } : { organiser: { email: address.value } };
 }
 
 /**
@@ -98,7 +96,6 @@ export async function createEventFor(input: unknown, creation: Creation): Promis
   try {
     stored = await atomically(db, async (trx) => {
       const id = await insertEvent(trx, validation.event, hashAdminToken(token));
-      if (organiser === null) return { id, link: null };
       if ("accountId" in organiser) {
         await writeEventOwner(trx, id, { accountId: organiser.accountId, confirmedAt: now });
         return { id, link: null };
@@ -119,7 +116,7 @@ export async function createEventFor(input: unknown, creation: Creation): Promis
   }
 
   const { id, link } = stored;
-  if (link !== null && organiser !== null && "email" in organiser) {
+  if (link !== null && "email" in organiser) {
     const email = organiser.email;
     creation.later(async () => void (await sendConfirmation(creation, { id, email, token: link, since: now })));
   }
