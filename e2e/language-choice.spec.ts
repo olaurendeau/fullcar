@@ -20,14 +20,14 @@ const WRONG_SECRET = "q3Vx9kLmN2pR7sT1uW4yZQ";
 
 const FR = {
   switch: "English",
-  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
   notFound: "Événement introuvable",
   panel: "Espace organisateur",
   shareLink: "Lien à partager",
 };
 const EN = {
   switch: "Français",
-  tagline: "Group carpooling, there and back, no account needed.",
+  tagline: "Group carpooling, there and back, no account for participants.",
   notFound: "Event not found",
   panel: "Organiser area",
   shareLink: "Link to share",

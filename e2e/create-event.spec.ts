@@ -27,7 +27,7 @@ const FR = {
   failed: "Impossible de créer l’événement. Vérifiez la connexion, puis réessayez.",
   needsJavaScript: "La création d’un événement nécessite JavaScript : activez-le, puis rechargez la page.",
   panel: "Espace organisateur",
-  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
 };
 
 /** Where the form is (#245, A2.1): `/` is to be the home page. */
