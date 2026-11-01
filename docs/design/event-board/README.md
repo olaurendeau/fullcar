@@ -50,10 +50,81 @@
   numéro restent tels quels. Qui voit un numéro ne change pas (DO1). Voir « Ce qui change en
   v4.8 ». Avec elle, les libellés de la v4.5 deviennent « Je ramène aussi des personnes » et
   « J’emmène aussi des personnes » (décision du propriétaire sur #649, 26/10)
+- v4.9 : une icône de voiture devant « Voiture de… » dans l’en-tête de la fiche (demande du
+  propriétaire). Aucun mot nouveau. Voir « Ce qui change en v4.9 »
 - Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
   la maquette `language-switch` depuis sa v3 (#236)
 - Page : `index.html` (autonome, maquettes à 360 px de large)
 - Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
+
+## Ce qui change en v4.9 : l’icône de voiture de l’en-tête
+
+Demande du propriétaire : « une icône de voiture devant « Voiture de… » dans l’en-tête de la
+fiche ». Cette maquette est celle de la fiche (C4.3, `ride-card.tsx`) ; `meeting-points` ne la
+dessine que comme croquis et n’est pas redessinée (voir « Pour le développement »).
+
+**Aujourd’hui** (`origin/main`, `ride-card.tsx`) : l’en-tête est un `div.flex.items-start.justify-between.gap-2`
+avec, à gauche, le `h3` « Voiture de {conducteur} » (`min-w-0 font-semibold wrap-anywhere`), à
+droite l’horloge et l’heure, puis « Complet » s’il y a lieu. Les lignes de dessous portent déjà
+des icônes lucide de 16 px en `text-muted-foreground` : `MapPin`, `User`, `Clock`, le téléphone.
+
+**La règle** :
+- **Icône** : `Car` de `lucide-react` (déjà utilisé par l’état vide et les feuilles ; aucune
+  dépendance nouvelle).
+- **Taille et couleur** : `size-4 shrink-0 text-muted-foreground`, comme les autres icônes de la
+  fiche. Elle est plus discrète que le titre (`font-semibold`, couleur du texte) : c’est le
+  titre qui nomme la voiture, l’icône l’annonce. `visual-identity` ne fixe aucune règle
+  d’icône de fiche au-delà de VI4.3 (marque : `aria-hidden`, hors lien) ; l’icône de fiche n’est
+  pas la marque et reste grise, pas pétrole.
+- **Décorative** : `aria-hidden`, placée hors du `h3`, sœur de celui-ci. Le nom de l’article
+  (`aria-labelledby`) et du titre reste exactement « Voiture de {conducteur} » ; le lecteur
+  d’écran ne lit rien de plus.
+- **Disposition** : le côté gauche de l’en-tête devient `flex min-w-0 items-start gap-2`
+  (icône, puis `h3`). L’icône prend `mt-1` : sur la première ligne du titre (24 px), elle est
+  centrée comme `MapPin` l’est sur ses 20 px (`mt-0.5`). Le côté droit ne change pas (`shrink-0`).
+  Le `h3` garde `min-w-0` et `wrap-anywhere`, donc un nom long passe à la ligne, l’icône reste
+  à côté de la première ligne.
+- **Focus** : l’anneau de `focusCarTitle` entoure toujours le `h3` seul, l’icône est hors de
+  l’anneau.
+- **Autres endroits** : seul l’en-tête de la fiche change. L’icône `Car` de l’état vide, des
+  feuilles et de « Proposer une voiture » ne bouge pas.
+
+Mesuré dans Chrome headless, maquette à 360 px, nom de 50 caractères sans espace et « Complet » :
+le nom occupe 4 lignes de 132 px, son bord droit est à 8 px de l’heure, rien ne se recouvre et
+la page n’a pas de défilement horizontal.
+
+### Critères de la v4.9
+
+- CI1.1 L’en-tête d’une fiche contient une icône `Car` (un `svg` de lucide) avant « Voiture de
+  {conducteur} », dans l’ordre du DOM : icône, `h3`, puis l’heure.
+- CI1.2 L’icône mesure 16 × 16 px et a la couleur calculée des icônes `MapPin` et `Clock` de la
+  même fiche.
+- CI1.3 L’icône a `aria-hidden="true"` et n’est pas dans le `h3` ; `getByRole('article', { name:
+  'Voiture de Marc' })` et `getByRole('heading', { name: 'Voiture de Marc' })` trouvent chacun une
+  seule fiche, nom inchangé ; le texte du `h3` est exactement « Voiture de Marc ».
+- CI1.4 À 360 px de large, un prénom de 40 caractères sans espace, l’heure et « Complet » : les
+  boîtes de l’icône, du `h3` et du côté droit ne se recouvrent pas, la boîte du `h3` ne dépasse
+  pas celle de la fiche, et `document.documentElement.scrollWidth` n’excède pas la largeur de
+  la fenêtre.
+- CI1.5 Même vérification en anglais (« Marc’s car », « 7:15 AM ») : mêmes boîtes, mêmes
+  résultats.
+- CI1.6 Le haut de l’icône est dans la première ligne du titre : son centre vertical est à 1 px
+  près celui de cette ligne, avec un titre sur une seule ligne et avec un titre sur plusieurs.
+- CI1.7 Le focus donné par script au `h3` (« Voir la voiture ») ne change pas, et l’icône ne
+  reçoit jamais le focus.
+- CI1.8 Les 15 voitures d’un leg ont chacune l’icône ; une voiture avec « Complet » ne la perd pas.
+
+### Hors périmètre de la v4.9
+
+Une autre icône pour « Complet » ; la couleur pétrole pour l’icône ; l’icône dans les barres,
+les feuilles ou l’espace organisateur ; une icône dans le titre des fiches de l’organisateur.
+
+### Pour le développement
+
+`src/components/event/ride-card.tsx` seul, plus un test Playwright de CI1.1 à CI1.5. Les
+Vitest et e2e qui cherchent le titre par son nom ne changent pas. Ne pas mettre l’icône dans
+le `h3`, ni lui donner `aria-label`. `meeting-points` dessine un en-tête de fiche sans icône : ce
+croquis n’est pas l’écran, et l’en-tête de référence est celui de cette maquette.
 
 ## Ce qui change en v4.8 : le numéro au bon moment, obligatoire pour qui conduit (#766)
 
@@ -5509,3 +5580,7 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
     serveur.
   - La v4.7 n’y change pas d’un octet. Republiée à la même URL : version 37 de l’artifact,
     `index.html` sha1 `3d949fe67e46a1bc32569bdc1d637a967b6ba59a`.
+- v4.9 (2026-10-31) : l’icône de voiture devant « Voiture de… » (demande du propriétaire).
+  Aucun mot nouveau. La page ajoute la section « L’icône de voiture de l’en-tête (v4.9) » et
+  l’icône dans les 36 en-têtes de fiche déjà dessinés. Critères CI1.1 à CI1.8. Republiée à la
+  même URL. Pas encore relue en revue de design.
