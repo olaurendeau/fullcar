@@ -80,6 +80,16 @@ for (const locale of ["fr", "en"] as const) {
       expect(await shown(page)).toEqual(expected);
     });
 
+    test(`OT8.4: "What we keep" says what is kept of a pending handover, under the event (${locale})`, async ({
+      page,
+    }) => {
+      await page.goto("/confidentialite");
+      const event = page.getByRole("heading", { level: 3, name: message(messages, "Privacy.keep.event.title") });
+      const items = event.locator("xpath=following-sibling::ul[1]/li");
+      await expect(items.nth(5)).toHaveText(message(messages, "Privacy.keep.event.transfer"));
+      await expect(items).toHaveCount(6);
+    });
+
     test(`OA10.4: the title of the tab is the page's (${locale})`, async ({ page }) => {
       await page.goto("/confidentialite");
       await expect(page).toHaveTitle(message(messages, "Privacy.title"));
