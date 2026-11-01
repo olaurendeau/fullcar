@@ -33,8 +33,10 @@ type Shown = "ready" | LinkScreen | "sent";
 /**
  * The page of a link in an email (OA5.1 to OA5.8): `/connexion/lien` signs in, `/connexion/confirmer`
  * confirms the address of an event and signs in. Opening it asks the server nothing, so that a
- * scanner of emails that follows the link uses nothing up (OA5.1): the token is read from the
- * fragment, `location.hash`, on the press of the button, and goes in the body of the action, in no URL.
+ * scanner of emails that follows the link uses nothing up (OA5.1): the fragment, `location.hash`, is
+ * read at render only to tell whether it has the shape of a token, and nothing is sent. On the press
+ * of the button it is read again and handed to `link-browser.ts`, which takes the token out with
+ * `linkTokenOf` and puts it in the body of the action, in no URL.
  * Once a session is open the browser keeps it (OA5.9) and leaves for the page the link leads to
  * (OA4.4) with `router.replace`, which takes the fragment out of the address bar and of the
  * history (OA5.2); the bar of the root layout says whose session it is (arrival-bar.tsx).
@@ -87,7 +89,10 @@ export function LinkPage({ kind }: { kind: "login" | "confirm" }) {
     setAfter(screen);
   }
 
-  /** « Se connecter » or « Confirmer et se connecter »: the fragment is read now, and only now. */
+  /**
+   * « Se connecter » or « Confirmer et se connecter »: the fragment, read at render for its shape only, is read
+   * again, and `link-browser.ts` takes the token out of it and sends it.
+   */
   async function open() {
     if (inFlight.current || hash === null) return;
     inFlight.current = true;

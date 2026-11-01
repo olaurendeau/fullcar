@@ -74,7 +74,14 @@ celui qui écrit le code.
   lu dans l'URL, et un fragment sur `/e/{id}/admin` est ignoré (OA7.5). Un jeton d'admin lu
   dans l'URL, fragment compris, ou rangé sous une autre clé, est bloquant. Ce point ne vaut
   que pour le jeton d'admin : les liens de connexion et de confirmation
-  (`src/email/messages.ts`) portent toujours leur jeton dans le fragment.
+  (`src/email/messages.ts`) portent toujours leur jeton dans le fragment. Seul
+  `src/app/connexion/link-fragment.ts` (`linkTokenOf`) extrait le jeton de lien de la chaîne
+  du fragment dans le navigateur ; il servira aussi aux liens de cession (#950). Il ne lit pas
+  l'adresse : `link-page.tsx` lit `window.location.hash` et le lui donne, à l'affichage
+  (pour savoir si le fragment a la forme d'un jeton, sans rien envoyer) et à l'appui sur le
+  bouton, par `link-browser.ts` qui envoie le jeton dans le corps de l'action. Un jeton de lien
+  extrait du fragment ailleurs, lu dans le chemin ou la requête, ou rangé dans `localStorage`,
+  est bloquant.
 - À partir de #66, le jeton personnel est tiré **par le navigateur** avec
   `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
   avant l'envoi. Un jeton personnel tiré
