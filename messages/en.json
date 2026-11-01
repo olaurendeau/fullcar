@@ -556,7 +556,8 @@
         "description": "the description, if the organiser wrote one;",
         "options": "the options turned on;",
         "adminToken": "the fingerprint of the admin token of the browser that created it, when there is one;",
-        "pending": "until the organiser’s address is confirmed: the email address entered at creation, and the outcome of the last sending of the confirmation link (in progress, sent, failed or limit reached), with its date."
+        "pending": "until the organiser’s address is confirmed: the email address entered at creation, and the outcome of the last sending of the confirmation link (in progress, sent, failed or limit reached), with its date.",
+        "transfer": "while a handover is pending: the address of the person the event is handed over to, kept on the event 30 days after its date at the latest, then erased from the event; it also stays in the list of emails sent, which is used to limit how many go out (see “To limit emails”)."
       },
       "organiser": {
         "title": "For the organiser",
@@ -569,7 +570,7 @@
       },
       "sends": {
         "title": "To limit emails",
-        "body": "For each confirmation or sign-in email: the recipient’s address, the kind of email, the event if there is one, and the date. This also applies to an address with no account, when someone asks to sign in with it. This is what stops anyone from flooding an address."
+        "body": "For each confirmation, sign-in or handover email: the recipient’s address, the kind of email, the event if there is one, and the date. This also applies to an address with no account, when someone asks to sign in with it. This is what stops anyone from flooding an address."
       },
       "logs": {
         "title": "Logs",
@@ -624,7 +625,7 @@
       "intro": "Each one receives only what it needs. For those that transfer data outside the European Union, the safeguard is given on their line: the European Commission’s standard contractual clauses (Decision 2021/914), or the EU–US Data Privacy Framework.",
       "vercel": "Vercel (Vercel Inc., United States) hosts the site. Our functions run in Frankfurt, Germany; Vercel’s network receives each request at the point closest to you, wherever you are. Like any host, Vercel sees your IP address and what your browser asks for. It also counts visits (see “What we do not do”). Transfers: standard contractual clauses, and certification under the Data Privacy Framework.",
       "neon": "Neon hosts the database in Frankfurt, Germany (AWS eu-central-1). The contract is with Databricks, Inc. (United States), which runs Neon. The database holds everything listed in “What we keep”. The data is stored in the European Union; access from outside the Union, by Databricks or its subprocessors, remains possible, and it is covered by the standard contractual clauses.",
-      "brevo": "Brevo (Brevo SAS, RCS Paris 498 019 298, 9-17 rue Salneuve, 75017 Paris, France) sends the account’s four emails. It receives the recipient’s address and the email, which contains the sign-in or confirmation link; never your IP address, nor a title, a place or a first name. It may count opens and clicks, in an anonymised way, without tying them to the recipient (see “What we do not do”). Brevo hosts its data at OVH (France) and Google Cloud (Belgium); its delivery network, Cloudflare (United States), is covered by the Data Privacy Framework and the standard contractual clauses.",
+      "brevo": "Brevo (Brevo SAS, RCS Paris 498 019 298, 9-17 rue Salneuve, 75017 Paris, France) sends the account’s five emails. It receives the recipient’s address and the email, which contains the sign-in, confirmation or handover link; never your IP address, nor a title, a place or a first name. It may count opens and clicks, in an anonymised way, without tying them to the recipient (see “What we do not do”). Brevo hosts its data at OVH (France) and Google Cloud (Belgium); its delivery network, Cloudflare (United States), is covered by the Data Privacy Framework and the standard contractual clauses.",
       "sentry": "Sentry (Functional Software, Inc., United States) receives error reports, through our own address, and stores them in Frankfurt, Germany. They are rebuilt before they leave: no first name, no number, no email address, no token, no description. What else Sentry keeps, IP address included, depends on its settings and its policy. Access from outside the Union, by Sentry or its subprocessors, remains possible: it is covered by the Data Privacy Framework, with standard contractual clauses as a fallback.",
       "photon": "Photon, komoot’s public instance, hosted in Germany, suggests places while you type. Our server is what asks it: Photon receives the text typed, the language and, if known, the event’s area rounded to about 10 km, never your IP address.",
       "geoapify": "Geoapify (KEPTAGO LTD, Paphos, Cyprus; servers in the European Union, according to its policy) provides the map backgrounds. Our server is what asks for them: Geoapify sees which parts of the map are requested, so the area looked at, never your IP address or your browser.",
