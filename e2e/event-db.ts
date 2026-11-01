@@ -3,6 +3,7 @@ import { removeRetour } from "@/app/e/[id]/retour";
 import { lockEvent, writeEventFields, type EventFieldsChange } from "@/db/events";
 import { countLegRows } from "@/db/legs";
 import type { Database } from "@/db/schema";
+import { seedLink } from "@/db/test-accounts";
 import { atomically } from "@/db/transaction";
 
 /*
@@ -29,3 +30,16 @@ export async function editEventInDb(db: Kysely<Database>, eventId: string, chang
 
 /** The retour of event `eventId` removed, with what it held. */
 export const removeRetourInDb = (db: Kysely<Database>, eventId: string) => editEventInDb(db, eventId, { retourAt: null });
+
+/**
+ * A handover waiting on `email` (epic #935), as a sent transfer email leaves it: the address
+ * on the event and its link, made now or at `linkCreatedAt` (older than 7 days: expired).
+ */
+export async function startTransferInDb(db: Kysely<Database>, eventId: string, email: string, linkCreatedAt?: Date) {
+  await db
+    .updateTable("event")
+    .set({ transfer_email: email, transfer_status: "sent", transfer_status_at: linkCreatedAt ?? new Date() })
+    .where("id", "=", eventId)
+    .execute();
+  await seedLink(db, { kind: "transfer", eventId }, { createdAt: linkCreatedAt });
+}

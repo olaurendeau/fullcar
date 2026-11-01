@@ -23,7 +23,7 @@ const FR = {
   source: "Code source sur GitHub (s’ouvre dans un nouvel onglet)",
   contact: "Nous contacter (s’ouvre dans un nouvel onglet)",
   panel: "Espace organisateur",
-  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
 };
 type Words = typeof FR;
 const EN: Words = {
@@ -33,7 +33,7 @@ const EN: Words = {
   source: "Source code on GitHub (opens in a new tab)",
   contact: "Contact us (opens in a new tab)",
   panel: "Organiser area",
-  tagline: "Group carpooling, there and back, no account needed.",
+  tagline: "Group carpooling, there and back, no account for participants.",
 };
 
 /**

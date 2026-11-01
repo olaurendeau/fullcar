@@ -2,7 +2,9 @@ import { randomBytes } from "node:crypto";
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import { anonymiseEvent, deleteEvent, findDayThirtyEvents } from "./day-thirty";
+import { writeTransfer } from "./events";
 import type { Database } from "./schema";
+import { anAddress, seedLink } from "./test-accounts";
 import { withRollback } from "./test-db";
 import { confirmSeededEvent, seedEvent } from "./test-events";
 import { seedPerson, seedPlacement, seedRide, seedStop } from "./test-participants";
@@ -107,6 +109,32 @@ describe("anonymiseEvent", () => {
         description: null,
         anonymised_at: expect.any(Date),
       });
+    });
+  });
+
+  // OT7.1: without it, `event_transfer_open` refuses the anonymisation of an event that is being handed over.
+  it("OT7.1: erases the handover that waits, its address and its result, and its transfer links, and nothing of another event's", async () => {
+    await withRollback(async (trx) => {
+      const id = await seedFullEvent(trx);
+      await confirmSeededEvent(trx, id);
+      const email = anAddress();
+      await writeTransfer(trx, id, { email, status: "sending", at: new Date() });
+      await seedLink(trx, { kind: "transfer", eventId: id });
+      await seedLink(trx, { kind: "transfer", eventId: id }, { usedAt: new Date() });
+      const other = await seedFullEvent(trx);
+      await confirmSeededEvent(trx, other);
+      const otherEmail = anAddress();
+      await writeTransfer(trx, other, { email: otherEmail, status: "sending", at: new Date() });
+      await seedLink(trx, { kind: "transfer", eventId: other });
+
+      await anonymiseEvent(trx, id);
+
+      const after = await eventRow(trx, id);
+      expect(after).toMatchObject({ transfer_email: null, transfer_status: null, transfer_status_at: null, anonymised_at: expect.any(Date) });
+      expect(await rowsOf(trx, id)).toMatchObject({ links: 0 });
+      expect(JSON.stringify(after)).not.toContain(email);
+      expect(await eventRow(trx, other)).toMatchObject({ transfer_email: otherEmail });
+      expect(await rowsOf(trx, other)).toMatchObject({ links: 2 });
     });
   });
 

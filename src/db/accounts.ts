@@ -122,7 +122,10 @@ export async function eraseAccount(db: Kysely<Database>, accountId: string, admi
 /**
  * What erasing an account comes to, under the lock of its sessions (OA9.5, decision 4 on #581):
  * its anonymised events are deleted; its other events stay open, without account and without
- * admin token, as are the events whose token `adminTokens` holds; the pending events created
+ * admin token, as are the events whose token `adminTokens` holds; the handovers that wait on its
+ * events (OT7.2), or that wait on its address on an event of another organiser (decision 4 on
+ * #935), are cancelled: the address and its result cleared, the transfer links deleted, before
+ * `account_id` is set to null (`event_transfer_open`); the pending events created
  * elsewhere with its address lose that address and their confirmation links; its sign-in links,
  * its sends and its sessions are deleted; then the account, so that its address is in no table.
  *
@@ -139,11 +142,12 @@ async function eraseHeld(db: Kysely<Database>, accountId: string, adminTokens: r
 
   const events = await db
     .selectFrom("event")
-    .select(["id", "account_id", "anonymised_at", "pending_email", "admin_token_hash"])
+    .select(["id", "account_id", "anonymised_at", "pending_email", "transfer_email", "admin_token_hash"])
     .where((eb) =>
       eb.or([
         eb("account_id", "=", accountId),
         eb("pending_email", "=", email),
+        eb("transfer_email", "=", email),
         ...(keys.length > 0 ? [eb("admin_token_hash", "in", keys)] : []),
       ]),
     )
@@ -154,11 +158,22 @@ async function eraseHeld(db: Kysely<Database>, accountId: string, adminTokens: r
   const ended = own.filter((event) => event.anonymised_at !== null).map((event) => event.id);
   const open = own.filter((event) => event.anonymised_at === null).map((event) => event.id);
   const pending = events.filter((event) => event.account_id !== accountId && event.pending_email === email).map((event) => event.id);
+  // Whatever waits on the account's events, or on its address: the handover goes, not the event.
+  const handovers = events
+    .filter((event) => event.transfer_email !== null && (event.account_id === accountId || event.transfer_email === email))
+    .map((event) => event.id);
   const revoked = events
     .filter((event) => event.anonymised_at === null)
     .filter((event) => event.account_id === accountId || keys.some((key) => event.admin_token_hash?.equals(key)))
     .map((event) => event.id);
 
+  if (handovers.length > 0) {
+    await db
+      .updateTable("event")
+      .set({ transfer_email: null, transfer_status: null, transfer_status_at: null })
+      .where("id", "in", handovers)
+      .execute();
+  }
   if (revoked.length > 0) await db.updateTable("event").set({ admin_token_hash: null }).where("id", "in", revoked).execute();
   if (open.length > 0) await db.updateTable("event").set({ account_id: null }).where("id", "in", open).execute();
   if (pending.length > 0) await db.updateTable("event").set({ pending_email: null }).where("id", "in", pending).execute();
@@ -168,7 +183,13 @@ async function eraseHeld(db: Kysely<Database>, accountId: string, adminTokens: r
   const links = await db
     .selectFrom("email_link")
     .select("token_hash")
-    .where((eb) => eb.or([eb("account_id", "=", accountId), ...(pending.length > 0 ? [eb("event_id", "in", pending)] : [])]))
+    .where((eb) =>
+      eb.or([
+        eb("account_id", "=", accountId),
+        ...(pending.length > 0 ? [eb("event_id", "in", pending)] : []),
+        ...(handovers.length > 0 ? [eb.and([eb("event_id", "in", handovers), eb("kind", "=", "transfer")])] : []),
+      ]),
+    )
     .orderBy("token_hash")
     .forUpdate()
     .execute();

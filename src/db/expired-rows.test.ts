@@ -5,6 +5,7 @@ import { anAddress, seedAccount, seedLink, seedSends, seedSession } from "./test
 import { withRollback } from "./test-db";
 import { confirmSeededEvent, seedEvent } from "./test-events";
 import { tokenKey } from "./token-key";
+import { clearTransfer, writeTransfer } from "./events";
 import { deleteExpiredRows } from "./expired-rows";
 
 type Db = Kysely<Database>;
@@ -157,6 +158,56 @@ describe("a link", () => {
 
       expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 1, sends: 0 });
       expect(await linkExists(trx, gone)).toBe(false);
+    });
+  });
+});
+
+describe("a transfer link (epic #935)", () => {
+  /** A confirmed event, handed over to a drawn address when `waiting`. */
+  async function aConfirmedEvent(db: Db, waiting: boolean): Promise<string> {
+    const { id } = await seedEvent(db);
+    await confirmSeededEvent(db, id);
+    if (waiting) await writeTransfer(db, id, { email: anAddress(), status: "sending", at: ago(8 * DAY) });
+    return id;
+  }
+
+  it("goes 30 days after its expiry, 37 days, when no handover waits on its event, and is kept the millisecond before", async () => {
+    await withRollback(async (trx) => {
+      const id = await aConfirmedEvent(trx, false);
+      const gone = await seedLink(trx, { kind: "transfer", eventId: id }, { createdAt: ago(37 * DAY) });
+      const kept = await seedLink(trx, { kind: "transfer", eventId: id }, { createdAt: ago(37 * DAY - 1) });
+
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 1, sends: 0 });
+
+      expect(await linkExists(trx, gone)).toBe(false);
+      expect(await linkExists(trx, kept)).toBe(true);
+    });
+  });
+
+  it("used, goes on the same day as unused", async () => {
+    await withRollback(async (trx) => {
+      const id = await aConfirmedEvent(trx, false);
+      const gone = await seedLink(trx, { kind: "transfer", eventId: id }, { createdAt: ago(37 * DAY), usedAt: ago(40 * DAY) });
+
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 1, sends: 0 });
+      expect(await linkExists(trx, gone)).toBe(false);
+    });
+  });
+
+  it("stays while the handover of its event waits, however old, and goes once it does not, side by side", async () => {
+    await withRollback(async (trx) => {
+      const waiting = await aConfirmedEvent(trx, true);
+      const done = await aConfirmedEvent(trx, false);
+      const kept = await seedLink(trx, { kind: "transfer", eventId: waiting }, { createdAt: ago(400 * DAY) });
+      const gone = await seedLink(trx, { kind: "transfer", eventId: done }, { createdAt: ago(400 * DAY) });
+
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 1, sends: 0 });
+
+      expect(await linkExists(trx, kept)).toBe(true);
+      expect(await linkExists(trx, gone)).toBe(false);
+      await clearTransfer(trx, waiting);
+      expect(await deleteExpiredRows(trx, NOW)).toEqual({ sessions: 0, links: 1, sends: 0 });
+      expect(await linkExists(trx, kept)).toBe(false);
     });
   });
 });

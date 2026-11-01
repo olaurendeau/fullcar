@@ -31,6 +31,7 @@ function row(fields: Partial<MyEventRow> & Pick<MyEventRow, "id">): MyEventRow {
     anonymised: false,
     persons: 0,
     withoutCar: { aller: 0, retour: 0 },
+    transferEmail: null,
     ...fields,
   };
 }
@@ -96,6 +97,7 @@ function clockCases() {
           location: "Gymnase des Gayeulles",
           persons: 4,
           withoutCar: [{ leg: "retour", count: 2 }],
+          transferEmail: null,
         },
       ]);
     });
@@ -136,6 +138,7 @@ function clockCases() {
           persons: 2,
           withoutCar: [{ leg: "aller", count: 1 }],
           erasedOn: "2027-01-01",
+          transferEmail: null,
         },
       ]);
     });
@@ -194,6 +197,33 @@ function clockCases() {
       const list = listMyEvents(rows, ACCOUNT, NOW);
       expect(ids(list.past)).toEqual(["past", "erased"]);
       expect(ids(list.upcoming)).toEqual(["upcoming"]);
+    });
+  });
+
+  // OT2.8: the row says who the event is being handed to, whether the link still serves or not.
+  describe("OT2.8: a handover waiting", () => {
+    it("carries the recipient's address on an upcoming and on a past row", () => {
+      const rows = [
+        row({ id: "upcoming", transferEmail: "dominique@exemple.fr" }),
+        row({ id: "past", allerAt: "2026-12-01 07:30:00", retourAt: null, transferEmail: "dominique@exemple.fr" }),
+        row({ id: "none", allerAt: "2026-12-19 07:30:00" }),
+      ];
+      const list = listMyEvents(rows, ACCOUNT, NOW);
+      expect(list.upcoming.map((event) => [event.id, event.transferEmail])).toEqual([
+        ["none", null],
+        ["upcoming", "dominique@exemple.fr"],
+      ]);
+      expect(list.past[0]).toMatchObject({ id: "past", transferEmail: "dominique@exemple.fr" });
+    });
+
+    it("answers the address of an event of another account to no one", () => {
+      const rows = [row({ id: "someone-else", accountId: OTHER_ACCOUNT_ID, transferEmail: "secret@exemple.fr" })];
+      expect(JSON.stringify(listMyEvents(rows, ACCOUNT, NOW))).not.toContain("secret@exemple.fr");
+    });
+
+    it("keeps an anonymised row to its fixed fields", () => {
+      const rows = [row({ id: "erased", allerAt: "2026-10-01 07:30:00", retourAt: null, anonymised: true, transferEmail: "x@exemple.fr" })];
+      expect(listMyEvents(rows, ACCOUNT, NOW).past[0]).not.toHaveProperty("transferEmail");
     });
   });
 

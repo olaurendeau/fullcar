@@ -5,7 +5,8 @@ import type { Database } from "./schema";
 
 /*
  * « Mes événements » in the database (epic #581, OA6.1–OA6.4): an account's events, each
- * with its own fields and numbers only. No person, no ride, no first name and no phone
+ * with its own fields and numbers only (and, from #949, the address a handover waits on:
+ * the account's own events are all it reads). No person, no ride, no first name and no phone
  * leaves this query: what persons and Placements give is counted in SQL. Which of these
  * events the session may see, and in which section, is src/domain/my-events.ts's.
  */
@@ -48,6 +49,7 @@ export async function readMyEventRows(db: Kysely<Database>, accountId: string): 
       "event.account_id",
       "event.confirmed_at",
       "event.anonymised_at",
+      "event.transfer_email",
       personsOf(eb),
       withoutCarOn(eb, "aller"),
       withoutCarOn(eb, "retour"),
@@ -65,5 +67,6 @@ export async function readMyEventRows(db: Kysely<Database>, accountId: string): 
     anonymised: row.anonymised_at !== null,
     persons: Number(row.persons ?? 0),
     withoutCar: { aller: Number(row.aller_without_car ?? 0), retour: Number(row.retour_without_car ?? 0) },
+    transferEmail: row.transfer_email,
   }));
 }
