@@ -167,7 +167,7 @@ describe("a transfer link (epic #935)", () => {
   async function aConfirmedEvent(db: Db, waiting: boolean): Promise<string> {
     const { id } = await seedEvent(db);
     await confirmSeededEvent(db, id);
-    if (waiting) await writeTransfer(db, id, { email: anAddress(), status: "sent", at: ago(8 * DAY) });
+    if (waiting) await writeTransfer(db, id, { email: anAddress(), status: "sending", at: ago(8 * DAY) });
     return id;
   }
 

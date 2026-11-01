@@ -118,13 +118,13 @@ describe("anonymiseEvent", () => {
       const id = await seedFullEvent(trx);
       await confirmSeededEvent(trx, id);
       const email = anAddress();
-      await writeTransfer(trx, id, { email, status: "sent", at: new Date() });
+      await writeTransfer(trx, id, { email, status: "sending", at: new Date() });
       await seedLink(trx, { kind: "transfer", eventId: id });
       await seedLink(trx, { kind: "transfer", eventId: id }, { usedAt: new Date() });
       const other = await seedFullEvent(trx);
       await confirmSeededEvent(trx, other);
       const otherEmail = anAddress();
-      await writeTransfer(trx, other, { email: otherEmail, status: "sent", at: new Date() });
+      await writeTransfer(trx, other, { email: otherEmail, status: "sending", at: new Date() });
       await seedLink(trx, { kind: "transfer", eventId: other });
 
       await anonymiseEvent(trx, id);

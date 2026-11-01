@@ -103,14 +103,14 @@ describe("deleteAccount (OA9.3 to OA9.5)", () => {
       const session = await seedSession(trx, accountId);
       const handed = await confirmedBy(trx, accountId);
       const recipient = anAddress();
-      await writeTransfer(trx, handed.id, { email: recipient, status: "sent", at: new Date() });
+      await writeTransfer(trx, handed.id, { email: recipient, status: "sending", at: new Date() });
       const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
       const used = await seedLink(trx, { kind: "transfer", eventId: handed.id }, { usedAt: new Date() });
       const calm = await confirmedBy(trx, accountId);
       const otherAccount = await seedAccount(trx);
       const elsewhere = await confirmedBy(trx, otherAccount);
       const elsewhereEmail = anAddress();
-      await writeTransfer(trx, elsewhere.id, { email: elsewhereEmail, status: "sent", at: new Date() });
+      await writeTransfer(trx, elsewhere.id, { email: elsewhereEmail, status: "sending", at: new Date() });
       const elsewhereLink = await seedLink(trx, { kind: "transfer", eventId: elsewhere.id });
 
       expect(await deleteAccount(trx, session, [])).toBe(true);
@@ -145,12 +145,12 @@ describe("deleteAccount (OA9.3 to OA9.5)", () => {
       const session = await seedSession(trx, accountId);
       const organiser = await seedAccount(trx);
       const handed = await confirmedBy(trx, organiser);
-      await writeTransfer(trx, handed.id, { email, status: "sent", at: new Date() });
+      await writeTransfer(trx, handed.id, { email, status: "sending", at: new Date() });
       const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
       await seedSends(trx, 1, { kind: "transfer", email, eventId: handed.id });
       const otherEmail = anAddress();
       const kept = await confirmedBy(trx, organiser);
-      await writeTransfer(trx, kept.id, { email: otherEmail, status: "sent", at: new Date() });
+      await writeTransfer(trx, kept.id, { email: otherEmail, status: "sending", at: new Date() });
 
       expect(await deleteAccount(trx, session, [])).toBe(true);
 
@@ -280,7 +280,7 @@ describe("eraseAccount", () => {
     await withRollbackRecordingSends(async (trx) => {
       const accountId = await seedAccount(trx);
       const handed = await confirmedBy(trx, accountId);
-      await writeTransfer(trx, handed.id, { email: anAddress(), status: "sent", at: new Date() });
+      await writeTransfer(trx, handed.id, { email: anAddress(), status: "sending", at: new Date() });
       const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
 
       expect(await eraseAccount(trx, accountId, [])).toBe(true);
