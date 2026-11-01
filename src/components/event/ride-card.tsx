@@ -1,4 +1,4 @@
-import { Clock, MapPin, Plus, User } from "lucide-react";
+import { Car, Clock, MapPin, Plus, User } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import type { VisibleCar } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
@@ -57,16 +57,20 @@ export function RideCard({
   return (
     <article aria-labelledby={headingId} className={cn("flex min-w-0 flex-col gap-3 rounded-xl border p-4", ABOVE_BAR)}>
       <div className="flex items-start justify-between gap-2">
-        {/* Focusable by script alone: « Voir la voiture » leads here (focusCarTitle). */}
-        <h3
-          id={headingId}
-          tabIndex={-1}
-          data-car-title={car.id}
-          data-leg={car.leg}
-          className="min-w-0 rounded-sm font-semibold wrap-anywhere focus-visible:focus-ring"
-        >
-          {t("title", { driver })}
-        </h3>
+        <div className="flex min-w-0 items-start gap-2">
+          {/* Decorative and a sibling of the title, so the name and the focus ring stay the title's alone (CI1). mt-0.5: centred on the title's first line, 20 px (CI1.6). */}
+          <Car aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          {/* Focusable by script alone: « Voir la voiture » leads here (focusCarTitle). */}
+          <h3
+            id={headingId}
+            tabIndex={-1}
+            data-car-title={car.id}
+            data-leg={car.leg}
+            className="min-w-0 rounded-sm font-semibold wrap-anywhere focus-visible:focus-ring"
+          >
+            {t("title", { driver })}
+          </h3>
+        </div>
         <span className="flex shrink-0 items-center gap-2">
           <span className="flex items-center gap-1.5">
             <Clock aria-hidden className="size-4 shrink-0 text-muted-foreground" />
