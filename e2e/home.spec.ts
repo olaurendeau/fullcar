@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-/** The home page's words (#232, design v2.1, docs/design/home/README.md). */
+/**
+ * The home page's words (#232, design v2.1, docs/design/home/README.md). The tagline, the create and share steps and
+ * the deletion line are the four words modified by docs/design/organizer-account/README.md (#615).
+ */
 const FR = {
   tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
   intro:

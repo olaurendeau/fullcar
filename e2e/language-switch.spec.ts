@@ -17,7 +17,7 @@ const DAY = 24 * 60 * 60;
 
 const FR = {
   switch: "English",
-  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
   contact: "Nous contacter (s’ouvre dans un nouvel onglet)",
   panel: "Espace organisateur",
   // The screen of a pending event, refused to a browser without its token (#598).
@@ -28,7 +28,7 @@ const FR = {
 };
 const EN = {
   switch: "Français",
-  tagline: "Group carpooling, there and back, no account needed.",
+  tagline: "Group carpooling, there and back, no account for participants.",
   contact: "Contact us (opens in a new tab)",
   panel: "Organiser area",
   refused: "Email address not confirmed yet",
