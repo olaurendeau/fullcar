@@ -89,7 +89,10 @@ export function LinkPage({ kind }: { kind: "login" | "confirm" }) {
     setAfter(screen);
   }
 
-  /** « Se connecter » or « Confirmer et se connecter »: the fragment is read now, and only now. */
+  /**
+   * « Se connecter » or « Confirmer et se connecter »: the fragment, read at render for its shape only, is read
+   * again, and `link-browser.ts` takes the token out of it and sends it.
+   */
   async function open() {
     if (inFlight.current || hash === null) return;
     inFlight.current = true;
