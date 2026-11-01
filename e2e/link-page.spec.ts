@@ -102,10 +102,13 @@ test.describe("La page du lien", () => {
     await expect(page).toHaveURL(/\/connexion$/);
 
     const requests: Request[] = [];
-    const documents: Promise<string>[] = [];
+    // A reload() drops the answer of the document it replaces, and then `text()` rejects (Playwright's
+    // "Network.getResponseBody" race): such a document is `null`, not a failure. The last one is the page
+    // that stays, and it is read below.
+    const documents: Promise<string | null>[] = [];
     page.on("request", (request) => requests.push(request));
     page.on("response", (response) => {
-      if (response.request().resourceType() === "document") documents.push(response.text());
+      if (response.request().resourceType() === "document") documents.push(response.text().catch(() => null));
     });
     const headers: Promise<string[]>[] = [];
     page.on("requestfinished", (request) => headers.push(request.allHeaders().then(Object.values)));
@@ -142,7 +145,9 @@ test.describe("La page du lien", () => {
     expect(new URL(carrying[0].url()).pathname).toBe("/connexion/lien");
     expect(requests.some((request) => request.url().includes(token)), "a request's URL carries the token").toBe(false);
     expect((await Promise.all(headers)).flat().some((value) => value.includes(token)), "a header carries the token").toBe(false);
-    expect((await Promise.all(documents)).some((html) => html.includes(token)), "a document carries the token").toBe(false);
+    const html = await Promise.all(documents);
+    expect(html.at(-1), "the document the page stayed on was read").not.toBeNull();
+    expect(html.some((document) => document?.includes(token)), "a document carries the token").toBe(false);
   });
 
   test("OA5.2: the fragment is in the history no more: back leaves the link behind", async ({ page, db }) => {
