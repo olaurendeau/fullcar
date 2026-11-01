@@ -254,11 +254,14 @@ describe("openWithConfirmationLink (OA5.3, OA5.4, OA5.6, decision 3)", () => {
   it("OA5.4: an event confirmed in another way says used, and no session opens", async () => {
     await withRollbackRecordingSends(async (trx) => {
       const { id, token } = await pendingWithLink(trx);
-      const accountId = await alreadyConfirmed(trx, id);
-      // The database is shared: sessions committed by other test files sit in `session`, so only this account's rows count.
+      await alreadyConfirmed(trx, id);
       await seedSession(trx, await seedAccount(trx));
+      // The database is shared, but the transaction reads one snapshot (REPEATABLE READ): sessions committed by other
+      // test files meanwhile are not seen, so the whole table is counted, whichever account a session would open on.
+      const count = async () => Number((await trx.selectFrom("session").select((eb) => eb.fn.countAll().as("n")).executeTakeFirstOrThrow()).n);
+      const before = await count();
       expect(await openWithConfirmationLink(trx, token, "fr")).toEqual({ state: "used" });
-      expect(await trx.selectFrom("session").select("token_hash").where("account_id", "=", accountId).execute()).toEqual([]);
+      expect(await count()).toBe(before);
     });
   });
 
