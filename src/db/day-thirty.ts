@@ -25,9 +25,10 @@ export async function findDayThirtyEvents(db: Kysely<Database>, cutoff: WallDate
 }
 
 /**
- * Anonymises the event (OA8.1, DS4.1): its Placements, Stops, Rides, Persons (and their personal
- * tokens) and confirmation links deleted, its position, admin token and description set to
- * null, `anonymised_at` written. The title, the place's text, the dates and the options stay.
+ * Anonymises the event (OA8.1, DS4.1, OT7.1): its Placements, Stops, Rides, Persons (and their personal
+ * tokens) and links deleted (confirmation and transfer: they hold to the event, not to a kind), its position, admin token and description set to
+ * null, the handover that waits cleared with its address (`event_transfer_open` refuses an anonymised event that has one),
+ * `anonymised_at` written. The title, the place's text, the dates and the options stay.
  * The Placements before the Rides, which would otherwise set them without a car for
  * nothing, and the Rides before their drivers. The Stops go with their Rides (`stop_ride_fk`
  * and `stop_event_fk` cascade), with no delete of their own. The caller holds the Event's exclusive lock, in the
@@ -45,6 +46,9 @@ export async function anonymiseEvent(db: Kysely<Database>, eventId: string): Pro
       location_lng: null,
       admin_token_hash: null,
       description: null,
+      transfer_email: null,
+      transfer_status: null,
+      transfer_status_at: null,
       anonymised_at: sql<Date>`now()`,
     })
     .where("id", "=", eventId)
