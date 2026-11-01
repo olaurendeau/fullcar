@@ -75,9 +75,7 @@ function columns(trx: Trx, table: string) {
 
 const TIMESTAMP = "timestamp with time zone";
 
-// #940: the database accepts the handover kind; the column types learn it with the domain's
-// LinkKind (#941). Until then a test writes it through the type of a kind they know.
-const TRANSFER = "transfer" as "confirmation";
+const TRANSFER = "transfer" as const;
 
 // Addresses as src/domain/email-address.ts writes them, typed in several scripts: the
 // database must accept every one, since one address is one account. Since #626 the local
@@ -163,8 +161,8 @@ describe("account tables", () => {
 
   it("types the kinds, the locale and the send status, and never lets an account's creation be written", () => {
     expectTypeOf<Selectable<AccountTable>["locale"]>().toEqualTypeOf<"fr" | "en">();
-    expectTypeOf<Selectable<EmailLinkTable>["kind"]>().toEqualTypeOf<"login" | "confirmation">();
-    expectTypeOf<Selectable<EmailSendTable>["kind"]>().toEqualTypeOf<"confirmation" | "login">();
+    expectTypeOf<Selectable<EmailLinkTable>["kind"]>().toEqualTypeOf<"login" | "confirmation" | "transfer">();
+    expectTypeOf<Selectable<EmailSendTable>["kind"]>().toEqualTypeOf<"confirmation" | "login" | "transfer">();
     expectTypeOf<Selectable<EventTable>["send_status"]>().toEqualTypeOf<
       "sending" | "sent" | "failed" | "address_limit" | null
     >();
