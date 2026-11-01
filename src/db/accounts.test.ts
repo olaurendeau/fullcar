@@ -4,7 +4,7 @@ import { signOutBrowser } from "@/app/mes-evenements/sign-out";
 import { SESSION_LIFETIME_MS } from "@/domain/account-rules";
 import { decideOrganiserAccess } from "@/domain/organiser-access";
 import { accountForEmail, deleteAccount, eraseAccount, findAccount, findAccountByEmail } from "./accounts";
-import { useLink } from "./email-links";
+import { claimConfirmation, claimTransfer, useLink } from "./email-links";
 import { recordSend } from "./email-sends";
 import { readAdminTokenHash, readOrganiserAccessEvent, readTransfer, writeEventOwner, writeTransfer } from "./events";
 import type { Database } from "./schema";
@@ -395,6 +395,61 @@ describe("deleteAccount, concurrently", () => {
       );
       expect(claim).toBe("recorded");
       expect(await sendsTo(db, email)).toHaveLength(1);
+    });
+  });
+
+  // #986: the address is written under the address's lock, after the deletion read the events: it reads them again once it holds the lock.
+  it("clears the pending address of an event written and committed while it waited for the address, with its confirmation links", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      await withCommittedAddresses(async (_db, address) => {
+        const email = address();
+        const accountId = await seedAccount(db, { email });
+        const session = await seedSession(db, accountId);
+        const deleted = await whileHeld(
+          db,
+          async (trx) => {
+            expect(await claimConfirmation(trx, eventId, email)).toMatchObject({ claim: "recorded" });
+            await writeEventOwner(trx, eventId, { pendingEmail: email, sendStatus: "sending", sendStatusAt: new Date() });
+          },
+          (own) => deleteAccount(own, session, []),
+        );
+        expect(deleted).toBe(true);
+        const row = await db.selectFrom("event").select("pending_email").where("id", "=", eventId).executeTakeFirstOrThrow();
+        expect(row.pending_email).toBeNull();
+        expect(await db.selectFrom("email_link").select("token_hash").where("event_id", "=", eventId).execute()).toEqual([]);
+        expect(await sendsTo(db, email)).toEqual([]);
+        expect(await findAccount(db, accountId)).toBeUndefined();
+      });
+    });
+  });
+
+  it("cancels the handover to its address written and committed while it waited for the address, with its transfer links", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      await withCommittedAddresses(async (_db, address) => {
+        const email = address();
+        const accountId = await seedAccount(db, { email });
+        const session = await seedSession(db, accountId);
+        const organiser = await seedAccount(db, { email: address() });
+        await db.updateTable("event").set({ account_id: organiser, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+        const deleted = await whileHeld(
+          db,
+          async (trx) => {
+            expect(await claimTransfer(trx, eventId, email)).toMatchObject({ claim: "recorded" });
+            await writeTransfer(trx, eventId, { email, status: "sending", at: new Date() });
+          },
+          (own) => deleteAccount(own, session, []),
+        );
+        expect(deleted).toBe(true);
+        const row = await db
+          .selectFrom("event")
+          .select(["account_id", "transfer_email", "transfer_status", "transfer_status_at"])
+          .where("id", "=", eventId)
+          .executeTakeFirstOrThrow();
+        expect(row).toEqual({ account_id: organiser, transfer_email: null, transfer_status: null, transfer_status_at: null });
+        expect(await db.selectFrom("email_link").select("token_hash").where("event_id", "=", eventId).execute()).toEqual([]);
+        expect(await sendsTo(db, email)).toEqual([]);
+        expect(await findAccount(db, accountId)).toBeUndefined();
+      });
     });
   });
 
