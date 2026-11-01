@@ -103,3 +103,42 @@ describe("the text of the page (PP2)", () => {
     expect(String(message(en, "Privacy.services.crisp"))).toMatch(/artificial intelligence/);
   });
 });
+
+describe("the address of a pending handover (OT8.4, OT7.3)", () => {
+  const text = (messages: Record<string, unknown>, key: string) => String(message(messages, key));
+
+  it("is a line of « Pour chaque événement », after the unconfirmed address", () => {
+    const keys = POLICY.map(({ key }) => key);
+    expect(POLICY.find(({ key }) => key === "Privacy.keep.event.transfer")?.role).toBe("li");
+    expect(keys.indexOf("Privacy.keep.event.transfer")).toBe(keys.indexOf("Privacy.keep.event.pending") + 1);
+    expect(keys.indexOf("Privacy.keep.event.transfer")).toBeLessThan(keys.indexOf("Privacy.keep.organiser.title"));
+  });
+
+  it("says the address is kept on the event while the handover waits, until day 30 at most, then erased, in French", () => {
+    const line = text(fr, "Privacy.keep.event.transfer");
+    expect(line).toMatch(/cession/);
+    expect(line).toMatch(/30 jours après sa date au plus/);
+    expect(line).toMatch(/effacée/);
+    expect(line).toMatch(/liste des e-mails envoyés/);
+  });
+
+  it("says the same in English", () => {
+    const line = text(en, "Privacy.keep.event.transfer");
+    expect(line).toMatch(/handover/);
+    expect(line).toMatch(/30 days after its date at the latest/);
+    expect(line).toMatch(/erased/);
+    expect(line).toMatch(/list of emails sent/);
+  });
+
+  it("announces no length of time for the sending records, which the owner has not set (OT7.3)", () => {
+    expect(text(fr, "Privacy.keep.event.transfer")).not.toMatch(/\d\s*(heures?|minutes?|h\b)/);
+    expect(text(en, "Privacy.keep.event.transfer")).not.toMatch(/\d\s*(hours?|minutes?|h\b)/);
+  });
+
+  it("counts the handover email among those Brevo sends", () => {
+    expect(text(fr, "Privacy.services.brevo")).toMatch(/envoie les cinq e-mails du compte/);
+    expect(text(en, "Privacy.services.brevo")).toMatch(/sends the account’s five emails/);
+    expect(text(fr, "Privacy.services.brevo")).toMatch(/lien de connexion, de confirmation ou de cession/);
+    expect(text(en, "Privacy.services.brevo")).toMatch(/sign-in, confirmation or handover link/);
+  });
+});
