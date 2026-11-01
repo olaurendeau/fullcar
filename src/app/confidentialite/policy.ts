@@ -29,6 +29,7 @@ export const POLICY: readonly { key: string; role: Role }[] = [
   { key: "Privacy.keep.event.options", role: "li" },
   { key: "Privacy.keep.event.adminToken", role: "li" },
   { key: "Privacy.keep.event.pending", role: "li" },
+  { key: "Privacy.keep.event.transfer", role: "li" },
   { key: "Privacy.keep.organiser.title", role: "h3" },
   { key: "Privacy.keep.organiser.email", role: "li" },
   { key: "Privacy.keep.organiser.locale", role: "li" },
