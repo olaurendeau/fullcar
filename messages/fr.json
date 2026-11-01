@@ -790,7 +790,41 @@
     "spam": "Rien reçu ? Regardez dans les indésirables.",
     "resend": "Renvoyer l’e-mail",
     "change": "Changer d’adresse",
-    "resent": "E-mail renvoyé."
+    "resent": "E-mail renvoyé.",
+    "confirmBody": "Nous avons envoyé un nouveau lien de confirmation à l’adresse qui a créé l’événement. Il est valable 7 jours. Ouvrez-le dans le navigateur où vous voulez administrer l’événement."
+  },
+  "LinkPage": {
+    "login": {
+      "title": "Se connecter à Fullcar",
+      "body": "La session s’ouvrira dans ce navigateur. Sur un appareil partagé, fermez-la ensuite avec « Se déconnecter », dans Mes événements.",
+      "button": "Se connecter"
+    },
+    "confirm": {
+      "title": "Confirmer votre adresse",
+      "body": "L’événement sera ajouté à Mes événements, et la session s’ouvrira dans ce navigateur.",
+      "button": "Confirmer et se connecter"
+    },
+    "working": "Ouverture de la session…",
+    "offline": "La session n’a pas été ouverte. Vérifiez la connexion, puis réessayez.",
+    "failed": "La session n’a pas été ouverte. Une erreur est survenue : réessayez dans quelques minutes.",
+    "expired": {
+      "title": "Ce lien a expiré",
+      "login": "Un lien de connexion est valable 1 heure. Demandez-en un nouveau.",
+      "confirm": "Un lien de confirmation est valable 7 jours. Nous pouvons en envoyer un nouveau à la même adresse."
+    },
+    "newLink": "Recevoir un nouveau lien",
+    "used": {
+      "title": "Ce lien a déjà servi",
+      "login": "Un lien ne sert qu’une fois. Si vous venez de l’utiliser, votre session est peut-être déjà ouverte.",
+      "confirm": "Cette adresse est déjà confirmée, et l’événement est dans Mes événements."
+    },
+    "invalid": {
+      "title": "Ce lien n’est pas valide",
+      "body": "Vérifiez qu’il a été copié en entier, ou demandez un nouveau lien."
+    }
+  },
+  "Session": {
+    "signedInAs": "Session ouverte avec {email}."
   },
   "MyEvents": {
     "title": "Mes événements",

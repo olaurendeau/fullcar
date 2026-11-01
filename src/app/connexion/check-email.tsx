@@ -16,23 +16,34 @@ type Resent = { n: number; alert?: LoginAlert };
  * `headingRef`, from the form that sent. « Renvoyer l’e-mail » keeps the focus and says what
  * came of it under the buttons; « Changer d’adresse » is the form's again.
  *
+ * The same screen answers an expired confirmation link (OA5.6): `body` says what was sent in place
+ * of `Check.body` (which names the address), there is no address to change, and `alertText` words
+ * the failures of its resend.
+ *
  * Decision: a resend that fails says it with the form's alert (`Login.offline`, `failed`,
  * `tooMany`), where `Check.resent` would be. — Reason: the design draws only the resend that
  * goes out; saying nothing would leave « E-mail renvoyé. » unsaid with no reason.
  */
 export function CheckEmail({
-  email,
+  email = "",
+  body,
   headingRef,
   level = "h1",
   resend,
   onChange,
+  alertText,
 }: {
-  email: string;
+  email?: string;
+  /** What was sent, in place of `Check.body`. */
+  body?: string;
   headingRef: Ref<HTMLHeadingElement>;
   /** An `h2` under another page's title, as the organiser area's (OA7.1). */
   level?: "h1" | "h2";
   resend: () => Promise<LoginOutcome>;
-  onChange: () => void;
+  /** « Changer d’adresse »; none, no button. */
+  onChange?: () => void;
+  /** The words of an alert, in place of the form's (`Login.offline`, `failed`, `tooMany`). */
+  alertText?: (alert: LoginAlert) => string;
 }) {
   const t = useTranslations("Check");
   const tLogin = useTranslations("Login");
@@ -67,15 +78,17 @@ export function CheckEmail({
       >
         {t("title")}
       </Title>
-      <p className="mt-2 mb-6 text-muted-foreground [overflow-wrap:anywhere]">{t("body", { email })}</p>
+      <p className="mt-2 mb-6 text-muted-foreground [overflow-wrap:anywhere]">{body ?? t("body", { email })}</p>
       <div className="flex flex-col gap-2">
         <Button type="button" variant="outline" className="h-11 aria-disabled:opacity-50" aria-disabled={sending || undefined} onClick={again}>
           <Mail aria-hidden />
           {t("resend")}
         </Button>
-        <Button type="button" variant="outline" className="h-11" onClick={onChange}>
-          {t("change")}
-        </Button>
+        {onChange && (
+          <Button type="button" variant="outline" className="h-11" onClick={onChange}>
+            {t("change")}
+          </Button>
+        )}
       </div>
       {/* In place before it speaks, as a live region must be to be announced. */}
       <div role="status">
@@ -88,7 +101,7 @@ export function CheckEmail({
       </div>
       {resent?.alert && (
         <p key={resent.n} role="alert" className="mt-4 text-sm text-destructive">
-          {tLogin(resent.alert)}
+          {alertText ? alertText(resent.alert) : tLogin(resent.alert)}
         </p>
       )}
       <p className="mt-4 text-sm text-muted-foreground">{t("spam")}</p>
