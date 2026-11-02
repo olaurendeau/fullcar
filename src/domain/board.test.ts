@@ -386,6 +386,60 @@ describe("C3.5: aller and retour are independent", () => {
   });
 });
 
+describe("legBoard: the persons not concerned (PL1.4)", () => {
+  const data = rows({
+    persons: [person("marc", "Marc"), person("lea", "Léa"), person("tom", "Tom"), person("zoe", "Zoé"), person("sam", "Sam")],
+    rides: [ride("r1", "marc"), ride("r2", "sam", { leg: "retour" })],
+    // Léa is a passenger and Tom without a car at the aller; Zoé does neither leg.
+    placements: [placed("lea", "r1"), placed("tom", null), placed("lea", null, "retour")],
+  });
+
+  it("lists, in the event's order, the persons with no Placement on the leg who do not drive it", () => {
+    expect(legBoard("aller", data, NONE).notConcerned).toEqual([
+      { id: "zoe", firstName: "Zoé" },
+      { id: "sam", firstName: "Sam" },
+    ]);
+    expect(legBoard("retour", data, NONE).notConcerned).toEqual([
+      { id: "marc", firstName: "Marc" },
+      { id: "tom", firstName: "Tom" },
+      { id: "zoe", firstName: "Zoé" },
+    ]);
+  });
+
+  it("a driver of the leg is not in it, even with a Placement of their own", () => {
+    const board = legBoard("aller", rows({ ...data, placements: [placed("marc", null)] }), NONE);
+    expect(board.notConcerned.map((p) => p.id)).not.toContain("marc");
+    expect(board.withoutCar).toEqual([]);
+  });
+
+  it("a person without a car or a passenger is not in it", () => {
+    const ids = legBoard("aller", data, NONE).notConcerned.map((p) => p.id);
+    expect(ids).not.toContain("lea");
+    expect(ids).not.toContain("tom");
+  });
+
+  it("a person who does no leg is in both lists", () => {
+    expect(buildBoard(data, ["aller", "retour"], NONE).map((leg) => leg.notConcerned.map((p) => p.id))).toEqual([
+      ["zoe", "sam"],
+      ["marc", "tom", "zoe"],
+    ]);
+  });
+
+  it("carries the first name and the id, and nothing else, whatever the device", () => {
+    for (const deviceIds of [NONE, new Set(["zoe", "sam"])]) {
+      for (const person of legBoard("aller", data, deviceIds).notConcerned) {
+        expect(Object.keys(person).sort()).toEqual(["firstName", "id"]);
+      }
+    }
+  });
+
+  it("an event without a retour has no retour list", () => {
+    const board = buildBoard(data, ["aller"], NONE);
+    expect(board.map((leg) => leg.leg)).toEqual(["aller"]);
+    expect(board.flatMap((leg) => leg.notConcerned).length).toBe(2);
+  });
+});
+
 describe("buildBoard", () => {
   it("one state per leg of the event, aller first", () => {
     const data = rows({ persons: [person("lea")], placements: [placed("lea", null, "retour")] });
