@@ -114,8 +114,9 @@ test.describe("CA2.1: the organiser's sentence, an event without a position", ()
   test("on /admin, the area refused, neither the sentence nor its button", async ({ page, seededEvent }) => {
     await keepAdminToken(page, seededEvent.id, oneCharOff(seededEvent.token));
     await page.goto(organiserPath(seededEvent));
-    await expect(page.getByRole("button", { name: "Proposer une voiture" })).toBeVisible();
+    // Refused, the board goes with its legs once the check answers (#598): no leg is left to say it.
     await expect(areaRefused(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Proposer une voiture" })).toHaveCount(0);
     await expect(hint(page)).toHaveCount(0);
     await expect(hintButton(page)).toHaveCount(0);
   });

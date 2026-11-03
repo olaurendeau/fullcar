@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { covers, personLeg, type Withdrawal } from "./bar-state";
-import { aboutOf, allerPart, coverPage, forget, offersRetour, onWithdraw, personsGone, sendAbout, whenPageShown } from "./hidden-page";
+import { aboutOf, allerPart, carsGone, coverPage, forget, offersRetour, onWithdraw, personsGone, sendAbout, whenPageShown } from "./hidden-page";
 
 /** Once the microtask a sheet leaves at its unmount has run. */
 const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -341,6 +341,38 @@ describe("personsGone", () => {
     const told: Withdrawal[] = [];
     const stop = onWithdraw((withdrawal) => told.push(withdrawal));
     personsGone([]);
+    stop();
+    expect(told).toEqual([]);
+  });
+});
+
+// #850's review, on #670: the cars of a person gone take what waits about them, answered already;
+// an answer still to come says what came of it (`rideGone`), as for the person (`personsGone`).
+describe("carsGone", () => {
+  it("what waits about her car is never said; about another car, it is, and an answer still to come too", async () => {
+    const tom = personLeg("tom-8", "aller");
+    const uncover = coverPage();
+    const said: string[] = [];
+    sendAbout(["seats:lea-car-8", "seats:lea-car-8:tom-8"]).whenStillTrue([tom], () => said.push("Tom placé chez Léa"));
+    sendAbout(["undo:lea-car-8", "undo:lea-car-8:tom-8"]).whenClosed(() => said.push("Annuler chez Léa"), true);
+    sendAbout(["ride:lea-car-8:edit"]).whenClosed(() => said.push("Modifier la voiture de Léa"), true);
+    sendAbout(["seats:claire-car-8", "seats:claire-car-8:tom-8"]).whenClosed(() => said.push("Tom chez Claire"), true);
+    const onItsWay = sendAbout(["seats:lea-car-8", "seats:lea-car-8:zoe-8"]);
+    const told: Withdrawal[] = [];
+    const stop = onWithdraw((withdrawal) => told.push(withdrawal));
+    carsGone(["lea-car-8"]);
+    stop();
+    onItsWay.whenClosed(() => said.push("Zoé chez Léa"), true);
+    uncover();
+    await settled();
+    expect(said).toEqual(["Tom chez Claire", "Zoé chez Léa"]);
+    expect(told).toEqual([{ cars: ["lea-car-8"] }]);
+  });
+
+  it("no car gone: nothing is withdrawn, and the bar is told nothing", () => {
+    const told: Withdrawal[] = [];
+    const stop = onWithdraw((withdrawal) => told.push(withdrawal));
+    carsGone([]);
     stop();
     expect(told).toEqual([]);
   });

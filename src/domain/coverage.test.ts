@@ -7,13 +7,13 @@ function ride(id: string, driverId: string, seats: number): RideRow {
 }
 
 function placed(personId: string, rideId: string | null, leg: RideRow["leg"] = "aller"): PlacementRow {
-  return { personId, leg, rideId, placedAt: new Date(Date.UTC(2026, 9, 14)) };
+  return { personId, leg, rideId, stopId: null, placedAt: new Date(Date.UTC(2026, 9, 14)) };
 }
 
 /** Every id is also a person of the event; with `allOnDevice`, a person of the device too. */
 function aller(rides: RideRow[], placements: PlacementRow[], allOnDevice = false) {
   const ids = new Set([...rides.map((r) => r.driverId), ...placements.map((p) => p.personId)]);
-  const data: BoardRows = { persons: [...ids].map((id) => ({ id, firstName: id })), rides, placements };
+  const data: BoardRows = { persons: [...ids].map((id) => ({ id, firstName: id })), rides, placements, stops: [] };
   return legBoard("aller", data, allOnDevice ? ids : new Set());
 }
 
@@ -121,5 +121,23 @@ describe("C9.1, C9.6: a leg shows the banner when it has a car or a person", () 
 
   it("with a person without a car", () => {
     expect(hasBanner(aller([], [placed("tom", null)]))).toBe(true);
+  });
+});
+
+describe("C9.5: the persons not concerned count in no N", () => {
+  it("a person who does not do the leg changes neither N nor M", () => {
+    const rides = [ride("r1", "marc", 3)];
+    const placements = [placed("lea", "r1"), placed("tom", null)];
+    const without = aller(rides, placements);
+    const data: BoardRows = {
+      persons: [...["marc", "lea", "tom", "zoe"].map((id) => ({ id, firstName: id }))],
+      rides,
+      placements,
+      stops: [],
+    };
+    const board = legBoard("aller", data, new Set());
+    expect(board.notConcerned.map((person) => person.id)).toEqual(["zoe"]);
+    expect(coverage(board)).toEqual(coverage(without));
+    expect(coverage(board)).toMatchObject({ withoutCar: 1, freeSeats: 2 });
   });
 });

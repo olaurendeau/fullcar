@@ -5,12 +5,13 @@ import { formatDate } from "@/i18n/format-date";
 import type { Locale } from "@/i18n/locales";
 
 /*
- * The four emails of epic #581, and no other (docs/design/organizer-account/README.md,
- * « Les e-mails », decision 22). Their words are the `Emails.*` keys, in the language of the
+ * The four emails of epic #581 (docs/design/organizer-account/README.md, « Les e-mails »,
+ * decision 22), and the fifth, the handover of epic #935 (docs/design/organizer-transfer/README.md,
+ * « L'e-mail »), and no other. Their words are the `Emails.*` keys, in the language of the
  * page that asked for them; the warning, in the account's.
  *
- * The input has no field for anything somebody typed: no title, no place, no first name
- * (OA3.2). A title would be anyone writing, in our name, to an address they chose. The only
+ * The input has no field for anything somebody typed: no title, no place, no first name, and
+ * for the handover not the first organiser either (OA3.2, OT6.2). A title would be anyone writing, in our name, to an address they chose. The only
  * values are ours: the site's origin, a token the server drew, a date it computed.
  *
  * No image, no remote resource, no tracking (OA3.3): every link is to the origin, and the
@@ -23,6 +24,8 @@ type Origin = string;
 export type EmailInput =
   /** On creating an event without a session: confirms the address. */
   | { kind: "confirmation"; locale: Locale; origin: Origin; token: string }
+  /** A handover: the link to open to take an event over (OT6). It names neither event nor organiser. */
+  | { kind: "transfer"; locale: Locale; origin: Origin; token: string }
   /** A sign-in link, for an address with an account. */
   | { kind: "signIn"; locale: Locale; origin: Origin; token: string }
   /** A sign-in request for an address with no account: no token, a way to /nouveau. */
@@ -75,6 +78,20 @@ export function renderEmail(input: EmailInput): RenderedEmail {
         { type: "button", label: t(`${kind}.button`), href: url },
         { type: "paragraph", text: t(`${kind}.validity`) },
         { type: "paragraph", text: t(`${kind}.notYou`) },
+        { type: "fallback", lead: t("fallback"), url },
+      ];
+      break;
+    }
+    case "transfer": {
+      const url = `${origin}/connexion/cession#${checkedToken(input.token)}`;
+      subject = t("transfer.subject");
+      blocks = [
+        hello,
+        { type: "paragraph", text: t("transfer.intro") },
+        { type: "button", label: t("transfer.button"), href: url },
+        { type: "paragraph", text: t("transfer.validity") },
+        { type: "paragraph", text: t("transfer.notYou") },
+        { type: "paragraph", text: t("transfer.address") },
         { type: "fallback", lead: t("fallback"), url },
       ];
       break;

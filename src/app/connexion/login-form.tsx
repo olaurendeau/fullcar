@@ -1,6 +1,6 @@
 "use client";
 
-import { Users } from "lucide-react";
+import { CircleCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
@@ -13,6 +13,7 @@ import { EMAIL_MAX, emailAddress, type EmailError } from "@/domain/email-address
 import { cn } from "@/lib/utils";
 import { requestLink, signedInAs } from "./actions";
 import { CheckEmail } from "./check-email";
+import { forgetSignedOut, peekSignedOut } from "./signed-out";
 import { loginOutcome, type LoginAlert, type LoginOutcome } from "./login-outcome";
 
 const noSubscription = () => () => {};
@@ -32,12 +33,26 @@ type FocusNext = "check" | "field" | undefined;
  *
  * With a session, « Session ouverte avec … » above the title (OA4.6), asked after the load
  * with the token of session-token.ts, in the body: the HTML depends on no session.
+ *
+ * In the organiser area (`returnEventId` given, OA7.1) the form comes under that page's own
+ * title and sentence: no title, intro or session line of its own.
  */
-export function LoginForm({ returnEventId = null }: { returnEventId?: string | null }) {
+export function LoginForm({
+  returnEventId = null,
+  onSent,
+}: {
+  returnEventId?: string | null;
+  /** Tells whether « Regardez vos e-mails » replaces the form, for the page whose sentence it leaves. */
+  onSent?: (sent: boolean) => void;
+}) {
   const t = useTranslations("Login");
   const tErrors = useTranslations("FormErrors");
   const tHome = useTranslations("Home");
+  const tMyEvents = useTranslations("MyEvents");
   const ids = useId();
+  // Sent from the organiser area (OA7.1): its title and sentence are above, and no session is
+  // known to it (a session would have been refused with the address, OA7.2).
+  const inArea = returnEventId !== null;
   // Inactive until hydrated, as the creation form is (C1.5).
   const hydrated = useSyncExternalStore(
     noSubscription,
@@ -58,9 +73,19 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
   const fieldRef = useRef<HTMLInputElement>(null);
   const checkRef = useRef<HTMLHeadingElement>(null);
 
+  // OA9.1: led here by « Se déconnecter », the line says so once, and takes the focus (« Le focus »).
+  // Only the App Router's navigation leads here so: the server, and a document loaded, find nothing.
+  const [signedOut] = useState(() => !inArea && peekSignedOut());
+  const signedOutRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    // Once committed, not as it renders: a render React throws away must leave the note for the next.
+    if (!inArea) forgetSignedOut();
+    if (signedOut) signedOutRef.current?.focus();
+  }, [inArea, signedOut]);
+
   useEffect(() => {
     const token = readSessionToken();
-    if (token === undefined) return;
+    if (inArea || token === undefined) return;
     let current = true;
     void sendAction(() => signedInAs(token)).then((sent) => {
       // A failure says nothing of the session: the line is left out.
@@ -70,7 +95,7 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
     return () => {
       current = false;
     };
-  }, []);
+  }, [inArea]);
 
   useEffect(() => {
     const next = focusNext.current;
@@ -78,6 +103,10 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
     if (next === "check") checkRef.current?.focus();
     if (next === "field") fieldRef.current?.focus();
   }, [sentTo]);
+
+  useEffect(() => {
+    onSent?.(sentTo !== undefined);
+  }, [sentTo, onSent]);
 
   const request = async (address: string): Promise<LoginOutcome> =>
     loginOutcome(await sendAction(() => requestLink(address, returnEventId)));
@@ -112,6 +141,7 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
       <CheckEmail
         email={sentTo}
         headingRef={checkRef}
+        level={inArea ? "h2" : "h1"}
         resend={() => request(sentTo)}
         onChange={() => {
           focusNext.current = "field";
@@ -127,27 +157,42 @@ export function LoginForm({ returnEventId = null }: { returnEventId?: string | n
 
   return (
     <>
+      {signedOut && (
+        <p
+          ref={signedOutRef}
+          tabIndex={-1}
+          role="status"
+          className="flex items-start gap-2 rounded-[10px] bg-muted px-3 py-2.5 text-sm focus-visible:focus-ring"
+        >
+          <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0">{t("signedOut")}</span>
+        </p>
+      )}
       {signedIn !== undefined && (
         <p className="flex items-start gap-2 rounded-[10px] bg-muted px-3 py-2.5 text-sm">
           <Users aria-hidden className="mt-0.5 size-4 shrink-0" />
           <span className="min-w-0 [overflow-wrap:anywhere]">
             {t("already", { email: signedIn })}{" "}
             <Link href="/mes-evenements" className="underline underline-offset-4">
-              {t("myEvents")}
+              {tMyEvents("title")}
             </Link>
           </span>
         </p>
       )}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">{t("title")}</h1>
-        <p id="login-intro" className="text-muted-foreground">
-          {t("intro")}
-        </p>
-      </div>
-      <noscript>
-        <style>{WITHOUT_SCRIPT}</style>
-        <p className="text-sm text-destructive">{t("needsJavaScript")}</p>
-      </noscript>
+      {!inArea && (
+        <>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-2xl font-bold">{t("title")}</h1>
+            <p id="login-intro" className="text-muted-foreground">
+              {t("intro")}
+            </p>
+          </div>
+          <noscript>
+            <style>{WITHOUT_SCRIPT}</style>
+            <p className="text-sm text-destructive">{t("needsJavaScript")}</p>
+          </noscript>
+        </>
+      )}
       <form id="login-form" noValidate onSubmit={submit} className="flex flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-1.5">
           <Label htmlFor={`${ids}-email`} className={cn(error && "text-destructive")}>

@@ -9,7 +9,7 @@
  * organiser is never listed (OA2.3), whatever the rows hold. « Passé » and day 30 are
  * day-thirty.ts's, at Paris time.
  */
-import { dayThirty, isPast } from "./day-thirty";
+import { dayThirty, isDayThirtyReached, isPast } from "./day-thirty";
 import { eventLegs, type Leg } from "./leg";
 import { decideOrganiserAccess } from "./organiser-access";
 import type { WallClock, WallDate } from "./wall-clock";
@@ -29,6 +29,8 @@ export interface MyEventRow {
   persons: number;
   /** The persons without a car, on each leg. */
   withoutCar: Record<Leg, number>;
+  /** The address the event is being handed to, while the handover waits, its link expired or not (OT2.8). */
+  transferEmail: string | null;
 }
 
 /** The persons without a car on one leg, for the amber badge (`MyEvents.withoutCar`). */
@@ -50,6 +52,8 @@ interface CountedEvent extends ListedEvent {
   persons: number;
   /** One per leg of the event with at least one person without a car, aller first (OA6.2). */
   withoutCar: LegWithoutCar[];
+  /** `MyEvents.transferPending`: who the event is being handed to, or null (OT2.8). */
+  transferEmail: string | null;
 }
 
 /** Not past yet (OA6.2). */
@@ -57,10 +61,14 @@ export interface UpcomingEvent extends CountedEvent {
   state: "upcoming";
 }
 
-/** Past, not anonymised yet: its sign-ups are erased on `erasedOn`, day 30 in Paris (OA6.3). */
+/**
+ * Past, not anonymised yet: its sign-ups are erased on `erasedOn`, day 30 in Paris (OA6.3).
+ * Null once day 30 has begun and the purge has not run yet (it runs at 03:00 UTC, and may
+ * fail): no date to come is left to give, and the page says « sous peu » (#607).
+ */
 export interface PastEvent extends CountedEvent {
   state: "past";
-  erasedOn: WallDate;
+  erasedOn: WallDate | null;
 }
 
 /** Anonymised: « Inscriptions effacées », and no count (OA6.4). */
@@ -86,7 +94,7 @@ function counted(row: MyEventRow): CountedEvent {
   const withoutCar = eventLegs(row.retourAt)
     .map((leg) => ({ leg, count: row.withoutCar[leg] }))
     .filter(({ count }) => count > 0);
-  return { id: row.id, title: row.title, start: row.allerAt, location: row.location, persons: row.persons, withoutCar };
+  return { id: row.id, title: row.title, start: row.allerAt, location: row.location, persons: row.persons, withoutCar, transferEmail: row.transferEmail };
 }
 
 function byStart(a: ListedEvent, b: ListedEvent): number {
@@ -103,7 +111,7 @@ export function listMyEvents(rows: readonly MyEventRow[], account: { id: string;
     if (row.anonymised) {
       past.push({ state: "erased", id: row.id, title: row.title, start: row.allerAt, location: row.location });
     } else if (isPast(row, now)) {
-      past.push({ state: "past", ...counted(row), erasedOn: dayThirty(row) });
+      past.push({ state: "past", ...counted(row), erasedOn: isDayThirtyReached(row, now) ? null : dayThirty(row) });
     } else {
       upcoming.push({ state: "upcoming", ...counted(row) });
     }

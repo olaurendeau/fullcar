@@ -428,3 +428,35 @@ describe("a person gone from the state the page shows", () => {
     expect(regions(withdraw(state, gone)).alert).toBe("");
   });
 });
+
+// #850's review, on #670: a person removed takes her cars with her. What the bar says about them
+// goes, as « Retirer la voiture » takes it (`forget`): their seats, their « Annuler », their change.
+describe("the cars of a person gone from the state the page shows", () => {
+  const gone = { cars: ["lea-car"] };
+
+  it("the failures about her car go: a seat taken, its « Annuler », « Modifier la voiture », « Retirer la voiture »", () => {
+    for (const about of [["seats:lea-car", "seats:lea-car:tom"], ["undo:lea-car", "undo:lea-car:tom"], ["ride:lea-car:edit"], ["ride:lea-car"]]) {
+      expect(covers(gone, { about, sent: 1 }), about.join()).toBe(true);
+    }
+  });
+
+  it("the failures about another car, or a person, stay", () => {
+    for (const about of [["seats:claire-car", "seats:claire-car:lea"], ["undo:claire-car"], ["ride:claire-car:edit"], ["person:lea"], ["offer:aller:lea"], ["cell:tom:aller"]]) {
+      expect(covers(gone, { about, sent: 1 }), about.join()).toBe(false);
+    }
+  });
+
+  it("the success of a placement in her car goes, with its « Annuler »; one in another car, or about no car, stays", () => {
+    const placed = (text: string, car: string) => ({ ...success(text), persons: ["tom"], car, undo: { run: () => {} } });
+    expect(texts(withdraw(succeed(emptyBar, placed("Tom est dans la voiture de Léa", "lea-car")), gone))).toEqual([]);
+    expect(texts(withdraw(succeed(emptyBar, placed("Tom est dans la voiture de Claire", "claire-car")), gone))).toEqual(["Tom est dans la voiture de Claire"]);
+    let state = inform(emptyBar, info("Léa ne fait plus partie de vos inscriptions"));
+    state = succeed(state, success("Léa ne fait plus partie de l’événement"));
+    expect(texts(withdraw(state, gone))).toEqual(["Léa ne fait plus partie de vos inscriptions", "Léa ne fait plus partie de l’événement"]);
+  });
+
+  it("a person gone takes no success about a car: the car's own withdrawal does", () => {
+    const state = succeed(emptyBar, { ...success("Tom est dans la voiture de Léa"), persons: ["tom"], car: "lea-car" });
+    expect(texts(withdraw(state, { persons: ["lea"] }))).toEqual(["Tom est dans la voiture de Léa"]);
+  });
+});

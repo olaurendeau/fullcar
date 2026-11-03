@@ -6,11 +6,13 @@ import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
 import { anAddress, seedAccount, seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
-import { confirmSeededEvent, seedEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { confirmSeededEvent, seedEvent, seedPendingSend } from "@/db/test-events";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import { atomically } from "@/db/transaction";
 import type { Leg } from "@/domain/leg";
 import { legIsEmpty, organiserPersons, type OrganiserPanelAnswer } from "@/domain/organiser-panel";
+import type { Brevo } from "@/email/brevo";
+import { createEventFor } from "@/app/create-event";
 import { readOrganiserState } from "./organiser-state";
 
 // The same function, watched: the persons are built after the access check, not before.
@@ -92,6 +94,7 @@ describe("readOrganiserState", () => {
       const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
       expect(answer).toStrictEqual({
         state: "panel",
+        options: { stops: false },
         legs: [
           {
             leg: "aller",
@@ -117,6 +120,34 @@ describe("readOrganiserState", () => {
       });
       expect(sentNumbers(answer)).toEqual(["b", "c"]);
       expect(sentNumbers(answer.state === "panel" && answer.persons)).toEqual([]);
+    });
+  });
+
+  it("options.stops follows the event's option, which « Modifier l'événement » reads", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      const options = async () => {
+        const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
+        return answer.state === "panel" ? answer.options : undefined;
+      };
+      expect(await options()).toEqual({ stops: false });
+      await trx.updateTable("event").set({ stops_enabled: true }).where("id", "=", scene.eventId).execute();
+      expect(await options()).toEqual({ stops: true });
+    });
+  });
+
+  it("with the option on, the panel carries no Stop: the organiser's answer is the same as without them", async () => {
+    await withRollback(async (trx) => {
+      const scene = await seedScene(trx);
+      await trx.updateTable("event").set({ stops_enabled: true }).where("id", "=", scene.eventId).execute();
+      const before = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
+      await seedStop(trx, scene.eventId, scene.ride, { location: "Gare de Rennes", time: "07:20:00" });
+
+      const answer = await readOrganiserState(trx, scene.eventId, { adminToken: scene.token });
+
+      expect(answer).toStrictEqual(before);
+      expect(answer).not.toHaveProperty("stops");
+      expect(JSON.stringify(answer)).not.toContain("Gare de Rennes");
     });
   });
 
@@ -232,7 +263,9 @@ describe("readOrganiserState", () => {
       async (trx, { eventId }) => {
         const session = await seedSession(trx, await confirmSeededEvent(trx, eventId));
         await anonymiseEvent(trx, eventId);
-        return { proof: { session }, expected: { state: "ended" } };
+        // What the organiser's screen shows: the title, the place, the dates and day 30 (OA8.4).
+        const event = { title: "Tournoi de Rennes", location: "Gymnase des Gayeulles", allerAt: "2026-12-12 07:30:00", retourAt: "2026-12-12 18:00:00" };
+        return { proof: { session }, expected: { state: "ended", event, erasedOn: "2027-01-11" } };
       },
     ],
   ])("%s: that state and nothing else, the persons never built", async (_, arrange) => {
@@ -353,5 +386,79 @@ describe("readOrganiserState", () => {
     await expect(atomically(getDb(), (trx) => readOrganiserState(trx, "Zz9yXw8v", { adminToken: undefined }))).rejects.toThrow(
       "onOneSnapshot: the transaction given is in read committed, not repeatable read",
     );
+  });
+});
+
+describe("readOrganiserState: the notice « Confirmez votre adresse » (OA1.7, OA1.10, OA2.1)", () => {
+  const NOW = new Date("2026-10-27T09:00:00.000Z");
+  const ago = (ms: number) => new Date(NOW.getTime() - ms);
+  const HOUR = 60 * 60_000;
+
+  it.each([
+    ["sent", "sent", ago(HOUR), "sent"],
+    ["failed", "failed", ago(24 * HOUR), "failed"],
+    ["the limit of the address", "address_limit", ago(24 * HOUR), "addressLimit"],
+    ["still sending, 2 s ago", "sending", ago(2_000), "sending"],
+    // The function killed: nothing will end it (comment on #600).
+    ["still sending, 1 hour ago", "sending", ago(HOUR), "failed"],
+  ] as const)("the creation browser's panel carries the address and the result kept: %s", async (_, status, at, send) => {
+    await withRollback(async (trx) => {
+      const { id, token } = await seedEvent(trx);
+      const email = anAddress();
+      await seedPendingSend(trx, id, { email, status, at });
+      const answer = await readOrganiserState(trx, id, { adminToken: token }, NOW);
+      expect(answer.state === "panel" && answer.pending).toStrictEqual({ email, send });
+    });
+  });
+
+  it("OA7.7: anyone else reads « pending » and nothing else, never the address", async () => {
+    await withRollback(async (trx) => {
+      const { id, token } = await seedEvent(trx);
+      const email = anAddress();
+      await seedPendingSend(trx, id, { email, status: "sent", at: ago(HOUR) });
+      const session = await seedSession(trx, await seedAccount(trx));
+      for (const proof of [{}, { adminToken: oneCharOff(token) }, { session }]) {
+        const answer = await readOrganiserState(trx, id, proof, NOW);
+        expect(answer).toStrictEqual({ state: "pending" });
+        expect(JSON.stringify(answer)).not.toContain(email);
+      }
+    });
+  });
+
+  it("OA2.6: once confirmed, the panel has no notice, for the session as for the creation browser", async () => {
+    await withRollback(async (trx) => {
+      const { id, token } = await seedEvent(trx);
+      await seedPendingSend(trx, id, { email: anAddress(), status: "sent", at: ago(HOUR) });
+      // As a confirmation link leaves it: no address awaiting, then the account (#586).
+      await trx.updateTable("event").set({ pending_email: null }).where("id", "=", id).execute();
+      const accountId = await confirmSeededEvent(trx, id);
+      const session = await seedSession(trx, accountId);
+      for (const proof of [{ adminToken: token }, { session }]) {
+        const answer = await readOrganiserState(trx, id, proof, NOW);
+        expect(answer.state).toBe("panel");
+        expect(answer).not.toHaveProperty("pending");
+      }
+    });
+  });
+});
+
+describe("readOrganiserState: an event created with a session (OA1.3, OA7.6, review of #840)", () => {
+  it("a real creation, read through the access rule: organiser for its session and for its admin token, not for another session", async () => {
+    await withRollback(async (trx) => {
+      const session = await seedSession(trx, await seedAccount(trx));
+      const date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const brevo: Brevo = { send: () => Promise.reject(new Error("OA1.3: no email goes with a session")) };
+      const created = await createEventFor(
+        { title: "Tournoi", location: "Gymnase", allerDate: date, allerTime: "07:30", session },
+        { db: trx, now: new Date(), locale: "fr", origin: "https://fullcar.test", brevo, later: () => {} },
+      );
+      if (!created.ok) throw new Error(`expected an event, got ${JSON.stringify(created.errors)}`);
+
+      expect((await readOrganiserState(trx, created.id, { session })).state).toBe("panel");
+      expect((await readOrganiserState(trx, created.id, { adminToken: created.token })).state).toBe("panel");
+      const email = anAddress();
+      const other = await seedSession(trx, await seedAccount(trx, { email }));
+      expect(await readOrganiserState(trx, created.id, { session: other })).toStrictEqual({ state: "notYours", email });
+    });
   });
 });

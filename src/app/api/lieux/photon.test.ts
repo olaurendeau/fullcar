@@ -28,10 +28,10 @@ const status = (code: number, headers?: Record<string, string>) => new Response(
 type Answer = (url: string, init: RequestInit) => Response | Promise<Response>;
 
 /** Photon behind an injected `fetch` and clock: `answers` in turn, then Brindas. */
-function setup(answers: Answer[] = [], options: { breakerMs?: number } = {}) {
+function setup(answers: Answer[] = [], options: { breakerMs?: number; callsPerSecond?: number } = {}) {
   let time = START;
   const fetch = vi.fn((url: string, init: RequestInit) => Promise.resolve((answers.shift() ?? (() => json(BRINDAS)))(url, init)));
-  const photon = createPhoton({ fetch: fetch as unknown as typeof globalThis.fetch, now: () => time, url: PHOTON, breakerMs: MINUTE, ...options });
+  const photon = createPhoton({ fetch: fetch as unknown as typeof globalThis.fetch, now: () => time, url: PHOTON, breakerMs: MINUTE, callsPerSecond: 5, ...options });
   return {
     search: (q: PlaceQuery = LILAS) => photon.search(q),
     fetch,
@@ -152,6 +152,13 @@ describe("the cap of 5 calls a second (AL2.5)", () => {
     advance(1);
     expect(await search(query("lieu 5"))).toEqual(OK);
     expect(fetch).toHaveBeenCalledTimes(6);
+  });
+
+  it("lets through as many calls as callsPerSecond says (the slots', where tests run in parallel)", async () => {
+    const { search, fetch } = setup([], { callsPerSecond: 50 });
+    for (let n = 0; n < 50; n++) expect(await search(query(`lieu ${n}`))).toEqual(OK);
+    expect(await search(query("lieu 50"))).toEqual(UNAVAILABLE);
+    expect(fetch).toHaveBeenCalledTimes(50);
   });
 
   it("still serves the cache beyond it", async () => {
@@ -431,18 +438,27 @@ describe("what a failure leaves (AL6.3, AL6.6)", () => {
 
 describe("photonSettings", () => {
   it("defaults to komoot's public instance and a breaker of 60 s", () => {
-    expect(photonSettings({})).toEqual({ url: PHOTON, breakerMs: MINUTE });
+    expect(photonSettings({})).toEqual({ url: PHOTON, breakerMs: MINUTE, callsPerSecond: 5 });
   });
 
   it("reads PHOTON_URL and PLACES_BREAKER_MS", () => {
     expect(photonSettings({ PHOTON_URL: "http://photon:2322/api/", PLACES_BREAKER_MS: "0" })).toEqual({
       url: "http://photon:2322/api/",
       breakerMs: 0,
+      callsPerSecond: 5,
     });
     expect(photonSettings({ PLACES_BREAKER_MS: "15000" }).breakerMs).toBe(15_000);
   });
 
   it.each(["", " ", "-1", "1.5", "1e3", "soon"])("ignores PLACES_BREAKER_MS = %j", (value) => {
-    expect(photonSettings({ PHOTON_URL: "", PLACES_BREAKER_MS: value })).toEqual({ url: PHOTON, breakerMs: MINUTE });
+    expect(photonSettings({ PHOTON_URL: "", PLACES_BREAKER_MS: value })).toEqual({ url: PHOTON, breakerMs: MINUTE, callsPerSecond: 5 });
+  });
+
+  it("reads PLACES_CALLS_PER_SECOND, a positive integer", () => {
+    expect(photonSettings({ PLACES_CALLS_PER_SECOND: "1000" }).callsPerSecond).toBe(1000);
+  });
+
+  it.each(["", " ", "0", "-1", "1.5", "1e3", "many"])("ignores PLACES_CALLS_PER_SECOND = %j", (value) => {
+    expect(photonSettings({ PLACES_CALLS_PER_SECOND: value }).callsPerSecond).toBe(5);
   });
 });

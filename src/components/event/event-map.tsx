@@ -5,14 +5,15 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import type { BoardCar } from "@/domain/board";
-import { freeSeatsOf, mapOf } from "@/domain/event-map";
+import { freeSeatsOf, mapOf, routeOf, stopPointsOf, stopsOf } from "@/domain/event-map";
 import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
+import { wallClockAsUtc } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { leafletFocus, TILES_QUIET, tilesStep, type LeafletFocus, type TilesEvent } from "./event-map-state";
 import { focusLandmark, showCar } from "./focus";
 import { leafletImport } from "./leaflet-import";
-import type { CarPoint, EventMapHandle, MapState } from "./leaflet-map";
+import type { CarPoint, CarRoute, EventMapHandle, MapState, StopPoint } from "./leaflet-map";
 
 /** What a leg's map needs from the page: the event's place, the page's open or folded state, and whether it is settled. */
 export interface LegMap {
@@ -36,7 +37,11 @@ export interface MapHint {
 }
 
 /** What the map reads of a car, and nothing more: the driver's first name, never their number. */
-type MapCar = Pick<BoardCar, "id" | "location" | "position" | "freeSeats"> & { driver: Pick<BoardCar["driver"], "firstName"> };
+type MapCar = Pick<BoardCar, "id" | "location" | "position" | "freeSeats"> & {
+  driver: Pick<BoardCar["driver"], "firstName">;
+  /** The aller's Stops by time (empty on the retour, and without the event's option): never their passengers. */
+  stops: readonly Pick<BoardCar["stops"][number], "id" | "location" | "time" | "position">[];
+};
 
 /**
  * A touch screen, where one finger scrolls the page and two move the map (CA1.11): Leaflet's
@@ -150,14 +155,19 @@ function Credits({ ref }: { ref: Ref<HTMLParagraphElement> }) {
  * The map has the flag and a point per car of the leg with a position, `cars` in the order of
  * the cards, cars less than 25 m apart in one point, and those less than 25 m from the flag in
  * its one point (`mapOf`, v18); its name counts them, and `notOnMap` the others. An activated
- * point leads to its card (`showCar`), a grouped one opens its bubble, whose buttons do. The
- * credits are in the map, at its bottom right, loading too, and hidden with the box under
+ * point leads to its card (`showCar`), a grouped one opens its bubble, whose buttons do.
+ * On the aller, with the event's option, a Stop with a position is a round and a label of its own
+ * (`stopsOf`, epic #881, RV5.1), grouped only with the Stops of other cars less than 25 m away
+ * (`stopPointsOf`, RV5.6), never with a car nor the flag; a car with such a Stop draws one line
+ * through them to the flag (`routeOf`, RV5.2) in place of its straight one; `stopsNotOnMap` counts
+ * the others, under `notOnMap` (RV5.3). Pressing a Stop opens its bubble (RV5.4), whose buttons lead to the cards.
+ * The credits are in the map, at its bottom right, loading too, and hidden with the box under
  * Leaflet's notice (CA1.14, CA2.8, CA3.7). Under the map, in this order (CA1.17): the tiles' notice (CA2.4, `tilesStep`), part of the map's
- * description, `notOnMap`, then the two-finger sentence, shown at touch only (`pointer-coarse:`).
+ * description, `notOnMap`, `stopsNotOnMap`, then the two-finger sentence, shown at touch only (`pointer-coarse:`).
  * A new state of the page updates the map started (`update`, « Mises à jour et focus »), folded
  * or in a hidden tab too, where its framing waits for a size.
  */
-export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: readonly MapCar[] }) {
+export function EventMap({ leg, map, cars, date }: { leg: Leg; map: LegMap; cars: readonly MapCar[]; date: string }) {
   const t = useTranslations("EventMap");
   const tCar = useTranslations("Board.car");
   const tActions = useTranslations("Actions");
@@ -259,28 +269,72 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
   const zoomOut = t("zoomOut");
   const close = tActions("close");
   const { points: grouped, onMap, notOnMap } = mapOf(map.position, cars);
+  // The Stops are the aller's alone (RV5.1): a car of the retour has none, and the map would not draw them.
+  const { stops: placedStops, stopsNotOnMap } = stopsOf(leg === "aller" ? cars : []);
+  // A car with a positioned Stop draws its own line through them, in place of its straight one (Q4).
+  const routes: CarRoute[] =
+    leg === "aller"
+      ? cars
+          .filter((car) => car.position !== null && car.stops.some(({ position }) => position !== null))
+          .map((car) => ({ car: car.id, positions: routeOf(car, map.position) }))
+      : [];
+  const routed = new Set(routes.map(({ car }) => car));
+  // Every count of seats in a name, 0 included: « 0 place libre », never « Complet » (v29, CA1.22).
+  const carOf = (car: (typeof cars)[number]) => ({
+    id: car.id,
+    position: car.position,
+    title: tCar("title", { driver: car.driver.firstName }),
+    name: t(`car.${leg}`, {
+      car: tCar("title", { driver: car.driver.firstName }),
+      location: car.location,
+      seats: t("freeSeats", { free: car.freeSeats }),
+    }),
+    seats: format.number(car.freeSeats),
+  });
+  // Rounds of Stops (RV5.4, RV5.6): the map puts each after the point of its first car in the Tab order (CA1.23).
+  const stops: StopPoint[] = stopPointsOf(placedStops).map(({ position, stops: here }) => {
+    const [first] = here;
+    const time = format.dateTime(wallClockAsUtc(`${date} ${first.stop.time}`), { timeStyle: "short" });
+    const where = t("stopTitle", { place: first.stop.location, time });
+    const drivers = here.map(({ car }) => car.driver.firstName);
+    // « 08:25 Nina », or « 08:25 · 2 voitures », the design's word for the count; its name starts with it (WCAG 2.5.3).
+    const label = here.length === 1 ? `${time} ${drivers[0]}` : `${time} · ${t("stopCars", { count: here.length })}`;
+    const name = t("stop", { driver: format.list(drivers, { type: "conjunction", style: "narrow" }), place: first.stop.location, time });
+    return {
+      key: here
+        .map(({ stop }) => stop.id)
+        .sort()
+        .join(" "),
+      follows: first.car.id,
+      position,
+      label,
+      name: `${label}, ${name}`,
+      title: here.length === 1 ? where : t("stopCars", { count: here.length }),
+      detail: here.length === 1 ? "" : where,
+      cars: here.map(({ car, stop }) => {
+        const own = carOf(car);
+        const at = format.dateTime(wallClockAsUtc(`${date} ${stop.time}`), { timeStyle: "short" });
+        // Only the line of a car whose place or time is not the title's says its own: « · Prelles église, 09:20 » (RV5.6).
+        if (here.length === 1 || (stop.location === first.stop.location && at === time)) return own;
+        const title = t("stopLineAt", { line: own.title, place: stop.location, time: at });
+        // Its name starts with its visible text (WCAG 2.5.3).
+        return { ...own, title, name: `${title}, ${own.name}` };
+      }),
+    };
+  });
   const points: CarPoint[] = grouped.map((point) => {
     const { position, atFlag, cars: here } = point;
-    // Every count of seats in a name, 0 included: « 0 place libre », never « Complet » (v29, CA1.22).
-    const pointCars = here.map((car) => ({
-      id: car.id,
-      position: car.position,
-      title: tCar("title", { driver: car.driver.firstName }),
-      name: t(`car.${leg}`, {
-        car: tCar("title", { driver: car.driver.firstName }),
-        location: car.location,
-        seats: t("freeSeats", { free: car.freeSeats }),
-      }),
-      seats: format.number(car.freeSeats),
-    }));
+    const direct = !atFlag && here.some((car) => !routed.has(car.id));
+    const pointCars = here.map(carOf);
     const free = freeSeatsOf(point);
     if (here.length === 1) {
       const { name } = pointCars[0];
-      return { position, atFlag, label: here[0].driver.firstName, name, title: name, seats: format.number(free), cars: pointCars };
+      return { position, atFlag, direct, label: here[0].driver.firstName, name, title: name, seats: format.number(free), cars: pointCars };
     }
     return {
       position,
       atFlag,
+      direct,
       label: format.number(here.length),
       // « Nina, Paul », as the design writes it: the narrow conjunction, without « et » or « and ».
       name: t("group", {
@@ -298,7 +352,7 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
     };
   });
   // What the map shows, compared as text: a new state of the page that changes none of it changes nothing.
-  const stateJson = JSON.stringify({ flag: map.position, flagLabel, points } satisfies MapState);
+  const stateJson = JSON.stringify({ flag: map.position, flagLabel, points, stops, routes } satisfies MapState);
   const shown = useEffectEvent(() => JSON.parse(stateJson) as MapState);
 
   useEffect(() => {
@@ -425,6 +479,9 @@ export function EventMap({ leg, map, cars }: { leg: Leg; map: LegMap; cars: read
         )}
         {notOnMap > 0 && (
           <p className="text-[13px] leading-[18px] text-muted-foreground">{t("notOnMap", { count: notOnMap })}</p>
+        )}
+        {stopsNotOnMap > 0 && (
+          <p className="text-[13px] leading-[18px] text-muted-foreground">{t("stopsNotOnMap", { count: stopsNotOnMap })}</p>
         )}
         {/* In the server's HTML, always, shown by `(pointer: coarse)` alone: nothing jumps at the
             hydration (v29, CA1.19), and it follows the pointer when it changes (CA1.11). */}

@@ -7,6 +7,7 @@ import {
   GLOBAL_SENDS_PER_HOUR,
   LOGINS_PER_ADDRESS,
   SEND_WINDOW_MS,
+  TRANSFERS_PER_EVENT,
   inSendWindow,
   sendLimitReached,
 } from "./send-limits";
@@ -43,6 +44,24 @@ describe("sendLimitReached", () => {
     it("lets the 3rd go, and stops the 4th", () => {
       expect(sendLimitReached({ event: 2, address: 2, global: 2 })).toBeNull();
       expect(sendLimitReached({ event: 3, address: 3, global: 3 })).toBe("event");
+    });
+  });
+
+  // OT6.5: 3 handover emails per hour for an event, sending, resends and changes of address included.
+  describe("transfers per event", () => {
+    it("is 3 per hour", () => {
+      expect(TRANSFERS_PER_EVENT).toBe(3);
+    });
+
+    it("lets the 3rd go, and stops the 4th, named as the event limit", () => {
+      expect(sendLimitReached({ transfer: 2, address: 2, global: 2 })).toBeNull();
+      expect(sendLimitReached({ transfer: 3, address: 3, global: 3 })).toBe("event");
+    });
+
+    it("is counted apart from the confirmations: 3 of one kind do not stop the other", () => {
+      expect(sendLimitReached({ event: 3, transfer: 0, address: 0, global: 3 })).toBe("event");
+      expect(sendLimitReached({ event: 0, transfer: 3, address: 0, global: 3 })).toBe("event");
+      expect(sendLimitReached({ event: 2, transfer: 2, address: 4, global: 4 })).toBeNull();
     });
   });
 

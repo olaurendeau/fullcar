@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { BrandMark } from "@/components/brand/brand-mark";
-import { ContactFooter } from "@/components/contact/contact-footer";
+import { ContactFooter, inLink } from "@/components/contact/contact-footer";
 import { Button } from "@/components/ui/button";
+import { AccountDeletedNotice } from "./account-deleted-notice";
 import { publicPageMetadata } from "./site";
 
 export const metadata: Metadata = publicPageMetadata("/");
@@ -20,6 +21,7 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 p-4">
+      <AccountDeletedNotice />
       <div className="flex flex-col gap-1">
         {/* The mark beside the h1, outside it: the h1's name stays « Fullcar » (#651, VI4.3). */}
         <div className="flex items-start gap-2.5">
@@ -32,6 +34,11 @@ export default function Home() {
       <Button asChild className="h-11">
         <Link href="/nouveau">{t("create")}</Link>
       </Button>
+      {/* With or without a session: without one, /mes-evenements sends to /connexion (OA10.2).
+          Small, grey, centred, 8 px under the button (OA10.1): the footer's link style. */}
+      <Link href="/mes-evenements" className={`${inLink} -mt-4 self-center`}>
+        {t("myEvents")}
+      </Link>
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">{t("howItWorks")}</h2>
         {/* `role="list"`: without its bullets, Safari would no longer expose the list as one. */}

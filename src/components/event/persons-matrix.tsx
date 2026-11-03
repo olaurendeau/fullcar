@@ -13,8 +13,8 @@ const CELL: Record<DeviceState["kind"], string> = {
   notConcerned: "bg-background font-normal text-muted-foreground",
 };
 
-/** A cell's visible text: « Avec Claire », « Ne fait pas le retour »… */
-function cellText(t: ReturnType<typeof useTranslations<"DevicePersons">>, { state, leg }: MatrixCell): string {
+/** A cell's visible text: « Avec Claire », « Ne fait pas le retour »…; « Personnes inscrites » shows it too (RP4.2). */
+export function cellText(t: ReturnType<typeof useTranslations<"DevicePersons">>, { state, leg }: MatrixCell): string {
   if (state.kind === "passenger") return t("cell.passenger", { driver: state.driver.firstName });
   if (state.kind === "notConcerned") return t(`state.notConcerned.${leg}`);
   return t(`state.${state.kind}`);

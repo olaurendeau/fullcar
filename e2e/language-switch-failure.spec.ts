@@ -9,7 +9,7 @@ import { expect, test } from "./fixtures";
 
 const FR = {
   switch: "English",
-  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
   // What a page in French says, written in English, the language asked for (decision 4).
   failed: "The language could not be changed. Check your connection, then try again.",
   cookiesBlocked:
@@ -17,7 +17,7 @@ const FR = {
 };
 const EN = {
   switch: "Français",
-  tagline: "Group carpooling, there and back, no account needed.",
+  tagline: "Group carpooling, there and back, no account for participants.",
   failed: "La langue n’a pas pu être changée. Vérifiez la connexion, puis réessayez.",
   cookiesBlocked:
     "Votre navigateur bloque les cookies, qui retiennent le choix de la langue. Autorisez-les pour ce site, puis réessayez.",

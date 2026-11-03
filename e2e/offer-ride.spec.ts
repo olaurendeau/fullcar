@@ -141,9 +141,10 @@ test.describe("offer a car", () => {
     expect(actions.slice(0, 2)).toEqual([FR.add, FR.offer]);
     expect(actions.filter((name) => name === "car")).toHaveLength(15);
     expect((await offerButton(panel(page)).boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    // The empty Retour: its empty state, under both actions.
+    // The empty Retour: its empty state, under both actions. The 15 drivers do not do it: their fold
+    // « Ne font pas le retour (15) » is the third and last button, closed (#981, PL1.2).
     await selectTab(page, "Retour");
-    await expect(panel(page).getByRole("button")).toHaveText([FR.add, FR.offer]);
+    await expect(panel(page).getByRole("button")).toHaveText([FR.add, FR.offer, "Ne font pas le retour (15)"]);
     await expect(offerButton(panel(page))).toBeEnabled();
   });
 
@@ -565,21 +566,29 @@ test.describe("offer a car", () => {
     await expect(withoutCar(panel(page))).toHaveText(["Tom"]);
   });
 
-  test("C4.9: with the three options on, the form is the same as without", async ({ db, page, seededEvent }) => {
-    const options = await seedEvent(db, { boostersEnabled: true, participationEnabled: true, stopsEnabled: true });
-    try {
-      const shown: string[][] = [];
-      for (const id of [seededEvent.id, options.id]) {
-        await page.goto(`/e/${id}`);
-        await openForm(page);
-        shown.push([
-          await form(page).innerText(),
-          String(await form(page).locator("input, textarea, select, [role=radio], [role=checkbox]").count()),
-        ]);
+  // « Points de RDV » adds its section to the aller's form only (#889, RV1.1; e2e/ride-stops.spec.ts): the aller is compared
+  // with the option off, the retour with it on.
+  for (const { leg, stopsEnabled, title } of [
+    { leg: "Aller", stopsEnabled: false, title: "C4.9: with boosters and participation on, the aller's form is the same as without" },
+    { leg: "Retour", stopsEnabled: true, title: "C4.9: with the three options on, the retour's form is the same as without" },
+  ]) {
+    test(title, async ({ db, page, seededEvent }) => {
+      const options = await seedEvent(db, { boostersEnabled: true, participationEnabled: true, stopsEnabled });
+      try {
+        const shown: string[][] = [];
+        for (const id of [seededEvent.id, options.id]) {
+          await page.goto(`/e/${id}`);
+          if (leg === "Retour") await selectTab(page, "Retour");
+          await openForm(page);
+          shown.push([
+            await form(page).innerText(),
+            String(await form(page).locator("input, textarea, select, [role=radio], [role=checkbox]").count()),
+          ]);
+        }
+        expect(shown[1]).toEqual(shown[0]);
+      } finally {
+        await db.deleteFrom("event").where("id", "=", options.id).execute();
       }
-      expect(shown[1]).toEqual(shown[0]);
-    } finally {
-      await db.deleteFrom("event").where("id", "=", options.id).execute();
-    }
-  });
+    });
+  }
 });

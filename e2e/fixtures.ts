@@ -4,6 +4,7 @@ import { createDb } from "@/db/client";
 import type { Database } from "@/db/schema";
 import type { NewEvent } from "@/domain/event";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
+import { takeIssuedAddresses } from "./mailbox";
 
 export { expect };
 
@@ -38,10 +39,23 @@ export function e2eDatabaseUrl(url: string | undefined): string {
  * Playwright's `use` is named `provide` here: the React hooks lint rule takes `use` for a hook.
  */
 export const test = base.extend<
-  { eventFields: Partial<NewEvent>; seededEvent: SeededEvent },
+  { eventFields: Partial<NewEvent>; seededEvent: SeededEvent; sweepSends: void },
   { db: Kysely<Database> }
 >({
   eventFields: [{}, { option: true }],
+  /**
+   * After each test, the confirmation sends to the addresses it took from `newAddress`: an
+   * event created through the form sends one, and the hour's global cap (50) is shared by
+   * the whole suite. The events stay; their sends do not.
+   */
+  sweepSends: [
+    async ({ db }, provide) => {
+      await provide();
+      const addresses = takeIssuedAddresses();
+      if (addresses.length > 0) await db.deleteFrom("email_send").where("email", "in", addresses).execute();
+    },
+    { auto: true },
+  ],
   db: [
     async ({}, provide) => {
       const db = createDb(e2eDatabaseUrl(process.env.DATABASE_URL));

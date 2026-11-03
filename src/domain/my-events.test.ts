@@ -31,6 +31,7 @@ function row(fields: Partial<MyEventRow> & Pick<MyEventRow, "id">): MyEventRow {
     anonymised: false,
     persons: 0,
     withoutCar: { aller: 0, retour: 0 },
+    transferEmail: null,
     ...fields,
   };
 }
@@ -96,6 +97,7 @@ function clockCases() {
           location: "Gymnase des Gayeulles",
           persons: 4,
           withoutCar: [{ leg: "retour", count: 2 }],
+          transferEmail: null,
         },
       ]);
     });
@@ -136,6 +138,7 @@ function clockCases() {
           persons: 2,
           withoutCar: [{ leg: "aller", count: 1 }],
           erasedOn: "2027-01-01",
+          transferEmail: null,
         },
       ]);
     });
@@ -143,6 +146,22 @@ function clockCases() {
     it("counts day 30 from the aller without a retour", () => {
       const past = row({ id: "past", allerAt: "2026-12-01 23:30:00", retourAt: null });
       expect(listMyEvents([past], ACCOUNT, NOW).past[0]).toMatchObject({ state: "past", erasedOn: "2026-12-31" });
+    });
+
+    // #607: the purge runs at 03:00 UTC, and may fail. Day 30 begun, the date is no longer in the future.
+    it("gives no date once day 30 has begun in Paris, before the purge has anonymised it", () => {
+      const dayThirtyToday = row({ id: "today", allerAt: "2026-11-12 07:30:00", retourAt: "2026-11-12 18:00:00" });
+      const dayThirtyPassed = row({ id: "passed", allerAt: "2026-11-01 07:30:00", retourAt: null });
+      const dayThirtyTomorrow = row({ id: "tomorrow", allerAt: "2026-11-13 07:30:00", retourAt: null });
+      const past = listMyEvents([dayThirtyToday, dayThirtyPassed, dayThirtyTomorrow], ACCOUNT, NOW).past;
+      expect(past.map((event) => [event.id, event.state === "past" && event.erasedOn])).toEqual([
+        ["tomorrow", "2026-12-13"],
+        ["today", null],
+        ["passed", null],
+      ]);
+      // From Paris's midnight on: 00:30 in Paris is still 23:30 UTC of the day before.
+      const justAfterMidnight = new Date("2026-12-11T23:30:00Z");
+      expect(listMyEvents([dayThirtyToday], ACCOUNT, justAfterMidnight).past[0]).toMatchObject({ erasedOn: null });
     });
   });
 
@@ -178,6 +197,33 @@ function clockCases() {
       const list = listMyEvents(rows, ACCOUNT, NOW);
       expect(ids(list.past)).toEqual(["past", "erased"]);
       expect(ids(list.upcoming)).toEqual(["upcoming"]);
+    });
+  });
+
+  // OT2.8: the row says who the event is being handed to, whether the link still serves or not.
+  describe("OT2.8: a handover waiting", () => {
+    it("carries the recipient's address on an upcoming and on a past row", () => {
+      const rows = [
+        row({ id: "upcoming", transferEmail: "dominique@exemple.fr" }),
+        row({ id: "past", allerAt: "2026-12-01 07:30:00", retourAt: null, transferEmail: "dominique@exemple.fr" }),
+        row({ id: "none", allerAt: "2026-12-19 07:30:00" }),
+      ];
+      const list = listMyEvents(rows, ACCOUNT, NOW);
+      expect(list.upcoming.map((event) => [event.id, event.transferEmail])).toEqual([
+        ["none", null],
+        ["upcoming", "dominique@exemple.fr"],
+      ]);
+      expect(list.past[0]).toMatchObject({ id: "past", transferEmail: "dominique@exemple.fr" });
+    });
+
+    it("answers the address of an event of another account to no one", () => {
+      const rows = [row({ id: "someone-else", accountId: OTHER_ACCOUNT_ID, transferEmail: "secret@exemple.fr" })];
+      expect(JSON.stringify(listMyEvents(rows, ACCOUNT, NOW))).not.toContain("secret@exemple.fr");
+    });
+
+    it("keeps an anonymised row to its fixed fields", () => {
+      const rows = [row({ id: "erased", allerAt: "2026-10-01 07:30:00", retourAt: null, anonymised: true, transferEmail: "x@exemple.fr" })];
+      expect(listMyEvents(rows, ACCOUNT, NOW).past[0]).not.toHaveProperty("transferEmail");
     });
   });
 

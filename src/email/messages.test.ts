@@ -3,7 +3,8 @@ import { negotiateLocale } from "@/i18n/negotiate";
 import { renderEmail, type EmailInput } from "./messages";
 
 // The four emails of epic #581, word for word as « Les e-mails » says them
-// (docs/design/organizer-account/README.md, v4), in French and in English.
+// (docs/design/organizer-account/README.md, v4), and the fifth, the handover of epic #935
+// (docs/design/organizer-transfer/README.md, « L'e-mail »), in French and in English.
 
 const ORIGIN = "https://fullcar.example";
 const TOKEN = "AbCdEfGhIjKlMnOpQrStUv";
@@ -92,6 +93,34 @@ const EXPECTED = {
       ),
     },
   },
+  transfer: {
+    fr: {
+      subject: "Un événement vous est cédé sur Fullcar",
+      text: paragraphs(
+        "Bonjour,",
+        "Quelqu’un souhaite vous céder l’organisation d’un événement de covoiturage sur Fullcar. Ouvrez le lien pour l’accepter : l’événement rejoindra Mes événements, sur n’importe quel appareil.",
+        "[Voir l’événement cédé]",
+        "Ce lien est valable 7 jours et ne sert qu’une fois. Ne le transférez pas : il ouvre l’espace organisateur, qui montre des numéros de téléphone.",
+        "Cet événement ne vous concerne pas ? Ignorez cet e-mail : tant que vous n’ouvrez pas le lien, rien ne change pour vous et aucun compte n’est créé. Si le lien ne marche plus, la personne qui vous l’a envoyé l’a peut-être annulé.",
+        "Votre adresse : nous la gardons sur l’événement tant que la cession attend, 30 jours après sa date au plus, puis nous l’en effaçons. Elle reste aussi dans la liste des e-mails envoyés, qui sert à limiter les envois. Le détail est dans la page de confidentialité, ci-dessous.",
+        `Si le bouton ne marche pas, copiez ce lien dans votre navigateur :\n${ORIGIN}/connexion/cession#${TOKEN}`,
+        FR_FOOTER,
+      ),
+    },
+    en: {
+      subject: "An event is being handed over to you on Fullcar",
+      text: paragraphs(
+        "Hello,",
+        "Someone would like to hand over the organising of a carpooling event on Fullcar to you. Open the link to accept it: the event will join My events, on any device.",
+        "[See the event handed over]",
+        "This link is valid for 7 days and works once. Do not forward it: it opens the organiser area, which shows phone numbers.",
+        "Not for you? Ignore this email: until you open the link, nothing changes for you and no account is created. If the link no longer works, the person who sent it may have cancelled it.",
+        "Your address: we keep it on the event while the handover is pending, 30 days after its date at the latest, then we erase it from the event. It also stays in the list of emails sent, which is used to limit how many go out. The details are on the privacy page, below.",
+        `If the button does not work, copy this link into your browser:\n${ORIGIN}/connexion/cession#${TOKEN}`,
+        EN_FOOTER,
+      ),
+    },
+  },
   inactivityWarning: {
     fr: {
       subject: "Votre compte Fullcar sera supprimé le 12 mars 2029",
@@ -127,6 +156,7 @@ function inputOf(kind: Kind, locale: Locale): EmailInput {
   switch (kind) {
     case "confirmation":
     case "signIn":
+    case "transfer":
       return { kind, locale, origin: ORIGIN, token: TOKEN };
     case "noAccount":
       return { kind, locale, origin: ORIGIN };
@@ -161,6 +191,14 @@ function visibleText(html: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+describe("OT6.1: the email of a handover has exactly the subject and the text of « L'e-mail »", () => {
+  it.each(["fr", "en"] as const)("%s", (locale) => {
+    const email = renderEmail(inputOf("transfer", locale));
+    expect(email.subject).toBe(EXPECTED.transfer[locale].subject);
+    expect(email.text).toBe(EXPECTED.transfer[locale].text);
+  });
+});
 
 describe("OA3.1: each email has exactly the subject and the text of « Les e-mails »", () => {
   it.each(CASES)("%s, %s", (kind, locale) => {
@@ -207,6 +245,23 @@ describe("OA3.2: no text typed by anyone", () => {
     for (const part of [email.subject, email.text, email.html]) expect(part).not.toContain("Zorglub");
   });
 
+  it("OT6.2: the handover has no field for a title, a place or the first organiser, and writes none of them", () => {
+    // @ts-expect-error: no title.
+    renderEmail({ kind: "transfer", locale: "fr", origin: ORIGIN, token: TOKEN, title: "x" });
+    // @ts-expect-error: no place.
+    renderEmail({ kind: "transfer", locale: "fr", origin: ORIGIN, token: TOKEN, location: "x" });
+    // @ts-expect-error: no address of the first organiser.
+    renderEmail({ kind: "transfer", locale: "fr", origin: ORIGIN, token: TOKEN, from: "cedant@exemple.fr" });
+    const typed = { title: "Zorglub <b>x</b>", location: "Zorglub-lieu", from: "cedant@exemple.fr" };
+    for (const locale of ["fr", "en"] as const) {
+      const email = renderEmail({ ...inputOf("transfer", locale), ...typed });
+      for (const part of [email.subject, email.text, email.html]) {
+        expect(part).not.toContain("Zorglub");
+        expect(part).not.toContain("cedant@exemple.fr");
+      }
+    }
+  });
+
   it("the input has no field for a title, a place or a first name", () => {
     // @ts-expect-error: no title.
     renderEmail({ kind: "confirmation", locale: "fr", origin: ORIGIN, token: TOKEN, title: "x" });
@@ -221,8 +276,8 @@ describe("OA3.2: no text typed by anyone", () => {
 describe("DS5.1: no email carries the description of an event", () => {
   const MARKER = "Zorglub4729";
 
-  it("the input of none of the four emails has a field for it", () => {
-    // Every key of every one of the four inputs.
+  it("the input of none of the five emails has a field for it", () => {
+    // Every key of every one of the five inputs.
     type Keys<T> = T extends unknown ? keyof T : never;
     expectTypeOf<Keys<EmailInput>>().toEqualTypeOf<"kind" | "locale" | "origin" | "token" | "deletesAt">();
     // @ts-expect-error: no description in the confirmation.
@@ -262,10 +317,24 @@ describe("OA3.3: our HTML has no image and links only to the site", () => {
   });
 });
 
+describe("OT7.3: the handover tells the address is kept, without a duration, and points to /confidentialite", () => {
+  it.each(["fr", "en"] as const)("%s", (locale) => {
+    const { text, html } = renderEmail(inputOf("transfer", locale));
+    const paragraph = text.split("\n\n").find((p) => p.startsWith(locale === "fr" ? "Votre adresse" : "Your address"))!;
+    // The 30 days are the event's, said once; the list of emails sent gets no duration (#938).
+    const sent = paragraph.split(/(?<=\.) /).find((sentence) => /e-mails envoyés|emails sent/.test(sentence))!;
+    expect(sent).not.toMatch(/\d|jour|day|mois|month|\ban\b|year/i);
+    expect(text).toContain(`${ORIGIN}/confidentialite`);
+    expect(hrefsOf(html)).toContain(`${ORIGIN}/connexion/cession#${TOKEN}`);
+    expect(html).toContain(`${ORIGIN}/confidentialite`);
+  });
+});
+
 describe("OA3.4: the links of the emails", () => {
   it.each([
     ["confirmation", "/connexion/confirmer"],
     ["signIn", "/connexion/lien"],
+    ["transfer", "/connexion/cession"],
   ] as const)("%s: path %s, no query string, the token after #", (kind, path) => {
     for (const locale of ["fr", "en"] as const) {
       const { html, text } = renderEmail(inputOf(kind, locale));

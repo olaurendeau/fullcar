@@ -34,7 +34,10 @@ export type EventField = (typeof EVENT_FIELDS)[number];
 export type EventError = TextError | "tooEarly" | "tooLate" | "notAfterAller";
 export type EventErrors = Partial<Record<EventField, EventError>>;
 
-/** What the form sends. A missing text counts as empty, a missing option as disabled. */
+/**
+ * What the form sends. A missing text counts as empty, a missing option as disabled; at the
+ * change, `stops` alone is read as sent or not (D1): a request without it leaves the option.
+ */
 export interface EventFields {
   title?: string;
   location?: string;
@@ -78,7 +81,18 @@ export interface EventHeader {
 export type EventChange = Omit<EventHeader, "locationPosition" | "description"> & {
   locationPosition?: Position | null;
   description?: string | null;
+  /**
+   * The option « Points de RDV » (epic #881, D1): the only option a change may touch. Sent,
+   * it is written; as `before`, it is the value the page loaded. Not sent, the option stays.
+   */
+  stops?: boolean;
 };
+
+/**
+ * What « Modifier l’événement » loaded and sends back as `before`: the header and, since the
+ * option can be turned on there (D1), the option « Points de RDV ». A page from before it has none.
+ */
+export type EventBefore = EventHeader & { stops?: boolean };
 
 export interface NewEvent extends EventHeader {
   boostersEnabled: boolean;
@@ -115,7 +129,8 @@ export function eventFieldsOf(input: unknown): EventFields {
     description: fields.description,
     boosters: box("boosters"),
     participation: box("participation"),
-    stops: box("stops"),
+    // Unlike the other boxes, a change tells "not sent" from "off": only a boolean is a value.
+    stops: typeof fields.stops === "boolean" ? fields.stops : undefined,
   };
 }
 
@@ -192,18 +207,21 @@ export function validateEvent(fields: EventFields, bounds: DateBounds): EventVal
 /**
  * A change follows the rules of the creation, with one difference (M2.4): a date equal to
  * the saved one is accepted even when it is past, so that an event already started can
- * still be changed. A changed date is bounded as at the creation. The options are not
- * part of a change.
+ * still be changed. A changed date is bounded as at the creation. Of the options, a change
+ * keeps `stops` when it is sent (D1) and nothing else: the boosters and the participation are
+ * not part of it.
  */
 export function validateEventChange(
   fields: EventFields,
   bounds: DateBounds,
   before: EventChange,
 ): EventChangeValidation {
-  return validate(fields, bounds, {
+  const result = validate(fields, bounds, {
     allerDate: wallClockParts(before.allerAt).date,
     retourDate: before.retourAt === null ? undefined : wallClockParts(before.retourAt).date,
   });
+  if (!result.ok || fields.stops === undefined) return result;
+  return { ok: true, event: { ...result.event, stops: fields.stops } };
 }
 
 function validate(fields: EventFields, bounds: DateBounds, kept: KeptDates): EventChangeValidation {

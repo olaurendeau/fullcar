@@ -73,7 +73,7 @@ describe("WebAnalytics", () => {
 
   it("sends nothing for a path that is none of the application's routes", () => {
     const { id, personalToken } = secrets;
-    for (const path of [`/e/${id}/moi#${personalToken}`, `/e/${id}/admin/x`, `/e/`, `/${id}`, `/nouveau/${id}`, "/monitoring"]) {
+    for (const path of [`/e/${id}/moi#${personalToken}`, `/e/${id}/admin/x`, `/e/`, `/${id}`, `/nouveau/${id}`, "/monitoring", "/confidentialite", "/connexion", "/mes-evenements"]) {
       same(sent(pageview(`${ORIGIN}${path}`)), null);
     }
   });

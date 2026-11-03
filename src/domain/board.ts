@@ -34,19 +34,45 @@ export interface PlacementRow {
   personId: string;
   leg: Leg;
   rideId: string | null;
+  /** The Stop of the car where the person boards, or `null` for the departure. */
+  stopId: string | null;
   /** When the person boarded, or declared being without a car: gives the order. */
   placedAt: Date;
+}
+
+/** A Stop of a Ride on the aller, read by time and then by rank (RV1.5). */
+export interface StopRow {
+  id: string;
+  rideId: string;
+  location: string;
+  /** `HH:MM:SS` on the date of the aller. */
+  time: WallTime;
+  /** The position of `location`, or `null` when it has none. */
+  position: Position | null;
 }
 
 export interface BoardRows {
   persons: readonly PersonRow[];
   rides: readonly RideRow[];
   placements: readonly PlacementRow[];
+  /** Empty when the event's option is off (RV8.3). */
+  stops: readonly StopRow[];
 }
 
 export interface BoardPerson {
   id: string;
   firstName: string;
+}
+
+/** A meeting point of a car and the persons who board there. */
+export interface BoardStop {
+  id: string;
+  location: string;
+  time: WallTime;
+  /** The position of `location`, or `null`. */
+  position: Position | null;
+  /** In boarding order; a passenger who boards at the departure is in none. */
+  passengerIds: string[];
 }
 
 export interface BoardCar {
@@ -61,6 +87,8 @@ export interface BoardCar {
   seats: number;
   /** In boarding order. */
   passengers: BoardPerson[];
+  /** By time, then by rank; always empty on the retour. */
+  stops: BoardStop[];
   freeSeats: number;
   /** No free seat left: the card says « Complet ». */
   full: boolean;
@@ -81,8 +109,16 @@ export interface LegBoard {
   leg: Leg;
   /** By departure time. */
   cars: BoardCar[];
-  /** In the order they declared it. Persons not concerned are in no list (C3.3). */
+  /**
+   * In the order they declared it: the persons placed on the leg who are in no car on it. Persons
+   * not concerned are not here (C3.3): they are in `notConcerned`.
+   */
   withoutCar: BoardPerson[];
+  /**
+   * In the event's order: the persons with no Placement on the leg who do not drive it. The
+   * first name and the id, never a number (PL1.4, D3); they count in no N (C9.5).
+   */
+  notConcerned: BoardPerson[];
   /** The device's persons, in the event's order; empty when the device has none. */
   device: DevicePerson[];
 }
@@ -91,6 +127,10 @@ export type Board = LegBoard[];
 
 function byPlacedAt(a: PlacementRow, b: PlacementRow): number {
   return a.placedAt.getTime() - b.placedAt.getTime();
+}
+
+function byTime(a: { time: WallTime }, b: { time: WallTime }): number {
+  return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
 }
 
 function byDepartureTime(a: BoardCar, b: BoardCar): number {
@@ -121,6 +161,21 @@ export function legBoard(leg: Leg, rows: BoardRows, deviceIds: ReadonlySet<strin
         const passengers = placements
           .filter((placement) => placement.rideId === ride.id)
           .flatMap((placement) => personOf(placement.personId));
+        const rideStops = leg === "aller" ? rows.stops.filter((stop) => stop.rideId === ride.id) : [];
+        const boardStops = rideStops
+          .map(
+            (stop): BoardStop => ({
+              id: stop.id,
+              location: stop.location,
+              time: stop.time,
+              position: stop.position,
+              passengerIds: placements
+                .filter((placement) => placement.rideId === ride.id && placement.stopId === stop.id)
+                .map((placement) => placement.personId),
+            }),
+          )
+          // Stable: Stops at the same time stay in the order they were read in, their rank.
+          .sort(byTime);
         const freeSeats = Math.max(0, ride.seats - passengers.length);
         return {
           id: ride.id,
@@ -132,6 +187,7 @@ export function legBoard(leg: Leg, rows: BoardRows, deviceIds: ReadonlySet<strin
           position: ride.position,
           seats: ride.seats,
           passengers,
+          stops: boardStops,
           freeSeats,
           full: freeSeats === 0,
         };
@@ -161,7 +217,12 @@ export function legBoard(leg: Leg, rows: BoardRows, deviceIds: ReadonlySet<strin
     .filter((person) => deviceIds.has(person.id))
     .map((person): DevicePerson => ({ id: person.id, firstName: person.firstName, state: stateOf(person.id) }));
 
-  return { leg, cars, withoutCar, device };
+  const placedIds = new Set(rows.placements.filter((placement) => placement.leg === leg).map((p) => p.personId));
+  const notConcerned = rows.persons
+    .filter((person) => !placedIds.has(person.id) && !drivers.has(person.id))
+    .map((person): BoardPerson => ({ id: person.id, firstName: person.firstName }));
+
+  return { leg, cars, withoutCar, notConcerned, device };
 }
 
 /** The state of each of the event's legs, in the order given (`eventLegs`). */

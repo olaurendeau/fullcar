@@ -6,7 +6,7 @@ import type { Leg } from "@/domain/leg";
 import { numbersHidden } from "./driver";
 import { leaveNoToken } from "./fixtures";
 import { expectRing, press, pressUntil } from "./focus-ring";
-import { digitsOf, expect, organiserPath, type ScenePhones, seedOrganiserScene, test, unfoldLegs } from "./organiser";
+import { digitsOf, expect, LEG_HEADINGS, organiserPath, type ScenePhones, seedOrganiserScene, test, unfoldLegs } from "./organiser";
 
 /*
  * #179, epic #154: the organiser area's sections, one per leg, under the warning. Each test
@@ -72,7 +72,7 @@ test.describe("the scene of O2.5", () => {
   }) => {
     await page.goto(organiserPath(seededEvent));
     await unfoldLegs(page);
-    await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller", "Retour"]);
+    await expect(panel(page).locator(LEG_HEADINGS)).toHaveText(["Aller", "Retour"]);
 
     for (const [leg, time, banner] of [
       ["Aller", /^samedi 12 décembre 2026 à 07:30$/, "2 sans voiture · il manque 1 place"],
@@ -208,7 +208,7 @@ test.describe("without a retour", () => {
     await withoutCar(db, seededEvent.id, "Tom", null, ["aller"]);
     await page.goto(organiserPath(seededEvent));
     await unfoldLegs(page);
-    await expect(panel(page).getByRole("heading", { level: 3 })).toHaveText(["Aller"]);
+    await expect(panel(page).locator(LEG_HEADINGS)).toHaveText(["Aller"]);
     await expect(section(page, "Aller")).toContainText("Sans voiture (1)");
     await expect(panel(page)).not.toContainText("Retour");
   });
@@ -297,7 +297,8 @@ test("O5.6, O5.8, O7.4: five lines, then « Afficher… »; each list and each l
   expect((await box(more)).width).toBeGreaterThanOrEqual((await box(persons)).width);
 
   // By keyboard: the list unfolds, the focus on the 6th first name, its ring as wide as the text.
-  await pressUntil(page, "Tab", more);
+  // The board above the panel has the 7 first names of « Sans voiture » as buttons now (#981, PL1.1): 7 more tab stops than the 40 allowed.
+  await pressUntil(page, "Tab", more, 60);
   await press(page, "Enter");
   await expect(rows(persons)).toHaveCount(7);
   const sixth = rows(persons).nth(5).getByText("Félix", { exact: true });

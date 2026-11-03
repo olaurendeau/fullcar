@@ -41,10 +41,11 @@ describe("v4.8-9: each leg's device section is in the order of « Vos inscriptio
     ],
     rides: [{ id: "car-of-claire", leg: "aller", driverId: "claire", location: "Gare", departureTime: "08:00:00", seats: 3, note: null, position: null }],
     placements: [
-      { personId: "tom", leg: "retour", rideId: null, placedAt: new Date("2026-10-01T08:00:00Z") },
-      { personId: "lea", leg: "aller", rideId: null, placedAt: new Date("2026-10-01T09:00:00Z") },
-      { personId: "tom", leg: "aller", rideId: null, placedAt: new Date("2026-10-01T10:00:00Z") },
+      { personId: "tom", leg: "retour", rideId: null, stopId: null, placedAt: new Date("2026-10-01T08:00:00Z") },
+      { personId: "lea", leg: "aller", rideId: null, stopId: null, placedAt: new Date("2026-10-01T09:00:00Z") },
+      { personId: "tom", leg: "aller", rideId: null, stopId: null, placedAt: new Date("2026-10-01T10:00:00Z") },
     ],
+    stops: [],
   };
   const board = buildBoard(rows, ["aller", "retour"], new Set(["claire", "lea", "tom"]));
   const order = deviceMatrix(board).map(({ id }) => id);

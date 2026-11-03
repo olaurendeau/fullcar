@@ -213,7 +213,7 @@ test("event ended", async ({ db, page, seededEvent }, testInfo) => {
 
 test("organiser area, refused", async ({ page, seededEvent }, testInfo) => {
   await page.goto(organiserPath(seededEvent));
-  // Shown once the client has had the server's answer: the area's title alone (#597, until #598).
+  // Shown once the client has had the server's answer: the screen of a pending event (#598).
   await expect(areaRefused(page)).toBeVisible();
   await shoot(page, testInfo, "event-admin-refuse");
 });

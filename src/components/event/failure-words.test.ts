@@ -555,4 +555,22 @@ describe("removalProblem: « Retirer de l’événement »", () => {
     expect(said("en", "forbidden")).toBe("Léa is still part of the event. This device cannot make this change: reload the page.");
     expect(said("en", "invalid")).toBe("Léa is still part of the event. Something went wrong: try again in a moment.");
   });
+
+  // RP4.7 (amended by #854): from the panel, no access is a refusal that sending again would not change.
+  it("RP4.7: noOrganiserAccess is final, and says the organiser area is no longer open, word for word", () => {
+    expect(removalProblem("noOrganiserAccess")).toEqual({ problem: "noOrganiserAccess", final: true });
+    const notDone: NotDone = { kind: "removePerson", firstName: "Léa" };
+    const said = (locale: Locale) => failureText(words(locale), notDone, whyOf(removalProblem("noOrganiserAccess").problem));
+    expect(said("fr")).toBe("Léa fait toujours partie de l’événement. L’espace organisateur ne vous est plus ouvert : rechargez la page.");
+    expect(said("en")).toBe("Léa is still part of the event. The organiser area is no longer open to you: reload the page.");
+  });
+});
+
+describe("failureText: « Passer sans voiture » of a person of another device (#981)", () => {
+  const notDone: NotDone = { kind: "choice", firstName: "Hugo", leg: "retour", choice: "setWithoutCar" };
+
+  it("names the button the sheet showed, not « Je cherche une place »", () => {
+    expect(failureText(words("fr"), notDone, whyOf("offline"))).toContain("Hugo · Retour : « Passer sans voiture » n’a pas été enregistré.");
+    expect(failureText(words("en"), notDone, whyOf("offline"))).toContain("Hugo · Return: “Mark as without a car” was not saved.");
+  });
 });

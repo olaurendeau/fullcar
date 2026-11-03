@@ -132,6 +132,14 @@ export function withOrganiserPhones(
       position: car.position,
       seats: car.seats,
       passengers: car.passengers.map(personOnly),
+      // Field by field, as the rest: a Stop is a place, a time and ids, never a number.
+      stops: car.stops.map((stop) => ({
+        id: stop.id,
+        location: stop.location,
+        time: stop.time,
+        position: stop.position,
+        passengerIds: [...stop.passengerIds],
+      })),
       freeSeats: car.freeSeats,
       full: car.full,
       driverHasPhone: phoneOf(car.driver.id) !== null,

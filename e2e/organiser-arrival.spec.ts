@@ -25,7 +25,7 @@ const FR = {
 const alert = (page: Page) => page.getByRole("main").getByRole("alert").filter({ hasText: /\S/ });
 const loading = (page: Page) => page.getByRole("main").getByRole("status").filter({ hasText: FR.loading });
 const panel = (page: Page) => page.getByRole("region", { name: FR.panel });
-/** The area's title alone, in the panel's place, once the access is refused (#597, until #598). */
+/** Refused to a browser without the seeded event's token: the screen of a pending event, in place of the panel and the board (#598). */
 const refused = (page: Page) => areaRefused(page);
 const retry = (page: Page) => page.getByRole("button", { name: FR.retry });
 /** The failed check's frame: its alert region, then « Réessayer », next to it. */
@@ -299,13 +299,14 @@ test("O5.8: when « Réessayer » finds the area refused, the focus goes to its 
   await db.deleteFrom("event").where("id", "=", seededEvent.id).execute();
   await retry(page).focus();
   await page.keyboard.press("Enter");
-  await expect(refused(page)).toBeFocused();
+  // An event gone has the area's title alone (#598).
+  await expect(areaRefused(page, FR.panel)).toBeFocused();
 });
 
 test.describe("at 1280 px", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test("O7.5: loading, the failed check and the area refused have the board's width, centred", async ({
+  test("O7.5: loading and the failed check have the board's width, centred; the area refused, its screen's, centred", async ({
     page,
     seededEvent,
   }) => {
@@ -323,7 +324,11 @@ test.describe("at 1280 px", () => {
     await keepAdminToken(page, seededEvent.id, oneCharOff(seededEvent.token));
     await page.reload();
     await expect(refused(page)).toBeVisible();
-    await expectBoardWidth(page, refused(page));
+    // No board left (#598): the screen, as wide as « Événement introuvable », centred in the page.
+    const screen = (await refused(page).locator("xpath=ancestor::section[1]").boundingBox())!;
+    const main = (await page.getByRole("main").boundingBox())!;
+    expect(Math.abs(screen.x + screen.width / 2 - (main.x + main.width / 2)), "centred").toBeLessThanOrEqual(1);
+    expect(screen.width).toBeLessThanOrEqual(448);
   });
 });
 

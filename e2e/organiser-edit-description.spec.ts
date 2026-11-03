@@ -62,13 +62,16 @@ test.describe("with a saved description", () => {
     await openSheet(page, organiserPath(seededEvent));
     await expect(area(page)).toHaveValue(SAVED);
     expect(await isAfter(area(page), sheet(page).getByLabel("Heure de fin", { exact: true }))).toBe(true);
-    // No field after it: what follows in the form are its buttons.
+    // No field after it, but the option « Points de RDV », which closes the body: what follows are its buttons.
     const after = await area(page).evaluate((textarea) =>
-      [...(textarea as HTMLTextAreaElement).form!.querySelectorAll("input, textarea, select, [role=checkbox], [role=combobox]")].filter(
-        (control) => control !== textarea && (textarea.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 && control.getAttribute("aria-hidden") !== "true",
-      ).length,
+      [...(textarea as HTMLTextAreaElement).form!.querySelectorAll("input, textarea, select, [role=checkbox], [role=combobox]")]
+        .filter(
+          (control) => control !== textarea && (textarea.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 && control.getAttribute("aria-hidden") !== "true",
+        )
+        .map((control) => control.getAttribute("aria-label") ?? control.id),
     );
-    expect(after).toBe(0);
+    expect(after.length, `controls after the description: ${after.join(", ")}`).toBe(1);
+    expect(await isAfter(sheet(page).getByRole("checkbox", { name: "Points de RDV", exact: true }), area(page))).toBe(true);
   });
 
   test("DS1.10: nothing changed, or put back as loaded, « Valider » closes with no request; emptied, it is removed, and /admin shows it gone at once", async ({

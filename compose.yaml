@@ -28,9 +28,12 @@ services:
       # UTC by default, as on Vercel; another zone for `make e2e` and `make shot` (see the Makefile).
       TZ: ${WEB_TZ:-UTC}
       # The slot's fake Photon, never the public one; without a breaker, so that one test's
-      # 429 or 500 does not leave the others without suggestions.
+      # 429 or 500 does not leave the others without suggestions; and without the cap of 5 calls a
+      # second, which the parallel tests of a run share and which would answer some of them
+      # « Propositions indisponibles ».
       PHOTON_URL: http://photon:2322/api/
       PLACES_BREAKER_MS: "0"
+      PLACES_CALLS_PER_SECOND: "1000"
       # The slot's fake tile provider, never Geoapify, with a test key that cannot be taken
       # for anything else. `next build` runs here too, so the build has it in its environment
       # (CA3.5). Without a breaker, so that one test's 429 does not leave the others without tiles.

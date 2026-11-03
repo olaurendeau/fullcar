@@ -49,7 +49,7 @@ describe("phoneVisible (C10.1, C10.5)", () => {
 let clock = 0;
 function placed(personId: string, leg: Leg, rideId: string | null): PlacementRow {
   clock += 1;
-  return { personId, leg, rideId, placedAt: new Date(Date.UTC(2026, 9, 15, 8, 0, clock)) };
+  return { personId, leg, rideId, stopId: null, placedAt: new Date(Date.UTC(2026, 9, 15, 8, 0, clock)) };
 }
 
 function ride(id: string, leg: Leg, driverId: string, departureTime: RideRow["departureTime"]): RideRow {
@@ -77,6 +77,7 @@ const ROWS: BoardRows = {
     placed("tom", "retour", null),
     placed("zoe", "retour", null),
   ],
+  stops: [],
 };
 
 const GYMNASE = { lat: 48.85661, lng: 2.35222 };
@@ -145,6 +146,7 @@ describe("withVisiblePhones", () => {
       ],
       rides: [ride("r5", "aller", "sam", "07:00:00")],
       placements: [placed("lea", "aller", "r5")],
+      stops: [],
     };
     const [aller] = withVisiblePhones(buildBoard(rows, ["aller"], deviceIds), PHONES, deviceIds);
     expect(aller.cars[0].driver).toEqual({ id: "sam", firstName: "sam", phone: null });
@@ -178,6 +180,18 @@ describe("withVisiblePhones", () => {
     const [allerBoard, retourBoard] = visibleFor(device);
     expect(sentNumbers(allerBoard).sort()).toEqual([...aller].sort());
     expect(sentNumbers(retourBoard).sort()).toEqual([...retour].sort());
+  });
+
+  it("PL7.2: the persons not concerned carry no number, whatever the device, even their own", () => {
+    // Tom has a number and does not do the aller: his device reads it in its own section only.
+    const rows: BoardRows = { ...ROWS, placements: ROWS.placements.filter((row) => !(row.personId === "tom" && row.leg === "aller")) };
+    for (const device of [[], ["tom"], ["sam"], ["marc", "tom"], ["lea", "zoe", "ana"]]) {
+      const deviceIds = new Set(device);
+      const [aller] = withVisiblePhones(buildBoard(rows, ["aller", "retour"], deviceIds), PHONES, deviceIds);
+      expect(aller.notConcerned).toStrictEqual([p("tom"), p("sam")]);
+      for (const person of aller.notConcerned) expect(Object.keys(person).sort()).toEqual(["firstName", "id"]);
+      expect(JSON.stringify(aller.notConcerned)).not.toMatch(/\d/);
+    }
   });
 
   it("a car's position, or null, arrives in the visible car", () => {
@@ -271,6 +285,7 @@ function sceneWithEve(eve: EveOnAller): BoardRows {
     persons: ["marc", "lea", "tom", "ana", "eve", "sam"].map((id) => ({ id, firstName: id })),
     rides,
     placements,
+    stops: [],
   };
 }
 
@@ -387,6 +402,7 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
         { id: "lea", firstName: "lea" },
         { id: "eve", firstName: "eve" },
       ],
+      stops: [],
       freeSeats: 1,
       full: false,
       driverHasPhone: true,
@@ -406,6 +422,27 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
     expect(JSON.parse(JSON.stringify(aller.cars[0]))).toHaveProperty("position", null);
   });
 
+  it("RV8.3: a car's stops arrive as they are, with their passengers' ids, and no field more", () => {
+    const rows = sceneWithEve("a passenger");
+    const withStops: BoardRows = {
+      ...rows,
+      stops: [{ id: "s1", rideId: "r1", location: "Gare", time: "07:20:00", position: GYMNASE }],
+      placements: rows.placements.map((row) => (row.personId === "eve" ? { ...row, stopId: "s1" } : row)),
+    };
+    const board = buildBoard(withStops, ["aller", "retour"], new Set());
+    // A stop that carried a number would not go through: the fields are copied one by one.
+    const stop = board[0].cars[0].stops[0];
+    Object.assign(stop, { phone: EVE_PHONE });
+
+    const [aller, retour] = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT, EVENT_ID) ?? [];
+
+    expect(aller.cars[0].stops).toStrictEqual([
+      { id: "s1", location: "Gare", time: "07:20:00", position: GYMNASE, passengerIds: ["eve"] },
+    ]);
+    expect(retour.cars[0].stops).toStrictEqual([]);
+    expect(sentOrganiserNumbers(aller.cars[0].stops)).toEqual([]);
+  });
+
   it("does not take the device's section: only the leg, its cars and its list without a car", () => {
     const board = buildBoard(sceneWithEve("without a car"), ["aller", "retour"], new Set(["tom"]));
     const organiser = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT, EVENT_ID) ?? [];
@@ -413,6 +450,14 @@ describe("withOrganiserPhones (DO1, O2.1)", () => {
       ["cars", "leg", "withoutCar"],
       ["cars", "leg", "withoutCar"],
     ]);
+  });
+
+  it("PL7.2: does not read the persons not concerned, and sets no number on them", () => {
+    const board = buildBoard(sceneWithEve("not concerned"), ["aller", "retour"], new Set(["eve"]));
+    expect(board[0].notConcerned.map((person) => person.id)).toContain("eve");
+    const organiser = withOrganiserPhones(board, ORGANISER_PHONES, RIGHT, EVENT_ID) ?? [];
+    expect(JSON.stringify(organiser)).not.toContain("notConcerned");
+    expect(sentOrganiserNumbers(organiser)).not.toContain("eve");
   });
 
   it("leaves the board it is given as it was", () => {

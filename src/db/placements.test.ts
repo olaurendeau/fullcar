@@ -13,12 +13,12 @@ import { atomically } from "./transaction";
 import { withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
 import { seedEvent } from "./test-events";
-import { seedPerson, seedRide } from "./test-participants";
+import { seedPerson, seedRide, seedStop } from "./test-participants";
 
 async function placementsOf(trx: Kysely<Database>, eventId: string) {
   return trx
     .selectFrom("placement")
-    .select(["person_id", "leg", "ride_id", "placed_at"])
+    .select(["person_id", "leg", "ride_id", "stop_id", "placed_at"])
     .where("event_id", "=", eventId)
     .orderBy("person_id")
     .orderBy("leg")
@@ -67,14 +67,73 @@ describe("setPlacement", () => {
       await boardedEarlier(trx, personId);
       await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideB });
       expect(await placementsOf(trx, eventId)).toEqual([
-        { person_id: personId, leg: "aller", ride_id: rideB, placed_at: await now(trx) },
+        { person_id: personId, leg: "aller", ride_id: rideB, stop_id: null, placed_at: await now(trx) },
       ]);
 
       await boardedEarlier(trx, personId);
       await setPlacement(trx, { personId, eventId, leg: "aller", rideId: null });
       expect(await placementsOf(trx, eventId)).toEqual([
-        { person_id: personId, leg: "aller", ride_id: null, placed_at: await now(trx) },
+        { person_id: personId, leg: "aller", ride_id: null, stop_id: null, placed_at: await now(trx) },
       ]);
+    });
+  });
+
+  describe("with a boarding Stop (epic #881)", () => {
+    const stopsOf = async (trx: Kysely<Database>, eventId: string) =>
+      (await placementsOf(trx, eventId)).map((row) => row.stop_id);
+
+    it("writes the Stop with the Ride, and none when none is given", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, rideA, personId } = await aCrowd(trx);
+        const stopId = await seedStop(trx, eventId, rideA);
+        await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA, stopId });
+        expect(await stopsOf(trx, eventId)).toEqual([stopId]);
+        await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA, stopId: null });
+        expect(await stopsOf(trx, eventId)).toEqual([null]);
+        await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA, stopId });
+        await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA });
+        expect(await stopsOf(trx, eventId)).toEqual([null]);
+      });
+    });
+
+    it("changes the Stop in the same Ride without moving the boarding time", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, rideA, personId } = await aCrowd(trx);
+        const first = await seedStop(trx, eventId, rideA);
+        const second = await seedStop(trx, eventId, rideA);
+        await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA, stopId: first });
+        await boardedEarlier(trx, personId);
+        const [before] = await placementsOf(trx, eventId);
+
+        await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA, stopId: second });
+
+        expect(await placementsOf(trx, eventId)).toEqual([{ ...before, stop_id: second }]);
+      });
+    });
+
+    it("sets the boarding time back to now() when the Ride changes, with the Stop of the new one", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, rideA, rideB, personId } = await aCrowd(trx);
+        const stopId = await seedStop(trx, eventId, rideB);
+        await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA });
+        await boardedEarlier(trx, personId);
+
+        await setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideB, stopId });
+
+        expect(await placementsOf(trx, eventId)).toEqual([
+          { person_id: personId, leg: "aller", ride_id: rideB, stop_id: stopId, placed_at: await now(trx) },
+        ]);
+      });
+    });
+
+    it("refuses a Stop of another Ride", async () => {
+      await withRollback(async (trx) => {
+        const { eventId, rideA, rideB, personId } = await aCrowd(trx);
+        const stopId = await seedStop(trx, eventId, rideB);
+        await expect(
+          setPlacement(trx, { personId, eventId, leg: "aller", rideId: rideA, stopId }),
+        ).rejects.toMatchObject({ constraint: "placement_stop_on_ride" });
+      });
     });
   });
 
@@ -155,7 +214,7 @@ describe("removePassengers", () => {
       expect(removed).toEqual([personId]);
       const after = await placementsOf(trx, eventId);
       const row = (id: string, leg: string) => after.find((p) => p.person_id === id && p.leg === leg);
-      expect(row(personId, "aller")).toEqual({ person_id: personId, leg: "aller", ride_id: null, placed_at: await now(trx) });
+      expect(row(personId, "aller")).toEqual({ person_id: personId, leg: "aller", ride_id: null, stop_id: null, placed_at: await now(trx) });
       expect(row(personId, "retour")).toEqual(before.find((p) => p.person_id === personId && p.leg === "retour"));
       expect(row(stays, "aller")).toEqual(before.find((p) => p.person_id === stays));
     });

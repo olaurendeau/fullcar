@@ -1,6 +1,8 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
-import { areaRefused } from "./organiser";
+import { expect, leaveNoToken, test } from "./fixtures";
+import { keepAdminToken } from "./organiser";
+
+leaveNoToken();
 
 /*
  * #113, #131: after a tap on the language switch, what the page computes follows the new
@@ -31,10 +33,13 @@ const LANGUAGES = {
 } as const;
 type Lang = keyof typeof LANGUAGES;
 
-/** The event's view, on its own page and on the organiser's page of a browser without its token. */
+/**
+ * The event's view, on its own page and on the organiser's page of the browser that created it:
+ * refused, that page shows no board since #598.
+ */
 const VIEWS: [string, (id: string) => string][] = [
   ["the event's page", (id) => `/e/${id}`],
-  ["the organiser's page, without the token", (id) => `/e/${id}/admin`],
+  ["the organiser's page, in the creation browser", (id) => `/e/${id}/admin`],
 ];
 
 /** Clicks a tab until it is selected: a click before hydration does nothing. */
@@ -76,12 +81,12 @@ async function expectEventIn(page: Page, lang: Lang) {
   }
 }
 
-/** The view once it has settled: on the organiser's page, once the missing link has been checked. */
+/** The view once it has settled: on the organiser's page, once the token has been checked. */
 async function openView(page: Page, path: string, lang: Lang) {
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(TITLE);
   if (path.endsWith("/admin")) {
-    await expect(areaRefused(page, LANGUAGES[lang].panel)).toBeVisible();
+    await expect(page.getByRole("region", { name: LANGUAGES[lang].panel })).toBeVisible();
   }
 }
 
@@ -97,6 +102,7 @@ for (const [from, to, locale, timezoneId] of [
         page,
         seededEvent,
       }) => {
+        await keepAdminToken(page, seededEvent.id, seededEvent.token);
         await openView(page, path(seededEvent.id), from);
         await expectEventIn(page, from);
 

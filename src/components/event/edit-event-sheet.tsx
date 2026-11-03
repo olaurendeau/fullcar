@@ -10,21 +10,43 @@ import {
   deviceBounds,
   firstInvalidField,
   validateEventChange,
+  type EventBefore,
   type EventErrors,
-  type EventFields,
   type EventHeader,
 } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import { cn } from "@/lib/utils";
 import { BottomSheet, SheetBar } from "./bottom-sheet";
-import { carTimesKept, EventFormFields, eventFieldsChanged, loadedEventFields, withSavedFields } from "./event-fields";
+import {
+  Box,
+  carTimesKept,
+  EventFormFields,
+  eventFieldsChanged,
+  loadedEventFields,
+  withSavedFields,
+  type EventFieldValues,
+} from "./event-fields";
 import { RemoveRetourDialog, type RemovalSaid, type RetourCounts } from "./remove-retour-dialog";
 
 /**
- * Sends the organiser's change: `fields` as the form holds them, `before` the values it loaded,
- * `removal` the numbers « Supprimer le retour ? » showed, once confirmed.
+ * Sends the organiser's change: `fields` as the form holds them, with the option « Points de RDV »
+ * (`stops`), `before` the values it loaded, the option too, `removal` the numbers « Supprimer le
+ * retour ? » showed, once confirmed.
  */
-export type EditEvent = (fields: EventFields, before: EventHeader, removal?: RetourCounts) => Promise<EditAnswer>;
+export type EditEvent = (
+  fields: EventFieldValues & { stops: boolean },
+  before: EventBefore,
+  removal?: RetourCounts,
+) => Promise<EditAnswer>;
+
+/**
+ * The option « Points de RDV » as the page shows it: `on`, and `cars`, the cars of the aller that
+ * have Stops. While `on` and `cars` is not 0, the box stays checked and locked (RV9.3, D1).
+ */
+export interface StopsOption {
+  on: boolean;
+  cars: number;
+}
 
 /** How long a change waits for its answer before it lets the organiser go on (decisions 39 and 51). */
 export const LONG_WAIT = 10_000;
@@ -34,7 +56,9 @@ type LateRemoval = { kind: "offline" | "failed" | "eventNotFound" } | { kind: "r
 
 /**
  * « Modifier l’événement » (organizer-view v3.3.6, « Le formulaire »): a sheet with the fields of
- * the creation and no option, loaded with `event`, the values the page shows as it opens. On a
+ * the creation and, of the options, « Points de RDV » alone (meeting-points, D1: it can be turned
+ * on here, and off only while no car has Stops), loaded with `event` and `stops`, the values the
+ * page shows as it opens. On a
  * phone, it fills the visible height, its messages and buttons in its bar (event-board v4.6). Neither
  * « Fermer »: « Annuler » and Escape close it. Closed, by them or once saved, the focus goes back
  * to `onClosed`'s place, « Modifier l’événement ». While open, `lateSavedRef` gives it the values a
@@ -45,6 +69,7 @@ export function EditEventSheet({
   open,
   onOpenChange,
   event,
+  stops,
   cars,
   onEdit,
   onClosed,
@@ -54,11 +79,13 @@ export function EditEventSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   event: EventHeader;
+  /** The option in the state the page shows last. */
+  stops: StopsOption;
   /** The cars of each leg in the state the page shows last (« Les voitures gardent leur heure »). */
   cars: Record<Leg, number>;
   onEdit: EditEvent;
   onClosed: () => void;
-  lateSavedRef: RefObject<((event: EventHeader) => void) | null>;
+  lateSavedRef: RefObject<((event: EventHeader, stops?: boolean) => void) | null>;
   opening: number;
 }) {
   const t = useTranslations("EditEvent");
@@ -77,6 +104,7 @@ export function EditEventSheet({
       <EditEventForm
         key={opening}
         event={event}
+        stops={stops}
         cars={cars}
         onEdit={onEdit}
         onDone={() => onOpenChange(false)}
@@ -87,7 +115,7 @@ export function EditEventSheet({
 }
 
 /** What the sheet says above « Valider » after an answer (« Enregistrer », feuille ouverte). */
-type Said = ActionProblem | "changed" | "eventNotFound";
+type Said = ActionProblem | "changed" | "eventNotFound" | "stopsLocked";
 
 /**
  * The form, mounted with each opening: what it loaded is what the page showed then. Nothing
@@ -104,19 +132,25 @@ type Said = ActionProblem | "changed" | "eventNotFound";
  * gone (M8.3), « Valider » is `disabled` for good, and the focus goes to « Annuler ». The retour
  * unchecked still holding cars or persons, « Supprimer le retour ? » asks first (M3.2): its
  * « Annuler » and Escape come back to the sheet, the box still unchecked, the focus on « Valider ».
+ * The box « Points de RDV » is one more value, sent with the rest: while cars have Stops it is
+ * checked and `aria-disabled`, never `disabled`, described by why, and touching it changes nothing
+ * (RV9.3). Refused by `stopsLocked`, a car having got Stops meanwhile, the sheet shows it so and says
+ * why above « Valider », which gets the focus.
  */
 function EditEventForm({
   event,
+  stops,
   cars,
   onEdit,
   onDone,
   lateSavedRef,
 }: {
   event: EventHeader;
+  stops: StopsOption;
   cars: Record<Leg, number>;
   onEdit: EditEvent;
   onDone: () => void;
-  lateSavedRef: RefObject<((event: EventHeader) => void) | null>;
+  lateSavedRef: RefObject<((event: EventHeader, stops?: boolean) => void) | null>;
 }) {
   const tEdit = useTranslations("EditEvent");
   const tActions = useTranslations("Actions");
@@ -125,6 +159,13 @@ function EditEventForm({
   const [before, setBefore] = useState(event);
   const [loaded, setLoaded] = useState(() => loadedEventFields(event));
   const [fields, setFields] = useState(loaded);
+  // The option as last stored (what `before` says), the box, and the cars known to hold Stops: the page's, or an answer's.
+  const [stopsLoaded, setStopsLoaded] = useState(stops.on);
+  const [stopsBox, setStopsBox] = useState(stops.on);
+  const [stopCars, setStopCars] = useState(stops.cars);
+  const carsWithStops = Math.max(stops.cars, stopCars);
+  const stopsLocked = stopsLoaded && carsWithStops > 0;
+  const stopsWanted = stopsLocked || stopsBox;
   const [errors, setErrors] = useState<EventErrors>({});
   const [said, setSaid] = useState<Said | null>(null);
   const [sending, setSending] = useState(false);
@@ -167,16 +208,23 @@ function EditEventForm({
   // A change sent from an earlier sheet, saved late (decision 51): its values become the ones
   // loaded, and each field not changed shows them, with no alert. This sheet has not sent.
   useEffect(() => {
-    lateSavedRef.current = (saved) => {
+    lateSavedRef.current = (saved, savedStops) => {
       const values = loadedEventFields(saved);
       setFields(withSavedFields(loaded.values, values));
       setLoaded(values);
       setBefore(saved);
+      if (savedStops !== undefined) takeSavedStops(savedStops);
     };
     return () => {
       lateSavedRef.current = null;
     };
   });
+
+  /** The option stored changed elsewhere or was saved late: the box takes it, unless it was changed here. */
+  function takeSavedStops(saved: boolean) {
+    if (stopsWanted === stopsLoaded) setStopsBox(saved);
+    setStopsLoaded(saved);
+  }
 
   function showErrors(found: EventErrors) {
     setErrors(found);
@@ -188,7 +236,7 @@ function EditEventForm({
   async function send(removal?: RetourCounts): Promise<EditAnswer | undefined> {
     inFlight.current = true;
     setSending(true);
-    const answer = await onEdit(fields.values, before, removal);
+    const answer = await onEdit({ ...fields.values, stops: stopsWanted }, { ...before, stops: stopsLoaded }, removal);
     inFlight.current = false;
     if (!mounted.current) return undefined;
     setSending(false);
@@ -207,11 +255,17 @@ function EditEventForm({
       setSaid("eventNotFound");
       return cancelButton.current?.focus();
     }
-    if (answer.kind === "changed") {
+    if (answer.kind === "stopsLocked") {
+      // A car got Stops meanwhile: the box shows it locked, checked, with their number.
+      setStopCars(answer.cars);
+      setStopsBox(true);
+      setSaid("stopsLocked");
+    } else if (answer.kind === "changed") {
       const saved = loadedEventFields(answer.event);
       setFields(withSavedFields(loaded.values, saved));
       setLoaded(saved);
       setBefore(answer.event);
+      if (answer.stops !== undefined) takeSavedStops(answer.stops);
       setSaid("changed");
     } else {
       // Refused (`invalid`): the generic failure, as the confirmation says it; there is no organiser's link to check (#597).
@@ -228,7 +282,7 @@ function EditEventForm({
     // fields checked first, unless « Retour » was checked again (decision 49).
     const reopen = late?.kind === "retourChanged" && !fields.values.retour;
     if (!reopen) setLate(null);
-    if (!reopen && !eventFieldsChanged(fields.values, loaded.values)) return onDone();
+    if (!reopen && !eventFieldsChanged(fields.values, loaded.values) && stopsWanted === stopsLoaded) return onDone();
     setSaid(null);
     const checked = validateEventChange(fields.values, deviceBounds(new Date()), before);
     if (!checked.ok) return showErrors(checked.errors);
@@ -303,6 +357,15 @@ function EditEventForm({
   return (
     <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       <EventFormFields idOf={idOf} state={fields} errors={errors} onChange={setFields} notes={notes} locked={sending} suggestions />
+      <Box
+        id={idOf("stops")}
+        label={tEdit("stops.label")}
+        hint={tEdit("stops.hint")}
+        checked={stopsWanted}
+        onChange={(checked) => !sending && !stopsLocked && setStopsBox(checked)}
+        locked={sending || stopsLocked}
+        reason={stopsLocked ? tEdit("stops.locked", { count: carsWithStops }) : undefined}
+      />
       {/* In the sheet's bar, out of the form: « Valider » is its submit button by `form` (v4.6, rule 1). */}
       <SheetBar
         messages={
@@ -310,6 +373,11 @@ function EditEventForm({
             {(said === "offline" || said === "failed") && (
               <p role="alert" className="text-sm text-destructive">
                 {tActions(said)}
+              </p>
+            )}
+            {said === "stopsLocked" && (
+              <p role="alert" className="text-sm text-destructive">
+                {tEdit("stops.stillLocked")}
               </p>
             )}
             {late && <SheetNotice said={late} destructive />}

@@ -1,7 +1,22 @@
+import { sql, type Kysely, type Transaction } from "kysely";
 import { describe, expect, it } from "vitest";
-import { accountForEmail, findAccount, findAccountByEmail } from "./accounts";
-import { anAddress, seedAccount } from "./test-accounts";
+import { resendConfirmation } from "@/app/e/[id]/pending-email";
+import { deleteAccountOf } from "@/app/mes-evenements/delete-account";
+import { signOutBrowser } from "@/app/mes-evenements/sign-out";
+import { SESSION_LIFETIME_MS } from "@/domain/account-rules";
+import { decideOrganiserAccess } from "@/domain/organiser-access";
+import { accountForEmail, deleteAccount, eraseAccount, findAccount, findAccountByEmail } from "./accounts";
+import { claimConfirmation, claimTransfer, useLink } from "./email-links";
+import { recordSend } from "./email-sends";
+import { readAdminTokenHash, readOrganiserAccessEvent, readTransfer, writeEventOwner, writeTransfer } from "./events";
+import { errorCode } from "./failure";
+import type { Database } from "./schema";
+import { findSession } from "./sessions";
+import { anAddress, seedAccount, seedLink, seedSends, seedSession, withCommittedAddresses, withRollbackRecordingSends } from "./test-accounts";
+import { whileHeld, whileHeldInTurn, withCommittedEvent } from "./test-committed";
 import { withRollback } from "./test-db";
+import { seedEvent, seedPendingSend } from "./test-events";
+import { seedPerson } from "./test-participants";
 
 describe("findAccountByEmail and findAccount", () => {
   it("give the account of the address or the id, with its language and its last visit", async () => {
@@ -35,4 +50,471 @@ describe("accountForEmail", () => {
       expect(rows).toEqual([{ id: created.id }]);
     });
   });
+});
+
+/** The event confirmed by `accountId`, as a used confirmation link leaves it; anonymised if asked. */
+async function confirmedBy(trx: Transaction<Database>, accountId: string, anonymise = false) {
+  const event = await seedEvent(trx);
+  await trx.updateTable("event").set({ account_id: accountId, confirmed_at: new Date() }).where("id", "=", event.id).execute();
+  if (anonymise) {
+    await trx.updateTable("event").set({ admin_token_hash: null, anonymised_at: new Date() }).where("id", "=", event.id).execute();
+  }
+  return event;
+}
+
+describe("deleteAccount (OA9.3 to OA9.5)", () => {
+  it("deletes the account of the session and all its sessions, and leaves another account as it was", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const session = await seedSession(trx, accountId);
+      const elsewhere = await seedSession(trx, accountId);
+      const other = await seedAccount(trx);
+      const otherSession = await seedSession(trx, other);
+
+      expect(await deleteAccount(trx, session, [])).toBe(true);
+
+      expect(await findAccount(trx, accountId)).toBeUndefined();
+      expect(await findSession(trx, session)).toBeUndefined();
+      expect(await findSession(trx, elsewhere)).toBeUndefined();
+      expect(await findAccount(trx, other)).toBeDefined();
+      expect(await findSession(trx, otherSession)).toBeDefined();
+    });
+  });
+
+  // OA9.5: the events not yet anonymised stay open, with no organiser, and no token opens them.
+  it("leaves its open events to their participants, without account and without admin token: orphans for every visitor", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const session = await seedSession(trx, accountId);
+      const open = await confirmedBy(trx, accountId);
+      const person = await seedPerson(trx, open.id);
+
+      await deleteAccount(trx, session, []);
+
+      const row = await trx.selectFrom("event").select(["account_id", "admin_token_hash"]).where("id", "=", open.id).executeTakeFirstOrThrow();
+      expect(row).toEqual({ account_id: null, admin_token_hash: null });
+      const event = (await readOrganiserAccessEvent(trx, open.id))!;
+      expect(decideOrganiserAccess(event, { adminToken: open.token, account: undefined })).toEqual({ state: "orphan" });
+      expect(await trx.selectFrom("person").select("id").where("event_id", "=", open.id).execute()).toEqual([{ id: person.id }]);
+    });
+  });
+
+  // OT7.2: without it, `event_transfer_open` refuses the `account_id = null` of the deletion.
+  it("OT7.2: cancels the handover that waits on its events: links deleted, address erased, the event open without organiser, the recipient's link invalid", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const session = await seedSession(trx, accountId);
+      const handed = await confirmedBy(trx, accountId);
+      const recipient = anAddress();
+      await writeTransfer(trx, handed.id, { email: recipient, status: "sending", at: new Date() });
+      const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
+      const used = await seedLink(trx, { kind: "transfer", eventId: handed.id }, { usedAt: new Date() });
+      const calm = await confirmedBy(trx, accountId);
+      const otherAccount = await seedAccount(trx);
+      const elsewhere = await confirmedBy(trx, otherAccount);
+      const elsewhereEmail = anAddress();
+      await writeTransfer(trx, elsewhere.id, { email: elsewhereEmail, status: "sending", at: new Date() });
+      const elsewhereLink = await seedLink(trx, { kind: "transfer", eventId: elsewhere.id });
+
+      expect(await deleteAccount(trx, session, [])).toBe(true);
+
+      const row = await trx
+        .selectFrom("event")
+        .select(["account_id", "admin_token_hash", "transfer_email", "transfer_status", "transfer_status_at", "anonymised_at"])
+        .where("id", "=", handed.id)
+        .executeTakeFirstOrThrow();
+      expect(row).toEqual({
+        account_id: null,
+        admin_token_hash: null,
+        transfer_email: null,
+        transfer_status: null,
+        transfer_status_at: null,
+        anonymised_at: null,
+      });
+      expect((await useLink(trx, link, "transfer")).outcome).toBe("invalid");
+      expect((await useLink(trx, used, "transfer")).outcome).toBe("invalid");
+      expect(await readTransfer(trx, calm.id)).toEqual({ email: null, status: null, at: null, lastLinkAt: null });
+      // The handover of another organiser is not touched.
+      expect((await readTransfer(trx, elsewhere.id))?.email).toBe(elsewhereEmail);
+      expect((await useLink(trx, elsewhereLink, "transfer")).outcome).toBe("valid");
+    });
+  });
+
+  // Decision 4 on #935: the address of the recipient who deletes their account is in no table.
+  it("cancels the handover that waits on its address, on an event of another organiser, and erases the address from every table", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const email = anAddress();
+      const accountId = await seedAccount(trx, { email });
+      const session = await seedSession(trx, accountId);
+      const organiser = await seedAccount(trx);
+      const handed = await confirmedBy(trx, organiser);
+      await writeTransfer(trx, handed.id, { email, status: "sending", at: new Date() });
+      const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
+      await seedSends(trx, 1, { kind: "transfer", email, eventId: handed.id });
+      const otherEmail = anAddress();
+      const kept = await confirmedBy(trx, organiser);
+      await writeTransfer(trx, kept.id, { email: otherEmail, status: "sending", at: new Date() });
+
+      expect(await deleteAccount(trx, session, [])).toBe(true);
+
+      const row = await trx
+        .selectFrom("event")
+        .select(["account_id", "transfer_email", "transfer_status", "transfer_status_at"])
+        .where("id", "=", handed.id)
+        .executeTakeFirstOrThrow();
+      expect(row).toEqual({ account_id: organiser, transfer_email: null, transfer_status: null, transfer_status_at: null });
+      expect((await useLink(trx, link, "transfer")).outcome).toBe("invalid");
+      expect((await readTransfer(trx, kept.id))?.email).toBe(otherEmail);
+      for (const table of ["account", "event", "email_send", "email_link", "session"] as const) {
+        const { rows } = await sql<{ found: number }>`
+          select count(*)::int as found from ${sql.table(table)} t where t::text like ${"%" + email + "%"}`.execute(trx);
+        expect(rows[0]!.found, table).toBe(0);
+      }
+    });
+  });
+
+  it("deletes its anonymised events, which answer « Événement introuvable »", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const session = await seedSession(trx, accountId);
+      const ended = await confirmedBy(trx, accountId, true);
+      const open = await confirmedBy(trx, accountId);
+
+      await deleteAccount(trx, session, []);
+
+      expect(await readOrganiserAccessEvent(trx, ended.id)).toBeUndefined();
+      expect(await readOrganiserAccessEvent(trx, open.id)).toBeDefined();
+    });
+  });
+
+  // OA9.5 in the strict sense (decision 4 on #581): the address is in no table any more.
+  it("erases the address from every table: its sends, its sign-in links, and the pending events created elsewhere with it", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const email = anAddress();
+      const accountId = await seedAccount(trx, { email });
+      const session = await seedSession(trx, accountId);
+      await seedLink(trx, { kind: "login", accountId, returnEventId: null });
+      await seedSends(trx, 2, { kind: "login", email });
+      const pending = await seedEvent(trx);
+      await seedPendingSend(trx, pending.id, { email, status: "sent" });
+      await seedLink(trx, { kind: "confirmation", eventId: pending.id });
+      const someoneElse = await seedEvent(trx);
+      const otherEmail = anAddress();
+      await seedPendingSend(trx, someoneElse.id, { email: otherEmail, status: "sent" });
+      await seedSends(trx, 1, { kind: "login", email: otherEmail });
+
+      await deleteAccount(trx, session, []);
+
+      expect(await trx.selectFrom("email_send").select("id").where("email", "=", email).execute()).toEqual([]);
+      expect(await trx.selectFrom("email_send").select("id").where("email", "=", otherEmail).execute()).toHaveLength(1);
+      expect(await trx.selectFrom("email_link").select("token_hash").where("account_id", "=", accountId).execute()).toEqual([]);
+      // The pending event stays, with no address, and no link that would confirm one.
+      const row = await trx.selectFrom("event").select(["pending_email", "confirmed_at"]).where("id", "=", pending.id).executeTakeFirstOrThrow();
+      expect(row).toEqual({ pending_email: null, confirmed_at: null });
+      expect(await trx.selectFrom("email_link").select("token_hash").where("event_id", "=", pending.id).execute()).toEqual([]);
+      const kept = await trx.selectFrom("event").select("pending_email").where("id", "=", someoneElse.id).executeTakeFirstOrThrow();
+      expect(kept.pending_email).toBe(otherEmail);
+      // The address is in no row of the tables that held it.
+      for (const table of ["account", "event", "email_send", "email_link", "session"] as const) {
+        const { rows } = await sql<{ found: number }>`
+          select count(*)::int as found from ${sql.table(table)} t where t::text like ${"%" + email + "%"}`.execute(trx);
+        expect(rows[0]!.found, table).toBe(0);
+      }
+    });
+  });
+
+  it("revokes the admin tokens the browser sends, and only those", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const session = await seedSession(trx, accountId);
+      const kept = await seedEvent(trx);
+      const pending = await seedEvent(trx);
+
+      await deleteAccount(trx, session, [pending.token, 42, null]);
+
+      expect(await readAdminTokenHash(trx, pending.id)).toBeNull();
+      expect(await readAdminTokenHash(trx, kept.id)).not.toBeNull();
+    });
+  });
+
+  it.each([
+    ["an unknown token", "inconnu"],
+    ["a value that is no token", 42],
+  ])("deletes nothing for %s", async (_, token) => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      await seedSession(trx, accountId);
+      expect(await deleteAccount(trx, token, [])).toBe(false);
+      expect(await findAccount(trx, accountId)).toBeDefined();
+    });
+  });
+
+  it("deletes nothing for a session ended 90 days after its last visit", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const old = await seedSession(trx, accountId, { lastVisitAt: new Date(Date.now() - SESSION_LIFETIME_MS - 1000) });
+      const open = await confirmedBy(trx, accountId);
+      expect(await deleteAccount(trx, old, [])).toBe(false);
+      expect(await findAccount(trx, accountId)).toBeDefined();
+      expect(await readAdminTokenHash(trx, open.id)).not.toBeNull();
+    });
+  });
+
+  // OA9.4: all or nothing. The account's own deletion, the last step, fails.
+  it("is all or nothing: a failure on the last step leaves the account, its sessions and its events as they were", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const session = await seedSession(trx, accountId);
+      const open = await confirmedBy(trx, accountId);
+      await sql`create function pg_temp.refuse() returns trigger language plpgsql as $$ begin raise exception 'refused'; end $$`.execute(trx);
+      await sql`create trigger refuse_delete before delete on account for each row execute function pg_temp.refuse()`.execute(trx);
+      await sql`savepoint before_delete`.execute(trx);
+      await expect(deleteAccount(trx, session, [])).rejects.toThrow("refused");
+      await sql`rollback to savepoint before_delete`.execute(trx);
+      expect(await findAccount(trx, accountId)).toBeDefined();
+      expect(await findSession(trx, session)).toBeDefined();
+      expect(await readAdminTokenHash(trx, open.id)).not.toBeNull();
+    });
+  });
+});
+
+describe("eraseAccount", () => {
+  it("OT7.2, 3 years without a visit: cancels the handover that waits, as the deletion of the account does", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      const handed = await confirmedBy(trx, accountId);
+      await writeTransfer(trx, handed.id, { email: anAddress(), status: "sending", at: new Date() });
+      const link = await seedLink(trx, { kind: "transfer", eventId: handed.id });
+
+      expect(await eraseAccount(trx, accountId, [])).toBe(true);
+
+      expect(await readTransfer(trx, handed.id)).toEqual({ email: null, status: null, at: null, lastLinkAt: null });
+      expect((await useLink(trx, link, "transfer")).outcome).toBe("invalid");
+      expect(await readOrganiserAccessEvent(trx, handed.id)).toBeDefined();
+    });
+  });
+
+  it("erases an account by its id, with no session to show (the inactivity deletion of #611), once", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const accountId = await seedAccount(trx);
+      expect(await eraseAccount(trx, accountId, [])).toBe(true);
+      expect(await findAccount(trx, accountId)).toBeUndefined();
+      expect(await eraseAccount(trx, accountId, [])).toBe(false);
+    });
+  });
+});
+
+/** The sends recorded for the address. */
+const sendsTo = (db: Kysely<Database>, email: string) => db.selectFrom("email_send").select("id").where("email", "=", email).execute();
+
+// Each test holds the first transaction open until the second waits for one of its locks (whileHeld),
+// so that the order is forced and each lock of eraseHeld has a test that fails without it.
+describe("deleteAccount, concurrently", () => {
+  // Two tabs, two sessions of one account: one deletes it, the other finds it gone.
+  it("lets a deletion wait for another of the same account, which then finds nothing to delete", async () => {
+    await withCommittedAddresses(async (db, address) => {
+      const accountId = await seedAccount(db, { email: address() });
+      const first = await seedSession(db, accountId);
+      const second = await seedSession(db, accountId);
+      const deleted = await whileHeld(
+        db,
+        async (trx) => expect(await deleteAccount(trx, first, [])).toBe(true),
+        (own) => deleteAccount(own, second, []),
+      );
+      expect(deleted).toBe(false);
+      expect(await findAccount(db, accountId)).toBeUndefined();
+    });
+  });
+
+  // Another tab closes the session while this one waits for the sessions' locks: nothing is deleted.
+  it("deletes nothing for a session closed by « Se déconnecter » while it waited, and leaves the account and its other sessions", async () => {
+    await withCommittedAddresses(async (db, address) => {
+      const accountId = await seedAccount(db, { email: address() });
+      const closing = await seedSession(db, accountId);
+      const other = await seedSession(db, accountId);
+      const deleted = await whileHeld(
+        db,
+        (trx) => signOutBrowser(trx, closing, []),
+        (own) => deleteAccount(own, closing, []),
+      );
+      expect(deleted).toBe(false);
+      expect(await findAccount(db, accountId)).toBeDefined();
+      expect(await findSession(db, other)).toBeDefined();
+    });
+  });
+
+  // The sign-out takes a session, then the events; the deletion takes the sessions, then the events: one order.
+  it.each([
+    ["another session", "other"],
+    ["the same session", "same"],
+  ] as const)(
+    "lets « Se déconnecter » of %s, with the admin token of an event of the account, wait for the deletion: signed out, no deadlock, the account gone",
+    async (_, which) => {
+      await withCommittedEvent(async (db, eventId, token) => {
+        await withCommittedAddresses(async (_db, address) => {
+          const accountId = await seedAccount(db, { email: address() });
+          const deleting = await seedSession(db, accountId);
+          const other = await seedSession(db, accountId);
+          await db.updateTable("event").set({ account_id: accountId, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+          const answer = await whileHeld(
+            db,
+            async (trx) => expect(await deleteAccount(trx, deleting, [])).toBe(true),
+            (own) => signOutBrowser(own, which === "same" ? deleting : other, [token]),
+          );
+          expect(answer).toEqual({ signedOut: true });
+          expect(await findAccount(db, accountId)).toBeUndefined();
+          expect(await readAdminTokenHash(db, eventId)).toBeNull();
+        });
+      });
+    },
+  );
+
+  // WINDOW_LOCK (#848): a send recorded for the address and not yet committed is erased with the rest, or the address stays in email_send.
+  it("erases the sends of the address, including one recorded and committed while it waited for the address", async () => {
+    await withCommittedAddresses(async (db, address) => {
+      const email = address();
+      const accountId = await seedAccount(db, { email });
+      const session = await seedSession(db, accountId);
+      const deleted = await whileHeld(
+        db,
+        async (trx) => expect(await recordSend(trx, { kind: "login", email })).toBe("recorded"),
+        (own) => deleteAccount(own, session, []),
+      );
+      expect(deleted).toBe(true);
+      expect(await sendsTo(db, email)).toEqual([]);
+      expect(await findAccount(db, accountId)).toBeUndefined();
+    });
+  });
+
+  it("lets a send to the address wait for the deletion: recorded after it, with no deadlock", async () => {
+    await withCommittedAddresses(async (db, address) => {
+      const email = address();
+      const accountId = await seedAccount(db, { email });
+      const session = await seedSession(db, accountId);
+      const claim = await whileHeld(
+        db,
+        async (trx) => expect(await deleteAccount(trx, session, [])).toBe(true),
+        (own) => recordSend(own, { kind: "login", email }),
+      );
+      expect(claim).toBe("recorded");
+      expect(await sendsTo(db, email)).toHaveLength(1);
+    });
+  });
+
+  // #986: the address is written under the address's lock, after the deletion read the events: it reads them again once it holds the lock.
+  it("clears the pending address of an event written and committed while it waited for the address, with its confirmation links", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      await withCommittedAddresses(async (_db, address) => {
+        const email = address();
+        const accountId = await seedAccount(db, { email });
+        const session = await seedSession(db, accountId);
+        const deleted = await whileHeld(
+          db,
+          async (trx) => {
+            expect(await claimConfirmation(trx, eventId, email)).toMatchObject({ claim: "recorded" });
+            await writeEventOwner(trx, eventId, { pendingEmail: email, sendStatus: "sending", sendStatusAt: new Date() });
+          },
+          (own) => deleteAccount(own, session, []),
+        );
+        expect(deleted).toBe(true);
+        const row = await db.selectFrom("event").select("pending_email").where("id", "=", eventId).executeTakeFirstOrThrow();
+        expect(row.pending_email).toBeNull();
+        expect(await db.selectFrom("email_link").select("token_hash").where("event_id", "=", eventId).execute()).toEqual([]);
+        expect(await sendsTo(db, email)).toEqual([]);
+        expect(await findAccount(db, accountId)).toBeUndefined();
+      });
+    });
+  });
+
+  it("cancels the handover to its address written and committed while it waited for the address, with its transfer links", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      await withCommittedAddresses(async (_db, address) => {
+        const email = address();
+        const accountId = await seedAccount(db, { email });
+        const session = await seedSession(db, accountId);
+        const organiser = await seedAccount(db, { email: address() });
+        await db.updateTable("event").set({ account_id: organiser, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+        const deleted = await whileHeld(
+          db,
+          async (trx) => {
+            expect(await claimTransfer(trx, eventId, email)).toMatchObject({ claim: "recorded" });
+            await writeTransfer(trx, eventId, { email, status: "sending", at: new Date() });
+          },
+          (own) => deleteAccount(own, session, []),
+        );
+        expect(deleted).toBe(true);
+        const row = await db
+          .selectFrom("event")
+          .select(["account_id", "transfer_email", "transfer_status", "transfer_status_at"])
+          .where("id", "=", eventId)
+          .executeTakeFirstOrThrow();
+        expect(row).toEqual({ account_id: organiser, transfer_email: null, transfer_status: null, transfer_status_at: null });
+        expect(await db.selectFrom("email_link").select("token_hash").where("event_id", "=", eventId).execute()).toEqual([]);
+        expect(await sendsTo(db, email)).toEqual([]);
+        expect(await findAccount(db, accountId)).toBeUndefined();
+      });
+    });
+  });
+
+  // #904: an event created with the session sets its account_id after the deletion read the account's events.
+  it("revokes the admin token of an event created with the session while it ran, which the account's SET NULL leaves open", async () => {
+    await withCommittedEvent(async (db, eventId) => {
+      await withCommittedAddresses(async (_db, address) => {
+        const accountId = await seedAccount(db, { email: address() });
+        const session = await seedSession(db, accountId);
+        const deleted = await whileHeld(
+          db,
+          (trx) => writeEventOwner(trx, eventId, { accountId, confirmedAt: new Date() }),
+          (own) => deleteAccount(own, session, []),
+        );
+        expect(deleted).toBe(true);
+        const row = await db.selectFrom("event").select(["account_id", "admin_token_hash"]).where("id", "=", eventId).executeTakeFirstOrThrow();
+        expect(row).toEqual({ account_id: null, admin_token_hash: null });
+      });
+    });
+  });
+
+  // #986: clearLateAddress locks the event after the address, `confirmAgain` the address after the event: a deadlock
+  // (40P01) that Postgres breaks by cancelling one of the two. Whether the two meet depends on which wakes first when
+  // the correction commits, so this test cannot force the deadlock. It holds in every outcome: deleteAccountOf deletes
+  // the account (after its retry when it was the one cancelled), and a resend that was cancelled is a 40P01 the page shows as « failed ».
+  // Explicit timeout: it relies on deadlock_timeout (1 s per detection, twice at worst, plus the retry), too close to the 5 s default.
+  it("deletes the account after a resend of the event moved to its address, whichever of the two Postgres cancels in a deadlock", async () => {
+    await withCommittedEvent(async (db, eventId, token) => {
+      await withCommittedAddresses(async (_db, address) => {
+        const email = address();
+        const accountId = await seedAccount(db, { email });
+        const session = await seedSession(db, accountId);
+        await seedPendingSend(db, eventId, { email: address(), status: "sent", at: new Date(Date.now() - 60 * 60_000) });
+        const brevo = { send: async () => ({ state: "sent" as const }) };
+        const resend = async (own: Kysely<Database>) => {
+          try {
+            return await resendConfirmation(eventId, { adminToken: token }, { db: own, now: new Date(), locale: "fr", origin: "https://fullcar.test", brevo });
+          } catch (error) {
+            return { cancelled: errorCode(error) };
+          }
+        };
+        const [deleted, resent] = await whileHeldInTurn<unknown>(
+          db,
+          // The correction F to E, not yet committed: the first read of the events of the deletion does not see it.
+          async (trx) => {
+            expect(await claimConfirmation(trx, eventId, email)).toMatchObject({ claim: "recorded" });
+            await writeEventOwner(trx, eventId, { pendingEmail: email, sendStatus: "sending", sendStatusAt: new Date() });
+          },
+          [(own) => deleteAccountOf(own, session, []), resend],
+        );
+        expect(deleted).toEqual({ deleted: true });
+        expect([
+          { ok: true, pending: { email, send: "sent" } },
+          { ok: false, error: "notPending" },
+          { cancelled: "SQLSTATE 40P01" },
+        ]).toContainEqual(resent);
+        const row = await db.selectFrom("event").select("pending_email").where("id", "=", eventId).executeTakeFirstOrThrow();
+        expect(row.pending_email).toBeNull();
+        expect(await sendsTo(db, email)).toEqual([]);
+        expect(await db.selectFrom("email_link").select("token_hash").where("event_id", "=", eventId).execute()).toEqual([]);
+        expect(await findAccount(db, accountId)).toBeUndefined();
+      });
+    });
+  }, 10_000);
 });

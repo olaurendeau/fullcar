@@ -1,6 +1,7 @@
 import type { BrowserContext, Page, Request } from "@playwright/test";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { fillAddress } from "./mailbox";
 import { areaRefused, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
@@ -19,14 +20,14 @@ const WRONG_SECRET = "q3Vx9kLmN2pR7sT1uW4yZQ";
 
 const FR = {
   switch: "English",
-  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
   notFound: "Événement introuvable",
   panel: "Espace organisateur",
   shareLink: "Lien à partager",
 };
 const EN = {
   switch: "Français",
-  tagline: "Group carpooling, there and back, no account needed.",
+  tagline: "Group carpooling, there and back, no account for participants.",
   notFound: "Event not found",
   panel: "Organiser area",
   shareLink: "Link to share",
@@ -34,6 +35,8 @@ const EN = {
 type Words = typeof FR;
 
 const TITLE = { fr: "Tournoi de Rennes", en: "Tournoi de Rennes" };
+/** Refused, the screen of a pending event takes the board's place, and its title is the page's (#598). */
+const REFUSED = { fr: "Adresse pas encore confirmée", en: "Email address not confirmed yet" };
 
 /**
  * The pages of the footer (footer.spec.ts): which, where, their title in each language, and on
@@ -44,8 +47,8 @@ const PAGES: [string, (event: SeededEvent) => string, Record<"fr" | "en", string
   ["the event not found", () => `/e/${UNKNOWN_ID}`, { fr: FR.notFound, en: EN.notFound }],
   ["the event's page", ({ id }) => `/e/${id}`, TITLE],
   ["the organiser's page", organiserPath, TITLE, ({ token }) => token],
-  ["the organiser's page, wrong secret", organiserPath, TITLE, () => WRONG_SECRET],
-  ["the organiser's page, no secret", organiserPath, TITLE, () => null],
+  ["the organiser's page, wrong secret", organiserPath, REFUSED, () => WRONG_SECRET],
+  ["the organiser's page, no secret", organiserPath, REFUSED, () => null],
 ];
 
 /** The page once it has settled: on the organiser's page, once its token has been checked. */
@@ -53,7 +56,7 @@ async function open(page: Page, path: string, heading: string, words: Words = FR
   await page.goto(path, { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
   if (path.includes("/admin")) {
-    const refused = areaRefused(page, words.panel);
+    const refused = areaRefused(page, words === FR ? REFUSED.fr : REFUSED.en);
     await expect(page.getByRole("region", { name: words.panel }).or(refused)).toBeVisible();
   }
 }
@@ -439,6 +442,7 @@ test.describe("an event created in the language chosen", () => {
     await field("Start date").fill(allerDate);
     await field("Start time").fill("07:30");
     await field("End time").fill("18:00");
+    await fillAddress(page, "Your email address");
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
     // Read by its path: the arrival has no fragment (OA1.6).

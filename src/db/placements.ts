@@ -14,6 +14,8 @@ export interface PlacementRef {
 export interface NewPlacement extends PlacementRef {
   /** `null`: without a car on the leg. */
   rideId: string | null;
+  /** The Stop of the Ride where the person boards; none or `null`: at the Ride's start. */
+  stopId?: string | null;
 }
 
 /** The database's clock, the same for the whole transaction. */
@@ -22,7 +24,8 @@ const now = () => sql<Date>`now()`;
 /**
  * Writes where the person stands on the leg: in that Ride, or without a car. The other
  * leg is not touched (C3.5). When `ride_id` changes, the boarding time goes back to
- * `now()`; written again with the same Ride, the row is left as it is. A person of
+ * `now()`; written again with the same Ride, the row is left as it is, but for a new Stop,
+ * which does not move the boarding time. A person of
  * another event is left as she is too: the update is limited to `eventId`.
  *
  * In a car, the Ride is locked first (lock order: Ride, then Person, which the trigger on
@@ -45,13 +48,24 @@ async function upsertPlacement(db: Kysely<Database>, placement: NewPlacement): P
       event_id: placement.eventId,
       leg: placement.leg,
       ride_id: placement.rideId,
+      stop_id: placement.stopId ?? null,
     })
     .onConflict((conflict) =>
       conflict
         .columns(["person_id", "leg"])
-        .doUpdateSet((eb) => ({ ride_id: eb.ref("excluded.ride_id"), placed_at: now() }))
+        .doUpdateSet((eb) => ({
+          ride_id: eb.ref("excluded.ride_id"),
+          stop_id: eb.ref("excluded.stop_id"),
+          placed_at: sql<Date>`case when placement.ride_id is distinct from excluded.ride_id
+            then now() else placement.placed_at end`,
+        }))
         .whereRef("placement.event_id", "=", "excluded.event_id")
-        .whereRef("placement.ride_id", "is distinct from", "excluded.ride_id"),
+        .where((eb) =>
+          eb.or([
+            eb("placement.ride_id", "is distinct from", eb.ref("excluded.ride_id")),
+            eb("placement.stop_id", "is distinct from", eb.ref("excluded.stop_id")),
+          ]),
+        ),
     )
     .execute();
 }

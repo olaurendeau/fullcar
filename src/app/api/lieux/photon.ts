@@ -26,6 +26,8 @@ export interface PhotonOptions {
   url: string;
   /** How long the breaker stays open, `PLACES_BREAKER_MS`; `0` never opens it, `Retry-After` included. */
   breakerMs: number;
+  /** How many calls may leave in a second, `PLACES_CALLS_PER_SECOND`: 5, but for the slots, where tests run in parallel. */
+  callsPerSecond: number;
 }
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
@@ -46,10 +48,18 @@ const MAX_FEATURES = 20;
 
 const UNAVAILABLE: PhotonAnswer = { state: "unavailable" };
 
-/** `PHOTON_URL` and `PLACES_BREAKER_MS` (an integer of milliseconds), each with its default when unset or unreadable. */
-export function photonSettings(env: Record<string, string | undefined>): Pick<PhotonOptions, "url" | "breakerMs"> {
+/**
+ * `PHOTON_URL`, `PLACES_BREAKER_MS` (an integer of milliseconds) and `PLACES_CALLS_PER_SECOND` (a
+ * positive integer), each with its default when unset or unreadable.
+ */
+export function photonSettings(env: Record<string, string | undefined>): Pick<PhotonOptions, "url" | "breakerMs" | "callsPerSecond"> {
   const breaker = env.PLACES_BREAKER_MS ?? "";
-  return { url: env.PHOTON_URL || PHOTON_URL, breakerMs: /^\d+$/.test(breaker) ? Number(breaker) : BREAKER_MS };
+  const calls = env.PLACES_CALLS_PER_SECOND ?? "";
+  return {
+    url: env.PHOTON_URL || PHOTON_URL,
+    breakerMs: /^\d+$/.test(breaker) ? Number(breaker) : BREAKER_MS,
+    callsPerSecond: /^[1-9]\d*$/.test(calls) ? Number(calls) : CALLS_PER_SECOND,
+  };
 }
 
 /** Why a call failed, as it is logged: a fixed word, or the HTTP status. */
@@ -59,7 +69,7 @@ class Unavailable {
   constructor(readonly failure: Failure) {}
 }
 
-export function createPhoton({ fetch, now, url, breakerMs }: PhotonOptions): Photon {
+export function createPhoton({ fetch, now, url, breakerMs, callsPerSecond }: PhotonOptions): Photon {
   /** Oldest first: Map keeps its insertion order, and a hit moves its entry to the end. */
   const cache = new Map<string, { at: number; suggestions: Suggestion[] }>();
   const calls: number[] = [];
@@ -83,7 +93,7 @@ export function createPhoton({ fetch, now, url, breakerMs }: PhotonOptions): Pho
   function underCap(): boolean {
     const time = now();
     while (calls.length > 0 && calls[0] <= time - 1000) calls.shift();
-    if (calls.length >= CALLS_PER_SECOND) return false;
+    if (calls.length >= callsPerSecond) return false;
     calls.push(time);
     return true;
   }
