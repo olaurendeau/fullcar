@@ -1,12 +1,12 @@
-import { UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, UserPlus } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { storageAvailable } from "@/app/e/[id]/device-token";
 import { Button } from "@/components/ui/button";
 import type { Leg } from "@/domain/leg";
 import { phonePrefill } from "@/domain/phone-prefill";
 import type { VisibleCar, VisibleLegBoard } from "@/domain/phone-visibility";
-import { sheetCandidates, sheetSubmit, tapOutcome } from "@/domain/tap";
+import { sheetCandidates, sheetSubmit, tapOutcome, type SheetCandidate } from "@/domain/tap";
 import type { WallDate } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import { BottomSheet, SheetStep } from "./bottom-sheet";
@@ -38,13 +38,13 @@ export type SeatsTaken =
 /** What the server answers `takeSeats`, an unknown event included. */
 type SeatsAnswer =
   | { ok: true; stopGone?: true }
-  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "eventEnded" | "noRetour" | "stopsOff" }
+  | { ok: false; error: "invalid" | "rideGone" | "alreadyInCar" | "seatTaken" | "eventNotFound" | "eventEnded" | "noRetour" | "stopsOff" }
   | { ok: false; error: "notEnoughSeats"; freeSeats: number }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
 /**
  * `takeSeats`'s answer as the page says it, for the persons sent, `names`, whose ids are `personIds`
- * in the same order. The sheet has no words of its own for `forbidden`, `eventNotFound` and
+ * in the same order. The sheet has no words of its own for `eventNotFound` and
  * `invalid`: `failed` there (§ 2.6).
  */
 export function seatsTaken(
@@ -182,13 +182,27 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
         opening={opening}
         car={board.cars.find((car) => car.id === opening.rideId)}
         date={date}
-        persons={board.device}
+        board={board}
         onOpenChange={onOpenChange(opening.count)}
         device={device}
         hasRetour={hasRetour}
       />
     ));
   return { tap, sheet };
+}
+
+/** A group of the sheet: its title when the sheet says whose they are (PL2.4), else the boxes alone. */
+function Group({ title, children }: { title: string | undefined; children: ReactNode }) {
+  const id = useId();
+  if (title === undefined) return <>{children}</>;
+  return (
+    <div role="group" aria-labelledby={id} className="flex flex-col">
+      <p id={id} className="mt-2.5 text-[13px] leading-[18px] font-semibold text-muted-foreground">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -281,7 +295,7 @@ function SeatSheet({
   opening: { rideId, driver, seat, open },
   car,
   date,
-  persons,
+  board,
   onOpenChange,
   device: { takeSeats, addPerson },
   hasRetour,
@@ -292,8 +306,8 @@ function SeatSheet({
   car: VisibleCar | undefined;
   /** The leg's date, with which the Stops' times are shown. */
   date: WallDate;
-  /** The device's persons on the leg, as the page now shows them. */
-  persons: VisibleLegBoard["device"];
+  /** The leg as the page now shows it: the device's persons and the others who are in no car. */
+  board: VisibleLegBoard;
   onOpenChange: (open: boolean) => void;
   device: BoardDevice;
   hasRetour: boolean;
@@ -302,13 +316,30 @@ function SeatSheet({
   const words = wordsOf(t, useFormatter());
   const ids = useId();
   const boxId = (personId: string) => `${ids}-${personId}`;
-  const candidates = sheetCandidates(persons);
+  const groups = sheetCandidates(board);
+  const candidates = [...groups.own, ...groups.others, ...groups.notConcerned];
+  // The titles say whose the persons are, only when the sheet lists someone of another device (PL2.4).
+  const headed = groups.others.length + groups.notConcerned.length > 0;
+  // The persons of other devices who do not do the leg: folded, and folding changes no box (PL2.5).
+  const [showNotConcerned, setShowNotConcerned] = useState(false);
+  const Chevron = showNotConcerned ? ChevronUp : ChevronDown;
   const hasStops = (car?.stops.length ?? 0) > 0;
   // What the person changed; the others keep their default (C6.1), a person added since included.
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
   // The point where they board: the departure (`null`) as the sheet opens (RV3.2). One for everyone ticked.
   const [stopId, setStopId] = useState<string | null>(null);
   const chosen = candidates.filter((candidate) => ticked[candidate.id] ?? candidate.checked);
+  const box = (candidate: SheetCandidate) => (
+    <Box
+      key={candidate.id}
+      id={boxId(candidate.id)}
+      label={candidate.firstName}
+      // The state she is in, as the page shows it now (C6.1).
+      hint={candidate.state === "withoutCar" ? t("DevicePersons.state.withoutCar") : t(`DevicePersons.state.notConcerned.${leg}`)}
+      checked={ticked[candidate.id] ?? candidate.checked}
+      onChange={(value) => setTicked((current) => ({ ...current, [candidate.id]: value }))}
+    />
+  );
   const gone = car === undefined;
   const submit = sheetSubmit(chosen.length, car?.freeSeats ?? 0);
   const [sending, setSending] = useState(false);
@@ -359,8 +390,8 @@ function SeatSheet({
     const sheet = sends(personIds);
     const placed =
       names.length === 1 ? t("Seat.placed", { firstName: names[0], driver }) : t("Sheet.placed", { names: nameList(words, names), driver });
-    // Ticked by default exactly when without a car (C6.1): unticked, she did not do the leg.
-    const persons = chosen.map(({ id, checked }): Seated => ({ personId: id, before: checked ? "withoutCar" : "notConcerned" }));
+    // Where each stood on the leg, not whether the box was ticked: « Annuler » gives her that back (PL4.3).
+    const persons = chosen.map(({ id, state }): Seated => ({ personId: id, before: state }));
     // Sent with a car that has Stops only, and as the sheet showed it: the Stop chosen, or the departure.
     const stop = hasStops ? { stopId } : {};
     const taken = await takeSeats({ rideId, leg, persons, ...stop }, { ...sheet, sending: setSending, seats: { names, driver }, placed });
@@ -437,7 +468,7 @@ function SeatSheet({
             <SheetStep onBack={cancelAdding} />
             {!adding.kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
             <PersonForm
-              mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId), prefill: phonePrefill(persons), driver }}
+              mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId), prefill: phonePrefill(board.device), driver }}
               open={() => isOpen.current}
               onGone={() => onOpenChange(false)}
               onDone={(personId) => {
@@ -454,17 +485,29 @@ function SeatSheet({
                 <p className="text-sm">{t(`Sheet.nobody.${leg}`)}</p>
               ) : (
                 <div className="flex flex-col">
-                  {candidates.map((candidate) => (
-                    <Box
-                      key={candidate.id}
-                      id={boxId(candidate.id)}
-                      label={candidate.firstName}
-                      // Ticked by default exactly when without a car (C6.1).
-                      hint={candidate.checked ? t("DevicePersons.state.withoutCar") : t(`DevicePersons.state.notConcerned.${leg}`)}
-                      checked={ticked[candidate.id] ?? candidate.checked}
-                      onChange={(value) => setTicked((current) => ({ ...current, [candidate.id]: value }))}
-                    />
-                  ))}
+                  {groups.own.length > 0 && (
+                    <Group title={headed ? t("Sheet.group.own") : undefined}>{groups.own.map(box)}</Group>
+                  )}
+                  {groups.others.length > 0 && (
+                    <Group title={t("Sheet.group.others")}>{groups.others.map(box)}</Group>
+                  )}
+                  {groups.notConcerned.length > 0 && (
+                    <div className="flex flex-col">
+                      <button
+                        type="button"
+                        aria-expanded={showNotConcerned}
+                        aria-controls={`${ids}-not-concerned`}
+                        onClick={() => setShowNotConcerned(!showNotConcerned)}
+                        className="flex min-h-11 items-center justify-between gap-2 rounded-lg text-left text-sm text-muted-foreground focus-visible:focus-ring"
+                      >
+                        <span className="min-w-0 [overflow-wrap:anywhere]">{t(`Sheet.group.notConcerned.${leg}`, { count: groups.notConcerned.length })}</span>
+                        <Chevron aria-hidden className="size-4 shrink-0" />
+                      </button>
+                      <div id={`${ids}-not-concerned`} hidden={!showNotConcerned}>
+                        {groups.notConcerned.map(box)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {car && hasStops && candidates.length > 0 && (
