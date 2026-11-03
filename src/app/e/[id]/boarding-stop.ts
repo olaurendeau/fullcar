@@ -5,7 +5,7 @@ import { lockRide, ridePassengers, type RideRef } from "@/db/rides";
 import type { Database } from "@/db/schema";
 import { atomically } from "@/db/transaction";
 import { isCreationId } from "@/domain/creation-id";
-import { deviceAccess } from "@/domain/device";
+import { eventAccess } from "@/domain/device";
 import { isPublicId } from "@/domain/public-id";
 import { EVENT_NOT_FOUND, type EventNotFound } from "./change-ride";
 import { readEventState, type DeviceState } from "./event-state";
@@ -41,8 +41,9 @@ export async function isStopOfRide(db: Kysely<Database>, ride: RideRef, stopId: 
 /**
  * - `eventEnded`: the event is anonymised (#588), before any other refusal.
  * - `invalid`: a request no page sends (an id malformed).
- * - `forbidden`: the person is not one of the device (C2.4).
- * - `personGone`: the person is no longer one of the event (RP5.4).
+ * - `personGone`: the person is not one of the event (any more, RP5.4). Whose token created her
+ *   does not matter, nor whether the request has one: whoever has the link changes her point
+ *   (epic #973).
  * - `stopsOff`: the event's option « Points de RDV » is off (RV8.3): nothing is written.
  * - `rideGone`: the car is no longer offered on the aller.
  * - `notInCar`: the person is no longer in that car: she left it, or took another.
@@ -50,7 +51,7 @@ export async function isStopOfRide(db: Kysely<Database>, ride: RideRef, stopId: 
  */
 export type BoardingStopOutcome =
   | { ok: true; stopGone?: true }
-  | { ok: false; error: "eventEnded" | "invalid" | "forbidden" | "rideGone" | "notInCar" | "stopsOff" }
+  | { ok: false; error: "eventEnded" | "invalid" | "rideGone" | "notInCar" | "stopsOff" }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
 /** The outcome, and the event's state as the device now sees it, refusal or not. */
@@ -67,7 +68,6 @@ type Written<Outcome> = Outcome | EventNotFound;
 async function changeBoarding(
   trx: Kysely<Database>,
   eventId: string,
-  token: unknown,
   rideId: unknown,
   personId: unknown,
   stopId: unknown,
@@ -78,8 +78,8 @@ async function changeBoarding(
   if (!legs.stopsEnabled) return { ok: false, error: "stopsOff" };
   const requested = requestedStop(stopId);
   if (!isCreationId(rideId) || !isCreationId(personId) || requested === undefined) return { ok: false, error: "invalid" };
-  const access = deviceAccess(token, await readTokenHolders(trx, eventId), [personId]);
-  if (access.kind === "forbidden") return { ok: false, error: "forbidden" };
+  // Whoever has the link changes the point of any person of the event (epic #973).
+  const access = eventAccess(await readTokenHolders(trx, eventId), [personId]);
   if (access.kind === "personGone") return { ok: false, error: "personGone", goneIds: access.goneIds };
   const ride = { id: rideId, eventId, leg: "aller" } as const;
   if ((await lockRide(trx, ride)) === undefined) return { ok: false, error: "rideGone" };
@@ -103,12 +103,12 @@ async function changeBoarding(
 }
 
 /**
- * « Changer le point » (RV4.2 to RV4.4): a person of the device, already in a car of the aller,
+ * « Changer le point » (RV4.2 to RV4.4): a person of the event, already in a car of the aller,
  * boards at another point of it, or at its start with `null`; then reads the event's state for
  * it. « Annuler » calls it again with the point before. `eventNotFound` for an unknown event,
  * forged request or not; a malformed id is never looked up. As for takeSeats, the write
- * commits in its own transaction and the state is read after the commit; the token is only
- * compared, never logged nor kept.
+ * commits in its own transaction and the state is read after the commit; the token only
+ * decides which numbers the state shows, and is never logged nor kept.
  */
 export async function setBoardingStop(
   db: Kysely<Database>,
@@ -119,7 +119,7 @@ export async function setBoardingStop(
   stopId: unknown,
 ): Promise<BoardingStopResult | EventNotFound> {
   if (!isPublicId(eventId)) return EVENT_NOT_FOUND;
-  const outcome = await atomically(db, (trx) => changeBoarding(trx, eventId, token, rideId, personId, stopId));
+  const outcome = await atomically(db, (trx) => changeBoarding(trx, eventId, rideId, personId, stopId));
   if (!outcome.ok && outcome.error === "eventNotFound") return EVENT_NOT_FOUND;
   const state = await readEventState(db, eventId, token);
   return state ? { ...outcome, state } : EVENT_NOT_FOUND;

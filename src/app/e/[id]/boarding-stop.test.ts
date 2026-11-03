@@ -198,17 +198,35 @@ describe("setBoardingStop", () => {
     });
   });
 
-  it("RV4.3: forbidden for a person of another device, or a token held by nobody, before the car is looked up", async () => {
+  it("PL5.1: changes the point of a person of another device, with any token or none, and the seat stays", async () => {
     await withRollback(async (trx) => {
-      const { eventId, lea, tom, r1, r2, s3 } = await seedScene(trx);
-      const before = await rowsOf(trx, eventId);
+      const { eventId, lea, tom, hugo, r1, r2, s1, s3 } = await seedScene(trx);
+      const s4 = await seedStop(trx, eventId, r2, { location: "Gare", time: "07:25:00" });
+      const seat = (rows: Awaited<ReturnType<typeof rowsOf>>, personId: string) => rows.find((row) => row.person_id === personId);
 
-      expect(await setBoardingStop(trx, eventId, lea.token, r2, tom.id, null)).toMatchObject({ ok: false, error: "forbidden" });
-      expect(await setBoardingStop(trx, eventId, NOBODYS_TOKEN, r1, lea.id, null)).toMatchObject({ ok: false, error: "forbidden" });
-      expect(await setBoardingStop(trx, eventId, undefined, randomUUID(), tom.id, s3)).toMatchObject({
-        ok: false,
-        error: "forbidden",
-      });
+      const start = await rowsOf(trx, eventId);
+      // Léa's token moves Tom (another device) to another point of his car.
+      const moved = await setBoardingStop(trx, eventId, lea.token, r2, tom.id, s4);
+      expect(moved).toEqual({ ok: true, state: await readEventState(trx, eventId, lea.token) });
+      const afterMove = await rowsOf(trx, eventId);
+      expect(seat(afterMove, tom.id)).toMatchObject({ ride_id: r2, stop_id: s4 });
+
+      // No token, a malformed one, a well-formed one held by nobody: Hugo is moved all the same.
+      for (const [token, stop] of [[undefined, null], ["AAAA", s1], [NOBODYS_TOKEN, null]] as const) {
+        expect(await setBoardingStop(trx, eventId, token, r1, hugo.id, stop)).toMatchObject({ ok: true });
+        expect(seat(await rowsOf(trx, eventId), hugo.id)).toMatchObject({ ride_id: r1, stop_id: stop });
+      }
+      // Boarding time kept (RV4.4), and the point really changed from s3.
+      expect(seat(afterMove, tom.id)?.placed_at).toEqual(seat(start, tom.id)?.placed_at);
+      expect(seat(start, tom.id)?.stop_id).toBe(s3);
+    });
+  });
+
+  it("PL5.1: a person of another device in another car is still notInCar for this one", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, tom, r1 } = await seedScene(trx);
+      const before = await rowsOf(trx, eventId);
+      expect(await setBoardingStop(trx, eventId, lea.token, r1, tom.id, null)).toMatchObject({ ok: false, error: "notInCar" });
       expect(await rowsOf(trx, eventId)).toEqual(before);
     });
   });
@@ -226,6 +244,19 @@ describe("setBoardingStop", () => {
         state: await readEventState(trx, eventId, lea.token),
       });
       expect(await setBoardingStop(trx, eventId, lea.token, randomUUID(), hugo.id, s2)).toMatchObject({ error: "personGone" });
+    });
+  });
+
+  it("a real person of another event is personGone, and nothing is written to either event", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, r1, s2 } = await seedScene(trx);
+      const other = await seedScene(trx);
+      const before = [await rowsOf(trx, eventId), await rowsOf(trx, other.eventId)];
+
+      const result = await setBoardingStop(trx, eventId, lea.token, r1, other.hugo.id, s2);
+
+      expect(result).toMatchObject({ ok: false, error: "personGone", goneIds: [other.hugo.id] });
+      expect([await rowsOf(trx, eventId), await rowsOf(trx, other.eventId)]).toEqual(before);
     });
   });
 
