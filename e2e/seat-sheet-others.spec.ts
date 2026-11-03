@@ -190,6 +190,9 @@ test.describe("the sheet lists the persons of the other devices", () => {
     await expect(dialog.getByRole("group", { name: "Autres personnes sans voiture" }).getByRole("checkbox")).toHaveCount(1);
     await expect(folded(dialog)).toHaveText("Autres personnes qui ne font pas le retour (1)");
     await expect(placeButton(dialog)).toHaveText("Placer 2 personnes");
+    // The first title has no margin above it, the second has one (states 3, 5, 16 of the design).
+    await expect(dialog.getByText("Vos personnes", { exact: true })).toHaveCSS("margin-top", "0px");
+    await expect(dialog.getByText("Autres personnes sans voiture", { exact: true })).not.toHaveCSS("margin-top", "0px");
   });
 
   test("PL6.1: in English, the groups and the folded list say the words of the design", async ({ browser, seededEvent }) => {
@@ -243,6 +246,46 @@ test.describe("without a person of another device", () => {
     const dialog = await openSheet(page, "Camille");
     await expect(dialog.getByText("Tout le monde est déjà dans une voiture pour le retour.", { exact: true })).toBeVisible();
     expect(await dialog.getByRole("button").allTextContents()).toEqual(["Ajouter une personne", "Fermer"]);
+  });
+});
+
+test.describe("the only persons of the other devices are folded", () => {
+  test.use({ locale: "fr-FR" });
+  const token = newToken();
+
+  /** Camille drives on the retour (3 seats); Zoé, of another device, does not do the retour. */
+  async function seedFoldedOnly(db: Db, eventId: string, driverToken?: string) {
+    const camille = (await seedPerson(db, eventId, { firstName: "Camille" }, driverToken)).id;
+    await seedRide(db, eventId, camille, { leg: "retour" });
+    await seedPerson(db, eventId, { firstName: "Zoé" });
+  }
+
+  test("PL2.4: « Vos personnes » shows, « Autres personnes sans voiture » does not, the fold does", async ({ db, page, seededEvent }) => {
+    await seedFoldedOnly(db, seededEvent.id);
+    // Two of the device without a car: one alone would be seated at a tap, with no sheet.
+    for (const firstName of ["Tom", "Léa"]) {
+      const { id } = await seedPerson(db, seededEvent.id, { firstName }, token);
+      await seedPlacement(db, { personId: id, eventId: seededEvent.id, leg: "retour", rideId: null });
+    }
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const dialog = await openSheet(page, "Camille");
+    await expect(dialog.getByRole("group", { name: "Vos personnes" }).getByRole("checkbox", { name: "Tom" })).toBeChecked();
+    await expect(dialog.getByRole("group", { name: "Autres personnes sans voiture" })).toHaveCount(0);
+    await expect(folded(dialog)).toHaveText("Autres personnes qui ne font pas le retour (1)");
+  });
+
+  test("PL2.8: only folded candidates: the fold is there, « Tout le monde est déjà… » is not, « Placer » is inactive", async ({ db, page, seededEvent }) => {
+    await seedFoldedOnly(db, seededEvent.id, token);
+    await holdToken(page, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const dialog = await openSheet(page, "Camille");
+    await expect(folded(dialog)).toHaveText("Autres personnes qui ne font pas le retour (1)");
+    await expect(dialog.getByText(/Tout le monde est déjà/)).toHaveCount(0);
+    await expect(placeButton(dialog)).toHaveText("Placer");
+    await expect(placeButton(dialog)).toHaveAttribute("aria-disabled", "true");
+    await folded(dialog).click();
+    await expect(dialog.getByRole("checkbox", { name: "Zoé" })).not.toBeChecked();
   });
 });
 

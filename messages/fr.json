@@ -186,7 +186,8 @@
     "storage": {
       "title": "Cet appareil ne pourra pas s’en souvenir",
       "body": "Votre navigateur bloque le stockage : après la fermeture de la page, ces inscriptions ne pourront plus être modifiées depuis cet appareil."
-    }
+    },
+    "placeOthers": "Placer une personne déjà inscrite"
   },
   "RideForm": {
     "title": {

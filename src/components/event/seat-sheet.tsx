@@ -119,8 +119,9 @@ function toBar(key: string, rideId: string, person: { id: string; firstName: str
 }
 
 /**
- * The car a free seat opened a sheet for, and that seat: the sheet that chooses who boards, or
- * the first registration of a device without a person (C5.4). Each opening is a new sheet.
+ * The car a free seat opened a sheet for, and that seat: the sheet opens on who boards, or on the
+ * first registration of a device without a person (C5.4), which leads to who boards (PL2.7). Each
+ * opening is a new sheet.
  */
 type Opening = { kind: "sheet" | "register"; rideId: string; driver: string; seat: HTMLElement; open: boolean; count: number };
 
@@ -171,23 +172,19 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
 
   const onOpenChange = (count: number) => (open: boolean) =>
     setOpening((current) => (current?.count === count ? { ...current, open } : current));
-  const sheet =
-    opening &&
-    (opening.kind === "register" ? (
-      <RegisterSheet key={opening.count} leg={board.leg} opening={opening} onOpenChange={onOpenChange(opening.count)} device={device} hasRetour={hasRetour} />
-    ) : (
-      <SeatSheet
-        key={opening.count}
-        leg={board.leg}
-        opening={opening}
-        car={board.cars.find((car) => car.id === opening.rideId)}
-        date={date}
-        board={board}
-        onOpenChange={onOpenChange(opening.count)}
-        device={device}
-        hasRetour={hasRetour}
-      />
-    ));
+  const sheet = opening && (
+    <SeatSheet
+      key={opening.count}
+      leg={board.leg}
+      opening={opening}
+      car={board.cars.find((car) => car.id === opening.rideId)}
+      date={date}
+      board={board}
+      onOpenChange={onOpenChange(opening.count)}
+      device={device}
+      hasRetour={hasRetour}
+    />
+  );
   return { tap, sheet };
 }
 
@@ -196,7 +193,7 @@ function Group({ title, children }: { title: string | undefined; children: React
   const id = useId();
   if (title === undefined) return <>{children}</>;
   return (
-    <div role="group" aria-labelledby={id} className="flex flex-col">
+    <div role="group" aria-labelledby={id} className="flex flex-col first:[&>p]:mt-0">
       <p id={id} className="mt-2.5 text-[13px] leading-[18px] font-semibold text-muted-foreground">
         {title}
       </p>
@@ -212,72 +209,11 @@ function Group({ title, children }: { title: string | undefined; children: React
  * came of the seat: placed, or not, why, with the person kept without a car on the leg (#92).
  * The focus then goes to the car's title, or to the leg's banner once the car is gone. A
  * registration that fails stays in the form, as from « Ajouter une personne ». Closed without
- * effect, the focus goes back to the seat.
- */
-function RegisterSheet({
-  leg,
-  opening: { rideId, driver, seat, open },
-  onOpenChange,
-  device,
-  hasRetour,
-}: {
-  leg: Leg;
-  opening: Opening;
-  onOpenChange: (open: boolean) => void;
-  device: BoardDevice;
-  hasRetour: boolean;
-}) {
-  const t = useTranslations();
-  // Probed as the sheet opens, with a key that names no event (C1.13).
-  const [kept] = useState(storageAvailable);
-  const isOpen = useRef(open);
-  useEffect(() => {
-    isOpen.current = open;
-  }, [open]);
-  const afterClose = useRef(() => (seat.isConnected ? seat.focus() : toCarOrBanner(leg, rideId)));
-
-  const addPerson: AddPerson = async (registering) => {
-    const added = await device.addPerson(registering);
-    if (added?.kind !== "done") return added;
-    // Her creation id is her id; her first name as sent, its spaces trimmed.
-    const person = { id: registering.creationId(), firstName: registering.notDone.kind === "addPerson" ? registering.notDone.firstName : registering.person.firstName };
-    afterClose.current = () => toCarOrBanner(leg, rideId);
-    const placed = t("Seat.placed", { firstName: person.firstName, driver });
-    // Registered from the seat, she was without a car on its leg.
-    await device.takeSeats({ rideId, leg, persons: [{ personId: person.id, before: "withoutCar" }] }, { ...toBar(`register:${person.id}`, rideId, person, driver, placed), sending: registering.sending });
-    return added;
-  };
-
-  return (
-    <BottomSheet
-      open={open}
-      onOpenChange={onOpenChange}
-      title={t("PersonForm.title.add")}
-      description={
-        <>
-          <span className="block">{t("PersonForm.forSeat", { driver })}</span>
-          {kept && <span className="block">{t("PersonForm.remember")}</span>}
-        </>
-      }
-      // It has fields: on a phone, it fills the screen (v4.6, rule 2).
-      fullHeight
-      onCloseAutoFocus={(event) => {
-        event.preventDefault();
-        afterClose.current();
-      }}
-    >
-      {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
-      <PersonForm
-        mode={{ kind: "add", leg, hasRetour, addPerson, landmark: focusCar(leg, rideId), driver }}
-        open={() => isOpen.current}
-        onDone={() => onOpenChange(false)}
-        onGone={() => onOpenChange(false)}
-      />
-    </BottomSheet>
-  );
-}
-
-/**
+ * effect, the focus goes back to the seat. Under the form, « Placer une personne déjà inscrite »,
+ * only when someone is without a car or not on the leg (PL2.7), takes its place for the list below,
+ * nothing ticked; the browser's « back » comes back to the form. No token is made for it: the
+ * persons seated are those of other devices.
+ *
  * « Qui monte dans la voiture de {driver} ? » (R6): under the title, always, the seats left,
  * red when more are ticked than left or after a refusal; one box per person of the device in
  * no car on the leg, her state under her name (C6.1); « Ajouter une personne », whose form
@@ -292,7 +228,7 @@ function RegisterSheet({
  */
 function SeatSheet({
   leg,
-  opening: { rideId, driver, seat, open },
+  opening: { kind, rideId, driver, seat, open },
   car,
   date,
   board,
@@ -345,6 +281,10 @@ function SeatSheet({
   const [sending, setSending] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const [adding, setAdding] = useState<{ kept: boolean } | null>(null);
+  // The first registration of a device without a person, before the list (PL2.7); probed as the sheet opens, with a key that names no event (C1.13).
+  const [registering, setRegistering] = useState(kind === "register");
+  const [registerKept] = useState(() => kind !== "register" || storageAvailable());
+  const placeOthers = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const afterClose = useRef(() => (seat.isConnected ? seat.focus() : focusFirstShown([focusCar(leg, rideId)])));
@@ -413,6 +353,38 @@ function SeatSheet({
     if (carGone || (hasStops && !isAdding.current)) focusNext.current = placeFooter;
   }
 
+  // Registered from the seat, she was without a car on its leg; her first name as sent, its spaces trimmed.
+  const register: AddPerson = async (registration) => {
+    const added = await addPerson(registration);
+    if (added?.kind !== "done") return added;
+    const person = {
+      id: registration.creationId(),
+      firstName: registration.notDone.kind === "addPerson" ? registration.notDone.firstName : registration.person.firstName,
+    };
+    afterClose.current = () => toCarOrBanner(leg, rideId);
+    const placed = t("Seat.placed", { firstName: person.firstName, driver });
+    await takeSeats(
+      { rideId, leg, persons: [{ personId: person.id, before: "withoutCar" }] },
+      { ...toBar(`register:${person.id}`, rideId, person, driver, placed), sending: registration.sending },
+    );
+    return added;
+  };
+
+  // The list in the form's place, nothing ticked (PL2.3); a car with Stops puts the focus on its departure.
+  const showList = () => {
+    if (!hasStops) {
+      focusNext.current = () => body.current?.querySelector<HTMLElement>('[role="checkbox"]:not([hidden] *), [aria-expanded]');
+    }
+    setRegistering(false);
+  };
+
+  // Back to the form, what was typed lost, the focus on the link: the browser's « back » (v4.7, rule 3).
+  const backToRegistering = () => {
+    focusNext.current = () => placeOthers.current;
+    setOpensOnStops(false);
+    setRegistering(true);
+  };
+
   // Back to the list, what was typed lost, the focus on « Ajouter une personne »: « Annuler », and the browser's « back » (v4.7, rule 3).
   const cancelAdding = () => {
     focusNext.current = () => addButton.current;
@@ -427,9 +399,16 @@ function SeatSheet({
     <BottomSheet
       open={open}
       onOpenChange={onOpenChange}
-      title={adding ? t("PersonForm.title.add") : t("Sheet.title", { driver })}
+      title={adding || registering ? t("PersonForm.title.add") : t("Sheet.title", { driver })}
+      // The form of the first registration has fields: on a phone, it fills the screen (v4.6, rule 2).
+      fullHeight={registering}
       description={
-        !adding && car ? (
+        registering ? (
+          <>
+            <span className="block">{t("PersonForm.forSeat", { driver })}</span>
+            {registerKept && <span className="block">{t("PersonForm.remember")}</span>}
+          </>
+        ) : !adding && car ? (
           <span aria-live="polite" className={cn(over && "font-medium text-destructive")}>
             {t("Sheet.remaining", { count: car.freeSeats })}
           </span>
@@ -441,7 +420,8 @@ function SeatSheet({
       }}
       closable={!adding}
       actions={
-        !adding && (
+        !adding &&
+        !registering && (
           <>
             {message && (
               <p role="alert" className="text-sm text-destructive">
@@ -463,7 +443,23 @@ function SeatSheet({
       }
     >
       <div ref={body} className="contents">
-        {adding ? (
+        {kind === "register" && !registering && <SheetStep onBack={backToRegistering} />}
+        {registering ? (
+          <>
+            {!registerKept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
+            <PersonForm
+              mode={{ kind: "add", leg, hasRetour, addPerson: register, landmark: focusCar(leg, rideId), driver }}
+              open={() => isOpen.current}
+              onDone={() => onOpenChange(false)}
+              onGone={() => onOpenChange(false)}
+            />
+            {candidates.length > 0 && (
+              <Button ref={placeOthers} variant="ghost" className="h-11 w-full underline" onClick={showList}>
+                {t("PersonForm.placeOthers")}
+              </Button>
+            )}
+          </>
+        ) : adding ? (
           <>
             <SheetStep onBack={cancelAdding} />
             {!adding.kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
