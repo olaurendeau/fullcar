@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceState, LegBoard } from "./board";
-import { cellActions, declaredBy, deviceMatrix, matrixSummary, startsExpanded, type CellAction, type MatrixRow } from "./device-matrix";
+import { cellActions, declaredBy, deviceMatrix, matrixSummary, otherPersonActions, startsExpanded, type CellAction, type CellChange, type MatrixRow } from "./device-matrix";
 import type { Leg } from "./leg";
 
 const WITHOUT_CAR: DeviceState = { kind: "withoutCar" };
@@ -106,6 +106,15 @@ describe("cellActions (C3.1, C3.2, C7.1, C7.2): a cell's sheet, its actions in t
     ["not concerned: looking for a seat", NOT_CONCERNED, ["lookingForSeat"]],
   ])("%s", (_, state, actions) => {
     expect(cellActions(state)).toEqual(actions);
+  });
+
+  it.each<[string, DeviceState, CellChange[]]>([
+    ["without a car: not on this leg, and no « Trouver une place » before #983", WITHOUT_CAR, ["notConcerned"]],
+    ["not concerned: « Passer sans voiture »", NOT_CONCERNED, ["lookingForSeat"]],
+    ["a passenger: none yet (her sheet comes from the car's card)", WITH_MARC, []],
+    ["a driver: none", DRIVER, []],
+  ])("otherPersonActions (PL3.2), %s", (_, state, actions) => {
+    expect(otherPersonActions(state)).toEqual(actions);
   });
 
   it("« Sortir de la voiture » and « Je cherche une place » declare without a car, « Ne fait pas… » not concerned", () => {

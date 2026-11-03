@@ -14,7 +14,8 @@ import type { PersonField } from "@/domain/person";
 export type NotDone =
   | { kind: "seats"; names: readonly string[]; driver: string }
   | { kind: "leave"; names: readonly string[]; driver: string }
-  | { kind: "choice"; firstName: string; leg: Leg; choice: "notConcerned" | "lookingForSeat" }
+  /** `setWithoutCar`: « Passer sans voiture », the button for a person of another device (`OtherPerson`). */
+  | { kind: "choice"; firstName: string; leg: Leg; choice: "notConcerned" | "lookingForSeat" | "setWithoutCar" }
   | { kind: "addPerson"; firstName: string }
   | { kind: "editPerson"; firstName: string; fields: "firstName" | "phone" | "both" }
   | { kind: "offerRide"; driver: string; legs: Leg | "both" }
@@ -247,7 +248,10 @@ function notDoneText(words: Words, notDone: NotDone): string {
       return t(`Actions.notDone.${notDone.kind}`, { names: nameList(words, notDone.names), count: notDone.names.length, driver: notDone.driver });
     case "choice": {
       const person = t("DevicePersons.sheetTitle", { firstName: notDone.firstName, leg: t(`Event.legs.${notDone.leg}`) });
-      const choice = notDone.choice === "notConcerned" ? t(`DevicePersons.notConcerned.${notDone.leg}`) : t("DevicePersons.lookingForSeat");
+      const choice =
+        notDone.choice === "notConcerned"
+          ? t(`DevicePersons.notConcerned.${notDone.leg}`)
+          : t(notDone.choice === "setWithoutCar" ? "OtherPerson.setWithoutCar" : "DevicePersons.lookingForSeat");
       return t("Actions.notDone.choice", { person, choice });
     }
     case "editStops":

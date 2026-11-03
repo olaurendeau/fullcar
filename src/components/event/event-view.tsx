@@ -98,7 +98,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           <h2 id="leg-aller" className="sr-only">
             {t("aller")}
           </h2>
-          <LegPanel at={allerAt} board={legOf(board, "aller")} device={device} hasRetour={false} near={locationPosition} stopsOn={stopsOn} map={map} hint={hint} />
+          <LegPanel at={allerAt} board={legOf(board, "aller")} legs={[legOf(board, "aller")]} device={device} hasRetour={false} near={locationPosition} stopsOn={stopsOn} map={map} hint={hint} />
         </section>
       )}
     </div>
