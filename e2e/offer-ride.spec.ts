@@ -141,9 +141,10 @@ test.describe("offer a car", () => {
     expect(actions.slice(0, 2)).toEqual([FR.add, FR.offer]);
     expect(actions.filter((name) => name === "car")).toHaveLength(15);
     expect((await offerButton(panel(page)).boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    // The empty Retour: its empty state, under both actions.
+    // The empty Retour: its empty state, under both actions. The 15 drivers do not do it: their fold
+    // « Ne font pas le retour (15) » is the third and last button, closed (#981, PL1.2).
     await selectTab(page, "Retour");
-    await expect(panel(page).getByRole("button")).toHaveText([FR.add, FR.offer]);
+    await expect(panel(page).getByRole("button")).toHaveText([FR.add, FR.offer, "Ne font pas le retour (15)"]);
     await expect(offerButton(panel(page))).toBeEnabled();
   });
 

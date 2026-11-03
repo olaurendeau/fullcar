@@ -293,7 +293,8 @@ test("O5.6, O5.8, O7.4: five lines, then « Afficher… »; each list and each l
   expect((await box(more)).width).toBeGreaterThanOrEqual((await box(persons)).width);
 
   // By keyboard: the list unfolds, the focus on the 6th first name, its ring as wide as the text.
-  await pressUntil(page, "Tab", more);
+  // The board above the panel has the 7 first names of « Sans voiture » as buttons now (#981, PL1.1): 7 more tab stops than the 40 allowed.
+  await pressUntil(page, "Tab", more, 60);
   await press(page, "Enter");
   await expect(rows(persons)).toHaveCount(7);
   const sixth = rows(persons).nth(5).getByText("Félix", { exact: true });
