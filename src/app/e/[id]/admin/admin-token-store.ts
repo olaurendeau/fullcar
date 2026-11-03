@@ -17,8 +17,8 @@ import { fixEmail, loadOrganiserPanel, removePersonAsOrganiser, resendEmail, upd
  * browser that created the event keeps the token the server drew, in `localStorage` under its
  * event's key, `fullcar:admin-token:{id}`; without `localStorage`, the page's memory keeps it.
  * It travels in the body of `loadOrganiserPanel`, `updateEvent`, `removePersonAsOrganiser`,
- * `resendEmail`, `fixEmail`, `signOut` and `deleteAccount` only, with the session's (the last two
- * carry every token this browser keeps): never in a URL, a header, a cookie, a log, an error or
+ * `resendEmail`, `fixEmail`, `transferEvent`, `signOut` and `deleteAccount` only, with the session's
+ * (the last two carry every token this browser keeps): never in a URL, a header, a cookie, a log, an error or
  * the page. There is no organiser's link any more: a fragment on `/e/{id}/admin` is ignored
  * (OA7.5). It is compared on the server only.
  */

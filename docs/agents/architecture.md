@@ -641,6 +641,23 @@ ci-dessus valent pour chacun.
   connexion ou de confirmation passe aussi par Brevo et par la boîte de l'organisateur, où
   il est en clair. Le lien perso, et le lien admin jusqu'à #597, sont en clair partout où
   la personne les copie.
+- **La cession, côté cédant** (épique #935, `src/app/e/[id]/transfer.ts`, server action
+  `transferEvent`, #944) : la confirmation retournée. Une seule action pour les gestes du cédant
+  (`start` et `change` ici, `resend` et `cancel` avec #945), donc un seul point d'entrée du jeton d'admin et
+  une seule décision d'accès. Le corps porte `{ adminToken, session }` et la requête
+  `{ op, email }`. L'accès est décidé avant le verrou puis de nouveau sous
+  `lockEvent(trx, id, "noKeyUpdate")` (OT4.3), puis la transaction (`READ COMMITTED`) prend, dans
+  l'ordre de `recordSend` : l'Event, l'adresse, le plafond global. `claimTransfer`, l'adresse du
+  destinataire et `transfer_status` à `sending`, et la suppression des liens de cession de
+  l'ancienne adresse (`deleteTransferLinks`, liens verrouillés par clé) sont dans cette seule
+  transaction. L'e-mail part ensuite par `after()`, sans verrou, et `writeTransferResult` n'écrit
+  `sent` ou `failed` que sur le `sending` qu'il a écrit : une cession remplacée ou annulée entre-temps
+  garde son état. La limite de l'événement refuse (`tooMany`) sans rien écrire ; la limite de
+  l'adresse ou le plafond global écrivent la cession en `address_limit`, sans lien, et suppriment les
+  liens précédents, pour que seule l'adresse que l'avis montre puisse accepter. L'adresse du
+  destinataire n'est jamais cherchée parmi les comptes : même réponse, même e-mail, même durée
+  (OT1.7, OT1.8, OT8.6). La réponse du panneau porte l'avis, `transfer`, lu une fois l'accès
+  accordé, comme `pending`.
 - **Une seule règle d'accès** à l'espace organisateur : `src/domain/organiser-access.ts`
   (#596). Elle donne l'accès à la session du compte de l'événement, ou au jeton d'admin du
   navigateur de création. `withOrganiserPhones` n'accepte qu'une autorisation produite par
