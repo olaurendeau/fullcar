@@ -91,8 +91,10 @@ export function useBoardPersonSheet(board: VisibleLegBoard, legs: readonly Visib
         ? "notConcerned"
         : undefined;
     // Her state on this leg as the page shows it now, where the sheet was opened from: her list, or her car.
-    // Moved to a car, out of it, or gone, the sheet closes over what it showed.
-    const shown: BoardPersonState | undefined = opening.state.kind === "passenger" ? car?.state : listed && { kind: listed };
+    // Out of that car (to the list, to another car, or gone) or out of her list, the sheet closes over what it showed:
+    // an action never applies to a place the user did not open it from.
+    const shown: BoardPersonState | undefined =
+      opening.state.kind === "passenger" ? (car?.state.rideId === opening.state.rideId ? car.state : undefined) : listed && { kind: listed };
     const own = legs.flatMap((leg) => leg.device).find((person) => person.id === id);
     sheet = (
       <BoardPersonSheet
@@ -102,7 +104,7 @@ export function useBoardPersonSheet(board: VisibleLegBoard, legs: readonly Visib
         state={shown ?? opening.state}
         phone={car ? car.phone : opening.phone}
         open={opening.open && shown !== undefined}
-        present={shown !== undefined}
+        present={listed !== undefined}
         onOpenChange={onOpenChange(opening.count)}
         setPersonLeg={device.setPersonLeg}
         leaveCar={device.leaveCar}
@@ -158,7 +160,7 @@ function BoardPersonSheet({
   leg: Leg;
   state: BoardPersonState;
   open: boolean;
-  /** She is still in one of the leg's lists, not moved to a car nor gone with a removal. */
+  /** She is in one of the leg's lists now, wherever she was opened from: not in a car, nor gone with a removal. */
   present: boolean;
   onOpenChange: (open: boolean) => void;
   setPersonLeg: SetPersonLeg;

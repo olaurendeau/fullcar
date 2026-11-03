@@ -6,6 +6,7 @@ import { contrast } from "./contrast";
 import { DRIVER_PHONE, numbersHidden } from "./driver";
 import { failActions, holdActions, holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
 
@@ -50,6 +51,7 @@ type Scene = Awaited<ReturnType<typeof seedScene>>;
 const car = (page: Page, driver: string) => page.getByRole("article", { name: `Voiture de ${driver}` });
 const passenger = (page: Page, driver: string, firstName: string) => car(page, driver).getByRole("button", { name: firstName, exact: true });
 const sheet = (page: Page, title: string) => page.getByRole("dialog", { name: title });
+const fold = (page: Page, leg: "l’aller" | "le retour") => page.getByRole("button", { name: new RegExp(`^Ne font pas ${leg} `) });
 const NOTE = "Seul l’appareil qui a inscrit cette personne peut changer son prénom ou son numéro, ou la retirer.";
 
 /** The names of a sheet's buttons in order, « Fermer » left out. */
@@ -161,6 +163,29 @@ test.describe("the sheet of a passenger, from the card of her car", () => {
     await silent(page, record);
   });
 
+  // #981: a first name that goes into « Ne font pas l’aller » (closed) sends the focus to the fold, never to the page or elsewhere.
+  for (const [driver, name] of [["Sophie", "Tom"], ["Camille", "Max"]]) {
+    test(`PL4.2: « Ne fait pas l’aller » of ${name} from his sheet, ${name === "Tom" ? "of another device" : "of the device"}: the focus goes to the fold « Ne font pas l’aller »`, async ({ page }) => {
+      await passenger(page, driver, name).click();
+      await sheet(page, `${name} · Aller`).getByRole("button", { name: "Ne fait pas l’aller" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(fold(page, "l’aller")).toHaveText("Ne font pas l’aller (1)");
+      await expect(fold(page, "l’aller")).toBeFocused();
+    });
+  }
+
+  test("PL4.2: « Ne fait pas le retour » of Léa, of another device, from her sheet on the retour: the focus goes to the fold « Ne font pas le retour »", async ({ db, page, seededEvent }) => {
+    const retour = await seedRide(db, seededEvent.id, scene.sophie, { leg: "retour", departureTime: "17:30:00" });
+    await seedPlacement(db, { personId: scene.lea, eventId: seededEvent.id, leg: "retour", rideId: retour });
+    await page.reload();
+    await page.getByRole("tab", { name: "Retour" }).click();
+    await expect(page.getByRole("tab", { name: "Retour" })).toHaveAttribute("aria-selected", "true");
+    await passenger(page, "Sophie", "Léa").click();
+    await sheet(page, "Léa · Retour").getByRole("button", { name: "Ne fait pas le retour" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(fold(page, "le retour")).toBeFocused();
+  });
+
   test("PL3.7: Tom already out in the database: the bar says « Tom n’était déjà plus… », with no « Annuler »", async ({ db, page }) => {
     await passenger(page, "Sophie", "Tom").click();
     await db.deleteFrom("placement").where("person_id", "=", scene.tom).where("leg", "=", "aller").execute();
@@ -231,6 +256,28 @@ test.describe("the sheet of a passenger, from the card of her car", () => {
     await expect(sheet(page, "Tom · Aller")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(passenger(page, "Sophie", "Tom")).toBeFocused();
+  });
+});
+
+test.describe("a passenger moved to another car while her sheet is open", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("PL3.6: the sheet closes as soon as the page shows Tom in Marc's car, so that no action applies to Sophie's", async ({ db, page, seededEvent }) => {
+    const scene = await seedScene(db, seededEvent.id, newToken());
+    await keepAdminToken(page, seededEvent.id, seededEvent.token);
+    await page.goto(organiserPath(seededEvent));
+    await expect(passenger(page, "Sophie", "Tom")).toBeVisible();
+    await passenger(page, "Sophie", "Tom").click();
+    const dialog = sheet(page, "Tom · Aller");
+    await expect(dialog).toContainText("Dans la voiture de Sophie");
+
+    await db.deleteFrom("placement").where("person_id", "=", scene.tom).where("leg", "=", "aller").execute();
+    await seedPlacement(db, { personId: scene.tom, eventId: seededEvent.id, leg: "aller", rideId: scene.rides.marc });
+    // « Actualiser » is behind the sheet: its read is what another device's move reaches the page by.
+    await page.locator("button", { hasText: "Actualiser" }).dispatchEvent("click");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(passenger(page, "Marc", "Tom")).toBeVisible();
+    await expect(passenger(page, "Sophie", "Tom")).toHaveCount(0);
   });
 });
 
