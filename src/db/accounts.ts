@@ -120,6 +120,51 @@ export async function eraseAccount(db: Kysely<Database>, accountId: string, admi
 }
 
 /**
+ * Clears the address from the events that hold it once the lock of the address is held (#986):
+ * a pending address or a handover is written under that lock, after a send is recorded, so one
+ * committed while `eraseHeld` waited for it is not in its first read of the events. Read again,
+ * the events lose it as the others do: `pending_email`, or the handover, and the links they wait
+ * on. Usually none; the events and the links are locked as the first read does.
+ */
+async function clearLateAddress(db: Kysely<Database>, email: string): Promise<void> {
+  const late = await db
+    .selectFrom("event")
+    .select(["id", "pending_email", "transfer_email"])
+    .where((eb) => eb.or([eb("pending_email", "=", email), eb("transfer_email", "=", email)]))
+    .orderBy("id")
+    .forNoKeyUpdate()
+    .execute();
+  if (late.length === 0) return;
+  const pending = late.filter((event) => event.pending_email === email).map((event) => event.id);
+  const handovers = late.filter((event) => event.transfer_email === email).map((event) => event.id);
+
+  if (handovers.length > 0) {
+    await db
+      .updateTable("event")
+      .set({ transfer_email: null, transfer_status: null, transfer_status_at: null })
+      .where("id", "in", handovers)
+      .execute();
+  }
+  if (pending.length > 0) await db.updateTable("event").set({ pending_email: null }).where("id", "in", pending).execute();
+
+  const links = await db
+    .selectFrom("email_link")
+    .select("token_hash")
+    .where((eb) =>
+      eb.or([
+        ...(pending.length > 0 ? [eb("event_id", "in", pending)] : []),
+        ...(handovers.length > 0 ? [eb.and([eb("event_id", "in", handovers), eb("kind", "=", "transfer")])] : []),
+      ]),
+    )
+    .orderBy("token_hash")
+    .forUpdate()
+    .execute();
+  if (links.length > 0) {
+    await db.deleteFrom("email_link").where("token_hash", "in", links.map((link) => link.token_hash)).execute();
+  }
+}
+
+/**
  * What erasing an account comes to, under the lock of its sessions (OA9.5, decision 4 on #581):
  * its anonymised events are deleted; its other events stay open, without account and without
  * admin token, as are the events whose token `adminTokens` holds; the handovers that wait on its
@@ -130,7 +175,8 @@ export async function eraseAccount(db: Kysely<Database>, accountId: string, admi
  * its sends and its sessions are deleted; then the account, so that its address is in no table.
  *
  * Lock order, as « Se déconnecter » and `editEvent` take it: the sessions (caller), then the
- * events by id, then the links by key, then the address, then the account. An event confirmed
+ * events by id, then the links by key, then the address (and, once held, the events and links that
+ * wrote it meanwhile: `clearLateAddress`), then the account. An event confirmed
  * meanwhile is left by the account's `SET NULL`, orphan, and its admin token is revoked under the
  * account's lock, just before it goes; so is one created with a session meanwhile (#904).
  */
@@ -198,6 +244,7 @@ async function eraseHeld(db: Kysely<Database>, accountId: string, adminTokens: r
   }
 
   await lockAddress(db, email);
+  await clearLateAddress(db, email);
   await db.deleteFrom("email_send").where("email", "=", email).execute();
   await db.deleteFrom("session").where("account_id", "=", accountId).execute();
 
