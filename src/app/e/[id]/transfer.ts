@@ -108,8 +108,8 @@ async function accessRefusal(db: Kysely<Database>, eventId: string, proof: unkno
  * the address with `sending` since `now`, and the links sent to the address it replaces deleted.
  * `start` replaces a handover that waits (OT2.7). A limit of the event writes nothing; one of
  * the address or the global cap writes the handover as `address_limit`, with no link, and
- * deletes the earlier links all the same, so that the only address that can accept is the one
- * the page shows. The address of the recipient is never looked up among the accounts (OT1.7,
+ * deletes the earlier links when the address changes, so that the only address that can accept
+ * is the one the page shows; when it is the address already waiting, its links still work and stay. The address of the recipient is never looked up among the accounts (OT1.7,
  * OT1.8). Past the commit, with no lock held, the email goes by `later`, and Brevo's answer is
  * kept (`sendTransfer`): the answer never waits for it.
  */
@@ -140,7 +140,8 @@ export async function handOverEvent(eventId: unknown, proof: unknown, request: u
     if (claim.claim === "event") return refusal("tooMany");
     if (claim.claim !== "recorded") {
       await writeTransfer(trx, eventId, { email: address.value, status: "address_limit", at: now });
-      await deleteTransferLinks(trx, eventId);
+      // The links sent to the address it replaces go; those of the address already waiting still work.
+      if (waiting?.email !== address.value) await deleteTransferLinks(trx, eventId);
       return { email: address.value, token: undefined };
     }
     await writeTransfer(trx, eventId, { email: address.value, status: "sending", at: now });

@@ -9,7 +9,7 @@ import { anAddress, seedAccount, seedLink, seedSends, seedSession, withCommitted
 import { whileHeld, withCommittedEvent } from "@/db/test-committed";
 import { confirmSeededEvent, seedEvent, seedPendingSend } from "@/db/test-events";
 import { seedPerson } from "@/db/test-participants";
-import { TRANSFERS_PER_EVENT } from "@/domain/send-limits";
+import { GLOBAL_SENDS_PER_HOUR, TRANSFERS_PER_EVENT } from "@/domain/send-limits";
 import { createBrevo, type Brevo, type Email, type SendAnswer } from "@/email/brevo";
 import { editEvent } from "./edit-event";
 import { readOrganiserState } from "./organiser-state";
@@ -269,6 +269,57 @@ describe("OT1.6: the email fails or the limit stops it", () => {
       expect(sent).toEqual([]);
       expect(queued()).toBe(0);
       expect(await readTransferState(trx, id, proof)).toMatchObject({ transfer: { email: to, send: "addressLimit" } });
+    });
+  });
+
+  it("the global cap writes the transfer as `address_limit` too: no link, no email, the old links gone", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const old = await seedLink(trx, { kind: "transfer", eventId: id });
+      await seedSends(trx, GLOBAL_SENDS_PER_HOUR, { kind: "login", email: () => anAddress() });
+      const to = anAddress();
+      const { deps, sent, queued } = handing(trx);
+      expect(await handOverEvent(id, proof, { op: "start", email: to }, deps)).toEqual({ ok: true, transfer: { email: to, send: "addressLimit" } });
+      expect(await eventRow(trx, id)).toMatchObject({ transfer_email: to, transfer_status: "address_limit" });
+      expect(await linksOf(trx, id)).toEqual([]);
+      expect(await findLink(trx, old)).toBeNull();
+      expect(sent).toEqual([]);
+      expect(queued()).toBe(0);
+    });
+  });
+
+  it.each(["start", "change"] as const)("`%s` to the address already waiting, stopped by its limit, keeps the link that still works", async (op) => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const to = anAddress();
+      const first = handing(trx);
+      await handOverEvent(id, proof, { op: "start", email: to }, first.deps);
+      await first.run();
+      const token = tokenIn(first.sent[0]!);
+      await seedSends(trx, 5, { kind: "confirmation", email: to });
+
+      const second = handing(trx);
+      expect(await handOverEvent(id, proof, { op, email: to }, second.deps)).toEqual({ ok: true, transfer: { email: to, send: "addressLimit" } });
+      expect(await eventRow(trx, id)).toMatchObject({ transfer_email: to, transfer_status: "address_limit" });
+      expect(second.sent).toEqual([]);
+      expect(await linksOf(trx, id)).toEqual([{ kind: "transfer", used_at: null }]);
+      expect(await useLink(trx, token, "transfer")).toMatchObject({ outcome: "valid", link: { eventId: id } });
+    });
+  });
+
+  it("`change` to another address, stopped by its limit, deletes the links of the address it replaces", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const first = handing(trx);
+      await handOverEvent(id, proof, { op: "start", email: anAddress() }, first.deps);
+      await first.run();
+      const oldToken = tokenIn(first.sent[0]!);
+      const to = anAddress();
+      await seedSends(trx, 5, { kind: "confirmation", email: to });
+
+      expect(await handOverEvent(id, proof, { op: "change", email: to }, handing(trx).deps)).toEqual({ ok: true, transfer: { email: to, send: "addressLimit" } });
+      expect(await linksOf(trx, id)).toEqual([]);
+      expect(await useLink(trx, oldToken, "transfer")).toEqual({ outcome: "invalid" });
     });
   });
 

@@ -620,12 +620,15 @@ ci-dessus valent pour chacun.
   `clearLateAddress` prend l'événement **après** l'adresse, alors que tout autre chemin la prend
   avant l'événement (`recordSend`, `lockAddress` : « jamais avant l'événement »). Un seul
   chemin peut s'y croiser : `confirmAgain` (`src/app/e/[id]/pending-email.ts`, renvoi et
-  correction de l'adresse), qui tient l'événement et attend l'adresse que la suppression tient
-  en attendant l'événement. Postgres fait échouer l'une des deux (40P01) : si c'est la
-  suppression, `deleteAccountOf` la reprend une fois ; si c'est `confirmAgain`, `resendEmail` ou
-  `fixEmail` lèvent `databaseFailure`, que la page montre comme « failed » : l'organisateur
-  renvoie ou corrige de nouveau. Quiconque ajoute un chemin qui prend un événement puis
-  l'adresse doit connaître ce second risque d'impasse.
+  correction de l'adresse) et `handOverEvent` (`src/app/e/[id]/transfer.ts`, cession et changement
+  d'adresse, via `claimTransfer`), qui tiennent l'événement et attendent l'adresse que la suppression
+  tient en attendant l'événement. Pour la cession, c'est une seconde demande à l'adresse X, sur le
+  même événement, pendant la suppression du compte X. Postgres fait échouer l'une des deux
+  (40P01) : si c'est la suppression, `deleteAccountOf` la reprend une fois ; si c'est
+  `confirmAgain`, `resendEmail` ou `fixEmail` lèvent `databaseFailure`, que la page montre comme
+  « failed » : l'organisateur renvoie ou corrige de nouveau ; si c'est la cession, `transferEvent`
+  lève `databaseFailure` de même, et l'organisateur recommence. Quiconque ajoute un chemin qui
+  prend un événement puis l'adresse doit connaître ce second risque d'impasse.
 - **Les liens** : un lien de connexion vaut 1 heure, un lien de confirmation 7 jours, et
   celui-ci ne rattache que son propre événement. Chacun ne sert qu'une fois, et plusieurs
   liens non utilisés restent valables ensemble. La page du lien lit le jeton dans
@@ -654,7 +657,8 @@ ci-dessus valent pour chacun.
   `sent` ou `failed` que sur le `sending` qu'il a écrit : une cession remplacée ou annulée entre-temps
   garde son état. La limite de l'événement refuse (`tooMany`) sans rien écrire ; la limite de
   l'adresse ou le plafond global écrivent la cession en `address_limit`, sans lien, et suppriment les
-  liens précédents, pour que seule l'adresse que l'avis montre puisse accepter. L'adresse du
+  liens précédents quand l'adresse change, pour que seule l'adresse que l'avis montre puisse accepter ;
+  si c'est l'adresse qui attend déjà, ses liens valent encore et restent. L'adresse du
   destinataire n'est jamais cherchée parmi les comptes : même réponse, même e-mail, même durée
   (OT1.7, OT1.8, OT8.6). La réponse du panneau porte l'avis, `transfer`, lu une fois l'accès
   accordé, comme `pending`.
