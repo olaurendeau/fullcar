@@ -123,3 +123,21 @@ describe("C9.1, C9.6: a leg shows the banner when it has a car or a person", () 
     expect(hasBanner(aller([], [placed("tom", null)]))).toBe(true);
   });
 });
+
+describe("C9.5: the persons not concerned count in no N", () => {
+  it("a person who does not do the leg changes neither N nor M", () => {
+    const rides = [ride("r1", "marc", 3)];
+    const placements = [placed("lea", "r1"), placed("tom", null)];
+    const without = aller(rides, placements);
+    const data: BoardRows = {
+      persons: [...["marc", "lea", "tom", "zoe"].map((id) => ({ id, firstName: id }))],
+      rides,
+      placements,
+      stops: [],
+    };
+    const board = legBoard("aller", data, new Set());
+    expect(board.notConcerned.map((person) => person.id)).toEqual(["zoe"]);
+    expect(coverage(board)).toEqual(coverage(without));
+    expect(coverage(board)).toMatchObject({ withoutCar: 1, freeSeats: 2 });
+  });
+});

@@ -33,7 +33,7 @@ export interface EventViewProps extends EventHeader {
 
 /** A leg's state; one the board does not have is empty. */
 function legOf(board: VisibleBoard, leg: Leg): VisibleLegBoard {
-  return board.find((candidate) => candidate.leg === leg) ?? { leg, cars: [], withoutCar: [], device: [] };
+  return board.find((candidate) => candidate.leg === leg) ?? { leg, cars: [], withoutCar: [], notConcerned: [], device: [] };
 }
 
 /**

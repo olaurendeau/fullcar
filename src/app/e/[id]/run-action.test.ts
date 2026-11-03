@@ -30,7 +30,7 @@ const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPositi
 const ENDED = { ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" };
 
 describe("stateOf", () => {
-  const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
+  const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], notConcerned: [], device: [] }] };
 
   it("is the state an action gives back, refusal included", () => {
     expect(stateOf({ ok: true, state })).toBe(state);
@@ -114,7 +114,7 @@ describe("stateShown", () => {
 // #265, § 5 of the epic's design: while a sheet hides the page, the retour it may be on stays.
 // #266: nor does a retour come, which would mount the aller's panel anew, and its sheet with it.
 describe("withTabsHeld", () => {
-  const leg = (name: "aller" | "retour", rideId: string) => ({ leg: name, cars: [], withoutCar: [], device: [], rideId });
+  const leg = (name: "aller" | "retour", rideId: string) => ({ leg: name, cars: [], withoutCar: [], notConcerned: [], device: [], rideId });
   const shown = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, options: { stops: false }, legs: [leg("aller", "old"), leg("retour", "old")] } as never as EventState;
   const next = { event: { ...header, title: "Tournoi de Vannes" }, options: { stops: false }, legs: [leg("aller", "new")] } as never as EventState;
 
@@ -233,7 +233,7 @@ describe("goneNamed", () => {
 });
 
 describe("actionRunner", () => {
-  const state: EventState = { event: header, options: { stops: false }, legs: [{ leg: "aller", cars: [], withoutCar: [], device: [] }] };
+  const state: EventState = { event: header, options: { stops: false }, legs: [{ leg: "aller", cars: [], withoutCar: [], notConcerned: [], device: [] }] };
 
   /** A page that records the states the runner gives it and each action that begins and ends, and a connection that can be cut. */
   function page() {

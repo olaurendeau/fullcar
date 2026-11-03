@@ -111,6 +111,11 @@ export interface LegBoard {
   cars: BoardCar[];
   /** In the order they declared it. Persons not concerned are in no list (C3.3). */
   withoutCar: BoardPerson[];
+  /**
+   * In the event's order: the persons with no Placement on the leg who do not drive it. The
+   * first name and the id, never a number (PL1.4, D3); they count in no N (C9.5).
+   */
+  notConcerned: BoardPerson[];
   /** The device's persons, in the event's order; empty when the device has none. */
   device: DevicePerson[];
 }
@@ -209,7 +214,12 @@ export function legBoard(leg: Leg, rows: BoardRows, deviceIds: ReadonlySet<strin
     .filter((person) => deviceIds.has(person.id))
     .map((person): DevicePerson => ({ id: person.id, firstName: person.firstName, state: stateOf(person.id) }));
 
-  return { leg, cars, withoutCar, device };
+  const placedIds = new Set(rows.placements.filter((placement) => placement.leg === leg).map((p) => p.personId));
+  const notConcerned = rows.persons
+    .filter((person) => !placedIds.has(person.id) && !drivers.has(person.id))
+    .map((person): BoardPerson => ({ id: person.id, firstName: person.firstName }));
+
+  return { leg, cars, withoutCar, notConcerned, device };
 }
 
 /** The state of each of the event's legs, in the order given (`eventLegs`). */
