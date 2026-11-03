@@ -128,7 +128,7 @@ function BoardPersonSheet({
   leg: Leg;
   state: BoardPersonState;
   open: boolean;
-  /** She is still in one of the leg's lists, or in a car: she did not go with a removal. */
+  /** She is still in one of the leg's lists, not moved to a car nor gone with a removal. */
   present: boolean;
   onOpenChange: (open: boolean) => void;
   setPersonLeg: SetPersonLeg;
@@ -148,9 +148,13 @@ function BoardPersonSheet({
   const first = useRef<HTMLButtonElement>(null);
   const isOpen = useRef(open);
   const isPresent = useRef(present);
-  // Her first name; or its fold, closed; or, she gone, the next person of « Vos inscriptions » (RP1.5).
-  const afterClose = useRef<() => unknown>(
-    () => focusBoardName(person.id, leg) || (isPresent.current && focusNotConcerned(leg)) || focusAfterRemoval(order, person.id),
+  // Her first name; or its fold, closed; or, she gone, the next person of « Vos inscriptions » (RP1.5); never <body>.
+  const afterClose = useRef<() => unknown>(() =>
+    focusFirstShown([
+      () => focusBoardName(person.id, leg),
+      () => isPresent.current && focusNotConcerned(leg),
+      () => focusAfterRemoval(order, person.id),
+    ]),
   );
   // The same subject as the cell of « Vos inscriptions »: a sheet of the same person and leg withdraws its failure.
   const sends = useSends(() => isOpen.current, `cell:${person.id}:${leg}`);

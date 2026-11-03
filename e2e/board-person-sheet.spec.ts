@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { contrast } from "./contrast";
-import { failActions, failHeld, holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
+import { failActions, failHeld, holdActions, holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { keepAdminToken, organiserPath } from "./organiser";
 
@@ -336,6 +336,51 @@ test.describe("360 px", () => {
     expect(await dialog.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
     expect(await contrast(dialog.getByText(NOTE), dialog)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+test.describe("while the device's persons are not known", () => {
+  test.use({ locale: "fr-FR" });
+  const token = newToken();
+
+  // C5.9, PL1.3b, PL3.3: before the read answers, or after it failed, board.device is empty: Tom, the device's own,
+  // would get the sheet of another device's person. His button, and Hugo's, wait like the seats and « Ajouter une personne ».
+  test("C5.9: the name buttons are inactive while the read is pending and after it failed, then Tom has his own sheet", async ({ db, page, seededEvent }) => {
+    await seedScene(db, seededEvent.id, token);
+    await holdToken(page, seededEvent.id, token);
+    const buttons = () => [person(withoutCar(page), "Tom"), person(withoutCar(page), "Hugo")];
+    const others = (name: string) => sheet(page, `${name} · Retour`).getByRole("button", { name: "Passer sans voiture" });
+
+    const release = await holdActions(page);
+    await page.goto(`/e/${seededEvent.id}`);
+    await expect(page.getByRole("status").filter({ hasText: "Chargement de vos inscriptions…" })).toBeVisible();
+    await selectTab(page, "Retour");
+    for (const button of buttons()) await expect(button).toBeDisabled();
+    await person(withoutCar(page), "Tom").click({ force: true });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    release();
+    await expect(cell(page, "Tom", "Retour")).toBeVisible();
+    for (const button of buttons()) await expect(button).toBeEnabled();
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    const failing = await failActions(page);
+    await page.reload();
+    const retry = page.getByRole("button", { name: "Réessayer" });
+    await expect(retry).toBeVisible();
+    await selectTab(page, "Retour");
+    for (const button of buttons()) await expect(button).toBeDisabled();
+    await person(withoutCar(page), "Tom").click({ force: true });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    failing.on = false;
+    await retry.click();
+    await expect(cell(page, "Tom", "Retour")).toBeVisible();
+
+    // Known, Tom's sheet is his own: « Je cherche une place », « Modifier », « Retirer », and not the sentence of another's.
+    await person(withoutCar(page), "Tom").click();
+    const dialog = sheet(page, "Tom · Retour");
+    await expect(dialog.getByRole("button", { name: "Modifier" })).toBeVisible();
+    await expect(dialog.getByText(NOTE)).toHaveCount(0);
+    await expect(others("Tom")).toHaveCount(0);
   });
 });
 

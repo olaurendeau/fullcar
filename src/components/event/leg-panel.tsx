@@ -171,7 +171,7 @@ export function LegPanel({
       )}
       {/* Under the cars, or the empty state: those who do not do the leg are there even with no one without a car (PL1.2). */}
       {(withoutCar.length > 0 || notConcerned.length > 0) && (
-        <WithoutCarList leg={leg} persons={withoutCar} notConcerned={notConcerned} onOpen={person.open} />
+        <WithoutCarList leg={leg} persons={withoutCar} notConcerned={notConcerned} active={deviceKnown(device.status)} onOpen={person.open} />
       )}
       {seats.sheet}
       {stops.sheet}

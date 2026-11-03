@@ -7,7 +7,19 @@ import type { Leg } from "@/domain/leg";
 /** Opens the sheet of `person`, from the list she is in (#981). */
 export type OpenPerson = (person: BoardPerson, state: "withoutCar" | "notConcerned") => void;
 
-function PersonButtons({ leg, persons, state, onOpen }: { leg: Leg; persons: readonly BoardPerson[]; state: "withoutCar" | "notConcerned"; onOpen: OpenPerson }) {
+function PersonButtons({
+  leg,
+  persons,
+  state,
+  active,
+  onOpen,
+}: {
+  leg: Leg;
+  persons: readonly BoardPerson[];
+  state: "withoutCar" | "notConcerned";
+  active: boolean;
+  onOpen: OpenPerson;
+}) {
   return (
     <ul className="flex flex-wrap gap-2">
       {persons.map((person) => (
@@ -15,10 +27,11 @@ function PersonButtons({ leg, persons, state, onOpen }: { leg: Leg; persons: rea
           <button
             type="button"
             aria-haspopup="dialog"
+            disabled={!active}
             data-board-person={person.id}
             data-leg={leg}
             onClick={() => onOpen(person, state)}
-            className="inline-flex min-h-11 max-w-full items-center rounded-full border px-3 py-1 text-left text-sm wrap-anywhere focus-visible:focus-ring"
+            className="inline-flex min-h-11 max-w-full items-center rounded-full border px-3 py-1 text-left text-sm wrap-anywhere focus-visible:focus-ring disabled:opacity-50"
           >
             {person.firstName}
           </button>
@@ -33,17 +46,20 @@ function PersonButtons({ leg, persons, state, onOpen }: { leg: Leg; persons: rea
  * button of 44 px that opens the person's sheet (PL1.1); under them, when there are any, the
  * persons who do not do this leg, in a fold closed at first (PL1.2, « Ne font pas le retour (n) »).
  * That fold is there without the list « Sans voiture », which is then not (a heading over
- * nobody), and shows no person at 0.
+ * nobody), and shows no person at 0. The buttons are inactive until the device is known (C5.9).
  */
 export function WithoutCarList({
   leg,
   persons,
   notConcerned,
+  active,
   onOpen,
 }: {
   leg: Leg;
   persons: readonly BoardPerson[];
   notConcerned: readonly BoardPerson[];
+  /** The device's persons are read (C5.9): before, a sheet would take its own person for another device's. */
+  active: boolean;
   onOpen: OpenPerson;
 }) {
   const t = useTranslations("Board");
@@ -59,7 +75,7 @@ export function WithoutCarList({
           <h3 id={headingId} className="font-semibold">
             {t("withoutCar")}
           </h3>
-          <PersonButtons leg={leg} persons={persons} state="withoutCar" onOpen={onOpen} />
+          <PersonButtons leg={leg} persons={persons} state="withoutCar" active={active} onOpen={onOpen} />
         </section>
       )}
       {notConcerned.length > 0 && (
@@ -77,7 +93,7 @@ export function WithoutCarList({
           </button>
           {expanded && (
             <div id={listId}>
-              <PersonButtons leg={leg} persons={notConcerned} state="notConcerned" onOpen={onOpen} />
+              <PersonButtons leg={leg} persons={notConcerned} state="notConcerned" active={active} onOpen={onOpen} />
             </div>
           )}
         </div>
