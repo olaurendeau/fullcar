@@ -161,7 +161,7 @@ test.describe("meeting points on the card and in the seat sheet", () => {
     await placeButton(sheet(page, "Nina")).click();
     await expect(messages(page)).toHaveText(["Tom est dans la voiture de Nina"]);
     expect(await placementOf(db, seededEvent.id, scene.persons.Tom)).toEqual({ rideId: scene.cars.nina, stopId: null });
-    // Tom is of the device: where he boards is said even at the departure (RV4.1, #892).
+    // Where he boards is said even at the departure, for every passenger of a car with points (RV2.2, PL5.1).
     await numbersHidden(() => expect(car(page, "Nina").getByRole("listitem").filter({ hasText: "Tom" })).toContainText("monte au départ"));
   });
 

@@ -20,14 +20,13 @@ const ABOVE_BAR = "scroll-mb-[calc(1rem+var(--message-bar-height,0px)+12px+env(s
  * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
  * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
  * removes it (C8.1); on a car with points, each passenger says where she boards, « monte à {lieu} » or « monte
- * au départ », on every device (RV2.2), and each one of the device has « Changer le point » (RV4.1, #892); `near`, the event's position, brings its place's suggestions closer (AL4.1).
+ * au départ », on every device (RV2.2), and each one has « Changer le point », whoever's device (PL5.1, #984); `near`, the event's position, brings its place's suggestions closer (AL4.1).
  */
 export function RideCard({
   car,
   date,
   seatsActive,
   onTakeSeat,
-  devicePassengers = [],
   onChangeStop,
   updateRide,
   removeRide,
@@ -38,8 +37,6 @@ export function RideCard({
   date: WallDate;
   seatsActive: boolean;
   onTakeSeat: (seat: HTMLElement) => void;
-  /** The passengers of this car who are the device's: on a car with points, each has « Changer le point » (RV4.1). */
-  devicePassengers?: readonly string[];
   onChangeStop?: (passenger: { id: string; firstName: string }, button: HTMLElement) => void;
   updateRide?: UpdateRide;
   removeRide?: RemoveRide;
@@ -107,8 +104,8 @@ export function RideCard({
           // Where she boards: a point, or the departure; told on a car with points only, none without (RV2.2).
           const stop = car.stops.find(({ passengerIds }) => passengerIds.includes(passenger.id));
           const withPoints = car.stops.length > 0;
-          // Hers to change: the device's passenger of a car with points (RV4.1).
-          const changes = onChangeStop !== undefined && withPoints && devicePassengers.includes(passenger.id);
+          // Anyone's to change, from any device: every passenger of a car with points (PL5.1).
+          const changes = onChangeStop !== undefined && withPoints;
           return (
             <li
               key={passenger.id}

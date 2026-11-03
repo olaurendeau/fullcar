@@ -9,7 +9,8 @@ import { expect, leaveNoToken, test } from "./fixtures";
 
 leaveNoToken();
 
-// #892, epic #881: « Changer le point » on the passengers of the device (RV4.1), the sheet « Où
+// #892, epic #881 and #984, epic #973: « Changer le point » on every passenger of a car with points
+// (PL5.1; RV4.1 held of the device only until v5.2), the sheet « Où
 // monte {prénom} ? » (RV4.2, RV4.3, RV4.4, RV7.1, RV7.2) and « monte à {lieu} » that follows a point
 // whose place or time the driver changes (RV6.2). Every assertion that reads a card goes through
 // `numbersHidden`: a card holds `tel:` links.
@@ -94,17 +95,17 @@ test.describe("« Changer le point »", () => {
     return dialog;
   }
 
-  test("RV4.1: each passenger of the device of a car with points has « Changer le point » and says where she boards; the others say where they board and have no button", async ({ db, page, seededEvent }) => {
+  test("PL5.1: every passenger of a car with points, of this device or of another, has « Changer le point » and says where she boards; a car without a point has none", async ({ db, page, seededEvent }) => {
     await visit(page, db, seededEvent.id);
     await numbersHidden(async () => {
       await expect(line(page, "Nina", "Tom")).toContainText(`monte à ${PRELLES}`);
       await expect(line(page, "Nina", "Léa")).toContainText("monte au départ");
       await expect(changeButton(page, "Nina", "Tom")).toHaveText("Changer le point");
       await expect(changeButton(page, "Nina", "Léa")).toHaveText("Changer le point");
-      // Paul is of another device: where he boards is shown, and nothing to change.
+      // Paul is of another device: he has the button too (PL5.1).
       await expect(line(page, "Nina", "Paul")).toContainText(`monte à ${PRELLES}`);
-      await expect(line(page, "Nina", "Paul").getByRole("button")).toHaveCount(0);
-      await expect(car(page, "Nina").getByRole("button", { name: /^Changer le point/ })).toHaveCount(2);
+      await expect(changeButton(page, "Nina", "Paul")).toHaveText("Changer le point");
+      await expect(car(page, "Nina").getByRole("button", { name: /^Changer le point/ })).toHaveCount(3);
       // Ava is of the device, but Sam's car has no point: no button, nothing said of where she boards (RV2.2).
       await expect(line(page, "Sam", "Ava")).toBeVisible();
       await expect(car(page, "Sam").getByRole("button", { name: /^Changer le point/ })).toHaveCount(0);
@@ -139,6 +140,36 @@ test.describe("« Changer le point »", () => {
     await expect(messages(page)).toHaveText([`Tom monte à ${PRELLES}`]);
     expect(await placementOf(db, seededEvent.id, scene.persons.Tom)).toEqual({ rideId: scene.cars.nina, stopId: scene.stops.prelles });
     await numbersHidden(() => expect(line(page, "Nina", "Tom")).toContainText(`monte à ${PRELLES}`));
+  });
+
+  test("PL5.1, PL5.2, PL5.4: from this device, the point of Paul, of another device: « Valider » saves, the bar says it, « Annuler » gives Prelles back; the seat and the coverage do not move", async ({ db, page, seededEvent }) => {
+    await visit(page, db, seededEvent.id);
+    const free = car(page, "Nina").getByRole("button", { name: /^Place libre/ });
+    await expect(free).toHaveCount(1);
+    const paul = (await db.selectFrom("person").select("id").where("event_id", "=", seededEvent.id).where("first_name", "=", "Paul").executeTakeFirstOrThrow()).id;
+    const placedAt = () => db.selectFrom("placement").select(["person_id", "ride_id", "placed_at"]).where("event_id", "=", seededEvent.id).orderBy("person_id").execute();
+    const before = await placedAt();
+
+    await changeButton(page, "Nina", "Paul").click();
+    const dialog = sheet(page, "Paul");
+    await expect(dialog).toBeVisible();
+    await expect(group(dialog).locator("label")).toHaveText([START_CHOICE, `${PRELLES} · 08:25`, `${BRIANCON} · 08:35`, `${MONETIER} · 08:50`]);
+    await expect(choice(dialog, /Prelles/)).toBeChecked();
+    await choice(dialog, /Monétier/).check();
+    await validate(dialog).click();
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(messages(page)).toHaveText([`Paul monte à ${MONETIER}`]);
+    expect(await placementOf(db, seededEvent.id, paul)).toEqual({ rideId: scene.cars.nina, stopId: scene.stops.monetier });
+    await numbersHidden(() => expect(line(page, "Nina", "Paul")).toContainText(`monte à ${MONETIER}`));
+    await expect(changeButton(page, "Nina", "Paul")).toBeFocused();
+    await expect(free).toHaveCount(1);
+    expect(await placedAt()).toEqual(before);
+
+    await bar(page).getByRole("button", { name: "Annuler" }).click();
+    await expect(messages(page)).toHaveText([`Paul monte à ${PRELLES}`]);
+    expect(await placementOf(db, seededEvent.id, paul)).toEqual({ rideId: scene.cars.nina, stopId: scene.stops.prelles });
+    await numbersHidden(() => expect(line(page, "Nina", "Paul")).toContainText(`monte à ${PRELLES}`));
   });
 
   test("RV4.2: the departure, « Tom monte au lieu de départ », and « Annuler » gives Prelles back", async ({ db, page, seededEvent }) => {
