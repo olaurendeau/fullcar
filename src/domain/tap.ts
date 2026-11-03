@@ -3,7 +3,7 @@
  * (R6). Pure decisions on the leg's device section (`LegBoard.device`): the view asks,
  * the server still decides at the write (C5.7, C6.5).
  */
-import type { BoardCar, BoardPerson, DevicePerson } from "./board";
+import type { BoardCar, BoardPerson, DevicePerson, LegBoard } from "./board";
 
 /**
  * What the page knows of the device's persons on this event.
@@ -76,20 +76,37 @@ export function findSeat<Car extends Pick<BoardCar, "departureTime" | "freeSeats
 export interface SheetCandidate {
   id: string;
   firstName: string;
+  /** Ticked as the sheet opens (PL2.3). */
   checked: boolean;
+  /** Where the person really stands on the leg: what « Annuler » gives back (PL4.3). */
+  state: "withoutCar" | "notConcerned";
+}
+
+/** The sheet's persons in three groups, each in its order (PL2.2). */
+export interface SheetGroups {
+  /** The device's persons, in its order, without a car and not concerned mixed. */
+  own: SheetCandidate[];
+  /** The persons of other devices without a car, in the order they declared it. */
+  others: SheetCandidate[];
+  /** The persons of other devices who do not do the leg, in the event's order: folded. */
+  notConcerned: SheetCandidate[];
 }
 
 /**
- * The persons of the sheet (C6.1): the device's persons in no car on the leg, those
- * without a car checked, those not concerned unchecked. Drivers and passengers of the leg
- * are left out; an empty list is the driver's path to add a person (C6.7).
+ * The persons of the sheet (C6.1, PL2.1): everybody in no car on the leg who does not drive it.
+ * The device's persons are ticked when without a car, the others never are (PL2.3). Drivers and
+ * passengers of the leg are left out; an empty list is the way to add a person (C6.7).
  */
-export function sheetCandidates(device: readonly DevicePerson[]): SheetCandidate[] {
-  return device.flatMap(({ id, firstName, state }) =>
+export function sheetCandidates(leg: Pick<LegBoard, "device" | "withoutCar" | "notConcerned">): SheetGroups {
+  const own = leg.device.flatMap(({ id, firstName, state }): SheetCandidate[] =>
     state.kind === "withoutCar" || state.kind === "notConcerned"
-      ? [{ id, firstName, checked: state.kind === "withoutCar" }]
+      ? [{ id, firstName, checked: state.kind === "withoutCar", state: state.kind }]
       : [],
   );
+  const device = new Set(leg.device.map(({ id }) => id));
+  const others = (persons: readonly BoardPerson[], state: SheetCandidate["state"]): SheetCandidate[] =>
+    persons.filter(({ id }) => !device.has(id)).map(({ id, firstName }) => ({ id, firstName, checked: false, state }));
+  return { own, others: others(leg.withoutCar, "withoutCar"), notConcerned: others(leg.notConcerned, "notConcerned") };
 }
 
 /**
