@@ -1,6 +1,7 @@
 import type { BrowserContext, Page, Request } from "@playwright/test";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { expect, leaveNoToken, test } from "./fixtures";
+import { fillAddress } from "./mailbox";
 import { areaRefused, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
@@ -19,14 +20,14 @@ const WRONG_SECRET = "q3Vx9kLmN2pR7sT1uW4yZQ";
 
 const FR = {
   switch: "English",
-  tagline: "Le covoiturage de groupe, aller et retour, sans compte.",
+  tagline: "Le covoiturage de groupe, aller et retour, sans compte pour les participants.",
   notFound: "Événement introuvable",
   panel: "Espace organisateur",
   shareLink: "Lien à partager",
 };
 const EN = {
   switch: "Français",
-  tagline: "Group carpooling, there and back, no account needed.",
+  tagline: "Group carpooling, there and back, no account for participants.",
   notFound: "Event not found",
   panel: "Organiser area",
   shareLink: "Link to share",
@@ -441,6 +442,7 @@ test.describe("an event created in the language chosen", () => {
     await field("Start date").fill(allerDate);
     await field("Start time").fill("07:30");
     await field("End time").fill("18:00");
+    await fillAddress(page, "Your email address");
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
     // Read by its path: the arrival has no fragment (OA1.6).

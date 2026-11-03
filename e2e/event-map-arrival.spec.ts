@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
 import type { Position } from "@/domain/place";
 import { messages } from "./device";
-import { around, idle, seedCar, serverPage } from "./event-map-points";
+import { ARRIVAL, around, idle, seedCar, serverPage } from "./event-map-points";
 import { leaveNoToken } from "./fixtures";
 import { expect, organiserPath, test as organiserTest } from "./organiser";
 import { answerFor } from "./photon";
@@ -186,15 +186,15 @@ for (const [pointer, device] of [
       // The style sheet loaded: the map's box has its height.
       const box = page.getByRole("region", { name: /^Carte de l’aller : / }).locator("xpath=..");
       expect((await box.boundingBox())!.height).toBe(240);
-      if (pointer === "at touch") await expect(hint).toBeVisible();
-      else await expect(hint).toBeHidden();
+      if (pointer === "at touch") await expect(hint).toBeVisible(ARRIVAL);
+      else await expect(hint).toBeHidden(ARRIVAL);
       const server = await topOf(card);
 
       await page.reload();
-      await expect(page.locator(".leaflet-container")).toHaveCount(1);
+      await expect(page.locator(".leaflet-container")).toHaveCount(1, ARRIVAL);
       await expect(page.getByRole("button", { name: /^Vos inscriptions/ })).toHaveCount(0);
-      if (pointer === "at touch") await expect(hint).toBeVisible();
-      else await expect(hint).toBeHidden();
+      if (pointer === "at touch") await expect(hint).toBeVisible(ARRIVAL);
+      else await expect(hint).toBeHidden(ARRIVAL);
       const started = await topOf(card);
       test.info().annotations.push({ type: "CA1.19", description: `${pointer}: première fiche à ${server} px (serveur), ${started} px (carte démarrée)` });
       expect(Math.abs(started - server)).toBeLessThanOrEqual(1);

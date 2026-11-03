@@ -58,6 +58,7 @@ describe("readMyEvents", () => {
             persons: 1,
             withoutCar: [{ leg: "retour", count: 1 }],
             erasedOn: "2027-01-05",
+            transferEmail: null,
           },
           { state: "erased", id: erased, title: "Effacé", start: "2026-10-03 09:00:00", location: "Gymnase des Gayeulles" },
         ],
@@ -95,6 +96,25 @@ describe("readMyEvents", () => {
   });
 
   // OA6.8: without a session, the page leads to /connexion.
+  // OT2.8: the recipient's address is the organiser's to read, nobody else's.
+  it("OT2.8: gives the recipient's address on the account's own event, and in no answer of another account", async () => {
+    await withRollback(async (trx) => {
+      const mine = await signedIn(trx);
+      const other = await signedIn(trx);
+      const handed = await seedEventOf(trx, mine.accountId, { allerAt: "2026-12-19 09:00:00", retourAt: null });
+      await trx
+        .updateTable("event")
+        .set({ transfer_email: "dominique@exemple.fr", transfer_status: "sent", transfer_status_at: daysBefore(1) })
+        .where("id", "=", handed)
+        .execute();
+      expect(await readMyEvents(trx, mine.token, NOW)).toMatchObject({
+        upcoming: [{ id: handed, transferEmail: "dominique@exemple.fr" }],
+      });
+      const theirs = await readMyEvents(trx, other.token, NOW);
+      expect(JSON.stringify(theirs)).not.toContain("dominique@exemple.fr");
+    });
+  });
+
   it("OA6.8: answers signIn for a session last visited 91 days ago", async () => {
     await withRollback(async (trx) => {
       const accountId = await seedAccount(trx);

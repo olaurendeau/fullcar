@@ -103,22 +103,27 @@ export function OrganiserCarsWithoutPhone({
  * lines: the first five, then « Afficher les {n} autres », which shows them all and puts the
  * focus on the 6th; « Réduire la liste » keeps it (O5.6, O5.8). `data-organiser-list`: where
  * the focus goes back to its title, should a read take away the line or the button it was on (O5.7).
+ * Without `title`, the list is named by `labelledBy`, its section's title: « Personnes inscrites »
+ * (#672), whose button is that title (decision 60).
  */
-function FoldList({
+export function FoldList({
   title,
+  labelledBy,
   hint,
   empty,
   lines,
   fold,
 }: {
-  title: string;
+  title?: string;
+  labelledBy?: string;
   hint: string;
   empty: string;
   lines: ReactNode[];
   fold: Fold;
 }) {
   const t = useTranslations("Admin");
-  const titleId = useId();
+  const ownId = useId();
+  const titleId = title === undefined ? labelledBy : ownId;
   const listRef = useRef<HTMLUListElement>(null);
   const focusSixth = useRef(false);
   const folds = lines.length > FOLD;
@@ -132,9 +137,11 @@ function FoldList({
 
   return (
     <div data-organiser-list className="flex min-w-0 flex-col gap-1.5 text-sm">
-      <h4 id={titleId} tabIndex={-1} className="self-start rounded-sm font-semibold focus-visible:focus-ring">
-        {title}
-      </h4>
+      {title !== undefined && (
+        <h4 id={titleId} tabIndex={-1} className="self-start rounded-sm font-semibold focus-visible:focus-ring">
+          {title}
+        </h4>
+      )}
       {lines.length > 0 ? (
         <>
           <p className="text-[13px] leading-[18px] text-muted-foreground">{hint}</p>

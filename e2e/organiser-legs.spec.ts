@@ -4,6 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { leaveNoToken } from "./fixtures";
+import { newAddress } from "./mailbox";
 import { expectRing, press } from "./focus-ring";
 import {
   areaEditButton,
@@ -11,6 +12,7 @@ import {
   expect,
   foldKey,
   holdActionsWith,
+  LEG_HEADINGS,
   LEGS_EXAMPLE_PHONE,
   legButton,
   organiserPath,
@@ -49,7 +51,7 @@ const box = async (locator: Locator) => (await locator.boundingBox()) ?? Promise
 const overflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
 /** Every leg's button, and whether it is unfolded. */
-const states = (page: Page) => panel(page).locator("h3 > button").evaluateAll((all) => all.map((each) => each.getAttribute("aria-expanded")));
+const states = (page: Page) => panel(page).locator(`${LEG_HEADINGS} > button`).evaluateAll((all) => all.map((each) => each.getAttribute("aria-expanded")));
 
 /**
  * Marks the first element Tab reaches after the legs' sections, computed rather than named
@@ -742,7 +744,7 @@ test("O9.6: an event just created from /nouveau arrives with the area unfolded a
   await page.goto("/nouveau");
   await expect(page.getByRole("button", { name: "Créer" })).toBeEnabled({ timeout: 15_000 });
   const day = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
-  const fields = { Titre: "Sortie ski du club", Lieu: "La Clusaz", "Date de début": day, "Heure de début": "07:30", "Heure de fin": "18:00" };
+  const fields = { Titre: "Sortie ski du club", Lieu: "La Clusaz", "Date de début": day, "Heure de début": "07:30", "Heure de fin": "18:00", "Votre adresse e-mail": newAddress() };
   for (const [label, value] of Object.entries(fields)) await page.getByLabel(label, { exact: true }).fill(value);
   await page.getByRole("button", { name: "Créer" }).click();
   // A loaded machine takes its time from the creation to the panel.

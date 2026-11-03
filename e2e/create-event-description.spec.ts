@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, expectUrl, leaveNoToken, test } from "./fixtures";
+import { fillAddress } from "./mailbox";
 
 /*
  * #713, epic #654, event-description v3 (« Écrire »): the description written at the creation,
@@ -42,13 +43,14 @@ const inAWeek = (page: Page) =>
     return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
   });
 
-/** The required fields: title, place, start date and time, end time. */
+/** The required fields: title, place, start date and time, end time, and the address (OA1.1). */
 async function fillRequired(page: Page, title: string) {
   await field(page, "Titre").fill(title);
   await field(page, "Lieu").fill("Gymnase des Fins, Annecy");
   await field(page, "Date de début").fill(await inAWeek(page));
   await field(page, "Heure de début").fill("07:30");
   await field(page, "Heure de fin").fill("18:00");
+  await fillAddress(page);
 }
 
 /** « Créer », then the organiser's link reached: the event's id, read from its path. */

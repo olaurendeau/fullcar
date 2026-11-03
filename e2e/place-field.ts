@@ -3,6 +3,7 @@ import type { Locator, Page, Request, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { expect, expectUrl } from "./fixtures";
+import { fillAddress } from "./mailbox";
 import { photonFeature, type PhotonFeature } from "./photon";
 
 /*
@@ -65,7 +66,7 @@ export async function openForm(page: Page, create = FR.create) {
   await expect(createButton(page, create)).toBeEnabled({ timeout: 15_000 });
 }
 
-/** Every field but the place: a title, a start a week from the device's today, an end the same day. */
+/** Every field but the place: a title, a start a week from the device's today, an end the same day, and the address a creation requires (OA1.1). */
 export async function fillTheRest(page: Page, labels = { title: "Titre", date: "Date de début", time: "Heure de début", end: "Heure de fin" }) {
   const date = await page.evaluate(() => {
     const at = new Date();
@@ -77,6 +78,7 @@ export async function fillTheRest(page: Page, labels = { title: "Titre", date: "
   await page.getByLabel(labels.date, { exact: true }).fill(date);
   await page.getByLabel(labels.time, { exact: true }).fill("10:00");
   await page.getByLabel(labels.end, { exact: true }).fill("18:00");
+  await fillAddress(page);
 }
 
 export const isSearch = (request: Request) => new URL(request.url()).pathname === "/api/lieux";

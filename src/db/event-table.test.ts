@@ -60,6 +60,9 @@ describe("event table", () => {
       { name: "send_status_at", type: "timestamp with time zone", nullable: "YES", default: null },
       { name: "anonymised_at", type: "timestamp with time zone", nullable: "YES", default: null },
       { name: "description", type: "text", nullable: "YES", default: null },
+      { name: "transfer_email", type: "text", nullable: "YES", default: null },
+      { name: "transfer_status", type: "text", nullable: "YES", default: null },
+      { name: "transfer_status_at", type: "timestamp with time zone", nullable: "YES", default: null },
     ]);
   });
 

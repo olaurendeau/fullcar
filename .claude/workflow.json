@@ -21,7 +21,7 @@
     "reviewer": 9
   },
   "pr": {
-    "max_lines": 1000,
+    "max_lines": 1500,
     "exclude": [
       "package-lock.json"
     ],

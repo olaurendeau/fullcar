@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
 import "./globals.css";
+import { ArrivalBar } from "@/components/account/arrival-bar";
 import { SessionVisit } from "@/components/account/session-visit";
 import { WebAnalytics } from "@/components/analytics/web-analytics";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang={await getLocale()} className={cn("h-full antialiased", "font-sans")}>
       {/* Chrome takes the page's scroll anchoring from <body>: a page turns it off by its main (O1.11). */}
       <body className="min-h-full flex flex-col has-data-[scroll-anchor=none]:[overflow-anchor:none]">
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <NextIntlClientProvider>
+          {children}
+          <ArrivalBar />
+        </NextIntlClientProvider>
         <SessionVisit />
         <WebAnalytics />
       </body>

@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { deviceAccess, devicePersonIds } from "./device";
+import { deviceAccess, devicePersonIds, eventAccess } from "./device";
 import { isPersonalToken, personalTokenFromBytes } from "./personal-token";
 import { hashToken } from "./token-hash";
 
@@ -122,5 +122,19 @@ describe("deviceAccess", () => {
       expect(deviceAccess(token, persons, ["gone"])).toEqual({ kind: "forbidden" });
       expect(deviceAccess(token, persons, ["p1"])).toEqual({ kind: "forbidden" });
     }
+  });
+});
+
+// Epic #973: placing is open to whoever has the link; only the event's membership is checked.
+describe("eventAccess", () => {
+  const persons = [{ id: "p1" }, { id: "p2" }];
+
+  it("grants persons all of the event's, whatever token holds them", () => {
+    expect(eventAccess(persons, ["p2", "p1"])).toEqual({ kind: "event" });
+  });
+
+  it("says which persons are gone from the event, in the order asked", () => {
+    expect(eventAccess(persons, ["gone2", "p1", "gone1"])).toEqual({ kind: "personGone", goneIds: ["gone2", "gone1"] });
+    expect(eventAccess([], ["p1"])).toEqual({ kind: "personGone", goneIds: ["p1"] });
   });
 });

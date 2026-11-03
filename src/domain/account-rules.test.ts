@@ -5,6 +5,7 @@ import {
   LINK_KEPT_AFTER_EXPIRY_MS,
   LOGIN_LINK_LIFETIME_MS,
   SESSION_LIFETIME_MS,
+  TRANSFER_LINK_LIFETIME_MS,
   accountDeletionDueAt,
   accountIsInactive,
   inactivityWarningDueAt,
@@ -36,10 +37,16 @@ describe("lifetimes", () => {
     expect(SESSION_LIFETIME_MS).toBe(90 * DAY);
   });
 
+  // OT2.6
+  it("are 7 days for a transfer link", () => {
+    expect(TRANSFER_LINK_LIFETIME_MS).toBe(7 * DAY);
+  });
+
   it("put the end of a link at its creation plus its lifetime", () => {
     const createdAt = new Date("2026-10-25T10:00:00.000Z");
     expect(linkExpiresAt("login", createdAt)).toEqual(new Date("2026-10-25T11:00:00.000Z"));
     expect(linkExpiresAt("confirmation", createdAt)).toEqual(new Date("2026-11-01T10:00:00.000Z"));
+    expect(linkExpiresAt("transfer", createdAt)).toEqual(new Date("2026-11-01T10:00:00.000Z"));
   });
 });
 
@@ -70,6 +77,23 @@ describe("linkOutcome", () => {
     expect(linkOutcome(link("confirmation", 30 * DAY, ago(20 * DAY)), "confirmation", now)).toBe("used");
   });
 
+  // OT2.6: 6 days 23 hours it serves, 7 days 1 hour it does not.
+  it("is valid for a transfer link at 6 days 23 hours, expired at 7 days 1 hour, and used whatever its age", () => {
+    expect(linkOutcome(link("transfer", 6 * DAY + 23 * HOUR), "transfer", now)).toBe("valid");
+    expect(linkOutcome(link("transfer", 7 * DAY - 1), "transfer", now)).toBe("valid");
+    expect(linkOutcome(link("transfer", 7 * DAY), "transfer", now)).toBe("expired");
+    expect(linkOutcome(link("transfer", 7 * DAY + HOUR), "transfer", now)).toBe("expired");
+    expect(linkOutcome(link("transfer", 20 * DAY, ago(10 * DAY)), "transfer", now)).toBe("used");
+    expect(linkOutcome(null, "transfer", now)).toBe("invalid");
+  });
+
+  it("is invalid for a transfer link on another page, and the reverse: a handover link neither confirms nor signs in", () => {
+    for (const other of ["login", "confirmation"] as const) {
+      expect(linkOutcome(link("transfer", MINUTE), other, now)).toBe("invalid");
+      expect(linkOutcome(link(other, MINUTE), "transfer", now)).toBe("invalid");
+    }
+  });
+
   // OA5.7, and OA2.5: a link replaced by a correction is no longer found.
   it("is invalid for a link that is not found", () => {
     expect(linkOutcome(null, "login", now)).toBe("invalid");
@@ -90,6 +114,7 @@ describe("an expired or used link", () => {
     const createdAt = new Date("2026-10-25T10:00:00.000Z");
     expect(linkDeletedAt("login", createdAt)).toEqual(new Date("2026-11-24T11:00:00.000Z"));
     expect(linkDeletedAt("confirmation", createdAt)).toEqual(new Date("2026-12-01T10:00:00.000Z"));
+    expect(linkDeletedAt("transfer", createdAt)).toEqual(new Date("2026-12-01T10:00:00.000Z"));
   });
 
   it("still says expired the millisecond before it may be deleted", () => {

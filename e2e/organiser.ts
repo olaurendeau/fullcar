@@ -167,6 +167,9 @@ export async function seedCrowd(db: Kysely<Database>, eventId: string): Promise<
 /** The button of a leg's title in the organiser's panel (O9.1), in any language. */
 export const legButton = (page: Page, leg: Leg) => page.locator(`[id="organiser-leg-${leg}"] > button`);
 
+/** The legs' titles (h3), not « Personnes inscrites »', the panel's other section (#672). */
+export const LEG_HEADINGS = 'h3[id^="organiser-leg-"]';
+
 /**
  * Unfolds the panel's sections of `legs`, both by default, once the panel shows (O9.4): every
  * section arrives folded (O9.2), and what its lists say is read unfolded. A leg the event does
@@ -576,7 +579,7 @@ export const test = creatorTest.extend<{ organiserTraffic: OrganiserTraffic }>({
       // Every number of the event, by the only query that reads them, named by its person's
       // rank in the event, as the scene names them by letter: never shown.
       const numbersNow = async () => {
-        const { persons, phonesById } = await readEventRows(db, id);
+        const { persons, phonesById } = await readEventRows(db, id, { stops: false });
         return persons.flatMap(({ id: personId }, n): [string, string][] => {
           const phone = phonesById.get(personId);
           return phone ? digitsOf(phone).map((form) => [`the number of person ${n + 1}`, form]) : [];

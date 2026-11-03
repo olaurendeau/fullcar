@@ -1,6 +1,6 @@
 import type { Locator, Page, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { seedPerson, seedPlacement } from "@/db/test-participants";
+import { seedPerson, seedPlacement, seedStop } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { holdToken, newToken } from "./device";
 import { editEventInDb, removeRetourInDb } from "./event-db";
@@ -374,6 +374,70 @@ onAdmin.describe("an event without a retour", () => {
     const retour = page.getByRole("region", { name: mapName("retour", "aucune voiture"), exact: true });
     await retour.scrollIntoViewIfNeeded();
     await expect(retour.locator(".leaflet-tile-loaded").first()).toBeVisible();
+    await tilesLoaded(page);
+  });
+});
+
+onAdmin.describe("the Stops of an aller (#893, RV5.4)", () => {
+  onAdmin.use({ eventFields: { stopsEnabled: true } });
+  const stopsOf = (map: Locator) => map.locator("button[data-map-stop]");
+
+  onAdmin("a car added before another's, the focus on a Stop: its Stop and the icons are moved in the Tab order, and the same Stop has the focus", async ({ db, page, seededEvent, place }) => {
+    const { id } = seededEvent;
+    const marc = await seedCar(db, id, "Marc", { position: around(place, { east: 2000 }), location: "Place de la mairie", departureTime: "09:00:00" });
+    await seedStop(db, id, marc, { location: "Prelles boucherie", time: "09:25:00", position: around(place, { east: 1000, north: 800 }) });
+    await page.goto(organiserPath(seededEvent));
+    await openMap(page, mapName("aller", "1 voiture"));
+    // Not by its name, which counts the cars: it changes with the update.
+    const map = region(page);
+    await stopsOf(map).evaluate((button) => button.setAttribute("data-kept", ""));
+    const kept = map.locator("[data-kept]");
+
+    // Sophie comes before Marc in the cards: her point and her Stop go before his, and his icons are moved.
+    await refreshWhile(page, seededEvent, async () => {
+      const sophie = await seedCar(db, id, "Sophie", { position: around(place, { north: 1500 }), location: "Gare", departureTime: "08:00:00" });
+      await seedStop(db, id, sophie, { location: "Monétier", time: "08:20:00", position: around(place, { north: 700, east: -300 }) });
+      await kept.focus();
+    });
+    await expect(region(page)).toHaveAccessibleName(mapName("aller", "2 voitures"));
+    await expect(stopsOf(map)).toHaveCount(2);
+    expect(await focusableIn(map)).toEqual([
+      "Voiture de Sophie, départ : Gare, 3 places libres",
+      expect.stringMatching(/^08:20 Sophie, /),
+      "Voiture de Marc, départ : Place de la mairie, 3 places libres",
+      expect.stringMatching(/^09:25 Marc, /),
+      "Zoom avant",
+      "Zoom arrière",
+      OSM_LINK,
+    ]);
+    await expect(kept).toBeFocused();
+    await tilesLoaded(page);
+  });
+
+  onAdmin("the focus in a Stop's bubble, on a car's button, then the car's seats change: the bubble is made again, the focus on the same car's button", async ({ db, page, seededEvent, place }) => {
+    const { id } = seededEvent;
+    const marc = await seedCar(db, id, "Marc", { position: around(place, { east: 2000 }), location: "Place de la mairie", departureTime: "09:00:00" });
+    await seedStop(db, id, marc, { location: "Prelles boucherie", time: "09:25:00", position: around(place, { east: 1000, north: 800 }) });
+    await page.goto(organiserPath(seededEvent));
+    await openMap(page, mapName("aller", "1 voiture"));
+    const map = region(page);
+    const stop = stopsOf(map);
+    const bubble = map.getByRole("group", { name: "Prelles boucherie, 09:25" });
+    const car = bubble.getByRole("button", { name: /^Voiture de Marc, départ : Place de la mairie, 3 places libres$/ });
+
+    // « Actualiser » takes the focus out of the map, which closes a bubble: opened again while the read is held.
+    await refreshWhile(page, seededEvent, async () => {
+      await db.updateTable("ride").set({ seats: 2 }).where("id", "=", marc).execute();
+      await stop.evaluate((button: HTMLElement) => button.focus({ preventScroll: true }));
+      await page.keyboard.press("Enter");
+      await expect(car).toBeFocused();
+      await car.evaluate((button) => button.setAttribute("data-old", ""));
+    });
+    // The bubble's buttons are made again: the old one is gone, and the new one has the focus.
+    const again = bubble.getByRole("button", { name: /^Voiture de Marc, départ : Place de la mairie, 2 places libres$/ });
+    await expect(again).toBeFocused();
+    await expect(bubble.locator("[data-old]")).toHaveCount(0);
+    await expect(stop).toHaveAttribute("aria-expanded", "true");
     await tilesLoaded(page);
   });
 });

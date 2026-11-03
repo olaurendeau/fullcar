@@ -90,3 +90,20 @@ export function cellActions(state: DeviceState): CellAction[] {
 export function declaredBy(action: CellChange): "withoutCar" | "notConcerned" {
   return action === "notConcerned" ? "notConcerned" : "withoutCar";
 }
+
+/**
+ * What the sheet of a person of another device offers (PL3.2): the changes `setPersonLeg` makes
+ * on the sheet's leg, and neither « Voir la voiture » nor « Trouver une place », which comes with
+ * its mode (#983). « Passer sans voiture » is `lookingForSeat`, which declares her without a car.
+ * A person in a car or driving has no sheet from the lists of a leg.
+ */
+export function otherPersonActions(state: DeviceState): CellChange[] {
+  switch (state.kind) {
+    case "withoutCar":
+      return ["notConcerned"];
+    case "notConcerned":
+      return ["lookingForSeat"];
+    default:
+      return [];
+  }
+}

@@ -66,6 +66,8 @@ export function LegTabs(props: {
   location: string;
   /** The event's position, for the suggestions of a car's places. */
   near: Position | null;
+  /** The option « Points de RDV » is on. */
+  stopsOn?: boolean;
   tab: Leg;
   onTab: (leg: Leg) => void;
   /** The map of both legs, one open or folded state for the page. */
@@ -105,9 +107,11 @@ export function LegTabs(props: {
           <LegPanel
             at={at}
             board={board}
+            legs={[props.aller, props.retour]}
             device={props.device}
             hasRetour
             near={props.near}
+            stopsOn={props.stopsOn}
             other={{ at: legs[1 - index].at, location: props.location, persons: legs[1 - index].board.device }}
             map={props.map}
             hint={props.hint}

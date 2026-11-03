@@ -3,7 +3,7 @@
  * (R6). Pure decisions on the leg's device section (`LegBoard.device`): the view asks,
  * the server still decides at the write (C5.7, C6.5).
  */
-import type { BoardCar, BoardPerson, DevicePerson } from "./board";
+import type { BoardCar, BoardPerson, DevicePerson, LegBoard } from "./board";
 
 /**
  * What the page knows of the device's persons on this event.
@@ -45,12 +45,20 @@ export type TapOutcome =
 /**
  * `device` is the device section of the tapped seat's leg. Only persons without a car on
  * that leg are counted: a driver, a passenger or a person not concerned never is (C5.6).
+ * `car` is the car tapped: with Stops, a tap always opens the sheet, where the boarding point
+ * is chosen, the departure ticked (RV3.2, D2). A device without a person still registers, and
+ * boards at the departure (RV3.1, Q3).
  */
-export function tapOutcome(status: DeviceStatus, device: readonly DevicePerson[]): TapOutcome {
+export function tapOutcome(
+  status: DeviceStatus,
+  device: readonly DevicePerson[],
+  car: Pick<BoardCar, "stops"> = { stops: [] },
+): TapOutcome {
   if (!deviceKnown(status)) return { kind: "wait" };
   if (status === "none") return { kind: "register" };
   // A key that no person of the event carries is a device without a person.
   if (device.length === 0) return { kind: "register" };
+  if (car.stops.length > 0) return { kind: "sheet" };
   const toPlace = device.filter((person) => person.state.kind === "withoutCar");
   return toPlace.length === 1 ? { kind: "place", personId: toPlace[0].id } : { kind: "sheet" };
 }
@@ -68,20 +76,37 @@ export function findSeat<Car extends Pick<BoardCar, "departureTime" | "freeSeats
 export interface SheetCandidate {
   id: string;
   firstName: string;
+  /** Ticked as the sheet opens (PL2.3). */
   checked: boolean;
+  /** Where the person really stands on the leg: what « Annuler » gives back (PL4.3). */
+  state: "withoutCar" | "notConcerned";
+}
+
+/** The sheet's persons in three groups, each in its order (PL2.2). */
+export interface SheetGroups {
+  /** The device's persons, in its order, without a car and not concerned mixed. */
+  own: SheetCandidate[];
+  /** The persons of other devices without a car, in the order they declared it. */
+  others: SheetCandidate[];
+  /** The persons of other devices who do not do the leg, in the event's order: folded. */
+  notConcerned: SheetCandidate[];
 }
 
 /**
- * The persons of the sheet (C6.1): the device's persons in no car on the leg, those
- * without a car checked, those not concerned unchecked. Drivers and passengers of the leg
- * are left out; an empty list is the driver's path to add a person (C6.7).
+ * The persons of the sheet (C6.1, PL2.1): everybody in no car on the leg who does not drive it.
+ * The device's persons are ticked when without a car, the others never are (PL2.3). Drivers and
+ * passengers of the leg are left out; an empty list is the way to add a person (C6.7).
  */
-export function sheetCandidates(device: readonly DevicePerson[]): SheetCandidate[] {
-  return device.flatMap(({ id, firstName, state }) =>
+export function sheetCandidates(leg: Pick<LegBoard, "device" | "withoutCar" | "notConcerned">): SheetGroups {
+  const own = leg.device.flatMap(({ id, firstName, state }): SheetCandidate[] =>
     state.kind === "withoutCar" || state.kind === "notConcerned"
-      ? [{ id, firstName, checked: state.kind === "withoutCar" }]
+      ? [{ id, firstName, checked: state.kind === "withoutCar", state: state.kind }]
       : [],
   );
+  const device = new Set(leg.device.map(({ id }) => id));
+  const others = (persons: readonly BoardPerson[], state: SheetCandidate["state"]): SheetCandidate[] =>
+    persons.filter(({ id }) => !device.has(id)).map(({ id, firstName }) => ({ id, firstName, checked: false, state }));
+  return { own, others: others(leg.withoutCar, "withoutCar"), notConcerned: others(leg.notConcerned, "notConcerned") };
 }
 
 /**

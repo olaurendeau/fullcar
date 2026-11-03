@@ -18,7 +18,7 @@ const NEW_PHONE = "07 12 12 12 12";
 const REQUIRED = "Champ requis.";
 const INVALID_PHONE = "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )";
 /** Claire drives at the aller: her number is « Téléphone », with the help for who drives (v4.8, rule 8). */
-const DRIVING_HINT = "Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.";
+const DRIVING_HINT = "Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.";
 /** In the bar, the failure of « Clara » names the field sent and the first name before it (C11.11, #225). */
 const FAILED = "Le prénom de Claire n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.";
 

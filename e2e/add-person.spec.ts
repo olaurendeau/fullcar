@@ -15,7 +15,7 @@ const FR = {
   add: "Ajouter une personne",
   firstName: "Prénom",
   phone: "Téléphone (facultatif)",
-  phoneHint: "Visible seulement par l’organisateur et par les personnes de la même voiture.",
+  phoneHint: "Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.",
   both: "Aller et retour",
   bothHint: {
     aller: "Décochez si cette personne ne fait que l’aller.",

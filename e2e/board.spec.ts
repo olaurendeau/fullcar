@@ -161,11 +161,17 @@ test.describe("board, with a retour", () => {
     await page.goto(`/e/${seededEvent.id}`);
     const panel = page.getByRole("tabpanel");
     await expect(withoutCar(panel).getByRole("listitem")).toHaveText(["Tom"]);
+    // Not text any more (#981, PL1.1): each first name is a button, which opens the person's sheet.
+    await expect(withoutCar(panel).getByRole("button", { name: "Tom", exact: true })).toHaveAttribute("aria-haspopup", "dialog");
+    // Those who are not on the leg are in a fold, closed: no first name shows (PL1.2).
     await expect(panel.getByText("Zoé")).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "Ne font pas l’aller (1)" })).toHaveAttribute("aria-expanded", "false");
 
     await selectTab(page, "Retour");
     await expect(withoutCar(panel).getByRole("listitem")).toHaveText(["Léa"]);
+    await expect(withoutCar(panel).getByRole("button", { name: "Léa", exact: true })).toHaveAttribute("aria-haspopup", "dialog");
     await expect(panel.getByText("Marc")).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "Ne font pas le retour (1)" })).toHaveAttribute("aria-expanded", "false");
   });
 
   test("C9.1: the banner comes first, with enough seats, then with seats missing", async ({ page, seededEvent }) => {

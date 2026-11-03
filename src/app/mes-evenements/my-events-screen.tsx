@@ -10,8 +10,9 @@ import { readSessionToken } from "@/app/session-token";
 import { ReadButton } from "@/components/event/read-button";
 import { Button } from "@/components/ui/button";
 import { myEvents } from "./actions";
+import { MyAccount } from "./my-account";
 import { MyEventRow } from "./my-event-row";
-import { myEventsRead, PAST_SHOWN, shownPast, type MyEventsRead, type MyEventsShown } from "./screen-state";
+import { myEventsRead, openEventCount, PAST_SHOWN, shownPast, type MyEventsRead, type MyEventsShown } from "./screen-state";
 
 type Screen = MyEventsRead | { state: "loading" };
 
@@ -21,7 +22,8 @@ type Screen = MyEventsRead | { state: "loading" };
  * the body. Without a session, or with one the server says ended, the page leads to
  * /connexion, whose link brings it back here (OA6.8, OA4.4). While it reads, a status line;
  * on a failure, the alert and « Réessayer », after which the first title of the list takes
- * the focus, or the button keeps it on a new failure (« Le focus »).
+ * the focus, or the button keeps it on a new failure (« Le focus »). Below the events,
+ * « Mon compte » (OA9.1).
  */
 export function MyEventsScreen() {
   const t = useTranslations("MyEvents");
@@ -81,7 +83,10 @@ export function MyEventsScreen() {
   return (
     <>
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">{t("title")}</h1>
+        {/* The focus lands here once a link has opened the session (OA5.2, arrival-bar.tsx). */}
+        <h1 tabIndex={-1} className="self-start rounded-sm text-2xl font-bold focus-visible:focus-ring">
+          {t("title")}
+        </h1>
         {screen.state === "events" && (
           <p className="text-[13px] leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">
             {t("signedInAs", { email: screen.list.email })}
@@ -92,6 +97,7 @@ export function MyEventsScreen() {
         <Link href="/nouveau">{tHome("create")}</Link>
       </Button>
       {content}
+      {screen.state === "events" && <MyAccount email={screen.list.email} openEvents={openEventCount(screen.list)} />}
     </>
   );
 }

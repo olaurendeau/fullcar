@@ -26,6 +26,11 @@ function fakeStorage(initial: Record<string, string> = {}) {
     items,
     getItem: vi.fn((key: string) => items.get(key) ?? null),
     setItem: vi.fn((key: string, value: string) => void items.set(key, value)),
+    removeItem: vi.fn((key: string) => void items.delete(key)),
+    key: (index: number) => [...items.keys()][index] ?? null,
+    get length() {
+      return items.size;
+    },
   };
 }
 
@@ -77,10 +82,7 @@ describe("keepAdminToken and readAdminToken", () => {
     ["the localStorage property throws", insecure],
     [
       "setItem throws",
-      () => ({
-        getItem: () => null,
-        setItem: insecure,
-      }),
+      () => ({ ...fakeStorage(), setItem: insecure }),
     ],
   ])("keeps the token in the page's memory when %s", (_, storage) => {
     const tokens = adminTokens({ storage });
@@ -97,6 +99,58 @@ describe("keepAdminToken and readAdminToken", () => {
     } finally {
       for (const spy of spies) spy.mockRestore();
     }
+  });
+});
+
+describe("keptAdminTokens and forgetAdminTokens", () => {
+  const OTHER_ID = "Zz9yXw8v";
+  const OTHER = "Zq9Lt2Wn8Rc4gkP3x-Vb7A";
+
+  // OA9.1: « Se déconnecter » sends every admin token this browser keeps, and nothing else it keeps.
+  it("lists the well-formed tokens of every event, and no other key", () => {
+    const storage = fakeStorage({
+      [KEY]: TOKEN,
+      [`fullcar:admin-token:${OTHER_ID}`]: OTHER,
+      "fullcar:admin-token:Qq2rSs3t": "not a token",
+      "fullcar:session": SESSION,
+      [`fullcar:personal-token:${ID}`]: SESSION,
+    });
+    expect(tokensOf(storage).keptAdminTokens().sort()).toEqual([OTHER, TOKEN].sort());
+  });
+
+  it("lists a token the page's memory keeps", () => {
+    const tokens = adminTokens({ storage: () => ({ ...fakeStorage(), setItem: insecure }) });
+    tokens.keepAdminToken(ID, TOKEN);
+    expect(tokens.keptAdminTokens()).toEqual([TOKEN]);
+  });
+
+  it("forgets the tokens sent, in the storage and in the page's memory, and no other", () => {
+    const storage = fakeStorage({ [KEY]: TOKEN, [`fullcar:admin-token:${OTHER_ID}`]: OTHER, "fullcar:session": SESSION });
+    const tokens = tokensOf(storage);
+    tokens.forgetAdminTokens([TOKEN]);
+    expect(tokens.readAdminToken(ID)).toBeUndefined();
+    expect([...storage.items.keys()]).toEqual([`fullcar:admin-token:${OTHER_ID}`, "fullcar:session"]);
+
+    const blocked = adminTokens({ storage: () => ({ ...fakeStorage(), setItem: insecure }) });
+    blocked.keepAdminToken(ID, TOKEN);
+    blocked.forgetAdminTokens([TOKEN]);
+    expect(blocked.readAdminToken(ID)).toBeUndefined();
+  });
+
+  // The creation of an event in another tab, while the sign-out was on its way, keeps its token.
+  it("keeps a token stored after the list was read", () => {
+    const storage = fakeStorage({ [KEY]: TOKEN });
+    const tokens = tokensOf(storage);
+    const sent = tokens.keptAdminTokens();
+    storage.items.set(`fullcar:admin-token:${OTHER_ID}`, OTHER);
+    tokens.forgetAdminTokens(sent);
+    expect([...storage.items]).toEqual([[`fullcar:admin-token:${OTHER_ID}`, OTHER]]);
+  });
+
+  it("lists nothing, and throws nothing, when localStorage cannot be reached", () => {
+    const tokens = adminTokens({ storage: insecure });
+    expect(tokens.keptAdminTokens()).toEqual([]);
+    expect(() => tokens.forgetAdminTokens([TOKEN])).not.toThrow();
   });
 });
 
@@ -149,15 +203,39 @@ describe("checkFromAnswer", () => {
   ];
 
   // C4.9 as amended by #154: the panel only on the server's panel, with its legs; the link to share alone (OA7.3).
-  it("shows the panel, with its legs and the link to share, when the server answers the panel", () => {
-    expect(checkFromAnswer({ state: "panel", legs }, "https://fullcar.example", ID)).toStrictEqual({
+  // RP4.1: and every person of the event, for « Personnes inscrites »; none from a server before #671.
+  const persons = [{ id: "lea", firstName: "Léa", cells: [{ leg: "aller", state: { kind: "withoutCar" } }] }];
+  it("shows the panel, with its legs, its persons and the link to share, when the server answers the panel", () => {
+    expect(checkFromAnswer({ state: "panel", legs, persons }, "https://fullcar.example", ID)).toStrictEqual({
       state: "valid",
       publicUrl: `https://fullcar.example/e/${ID}`,
       legs,
+      persons,
     });
     expect(checkFromAnswer({ state: "panel", legs: [] }, "https://fullcar.example", ID)).toMatchObject({
       state: "valid",
       legs: [],
+      persons: [],
+    });
+  });
+
+  // OA1.7, OA2.1: a pending event's panel comes with its notice; a malformed one is none.
+  it("shows the notice « Confirmez votre adresse » with the panel, when the server sends one", () => {
+    const pending = { email: "claire.martin@exemple.fr", send: "addressLimit" };
+    expect(checkFromAnswer({ state: "panel", legs, pending }, "https://fullcar.example", ID)).toStrictEqual({
+      state: "valid",
+      publicUrl: `https://fullcar.example/e/${ID}`,
+      legs,
+      persons: [],
+      pending,
+    });
+    expect(checkFromAnswer({ state: "panel", legs, pending: { send: "sent" } }, "https://fullcar.example", ID)).not.toHaveProperty(
+      "pending",
+    );
+    // Never on a refusal's screen (#598), whatever the answer carries.
+    expect(checkFromAnswer({ state: "pending", pending }, "https://fullcar.example", ID)).toStrictEqual({
+      state: "refused",
+      refusal: { kind: "pending" },
     });
   });
 
@@ -236,7 +314,7 @@ describe("retryFrom", () => {
   it.each<[string, OrganiserCheck]>([
     ["while the first check runs", { state: "checking" }],
     ["on a refused area", { state: "refused", refusal: { kind: "pending" } }],
-    ["on the panel", { state: "valid", publicUrl: "", legs: [] }],
+    ["on the panel", { state: "valid", publicUrl: "", legs: [], persons: [] }],
   ])("starts nothing %s", (_, check) => {
     expect(retryFrom(check)).toBeUndefined();
   });

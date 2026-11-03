@@ -20,6 +20,8 @@ import { findPublicEvent, headerFrom } from "./event";
  */
 export interface EventState {
   event: EventHeader;
+  /** The organiser's options the page follows: `stops` is « Points de RDV » (epic #881). */
+  options: { stops: boolean };
   legs: VisibleBoard;
 }
 
@@ -66,12 +68,13 @@ export async function readEventState(
 
 /** The state of `event`, read in the snapshot `trx` holds, for the device of `token`. */
 async function stateOf(trx: Kysely<Database>, event: PublicEvent, token: unknown): Promise<EventState> {
-  const { phonesById, ...rows } = await readEventRows(trx, event.id);
+  const { phonesById, ...rows } = await readEventRows(trx, event.id, { stops: event.stops_enabled });
   const holders = isPersonalToken(token) ? await readTokenHolders(trx, event.id) : [];
   // One set for the board and the numbers: the device section and the cards follow one device.
   const deviceIds: ReadonlySet<string> = new Set(devicePersonIds(token, holders));
   return {
     event: headerFrom(event),
+    options: { stops: event.stops_enabled },
     legs: withVisiblePhones(buildBoard(rows, eventLegs(event.retour_at), deviceIds), phonesById, deviceIds),
   };
 }

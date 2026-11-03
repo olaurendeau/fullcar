@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { newAdminToken } from "@/domain/admin-token";
 import { generatePublicId } from "@/domain/public-id";
 import type { Database } from "@/db/schema";
-import { seedSession } from "@/db/test-accounts";
+import { seedAccount, seedSession } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
 import { confirmSeededEvent, seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
+import { seedRemovalExample } from "@/db/test-removal-example";
 import nextConfig from "../../../../../next.config";
-import { loadOrganiserPanel, updateEvent } from "./actions";
+import { readEventState } from "../event-state";
+import { loadOrganiserPanel, removePersonAsOrganiser, updateEvent } from "./actions";
 
 // The action reaches the database through getDb(): here, the test's transaction.
 const connection = vi.hoisted(() => ({ current: undefined as Kysely<Database> | undefined }));
@@ -47,6 +49,7 @@ function loadSeeded(token: (seeded: string) => unknown, id: (seeded: string) => 
 /** The panel of an event without a retour and without anybody. */
 const EMPTY_PANEL = {
   state: "panel",
+  options: { stops: false },
   legs: [{ leg: "aller", coverage: { withoutCar: 0, freeSeats: 0 }, carCount: 0, withoutCar: [], carsWithoutPhone: [] }],
   persons: [],
 };
@@ -77,6 +80,7 @@ describe("loadOrganiserPanel", () => {
     it("gives the panel for the event's token, the number of the person without a car in it", async () => {
       const { c, answer } = await loadSeeded((token) => token);
       expect(answer).toStrictEqual({
+        options: { stops: false },
         state: "panel",
         legs: [
           {
@@ -264,7 +268,7 @@ describe("updateEvent", () => {
         return { answer, token, title: row.title };
       }),
     );
-    expect(answer).toEqual({ ok: true, event: { ...BEFORE, title: FIELDS.title, description: null } });
+    expect(answer).toEqual({ ok: true, stops: false, event: { ...BEFORE, title: FIELDS.title, description: null } });
     expect(title).toBe(FIELDS.title);
     expect(JSON.stringify(answer).includes(token)).toBe(false);
   });
@@ -374,6 +378,77 @@ describe("updateEvent", () => {
       expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
     } finally {
       for (const spy of spies) spy.mockRestore();
+    }
+  });
+});
+
+// #672 (remove-person v2, RP3.2, RP3.3): the organiser's removal, by organiser-access.ts alone.
+describe("removePersonAsOrganiser", () => {
+  /** The ids of the persons event `eventId` still has. */
+  const personIds = (trx: Kysely<Database>, eventId: string) =>
+    trx.selectFrom("person").select("id").where("event_id", "=", eventId).orderBy("id").execute();
+  const NO_ACCESS = { ok: false, error: "noOrganiserAccess" };
+
+  it.each<[string, "adminToken" | "session"]>([
+    ["the creation browser's token of a confirmed event", "adminToken"],
+    ["the session of the event's account", "session"],
+  ])("RP3.2: %s removes anyone, and answers the board of the device token sent", async (_, via) => {
+    await withRollback((trx) =>
+      using(trx, async () => {
+        const { eventId, adminToken, martins, persons } = await seedRemovalExample(trx);
+        const session = await seedSession(trx, await confirmSeededEvent(trx, eventId));
+        const proof = via === "adminToken" ? { adminToken } : { session };
+        const outcome = await removePersonAsOrganiser(eventId, proof, martins, persons.doublon.id);
+        expect(outcome).toEqual({ ok: true, removal: "removed", state: await readEventState(trx, eventId, martins) });
+        expect(await personIds(trx, eventId)).not.toContainEqual({ id: persons.doublon.id });
+      }),
+    );
+  });
+
+  it("RP3.2: a session of another account, and an event without an organiser, are noOrganiserAccess, and nothing is written", async () => {
+    await withRollback((trx) =>
+      using(trx, async () => {
+        const { eventId, adminToken, persons } = await seedRemovalExample(trx);
+        const accountId = await confirmSeededEvent(trx, eventId);
+        const before = await personIds(trx, eventId);
+        const another = await seedSession(trx, await seedAccount(trx));
+        expect(await removePersonAsOrganiser(eventId, { session: another }, undefined, persons.marc.id)).toEqual(NO_ACCESS);
+        // OA7.9: its account deleted, the token the creation browser kept opens nothing.
+        await trx.updateTable("event").set({ account_id: null }).where("id", "=", eventId).execute();
+        await trx.deleteFrom("account").where("id", "=", accountId).execute();
+        expect(await removePersonAsOrganiser(eventId, { adminToken }, undefined, persons.marc.id)).toEqual(NO_ACCESS);
+        expect(await personIds(trx, eventId)).toEqual(before);
+      }),
+    );
+  });
+
+  it("RP3.3: no personal token opens it, not even the creation browser's, as an admin token, a session or the body itself", async () => {
+    await withRollback((trx) =>
+      using(trx, async () => {
+        const { eventId, martins, persons } = await seedRemovalExample(trx);
+        const before = await personIds(trx, eventId);
+        for (const proof of [{ adminToken: martins }, { session: martins }, { adminToken: persons.marc.token }, martins]) {
+          expect(await removePersonAsOrganiser(eventId, proof, martins, persons.marc.id)).toEqual(NO_ACCESS);
+        }
+        expect(await personIds(trx, eventId)).toEqual(before);
+      }),
+    );
+  });
+
+  it("answers eventNotFound for a malformed id, and fails with a generic error, without the token, when the database fails", async () => {
+    const personId = "0b6f2c1e-6d0a-4c55-9a8e-3f1d2b7c9e10";
+    expect(await removePersonAsOrganiser("nope", { adminToken: "x" }, undefined, personId)).toEqual({ ok: false, error: "eventNotFound" });
+    const token = newAdminToken();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await using(failingDb(token), () => removePersonAsOrganiser(generatePublicId(), { adminToken: token }, undefined, personId)).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect((failure as Error).message.startsWith("removePersonAsOrganiser: the person could not be removed")).toBe(true);
+      expect(JSON.stringify([failure, (failure as Error).stack, log.mock.calls]).includes(token)).toBe(false);
+    } finally {
+      log.mockRestore();
     }
   });
 });

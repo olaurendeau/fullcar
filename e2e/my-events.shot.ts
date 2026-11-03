@@ -8,6 +8,7 @@ import { seedPerson, seedPlacement } from "@/db/test-participants";
 import { parisToday } from "@/domain/day-thirty";
 import type { NewEvent } from "@/domain/event";
 import { addDays } from "@/domain/wall-clock";
+import { startTransferInDb } from "./event-db";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { newAddress } from "./mailbox";
 
@@ -101,4 +102,17 @@ test("my events: long texts", async ({ page, db }, testInfo) => {
   await page.goto("/mes-evenements");
   await expect(page.getByText("T".repeat(80))).toBeVisible();
   await shoot(page, testInfo, "my-events-long");
+});
+
+// Epic #935, screens 22 and 25 (OT2.8, OT8.3): a handover pending, then expired with an address of 60 characters.
+test("my events: a handover pending", async ({ page, db }, testInfo) => {
+  const accountId = await signIn(page, db);
+  const ski = await eventOf(db, accountId, { title: "Week-end ski", location: "Les Gets", allerAt: day(7), retourAt: null });
+  const camp = await eventOf(db, accountId, { title: "Camp d’été", location: "Annecy", allerAt: day(14), retourAt: null });
+  const long = `${"d".repeat(60 - "@mailbox.test".length)}@mailbox.test`;
+  await startTransferInDb(db, ski, "marie.dupont@mailbox.test");
+  await startTransferInDb(db, camp, long, new Date(Date.now() - 8 * 24 * 60 * 60_000));
+  await page.goto("/mes-evenements");
+  await expect(page.getByText(`Cession en attente de ${long}`, { exact: true })).toBeVisible();
+  await shoot(page, testInfo, "my-events-transfer");
 });

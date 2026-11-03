@@ -51,6 +51,16 @@ export function focusCell(id: string, leg: Leg): boolean {
   return focusInSection(`[data-person-cell="${CSS.escape(id)}"][data-leg="${leg}"]`);
 }
 
+/** The first name of person `id` in « Sans voiture » of `leg`, or in its fold once unfolded (#981); false when she is in neither. */
+export function focusBoardName(id: string, leg: Leg): boolean {
+  return focus(document.querySelector<HTMLElement>(`[data-board-person="${CSS.escape(id)}"][data-leg="${leg}"]`));
+}
+
+/** « Ne font pas le retour (n) » of `leg`: where a first name goes to while its fold is closed (#981). */
+export function focusNotConcerned(leg: Leg): boolean {
+  return focus(document.querySelector<HTMLElement>(`[data-not-concerned="${leg}"]`));
+}
+
 /**
  * The title of car `rideId` on `leg`, focusable by `tabIndex={-1}`. The leg's tab is the
  * page's state: it is made active before, so that the title is shown when it is focused.

@@ -6,6 +6,7 @@ import {
   GLOBAL_SENDS_PER_HOUR,
   LOGINS_PER_ADDRESS,
   SEND_WINDOW_MS,
+  TRANSFERS_PER_EVENT,
 } from "@/domain/send-limits";
 import { SEND_LOCK_CLASS, lockAddress, lockGlobalSends, recordSend } from "./email-sends";
 import type { Database } from "./schema";
@@ -102,6 +103,67 @@ describe("recordSend", () => {
     });
   });
 
+  // OT6.5: 3 transfer emails per hour for an event; sending, resends and changes of address included.
+  it("records a transfer email with its event, stops the 4th of an hour, and records nothing for an event gone", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const email = anAddress();
+      expect(await recordSend(trx, { kind: "transfer", eventId, email })).toBe("recorded");
+      expect(await sendsTo(trx, email)).toEqual([{ kind: "transfer", email, event_id: eventId }]);
+      await seedSends(trx, TRANSFERS_PER_EVENT - 1, { kind: "transfer", eventId, email: () => anAddress() });
+      expect(await recordSend(trx, { kind: "transfer", eventId, email: anAddress() })).toBe("event");
+      const other = anAddress();
+      expect(await recordSend(trx, { kind: "transfer", eventId: "zzzzzzzz", email: other })).toBe("eventGone");
+      expect(await sendsTo(trx, other)).toEqual([]);
+    });
+  });
+
+  it("counts the transfer emails of an event apart from its confirmation emails", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      await seedSends(trx, CONFIRMATIONS_PER_EVENT, { kind: "confirmation", eventId, email: () => anAddress() });
+      expect(await recordSend(trx, { kind: "transfer", eventId, email: anAddress() })).toBe("recorded");
+      const { id: other } = await seedEvent(trx);
+      await seedSends(trx, TRANSFERS_PER_EVENT, { kind: "transfer", eventId: other, email: () => anAddress() });
+      expect(await recordSend(trx, { kind: "confirmation", eventId: other, email: anAddress() })).toBe("recorded");
+    });
+  });
+
+  it("no longer counts a transfer email of an hour ago", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      await seedSends(trx, TRANSFERS_PER_EVENT, { kind: "transfer", eventId, email: () => anAddress(), sentAt: ago(61 * MINUTE) });
+      expect(await recordSend(trx, { kind: "transfer", eventId, email: anAddress() })).toBe("recorded");
+    });
+  });
+
+  // Decision 3 of the design of #935: one limit of 5 for the confirmation and transfer emails to an address.
+  it("stops the 6th email to an address, confirmations and transfers together, from any event", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const email = anAddress();
+      const { id: first } = await seedEvent(trx);
+      const { id: second } = await seedEvent(trx);
+      await seedSends(trx, 3, { kind: "confirmation", email });
+      await seedSends(trx, CONFIRMATIONS_PER_ADDRESS - 4, { kind: "transfer", email });
+      expect(await recordSend(trx, { kind: "transfer", eventId: first, email })).toBe("recorded");
+      expect(await recordSend(trx, { kind: "transfer", eventId: second, email })).toBe("address");
+      expect(await recordSend(trx, { kind: "confirmation", eventId: second, email })).toBe("address");
+      expect(await sendsTo(trx, email)).toHaveLength(CONFIRMATIONS_PER_ADDRESS);
+    });
+  });
+
+  it("does not count the answers to sign-in requests in the limit of an address for a transfer, nor the reverse", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const email = anAddress();
+      const { id: eventId } = await seedEvent(trx);
+      await seedSends(trx, LOGINS_PER_ADDRESS, { kind: "login", email });
+      expect(await recordSend(trx, { kind: "transfer", eventId, email })).toBe("recorded");
+      const other = anAddress();
+      await seedSends(trx, CONFIRMATIONS_PER_ADDRESS, { kind: "transfer", email: other });
+      expect(await recordSend(trx, { kind: "login", email: other })).toBe("recorded");
+    });
+  });
+
   // Coordinator decision 2 on #581: every email of the hour, whatever its kind and its address.
   it("lets the 50th email of the hour go, then stops every kind, whatever the address", async () => {
     await withRollbackRecordingSends(async (trx) => {
@@ -110,6 +172,7 @@ describe("recordSend", () => {
       expect(await recordSend(trx, { kind: "confirmation", eventId, email: anAddress() })).toBe("recorded");
       expect(await recordSend(trx, { kind: "login", email: anAddress() })).toBe("global");
       expect(await recordSend(trx, { kind: "confirmation", eventId, email: anAddress() })).toBe("global");
+      expect(await recordSend(trx, { kind: "transfer", eventId, email: anAddress() })).toBe("global");
       expect(await sendsInWindow(trx)).toBe(GLOBAL_SENDS_PER_HOUR);
     });
   });
@@ -128,6 +191,20 @@ describe("recordSend", () => {
           expect(second).toBe("event");
           const sent = await db.selectFrom("email_send").select("id").where("event_id", "=", eventId).execute();
           expect(sent).toHaveLength(CONFIRMATIONS_PER_EVENT);
+        });
+      });
+    });
+
+    it("lets one more transfer of an event go, not two, even to two addresses", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        await withCommittedAddresses(async (_, address) => {
+          await seedSends(db, TRANSFERS_PER_EVENT - 1, { kind: "transfer", eventId, email: address });
+          const second = await whileHeld(
+            db,
+            async (trx) => expect(await recordSend(trx, { kind: "transfer", eventId, email: address() })).toBe("recorded"),
+            (own) => recordSend(own, { kind: "transfer", eventId, email: address() }),
+          );
+          expect(second).toBe("event");
         });
       });
     });

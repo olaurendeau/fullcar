@@ -158,7 +158,7 @@ test.describe("/nouveau", () => {
   test("VI3.4: the footer's links and « English » stay #737373", async ({ page }) => {
     await openForm(page);
     const footer = page.locator("footer");
-    const names = ["Accueil", "Code source sur GitHub (s’ouvre dans un nouvel onglet)", "Nous contacter (s’ouvre dans un nouvel onglet)"];
+    const names = ["Accueil", "Confidentialité", "Code source sur GitHub (s’ouvre dans un nouvel onglet)", "Nous contacter (s’ouvre dans un nouvel onglet)"];
     await expect(footer.getByRole("link")).toHaveCount(names.length);
     for (const name of names) {
       await expectColour(footer.getByRole("link", { name, exact: true }), "color", DISCREET, `« ${name} »`);

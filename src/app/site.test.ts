@@ -25,12 +25,13 @@ describe("siteOrigin (#412)", () => {
 });
 
 describe("the public pages (#412)", () => {
-  it("are the home page and the creation form, and no event", () => {
-    expect(publicPaths).toEqual(["/", "/nouveau"]);
+  it("are the home page, the creation form and the privacy page, and no event", () => {
+    expect(publicPaths).toEqual(["/", "/nouveau", "/confidentialite"]);
   });
 
   it("each names its own path as canonical, resolved against the root layout's metadataBase", () => {
     expect(publicPageMetadata("/")).toEqual({ alternates: { canonical: "/" } });
     expect(publicPageMetadata("/nouveau")).toEqual({ alternates: { canonical: "/nouveau" } });
+    expect(publicPageMetadata("/confidentialite")).toEqual({ alternates: { canonical: "/confidentialite" } });
   });
 });

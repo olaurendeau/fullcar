@@ -161,7 +161,7 @@ describe("lockRide", () => {
       const { id: eventId } = await seedEvent(trx);
       const { id: driverId } = await seedPerson(trx, eventId);
       const id = await seedRide(trx, eventId, driverId, { seats: 4 });
-      expect(await lockRide(trx, { id, eventId, leg: "aller" })).toEqual({ id, driverId, seats: 4, location: "Mairie de Cesson" });
+      expect(await lockRide(trx, { id, eventId, leg: "aller" })).toEqual({ id, driverId, seats: 4, location: "Mairie de Cesson", departureTime: "07:15:00" });
       expect(await lockRide(trx, { id, eventId, leg: "retour" })).toBeUndefined();
       expect(await lockRide(trx, { id: randomUUID(), eventId, leg: "aller" })).toBeUndefined();
     });

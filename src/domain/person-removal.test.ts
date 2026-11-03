@@ -26,7 +26,7 @@ function ride(id: string, leg: Leg, driverId: Name, seats: number): RideRow {
 
 let clock = 0;
 function placed(personId: Name, leg: Leg, rideId: string | null): PlacementRow {
-  return { personId, leg, rideId, placedAt: new Date(Date.UTC(2026, 11, 1, 8, 0, clock++)) };
+  return { personId, leg, rideId, stopId: null, placedAt: new Date(Date.UTC(2026, 11, 1, 8, 0, clock++)) };
 }
 
 const EXAMPLE: BoardRows = {
@@ -49,6 +49,7 @@ const EXAMPLE: BoardRows = {
     placed("lea", "retour", null),
     placed("doublon", "retour", null),
   ],
+  stops: [],
 };
 
 /** The board as a page shows it: the device of the Martins, or nobody's (the organiser area's). */

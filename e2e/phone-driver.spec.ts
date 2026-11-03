@@ -28,7 +28,7 @@ const FR = {
   phone: "Téléphone",
   optional: "Téléphone (facultatif)",
   driverPhone: (firstName: string) => `Téléphone de ${firstName}`,
-  hint: "Pour que les personnes à bord puissent vous joindre. Visible seulement par l’organisateur et par les personnes de la même voiture.",
+  hint: "Pour que les personnes à bord puissent vous joindre. Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.",
   required: "Un numéro est requis pour proposer une voiture.",
   invalid: "Numéro non valide : de 6 à 15 chiffres, avec seulement des espaces et + . - ( )",
   location: "Lieu de départ",
@@ -44,7 +44,7 @@ const FR = {
 
 const EN = {
   phone: "Phone",
-  hint: "So that the people on board can reach you. Only visible to the organiser and to the people in the same car.",
+  hint: "So that the people on board can reach you. Visible to the organiser and to the people in the same car. Anyone with the link can put someone in a car.",
   required: "A number is needed to offer a car.",
   driverPhone: "Claire’s phone",
 };
@@ -364,7 +364,7 @@ test.describe("a number to offer a car, in English", () => {
 // #778: a number is not removed while its person drives (event-board v4.8, rule 8, criteria T5).
 const OTHER_PHONE = "07 55 66 77 88";
 const WHILE_DRIVING = "Un numéro est requis tant que Claire conduit.";
-const PERSON_HINT = "Visible seulement par l’organisateur et par les personnes de la même voiture.";
+const PERSON_HINT = "Visible par l’organisateur et par les personnes de la même voiture. Toute personne qui a le lien peut placer quelqu’un dans une voiture.";
 
 /** « Modifier {firstName} », opened from the sheet of her first name in « Vos inscriptions ». */
 async function editPerson(page: Page, firstName: string) {

@@ -260,7 +260,11 @@ test.describe("edit a car", () => {
   async function sendThenClose(page: Page, closing = false) {
     const form = await openForm(page);
     await form.getByLabel("Lieu de départ").fill(GARE);
+    // Hypothesis, not reproduced (#922, #929): closed before the request has left, the failure may have
+    // nothing to wait for, since `holdFirst` holds it on its way out. Waiting for it to leave keeps the criterion.
+    const left = page.waitForRequest((request) => !!request.headers()["next-action"] && !!request.postData()?.includes(GARE));
     await form.getByRole("button", { name: "Valider" }).click();
+    await left;
     await page.keyboard.press("Escape");
     if (closing) await expect(page.getByRole("dialog")).toHaveAttribute("data-state", "closed");
     else await expect(page.getByRole("dialog")).toHaveCount(0);

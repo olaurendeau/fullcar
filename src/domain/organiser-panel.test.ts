@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { BoardPerson, BoardRows, PlacementRow, RideRow } from "./board";
 import type { Leg } from "./leg";
-import { legIsEmpty, organiserPanel, organiserPersons, type OrganiserLeg } from "./organiser-panel";
+import { byFirstName, legIsEmpty, organiserPanel, organiserPersons, type OrganiserLeg } from "./organiser-panel";
 import type { OrganiserCar, OrganiserLegBoard } from "./phone-visibility";
 import { browserUnsafe } from "./test-browser-safe";
 import type { WallTime } from "./wall-clock";
@@ -26,6 +26,7 @@ function car(
     position: null,
     seats,
     passengers: passengers.map(person),
+    stops: [],
     freeSeats,
     full: freeSeats === 0,
     driverHasPhone,
@@ -150,11 +151,28 @@ describe("legIsEmpty (O1.5)", () => {
   });
 });
 
+describe("byFirstName (RP4.1)", () => {
+  const named = (id: string, firstName: string) => ({ id, firstName, cells: [] });
+  // In the order of sign-up: the second Léa, the duplicate, signed up after Hugo.
+  const persons = [named("lea", "Léa"), named("hugo", "Hugo"), named("doublon", "Lea"), named("claire", "claire"), named("elodie", "Élodie")];
+
+  it("sorts by first name in the page's language, case and accents aside, then in the order of sign-up", () => {
+    expect(byFirstName(persons, "fr").map(({ id }) => id)).toEqual(["claire", "elodie", "hugo", "lea", "doublon"]);
+    expect(byFirstName(persons, "en").map(({ id }) => id)).toEqual(["claire", "elodie", "hugo", "lea", "doublon"]);
+  });
+
+  it("leaves the list it is given as it was", () => {
+    byFirstName(persons, "fr");
+    expect(persons.map(({ id }) => id)).toEqual(["lea", "hugo", "doublon", "claire", "elodie"]);
+  });
+});
+
 describe("organiserPersons (RP4.2)", () => {
   const placement = (personId: string, leg: Leg, rideId: string | null, second: number): PlacementRow => ({
     personId,
     leg,
     rideId,
+    stopId: null,
     placedAt: new Date(Date.UTC(2026, 9, 26, 8, 0, second)),
   });
   const ride = (id: string, leg: Leg, driverId: string): RideRow => ({
@@ -181,6 +199,7 @@ describe("organiserPersons (RP4.2)", () => {
     ],
     rides: [ride("r1", "aller", "lea")],
     placements: [placement("ines", "aller", null, 1), placement("hugo", "aller", "r1", 2), placement("hugo", "retour", null, 3)],
+    stops: [],
   };
 
   it("lists every person in the event's order, a cell per leg, those who do no leg included", () => {
@@ -227,7 +246,7 @@ describe("organiserPersons (RP4.2)", () => {
   });
 
   it("is empty when nobody has signed up", () => {
-    expect(organiserPersons({ persons: [], rides: [], placements: [] }, ["aller", "retour"])).toStrictEqual([]);
+    expect(organiserPersons({ persons: [], rides: [], placements: [], stops: [] },["aller", "retour"])).toStrictEqual([]);
   });
 
   it("carries no number, even from rows that hold one (Q2 = a)", () => {

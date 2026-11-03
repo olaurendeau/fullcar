@@ -11,6 +11,7 @@ import {
   lockEvent,
   readAdminTokenHash,
   readOrganiserAccessEvent,
+  revokeAdminTokens,
   writeEventFields,
 } from "./events";
 import type { Database } from "./schema";
@@ -227,6 +228,31 @@ describe("readOrganiserAccessEvent", () => {
       return [await readOrganiserAccessEvent(trx, "Zz9yXw8v"), await readOrganiserAccessEvent(trx, "ab3dEf7h")];
     });
     expect(reads).toEqual([undefined, undefined]);
+  });
+});
+
+describe("revokeAdminTokens", () => {
+  // OA9.1: « Se déconnecter » revokes the admin tokens this browser sends, and those alone.
+  it("sets to null the hash of each event whose token is sent, and of no other", async () => {
+    await withRollback(async (trx) => {
+      const first = await seedEvent(trx);
+      const second = await seedEvent(trx);
+      const kept = await seedEvent(trx);
+      const offByOne = `${kept.token.slice(0, -1)}${kept.token.at(-1) === "A" ? "Q" : "A"}`;
+      expect(await revokeAdminTokens(trx, [second.token, first.token, offByOne, second.token, 7, null])).toBe(2);
+      expect(await readAdminTokenHash(trx, first.id)).toBeNull();
+      expect(await readAdminTokenHash(trx, second.id)).toBeNull();
+      expect(await readAdminTokenHash(trx, kept.id)).toBe(hashAdminToken(kept.token));
+    });
+  });
+
+  it("revokes nothing for no token, and a revoked token again", async () => {
+    await withRollback(async (trx) => {
+      const { token } = await seedEvent(trx);
+      expect(await revokeAdminTokens(trx, [])).toBe(0);
+      expect(await revokeAdminTokens(trx, [token])).toBe(1);
+      expect(await revokeAdminTokens(trx, [token])).toBe(0);
+    });
   });
 });
 

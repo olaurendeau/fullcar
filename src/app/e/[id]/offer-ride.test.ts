@@ -1,16 +1,17 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { sql, TableNode, type Kysely, type KyselyPlugin, type QueryId } from "kysely";
 import { describe, expect, it } from "vitest";
+import { anonymiseEvent } from "@/db/day-thirty";
+import { lockEvent } from "@/db/events";
 import { readTokenHolders } from "@/db/persons";
 import { findPlacement, setPlacement } from "@/db/placements";
 import type { Database } from "@/db/schema";
-import { whileHeld, withCommittedEvent } from "@/db/test-committed";
+import { whileHeld, whileHeldInTurn, withCommittedEvent } from "@/db/test-committed";
 import { withRollback } from "@/db/test-db";
 import { seedEvent } from "@/db/test-events";
 import { deleteSeededPerson, seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "@/domain/personal-token";
-import { offerRide as offerRideAction } from "./actions";
 import { readEventState } from "./event-state";
 import { offerRide, type RideOffer } from "./offer-ride";
 import { stillOpen } from "./test-state";
@@ -78,27 +79,6 @@ function retourAfter(choice: Choice, start: Start, r2: string, drive: string) {
   if (choice !== "keep") return { kind: choice };
   if (start === "passenger") return { kind: "passenger", rideId: r2 };
   return { kind: start === "new" ? "notConcerned" : start };
-}
-
-/**
- * Resolves once `sessions` sessions wait for a lock the session `pid` holds, within 3 s,
- * under Vitest's 5 s. A session queued behind another for the same row waits for that one
- * (its tuple lock), not for `pid`: it counts too.
- */
-async function blockedBy(db: Db, pid: number, sessions = 1) {
-  for (let attempt = 0; attempt < 120; attempt++) {
-    const { rows } = await sql<{ pid: number }>`
-      with recursive waiting(pid) as (
-        select pid from pg_stat_activity where ${pid}::int = any(pg_blocking_pids(pid))
-        union
-        select activity.pid from pg_stat_activity activity, waiting
-        where waiting.pid = any(pg_blocking_pids(activity.pid))
-      )
-      select pid from waiting`.execute(db);
-    if (rows.length >= sessions) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`fewer than ${sessions} sessions waited for that lock`);
 }
 
 /**
@@ -975,27 +955,16 @@ describe("offerRide", () => {
         const { token, bea, r1, driver } = await aDeviceScene(db, eventId);
         const before = await rowsOf(db, eventId);
 
-        const taker = await db.startTransaction().setIsolationLevel("read committed").execute();
-        let offered: ReturnType<typeof offerRideAction> | undefined;
         const offer = anOffer("aller", driver, { passengerIds: [bea.id] });
-        try {
-          await setPlacement(taker, { personId: bea.id, eventId, leg: "aller", rideId: r1 });
-          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(taker);
-          offered = offerRideAction(eventId, token, offer);
-          offered.catch(() => {});
-          await blockedBy(db, rows[0].pid);
-          await taker.commit().execute();
-        } finally {
-          try {
-            await taker.rollback().execute();
-          } catch {
-            // Committed.
-          }
-        }
+        const result = await whileHeld(
+          db,
+          (taker) => setPlacement(taker, { personId: bea.id, eventId, leg: "aller", rideId: r1 }),
+          (own) => offerRide(own, eventId, token, offer),
+        );
 
-        const result = await offered;
         expect(result).toMatchObject({ ok: false, error: "alreadyInCar" });
-        const aller = legOf(result && "state" in result ? result.state : undefined, "aller");
+        // The state the action gives with the refusal, read once the offer is over (actions.ts).
+        const aller = legOf(await readEventState(db, eventId, token), "aller");
         expect(aller.cars.find((car) => car.id === r1)?.passengers.map((person) => person.id)).toContain(bea.id);
         const after = await rowsOf(db, eventId);
         expect(after.rides).toEqual(before.rides);
@@ -1020,36 +989,27 @@ describe("offerRide", () => {
           await seedPlacement(db, { personId: lea.id, eventId, leg: "retour", rideId: b });
           await seedPlacement(db, { personId: tom.id, eventId, leg: "aller", rideId: null });
 
-          const holder = await db.startTransaction().setIsolationLevel("read committed").execute();
-          let offered: ReturnType<typeof offerRide> | undefined;
           let personsFree: boolean | undefined;
-          try {
-            await sql`select id from ride where id = ${b} for update`.execute(holder);
-            const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
-            const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
-            const offer = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg, passengerIds: [tom.id] });
-            offered = offerRide(db, eventId, lea.token, offer);
-            offered.catch(() => {});
-            await blockedBy(db, rows[0].pid);
-            const persons = sql`select id from person where id in (${lea.id}, ${tom.id}) for update nowait`.execute(db);
-            // Locked is false; any other failure is no answer, and fails the test.
-            personsFree = await persons.then(
-              () => true,
-              (error: { code?: string }) => {
-                if (error.code === "55P03") return false;
-                throw error;
-              },
-            );
-            await holder.commit().execute();
-          } finally {
-            try {
-              await holder.rollback().execute();
-            } catch {
-              // Committed.
-            }
-          }
+          const otherLeg = choice === "drive" ? aDrive() : { kind: choice };
+          const offer = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg, passengerIds: [tom.id] });
+          const offered = await whileHeld(
+            db,
+            (holder) => sql`select id from ride where id = ${b} for update`.execute(holder),
+            (own) => offerRide(own, eventId, lea.token, offer),
+            async () => {
+              const persons = sql`select id from person where id in (${lea.id}, ${tom.id}) for update nowait`.execute(db);
+              // Locked is false; any other failure is no answer, and fails the test.
+              personsFree = await persons.then(
+                () => true,
+                (error: { code?: string }) => {
+                  if (error.code === "55P03") return false;
+                  throw error;
+                },
+              );
+            },
+          );
 
-          expect(await offered).toMatchObject({ ok: true });
+          expect(offered).toMatchObject({ ok: true });
           expect(personsFree).toBe(true);
           const retour = legOf(await readEventState(db, eventId, lea.token), "retour");
           expect(retour.cars.find((car) => car.id === b)?.passengers).toEqual([]);
@@ -1123,26 +1083,14 @@ describe("offerRide", () => {
           },
         };
 
-        const taker = await db.startTransaction().setIsolationLevel("read committed").execute();
-        let offered: ReturnType<typeof offerRide> | undefined;
-        try {
-          await setPlacement(taker, { personId: tom.id, eventId, leg: "aller", rideId: r1 });
-          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(taker);
-          const offer = anOffer("aller", { kind: "device", personId: tom.id });
-          offered = offerRide(db.withPlugin(watch), eventId, tom.token, offer);
-          offered.catch(() => {});
-          await blockedBy(db, rows[0].pid);
-          await taker.commit().execute();
-        } finally {
-          // Kysely throws on a transaction already committed: nothing is left to give back.
-          try {
-            await taker.rollback().execute();
-          } catch {
-            // Committed.
-          }
-        }
+        const offer = anOffer("aller", { kind: "device", personId: tom.id });
+        const offered = await whileHeld(
+          db,
+          (taker) => setPlacement(taker, { personId: tom.id, eventId, leg: "aller", rideId: r1 }),
+          (own) => offerRide(own.withPlugin(watch), eventId, tom.token, offer),
+        );
 
-        expect(await offered).toMatchObject({ ok: true });
+        expect(offered).toMatchObject({ ok: true });
         expect(lockedAtDelete).toEqual([true]);
         const aller = legOf(await readEventState(db, eventId, tom.token), "aller");
         expect(aller.cars.find((car) => car.id === r1)?.passengers.map((person) => person.id)).not.toContain(tom.id);
@@ -1166,30 +1114,18 @@ describe("offerRide", () => {
           await seedPlacement(db, { personId: person.id, eventId, leg: "retour", rideId: b });
         }
 
-        // Both Rides held, so that both offers wait at their first lock, then start together.
-        const holder = await db.startTransaction().setIsolationLevel("read committed").execute();
-        let offers: Promise<PromiseSettledResult<unknown>[]> | undefined;
-        try {
-          await sql`select id from ride where id in (${a}, ${b}) for update`.execute(holder);
-          const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(holder);
-          const fromAller = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg: aDrive() });
-          const fromRetour = anOffer("retour", { kind: "device", personId: tom.id }, { otherLeg: aDrive({ time: "08:00" }) });
-          offers = Promise.allSettled([
-            offerRide(db, eventId, lea.token, fromAller),
-            offerRide(db, eventId, tom.token, fromRetour),
-          ]);
-          await blockedBy(db, rows[0].pid, 2);
-          await holder.commit().execute();
-        } finally {
-          try {
-            await holder.rollback().execute();
-          } catch {
-            // Committed.
-          }
-        }
+        // Both Rides held, so that both offers wait at their first lock, then start together:
+        // Tom's, started once Léa's waits, queues behind hers for the same Ride.
+        const fromAller = anOffer("aller", { kind: "device", personId: lea.id }, { otherLeg: aDrive() });
+        const fromRetour = anOffer("retour", { kind: "device", personId: tom.id }, { otherLeg: aDrive({ time: "08:00" }) });
+        const offers = await whileHeldInTurn(
+          db,
+          (holder) => sql`select id from ride where id in (${a}, ${b}) for update`.execute(holder),
+          [(own) => offerRide(own, eventId, lea.token, fromAller), (own) => offerRide(own, eventId, tom.token, fromRetour)],
+        );
 
-        const ok = { status: "fulfilled", value: expect.objectContaining({ ok: true }) };
-        expect(await offers).toEqual([ok, ok]);
+        const ok = expect.objectContaining({ ok: true });
+        expect(offers).toEqual([ok, ok]);
         const state = await readEventState(db, eventId, lea.token);
         for (const leg of ["aller", "retour"] as const) {
           const { cars } = legOf(state, leg);
@@ -1197,6 +1133,161 @@ describe("offerRide", () => {
           expect(cars.map((car) => car.driver.id).sort()).toEqual([leg === "aller" ? marc.id : ines.id, lea.id, tom.id].sort());
         }
       });
+    });
+  });
+});
+
+describe("offerRide, the Stops of the aller (RV1)", () => {
+  const MAIRIE = randomUUID();
+  const GARE = randomUUID();
+  const EGLISE = randomUUID();
+  const stopsFor = () => [
+    { id: GARE, location: "Gare", time: "08:30", position: VAUGNERAY_EXACT },
+    { id: MAIRIE, location: "Mairie", time: "08:10" },
+    { id: EGLISE, location: "Église", time: "08:30" },
+  ];
+
+  async function storedStops(db: Db, eventId: string) {
+    return db
+      .selectFrom("stop")
+      .select(["id", "ride_id", "location", "stop_time", "rank"])
+      .where("event_id", "=", eventId)
+      .orderBy("stop_time")
+      .orderBy("rank")
+      .execute();
+  }
+
+  it("RV1.7: without stops, the car is written as before, and has none", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const offer = anOffer("aller", aNewDriver());
+      expect(await offerRide(trx, eventId, newToken(), offer)).toMatchObject({ ok: true });
+      expect(await storedStops(trx, eventId)).toEqual([]);
+    });
+  });
+
+  it("RV1.4, RV1.5: writes the Stops after the Ride, by time then order of entry, with their position", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const offer = anOffer("aller", aNewDriver(), { stops: stopsFor() });
+      expect(await offerRide(trx, eventId, newToken(), offer)).toMatchObject({ ok: true });
+
+      const stored = await storedStops(trx, eventId);
+      expect(stored.map((stop) => [stop.id, stop.ride_id, stop.rank, stop.stop_time])).toEqual([
+        [MAIRIE, offer.rideId, 0, "08:10:00"],
+        [GARE, offer.rideId, 1, "08:30:00"],
+        [EGLISE, offer.rideId, 2, "08:30:00"],
+      ]);
+      const gare = await trx.selectFrom("stop").select(["location_lat", "location_lng"]).where("id", "=", GARE).executeTakeFirstOrThrow();
+      expect(gare).toEqual({ location_lat: VAUGNERAY.lat, location_lng: VAUGNERAY.lng });
+    });
+  });
+
+  it("RV1.4: a Stop at the time of the departure is an error of its line, and nothing is written", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const offer = anOffer("aller", aNewDriver(), {
+        stops: [
+          { id: MAIRIE, location: "Mairie", time: "08:10" },
+          { id: GARE, location: " ", time: "08:00" },
+        ],
+      });
+      expect(await offerRide(trx, eventId, newToken(), offer)).toEqual({
+        ok: false,
+        errors: {},
+        first: "stops",
+        stopErrors: [{}, { location: "required", time: "notAfterDeparture" }],
+      });
+      expect((await rowsOf(trx, eventId)).rides).toEqual([]);
+    });
+  });
+
+  it("the errors of the car's fields come first, and the Stops are not compared to a time in error", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const offer = anOffer("aller", aNewDriver(), { time: "", stops: [{ id: MAIRIE, location: "Mairie", time: "00:01" }] });
+      expect(await offerRide(trx, eventId, newToken(), offer)).toEqual({ ok: false, errors: { time: "required" }, first: "time" });
+    });
+  });
+
+  const sevenIds = Array.from({ length: 7 }, (_, at) => `00000000-0000-4000-8000-00000000000${at}`);
+  it.each([
+    ["on the retour", () => anOffer("retour", aNewDriver(), { stops: stopsFor() })],
+    ["in otherLeg", () => anOffer("aller", aNewDriver(), { otherLeg: aDrive({ stops: stopsFor() }) })],
+    ["seven", () => anOffer("aller", aNewDriver(), { stops: sevenIds.map((id) => ({ id, location: "x", time: "08:30" })) })],
+    ["an id twice", () => anOffer("aller", aNewDriver(), { stops: [stopsFor()[0], stopsFor()[0]] })],
+  ])("RV1.4: stops %s are invalid, and nothing is written", async (_name, build) => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      expect(await offerRide(trx, eventId, newToken(), build())).toEqual({ ok: false, error: "invalid" });
+      expect((await rowsOf(trx, eventId)).rides).toEqual([]);
+      expect(await storedStops(trx, eventId)).toEqual([]);
+    });
+  });
+
+  it("RV1.9: with the option off, the Stops are refused by stopsOff and nothing is written; an empty list is not Stops", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const before = await rowsOf(trx, eventId);
+      const refused = await offerRide(trx, eventId, newToken(), anOffer("aller", aNewDriver(), { stops: stopsFor() }));
+      expect(refused).toEqual({ ok: false, error: "stopsOff" });
+      expect(await rowsOf(trx, eventId)).toEqual(before);
+      expect(await storedStops(trx, eventId)).toEqual([]);
+      expect(await offerRide(trx, eventId, newToken(), anOffer("aller", aNewDriver(), { stops: [] }))).toMatchObject({ ok: true });
+    });
+  });
+
+  it("RV8.3: an anonymised event gives eventEnded, before stopsOff", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      await anonymiseEvent(trx, eventId);
+      const refused = await offerRide(trx, eventId, newToken(), anOffer("aller", aNewDriver(), { stops: stopsFor() }));
+      expect(refused).toEqual({ ok: false, error: "eventEnded" });
+    });
+  });
+
+  // Two sessions on committed data: the organiser holds the Event's lock and turns the option
+  // over; the offer, on its own connection, waits for it and must decide on the option the lock
+  // gives, never on one read before `lockLegs` (RV1.9, RV8.3).
+  describe("at the same time as the organiser turning the option over, on committed data", () => {
+    const turnOption = (eventId: string, to: boolean) => async (trx: Db) => {
+      await lockEvent(trx, eventId, "noKeyUpdate");
+      await trx.updateTable("event").set({ stops_enabled: to }).where("id", "=", eventId).execute();
+    };
+
+    it("RV1.9: an option turned off while the offer waits refuses the Stops by stopsOff, and writes nothing", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        await db.updateTable("event").set({ stops_enabled: true }).where("id", "=", eventId).execute();
+        const offer = anOffer("aller", aNewDriver(), { stops: stopsFor() });
+
+        const result = await whileHeld(db, turnOption(eventId, false), (own) => offerRide(own, eventId, newToken(), offer));
+
+        expect(result).toEqual({ ok: false, error: "stopsOff" });
+        expect((await rowsOf(db, eventId)).rides).toEqual([]);
+        expect(await storedStops(db, eventId)).toEqual([]);
+      });
+    });
+
+    it("RV1.9: an option turned on while the offer waits accepts the Stops, and writes them", async () => {
+      await withCommittedEvent(async (db, eventId) => {
+        const offer = anOffer("aller", aNewDriver(), { stops: stopsFor() });
+
+        const result = await whileHeld(db, turnOption(eventId, true), (own) => offerRide(own, eventId, newToken(), offer));
+
+        expect(result).toMatchObject({ ok: true });
+        expect((await storedStops(db, eventId)).map((stop) => stop.ride_id)).toEqual([offer.rideId, offer.rideId, offer.rideId]);
+      });
+    });
+  });
+
+  it("refuses an id that is already the Stop of another car as invalid", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx, { stopsEnabled: true });
+      const first = anOffer("aller", aNewDriver(), { stops: stopsFor() });
+      expect(await offerRide(trx, eventId, newToken(), first)).toMatchObject({ ok: true });
+      const second = anOffer("aller", aNewDriver("Bea"), { stops: [{ id: GARE, location: "Autre", time: "08:20" }] });
+      expect(await offerRide(trx, eventId, newToken(), second)).toEqual({ ok: false, error: "invalid" });
+      expect((await storedStops(trx, eventId)).every((stop) => stop.ride_id === first.rideId)).toBe(true);
     });
   });
 });

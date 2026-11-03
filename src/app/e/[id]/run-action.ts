@@ -159,7 +159,7 @@ export function aboutPerson<T>(answer: T, personId: string): T {
 export function withTabsHeld(shown: EventState, next: EventState): EventState | undefined {
   if (!shown.event.retourAt === !next.event.retourAt) return undefined;
   const legs = [...next.legs.filter(({ leg }) => leg !== "retour"), ...shown.legs.filter(({ leg }) => leg === "retour")];
-  return { event: { ...next.event, retourAt: shown.event.retourAt }, legs };
+  return { event: { ...next.event, retourAt: shown.event.retourAt }, options: next.options, legs };
 }
 
 /** The state an action's answer carries back, refusal included (C5.7, C11.6), if any. */

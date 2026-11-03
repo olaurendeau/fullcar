@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserUnsafeReached } from "@/domain/test-browser-safe";
-import { readSessionToken, sendVisit, sessionTokens, type TokenStorage } from "./session-token";
+import { forgetSessionToken, isTokenShaped, keepSessionToken, readSessionToken, sendVisit, sessionTokens, type TokenStorage } from "./session-token";
 
 /** A `localStorage` in memory, whose every call is a spy. */
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -140,9 +140,79 @@ describe("sendVisit", () => {
   });
 });
 
+describe("keepSessionToken", () => {
+  // OA5.2, OA5.9: the token the server drew replaces the one the browser had, whoever's it was.
+  it("keeps the token under fullcar:session, in place of the one kept", () => {
+    const storage = fakeStorage({ [KEY]: OTHER });
+    expect(tokensOf(storage).keepSessionToken(TOKEN)).toBe(true);
+    expect([...storage.items]).toEqual([[KEY, TOKEN]]);
+    expect(new Set(keysPassed(storage))).toEqual(new Set([KEY]));
+  });
+
+  it("keeps nothing that is no token", () => {
+    const storage = fakeStorage();
+    expect(tokensOf(storage).keepSessionToken(`${TOKEN}A`)).toBe(false);
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  // Private browsing in some browsers: the session cannot be kept, and the page must not say it opened.
+  it("says it kept nothing, and throws nothing, when localStorage refuses", () => {
+    expect(sessionTokens({ storage: insecure }).keepSessionToken(TOKEN)).toBe(false);
+    const full = fakeStorage();
+    full.setItem.mockImplementation(() => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    });
+    expect(tokensOf(full).keepSessionToken(TOKEN)).toBe(false);
+  });
+});
+
+describe("isTokenShaped", () => {
+  it("is the shape of a token the server draws, and only it", () => {
+    expect(isTokenShaped(TOKEN)).toBe(true);
+    expect(isTokenShaped(TOKEN.slice(1))).toBe(false);
+    expect(isTokenShaped(`${TOKEN.slice(0, -1)}h`)).toBe(false);
+    expect(isTokenShaped("")).toBe(false);
+  });
+});
+
+describe("forgetSessionToken", () => {
+  // OA9.1: « Se déconnecter » leaves this browser without its session.
+  it("forgets the token sent, and touches no other key", () => {
+    const storage = fakeStorage({ [KEY]: TOKEN, "fullcar:admin-token:Ab3dEf7h": OTHER });
+    tokensOf(storage).forgetSessionToken(TOKEN);
+    expect([...storage.items]).toEqual([["fullcar:admin-token:Ab3dEf7h", OTHER]]);
+    expect(new Set(keysPassed(storage))).toEqual(new Set([KEY]));
+  });
+
+  // Another tab may open a new session while the sign-out is on its way: that one stays.
+  it("keeps a token other than the one sent", () => {
+    const storage = fakeStorage({ [KEY]: OTHER });
+    tokensOf(storage).forgetSessionToken(TOKEN);
+    expect([...storage.items]).toEqual([[KEY, OTHER]]);
+  });
+
+  it("throws nothing when localStorage cannot be reached", () => {
+    expect(() => sessionTokens({ storage: insecure }).forgetSessionToken(TOKEN)).not.toThrow();
+  });
+});
+
 describe("bound to window.localStorage", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("forgets in window.localStorage", () => {
+    const local = fakeStorage({ [KEY]: TOKEN });
+    vi.stubGlobal("window", { localStorage: local });
+    forgetSessionToken(TOKEN);
+    expect(local.items.size).toBe(0);
+  });
+
+  it("keeps in window.localStorage", () => {
+    const local = fakeStorage();
+    vi.stubGlobal("window", { localStorage: local });
+    expect(keepSessionToken(TOKEN)).toBe(true);
+    expect([...local.items]).toEqual([[KEY, TOKEN]]);
   });
 
   it("reads and forgets in window.localStorage only", async () => {
