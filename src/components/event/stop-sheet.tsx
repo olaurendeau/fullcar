@@ -66,7 +66,7 @@ export interface SendingStop extends FromSheet {
   restored: string;
 }
 
-/** Puts a person of the device, already in a car of the aller, at a Stop of it or at its start (`null`), as RV4.2 has it. */
+/** Puts a person of the event, already in a car of the aller, at a Stop of it or at its start (`null`), as RV4.2 has it. */
 export type SetBoardingStop = (
   request: {
     rideId: string;
@@ -87,8 +87,8 @@ export const boardingStopOf = (car: VisibleCar, personId: string): string | null
 type Opening = { rideId: string; personId: string; firstName: string; button: HTMLElement; open: boolean; count: number };
 
 /**
- * « Changer le point » (#892): `change(car, person, button)` opens the sheet for a passenger of the
- * device, `sheet` renders once on the leg. Each opening is a new sheet.
+ * « Changer le point » (#892): `change(car, person, button)` opens the sheet for any passenger of a car
+ * with points (PL5.1), `sheet` renders once on the leg. Each opening is a new sheet.
  */
 export function useStopSheet(board: VisibleLegBoard, device: BoardDevice, date: WallDate) {
   const [opening, setOpening] = useState<Opening | null>(null);

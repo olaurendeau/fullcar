@@ -149,7 +149,6 @@ export function LegPanel({
                 date={legDate}
                 seatsActive={deviceKnown(device.status)}
                 onTakeSeat={(seat) => seats.tap(car, seat)}
-                devicePassengers={board.device.filter(({ state }) => state.kind === "passenger" && state.rideId === car.id).map(({ id }) => id)}
                 onChangeStop={(person, button) => stops.change(car, person, button)}
                 updateRide={drivesIt(car.id) ? device.updateRide : undefined}
                 removeRide={drivesIt(car.id) ? device.removeRide : undefined}
