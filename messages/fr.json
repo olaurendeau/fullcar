@@ -334,9 +334,17 @@
     "title": "Qui monte dans la voiture de {driver} ?",
     "remaining": "{count, plural, =0 {Il ne reste aucune place dans cette voiture} one {Il reste # place dans cette voiture} other {Il reste # places dans cette voiture}}",
     "submit": "{count, plural, =0 {Placer} one {Placer # personne} other {Placer # personnes}}",
+    "group": {
+      "own": "Vos personnes",
+      "others": "Autres personnes sans voiture",
+      "notConcerned": {
+        "aller": "Autres personnes qui ne font pas l’aller ({count})",
+        "retour": "Autres personnes qui ne font pas le retour ({count})"
+      }
+    },
     "nobody": {
-      "aller": "Toutes vos personnes sont déjà dans une voiture pour l’aller.",
-      "retour": "Toutes vos personnes sont déjà dans une voiture pour le retour."
+      "aller": "Tout le monde est déjà dans une voiture pour l’aller.",
+      "retour": "Tout le monde est déjà dans une voiture pour le retour."
     },
     "notEnoughSeats": "Il n’y a plus assez de places : personne n’a été placé.",
     "placed": "{names} sont dans la voiture de {driver}",

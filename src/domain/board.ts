@@ -109,7 +109,10 @@ export interface LegBoard {
   leg: Leg;
   /** By departure time. */
   cars: BoardCar[];
-  /** In the order they declared it. Persons not concerned are in no list (C3.3). */
+  /**
+   * In the order they declared it: the persons placed on the leg who are in no car on it. Persons
+   * not concerned are not here (C3.3): they are in `notConcerned`.
+   */
   withoutCar: BoardPerson[];
   /**
    * In the event's order: the persons with no Placement on the leg who do not drive it. The

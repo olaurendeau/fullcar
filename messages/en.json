@@ -334,9 +334,17 @@
     "title": "Who gets in {driver}’s car?",
     "remaining": "{count, plural, =0 {No seat left in this car} one {# seat left in this car} other {# seats left in this car}}",
     "submit": "{count, plural, =0 {Seat} one {Seat # person} other {Seat # people}}",
+    "group": {
+      "own": "Your people",
+      "others": "Other people without a car",
+      "notConcerned": {
+        "aller": "Other people not on the outbound trip ({count})",
+        "retour": "Other people not on the return trip ({count})"
+      }
+    },
     "nobody": {
-      "aller": "All your people are already in a car for the outbound trip.",
-      "retour": "All your people are already in a car for the return trip."
+      "aller": "Everyone is already in a car for the outbound trip.",
+      "retour": "Everyone is already in a car for the return trip."
     },
     "notEnoughSeats": "There are no longer enough seats: nobody was seated.",
     "placed": "{names} are in {driver}’s car",

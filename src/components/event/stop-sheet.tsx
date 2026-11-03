@@ -13,7 +13,7 @@ import { StopChoice } from "./stop-choice";
 /** What the server answers `setBoardingStop`, an unknown event included. */
 type StopAnswer =
   | { ok: true; stopGone?: true }
-  | { ok: false; error: "invalid" | "forbidden" | "rideGone" | "notInCar" | "stopsOff" | "eventNotFound" | "eventEnded" }
+  | { ok: false; error: "invalid" | "rideGone" | "notInCar" | "stopsOff" | "eventNotFound" | "eventEnded" }
   | { ok: false; error: "personGone"; goneIds: string[] };
 
 /**
@@ -40,7 +40,6 @@ export function boardingStopTaken(
       return { kind: "personGone", why: personGone([person], answer.goneIds) };
     case "rideGone":
       return { kind: "failed", message: "rideGone", why: whyOf("rideGone") };
-    case "forbidden":
     case "eventNotFound":
     case "eventEnded":
       return { kind: "failed", message: "failed", why: whyOf(answer.error) };
