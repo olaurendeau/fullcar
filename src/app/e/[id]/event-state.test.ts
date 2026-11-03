@@ -168,6 +168,33 @@ describe("readEventState", () => {
     });
   });
 
+  describe("PL1.4, PL7.2: the persons without a car and those who do not do the leg are read by all, name and id only", () => {
+    it.each<[string, (scene: Awaited<ReturnType<typeof seedScene>>) => string | undefined]>([
+      ["a device without a person", () => undefined],
+      ["Léa and Zoé's device", (scene) => scene.lea.token],
+      ["Marc's device", (scene) => scene.marc.token],
+      ["Tom's device", (scene) => scene.tom.token],
+    ])("%s: exactly the keys id and firstName, and no number", async (_, tokenOf) => {
+      await withRollback(async (trx) => {
+        const scene = await seedScene(trx);
+        const state = await readEventState(trx, scene.eventId, tokenOf(scene));
+        // Aller: Tom is without a car, Zoé does not do it. Retour: Léa is without a car, Marc does not do it.
+        const aller = legOf(state, "aller");
+        const retour = legOf(state, "retour");
+        expect(aller.withoutCar).toEqual([{ id: scene.tom.id, firstName: "Tom" }]);
+        expect(aller.notConcerned).toEqual([{ id: scene.zoe.id, firstName: "Zoé" }]);
+        expect(retour.withoutCar).toEqual([{ id: scene.lea.id, firstName: "Léa" }]);
+        expect(retour.notConcerned).toEqual([{ id: scene.marc.id, firstName: "Marc" }]);
+        for (const leg of [aller, retour]) {
+          for (const person of [...leg.withoutCar, ...leg.notConcerned]) {
+            expect(Object.keys(person).sort()).toEqual(["firstName", "id"]);
+          }
+          expect(sentNumbers(leg.notConcerned)).toEqual([]);
+        }
+      });
+    });
+  });
+
   it.each<[string, unknown]>([
     ["C12.3: a well-formed token nobody holds", NOBODYS_TOKEN],
     ["a token one character short", "AAAAAAAAAAAAAAAAAAAAA"],
