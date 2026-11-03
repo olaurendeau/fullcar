@@ -27,6 +27,9 @@ const FR = {
   time: "Heure de départ",
   note: "Note (facultatif)",
   required: "Champ requis.",
+  seats: "Places, sans compter qui conduit",
+  step: "Qui sort de la voiture ?",
+  changed: "Quelqu’un a pris ou libéré une place entre-temps : rien n’a changé. Choisissez à nouveau parmi les personnes à bord.",
 };
 
 const RETOUR_HINT = "Le retour part du lieu de l’événement, Gymnase des Gayeulles, le samedi 12 décembre 2026 à 18:00.";
@@ -43,6 +46,17 @@ async function seedWithoutCar(db: Db, eventId: string, token: string, names: rea
 async function seedCar(db: Db, eventId: string, token: string) {
   const claire = await seedPerson(db, eventId, { firstName: "Claire" }, token);
   await seedRide(db, eventId, claire.id, { note: "Rendez-vous devant la mairie" });
+}
+
+/** The device holds Claire, who drives Nina and Paul, of another device, on the aller: 3 seats. */
+async function seedPassengers(db: Db, eventId: string, token: string) {
+  const claire = await seedPerson(db, eventId, { firstName: "Claire" }, token);
+  const car = await seedRide(db, eventId, claire.id, { note: "Rendez-vous devant la mairie" });
+  for (const firstName of ["Nina", "Paul"]) {
+    const passenger = await seedPerson(db, eventId, { firstName });
+    await seedPlacement(db, { personId: passenger.id, eventId, leg: "aller", rideId: car });
+  }
+  return car;
 }
 
 const panel = (page: Page) => page.getByRole("tabpanel");
@@ -70,6 +84,54 @@ async function openEdit(page: Page, names = { car: "Voiture de Claire", edit: "M
   const sheet = dialog(page, names.title);
   await settled(sheet);
   return sheet;
+}
+
+/** « Qui sort de la voiture ? »: Claire's seats down to 1, below her two passengers, then « Valider ». Its first box has the focus. */
+async function openStep(page: Page, note?: string) {
+  const form = await openEdit(page);
+  await form.getByLabel(FR.seats).fill("1");
+  if (note !== undefined) await form.getByLabel(FR.note).fill(note);
+  await submit(form).click();
+  const step = dialog(page, FR.step);
+  await expect(step.getByRole("checkbox", { name: "Nina" })).toBeFocused();
+  return step;
+}
+
+/** Whether `element` is in the sheet's bar. */
+const inBar = (element: Locator) => element.evaluate((node) => !!node.closest('[data-slot="sheet-footer"]'));
+
+/**
+ * Rule 1 for « Qui sort de la voiture ? »: its alert in the bar, entirely in view, « Valider »
+ * just under it with nothing between them; the line « n cochée(s) sur m » stays in the body.
+ */
+async function expectAlertAboveSubmit(step: Locator, count: string) {
+  const alert = step.getByRole("alert").filter({ hasText: FR.changed });
+  await expect(alert).toBeInViewport({ ratio: 1 });
+  expect(await inBar(alert)).toBe(true);
+  const next = await barOf(step).evaluate((bar, text) => {
+    const shown = Array.from(bar.querySelectorAll("p, button")).filter((node) => node.getBoundingClientRect().height > 0);
+    const at = shown.findIndex((node) => node.textContent === text);
+    return at < 0 ? null : shown[at + 1]?.textContent;
+  }, FR.changed);
+  expect(next).toBe("Valider");
+  const [message, button] = await Promise.all([edgesOf(alert), edgesOf(submit(step))]);
+  expect(button.top - message.bottom).toBeGreaterThanOrEqual(0);
+  expect(button.top - message.bottom).toBeLessThanOrEqual(8.5);
+  const line = step.getByText(count, { exact: true });
+  await expect(line).toBeVisible();
+  expect(await inBar(line)).toBe(false);
+}
+
+/** Tom, of another device, boards Claire's car during the step: its « Valider » is refused, and the step opens again (C8.5). */
+async function refusedStep(db: Db, eventId: string, page: Page, car: string) {
+  const step = await openStep(page);
+  const tom = await seedPerson(db, eventId, { firstName: "Tom" });
+  await seedPlacement(db, { personId: tom.id, eventId, leg: "aller", rideId: car });
+  await step.getByRole("checkbox", { name: "Paul" }).check();
+  await submit(step).click();
+  await expect(step.getByRole("checkbox")).toHaveCount(3);
+  await expect(step.getByRole("checkbox", { name: "Nina" })).toBeFocused();
+  return step;
 }
 
 const scrollTop = (sheet: Locator) => sheet.evaluate((element) => element.scrollTop);
@@ -105,6 +167,49 @@ test.describe("the car sheets on a phone", () => {
     await expect(close(sheet)).toBeInViewport({ ratio: 1 });
     expect(await scrollTop(sheet)).toBe(0);
     await expect(barOf(sheet).getByRole("button")).toHaveText(["Valider", "Fermer"]);
+  });
+
+  test("K1.5: « Qui sort de la voiture ? » keeps the screen, « Valider » and « Annuler » in its bar, no « Fermer »; « Annuler » gives the form back as typed", async ({
+    db,
+    page,
+    seededEvent,
+  }) => {
+    await seedPassengers(db, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const step = await openStep(page, "Gilets jaunes");
+    expect(await boxOf(step)).toEqual([0, 0, 360, 640]);
+    await expect(barOf(step).getByRole("button")).toHaveText(["Valider", "Annuler"]);
+    await expect(close(step)).toHaveCount(0);
+    await expect(submit(step)).toBeInViewport({ ratio: 1 });
+    await expect(close(step, "Annuler")).toBeInViewport({ ratio: 1 });
+
+    // No veil above it: a touch at the top of the screen keeps what was typed.
+    await page.mouse.click(180, 10);
+    await expect(step).toBeVisible();
+    expect(await boxOf(step)).toEqual([0, 0, 360, 640]);
+
+    await close(step, "Annuler").click();
+    const form = dialog(page, FR.edit);
+    await expect(form.getByLabel(FR.seats)).toBeFocused();
+    expect(await boxOf(form)).toEqual([0, 0, 360, 640]);
+    await expect(form.getByLabel(FR.seats)).toHaveValue("1");
+    await expect(form.getByLabel(FR.note)).toHaveValue("Gilets jaunes");
+    await expect(barOf(form).getByRole("button")).toHaveText(["Valider", "Fermer"]);
+
+    // Closed from the step by Escape, the sheet opens again on the form, with its « Fermer ».
+    await submit(form).click();
+    await expect(dialog(page, FR.step).getByRole("checkbox", { name: "Nina" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const reopened = await openEdit(page);
+    await expect(barOf(reopened).getByRole("button")).toHaveText(["Valider", "Fermer"]);
+  });
+
+  test("rule 1: the alert of « Qui sort de la voiture ? » is in its bar, just above « Valider »", async ({ db, page, seededEvent }) => {
+    const car = await seedPassengers(db, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const step = await refusedStep(db, seededEvent.id, page, car);
+    await expectAlertAboveSubmit(step, "0 cochée sur 2");
   });
 
   test("K1.2: « Proposer une voiture » scrolls under its title, « Valider » and « Fermer », which do not move", async ({ db, page, seededEvent }) => {
@@ -360,6 +465,15 @@ test.describe("the car sheets in a landscape window", () => {
 test.describe("the car sheets on a computer", () => {
   test.use({ locale: "fr-FR", viewport: { width: 1280, height: 600 } });
   const token = newToken();
+
+  test("rule 9: on a computer too, the alert of « Qui sort de la voiture ? » is in its bar, just above « Valider »", async ({ db, page, seededEvent }) => {
+    await holdToken(page, seededEvent.id, token);
+    const car = await seedPassengers(db, seededEvent.id, token);
+    await page.goto(`/e/${seededEvent.id}`);
+    const step = await refusedStep(db, seededEvent.id, page, car);
+    await expectAlertAboveSubmit(step, "0 cochée sur 2");
+    await expect(barOf(step).getByRole("button")).toHaveText(["Valider", "Annuler"]);
+  });
 
   test("K1.14: at 1280 × 600, « Proposer une voiture » keeps « Valider » and « Fermer » in view, at the top and at the bottom of its scroll", async ({
     db,
