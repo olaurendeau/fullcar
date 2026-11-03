@@ -54,7 +54,6 @@ describe("seatsTaken", () => {
       { ok: false as const, error: "notEnoughSeats" as const, freeSeats: 1 },
       { ok: false as const, error: "rideGone" as const },
       { ok: false as const, error: "alreadyInCar" as const },
-      { ok: false as const, error: "forbidden" as const },
       { ok: false as const, error: "eventNotFound" as const },
     ];
     const texts = answers.map((answer) => {

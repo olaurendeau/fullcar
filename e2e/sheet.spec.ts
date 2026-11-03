@@ -478,24 +478,27 @@ test.describe("the driver's path", () => {
   test.beforeEach(async ({ db, page, seededEvent }) => {
     const paul = await seedPerson(db, seededEvent.id, { firstName: "Paul" }, token);
     ride = await seedRide(db, seededEvent.id, paul.id);
+    // A person of another device, in Paul's car: nobody of any device is out of a car (PL2.8).
+    const ines = await seedPerson(db, seededEvent.id, { firstName: "Inès" });
+    await seedPlacement(db, { personId: ines.id, eventId: seededEvent.id, leg: "aller", rideId: ride });
     await holdToken(page, seededEvent.id, token);
   });
 
   test("C6.7, C5.6: nobody to place, the sheet says so and offers to add a person, who boards", async ({ db, page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     const paul = await openSheet(page, "Paul");
-    await expect(paul.getByText("Toutes vos personnes sont déjà dans une voiture pour l’aller.", { exact: true })).toBeVisible();
+    await expect(paul.getByText("Tout le monde est déjà dans une voiture pour l’aller.", { exact: true })).toBeVisible();
     expect(await paul.getByRole("button").allTextContents()).toEqual(["Ajouter une personne", "Fermer"]);
 
     await paul.getByRole("button", { name: "Ajouter une personne" }).click();
     await addForm(page).getByLabel("Prénom").fill("Léo");
     await addForm(page).getByRole("button", { name: "Valider" }).click();
     await expect(paul.getByRole("checkbox", { name: "Léo" })).toBeFocused();
-    await expect(paul.getByText("Toutes vos personnes sont déjà dans une voiture pour l’aller.")).toHaveCount(0);
+    await expect(paul.getByText("Tout le monde est déjà dans une voiture pour l’aller.")).toHaveCount(0);
     await placeButton(paul).click();
     await expect(page.getByRole("status").filter({ hasText: "Léo est dans la voiture de Paul" })).toBeVisible();
     await expect(title(page, "Paul")).toBeFocused();
-    await expect(car(page, "Paul").getByRole("listitem").first()).toHaveText("Léo");
+    await expect(car(page, "Paul").getByRole("listitem").filter({ hasText: "Léo" })).toHaveCount(1);
     // Folded at the first read, with nothing to do (v4-3): unfolded to read the cell.
     await toggle(page).click();
     await expect(cell(page, "Léo", "Aller")).toHaveAccessibleName("Léo, Aller : Avec Paul");

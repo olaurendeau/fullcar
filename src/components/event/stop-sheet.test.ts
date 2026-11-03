@@ -42,7 +42,7 @@ describe("boardingStopTaken", () => {
     for (const error of ["invalid", "stopsOff", "notInCar"] as const) {
       expect(boardingStopTaken({ ok: true, value: { ok: false, error } }, paul)).toMatchObject({ kind: "failed", message: "failed", why: { kind: "failed" } });
     }
-    for (const error of ["forbidden", "eventNotFound", "eventEnded"] as const) {
+    for (const error of ["eventNotFound", "eventEnded"] as const) {
       expect(boardingStopTaken({ ok: true, value: { ok: false, error } }, paul)).toMatchObject({ kind: "failed", message: "failed", why: { kind: error } });
     }
   });

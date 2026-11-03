@@ -106,19 +106,45 @@ describe("tapOutcome on a car with Stops (RV3.1, RV3.2, D2)", () => {
   });
 });
 
-describe("sheetCandidates (C6.1)", () => {
-  it("lists the device's persons who are in no car: without a car checked, not concerned unchecked", () => {
+describe("sheetCandidates (C6.1, PL2.1 to PL2.3)", () => {
+  const person = (id: string) => ({ id, firstName: id.toUpperCase() });
+  const leg = (device: DevicePerson[], withoutCar: string[] = [], notConcerned: string[] = []) => ({
+    device,
+    withoutCar: withoutCar.map(person),
+    notConcerned: notConcerned.map(person),
+  });
+
+  it("lists the device's persons who are in no car in its order: without a car checked, not concerned unchecked", () => {
     const device = [withoutCar("lea"), driver("marc"), notConcerned("tom"), passenger("zoe"), withoutCar("noe")];
-    expect(sheetCandidates(device)).toEqual([
-      { id: "lea", firstName: "LEA", checked: true },
-      { id: "tom", firstName: "TOM", checked: false },
-      { id: "noe", firstName: "NOE", checked: true },
+    expect(sheetCandidates(leg(device, ["lea", "noe"], ["tom"])).own).toEqual([
+      { id: "lea", firstName: "LEA", checked: true, state: "withoutCar" },
+      { id: "tom", firstName: "TOM", checked: false, state: "notConcerned" },
+      { id: "noe", firstName: "NOE", checked: true, state: "withoutCar" },
     ]);
   });
 
-  it("is empty when every person of the device drives or is in a car (C6.7)", () => {
-    expect(sheetCandidates([driver("marc"), passenger("zoe")])).toEqual([]);
-    expect(sheetCandidates([])).toEqual([]);
+  it("lists the others without a car in the order they declared it, then the others not on the leg, none checked", () => {
+    const device = [withoutCar("lea"), notConcerned("ana")];
+    // The device's persons are in the lists of the leg too: they are listed once, in their own group.
+    const groups = sheetCandidates(leg(device, ["hugo", "lea", "ines"], ["marc", "ana", "tom", "zoe"]));
+    expect(groups.others).toEqual([
+      { id: "hugo", firstName: "HUGO", checked: false, state: "withoutCar" },
+      { id: "ines", firstName: "INES", checked: false, state: "withoutCar" },
+    ]);
+    expect(groups.notConcerned).toEqual([
+      { id: "marc", firstName: "MARC", checked: false, state: "notConcerned" },
+      { id: "tom", firstName: "TOM", checked: false, state: "notConcerned" },
+      { id: "zoe", firstName: "ZOE", checked: false, state: "notConcerned" },
+    ]);
+  });
+
+  it("lists nobody who is in a car, and a driver nowhere", () => {
+    const groups = sheetCandidates(leg([driver("marc"), passenger("zoe")]));
+    expect(groups).toEqual({ own: [], others: [], notConcerned: [] });
+  });
+
+  it("is empty when nobody can board (PL2.8)", () => {
+    expect(sheetCandidates(leg([]))).toEqual({ own: [], others: [], notConcerned: [] });
   });
 });
 
