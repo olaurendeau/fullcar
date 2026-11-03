@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { contrast } from "./contrast";
-import { failActions, holdToken, messages, newToken, recordBar, said } from "./device";
+import { failActions, failHeld, holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { keepAdminToken, organiserPath } from "./organiser";
 
@@ -232,6 +232,20 @@ test.describe("the sheet of a person of the lists under the cars", () => {
     await dialog.getByRole("button", { name: "Passer sans voiture" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(withoutCar(page).getByRole("listitem")).toHaveText(["Tom", "Hugo", "Marc"]);
+  });
+
+  test("PL3.6: a failure after the sheet is closed goes to the bar, whose landmark is the first name of Hugo", async ({ page }) => {
+    const answer = await holdFirst(page, scene.hugo, true);
+    await person(withoutCar(page), "Hugo").click();
+    await sheet(page, "Hugo · Retour").getByRole("button", { name: "Ne fait pas le retour" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await failHeld(page, answer);
+    await expect(messages(page)).toHaveText([
+      "Hugo · Retour : « Ne fait pas le retour » n’a pas été enregistré. Une erreur est survenue : réessayez dans un instant.",
+    ]);
+    await page.locator("[data-message-bar]").getByRole("button", { name: "Fermer" }).click();
+    await expect(person(withoutCar(page), "Hugo")).toBeFocused();
   });
 
   test("PL3.7: « Passer sans voiture » on a person already without a car is a silent success", async ({ db, page, seededEvent }) => {
