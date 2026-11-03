@@ -114,10 +114,18 @@
       "remove": "Remove the car"
     },
     "withoutCar": "Without a car",
+    "notConcerned": {
+      "aller": "Not on the outbound trip ({count})",
+      "retour": "Not on the return trip ({count})"
+    },
     "call": "Call {firstName} on {phone}",
     "addPerson": "Add a person",
     "offerRide": "Offer a car",
     "needsJavaScript": "Signing up, offering a car or taking a seat needs JavaScript: turn it on, then reload the page."
+  },
+  "OtherPerson": {
+    "setWithoutCar": "Mark as without a car",
+    "note": "Only the device that signed this person up can change their name or number, or remove them."
   },
   "DevicePersons": {
     "title": "Your sign-ups",

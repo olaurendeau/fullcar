@@ -107,6 +107,7 @@ export function LegTabs(props: {
           <LegPanel
             at={at}
             board={board}
+            legs={[props.aller, props.retour]}
             device={props.device}
             hasRetour
             near={props.near}

@@ -114,10 +114,18 @@
       "remove": "Retirer la voiture"
     },
     "withoutCar": "Sans voiture",
+    "notConcerned": {
+      "aller": "Ne font pas l’aller ({count})",
+      "retour": "Ne font pas le retour ({count})"
+    },
     "call": "Appeler {firstName} au {phone}",
     "addPerson": "Ajouter une personne",
     "offerRide": "Proposer une voiture",
     "needsJavaScript": "S’inscrire, proposer une voiture ou prendre une place nécessite JavaScript : activez-le, puis rechargez la page."
+  },
+  "OtherPerson": {
+    "setWithoutCar": "Passer sans voiture",
+    "note": "Seul l’appareil qui a inscrit cette personne peut changer son prénom ou son numéro, ou la retirer."
   },
   "DevicePersons": {
     "title": "Vos inscriptions",

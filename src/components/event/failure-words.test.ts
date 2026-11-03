@@ -565,3 +565,12 @@ describe("removalProblem: « Retirer de l’événement »", () => {
     expect(said("en")).toBe("Léa is still part of the event. The organiser area is no longer open to you: reload the page.");
   });
 });
+
+describe("failureText: « Passer sans voiture » of a person of another device (#981)", () => {
+  const notDone: NotDone = { kind: "choice", firstName: "Hugo", leg: "retour", choice: "setWithoutCar" };
+
+  it("names the button the sheet showed, not « Je cherche une place »", () => {
+    expect(failureText(words("fr"), notDone, whyOf("offline"))).toContain("Hugo · Retour : « Passer sans voiture » n’a pas été enregistré.");
+    expect(failureText(words("en"), notDone, whyOf("offline"))).toContain("Hugo · Return: “Mark as without a car” was not saved.");
+  });
+});

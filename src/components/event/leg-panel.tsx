@@ -12,6 +12,7 @@ import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
 import { EventMap, OrganiserHint, type LegMap, type MapHint } from "./event-map";
+import { useBoardPersonSheet } from "./board-person-sheet";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import type { RemovePerson } from "./remove-person-dialog";
@@ -80,6 +81,7 @@ export function LegTime({ at }: { at: WallClock }) {
 export function LegPanel({
   at,
   board,
+  legs,
   device,
   hasRetour,
   other,
@@ -90,6 +92,8 @@ export function LegPanel({
 }: {
   at: WallClock;
   board: VisibleLegBoard;
+  /** The event's legs as the page shows them, for the sheet of a person of the lists: her number, and what her removal says. */
+  legs: readonly VisibleLegBoard[];
   device: BoardDevice;
   hasRetour: boolean;
   /** The other leg's date and time, the event's place, and the device's persons there, for « Proposer une voiture » (#169, #649). */
@@ -105,10 +109,11 @@ export function LegPanel({
 }) {
   const t = useTranslations("Event");
   const tBoard = useTranslations("Board");
-  const { leg, cars, withoutCar } = board;
+  const { leg, cars, withoutCar, notConcerned } = board;
   const legDate = wallClockParts(at).date;
   const seats = useSeatSheet(board, device, hasRetour, legDate);
   const stops = useStopSheet(board, device, legDate);
+  const person = useBoardPersonSheet(board, legs, device);
   // A car is the device's when one of its persons drives it on this leg (C8.1).
   const drivesIt = (rideId: string) => board.device.some(({ state }) => state.kind === "driver" && state.rideId === rideId);
 
@@ -160,13 +165,17 @@ export function LegPanel({
           ) : (
             <p className="text-sm text-muted-foreground">{t(`noCar.${leg}`)}</p>
           )}
-          {withoutCar.length > 0 && <WithoutCarList leg={leg} persons={withoutCar} />}
         </>
       ) : (
         <EmptyLeg leg={leg} />
       )}
+      {/* Under the cars, or the empty state: those who do not do the leg are there even with no one without a car (PL1.2). */}
+      {(withoutCar.length > 0 || notConcerned.length > 0) && (
+        <WithoutCarList leg={leg} persons={withoutCar} notConcerned={notConcerned} active={deviceKnown(device.status)} onOpen={person.open} />
+      )}
       {seats.sheet}
       {stops.sheet}
+      {person.sheet}
     </div>
   );
 }

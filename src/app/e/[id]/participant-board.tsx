@@ -25,7 +25,7 @@ import {
   type NotDone,
   type Why,
 } from "@/components/event/failure-words";
-import { focusAfterRemoval, focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusOffer, focusRetry, focusTitle } from "@/components/event/focus";
+import { focusAfterRemoval, focusBoardName, focusCar, focusCell, focusFirstShown, focusLandmark, focusName, focusOffer, focusRetry, focusTitle } from "@/components/event/focus";
 import {
   aboutOf,
   allerPart,
@@ -399,7 +399,8 @@ export function ParticipantBoard({
       return null;
     }
     const error = !sent.ok ? sent.problem : "error" in sent.value ? sent.value.error : "failed";
-    const landmark = () => focusCell(change.personId, change.leg);
+    // A person of another device has no cell: her first name in the leg's lists (#981).
+    const landmark = () => focusCell(change.personId, change.leg) || focusBoardName(change.personId, change.leg);
     const why = cellWhy(error, cell);
     // The leg gone, or the person (RP5.4): the sheet closes, and the bar says why.
     const closes = why.kind === "noRetour" || why.kind === "personGone";
