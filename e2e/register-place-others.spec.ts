@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
-import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
+import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import { messages } from "./device";
 import { expect, leaveNoToken, test } from "./fixtures";
 
@@ -28,7 +28,8 @@ async function seedScene(db: Db, eventId: string, who: { hugo: boolean; zoe: boo
 }
 
 const tokenKey = (eventId: string) => `fullcar:personal-token:${eventId}`;
-const stored = (page: Page, eventId: string) => page.evaluate((key) => localStorage.getItem(key), tokenKey(eventId));
+// A boolean, never the value: a failure must not print a personal token in the log (#365).
+const hasToken = (page: Page, eventId: string) => page.evaluate((key) => localStorage.getItem(key) !== null, tokenKey(eventId));
 
 test.describe("a device without a person, in French", () => {
   test.use({ locale: "fr-FR" });
@@ -46,7 +47,7 @@ test.describe("a device without a person, in French", () => {
     await expect(registration(page).getByLabel("Prénom")).toBeVisible();
   }
 
-  test("PL2.7: the link shows with Hugo without a car, under the form, and opens the sheet with nothing ticked", async ({ db, page, seededEvent }) => {
+  test("PL2.7: the link shows with Hugo without a car, and opens the sheet with nothing ticked", async ({ db, page, seededEvent }) => {
     await seedScene(db, seededEvent.id);
     await openRegistration(page, seededEvent.id);
     await expect(registration(page).getByText("Cette personne prendra une place dans la voiture de Camille.")).toBeVisible();
@@ -91,12 +92,12 @@ test.describe("a device without a person, in French", () => {
     const placementOf = async () => (await db.selectFrom("placement").select("ride_id").where("person_id", "=", hugo).where("leg", "=", "retour").executeTakeFirstOrThrow()).ride_id;
     expect(await placementOf()).toBe(ride);
     // No token was drawn for it.
-    expect(await stored(page, seededEvent.id)).toBeNull();
+    expect(await hasToken(page, seededEvent.id)).toBe(false);
 
     await page.locator("[data-message-bar]").getByRole("button", { name: "Annuler" }).click();
     await expect(page.locator('[role="status"]:has(+ [role="alert"])')).toHaveText("Hugo n’est plus dans la voiture de Camille");
     expect(await placementOf()).toBeNull();
-    expect(await stored(page, seededEvent.id)).toBeNull();
+    expect(await hasToken(page, seededEvent.id)).toBe(false);
   });
 
   test("the browser's « back » comes back to the registration, the focus on the link; then closes the sheet", async ({ db, page, seededEvent }) => {
@@ -129,6 +130,36 @@ test.describe("a device without a person, in French", () => {
   });
 });
 
+test.describe("a device without a person, a car with Stops", () => {
+  test.use({ locale: "fr-FR", eventFields: { stopsEnabled: true } });
+
+  test("the list puts the focus on the departure, again after the browser's « back » and the link", async ({ db, page, seededEvent }) => {
+    // Stops belong to the aller: Camille drives it (08:00), Hugo is without a car.
+    const camille = (await seedPerson(db, seededEvent.id, { firstName: "Camille" })).id;
+    const ride = await seedRide(db, seededEvent.id, camille, { departureTime: "08:00:00", location: "Salle des fêtes" });
+    await seedStop(db, seededEvent.id, ride, { location: "Prelles", time: "08:25:00" });
+    const hugo = (await seedPerson(db, seededEvent.id, { firstName: "Hugo" })).id;
+    await seedPlacement(db, { personId: hugo, eventId: seededEvent.id, leg: "aller", rideId: null });
+    await page.goto(`/e/${seededEvent.id}`);
+    await page.getByRole("tabpanel").getByRole("article", { name: "Voiture de Camille" }).getByRole("button", { name: /^Place libre/ }).first().click();
+    const registration = page.getByRole("dialog", { name: "Ajouter une personne" });
+    const sheet = page.getByRole("dialog", { name: "Qui monte dans la voiture de Camille ?" });
+    const departure = sheet.getByRole("radio", { name: /Lieu de départ/ });
+    const link = registration.getByRole("button", { name: "Placer une personne déjà inscrite" });
+
+    await link.click();
+    await expect(departure).toBeFocused();
+
+    await page.goBack();
+    await expect(registration).toBeVisible();
+    await expect(link).toBeFocused();
+
+    await link.click();
+    await expect(sheet).toBeVisible();
+    await expect(departure).toBeFocused();
+  });
+});
+
 test.describe("a device without a person, in English", () => {
   test.use({ locale: "en-US" });
 
@@ -144,6 +175,6 @@ test.describe("a device without a person, in English", () => {
     await sheet.getByRole("checkbox", { name: "Hugo" }).check();
     await sheet.getByRole("button", { name: "Seat 1 person" }).click();
     await expect(messages(page)).toHaveText(["Hugo is in Camille’s car"]);
-    expect(await stored(page, seededEvent.id)).toBeNull();
+    expect(await hasToken(page, seededEvent.id)).toBe(false);
   });
 });

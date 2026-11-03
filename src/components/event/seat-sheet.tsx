@@ -370,18 +370,16 @@ function SeatSheet({
     return added;
   };
 
-  // The list in the form's place, nothing ticked (PL2.3); a car with Stops puts the focus on its departure.
+  // The list in the form's place, nothing ticked (PL2.3); a car with Stops opens on its departure, each time the list shows.
   const showList = () => {
-    if (!hasStops) {
-      focusNext.current = () => body.current?.querySelector<HTMLElement>('[role="checkbox"]:not([hidden] *), [aria-expanded]');
-    }
+    if (hasStops) setOpensOnStops(true);
+    else focusNext.current = () => body.current?.querySelector<HTMLElement>('[role="checkbox"]:not([hidden] *), [aria-expanded]');
     setRegistering(false);
   };
 
   // Back to the form, what was typed lost, the focus on the link: the browser's « back » (v4.7, rule 3).
   const backToRegistering = () => {
     focusNext.current = () => placeOthers.current;
-    setOpensOnStops(false);
     setRegistering(true);
   };
 
