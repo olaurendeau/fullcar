@@ -111,7 +111,7 @@ describe("cellActions (C3.1, C3.2, C7.1, C7.2): a cell's sheet, its actions in t
   it.each<[string, DeviceState, CellChange[]]>([
     ["without a car: not on this leg, and no « Trouver une place » before #983", WITHOUT_CAR, ["notConcerned"]],
     ["not concerned: « Passer sans voiture »", NOT_CONCERNED, ["lookingForSeat"]],
-    ["a passenger: none yet (her sheet comes from the car's card)", WITH_MARC, []],
+    ["a passenger (her sheet comes from the car's card, #982): leave the car, not on this leg, never « Voir la voiture »", WITH_MARC, ["leaveCar", "notConcerned"]],
     ["a driver: none", DRIVER, []],
   ])("otherPersonActions (PL3.2), %s", (_, state, actions) => {
     expect(otherPersonActions(state)).toEqual(actions);

@@ -204,6 +204,19 @@ describe("cellNotDone and cellWhy: a cell's failure names the person, the leg an
     expect(offered.map((state) => state.kind)).toEqual(["passenger"]);
   });
 
+  // #982: « Sortir de la voiture » from a passenger's sheet is sent by `undoSeats`, whose refusals are « Annuler »'s:
+  // the line is the cell's, not the one of « Annuler » (`retryUndo`, which names that button).
+  it("« Sortir de la voiture » sent as undoSeats says the cell's words, not those of « Annuler »", () => {
+    const { action, ...cell } = CELLS["Cellule, « Sortir de la voiture » : Léa, voiture de Claire"];
+    for (const error of ["offline", "failed", "invalid", "forbidden", "eventNotFound", "eventEnded"] as const) {
+      const said = failureText(words("fr"), cellNotDone(action, cell), cellWhy(error, cell));
+      expect(said, error).toMatch(/^Léa n’a pas pu sortir de la voiture de Claire\. /);
+      expect(said, error).not.toContain("Annuler");
+    }
+    expect(failureText(words("fr"), { kind: "leave", names: ["Léa"], driver: "Claire" }, undoWhy("offline"))).toContain("Annuler");
+    expect(noRetourInfo(words("fr"), cellNotDone(action, cell))).toBe("Il n’y a plus de retour pour cet événement : la voiture de Claire n’est plus proposée.");
+  });
+
   // v4.8, rule 8: only a change of her number meets it; a cell's action gets the generic reason.
   it("gives `phoneWhileDriving` the generic reason", () => {
     const { state } = CELLS["Cellule, « Sortir de la voiture » : Léa, voiture de Claire"];
