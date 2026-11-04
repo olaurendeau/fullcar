@@ -126,6 +126,7 @@ export function LegPanel({
           hasRetour={hasRetour}
           disabled={!deviceKnown(device.status)}
           addPerson={device.addPerson}
+          persons={board.device}
           prefill={phonePrefill(board.device)}
         />
         <OfferRideButton
