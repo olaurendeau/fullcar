@@ -443,10 +443,11 @@ test.describe("« Changer le point » at 360 px", () => {
     await numbersHidden(() => expect(row).toContainText(`monte à ${PRELLES}`));
     const call = row.getByRole("link", { name: /^Appeler/ });
     const change = changeButton(page, "Nina", NAME);
-    await expect(call).toBeVisible();
+    // `call` is Jean's `tel:` link: a failing check or read prints it, href included.
+    await numbersHidden(() => expect(call).toBeVisible());
     const name = row.getByText(NAME, { exact: true });
     const said = row.getByText(`monte à ${PRELLES}`);
-    const box = async (locator: Locator) => (await locator.boundingBox())!;
+    const box = (locator: Locator) => numbersHidden(async () => (await locator.boundingBox())!);
     const [rowBox, nameBox, callBox, changeBox, saidBox] = [await box(row), await box(name), await box(call), await box(change), await box(said)];
 
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
