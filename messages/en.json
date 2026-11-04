@@ -186,7 +186,8 @@
     "storage": {
       "title": "This device will not remember it",
       "body": "Your browser blocks storage: once this page is closed, these sign-ups can no longer be changed from this device."
-    }
+    },
+    "placeOthers": "Seat someone already signed up"
   },
   "RideForm": {
     "title": {

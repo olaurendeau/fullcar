@@ -57,11 +57,266 @@
   son point de montée ; l'identité reste à l'appareil qui l'a inscrite ; aucune trace. Epic :
   texte dans « Ce qui change en v5.0 » (issue à créer). Une décision attend le propriétaire
   (numéros de téléphone). Voir « Ce qui change en v5.0 »
+- v5.3 : le titre de la feuille « Proposer une voiture » nomme le leg, un bouton passe à l'autre leg, et un « + » s'ajoute sous la liste des voitures (demande du propriétaire ; locale, non publiée : en ligne v4.8). Voir « Ce qui change en v5.3 ». Ajout du 03/11 (RL5, RL6) : la feuille « Qui monte… ? » ne coche rien d'office si tout ne tient pas et dit combien décocher ; un prénom déjà à l'appareil est refusé comme nouveau conducteur et signalé à l'ajout d'une personne.
 - Hors de cette maquette : la vue organisateur, epic #154 ; l’anneau de focus, qui relève de
   la maquette `language-switch` depuis sa v3 (#236)
-- Révisions : v5.1 — revue de design de la v5.0 appliquée (voir « Ce qui change en v5.1 ») ; v5.0 — première version de « n'importe qui place n'importe qui » (option A), à relire ; une décision en attente (numéros). Le détail des revues de v4.x est dans leurs sections.
+- Révisions : v5.3 (03/11) — RL5 et RL6 ajoutés (places de la feuille « Qui monte… ? », homonymes), RL1 à RL4 inchangés, locale, non publiée ; v5.1 — revue de design de la v5.0 appliquée (voir « Ce qui change en v5.1 ») ; v5.0 — première version de « n'importe qui place n'importe qui » (option A), à relire ; une décision en attente (numéros). Le détail des revues de v4.x est dans leurs sections.
 - Page : `index.html` (autonome, maquettes à 360 px de large)
 - Couleurs : remplacées par `visual-identity` v3 (#651). Ce que cette page dessine en `--app-primary` (#171717) est désormais #005a5b, sauf la barre de message réussie, qui reste #171717 ; l’onglet sélectionné, les tuiles teintées et la marque y sont décrits.
+
+## Ce qui change en v5.3 : savoir pour quel leg on propose une voiture
+
+Demande du propriétaire (traduite) : « Une maman n’a pas compris comment proposer une voiture
+pour le retour (avec le switch Aller / Retour). Il serait logique d’avoir un bouton « + » pour
+ajouter une voiture sous la carte ou sous la liste des voitures. » Réponse aux questions :
+elle était sur l’onglet Aller, a ouvert « Proposer une voiture » et s’est retrouvée sur le
+formulaire de l’aller ; le « + » remplace le bouton du haut ou s’y ajoute, **au design de
+trancher**.
+
+**Section de la page** : « Savoir pour quel leg on propose une voiture (v5.3) » (`#aller-retour`),
+huit états.
+
+### Le problème
+
+Qui veut proposer sa voiture **pour le retour** ouvre « Proposer une voiture » sur le mauvais
+onglet. La feuille s’appelle pareil sur les deux onglets : seul « Lieu de départ » (aller) ou
+« Lieu de dépose » (retour) dit où l’on est, et ce n’est pas un titre. Elle y voit « Au retour :
+Je ramène aussi des personnes », comprend qu’elle est au bon endroit, et crée une voiture
+d’aller qu’elle ne voulait pas. Depuis l’aller, on ne peut d’ailleurs pas ne proposer que le
+retour : la voiture du leg de l’onglet est toujours créée. Aujourd’hui elle doit deviner qu’il
+faut fermer la feuille, changer d’onglet (le sélecteur Aller / Retour) et recommencer.
+
+### Trois changements
+
+1. **La feuille dit son leg** : « Proposer une voiture pour l’aller » / « … pour le retour »
+   (un événement avec retour). Sans retour, il n’y a rien à confondre : « Proposer une voiture »
+   comme aujourd’hui.
+2. **Un bouton dans la feuille passe à l’autre leg** : « Proposer plutôt pour le retour » /
+   « Proposer plutôt pour l’aller ». Il ferme la feuille sans rien envoyer, active l’autre
+   onglet et y ouvre la feuille d’offre, vide.
+3. **Un « + » sous la liste des voitures**, en plus du bouton du haut : « Proposer une
+   voiture », même feuille, même leg.
+
+### Histoires
+
+- **H1.** En tant que personne qui ouvre « Proposer une voiture », je lis dans la feuille pour
+  quel leg elle est, sans deviner d’après un libellé de champ.
+- **H2.** En tant que personne qui s’aperçoit qu’elle est sur le mauvais onglet, je passe à
+  l’autre leg d’un tap, sans fermer la feuille ni chercher le sélecteur.
+- **H3.** En tant que personne qui a lu la liste des voitures d’un leg et ne trouve pas la
+  sienne, je trouve « Proposer une voiture » sous la dernière, là où mon regard s’arrête.
+
+### Critères (testables)
+
+**RL1, le titre**
+- RL1.1 Sur un événement avec retour, la feuille d’offre ouverte depuis l’onglet Aller a pour
+  titre (et nom accessible du dialogue) « Proposer une voiture pour l’aller » ; depuis
+  l’onglet Retour, « Proposer une voiture pour le retour ».
+- RL1.2 Sur un événement sans retour, le titre reste « Proposer une voiture »
+  (`RideForm.title.offer`).
+- RL1.3 « Modifier la voiture » ne change pas.
+- RL1.4 Le titre suit l'événement en direct : si le retour est supprimé feuille ouverte, le titre
+  redevient « Proposer une voiture » (RL1.2) et la saisie est gardée. Le titre ne dit jamais
+  « pour l'aller » sur un événement sans retour.
+
+**RL2, passer à l’autre leg**
+- RL2.1 Dans la feuille d’offre d’un événement avec retour, le premier élément du corps,
+  sous le titre, est un bouton de 44 px au moins, de texte « Proposer plutôt pour le retour »
+  (feuille de l’aller) ou « Proposer plutôt pour l’aller » (feuille du retour).
+- RL2.2 Un tap sur ce bouton, feuille au repos ou en échec : la feuille se ferme, l'onglet de
+  l'autre leg est actif, la feuille d'offre de cet autre leg est ouverte (titre de RL1.1), tous
+  ses champs aux valeurs par défaut d'une ouverture depuis le bouton du haut de cet onglet.
+  Aucune requête n'est envoyée. Ce qui avait été saisi et le message d'échec de la feuille ne
+  sont pas gardés. **Perte acceptée** : le titre nomme le leg avant toute saisie, le bouton est
+  en haut de la feuille, et le désactiver sur un formulaire modifié compliquerait sans gain. Le
+  bouton n'est donc pas désactivé quand le formulaire est modifié.
+- RL2.3 Historique (v4.7) : après le passage, une fois la fermeture (`history.back()`, asynchrone)
+  et l'ouverture terminées, il reste **exactement une** entrée de feuille. Test : un seul
+  `page.goBack()` ferme la feuille et laisse la page de l'événement affichée (pas la page
+  d'avant) ; fermée par « Fermer », la feuille ne laisse aucune entrée. Aucun message dans la
+  barre.
+- RL2.4 Le bouton est absent du DOM sur un événement sans retour, dans « Modifier la voiture »,
+  et dès que le retour est supprimé feuille ouverte (comme le groupe de l'autre leg, M7.6 ; RL1.4).
+- RL2.5 Focus. À l'ouverture par le passage : celui d'une feuille d'offre ouverte (premier
+  champ). À la fermeture de cette feuille (« Fermer », Échap, geste « retour », réussite sans
+  passager) : le bouton « Proposer une voiture » **du haut de l'onglet désormais actif**, seule
+  ancre affichée (l'ouvreur d'origine est dans un panneau masqué). Réussite avec passagers : le
+  titre de la nouvelle voiture, comme aujourd'hui. Jamais `<body>`.
+- RL2.6 Pendant l'envoi de la feuille (« Valider » inactif), le bouton de passage est inactif
+  (`disabled`) : un tap ne fait rien, la requête n'est pas affectée.
+- RL2.7 Après un échec (`Actions.offline`, `Actions.failed`, erreurs de champ), le bouton est
+  actif ; son tap suit RL2.2 (aucune requête, feuille suivante vide). Il n'ajoute aucun message
+  à la barre ; ce que la barre montre déjà reste.
+
+**RL3, le « + » sous la liste**
+- RL3.1 Un leg qui a au moins une voiture montre, après la dernière carte et avant « Sans
+  voiture », un bouton de texte visible « Proposer une voiture ». Un leg sans voiture n’en
+  montre pas (le bouton du haut est le seul).
+- RL3.2 Il ouvre la feuille d’offre du leg affiché, identique à celle du bouton du haut
+  (titre de RL1.1, champs, défauts, même envoi).
+- RL3.3 Il est inactif (`disabled`) quand celui du haut l’est (personnes de l’appareil pas
+  encore lues, ou lecture en échec, C5.9), et seulement alors.
+- RL3.4 Pleine largeur, 44 px au moins, contour (`outline`), tiret en bordure, icône « + »
+  décorative (`aria-hidden`). Jamais le style principal : le principal reste celui du haut quand
+  il manque des places (C9.7).
+- RL3.5 Son nom accessible est « Proposer une voiture pour l’aller » / « … pour le retour »
+  (il contient son texte visible). Le bouton du haut garde son nom « Proposer une voiture ».
+- RL3.6 Le focus revient, à la fermeture d'une feuille ouverte par un bouton de leg, sur ce bouton
+  s'il est encore affiché (le « + » disparaît si la liste se vide), sinon sur « Proposer une
+  voiture » du haut du même leg. Pour une feuille ouverte par le passage : RL2.5. Les
+  règles qui envoient aujourd’hui le focus au bouton du haut (barre, « Aucune place libre ») ne
+  changent pas : elles visent celui du haut.
+- RL3.7 Il n’ajoute rien à la barre ni aux annonces ; ajouter un bouton ne change aucun
+  message.
+- RL3.8 À 360 px et avec 15 voitures : aucun débordement horizontal, et le bouton reste
+  accessible au-dessus de la barre de messages (les 112 px réservés).
+
+**RL4, mots et inchangé**
+- RL4.1 Chaque chaîne de « Les mots de la v5.3 » existe en français et en anglais, mot pour mot.
+- RL4.2 Inchangés : « Ajouter une personne », le bandeau, les cartes, « Sans voiture », le groupe
+  « Au retour » / « À l’aller » (ses choix, sa ligne d’aide, ses défauts), les erreurs, le schéma
+  (aucune migration), Qui voit quoi.
+
+### Les mots de la v5.3
+
+| clé | fr | en |
+|---|---|---|
+| `RideForm.title.offerLeg.aller` | Proposer une voiture pour l’aller | Offer a car for the outbound trip |
+| `RideForm.title.offerLeg.retour` | Proposer une voiture pour le retour | Offer a car for the return trip |
+| `RideForm.switchLeg.aller` (feuille du retour, mène à l’aller) | Proposer plutôt pour l’aller | Offer for the outbound trip instead |
+| `RideForm.switchLeg.retour` (feuille de l’aller, mène au retour) | Proposer plutôt pour le retour | Offer for the return trip instead |
+| `Board.offerRideLeg.aller` (nom accessible du « + ») | Proposer une voiture pour l’aller | Offer a car for the outbound trip |
+| `Board.offerRideLeg.retour` | Proposer une voiture pour le retour | Offer a car for the return trip |
+
+Le texte visible du « + » est `Board.offerRide` (« Proposer une voiture » / « Offer a car »),
+inchangé. `RideForm.title.offer` reste, pour l’événement sans retour.
+
+### États couverts
+
+Leg avec voitures (1), leg sans voiture (2), chargement ou échec de lecture, contrôles inactifs
+(3), feuille de l'aller (4), du retour (5), après le passage (6), événement sans retour (7),
+anglais à 360 px avec titre long qui passe à la ligne (8), voitures toutes pleines, « + » en
+contour (9), envoi en cours (10), après un échec (11), retour supprimé feuille ouverte (12),
+focus à la fermeture après le passage (13). Les mots d'échec sont ceux de la feuille
+d'aujourd'hui ; le bouton de passage ajoute les critères RL2.6 et RL2.7. Un contrôle inactif
+est exempt du contraste de 4,5:1 (WCAG 1.4.3), comme le bouton du haut aujourd'hui.
+
+### Critères de la v5.2 changés
+
+- **PL1 à PL7 et D1 à D7 gardent leur texte.** Deux précisions, sans changer leur sens :
+  **PL3.9 précisée** (le focus sur « Proposer une voiture » vise le bouton **du haut**, devenu l'un
+  de deux boutons de ce nom) ; **C1.1 précisée** (les actions restent avant les voitures, et un
+  second « Proposer une voiture » suit la dernière carte).
+- Critères qui trouvent ce bouton par son nom « Proposer une voiture » : dans la v5.2, **PL3.9
+  seule** ; dans la v4.x, les règles de focus « Fermer » qui visent « Proposer une voiture » du
+  leg (N1.6 ; fermeture d'un échec d'offre ; repère `data-offer-ride`) : elles visent le bouton
+  du haut, sans changement de comportement. Tout test écrit sur ce nom doit viser
+  `data-offer-ride` ou nommer le leg.
+- Le **titre** de la feuille d'offre change sur un événement avec retour (`RideForm.title.offer`
+  ne sert plus qu'à l'événement sans retour). Les maquettes antérieures qui montrent le titre
+  « Proposer une voiture » restent justes pour l'événement sans retour.
+
+### Décisions de la v5.3
+
+1. Décision : le « + » **s’ajoute** au bouton du haut, il ne le remplace pas. — Raison : le bouton
+   du haut est l’action principale d’un leg où il manque des places (C9.7), au-dessus du pli, à
+   côté de « Ajouter une personne », et le focus s’y adresse (PL3.9) ; le retirer casserait ces
+   règles et obligerait à descendre tout un leg de 15 voitures pour agir. Le « + » sert à qui a
+   lu la liste et ne s’y trouve pas.
+2. Décision : pas de « + » sur un leg sans voiture. — Raison : « Aucune voiture proposée » ou
+   l’état vide sont déjà sous le bouton du haut ; deux boutons à 60 px d’écart seraient du bruit.
+3. Décision : le « + » a un libellé visible, « Proposer une voiture », avec une icône « + », pas
+   une icône seule. — Raison : un « + » seul ne dit ni « voiture » ni quel leg ; ce même bouton
+   en pleine largeur est le motif de la ligne « Place libre ».
+4. Décision : la cause est traitée à la source, par le titre de la feuille, avant le « + ». — Raison :
+   le « + » n’aurait pas empêché de l’ouvrir sur le mauvais onglet.
+5. Décision : le passage à l’autre leg est un bouton de la feuille, qui ouvre une feuille vide,
+   sans garder la saisie ; inactif pendant l'envoi, actif après un échec (RL2.6, RL2.7). — Raison : garder la saisie impose de décider quel lieu et quelle heure
+   suivent (le lieu de l’aller n’est pas celui du retour) ; le bouton est en haut de la feuille,
+   avant toute saisie. Alternative non retenue : fermer, changer d’onglet à la main (l’échec de
+   la maman).
+6. Décision : un événement sans retour garde le titre « Proposer une voiture » et n’a pas le
+   bouton de passage. — Raison : rien à confondre ; ne pas ajouter du bruit.
+7. Décision : pas de champ « Pour quel leg ? » dans le formulaire. — Raison : doublon du titre et
+   du passage, et il changerait le modèle d’envoi (R4).
+
+### Ajout du 03/11 (v5.3, RL5 et RL6) : la feuille « Qui monte… ? » et les homonymes
+
+**Rapport de terrain** (Carla, sur son téléphone, retour, en production) : « Voiture de Carla » a
+2 places libres ; la feuille « Qui monte dans la voiture de Carla ? » ouvre avec ses 4 personnes sans
+voiture cochées, elle en coche 2 autres, « Placer 6 personnes » est grisé et rien ne dit de décocher.
+Cause : `sheetCandidates` (`src/domain/tap.ts`) coche toute personne de l'appareil sans voiture, sans
+regarder les places libres. Chez elle aussi : un second « Carla » et deux « Tiago ».
+
+**Décisions du propriétaire** : rien n'est coché d'office si tout ne tient pas, et la feuille dit
+combien décocher (RL5) ; un prénom déjà à l'appareil est refusé comme nouveau conducteur et signalé à
+l'ajout d'une personne (RL6) ; les doublons existants se retirent à la main, rien de rétroactif.
+
+**Histoires.** H4 : je ne décoche pas ce que je n'ai pas choisi (RL5). H5 : je lis combien décocher
+(RL5). H6 : je ne crée pas sans le vouloir une seconde « Carla » (RL6).
+
+**RL5, les places de la feuille « Qui monte… ? »**
+- RL5.1 À l'ouverture, les personnes de l'appareil sans voiture sont cochées (PL2.3 comme aujourd'hui)
+  **seulement si elles tiennent toutes dans les places libres** ; sinon aucune case n'est cochée, de
+  l'appareil ou d'ailleurs. Tests : 2 personnes, 2 places -> 2 cochées ; 3 personnes, 2 places -> 0 ;
+  4 personnes, 2 places (Carla) -> 0, bouton « Placer » inactif.
+- RL5.2 Tant que le nombre cochées c dépasse les places libres f, une ligne rouge, avec une icône, est au-dessus
+  du bouton : « 6 cochées pour 2 places : décochez-en 4 ». Elle n'existe pas quand c <= f. Avec f = 0 :
+  « 2 cochées pour 0 place : décochez-en 2 » (EN : « 2 ticked for 0 seats: untick 2 »).
+- RL5.3 Le bouton reste inactif comme aujourd'hui (C6.3, libellé « Placer c personnes »), et la ligne
+  « Il reste n places dans cette voiture » n'est plus rouge (un seul message rouge).
+- RL5.4 Les mots, FR et EN, mot pour mot : voir le tableau.
+
+| clé | fr | en |
+|---|---|---|
+| `Sheet.over` | {checked, plural, one {# cochée} other {# cochées}} pour {free, plural, one {# place} other {# places}} : décochez-en {excess} | {checked} ticked for {free, plural, one {# seat} other {# seats}}: untick {excess} |
+
+`excess` = c - f. Critères existants changés : **PL2.3 et la dernière ligne du tableau de PL2.7**
+(cochées seulement si elles tiennent) ; **C6.3 précisé** (la ligne dit quoi faire, et n'est plus rouge
+à « Il reste n places ») ; C6.2 inchangé.
+
+**RL6, les homonymes**
+- RL6.1 Règle de comparaison, la même pour RL6.2 et RL6.4 : deux prénoms sont les mêmes s'ils sont
+  égaux après retrait des espaces au début et à la fin, passage en minuscules et retrait des accents.
+  Les espaces à l'intérieur comptent. Tests : « carla », « CARLA » et « Carla  » (espace final) = « Carla » ;
+  « Maria » = « María » ; « jeanne ( AINE) » = « Jeanne ( aîné) » ; « Jeanne (aîné) » ≠ « Jeanne ( aîné) » ;
+  « Jean » ≠ « Jeanne ».
+- RL6.2 Dans « Qui conduit ? », « Valider » avec « Une nouvelle personne » et un prénom qui est celui de
+  **n'importe quelle personne de l'appareil** (même si elle conduit déjà sur ce leg) n'envoie rien et
+  n'en crée aucune. L'erreur est sous le champ « Prénom » et le focus y va : « Carla est déjà dans vos
+  personnes. » (EN : « Carla is already one of your people. »), avec le prénom tel que l'appareil l'a
+  enregistré. Elle disparaît quand le prénom change ou qu'une autre personne est choisie.
+- RL6.3 Choisir cette personne dans la liste, puis « Valider », propose la voiture comme aujourd'hui.
+- RL6.4 Dans « Ajouter une personne », tant que le prénom tapé est celui d'une personne de l'appareil
+  (RL6.1), une ligne grise sous le champ dit « Une personne s'appelle déjà Tiago sur cet appareil. »
+  (EN : « Someone on this device is already called Tiago. »). Elle ne bloque rien : « Valider » ajoute la
+  personne. Elle est en texte d’aide ordinaire (`text-muted-foreground`, le gris des aides du champ), sans
+  nouvelle couleur. Renommer une personne dans « Modifier » (C2.3) n’affiche aucun avertissement. Elle disparaît dès que le prénom ne correspond plus. La première inscription d'un appareil
+  n'en a jamais (l'appareil n'a encore aucune personne).
+- RL6.5 Les mots RL6 existent en français et en anglais, mot pour mot.
+
+| clé | fr | en |
+|---|---|---|
+| `RideForm.driverNameTaken` | {firstName} est déjà dans vos personnes. | {firstName} is already one of your people. |
+| `PersonForm.nameTaken` | Une personne s’appelle déjà {firstName} sur cet appareil. | Someone on this device is already called {firstName}. |
+
+**Constat sur les doublons** (lecture du code, sans accès aux données de production) : « Une nouvelle
+personne » crée une personne (`insertPerson`) sans chercher d'homonyme : c'est le chemin du second
+« Carla ». Les passagers de « Qui monte avec vous ? » ne peuvent pas être créés (le serveur n'accepte que
+des personnes de l'appareil) ; le second « Tiago » vient d'« Ajouter une personne » ou d'un homonyme d'un
+autre appareil. Aucune unicité de prénom n'existe. Conséquence de RL6.2 : une personne qui conduit déjà
+sur le leg ne peut pas être « recréée » comme nouveau conducteur ; elle conduit déjà, c'est voulu.
+
+**États dessinés** (`#places-feuille`, 360 px) : 14 ouverture qui ne tient pas, 15 au-delà des places,
+16 tout tient, 17 refus et choix dans la liste, 18 avertissement à l'ajout.
+
+### Hors périmètre de la v5.3
+
+Un « + » dans « Ajouter une personne » ou sous « Sans voiture » ; un sélecteur Aller / Retour dans
+le formulaire ; proposer **uniquement** le retour depuis la feuille de l’aller sans passer par
+l’onglet (le bouton de passage le permet en un tap) ; garder ce qui a été saisi d’un leg à l’autre ;
+un tutoriel ou une info-bulle sur le sélecteur d’onglets ; renommer les onglets ; tout changement
+de qui voit un numéro.
 
 ## Ce qui change en v5.2, v5.1 (revue de la v5.0) et v5.0 : n’importe qui place n’importe qui
 
@@ -196,8 +451,9 @@ au retour. Marc ne fait pas le retour.
   voiture et « ne fait pas le leg » mêlées, comme aujourd’hui) ; puis les **autres
   personnes sans voiture**, dans l’ordre où elles l’ont déclaré ; puis, repliées, les **autres
   personnes qui ne font pas ce leg**, dans l’ordre de l’événement.
-- PL2.3 Cases cochées à l’ouverture : les personnes de l’appareil « sans voiture » ; jamais une
-  personne d’un autre appareil, ni une personne qui ne fait pas ce leg.
+- PL2.3 Cases cochées à l’ouverture : les personnes de l’appareil « sans voiture » **si elles tiennent
+  toutes dans les places libres, sinon aucune** (v5.3, RL5.1) ; jamais une personne d’un autre appareil,
+  ni une personne qui ne fait pas ce leg.
 - PL2.4 Les intitulés « Vos personnes » et « Autres personnes sans voiture » n’existent que
   si la feuille liste au moins une personne d’un autre appareil ; « Vos personnes » seulement
   si l’appareil en a une à lister. Sinon la feuille est celle d’aujourd’hui, sans intitulé.
@@ -214,7 +470,7 @@ au retour. Marc ne fait pas le retour.
   | une personne ou plus | exactement une | non | place cette personne, en un tap (la règle d’aujourd’hui, y compris quand d’autres appareils ont des personnes sans voiture) |
   | une personne ou plus | exactement une | oui | la feuille, départ coché, cette personne cochée |
   | une personne ou plus | zéro | oui ou non | la feuille, rien de coché ; si personne ne peut être listé : le message de PL2.8 |
-  | une personne ou plus | deux ou plus | oui ou non | la feuille, les personnes de l’appareil sans voiture cochées |
+  | une personne ou plus | deux ou plus | oui ou non | la feuille, les personnes de l’appareil sans voiture cochées si elles tiennent toutes, sinon aucune (RL5.1) |
 
 - PL2.8 Aucun candidat : le corps de la feuille dit « Tout le monde est déjà dans une voiture
   pour le retour. » (« l’aller » sur l’aller), avec « Ajouter une personne » et « Fermer ».
@@ -5908,3 +6164,8 @@ notifications. En v4.2 : les messages dans les feuilles, formulaires et confirma
   Aucun mot nouveau. La page ajoute la section « L’icône de voiture de l’en-tête (v4.9) » et
   l’icône dans les 36 en-têtes de fiche déjà dessinés. Critères CI1.1 à CI1.8. Republiée à la
   même URL. Pas encore relue en revue de design.
+- v5.3 (2026-11-03) : « Proposer une voiture » dit son leg (titre), un bouton de la feuille passe à
+  l’autre leg, et un « + » s’ajoute sous la liste des voitures, sans retirer le bouton du haut.
+  Aucun critère ni aucune décision de la v5.2 changés (le titre de la feuille et le nombre de
+  boutons d’un leg mis à part). Critères RL1 à RL4. Pas encore relue en revue de design.
+- v5.3 revue (2026-11-03) : focus après le passage (RL2.5, RL3.6), bouton inactif pendant l'envoi et actif après un échec (RL2.6, RL2.7), titre qui redevient « Proposer une voiture » sans retour (RL1.4), historique à une entrée (RL2.3), PL3.9 précisée et critères par nom listés, perte de saisie acceptée dite ; états 9 à 13 dessinés, titre anglais long.
