@@ -56,3 +56,26 @@ test("numbersHidden: a failing toContainText on a tel: link names its number hid
     expect(message.includes(phone), `the number, ${phone.length} characters, in the message`).toBe(false);
   }
 });
+
+// #873: a failing check or read of a tel: link prints the element, its href included.
+test("numbersHidden: a failing toBeFocused, toHaveCSS or read of a tel: link names its number hidden", async ({ page }) => {
+  const digits = PHONE.replaceAll(" ", "");
+  await page.setContent(`<a href="tel:${digits}">Appeler Léa au ${PHONE}</a><a href="tel:${digits}">Appeler Léa au ${PHONE}</a>`);
+  const link = page.locator('a[href^="tel:"]');
+  const failures: Record<string, () => Promise<unknown>> = {
+    toBeFocused: () => expect(link.first()).toBeFocused({ timeout: 1_000 }),
+    toHaveCSS: () => expect(link.first()).toHaveCSS("white-space", "pre", { timeout: 1_000 }),
+    innerText: () => link.innerText({ timeout: 1_000 }),
+  };
+  for (const [what, run] of Object.entries(failures)) {
+    const message = await numbersHidden(run).then(
+      () => "",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    expect(message !== "", `${what}: a failure`).toBe(true);
+    expect(message.includes("<numéro>"), `${what}: the number hidden in the message`).toBe(true);
+    for (const phone of [PHONE, digits]) {
+      expect(message.includes(phone), `${what}: the number, ${phone.length} characters, in the message`).toBe(false);
+    }
+  }
+});

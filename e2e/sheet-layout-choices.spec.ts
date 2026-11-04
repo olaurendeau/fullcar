@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
+import { numbersHidden } from "./driver";
 import { expect, leaveNoToken, test } from "./fixtures";
 import { barOf, boxOf, edgesOf, headerOf } from "./sheet-layout";
 
@@ -211,7 +212,8 @@ for (const locale of ["fr-FR", "en-GB"] as const) {
           if (which === "person") await expect(sheet.locator("a[href^='tel:']")).toHaveCount(1);
           const targets = await sheet.locator("button:not([role=checkbox]), a[href], label:has([role=checkbox])").all();
           for (const target of targets) {
-            expect(await heightOf(target), `« ${await target.innerText()} », ${name}`).toBeGreaterThanOrEqual(44);
+            // A target is Claire's `tel:` link: its text, named in the message, is her number.
+            await numbersHidden(async () => expect(await heightOf(target), `« ${await target.innerText()} », ${name}`).toBeGreaterThanOrEqual(44));
           }
           await page.keyboard.press("Escape");
           await expect(sheet).toHaveCount(0);
