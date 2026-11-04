@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, TriangleAlert, UserPlus } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { storageAvailable } from "@/app/e/[id]/device-token";
@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import type { Leg } from "@/domain/leg";
 import { phonePrefill } from "@/domain/phone-prefill";
 import type { VisibleCar, VisibleLegBoard } from "@/domain/phone-visibility";
-import { sheetCandidates, sheetSubmit, tapOutcome, type SheetCandidate } from "@/domain/tap";
+import { ownFit, sheetCandidates, sheetSubmit, tapOutcome, type SheetCandidate } from "@/domain/tap";
 import type { WallDate } from "@/domain/wall-clock";
-import { cn } from "@/lib/utils";
 import { BottomSheet, SheetStep } from "./bottom-sheet";
 import { Box } from "./create-event-form";
 import { nameList, personGone, whyOf, wordsOf, type Why } from "./failure-words";
@@ -252,7 +251,10 @@ function SeatSheet({
   const words = wordsOf(t, useFormatter());
   const ids = useId();
   const boxId = (personId: string) => `${ids}-${personId}`;
-  const groups = sheetCandidates(board);
+  // The device's persons are ticked as the sheet opens only if they all fit (RL5.1): decided once, so a refusal
+  // that lowers the seats does not untick what the person did not touch (C6.5). Each opening is a new sheet (`key`).
+  const [tickOwn] = useState(() => ownFit(board, car?.freeSeats ?? 0));
+  const groups = sheetCandidates(board, tickOwn);
   const candidates = [...groups.own, ...groups.others, ...groups.notConcerned];
   // The titles say whose the persons are, only when the sheet lists someone of another device (PL2.4).
   const headed = groups.others.length + groups.notConcerned.length > 0;
@@ -293,7 +295,8 @@ function SeatSheet({
   // a new person's box, « Placer » after a failure, or « Fermer » when the car is gone with the
   // button that had it.
   const focusNext = useRef<(() => HTMLElement | null | undefined) | null>(null);
-  // A car with Stops opens on the point chosen, the departure (RV7.2): once, never when the list comes back from « Ajouter une personne ».
+  // A car with Stops opens on the point chosen, the departure (RV7.2): as the sheet opens and each time the list shows
+  // (`showList`), never when the list comes back from « Ajouter une personne ».
   const [opensOnStops, setOpensOnStops] = useState(true);
   const isOpen = useRef(open);
   // Each opening is a new sheet (`key`): the one that sent may be gone. What it says is about the
@@ -390,9 +393,6 @@ function SeatSheet({
   };
 
   const message = refused ?? (gone && t("Actions.rideGone"));
-  // After a refusal for want of seats, the seats left are fewer than those ticked: red too.
-  const over = submit.kind === "notEnoughSeats";
-
   return (
     <BottomSheet
       open={open}
@@ -407,7 +407,7 @@ function SeatSheet({
             {registerKept && <span className="block">{t("PersonForm.remember")}</span>}
           </>
         ) : !adding && car ? (
-          <span aria-live="polite" className={cn(over && "font-medium text-destructive")}>
+          <span aria-live="polite">
             {t("Sheet.remaining", { count: car.freeSeats })}
           </span>
         ) : undefined
@@ -427,14 +427,23 @@ function SeatSheet({
               </p>
             )}
             {!gone && candidates.length > 0 && (
-              // Never `disabled`: the focus would fall out of the sheet while it is sent.
-              <Button
-                className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
-                aria-disabled={sending || submit.kind !== "ready" || undefined}
-                onClick={() => void place()}
-              >
-                {t("Sheet.submit", { count: submit.count })}
-              </Button>
+              <>
+                {submit.kind === "notEnoughSeats" && (
+                  // More ticked than seats: how many to untick (RL5.2). Not an alert, which is for refusals.
+                  <p className="flex items-start gap-1.5 text-sm font-medium text-destructive">
+                    <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+                    <span>{t("Sheet.over", { checked: submit.count, free: submit.freeSeats, excess: submit.count - submit.freeSeats })}</span>
+                  </p>
+                )}
+                {/* Never `disabled`: the focus would fall out of the sheet while it is sent. */}
+                <Button
+                  className="h-11 w-full aria-disabled:bg-muted aria-disabled:text-muted-foreground"
+                  aria-disabled={sending || submit.kind !== "ready" || undefined}
+                  onClick={() => void place()}
+                >
+                  {t("Sheet.submit", { count: submit.count })}
+                </Button>
+              </>
             )}
           </>
         )
@@ -467,6 +476,8 @@ function SeatSheet({
               onGone={() => onOpenChange(false)}
               onDone={(personId) => {
                 focusNext.current = () => document.getElementById(boxId(personId));
+                // Ticked, even when nothing was ticked as the sheet opened (C6.6, RL5.1).
+                setTicked((current) => ({ ...current, [personId]: true }));
                 setAdding(null);
               }}
               onCancel={cancelAdding}
