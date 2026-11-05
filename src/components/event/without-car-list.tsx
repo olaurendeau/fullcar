@@ -4,8 +4,8 @@ import { useId, useState } from "react";
 import type { BoardPerson } from "@/domain/board";
 import type { Leg } from "@/domain/leg";
 
-/** Opens the sheet of `person`, from the list she is in (#981). */
-export type OpenPerson = (person: BoardPerson, state: "withoutCar" | "notConcerned") => void;
+/** Opens the sheet of `person`, from the list she is in (#981), or from the card of her car (#982). */
+export type OpenPerson = (person: BoardPerson, state: "withoutCar" | "notConcerned" | "passenger") => void;
 
 function PersonButtons({
   leg,

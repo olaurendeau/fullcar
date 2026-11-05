@@ -1,6 +1,6 @@
-import { Car, Clock, MapPin, Plus, User } from "lucide-react";
+import { Car, ChevronDown, Clock, MapPin, Plus, User } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
-import type { VisibleCar } from "@/domain/phone-visibility";
+import type { PhonePerson, VisibleCar } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
 import { wallClockAsUtc, type WallDate } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,8 @@ const ABOVE_BAR = "scroll-mb-[calc(1rem+var(--message-bar-height,0px)+12px+env(s
  * known (C5.9) and without JavaScript; its tap takes a seat or opens a sheet (`onTakeSeat`, #92). Long
  * values wrap anywhere rather than scrolling sideways (C11.3). Given `updateRide` and
  * `removeRide`, the car is the device's: « Modifier » changes it, « Retirer la voiture »
- * removes it (C8.1); on a car with points, each passenger says where she boards, « monte à {lieu} » or « monte
+ * removes it (C8.1); each passenger's first name is a button of 44 px that opens her sheet, whoever's device (PL1.3, #982),
+ * inactive like a free seat until the device's persons are known (C5.9); the driver's is the title and no button; on a car with points, each passenger says where she boards, « monte à {lieu} » or « monte
  * au départ », on every device (RV2.2), and each one has « Changer le point », whoever's device (PL5.1, #984); `near`, the event's position, brings its place's suggestions closer (AL4.1).
  */
 export function RideCard({
@@ -28,6 +29,7 @@ export function RideCard({
   seatsActive,
   onTakeSeat,
   onChangeStop,
+  onOpenPassenger,
   updateRide,
   removeRide,
   near = null,
@@ -38,6 +40,8 @@ export function RideCard({
   seatsActive: boolean;
   onTakeSeat: (seat: HTMLElement) => void;
   onChangeStop?: (passenger: { id: string; firstName: string }, button: HTMLElement) => void;
+  /** Opens the sheet of a passenger (PL1.3); without it, her first name is text. */
+  onOpenPassenger?: (passenger: PhonePerson) => void;
   updateRide?: UpdateRide;
   removeRide?: RemoveRide;
   near?: Position | null;
@@ -113,7 +117,23 @@ export function RideCard({
             >
               <User aria-hidden className="size-4 shrink-0 text-muted-foreground" />
               {/* 12 characters at least: the number or the button goes under it, not the name down to a column (RV2.4, RV7.1). */}
-              <span className="min-w-[min(12ch,100%)] flex-[1_1_12ch] wrap-anywhere">{passenger.firstName}</span>
+              {onOpenPassenger ? (
+                // The chevron says the name opens something, and nothing of whose she is (PL1.3, D7, D8). Her sheet gives the focus back here (`focusBoardName`).
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  disabled={!seatsActive}
+                  data-board-person={passenger.id}
+                  data-leg={car.leg}
+                  onClick={() => onOpenPassenger(passenger)}
+                  className="inline-flex min-h-11 min-w-[min(12ch,100%)] flex-[1_1_12ch] items-center justify-start gap-1 rounded-md text-left focus-visible:focus-ring disabled:opacity-50"
+                >
+                  <span className="min-w-0 wrap-anywhere">{passenger.firstName}</span>
+                  <ChevronDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                </button>
+              ) : (
+                <span className="min-w-[min(12ch,100%)] flex-[1_1_12ch] wrap-anywhere">{passenger.firstName}</span>
+              )}
               {passenger.phone && <PhoneLink firstName={passenger.firstName} phone={passenger.phone} />}
               {changes && (
                 <button

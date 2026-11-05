@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
+import type { LeaveCar } from "@/components/event/board-person-sheet";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import type { MapHint } from "@/components/event/event-map";
 import { EventView } from "@/components/event/event-view";
@@ -409,6 +410,35 @@ export function ParticipantBoard({
     return sent.ok ? "failed" : sent.problem;
   };
 
+  // « Sortir de la voiture » from a passenger's sheet, of any device (#982): `undoSeats`, not `setPersonLeg`, so that
+  // a person who entered another car meanwhile stays there (PL4.5, the last gesture wins). Done, nothing is said (PL3.6,
+  // PL4.2); already out, the bar says so without « Annuler » (PL3.7). Its failure has the words of the cell, not those of « Annuler ».
+  const leaveCar: LeaveCar = async ({ personId, rideId, leg }, { cell, notDone, ...sheet }) => {
+    const persons = [{ personId, before: "withoutCar" as const }];
+    const send = () => storeUndo(id, readDeviceToken(id), rideId, leg, persons);
+    const sent = await runAction(`leaveCar:${sheet.key}`, send, undefined, sheet.leaves);
+    if (sent === undefined) return undefined;
+    sheet.answered();
+    const answer = sent.ok ? sent.value : { ok: false as const, error: sent.problem };
+    if (!answer.ok) {
+      const landmark = () => focusCell(personId, leg) || focusBoardName(personId, leg);
+      const why = cellWhy(answer.error, cell);
+      const closes = why.kind === "noRetour";
+      if (!informed(sheet, notDone, why)) failedIn(sheet, { notDone, why, landmark, closes, leg });
+      if (closes) return "noRetour";
+      return sent.ok ? "failed" : sent.problem;
+    }
+    if (answer.undoneIds.length > 0) {
+      messages.succeed(null);
+      sheet.changed([personLeg(personId, leg)]);
+      return null;
+    }
+    const driver = cell.state.kind === "passenger" ? cell.state.driver.firstName : "";
+    const text = undoneText(words, { names: [cell.firstName], undone: [], driver });
+    sheet.whenClosed(() => messages.succeed({ text, landmark: focusCar(leg, rideId), leg }));
+    return null;
+  };
+
   // As addPerson, the same way: the device's token is drawn only for a new driver, as the request leaves.
   // In the bar, the failure names who drives and each leg offered, then why, `alreadyDriving` included,
   // and `alreadyInCar` the passengers ticked. A success with passengers says who boarded, with « Annuler » (C4.13).
@@ -691,6 +721,7 @@ export function ParticipantBoard({
         addPerson,
         updatePerson,
         setPersonLeg,
+        leaveCar,
         offerRide,
         takeSeats,
         setBoardingStop,

@@ -12,7 +12,7 @@ import type { SetPersonLeg } from "./cell-sheet";
 import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
 import { EventMap, OrganiserHint, type LegMap, type MapHint } from "./event-map";
-import { useBoardPersonSheet } from "./board-person-sheet";
+import { useBoardPersonSheet, type LeaveCar } from "./board-person-sheet";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import type { RemovePerson } from "./remove-person-dialog";
@@ -39,6 +39,8 @@ export interface BoardDevice {
   updatePerson: UpdatePerson;
   /** Without a car, or not concerned, on a leg, for one of the device's persons (#89). */
   setPersonLeg: SetPersonLeg;
+  /** « Sortir de la voiture » for a passenger of any device (#982): gives her back her state before, if she is still in that car. */
+  leaveCar: LeaveCar;
   /** Offers a car on a leg (R4), with the device's token. */
   offerRide: OfferRide;
   /** Seats in a car for persons of the device, from a tap (#92) or the sheet (#91). */
@@ -156,6 +158,7 @@ export function LegPanel({
                 seatsActive={deviceKnown(device.status)}
                 onTakeSeat={(seat) => seats.tap(car, seat)}
                 onChangeStop={(person, button) => stops.change(car, person, button)}
+                onOpenPassenger={(passenger) => person.open(passenger, "passenger")}
                 updateRide={drivesIt(car.id) ? device.updateRide : undefined}
                 removeRide={drivesIt(car.id) ? device.removeRide : undefined}
                 near={near}

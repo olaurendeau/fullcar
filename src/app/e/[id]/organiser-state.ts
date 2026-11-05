@@ -1,6 +1,6 @@
 import type { Kysely } from "kysely";
 import { readEventRows } from "@/db/event-rows";
-import { readOrganiserAccessEvent, readPendingSend } from "@/db/events";
+import { readOrganiserAccessEvent, readPendingSend, readTransfer } from "@/db/events";
 import type { Database } from "@/db/schema";
 import { findSession } from "@/db/sessions";
 import { onOneSnapshot } from "@/db/transaction";
@@ -12,6 +12,7 @@ import { organiserPanel, organiserPersons, type OrganiserPanelAnswer } from "@/d
 import { pendingNotice } from "@/domain/pending-send";
 import { withOrganiserPhones } from "@/domain/phone-visibility";
 import { isPublicId } from "@/domain/public-id";
+import { transferNotice } from "@/domain/transfer";
 import { findPublicEvent } from "./event";
 
 /**
@@ -27,7 +28,9 @@ import { findPublicEvent } from "./event";
  * (RP4.2), from the rows without `phonesById`. The tokens are only compared, never logged
  * nor kept; nothing is written, the session's visit included. A pending event's panel carries
  * its notice (OA1.7): the address and the result kept of its email, as read at `now`; the
- * address is read once the access is granted, and is in no other answer.
+ * address is read once the access is granted, and is in no other answer. The panel of an event being
+ * handed over carries the same kind of notice, `transfer` (epic #935, OT2.2): the recipient's address
+ * and what became of the email, read once the access is granted, as `pending` is.
  */
 export async function readOrganiserState(
   db: Kysely<Database>,
@@ -58,7 +61,9 @@ export async function readOrganiserState(
     const persons = organiserPersons(rows, legNames);
     const sendRow = await readPendingSend(trx, eventId);
     const pending = sendRow && pendingNotice(sendRow, now);
+    const transferRow = await readTransfer(trx, eventId);
+    const transfer = transferRow && transferNotice(transferRow, now);
     const options = { stops: event.stops_enabled };
-    return { state: "panel", options, legs: organiserPanel(legs), persons, ...(pending && { pending }) };
+    return { state: "panel", options, legs: organiserPanel(legs), persons, ...(pending && { pending }), ...(transfer && { transfer }) };
   });
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { getLocale } from "next-intl/server";
+import { after } from "next/server";
 import { siteOrigin } from "@/app/site";
 import { getDb } from "@/db/client";
 import { databaseFailure } from "@/db/failure";
@@ -12,14 +13,15 @@ import { editEvent, type EditEventOutcome } from "../edit-event";
 import { readOrganiserState } from "../organiser-state";
 import { correctAddress, resendConfirmation, type CorrectionOutcome, type ResendOutcome } from "../pending-email";
 import { removeAsOrganiser, type RemovePersonOutcome } from "../remove-person";
+import { handOverEvent, type HandOverOutcome } from "../transfer";
 
 /**
  * The organiser area of event `id` (#3 C4.9 amended, C8.4; epic #154, O6.1; #596): the panel
  * when organiser-access.ts grants the access, the state it decides and nothing else
  * otherwise, `{ state: "invalid" }` for an unknown event. `proof` is `{ adminToken, session }`,
  * in the request's body: with `updateEvent`, `removePersonAsOrganiser`, `resendEmail`, `fixEmail`,
- * and `signOut` and `deleteAccount` (mes-evenements/actions.ts, which receive every admin token
- * the browser keeps), the seven actions that receive the admin token.
+ * `transferEvent`, and `signOut` and `deleteAccount` (mes-evenements/actions.ts, which receive
+ * every admin token the browser keeps), the eight actions that receive the admin token.
  * The browser sends the token it keeps (admin-token-store.ts) and its session's (#597), never one read from a URL.
  * A malformed id reads nothing; a token that is not a string is refused by the comparison.
  * Never logs a token nor the panel, never puts either in an error.
@@ -117,5 +119,29 @@ export async function removePersonAsOrganiser(id: unknown, proof: unknown, devic
   } catch (error) {
     // A Postgres error may carry the row: only its code is logged, none of it is thrown.
     throw databaseFailure("removePersonAsOrganiser: the person could not be removed", error);
+  }
+}
+
+/**
+ * « Céder l'événement » and « Changer l'adresse » (epic #935, OT1, OT2.4): event `id` is handed
+ * over to the account of `request.email`, as transfer.ts says, in the page's language.
+ * `request` is `{ op: "start" | "change", email }`, `proof` is `{ adminToken, session }`: both in
+ * the request's body, as for the actions above. The email goes out after the answer, by `after()`.
+ * Never logs a token nor an address; puts no token in an answer.
+ */
+export async function transferEvent(id: unknown, proof: unknown, request: unknown): Promise<HandOverOutcome> {
+  const locale = await getLocale();
+  try {
+    return await handOverEvent(id, proof, request, {
+      db: getDb(),
+      now: new Date(),
+      locale: isLocale(locale) ? locale : defaultLocale,
+      origin: siteOrigin(),
+      brevo: serverBrevo(),
+      later: (task) => after(task),
+    });
+  } catch (error) {
+    // Only its code is logged: no other detail of a Postgres error leaves the server.
+    throw databaseFailure("transferEvent: the event could not be handed over", error);
   }
 }
