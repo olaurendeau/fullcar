@@ -618,8 +618,8 @@ ci-dessus valent pour chacun.
   identifiant, et leurs liens dans le verrou des liens par clé. Une impasse (40P01) avec le
   nettoyage des liens est reprise une fois.
   `clearLateAddress` prend l'événement **après** l'adresse, alors que tout autre chemin la prend
-  avant l'événement (`recordSend`, `lockAddress` : « jamais avant l'événement »). Un seul
-  chemin peut s'y croiser : `confirmAgain` (`src/app/e/[id]/pending-email.ts`, renvoi et
+  avant l'événement (`recordSend`, `lockAddress` : « jamais avant l'événement »). Deux
+  chemins peuvent s'y croiser : `confirmAgain` (`src/app/e/[id]/pending-email.ts`, renvoi et
   correction de l'adresse) et `handOverEvent` (`src/app/e/[id]/transfer.ts`, cession et changement
   d'adresse, via `claimTransfer`), qui tiennent l'événement et attendent l'adresse que la suppression
   tient en attendant l'événement. Pour la cession, c'est une seconde demande à l'adresse X, sur le
@@ -646,7 +646,7 @@ ci-dessus valent pour chacun.
   la personne les copie.
 - **La cession, côté cédant** (épique #935, `src/app/e/[id]/transfer.ts`, server action
   `transferEvent`, #944) : la confirmation retournée. Une seule action pour les gestes du cédant
-  (`start` et `change` ici, `resend` et `cancel` avec #945), donc un seul point d'entrée du jeton d'admin et
+  (`start`, `change`, `resend` et `cancel`, #945), donc un seul point d'entrée du jeton d'admin et
   une seule décision d'accès. Le corps porte `{ adminToken, session }` et la requête
   `{ op, email }`. L'accès est décidé avant le verrou puis de nouveau sous
   `lockEvent(trx, id, "noKeyUpdate")` (OT4.3), puis la transaction (`READ COMMITTED`) prend, dans
@@ -658,7 +658,12 @@ ci-dessus valent pour chacun.
   garde son état. La limite de l'événement refuse (`tooMany`) sans rien écrire ; la limite de
   l'adresse ou le plafond global écrivent la cession en `address_limit`, sans lien, et suppriment les
   liens précédents quand l'adresse change, pour que seule l'adresse que l'avis montre puisse accepter ;
-  si c'est l'adresse qui attend déjà, ses liens valent encore et restent. L'adresse du
+  si c'est l'adresse qui attend déjà, ses liens valent encore et restent. `resend` ajoute un lien
+  à l'adresse qui attend, les précédents restent valables ; sa réponse attend Brevo (10 s au plus),
+  comme `resendEmail`, et n'écrit rien si une limite l'arrête (`tooMany`). `cancel` supprime
+  tous les liens de cession et efface la cession, sans compter d'envoi, et répond l'adresse
+  annulée ; un e-mail encore en route n'écrit plus rien ensuite. Sans cession en attente,
+  `change`, `resend` et `cancel` répondent `gone`. L'adresse du
   destinataire n'est jamais cherchée parmi les comptes : même réponse, même e-mail, même durée
   (OT1.7, OT1.8, OT8.6). La réponse du panneau porte l'avis, `transfer`, lu une fois l'accès
   accordé, comme `pending`.

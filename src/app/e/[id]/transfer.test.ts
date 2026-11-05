@@ -1,4 +1,4 @@
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { anonymiseEvent } from "@/db/day-thirty";
 import { findLink, useLink } from "@/db/email-links";
@@ -16,7 +16,8 @@ import { readOrganiserState } from "./organiser-state";
 import { handOverEvent, type Handing } from "./transfer";
 
 /*
- * Epic #935, T6 (#944): « Céder l'événement » and « Changer l'adresse », OT1 to OT6. The events
+ * Epic #935, T6 (#944) and T7 (#945): « Céder l'événement », « Changer l'adresse », « Renvoyer
+ * l'e-mail » and « Annuler la cession », OT1 to OT6. The events
  * are confirmed by an account of their own, whose session (or the creation browser's token)
  * is the proof. `later` is `after()`: its tasks run when `run()` says so.
  */
@@ -119,7 +120,7 @@ describe("OT1.3 / OT1.4: what is typed", () => {
     });
   });
 
-  it.each([null, undefined, "start", [], {}, { op: "dance", email: "a@exemple.fr" }, { op: "resend" }, { email: "a@exemple.fr" }])(
+  it.each([null, undefined, "start", [], {}, { op: "dance", email: "a@exemple.fr" }, { op: "Resend" }, { op: "cancel " }, { email: "a@exemple.fr" }])(
     "answers `invalid` to the request %j, and nothing is written",
     async (request) => {
       await withRollbackRecordingSends(async (trx) => {
@@ -552,5 +553,266 @@ describe("OT8.2: the journal", () => {
       const written = JSON.stringify(logs);
       for (const secret of [to, link, token, session]) expect(written).not.toContain(secret);
     });
+  });
+
+  it("resend and cancel hold no token and no address either, whatever Brevo answers", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof, token, session } = await anEvent(trx);
+      const { to, token: link } = await aTransferThatWaits(trx, id, proof);
+      await handOverEvent(id, proof, { op: "resend" }, handing(trx, async () => ({ state: "failed" })).deps);
+      await handOverEvent(id, { adminToken: token }, { op: "cancel" }, handing(trx).deps);
+      await handOverEvent(id, { adminToken: token }, { op: "resend" }, handing(trx).deps);
+      const written = JSON.stringify(logs);
+      for (const secret of [to, link, token, session]) expect(written).not.toContain(secret);
+    });
+  });
+});
+
+/** A transfer that waits, started and sent, as the organiser left it: its address and the token of its link. */
+async function aTransferThatWaits(trx: Kysely<Database>, id: string, proof: unknown) {
+  const first = handing(trx);
+  const to = anAddress();
+  await handOverEvent(id, proof, { op: "start", email: to }, first.deps);
+  await first.run();
+  return { to, token: tokenIn(first.sent[0]!) };
+}
+
+describe("OT2.3 / OT2.6: « Renvoyer l'e-mail »", () => {
+  it("OT2.3: one more link to the same address, the earlier one still valid, and the answer waits for Brevo", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const { to, token } = await aTransferThatWaits(trx, id, proof);
+
+      const again = handing(trx);
+      expect(await handOverEvent(id, proof, { op: "resend" }, again.deps)).toEqual({ ok: true, transfer: { email: to, send: "sent" } });
+      expect(again.queued()).toBe(0);
+      expect(again.sent).toHaveLength(1);
+      expect(again.sent[0]!.to).toBe(to);
+      expect(await eventRow(trx, id)).toMatchObject({ transfer_email: to, transfer_status: "sent" });
+      expect(await linksOf(trx, id)).toEqual([
+        { kind: "transfer", used_at: null },
+        { kind: "transfer", used_at: null },
+      ]);
+      expect(await sendsOf(trx, id)).toHaveLength(2);
+      expect(await useLink(trx, token, "transfer")).toMatchObject({ outcome: "valid", link: { eventId: id } });
+      expect(await useLink(trx, tokenIn(again.sent[0]!), "transfer")).toMatchObject({ outcome: "valid", link: { eventId: id } });
+    });
+  });
+
+  it("answers `failed` when Brevo fails, and keeps the transfer, its address and its links", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const { to } = await aTransferThatWaits(trx, id, proof);
+      const answer = await handOverEvent(id, proof, { op: "resend" }, handing(trx, async () => ({ state: "failed" })).deps);
+      expect(answer).toEqual({ ok: true, transfer: { email: to, send: "failed" } });
+      expect(await eventRow(trx, id)).toMatchObject({ transfer_email: to, transfer_status: "failed" });
+      expect(await linksOf(trx, id)).toHaveLength(2);
+    });
+  });
+
+  it("reads nothing that comes with the request: it goes to the address that waits", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const { to } = await aTransferThatWaits(trx, id, proof);
+      const again = handing(trx);
+      expect(await handOverEvent(id, proof, { op: "resend", email: "mauvaise" }, again.deps)).toEqual({ ok: true, transfer: { email: to, send: "sent" } });
+      expect(again.sent[0]!.to).toBe(to);
+    });
+  });
+
+  it("OT2.6: after the link expired, it sends a new link, and the notice is no longer `expired`", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const { to, token } = await aTransferThatWaits(trx, id, proof);
+      await sql`update email_link set created_at = now() - interval '8 days' where event_id = ${id}`.execute(trx);
+      expect(await readTransferState(trx, id, proof)).toMatchObject({ transfer: { email: to, send: "expired" } });
+      expect(await useLink(trx, token, "transfer", new Date())).toEqual({ outcome: "expired" });
+
+      const again = handing(trx);
+      expect(await handOverEvent(id, proof, { op: "resend" }, again.deps)).toEqual({ ok: true, transfer: { email: to, send: "sent" } });
+      expect(await readTransferState(trx, id, proof)).toMatchObject({ transfer: { email: to, send: "sent" } });
+      expect(await useLink(trx, tokenIn(again.sent[0]!), "transfer")).toMatchObject({ outcome: "valid", link: { eventId: id } });
+    });
+  });
+
+  it("OT6.5: a resend counts in the event's limit of the hour: the fourth request is `tooMany`, and writes nothing", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      await aTransferThatWaits(trx, id, proof);
+      for (let n = 1; n < TRANSFERS_PER_EVENT; n++) {
+        expect(await handOverEvent(id, proof, { op: "resend" }, handing(trx).deps)).toMatchObject({ ok: true });
+      }
+      const before = await snapshot(trx, id);
+      const { deps, sent } = handing(trx);
+      expect(await handOverEvent(id, proof, { op: "resend" }, deps)).toEqual({ ok: false, error: "tooMany" });
+      expect(await snapshot(trx, id)).toEqual(before);
+      expect(sent).toEqual([]);
+    });
+  });
+
+  it.each([
+    ["the limit of the address", async (trx: Kysely<Database>, to: string) => seedSends(trx, 5, { kind: "confirmation", email: to })],
+    ["the global cap", async (trx: Kysely<Database>) => seedSends(trx, GLOBAL_SENDS_PER_HOUR, { kind: "login", email: () => anAddress() })],
+  ])("%s answers `tooMany`, and writes nothing, the transfer and its links as they were", async (_, limit) => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const { to, token } = await aTransferThatWaits(trx, id, proof);
+      await limit(trx, to);
+      const before = await snapshot(trx, id);
+      const { deps, sent } = handing(trx);
+      expect(await handOverEvent(id, proof, { op: "resend" }, deps)).toEqual({ ok: false, error: "tooMany" });
+      expect(await snapshot(trx, id)).toEqual(before);
+      expect(sent).toEqual([]);
+      expect(await useLink(trx, token, "transfer")).toMatchObject({ outcome: "valid" });
+    });
+  });
+});
+
+describe("OT2.5: « Annuler la cession »", () => {
+  it("deletes every transfer link, clears the address, and answers the address cancelled", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof, accountId } = await anEvent(trx);
+      const { to, token } = await aTransferThatWaits(trx, id, proof);
+      await handOverEvent(id, proof, { op: "resend" }, handing(trx).deps);
+      expect(await linksOf(trx, id)).toHaveLength(2);
+
+      const { deps, sent, queued } = handing(trx);
+      expect(await handOverEvent(id, proof, { op: "cancel" }, deps)).toEqual({ ok: true, cancelled: to });
+      expect(await linksOf(trx, id)).toEqual([]);
+      expect(await eventRow(trx, id)).toMatchObject({
+        account_id: accountId,
+        transfer_email: null,
+        transfer_status: null,
+        transfer_status_at: null,
+      });
+      expect(await useLink(trx, token, "transfer")).toEqual({ outcome: "invalid" });
+      expect(sent).toEqual([]);
+      expect(queued()).toBe(0);
+      expect(await readTransferState(trx, id, proof)).not.toHaveProperty("transfer");
+    });
+  });
+
+  it("an email still on its way writes nothing once the transfer is cancelled", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const sending = handing(trx, async () => ({ state: "sent" }), new Date(Date.now() - 1000));
+      await handOverEvent(id, proof, { op: "start", email: anAddress() }, sending.deps);
+      await handOverEvent(id, proof, { op: "cancel" }, handing(trx).deps);
+      await sending.run();
+      expect(await eventRow(trx, id)).toMatchObject({ transfer_email: null, transfer_status: null, transfer_status_at: null });
+      expect(await linksOf(trx, id)).toEqual([]);
+    });
+  });
+
+  it("leaves the organiser able to hand the event over again, to the same address too", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      const { to } = await aTransferThatWaits(trx, id, proof);
+      await handOverEvent(id, proof, { op: "cancel" }, handing(trx).deps);
+      expect(await handOverEvent(id, proof, { op: "start", email: to }, handing(trx).deps)).toEqual({ ok: true, transfer: { email: to, send: "sending" } });
+    });
+  });
+
+  it("is not stopped by a limit, and writes no send", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      for (let n = 0; n < TRANSFERS_PER_EVENT; n++) await handOverEvent(id, proof, { op: "start", email: anAddress() }, handing(trx).deps);
+      const sends = await sendsOf(trx, id);
+      expect(await handOverEvent(id, proof, { op: "cancel" }, handing(trx).deps)).toMatchObject({ ok: true });
+      expect(await sendsOf(trx, id)).toEqual(sends);
+    });
+  });
+});
+
+describe("OT2.10: no transfer waits, or the event has changed hands", () => {
+  it.each([[{ op: "change", email: "autre@exemple.fr" }], [{ op: "resend" }], [{ op: "cancel" }]])(
+    "%j with no transfer waiting is `gone`, and nothing is written nor sent",
+    async (request) => {
+      await withRollbackRecordingSends(async (trx) => {
+        const { id, proof } = await anEvent(trx);
+        const before = await snapshot(trx, id);
+        const { deps, sent, queued } = handing(trx);
+        expect(await handOverEvent(id, proof, request, deps)).toEqual({ ok: false, error: "gone" });
+        expect(await snapshot(trx, id)).toEqual(before);
+        expect(sent).toEqual([]);
+        expect(queued()).toBe(0);
+      });
+    },
+  );
+
+  it.each([[{ op: "change", email: "autre@exemple.fr" }], [{ op: "resend" }], [{ op: "cancel" }]])(
+    "%j after the recipient accepted (simulated in the database) is `noOrganiserAccess`, and nothing is written nor sent",
+    async (request) => {
+      await withRollbackRecordingSends(async (trx) => {
+        const { id, proof, token } = await anEvent(trx);
+        await aTransferThatWaits(trx, id, proof);
+        // What the acceptance does (T8): the event goes to the recipient's account, the token is revoked, the transfer is over.
+        const recipient = await seedAccount(trx);
+        await trx.deleteFrom("email_link").where("event_id", "=", id).execute();
+        await trx
+          .updateTable("event")
+          .set({ account_id: recipient, admin_token_hash: null, transfer_email: null, transfer_status: null, transfer_status_at: null })
+          .where("id", "=", id)
+          .execute();
+        const before = await snapshot(trx, id);
+        const { deps, sent } = handing(trx);
+        for (const owner of [proof, { adminToken: token }]) {
+          expect(await handOverEvent(id, owner, request, deps)).toEqual({ ok: false, error: "noOrganiserAccess" });
+        }
+        expect(await snapshot(trx, id)).toEqual(before);
+        expect(sent).toEqual([]);
+      });
+    },
+  );
+
+  it.each([[{ op: "resend" }], [{ op: "cancel" }]])("%j: nobody, a wrong token and another account's session are `noOrganiserAccess`", async (request) => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof } = await anEvent(trx);
+      await aTransferThatWaits(trx, id, proof);
+      const stranger = await seedSession(trx, await seedAccount(trx));
+      const before = await snapshot(trx, id);
+      const { deps, sent } = handing(trx);
+      for (const visitor of [{}, undefined, { adminToken: "x".repeat(22) }, { session: stranger }]) {
+        expect(await handOverEvent(id, visitor, request, deps)).toEqual({ ok: false, error: "noOrganiserAccess" });
+      }
+      expect(await snapshot(trx, id)).toEqual(before);
+      expect(sent).toEqual([]);
+    });
+  });
+});
+
+describe("OT4.3: resend and cancel decide the access again under the lock", () => {
+  it.each([
+    ["resend", "session"],
+    ["resend", "adminToken"],
+    ["cancel", "session"],
+    ["cancel", "adminToken"],
+  ] as const)("`%s`: %s revoked while the request waits for the lock is `noOrganiserAccess`, and nothing is written", async (op, by) => {
+    await withCommittedAddresses((_, address) =>
+      withCommittedEvent(async (db, eventId, token) => {
+        const accountId = await seedAccount(db, { email: address() });
+        await db.updateTable("event").set({ account_id: accountId, confirmed_at: new Date() }).where("id", "=", eventId).execute();
+        const session = await seedSession(db, accountId);
+        const to = address();
+        await db.updateTable("event").set({ transfer_email: to, transfer_status: "sent", transfer_status_at: new Date() }).where("id", "=", eventId).execute();
+        const proof = by === "session" ? { session } : { adminToken: token };
+        const { deps, sent } = handing(db);
+        const answer = await whileHeld(
+          db,
+          async (trx) => {
+            await lockEvent(trx, eventId, "noKeyUpdate");
+            if (by === "adminToken") await trx.updateTable("event").set({ admin_token_hash: null }).where("id", "=", eventId).execute();
+          },
+          (own) => handOverEvent(eventId, proof, { op }, { ...deps, db: own }),
+          async () => {
+            if (by === "session") await closeSession(db, session);
+          },
+        );
+        expect(answer).toEqual({ ok: false, error: "noOrganiserAccess" });
+        expect(await eventRow(db, eventId)).toMatchObject({ transfer_email: to, transfer_status: "sent" });
+        expect(await linksOf(db, eventId)).toEqual([]);
+        expect(sent).toEqual([]);
+      }),
+    );
   });
 });
