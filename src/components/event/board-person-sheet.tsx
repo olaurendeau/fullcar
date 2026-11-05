@@ -10,22 +10,30 @@ import type { VisibleLegBoard } from "@/domain/phone-visibility";
 import { findSeat } from "@/domain/tap";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "./bottom-sheet";
-import type { SetPersonLeg } from "./cell-sheet";
+import type { CellSending, SetPersonLeg } from "./cell-sheet";
 import { cellNotDone, type NotDone } from "./failure-words";
 import { focusAfterRemoval, focusBoardName, focusFirstShown, focusFreeSeat, focusNotConcerned, focusOffer } from "./focus";
 import { useSends } from "./hidden-page";
 import type { BoardDevice } from "./leg-panel";
 import type { BarProblem } from "./message-bar";
 import { PersonForm, type UpdatePerson } from "./person-form";
+import { PhoneLink } from "./phone-link";
 import { RemovePersonButton, type RemovePerson } from "./remove-person-dialog";
 import type { OpenPerson } from "./without-car-list";
 
 /**
  * What the sheet of a person of the board can show of her state on its leg. « Sans voiture » and
  * « Ne fait pas ce leg » come from the lists under the cars (PL1.1, PL1.2); a passenger comes from
- * the card of her car (PL1.3), and will be a third case here.
+ * the card of her car (PL1.3, #982).
  */
-export type BoardPersonState = Extract<DeviceState, { kind: "withoutCar" | "notConcerned" }>;
+export type BoardPersonState = Extract<DeviceState, { kind: "withoutCar" | "notConcerned" | "passenger" }>;
+
+/**
+ * « Sortir de la voiture » for a passenger of any device (#982): `undoSeats` with her state before,
+ * `withoutCar`, so that a person who entered another car meanwhile stays there (PL4.5). It answers
+ * as `SetPersonLeg` does; when she was already out, the bar says so, without « Annuler » (PL3.7).
+ */
+export type LeaveCar = (request: { personId: string; rideId: string; leg: Leg }, sheet: CellSending) => ReturnType<SetPersonLeg>;
 
 /** What only the device's own persons have: her number, whether she drives, and what her removal says. */
 interface Own {
@@ -37,50 +45,69 @@ interface Own {
 }
 
 /** The person as she was when the sheet opened: what it shows while it closes, once she is gone. */
-type Opening = { id: string; firstName: string; state: BoardPersonState["kind"]; open: boolean; count: number; order: string[] };
+type Opening = { id: string; firstName: string; state: BoardPersonState; phone: string | null; open: boolean; count: number; order: string[] };
+
+/** Person `id` in a car of the leg, as the card shows her: her state, and the number it carries (PL3.5). */
+function inCar({ cars }: VisibleLegBoard, id: string): { state: Extract<BoardPersonState, { kind: "passenger" }>; phone: string | null } | undefined {
+  for (const car of cars) {
+    const passenger = car.passengers.find((candidate) => candidate.id === id);
+    if (passenger) return { state: { kind: "passenger", rideId: car.id, driver: { id: car.driver.id, firstName: car.driver.firstName } }, phone: passenger.phone };
+  }
+  return undefined;
+}
 
 /**
- * The sheets of the persons listed under a leg's cars (#981): `open(person, state)` for the
+ * The sheets of the persons listed under a leg's cars (#981) or passengers of one (#982): `open(person, state)` for the
  * button touched, `sheet` rendered once on the leg. Each opening is a new sheet. `legs` are the
  * event's legs as the page shows them, for her number and for what her removal says.
  */
 export function useBoardPersonSheet(board: VisibleLegBoard, legs: readonly VisibleLegBoard[], device: BoardDevice) {
   const [opening, setOpening] = useState<Opening | null>(null);
-  const open: OpenPerson = (person, state) =>
+  const open: OpenPerson = (person, kind) => {
+    // From the card of her car she is a passenger, with her driver and the number the state carries; from a list, her list's state.
+    const car = kind === "passenger" ? inCar(board, person.id) : undefined;
+    const state: BoardPersonState | undefined = kind === "passenger" ? car?.state : { kind };
+    if (!state) return;
     setOpening((current) => ({
       id: person.id,
       firstName: person.firstName,
       state,
+      phone: car?.phone ?? null,
       open: true,
       count: (current?.count ?? 0) + 1,
       order: deviceMatrix(legs).map(({ id }) => id),
     }));
+  };
   const onOpenChange = (count: number) => (isOpen: boolean) =>
     setOpening((current) => (current?.count === count ? { ...current, open: isOpen } : current));
 
   let sheet = null;
   if (opening) {
     const { id } = opening;
-    const mine = board.device.find((person) => person.id === id);
+    const car = inCar(board, id);
     const listed = board.withoutCar.some((person) => person.id === id)
       ? "withoutCar"
       : board.notConcerned.some((person) => person.id === id)
         ? "notConcerned"
         : undefined;
-    // Her state on this leg as the page shows it now; moved to a car or gone, the sheet closes over what it showed.
-    const state = mine ? mine.state.kind : listed;
-    const shown = state === "withoutCar" || state === "notConcerned" ? state : undefined;
+    // Her state on this leg as the page shows it now, where the sheet was opened from: her list, or her car.
+    // Out of that car (to the list, to another car, or gone) or out of her list, the sheet closes over what it showed:
+    // an action never applies to a place the user did not open it from.
+    const shown: BoardPersonState | undefined =
+      opening.state.kind === "passenger" ? (car?.state.rideId === opening.state.rideId ? car.state : undefined) : listed && { kind: listed };
     const own = legs.flatMap((leg) => leg.device).find((person) => person.id === id);
     sheet = (
       <BoardPersonSheet
         key={opening.count}
         person={{ id, firstName: opening.firstName }}
         leg={board.leg}
-        state={{ kind: shown ?? opening.state }}
+        state={shown ?? opening.state}
+        phone={car ? car.phone : opening.phone}
         open={opening.open && shown !== undefined}
-        present={shown !== undefined}
+        present={listed !== undefined}
         onOpenChange={onOpenChange(opening.count)}
         setPersonLeg={device.setPersonLeg}
+        leaveCar={device.leaveCar}
         own={
           own && {
             phone: own.phone,
@@ -105,7 +132,10 @@ export function useBoardPersonSheet(board: VisibleLegBoard, legs: readonly Visib
  * in « Vos inscriptions » (PL3.3), « Trouver une place » included, then « Modifier » and « Retirer
  * de l’événement » as her sheet there (PL1.3b). One of another device (PL3.2) has « Ne fait pas
  * le retour », or « Passer sans voiture » if she does not do the leg, and a sentence that says why
- * she has nothing more (PL3.4, D7); her « Trouver une place » comes with its mode (#983).
+ * she has nothing more (PL3.4, D7); her « Trouver une place » comes with its mode (#983). A passenger,
+ * opened from the card of her car, is « Dans la voiture de {conducteur} »: « Sortir de la voiture » and
+ * « Ne fait pas le retour », never « Voir la voiture », where one already is (PL3.2); under the state,
+ * her number when the state received carries it (PL3.5), and « Modifier » and « Retirer » if she is the device's (PL1.3b).
  *
  * An action that succeeds closes it, with no message (PL3.6, PL4.2; already so, in silence,
  * PL3.7); one refused keeps it open with its message. Closed, the focus goes back to her first name
@@ -119,6 +149,8 @@ function BoardPersonSheet({
   present,
   onOpenChange,
   setPersonLeg,
+  leaveCar,
+  phone,
   own,
   freeCar,
   inform,
@@ -128,10 +160,13 @@ function BoardPersonSheet({
   leg: Leg;
   state: BoardPersonState;
   open: boolean;
-  /** She is still in one of the leg's lists, not moved to a car nor gone with a removal. */
+  /** She is in one of the leg's lists now, wherever she was opened from: not in a car, nor gone with a removal. */
   present: boolean;
   onOpenChange: (open: boolean) => void;
   setPersonLeg: SetPersonLeg;
+  leaveCar: LeaveCar;
+  /** The number the state carries for a passenger (PL3.5): read from it, never derived. */
+  phone: string | null;
   /** Present for one of the device's persons. */
   own?: Own;
   /** The first car of `leg` with a free seat, if any. */
@@ -172,11 +207,15 @@ function BoardPersonSheet({
   async function declare(action: CellChange) {
     const change = { personId: person.id, leg, kind: declaredBy(action) };
     const cell = { firstName: person.firstName, leg, state };
-    const notDone: NotDone = own
+    // « Sortir de la voiture » names the car, which only a passenger has to leave.
+    const notDone: NotDone = own || state.kind === "passenger"
       ? cellNotDone(action, cell)
       : { kind: "choice", firstName: person.firstName, leg, choice: action === "notConcerned" ? "notConcerned" : "setWithoutCar" };
     const sheet = { ...sends(), cell, notDone };
-    const outcome = await setPersonLeg(change, sheet);
+    const outcome =
+      action === "leaveCar" && state.kind === "passenger"
+        ? await leaveCar({ personId: person.id, rideId: state.rideId, leg }, sheet)
+        : await setPersonLeg(change, sheet);
     if (outcome === undefined) return;
     const closes = outcome === null || outcome === "noRetour" || outcome === "personGone";
     if (sheet.inSheet()) setProblem(closes ? null : outcome);
@@ -192,7 +231,8 @@ function BoardPersonSheet({
     onOpenChange(false);
   }
 
-  const actions: CellAction[] = own ? cellActions(state) : otherPersonActions(state);
+  // « Voir la voiture » has nothing to show where one already is (PL3.2).
+  const actions: CellAction[] = (own ? cellActions(state) : otherPersonActions(state)).filter((action) => action !== "seeCar");
   const label: Record<CellAction, string> = {
     seeCar: t("DevicePersons.seeCar"),
     findSeat: t("DevicePersons.findSeat"),
@@ -231,9 +271,14 @@ function BoardPersonSheet({
           >
             {Icon && <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />}
             <span className="min-w-0 wrap-anywhere">
-              {state.kind === "notConcerned" ? t(`DevicePersons.state.notConcerned.${leg}`) : t("DevicePersons.state.withoutCar")}
+              {state.kind === "passenger"
+                ? t("DevicePersons.state.passenger", { driver: state.driver.firstName })
+                : state.kind === "notConcerned"
+                  ? t(`DevicePersons.state.notConcerned.${leg}`)
+                  : t("DevicePersons.state.withoutCar")}
             </span>
           </p>
+          {state.kind === "passenger" && phone && <PhoneLink firstName={person.firstName} phone={phone} />}
           {problem && (
             <p role="alert" className="text-sm text-destructive">
               {tActions(problem)}

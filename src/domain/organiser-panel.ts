@@ -12,6 +12,7 @@ import { deviceMatrix, type MatrixRow } from "./device-matrix";
 import type { Leg } from "./leg";
 import type { PendingNotice } from "./pending-send";
 import type { OrganiserLegBoard } from "./phone-visibility";
+import type { TransferNotice } from "./transfer";
 import type { WallClock, WallDate, WallTime } from "./wall-clock";
 
 /**
@@ -20,7 +21,9 @@ import type { WallClock, WallDate, WallTime } from "./wall-clock";
  * `signIn` (OA7.1), `notYours` with the address of the visitor's own session (OA7.2),
  * `pending` (OA7.7), `orphan` (OA7.9), `ended` for the organiser of an anonymised event (OA8.4),
  * with what is left of it and the date of its day 30, when the sign-ups were erased (#598).
- * The panel of an event awaiting confirmation carries its notice, `pending` (OA1.7, OA2.1).
+ * The panel of an event awaiting confirmation carries its notice, `pending` (OA1.7, OA2.1); the
+ * panel of an event being handed over carries its notice, `transfer` (epic #935, OT2.2): never
+ * both, the database refuses it (`event_transfer_open`).
  */
 export type OrganiserPanelAnswer =
   | { state: "invalid" | "signIn" | "pending" | "orphan" }
@@ -33,6 +36,7 @@ export type OrganiserPanelAnswer =
       legs: OrganiserLeg[];
       persons: OrganiserPerson[];
       pending?: PendingNotice;
+      transfer?: TransferNotice;
     };
 
 /**
