@@ -620,7 +620,7 @@ ci-dessus valent pour chacun.
   `clearLateAddress` prend l'événement **après** l'adresse, alors que tout autre chemin la prend
   avant l'événement (`recordSend`, `lockAddress` : « jamais avant l'événement »). Deux
   chemins peuvent s'y croiser : `confirmAgain` (`src/app/e/[id]/pending-email.ts`, renvoi et
-  correction de l'adresse) et `handOverEvent` (`src/app/e/[id]/transfer.ts`, cession et changement
+  correction de l'adresse) et `handOverEvent` (`src/app/e/[id]/transfer.ts`, cession, renvoi et changement
   d'adresse, via `claimTransfer`), qui tiennent l'événement et attendent l'adresse que la suppression
   tient en attendant l'événement. Pour la cession, c'est une seconde demande à l'adresse X, sur le
   même événement, pendant la suppression du compte X. Postgres fait échouer l'une des deux
@@ -648,7 +648,7 @@ ci-dessus valent pour chacun.
   `transferEvent`, #944) : la confirmation retournée. Une seule action pour les gestes du cédant
   (`start`, `change`, `resend` et `cancel`, #945), donc un seul point d'entrée du jeton d'admin et
   une seule décision d'accès. Le corps porte `{ adminToken, session }` et la requête
-  `{ op, email }`. L'accès est décidé avant le verrou puis de nouveau sous
+  `{ op, email }` (`start`, `change`) ou `{ op }` seul (`resend`, `cancel`). L'accès est décidé avant le verrou puis de nouveau sous
   `lockEvent(trx, id, "noKeyUpdate")` (OT4.3), puis la transaction (`READ COMMITTED`) prend, dans
   l'ordre de `recordSend` : l'Event, l'adresse, le plafond global. `claimTransfer`, l'adresse du
   destinataire et `transfer_status` à `sending`, et la suppression des liens de cession de
