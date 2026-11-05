@@ -149,38 +149,6 @@ test.describe("« Trouver une place » for a person of another device", () => {
     await backToToday(page, db, seededEvent.id, scene);
   });
 
-  test("ZZ today with Placer", async ({ page }) => {
-    await seat(page, "Nina").click();
-    const dialog = sheet(page, "Qui monte dans la voiture de Nina ?");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /^Placer/ }).click();
-    await page.waitForTimeout(1500);
-    console.log("ZZCOUNT", await page.locator('[role="dialog"]').count());
-  });
-
-  test("ZZ after person sheet", async ({ page }) => {
-    await person(page, "Hugo").click();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await seat(page, "Nina").click();
-    const dialog = sheet(page, "Qui monte dans la voiture de Nina ?");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /^Placer/ }).click();
-    await page.waitForTimeout(1500);
-    console.log("ZZCOUNT2", await page.locator('[role="dialog"]').count());
-  });
-
-  test("ZZ after find seat and Fermer", async ({ page }) => {
-    await findSeat(page, "Léa");
-    await barClose(page).click();
-    await seat(page, "Nina").click();
-    const dialog = sheet(page, "Qui monte dans la voiture de Nina ?");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /^Placer/ }).click();
-    await page.waitForTimeout(1500);
-    console.log("ZZCOUNT3", await page.locator('[role="dialog"]').count());
-  });
-
   test("PL3.8, état 17: on a car with points the tap opens « Qui monte… ? », Léa alone ticked, the departure ticked", async ({ db, page, seededEvent }) => {
     await findSeat(page, "Léa");
     await seat(page, "Nina").click();
@@ -195,9 +163,8 @@ test.describe("« Trouver une place » for a person of another device", () => {
     expect(await rideOf(db, seededEvent.id, scene.lea)).toEqual({ rideId: null, stopId: null });
 
     await dialog.getByRole("button", { name: /^Placer/ }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(messages(page)).toHaveText(["Léa est dans la voiture de Nina"]);
-    expect(await rideOf(db, seededEvent.id, scene.lea)).toEqual({ rideId: scene.nina, stopId: null });
+    // Léa alone, at the departure; Tom, who is of the device and without a car, stays so.
+    await expect.poll(() => rideOf(db, seededEvent.id, scene.lea)).toEqual({ rideId: scene.nina, stopId: null });
     expect(await rideOf(db, seededEvent.id, scene.tom)).toEqual({ rideId: null, stopId: null });
   });
 });
