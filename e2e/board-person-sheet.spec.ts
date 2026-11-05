@@ -107,13 +107,13 @@ test.describe("the sheet of a person of the lists under the cars", () => {
     await expect(fold(page)).toHaveText("Ne font pas l’aller (3)");
   });
 
-  test("PL3.1, PL3.2, PL3.4, PL3.6, PL4.2: Hugo, of another device, without a car: « Ne fait pas le retour » alone and the sentence; done, it closes and says nothing", async ({ page }) => {
+  test("PL3.1, PL3.2, PL3.4, PL3.6, PL4.2: Hugo, of another device, without a car: « Trouver une place » (#983) and « Ne fait pas le retour », and the sentence; done, it closes and says nothing", async ({ page }) => {
     const record = await recordBar(page);
     await expect(panel(page).getByRole("status")).toHaveText("2 sans voiture · 3 places libres");
     await person(withoutCar(page), "Hugo").click();
     const dialog = sheet(page, "Hugo · Retour");
     await expect(dialog).toContainText("Sans voiture");
-    expect(await actionsOf(dialog)).toEqual(["Ne fait pas le retour"]);
+    expect(await actionsOf(dialog)).toEqual(["Trouver une place", "Ne fait pas le retour"]);
     await expect(dialog.getByText(NOTE)).toBeVisible();
 
     await dialog.getByRole("button", { name: "Ne fait pas le retour" }).click();

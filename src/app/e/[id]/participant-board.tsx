@@ -7,7 +7,7 @@ import type { LeaveCar } from "@/components/event/board-person-sheet";
 import type { SetPersonLeg } from "@/components/event/cell-sheet";
 import type { MapHint } from "@/components/event/event-map";
 import { EventView } from "@/components/event/event-view";
-import { offerChanges, personLeg, type Failure, type Message, type Undo } from "@/components/event/bar-state";
+import { offerChanges, personLeg, type Failure, type Information, type Message, type Undo } from "@/components/event/bar-state";
 import {
   cellWhy,
   failureText,
@@ -46,6 +46,7 @@ import type { RemovePerson } from "@/components/event/remove-person-dialog";
 import type { RemoveRide } from "@/components/event/remove-ride-dialog";
 import type { OfferRide, UpdateRide } from "@/components/event/ride-form";
 import { seatsTaken, type TakeSeats } from "@/components/event/seat-sheet";
+import { usePickSeat } from "@/components/event/use-pick-seat";
 import { boardingStopTaken, type SetBoardingStop } from "@/components/event/stop-sheet";
 import type { EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
@@ -697,6 +698,13 @@ export function ParticipantBoard({
     return why.kind === "noRetour" ? { kind: "noRetour" } : { kind: "problem", problem };
   };
 
+  // The retour may have gone under the sheet: its tab goes as it closes, and nothing is said about it.
+  const inform = (message: Omit<Information, "at">, leg: Leg) =>
+    void whenPageShown(() => {
+      if (leg === "aller" || latest.current.event.retourAt) messages.inform({ ...message, leg });
+    });
+  const pickSeat = usePickSeat(messages, tab, inform);
+
   return (
     <EventView
       {...event}
@@ -713,11 +721,8 @@ export function ParticipantBoard({
           device.retry();
         },
         refocus: focusLandmark,
-        inform: (message, leg) =>
-          void whenPageShown(() => {
-            // The retour may have gone under the sheet: its tab goes as it closes, and nothing is said about it.
-            if (leg === "aller" || latest.current.event.retourAt) messages.inform({ ...message, leg });
-          }),
+        inform,
+        pickSeat,
         addPerson,
         updatePerson,
         setPersonLeg,

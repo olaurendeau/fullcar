@@ -11,11 +11,13 @@ import {
   madeUntrue,
   offerChanges,
   personLeg,
+  picksSeat,
   regions,
   retourBack,
   retourGone,
   succeed,
   undoing,
+  unpick,
   withdraw,
   type BarState,
   type Undo,
@@ -74,6 +76,36 @@ describe("the bar's lines", () => {
     state = fail(state, failure("A"));
     expect(texts(state)).toEqual(["A", "Aucune place libre au retour", "Tom est dans la voiture de Sophie"]);
     expect(regions(state).status).toBe("Tom est dans la voiture de Sophie");
+  });
+
+  // PL3.8 (#983): the mode « Touchez une place libre… » lives as long as its line does.
+  const pick = (at = 1) => ({ ...info("Touchez une place libre pour y placer Léa.", at), picksSeat: true as const });
+
+  it("PL3.8: the information of the mode is told apart, and only it goes when the mode ends without an action", () => {
+    let state = succeed(emptyBar, success("Tom est dans la voiture de Sophie"));
+    state = fail(state, failure("A"));
+    expect(picksSeat(state)).toBe(false);
+    state = inform(state, pick(3));
+    expect(picksSeat(state)).toBe(true);
+    expect(texts(unpick(state))).toEqual(["A", "Tom est dans la voiture de Sophie"]);
+    expect(picksSeat(unpick(state))).toBe(false);
+    expect(regions(unpick(state)).status).toBe("");
+  });
+
+  it("PL3.8: an information of another kind is not the mode's, and is left", () => {
+    const state = inform(emptyBar, info("Aucune place libre au retour"));
+    expect(picksSeat(state)).toBe(false);
+    expect(texts(unpick(state))).toEqual(["Aucune place libre au retour"]);
+  });
+
+  it("PL3.8: another information replaces the mode's line, and the mode is over", () => {
+    const state = inform(inform(emptyBar, pick(1)), info("Aucune place libre au retour", 2));
+    expect(picksSeat(state)).toBe(false);
+  });
+
+  it("PL3.8: the action that follows takes the line by rule 4, « Fermer » by rule 7", () => {
+    expect(picksSeat(ended(inform(emptyBar, pick(1)), 2))).toBe(false);
+    expect(picksSeat(close(inform(emptyBar, pick(1))))).toBe(false);
   });
 
   it("rule 7: « Fermer » removes every line", () => {

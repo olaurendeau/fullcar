@@ -13,6 +13,7 @@ import { CoverageBanner } from "./coverage-banner";
 import { EmptyLeg } from "./empty-leg";
 import { EventMap, OrganiserHint, type LegMap, type MapHint } from "./event-map";
 import { useBoardPersonSheet, type LeaveCar } from "./board-person-sheet";
+import type { PickSeatMode } from "./pick-seat";
 import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-form";
 import { RideCard } from "./ride-card";
 import type { RemovePerson } from "./remove-person-dialog";
@@ -33,6 +34,8 @@ export interface BoardDevice {
    * libre… », rule 4); never about a retour gone by then (#330, rule 9).
    */
   inform: (message: Message, leg: Leg) => void;
+  /** « Trouver une place » for a person of another device: the page's mode, and the seat that follows it (#983, PL3.8). */
+  pickSeat: PickSeatMode;
   /** Registers a person on this device (R1), with the device's token. */
   addPerson: AddPerson;
   /** Changes the first name and the number of one of the device's persons (C2.3). */
