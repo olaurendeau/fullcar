@@ -236,6 +236,14 @@ test.describe("the sheet", () => {
     expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({});
   });
 
+  test("RL6.4: a first name of the device typed in the sheet's form is noted", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    const sophie = await openSheet(page, "Sophie");
+    await sophie.getByRole("button", { name: "Ajouter une personne" }).click();
+    await addForm(page).getByLabel("Prénom").fill("léa");
+    await expect(addForm(page).getByText("Une personne s’appelle déjà Léa sur cet appareil.", { exact: true })).toBeVisible();
+  });
+
   test("C6.6: a person added from the sheet is ticked, with the focus on her box; closed, she stays without a car", async ({ db, page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     const sophie = await openSheet(page, "Sophie");
