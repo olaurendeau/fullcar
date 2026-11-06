@@ -29,6 +29,14 @@ describe("startPendingPoll: the notice read again while its email is on its way 
     expect(read).toHaveBeenCalledTimes(3);
   });
 
+  it("reads the notice of a handover just as well, and stops once it says something else (epic #935, OT2.2)", async () => {
+    const transfer = (send: string): Sent<unknown> => ({ ok: true, value: { state: "panel", legs: [], transfer: { email: EMAIL, send } } });
+    const { read, events } = run([transfer("sending"), transfer("sending"), transfer("sent")]);
+    await vi.advanceTimersByTimeAsync(10 * POLL_MS);
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(events.at(-1)).toStrictEqual({ type: "pendingRead", transfer: { email: EMAIL, send: "sent" } });
+  });
+
   it("stops once confirmed elsewhere: a panel without a notice (OA2.6)", async () => {
     const { read, events } = run([{ ok: true, value: { state: "panel", legs: [] } }]);
     await vi.advanceTimersByTimeAsync(10 * POLL_MS);

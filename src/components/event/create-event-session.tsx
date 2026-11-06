@@ -84,6 +84,7 @@ export function EmailField({
   onChange,
   readOnly = false,
   hint = false,
+  words,
 }: {
   id: string;
   value: string;
@@ -93,14 +94,20 @@ export function EmailField({
   /** While the address is being sent (« Corriger l’adresse », OA2.5): it is shown, not changed. */
   readOnly?: boolean;
   hint?: boolean;
+  /**
+   * The words of a field that is not the creation's (« Céder l’événement », epic #935): its label,
+   * the hint under it (without the link to « Confidentialité »), and the error to show instead of
+   * the creation's, when it has one.
+   */
+  words?: { label: string; hint: string; error?: string };
 }) {
   const t = useTranslations("CreateEvent");
   const tContact = useTranslations("Contact");
   const tErrors = useTranslations("FormErrors");
   const errorId = `${id}-error`;
   const hintId = `${id}-hint`;
-  const describedBy = [hint && hintId, problem && errorId].filter(Boolean).join(" ") || undefined;
-  const message =
+  const describedBy = [(hint || words) && hintId, problem && errorId].filter(Boolean).join(" ") || undefined;
+  const creation =
     problem === "sessionEnded"
       ? t("email.sessionEnded")
       : problem === "invalid"
@@ -108,11 +115,12 @@ export function EmailField({
         : problem === "tooLong"
           ? tErrors("tooLong", { max: String(EMAIL_MAX) })
           : problem && tErrors("required");
+  const message = problem && words?.error ? words.error : creation;
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <Label htmlFor={id} className={cn(problem && "text-destructive")}>
-        {t("email.label")}
+        {words?.label ?? t("email.label")}
       </Label>
       <Input
         ref={inputRef}
@@ -127,6 +135,11 @@ export function EmailField({
         aria-invalid={problem ? true : undefined}
         aria-describedby={describedBy}
       />
+      {words && (
+        <p id={hintId} className="text-[13px] leading-[18px] text-muted-foreground">
+          {words.hint}
+        </p>
+      )}
       {hint && (
         <p className="text-[13px] leading-[18px] text-muted-foreground">
           <span id={hintId}>{t("email.hint")}</span>{" "}

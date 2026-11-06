@@ -12,8 +12,8 @@ export const POLL_READS = SENDING_STALE_MS / POLL_MS;
 
 /**
  * Reads the panel every POLL_MS with `read`, each read waiting for the one before, and
- * dispatches the notice it answers (`pendingRead`). Stops by itself once the notice says
- * something else than « sending »: sent, failed, or none (OA2.6). After POLL_READS reads still
+ * dispatches the notice it answers (`pendingRead`). Stops by itself once the notice, a confirmation's or a handover's,
+ * says something else than « sending »: sent, failed, or none (OA2.6). After POLL_READS reads still
  * « sending », or failed, or not the panel, it gives up (`pendingGaveUp`): the notice then
  * reads as a failure, as the server would read it by then. Returns what stops it: nothing is
  * read nor dispatched after, a read on its way included.
@@ -28,7 +28,7 @@ export function startPendingPoll(read: () => Promise<Sent<unknown>>, dispatch: (
       if (stopped) return;
       reads += 1;
       if (answer) dispatch({ type: "pendingRead", ...answer });
-      if (answer && answer.pending?.send !== "sending") return;
+      if (answer && answer.pending?.send !== "sending" && answer.transfer?.send !== "sending") return;
       if (reads >= POLL_READS) return dispatch({ type: "pendingGaveUp" });
       next();
     }, POLL_MS);
@@ -40,7 +40,7 @@ export function startPendingPoll(read: () => Promise<Sent<unknown>>, dispatch: (
   };
 }
 
-/** While the notice of `screen` says « Envoi du lien… » (OA1.7), `startPendingPoll`, with the panel's own read. */
+/** While the notice of `screen`, a confirmation's or a handover's, says « Envoi du lien… » (OA1.7), `startPendingPoll`, with the panel's own read. */
 export function usePendingPoll(
   screen: ScreenState,
   read: () => Promise<Sent<unknown>>,

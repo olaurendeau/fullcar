@@ -505,6 +505,39 @@
     "cancel": "Cancel",
     "offline": "The email did not go out. Check your connection, then try again."
   },
+  "Transfer": {
+    "section": {
+      "title": "Hand over the event",
+      "body": "Another person takes over the organising with their email address. As soon as they open the link, the event leaves My events and you no longer have access."
+    },
+    "start": "Choose an address",
+    "sheet": {
+      "title": "Hand over the event",
+      "note": "Until the link is opened, you keep access and can cancel. Once it is opened, the event leaves My events and you no longer have access."
+    },
+    "email": {
+      "label": "Email address of the person taking over",
+      "hint": "They do not need an account: it will be created when they open the link.",
+      "self": "That is your account’s address. Enter the address of the person taking over."
+    },
+    "pending": {
+      "title": "Handover pending",
+      "sending": "Sending the link to {email}…",
+      "body": "We sent a link to {email}. Until it is opened, you keep access to this event."
+    },
+    "sendFailed": {
+      "title": "The email may not have been sent",
+      "body": "The link for {email} may not have been sent. Use “Resend the email”: if the first one arrives anyway, both links stay valid. You keep access."
+    },
+    "addressLimit": {
+      "title": "The email did not go out",
+      "body": "Too many emails went to {email} this hour. In an hour, use “Resend the email”. You keep access."
+    },
+    "expired": {
+      "title": "The link has expired",
+      "body": "The link sent to {email} is no longer valid. Send a new one, or cancel the handover. You keep access."
+    }
+  },
   "EditEvent": {
     "title": "Edit the event",
     "saved": "Event updated. Nobody is notified: remember to tell the group.",

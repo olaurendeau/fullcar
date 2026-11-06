@@ -6,6 +6,7 @@ import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg, OrganiserPerson } from "@/domain/organiser-panel";
 import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
 import { positionOf } from "@/domain/place";
+import { transferNoticeOf, type TransferNotice } from "@/domain/transfer";
 import { isWallClock } from "@/domain/wall-clock";
 import type { EventState } from "../event-state";
 import { stateRead, type ActionProblem, type Sent } from "../run-action";
@@ -21,12 +22,14 @@ import type { OrganiserCheck, Refusal } from "./admin-token-store";
 /**
  * The panel as last read: the link to share, and its legs, or `null` once withdrawn (O1.10):
  * the link stays, the sections go. There is no organiser's link any more (OA7.3). `pending`, the
- * notice « Confirmez votre adresse » of an event awaiting confirmation (OA1.7, OA2.1).
+ * notice « Confirmez votre adresse » of an event awaiting confirmation (OA1.7, OA2.1); `transfer`,
+ * the notice « Cession en attente » of an event being handed over (epic #935, OT2.2): never both.
  */
 export interface Panel {
   publicUrl: string;
   legs: OrganiserLeg[] | null;
   pending?: PendingNotice;
+  transfer?: TransferNotice;
 }
 
 /** The two lists of a leg's section (O5.6). */
@@ -85,8 +88,8 @@ export type ScreenEvent =
   | { type: "listToggled"; key: string }
   | { type: "legToggled"; leg: Leg }
   | { type: "personsToggled" }
-  /** The notice read again while its email is on its way (OA1.7): without one, it goes (OA2.6). */
-  | { type: "pendingRead"; pending?: PendingNotice }
+  /** The notice read again while its email is on its way (OA1.7), a confirmation's or a handover's: without one, it goes (OA2.6). */
+  | { type: "pendingRead"; pending?: PendingNotice; transfer?: TransferNotice }
   /** No result read in 30 s (POLL_READS): the notice still « sending » reads as a failure, as the server's rule says. */
   | { type: "pendingGaveUp" };
 
@@ -99,8 +102,8 @@ function fromCheck(check: OrganiserCheck, folded = false): ScreenState {
     case "failed":
       return { state: "failed", retrying: check.retrying ?? false };
     case "valid": {
-      const { publicUrl, legs, persons, pending } = check;
-      const panel = { publicUrl, legs, ...(pending && { pending }) };
+      const { publicUrl, legs, persons, pending, transfer } = check;
+      const panel = { publicUrl, legs, ...(pending && { pending }), ...(transfer && { transfer }) };
       const fresh = { expanded: new Set<string>(), unfolded: new Set<Leg>(), personsOpen: false };
       return { state: "ready", panel, persons, refreshing: null, refreshFailed: 0, refreshed: false, folded, ...fresh };
     }
@@ -155,11 +158,13 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
   if (event.type === "personsToggled") return { ...state, personsOpen: !state.personsOpen };
   if (event.type === "pendingRead") {
     const { publicUrl, legs } = state.panel;
-    return { ...state, panel: { publicUrl, legs, ...(event.pending && { pending: event.pending }) } };
+    const { pending, transfer } = event;
+    return { ...state, panel: { publicUrl, legs, ...(pending && { pending }), ...(transfer && { transfer }) } };
   }
   if (event.type === "pendingGaveUp") {
-    const { pending } = state.panel;
-    return pending?.send === "sending" ? { ...state, panel: { ...state.panel, pending: { ...pending, send: "failed" } } } : state;
+    const { pending, transfer } = state.panel;
+    if (pending?.send === "sending") return { ...state, panel: { ...state.panel, pending: { ...pending, send: "failed" } } };
+    return transfer?.send === "sending" ? { ...state, panel: { ...state.panel, transfer: { ...transfer, send: "failed" } } } : state;
   }
   if (event.type === "reread") {
     // Ending a refresh, it is that refresh's outcome, said as a refresh says it (O1.9, O5.4).
@@ -188,21 +193,22 @@ export function screenReducer(state: ScreenState, event: ScreenEvent): ScreenSta
 /** How often the notice is read again while its email is on its way (OA1.7: its result within 15 s of the arrival). */
 export const POLL_MS = 2_000;
 
-/** Whether the notice is read again: on the panel, while its email is on its way. */
+/** Whether the notice is read again: on the panel, while the email of its confirmation or its handover is on its way. */
 export function pollsPending(state: ScreenState): boolean {
-  return state.state === "ready" && state.panel.pending?.send === "sending";
+  return state.state === "ready" && (state.panel.pending?.send === "sending" || state.panel.transfer?.send === "sending");
 }
 
 /**
  * The notice of a read of the panel, `{}` for a panel without one (OA2.6); nothing to apply
  * when the read failed or did not answer the panel.
  */
-export function pendingRead(panel: Sent<unknown>): { pending?: PendingNotice } | undefined {
+export function pendingRead(panel: Sent<unknown>): { pending?: PendingNotice; transfer?: TransferNotice } | undefined {
   if (!panel.ok) return undefined;
-  const answer = panel.value as { state?: unknown; pending?: unknown } | null | undefined;
+  const answer = panel.value as { state?: unknown; pending?: unknown; transfer?: unknown } | null | undefined;
   if (answer?.state !== "panel") return undefined;
   const pending = pendingNoticeOf(answer.pending);
-  return pending ? { pending } : {};
+  const transfer = transferNoticeOf(answer.transfer);
+  return { ...(pending && { pending }), ...(transfer && { transfer }) };
 }
 
 /**
@@ -252,6 +258,34 @@ export function fixAnswer(sent: Sent<unknown>): FixAnswer {
   }
   if (answer?.ok === false && (answer.error === "tooMany" || answer.error === "notPending" || answer.error === "eventEnded")) return { kind: answer.error };
   return { kind: "notSent" };
+}
+
+/**
+ * What « Envoyer le lien » of « Céder l’événement » came to (epic #935, OT1.5, OT1.6): the notice
+ * the server answers, `sending` or `addressLimit` (the sheet closes, the notice says the rest);
+ * the address it refused, with the code the field shows, or the account's own; the limit of the
+ * event, which wrote nothing; an event that no longer takes a handover (`refused`: the sheet
+ * closes, the page is read again); or not sent, for want of a connection or any other reason:
+ * the sheet then says `FixEmail.offline`.
+ */
+export type TransferAnswer =
+  | { kind: "answered"; transfer: TransferNotice }
+  | { kind: "address"; reason: EmailError }
+  | { kind: "self" | "tooMany" | "refused" | "notSent" };
+
+const REFUSALS: readonly unknown[] = ["pending", "eventEnded", "noOrganiserAccess", "eventNotFound"];
+
+/** The answer of `transferEvent` to `start`, as the page takes it: anything it does not know is « not sent ». */
+export function transferAnswer(sent: Sent<unknown>): TransferAnswer {
+  if (!sent.ok) return { kind: "notSent" };
+  const answer = sent.value as { ok?: unknown; transfer?: unknown; error?: unknown } | null | undefined;
+  const transfer = answer?.ok === true ? transferNoticeOf(answer.transfer) : undefined;
+  if (transfer && (transfer.send === "sending" || transfer.send === "addressLimit")) return { kind: "answered", transfer };
+  if (answer?.ok !== false) return { kind: "notSent" };
+  if (answer.error === "required") return { kind: "address", reason: "required" };
+  if (answer.error === "email") return { kind: "address", reason: "invalid" };
+  if (answer.error === "self" || answer.error === "tooMany") return { kind: answer.error };
+  return REFUSALS.includes(answer.error) ? { kind: "refused" } : { kind: "notSent" };
 }
 
 /** What a read of the panel shows: its legs, and every person (none from a server before #671). */
