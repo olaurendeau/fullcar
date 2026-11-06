@@ -13,6 +13,7 @@ import type { NewEvent } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
 import { withVisiblePhones } from "@/domain/phone-visibility";
 import type { Position } from "@/domain/place";
+import { hashToken } from "@/domain/token-hash";
 import { readEventPage, readEventState, type DeviceState } from "./event-state";
 import { eventMetadata, loadEventPage } from "./load-event";
 import { stillOpen } from "./test-state";
@@ -132,6 +133,79 @@ describe("the Stops in the state (RV8.3)", () => {
       expect(stillOpen(state)?.options).toEqual({ stops: false });
       expect(legOf(state, "aller").cars[0].stops).toEqual([]);
       expect(JSON.stringify(state)).not.toContain(scene.stopId);
+    });
+  });
+});
+
+// LP5.1: the token field is one token or the device's list, its own first.
+describe("readEventState, a device with several tokens", () => {
+  it("gives each of the device's persons the rank of the token that holds her", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, zoe, tom, marc } = await seedScene(trx);
+      const ranks = async (token: unknown) => stillOpen(await readEventState(trx, eventId, token))?.tokenRanks;
+      expect(await ranks([lea.token, tom.token])).toEqual({ [lea.id]: 0, [zoe.id]: 0, [tom.id]: 1 });
+      expect(await ranks([tom.token, lea.token])).toEqual({ [tom.id]: 0, [lea.id]: 1, [zoe.id]: 1 });
+      expect(await ranks([marc.token, NOBODYS_TOKEN, tom.token, marc.token])).toEqual({ [marc.id]: 0, [tom.id]: 2 });
+    });
+  });
+
+  it("a token alone gives today's state, with every rank at 0", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, zoe } = await seedScene(trx);
+      const alone = await readEventState(trx, eventId, lea.token);
+      expect(alone).toEqual(await readEventState(trx, eventId, [lea.token]));
+      expect(stillOpen(alone)?.tokenRanks).toEqual({ [lea.id]: 0, [zoe.id]: 0 });
+    });
+  });
+
+  it("no device, or the page's read, has no rank", async () => {
+    await withRollback(async (trx) => {
+      const { eventId } = await seedScene(trx);
+      expect(stillOpen(await readEventState(trx, eventId))?.tokenRanks).toEqual({});
+      expect(stillOpen(await readEventState(trx, eventId, NOBODYS_TOKEN))?.tokenRanks).toEqual({});
+      const page = await readEventPage(trx, eventId);
+      expect(page).toMatchObject({ ended: false, state: { tokenRanks: {} } });
+    });
+  });
+
+  it("a device holding A and B sees what the devices of A and of B each see, nothing more", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, tom } = await seedScene(trx);
+      const read = async (token: unknown) => stillOpen(await readEventState(trx, eventId, token));
+      const [both, ofLea, ofTom] = [await read([lea.token, tom.token]), await read(lea.token), await read(tom.token)];
+      for (const leg of ["aller", "retour"] as const) {
+        const sees = (state: typeof both) => sentNumbers(legOf(state, leg));
+        expect(sees(both)).toEqual([...new Set([...sees(ofLea), ...sees(ofTom)])].sort());
+        const ids = (state: typeof both) => legOf(state, leg).device.map((person) => person.id);
+        expect(ids(both).sort()).toEqual([...ids(ofLea), ...ids(ofTom)].sort());
+      }
+      // Marc, who nobody sent, shows no more than to the others.
+      expect(sentNumbers(legOf(both, "retour"))).not.toContain("marc");
+    });
+  });
+
+  it("a field that reads as no token gives no device and no number", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea } = await seedScene(trx);
+      const nobody = await readEventState(trx, eventId);
+      const malformed = [[], [lea.token, "nope"], Array.from({ length: 21 }, () => lea.token), [[lea.token]], 42, { 0: lea.token }];
+      for (const field of malformed) {
+        expect(await readEventState(trx, eventId, field)).toEqual(nobody);
+      }
+      expect(sentNumbers(nobody)).toEqual([]);
+    });
+  });
+
+  it("the answer holds none of the tokens sent, nor a hash", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, lea, tom } = await seedScene(trx);
+      const sent = [lea.token, tom.token];
+      const state = await readEventState(trx, eventId, sent);
+      const serialized = JSON.stringify(state);
+      for (const token of sent) {
+        expect(serialized).not.toContain(token);
+        expect(serialized).not.toContain(hashToken(token));
+      }
     });
   });
 });

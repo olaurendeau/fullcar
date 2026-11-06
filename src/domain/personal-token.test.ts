@@ -1,7 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { isPersonalToken, PERSONAL_TOKEN_BYTES, personalTokenFromBytes } from "./personal-token";
+import {
+  creationTokenOf,
+  DEVICE_TOKENS_MAX,
+  deviceTokensOf,
+  isPersonalToken,
+  PERSONAL_TOKEN_BYTES,
+  personalTokenFromBytes,
+} from "./personal-token";
 import { browserUnsafe } from "./test-browser-safe";
 
 const BASE64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -86,6 +93,69 @@ describe("isPersonalToken", () => {
     for (const notString of [undefined, null, 42, [token], { toString: () => token }]) {
       expect(isPersonalToken(notString)).toBe(false);
     }
+  });
+});
+
+function tokens(count: number) {
+  return Array.from({ length: count }, () => personalTokenFromBytes(new Uint8Array(randomBytes(16))));
+}
+
+// LP5.1: the one reading of the field the browser sends as `token`.
+describe("deviceTokensOf", () => {
+  it("makes a list of the one well-formed token a page loaded before the deployment sends", () => {
+    const [token] = tokens(1);
+    expect(deviceTokensOf(token)).toEqual([token]);
+  });
+
+  it("reads lists of 1 to DEVICE_TOKENS_MAX well-formed tokens, in order", () => {
+    expect(DEVICE_TOKENS_MAX).toBe(20);
+    for (const count of [1, 2, 20]) {
+      const list = tokens(count);
+      expect(deviceTokensOf(list)).toEqual(list);
+    }
+  });
+
+  it("keeps duplicates in their place", () => {
+    const [a, b] = tokens(2);
+    expect(deviceTokensOf([a, b, a, a])).toEqual([a, b, a, a]);
+  });
+
+  it("reads nothing from 21 tokens, an empty list, or a malformed element", () => {
+    const [a] = tokens(1);
+    expect(deviceTokensOf(tokens(21))).toBeUndefined();
+    expect(deviceTokensOf([])).toBeUndefined();
+    for (const bad of ["", a.slice(1), `${a}A`, `${a.slice(0, -1)}B`, 42, null, undefined, { toString: () => a }]) {
+      expect(deviceTokensOf([a, bad])).toBeUndefined();
+      expect(deviceTokensOf([bad])).toBeUndefined();
+    }
+  });
+
+  it("reads nothing from a nested list, a number, an object or an absent value", () => {
+    const [a] = tokens(1);
+    for (const other of [[[a]], 42, { 0: a, length: 1 }, { toString: () => a }, null, undefined, true, ""]) {
+      expect(deviceTokensOf(other)).toBeUndefined();
+    }
+  });
+
+  it("does not hand back the list it was given", () => {
+    const list = tokens(2);
+    const read = deviceTokensOf(list);
+    list.push("x");
+    expect(read).toHaveLength(2);
+  });
+});
+
+describe("creationTokenOf", () => {
+  it("is the first token of the list, or the token alone", () => {
+    const [a, b] = tokens(2);
+    expect(creationTokenOf([a, b])).toBe(a);
+    expect(creationTokenOf(b)).toBe(b);
+  });
+
+  it("is nothing when the field reads as no token", () => {
+    expect(creationTokenOf([])).toBeUndefined();
+    expect(creationTokenOf(tokens(21))).toBeUndefined();
+    expect(creationTokenOf(undefined)).toBeUndefined();
   });
 });
 

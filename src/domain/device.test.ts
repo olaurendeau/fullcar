@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { deviceAccess, devicePersonIds, eventAccess } from "./device";
+import { deviceAccess, devicePersonIds, deviceTokenRanks, eventAccess } from "./device";
 import { isPersonalToken, personalTokenFromBytes } from "./personal-token";
 import { hashToken } from "./token-hash";
 
@@ -59,7 +59,7 @@ describe("devicePersonIds", () => {
   // C12.1, C12.2
   it("returns nobody for a malformed token, even when its hash is stored", () => {
     const body = mine.slice(0, -1);
-    for (const malformed of [body, `${mine}A`, `${body}B`, `${body}+`, undefined, null, 42, [mine], { toString: () => mine }]) {
+    for (const malformed of [body, `${mine}A`, `${body}B`, `${body}+`, undefined, null, 42, [], [[mine]], [body], [mine, body], { toString: () => mine }]) {
       const stored = typeof malformed === "string" ? [{ id: "px", tokenHash: hashToken(malformed) }] : [];
       expect(devicePersonIds(malformed, [...persons, ...stored])).toEqual([]);
     }
@@ -76,6 +76,32 @@ describe("devicePersonIds", () => {
 
   it("returns nobody when the event has no person", () => {
     expect(devicePersonIds(mine, [])).toEqual([]);
+  });
+
+  // LP5.1: a device holding A and B sees what the devices of A and of B each see.
+  it("returns the union of the persons of two tokens, in the event's order", () => {
+    expect(devicePersonIds([mine, theirs], persons)).toEqual(["p1", "p2", "p3"]);
+    expect(devicePersonIds([theirs, mine], persons)).toEqual(["p1", "p2", "p3"]);
+    expect(devicePersonIds([mine, newToken()], persons)).toEqual(["p1", "p3"]);
+    expect(devicePersonIds([mine, mine], persons)).toEqual(["p1", "p3"]);
+  });
+
+  // LP5.1
+  it("returns nobody for a list that reads as no token: empty, over 20, or with a malformed element", () => {
+    const twentyOne = Array.from({ length: 21 }, () => mine);
+    expect(devicePersonIds([], persons)).toEqual([]);
+    expect(devicePersonIds(twentyOne, persons)).toEqual([]);
+    expect(devicePersonIds(twentyOne.slice(0, 20), persons)).toEqual(["p1", "p3"]);
+    expect(devicePersonIds([mine, "nope"], persons)).toEqual([]);
+  });
+
+  // LP5.1
+  it("compares every hash with every token, with no early exit", () => {
+    for (const list of [[mine, theirs], [theirs, mine, newToken()], [mine, mine]]) {
+      vi.mocked(timingSafeEqual).mockClear();
+      devicePersonIds(list, persons);
+      expect(timingSafeEqual).toHaveBeenCalledTimes(persons.length * list.length);
+    }
   });
 
   // C12.2
@@ -117,10 +143,58 @@ describe("deviceAccess", () => {
     expect(deviceAccess(mine, persons, ["gone", "p2"])).toEqual({ kind: "forbidden" });
   });
 
+  // LP5.1
+  it("grants the person of the second token, and refuses the one of a token not sent", () => {
+    expect(deviceAccess([newToken(), theirs], persons, ["p2"])).toEqual({ kind: "device" });
+    expect(deviceAccess([mine, theirs], persons, ["p1", "p2", "p3"])).toEqual({ kind: "device" });
+    expect(deviceAccess([mine, newToken()], persons, ["p1", "p2"])).toEqual({ kind: "forbidden" });
+    expect(deviceAccess([theirs, newToken()], persons, ["gone", "p1"])).toEqual({ kind: "forbidden" });
+  });
+
+  // LP5.1
+  it("refuses as forbidden a list that reads as no token", () => {
+    expect(deviceAccess([], persons, ["gone"])).toEqual({ kind: "forbidden" });
+    expect(deviceAccess([mine, "nope"], persons, ["p1"])).toEqual({ kind: "forbidden" });
+    expect(deviceAccess(Array.from({ length: 21 }, () => mine), persons, ["p1"])).toEqual({ kind: "forbidden" });
+  });
+
   it("refuses as forbidden a malformed or absent token, whoever is asked", () => {
     for (const token of [mine.slice(1), "", undefined]) {
       expect(deviceAccess(token, persons, ["gone"])).toEqual({ kind: "forbidden" });
       expect(deviceAccess(token, persons, ["p1"])).toEqual({ kind: "forbidden" });
+    }
+  });
+});
+
+// LP5.1, LP5.3: the rank of the first token that holds each person of the device.
+describe("deviceTokenRanks", () => {
+  const a = newToken();
+  const b = newToken();
+  const persons = [
+    { id: "pa", tokenHash: hashToken(a) },
+    { id: "pb", tokenHash: hashToken(b) },
+    { id: "pc", tokenHash: hashToken(newToken()) },
+    { id: "pb2", tokenHash: hashToken(b) },
+  ];
+
+  it("gives each person of the device the rank of her token in the list", () => {
+    expect(deviceTokenRanks([a, b], persons)).toEqual({ pa: 0, pb: 1, pb2: 1 });
+    expect(deviceTokenRanks([b, a], persons)).toEqual({ pa: 1, pb: 0, pb2: 0 });
+  });
+
+  it("keeps the first rank of a duplicated token", () => {
+    expect(deviceTokenRanks([a, b, a], persons)).toEqual({ pa: 0, pb: 1, pb2: 1 });
+    expect(deviceTokenRanks([b, b, a], persons)).toEqual({ pa: 2, pb: 0, pb2: 0 });
+  });
+
+  it("leaves out a token that holds nobody, and the persons of no token sent", () => {
+    expect(deviceTokenRanks([newToken(), b], persons)).toEqual({ pb: 1, pb2: 1 });
+    expect(deviceTokenRanks(a, persons)).toEqual({ pa: 0 });
+  });
+
+  it("is empty for a field that reads as no token", () => {
+    for (const none of [undefined, [], [a, "nope"], Array.from({ length: 21 }, () => a), 42]) {
+      expect(deviceTokenRanks(none, persons)).toEqual({});
     }
   });
 });

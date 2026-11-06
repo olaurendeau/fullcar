@@ -5,10 +5,10 @@ import { readTokenHolders } from "@/db/persons";
 import type { Database } from "@/db/schema";
 import { onOneSnapshot } from "@/db/transaction";
 import { buildBoard } from "@/domain/board";
-import { devicePersonIds } from "@/domain/device";
+import { devicePersonIds, deviceTokenRanks } from "@/domain/device";
 import type { EventHeader } from "@/domain/event";
 import { eventLegs } from "@/domain/leg";
-import { isPersonalToken } from "@/domain/personal-token";
+import { deviceTokensOf } from "@/domain/personal-token";
 import { withVisiblePhones, type VisibleBoard } from "@/domain/phone-visibility";
 import { isPublicId } from "@/domain/public-id";
 import type { WallClock } from "@/domain/wall-clock";
@@ -23,6 +23,12 @@ export interface EventState {
   /** The organiser's options the page follows: `stops` is « Points de RDV » (epic #881). */
   options: { stops: boolean };
   legs: VisibleBoard;
+  /**
+   * For each person of the device, her id and the rank, from 0, of the token that holds her in
+   * the list the device sent (LP5.1, LP5.3). Nothing else of the tokens: neither a token nor a
+   * hash. `{}` without a device, and on the page's read.
+   */
+  tokenRanks: Record<string, number>;
 }
 
 /**
@@ -47,7 +53,9 @@ export type DeviceState = EventState | EndedEvent;
  * refusal by `eventEnded` included, so none gives the place. Nothing for an unknown event; a
  * malformed id is never looked up.
  *
- * Without a token, or with a malformed one, the device has no person and no number leaves
+ * `token` is the device's one token, or its list of 1 to 20 tokens, its own first (LP5.1): the
+ * persons and the numbers are those of the union of the tokens, nothing more. Without a token,
+ * or with a field that reads as none, the device has no person and no number leaves
  * the server (C10.6, C12.3). Everything is read on one snapshot, so that a passenger who
  * boards between two reads is not shown without a car, and an event anonymised meanwhile
  * never gives its place with empty legs (#799). The token is only compared, never logged
@@ -69,13 +77,14 @@ export async function readEventState(
 /** The state of `event`, read in the snapshot `trx` holds, for the device of `token`. */
 async function stateOf(trx: Kysely<Database>, event: PublicEvent, token: unknown): Promise<EventState> {
   const { phonesById, ...rows } = await readEventRows(trx, event.id, { stops: event.stops_enabled });
-  const holders = isPersonalToken(token) ? await readTokenHolders(trx, event.id) : [];
+  const holders = deviceTokensOf(token) !== undefined ? await readTokenHolders(trx, event.id) : [];
   // One set for the board and the numbers: the device section and the cards follow one device.
   const deviceIds: ReadonlySet<string> = new Set(devicePersonIds(token, holders));
   return {
     event: headerFrom(event),
     options: { stops: event.stops_enabled },
     legs: withVisiblePhones(buildBoard(rows, eventLegs(event.retour_at), deviceIds), phonesById, deviceIds),
+    tokenRanks: deviceTokenRanks(token, holders),
   };
 }
 

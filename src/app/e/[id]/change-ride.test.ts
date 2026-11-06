@@ -114,6 +114,38 @@ const NOT_THE_DRIVERS: [string, (scene: Scene, other: Scene) => unknown][] = [
   ["a malformed token", () => "AAAA"],
 ];
 
+// LP5.1: a device holding A and B changes the car of the driver of either.
+describe("updateRide and removeRide, a device with several tokens", () => {
+  it("the driver of B changes and removes her car with [A, B]; with [A] or [A, C] she cannot", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r1, r2 } = await seedScene(trx);
+      const before = await rowsOf(trx, eventId);
+      const forbidden = { ok: false, error: "forbidden" };
+
+      expect(await updateRide(trx, eventId, [NOBODYS_TOKEN], r1, "aller", form())).toMatchObject(forbidden);
+      expect(await updateRide(trx, eventId, [NOBODYS_TOKEN, NOBODYS_TOKEN], r1, "aller", form())).toMatchObject(forbidden);
+      expect(await removeRide(trx, eventId, [NOBODYS_TOKEN], r2, "retour")).toMatchObject(forbidden);
+      expect(await rowsOf(trx, eventId)).toEqual(before);
+
+      const changed = await updateRide(trx, eventId, [NOBODYS_TOKEN, marc.token], r1, "aller", form({ time: "09:10" }));
+      expect(changed).toMatchObject({ ok: true });
+      expect(carOf(stateOf(changed), "aller", r1)).toMatchObject({ location: "Mairie de Cesson", departureTime: "09:10:00" });
+      expect(stateOf(changed)?.tokenRanks).toEqual({ [marc.id]: 1 });
+    });
+  });
+
+  it("a list that reads as no token changes nothing", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, marc, r1 } = await seedScene(trx);
+      const before = await rowsOf(trx, eventId);
+      for (const list of [[], Array.from({ length: 21 }, () => marc.token), [marc.token, "nope"]]) {
+        expect(await updateRide(trx, eventId, list, r1, "aller", form())).toMatchObject({ ok: false, error: "forbidden" });
+      }
+      expect(await rowsOf(trx, eventId)).toEqual(before);
+    });
+  });
+});
+
 describe("updateRide", () => {
   it("C8.2: changes the place, the time, the note and the seats; more seats give more free seats", async () => {
     await withRollback(async (trx) => {

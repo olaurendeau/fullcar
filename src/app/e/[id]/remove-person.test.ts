@@ -59,6 +59,38 @@ function seedExample(db: Db): Promise<RemovalExample> {
   return seedRemovalExample(db);
 }
 
+// LP5.1: a device holding A and B removes the persons of either.
+describe("removeFromDevice, a device with several tokens", () => {
+  const A = "AAAAAAAAAAAAAAAAAAAAAA";
+  const B = "QQQQQQQQQQQQQQQQQQQQQQ";
+  const C = "gggggggggggggggggggggg";
+
+  it("LP5.1: removes a person of B with [A, B], and refuses one of C", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const fromB = await seedPerson(trx, eventId, { firstName: "Béa" }, B);
+      const fromC = await seedPerson(trx, eventId, { firstName: "Cécile" }, C);
+
+      const refused = await removeFromDevice(trx, eventId, [A, B], { personId: fromC.id });
+      expect(refused).toMatchObject({ ok: false, error: "forbidden" });
+      expect(await removeFromDevice(trx, eventId, [A, B], { personId: fromB.id })).toMatchObject({ ok: true, removal: "removed" });
+      const left = (await rowsOf(trx, eventId)).persons.map((row) => row.id);
+      expect(left).toEqual([fromC.id]);
+    });
+  });
+
+  it("LP5.1: a list that reads as no token is forbidden, and removes nobody", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const fromB = await seedPerson(trx, eventId, { firstName: "Béa" }, B);
+      for (const list of [[], Array.from({ length: 21 }, () => B), [B, "nope"]]) {
+        expect(await removeFromDevice(trx, eventId, list, { personId: fromB.id })).toMatchObject({ ok: false, error: "forbidden" });
+      }
+      expect((await rowsOf(trx, eventId)).persons).toHaveLength(1);
+    });
+  });
+});
+
 describe("removeFromDevice: what is erased (RP2)", () => {
   it("RP2.1: Marc removed, his car goes, his passengers are without a car at the aller only", async () => {
     await withRollback(async (trx) => {

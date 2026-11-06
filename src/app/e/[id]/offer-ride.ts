@@ -9,7 +9,7 @@ import { isCreationId } from "@/domain/creation-id";
 import { deviceAccess } from "@/domain/device";
 import { LEGS, otherLeg as otherLegOf, type Leg } from "@/domain/leg";
 import { validateDriver, validatePersonChange, type NewPerson, type PersonErrors, type PersonField } from "@/domain/person";
-import { isPersonalToken } from "@/domain/personal-token";
+import { creationTokenOf } from "@/domain/personal-token";
 import { positionOf, type Position } from "@/domain/place";
 import { isPublicId } from "@/domain/public-id";
 import {
@@ -249,7 +249,9 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
   const { rideId, leg } = offer;
   const { kind, personId } = driver;
   if (!isCreationId(rideId) || !isLeg(leg) || !isCreationId(personId)) return undefined;
-  const newcomer = kind === "new" && isPersonalToken(token);
+  // A new driver is created with the device's first token (LP5.4).
+  const creation = creationTokenOf(token);
+  const newcomer = kind === "new" && creation !== undefined;
   if (kind !== "device" && !newcomer) return undefined;
   const other = readOtherLeg(offer);
   // Stops are the aller's: sent on the retour, no form did it.
@@ -288,7 +290,7 @@ function readOffer(input: unknown, token: unknown): Offer | FieldErrors | undefi
     leg,
     driver:
       newcomer && person?.ok
-        ? { kind: "new", personId, person: person.person, token }
+        ? { kind: "new", personId, person: person.person, token: creation }
         : { kind: "device", personId, phone: (given?.ok && given.change.phone) || undefined },
     ride: { ...ride.ride, position },
     otherLeg,
@@ -389,7 +391,7 @@ async function offerOnce(
   if (driver.kind === "new") {
     const tokenHash = hashToken(driver.token);
     const stored = await insertPerson(trx, { id: driverId, eventId, ...driver.person, tokenHash });
-    if (stored === undefined || !tokenMatches(token, stored.tokenHash)) throw new Refused("idTaken");
+    if (stored === undefined || !tokenMatches(driver.token, stored.tokenHash)) throw new Refused("idTaken");
   }
 
   // The Placements she leaves: on this leg, and on the other unless she keeps it.

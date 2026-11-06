@@ -23,6 +23,27 @@ export function isPersonalToken(value: unknown): value is string {
   return typeof value === "string" && FORMAT.test(value);
 }
 
+/** What the server reads of the field: 20 fingerprints to compute at most, 20 × the event's persons to compare. */
+export const DEVICE_TOKENS_MAX = 20;
+
+/**
+ * The tokens of a device for one event, in the order sent: the device's own first (LP5.1). The
+ * field is one well-formed token (a page loaded before the deployment), or a list of 1 to
+ * `DEVICE_TOKENS_MAX` of them, duplicates kept. Any other form reads as no token, whole:
+ * `undefined`, never a part of it.
+ */
+export function deviceTokensOf(value: unknown): string[] | undefined {
+  if (isPersonalToken(value)) return [value];
+  if (!Array.isArray(value) || value.length === 0 || value.length > DEVICE_TOKENS_MAX) return undefined;
+  const list: unknown[] = Array.from(value);
+  return list.every(isPersonalToken) ? (list as string[]) : undefined;
+}
+
+/** The token a person is created with (LP5.4): the first of the device's. */
+export function creationTokenOf(value: unknown): string | undefined {
+  return deviceTokensOf(value)?.[0];
+}
+
 /**
  * The token for 16 bytes from a CSPRNG (`crypto.getRandomValues` in the browser):
  * their base64url, unpadded. Throws on any other length rather than write a

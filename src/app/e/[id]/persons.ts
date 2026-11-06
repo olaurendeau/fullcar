@@ -8,7 +8,7 @@ import { isCreationId } from "@/domain/creation-id";
 import { deviceAccess, eventAccess } from "@/domain/device";
 import { initialLegs, LEGS, type Leg } from "@/domain/leg";
 import { validatePerson, validatePersonChange, type PersonErrors, type PersonField } from "@/domain/person";
-import { isPersonalToken } from "@/domain/personal-token";
+import { creationTokenOf, deviceTokensOf } from "@/domain/personal-token";
 import { hashToken, tokenMatches } from "@/domain/token-hash";
 import { readEventState, type DeviceState } from "./event-state";
 import { lockLegs } from "./retour";
@@ -91,7 +91,7 @@ async function writeThenRead(
  * the event has the id any more (RP5.4).
  */
 async function refusalFor(trx: Kysely<Database>, eventId: string, token: unknown, personId: string) {
-  if (!isPersonalToken(token)) return FORBIDDEN;
+  if (deviceTokensOf(token) === undefined) return FORBIDDEN;
   const access = deviceAccess(token, await readTokenHolders(trx, eventId), [personId]);
   return access.kind === "device" ? undefined : access.kind === "forbidden" ? FORBIDDEN : PERSON_GONE;
 }
@@ -103,7 +103,7 @@ async function refusalFor(trx: Kysely<Database>, eventId: string, token: unknown
  * showed it, keeps its form for the aller alone.
  *
  * A well-formed token nobody holds yet is accepted (C12.3): it is the device's first
- * registration. The id is the creation id drawn by the browser: sent again with the same
+ * registration. Of a list of tokens, the first one creates her (LP5.4). The id is the creation id drawn by the browser: sent again with the same
  * token, the creation succeeds without writing anything (C12.4, C1.12), so that a person
  * who boarded since stays in her car; held by another token or another event, it is refused.
  */
@@ -122,9 +122,11 @@ export async function addPerson(
     if (!isCreationId(id) || leg === undefined) return INVALID;
     const bothLegs = fields.bothLegs === true;
     if (!legs.includes(leg) || (bothLegs && !legs.includes("retour"))) return NO_RETOUR;
-    if (!isPersonalToken(token)) return FORBIDDEN;
-    const stored = await insertPerson(trx, { id, eventId, ...validation.person, tokenHash: hashToken(token) });
-    if (stored === undefined || !tokenMatches(token, stored.tokenHash)) return FORBIDDEN;
+    // Created with the device's first token (LP5.4): the others are only read.
+    const creation = creationTokenOf(token);
+    if (creation === undefined) return FORBIDDEN;
+    const stored = await insertPerson(trx, { id, eventId, ...validation.person, tokenHash: hashToken(creation) });
+    if (stored === undefined || !tokenMatches(creation, stored.tokenHash)) return FORBIDDEN;
     // Sent again, or twice at once (the second insert waits for the first): nothing more to write.
     if (!stored.created) return { ok: true };
     const withoutCar = initialLegs({ bothLegs, leg, hasRetour: legs.includes("retour") });

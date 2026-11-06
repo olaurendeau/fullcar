@@ -10,7 +10,7 @@ import { isCreationId } from "@/domain/creation-id";
 import { devicePersonIds, type TokenHolder } from "@/domain/device";
 import { LEGS } from "@/domain/leg";
 import { decideOrganiserAccess, organiserProofOf } from "@/domain/organiser-access";
-import { isPersonalToken } from "@/domain/personal-token";
+import { deviceTokensOf } from "@/domain/personal-token";
 import { isPublicId } from "@/domain/public-id";
 import { readEventState, type DeviceState } from "./event-state";
 
@@ -84,7 +84,7 @@ export function removeFromDevice(
   input: unknown,
 ): Promise<RemovePersonOutcome> {
   const gate: Gate = {
-    right: async () => (isPersonalToken(token) ? undefined : "forbidden"),
+    right: async () => (deviceTokensOf(token) !== undefined ? undefined : "forbidden"),
     mayRemove: (holders, personId) => devicePersonIds(token, holders).includes(personId),
   };
   return removePerson(db, eventId, input, gate, token);
