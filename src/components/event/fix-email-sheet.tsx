@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { FixAnswer } from "@/app/e/[id]/admin/screen-state";
 import { Button } from "@/components/ui/button";
-import { emailAddress } from "@/domain/email-address";
+import { emailAddress, type EmailError } from "@/domain/email-address";
 import { BottomSheet, SheetBar } from "./bottom-sheet";
 import { EmailField, type EmailProblem } from "./create-event-session";
 
@@ -53,6 +53,21 @@ export function FixEmailSheet({
   );
 }
 
+function FixEmailForm({ email, onFix, onDone }: { email: string; onFix: FixEmail; onDone: () => void }) {
+  const t = useTranslations("FixEmail");
+  // The address the link was sent to, as the note says it, whatever the notice shows meanwhile.
+  const [was, setWas] = useState(email);
+  async function send(typed: string) {
+    const answer = await onFix(typed);
+    if (answer.kind !== "answered" || answer.pending.send !== "failed") return answer;
+    // A failure of Brevo came after the correction was kept: the page behind shows the new address, and a retry
+    // from the sheet is one more correction, which deletes the failed attempt's link. It says `offline`.
+    setWas(answer.pending.email);
+    return { kind: "notSent" };
+  }
+  return <AddressForm initial={email} send={send} note={t("note", { email: was })} onDone={onDone} />;
+}
+
 /**
  * The form, mounted with each opening. The address is checked as the creation checks it
  * (`emailAddress`): one that is not one shows its error under the field, which takes the focus,
@@ -60,20 +75,24 @@ export function FixEmailSheet({
  * field is read-only, and a second tap or Enter sends nothing. Sent for good, the sheet closes;
  * an address the server refuses shows under the field too. Otherwise the sheet says why above
  * « Envoyer le lien », which gets the focus, and what was typed stays: the limit
- * (`Admin.pending.tooMany`), or any other reason, a refusal included (`FixEmail.offline`), and a
- * failure of Brevo too: the correction is kept and the notice behind shows the new address, but the
- * sheet stays open for a retry, which counts as one more email. An event
- * no longer awaiting confirmation, or ended, closes the sheet: the page says the rest.
+ * (`Admin.pending.tooMany`), or any other reason, a refusal included (`FixEmail.offline`). An event
+ * no longer awaiting confirmation, or ended, closes the sheet: the page says the rest. Shared with
+ * « Céder l’événement » (`TransferForm`): its own `words`, the note first, and `self` refused too.
  */
-function FixEmailForm({ email, onFix, onDone }: { email: string; onFix: FixEmail; onDone: () => void }) {
+export function AddressForm(props: {
+  initial: string;
+  send: (typed: string) => Promise<{ kind: string; reason?: EmailError }>;
+  note: string;
+  noteFirst?: boolean;
+  words?: { label: string; hint: string; self: string };
+  onDone: () => void;
+}) {
+  const { initial, send, note, noteFirst, words, onDone } = props;
   const t = useTranslations("FixEmail");
   const tPending = useTranslations("Admin.pending");
   const ids = useId();
-  // The address the link was sent to, as the note says it, whatever the notice shows meanwhile;
-  // after a failure of Brevo, the address of the attempt: a retry makes its link stop working too.
-  const [was, setWas] = useState(email);
-  const [value, setValue] = useState(email);
-  const [problem, setProblem] = useState<EmailProblem>();
+  const [value, setValue] = useState(initial);
+  const [problem, setProblem] = useState<EmailProblem | "self">();
   const [said, setSaid] = useState<"offline" | "tooMany">();
   const [sending, setSending] = useState(false);
   // Set at once, unlike `sending`: a second tap before the next render sends nothing.
@@ -101,32 +120,35 @@ function FixEmailForm({ email, onFix, onDone }: { email: string; onFix: FixEmail
     setProblem(undefined);
     inFlight.current = true;
     setSending(true);
-    const answer = await onFix(value);
+    const answer = await send(value);
     inFlight.current = false;
     if (!mounted.current) return;
     setSending(false);
-    if (answer.kind === "address") {
-      setProblem(answer.reason);
+    if (answer.kind === "address" || answer.kind === "self") {
+      setProblem(answer.kind === "self" ? "self" : answer.reason);
       return field.current?.focus();
     }
-    // A failure of Brevo came after the correction was kept: the page behind shows the new address,
-    // and a retry from the sheet is one more correction, which deletes the failed attempt's link.
-    const failed = answer.kind === "answered" && answer.pending.send === "failed";
-    if (failed) setWas(answer.pending.email);
-    if (answer.kind === "tooMany" || answer.kind === "notSent" || failed) {
+    if (answer.kind === "tooMany" || answer.kind === "notSent") {
       setSaid(answer.kind === "tooMany" ? "tooMany" : "offline");
       return submitButton.current?.focus();
     }
     onDone();
   }
 
+  // With its own words, over 254 characters says what an address that is not one says; so does `self`.
+  const shown = problem === "self" || (words && problem === "tooLong") ? "invalid" : problem;
+  const fieldWords = words && { label: words.label, hint: words.hint, ...(problem === "self" && { error: words.self }) };
+  const noteLine = (
+    <p className="flex items-start gap-2 text-[13px] leading-[18px] text-muted-foreground">
+      <Info aria-hidden className="mt-px size-4 shrink-0" />
+      <span className="min-w-0 wrap-anywhere">{note}</span>
+    </p>
+  );
   return (
     <form id={`${ids}-form`} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-      <EmailField id={`${ids}-email`} value={value} problem={problem} inputRef={field} onChange={setValue} readOnly={sending} />
-      <p className="flex items-start gap-2 text-[13px] leading-[18px] text-muted-foreground">
-        <Info aria-hidden className="mt-px size-4 shrink-0" />
-        <span className="min-w-0 wrap-anywhere">{t("note", { email: was })}</span>
-      </p>
+      {noteFirst && noteLine}
+      <EmailField id={`${ids}-email`} value={value} problem={shown} inputRef={field} onChange={setValue} readOnly={sending} words={fieldWords} />
+      {!noteFirst && noteLine}
       {/* In the sheet's bar, out of the form: « Envoyer le lien » is its submit button by `form` (event-board v4.6, rule 1). */}
       <SheetBar
         messages={
