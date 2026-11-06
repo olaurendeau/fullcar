@@ -59,6 +59,23 @@ export async function confirmSeededEvent(db: Kysely<Database>, eventId: string):
 }
 
 /**
+ * The event of an account being handed over to `email` (epic #935), the result kept of its
+ * email as `status` since `at`: as `writeTransfer` leaves it, with no link. The event must be
+ * confirmed, or the database refuses (`event_transfer_open`).
+ */
+export async function seedTransfer(
+  db: Kysely<Database>,
+  eventId: string,
+  { email, status = "sent", at = new Date() }: { email: string; status?: SendStatusColumn; at?: Date },
+): Promise<void> {
+  await db
+    .updateTable("event")
+    .set({ transfer_email: email, transfer_status: status, transfer_status_at: at })
+    .where("id", "=", eventId)
+    .execute();
+}
+
+/**
  * The event pending for `email`, its confirmation email's result kept as `status` since `at`
  * (OA1.7, OA1.10): a date in the past, never a clock moved forward.
  */

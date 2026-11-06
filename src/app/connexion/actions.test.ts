@@ -4,8 +4,8 @@ import type { Database } from "@/db/schema";
 import { findSession } from "@/db/sessions";
 import { anAddress, seedAccount, seedLink, seedSession, withRollbackRecordingSends } from "@/db/test-accounts";
 import { withRollback } from "@/db/test-db";
-import { seedEvent, seedPendingSend } from "@/db/test-events";
-import { openConfirmationLink, openLoginLink, requestLink, resendConfirmationLink, signedInAs } from "./actions";
+import { confirmSeededEvent, seedEvent, seedPendingSend, seedTransfer } from "@/db/test-events";
+import { openConfirmationLink, openLoginLink, openTransferLink, readTransferLink, requestLink, resendConfirmationLink, signedInAs } from "./actions";
 
 // The action reaches the database through getDb(): here, the test's transaction.
 const connection = vi.hoisted(() => ({ current: undefined as Kysely<Database> | undefined }));
@@ -209,8 +209,46 @@ describe("the links of the emails", () => {
     });
   });
 
+  /** A confirmed event handed over to a new address, and the token of the link sent to it. */
+  async function aTransfer(trx: Kysely<Database>) {
+    const { id } = await seedEvent(trx, { title: "Tournoi de Rennes" });
+    await confirmSeededEvent(trx, id);
+    const to = anAddress();
+    await seedTransfer(trx, id, { email: to });
+    return { id, to, token: await seedLink(trx, { kind: "transfer", eventId: id }) };
+  }
+
+  it("readTransferLink reads the title and the start, and writes nothing: no account, no session, no email", async () => {
+    await inTransaction(async (trx) => {
+      const { token, to } = await aTransfer(trx);
+      expect(await readTransferLink(token)).toEqual({ state: "valid", title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" });
+      expect(await readTransferLink("AAAAAAAAAAAAAAAAAAAAAA")).toEqual({ state: "invalid" });
+      expect(await trx.selectFrom("account").select("id").where("email", "=", to).execute()).toEqual([]);
+      expect(brevo).toEqual([]);
+      expect(logs).toEqual([]);
+    });
+  });
+
+  it("openTransferLink creates the account in the page's language, opens its session, and sends no email (OT4.4)", async () => {
+    await inTransaction(async (trx) => {
+      const { id, token, to } = await aTransfer(trx);
+      request.headers = new Headers({ "accept-language": "en-GB,en;q=0.9" });
+      const answer = await openTransferLink(token);
+      expect(answer).toEqual({ state: "opened", session: expect.any(String), eventId: id });
+      if (answer.state !== "opened") throw new Error("expected a session");
+      const account = await trx.selectFrom("account").select(["id", "locale"]).where("email", "=", to).executeTakeFirstOrThrow();
+      expect(account.locale).toBe("en");
+      expect((await findSession(trx, answer.session))?.id).toBe(account.id);
+      expect(await openTransferLink(token)).toEqual({ state: "used" });
+      expect(brevo).toEqual([]);
+      expect(logs).toEqual([]);
+    });
+  });
+
   it.each([
     ["openLoginLink", openLoginLink, "openLoginLink: the sign-in link could not be used"],
+    ["readTransferLink", readTransferLink, "readTransferLink: the transfer link could not be read"],
+    ["openTransferLink", openTransferLink, "openTransferLink: the transfer link could not be used"],
     ["openConfirmationLink", openConfirmationLink, "openConfirmationLink: the confirmation link could not be used"],
     ["resendConfirmationLink", resendConfirmationLink, "resendConfirmationLink: the new link could not be sent"],
   ])("%s throws a fixed error, with the database's code alone in the log", async (_, action, message) => {

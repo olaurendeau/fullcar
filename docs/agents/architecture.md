@@ -633,7 +633,8 @@ ci-dessus valent pour chacun.
   celui-ci ne rattache que son propre événement. Chacun ne sert qu'une fois, et plusieurs
   liens non utilisés restent valables ensemble. La page du lien lit le jeton dans
   `location.hash` et ne l'envoie qu'à l'appui sur le bouton, jamais au chargement : un
-  scanner d'e-mails qui suit le lien ne l'use pas (OA5.1). Elle retire ensuite le fragment
+  scanner d'e-mails qui suit le lien ne l'use pas (OA5.1). Seule exception : la page du lien de
+  cession lit son jeton au chargement, sans l'user (voir la cession côté destinataire plus bas). Elle retire ensuite le fragment
   de la barre d'adresse et de l'historique (OA5.2). Côté serveur (`src/app/connexion/use-link.ts`,
   actions `openLoginLink`, `openConfirmationLink`, `resendConfirmationLink`, #605) : l'usage
   du lien et la session qu'il ouvre sont dans une seule transaction ; une confirmation prend
@@ -667,6 +668,29 @@ ci-dessus valent pour chacun.
   destinataire n'est jamais cherchée parmi les comptes : même réponse, même e-mail, même durée
   (OT1.7, OT1.8, OT8.6). La réponse du panneau porte l'avis, `transfer`, lu une fois l'accès
   accordé, comme `pending`.
+- **La cession, côté destinataire** (épique #935, `src/app/connexion/transfer-link.ts`, actions
+  `readTransferLink` et `openTransferLink`, #946). `readTransferLink` est la seule page de lien qui
+  envoie son jeton **au chargement** : une exception à OA5.1 que le propriétaire a accordée (Q4 de
+  #935), parce que la page doit dire quel événement on lui cède. Elle ne consomme rien : une seule
+  lecture sur un instantané (`REPEATABLE READ`, lecture seule), ni lien usé, ni compte créé, ni
+  session lue ; elle répond le titre et le début de l'événement pour un lien qui sert, et sinon
+  son état seul (`expired`, `used`, `invalid`). Un scanner d'e-mails qui suit le lien n'use donc
+  rien. `openTransferLink` ouvre, en une transaction `READ COMMITTED`, dans l'ordre de la
+  confirmation et de « Supprimer mon compte » : le lien cherché hors verrou (pour l'Event), l'Event
+  `noKeyUpdate`, puis, relus comme validés sous le verrou, le lien (supprimé : `invalid`, utilisé :
+  `used`, périmé : `expired`), l'accès et la cession (anonymisé, sans compte ou plus en cession :
+  `invalid`), l'usage du lien (`useLink`), les autres liens de cession de l'Event supprimés par clé
+  (`deleteTransferLinks`, le lien usé gardé pour dire « déjà servi »), l'adresse (`lockAddress`),
+  le compte de l'adresse (`accountForEmail`, créé dans la langue de la page, jamais cherché avant
+  le verrou de l'Event), un seul `UPDATE` de l'Event (`writeTakeover` : le compte, `admin_token_hash`
+  à nul, la cession effacée), puis `openSession`. Deux acceptations, ou une annulation et une
+  acceptation, se sérialisent sur le verrou de l'Event : une seule a lieu. Les liens que l'on
+  supprime ici sont ceux d'un Event dont la cession attend, que le nettoyage par âge ne prend pas
+  (`expired-rows.ts`). Comme `openWithConfirmationLink`, l'acceptation prend l'Event puis l'adresse :
+  elle partage le risque d'impasse (40P01) avec `clearLateAddress`, et l'échec devient un
+  `databaseFailure` que la page lit « échec » (`LinkPage.failed`) : le destinataire réessaie. Le
+  cédant n'est pas prévenu ; la règle d'accès lui répond `notYours` (sa session) ou `signIn` (son
+  jeton d'admin révoqué), « Mes événements » ne liste plus l'événement.
 - **Une seule règle d'accès** à l'espace organisateur : `src/domain/organiser-access.ts`
   (#596). Elle donne l'accès à la session du compte de l'événement, ou au jeton d'admin du
   navigateur de création. `withOrganiserPhones` n'accepte qu'une autorisation produite par
