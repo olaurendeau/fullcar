@@ -165,7 +165,7 @@ test.describe("written in the sheet", () => {
     const tab = page.getByRole("tabpanel");
     for (const [opener, title] of [
       [tab.getByRole("button", { name: "Ajouter une personne", exact: true }), "Ajouter une personne"],
-      [tab.getByRole("button", { name: "Proposer une voiture", exact: true }), "Proposer une voiture"],
+      [tab.getByRole("button", { name: "Proposer une voiture", exact: true }), "Proposer une voiture pour l’aller"],
     ] as const) {
       await opener.click();
       const dialog = page.getByRole("dialog", { name: title, exact: true });

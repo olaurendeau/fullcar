@@ -178,6 +178,8 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [kept, setKept] = useState(true);
+  // The retour gone while the sheet shows (M7.6): the sheet offers the aller alone, and says so in its title (RL1.4).
+  const [gone, setGone] = useState(false);
   // Read when an answer comes, as for « Ajouter une personne »: once the sheet is closing, a failure goes to the bar.
   const isOpen = useRef(false);
   // Where the focus lands once closed, if not on this button: the new car's title, after passengers boarded it.
@@ -191,7 +193,10 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
     <BottomSheet
       open={open}
       onOpenChange={(next) => {
-        if (next) setKept(storageAvailable());
+        if (next) {
+          setKept(storageAvailable());
+          setGone(false);
+        }
         toggle(next);
       }}
       trigger={
@@ -206,7 +211,8 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
           {t("Board.offerRide")}
         </Button>
       }
-      title={t("RideForm.title.offer")}
+      // Under the tabs (a retour), the leg it opens on (RL1.1); alone, or once the retour is gone, as it was (RL1.2, RL1.4).
+      title={form.other && !gone ? t(`RideForm.title.offerLeg.${form.leg}`) : t("RideForm.title.offer")}
       // Its fields: on a phone, it fills the screen (v4.6, rule 2).
       fullHeight
       onCloseAutoFocus={(event) => {
@@ -223,6 +229,7 @@ export function OfferRideButton({ main, disabled, ...form }: FormProps & { main:
         at={form.at}
         mode={{ kind: "offer", ...form }}
         open={() => isOpen.current}
+        onGone={() => setGone(true)}
         onDone={(land) => {
           landing.current = land;
           toggle(false);
@@ -295,9 +302,12 @@ function RideForm({
   open,
   onDone,
   onStep,
+  onGone,
 }: Pick<FormProps, "leg" | "at"> & {
   mode: FormMode;
   open: () => boolean;
+  /** `offer` mode: the other leg is gone from the form, which the sheet's title follows (RL1.4). */
+  onGone?: () => void;
   /** Closes the form; `land`, where the focus goes then, if not back on the button that opened it. */
   onDone: (land?: () => void) => void;
   onStep?: (choosing: boolean) => void;
@@ -317,6 +327,9 @@ function RideForm({
   const [problem, setProblem] = useState<"offline" | "failed" | "noRetour" | "stopsOff" | null>(null);
   const [gone, setGone] = useState(false);
   const { persons, other } = mode.kind === "offer" ? { ...mode, other: gone ? undefined : mode.other } : { persons: [], other: undefined };
+  useEffect(() => {
+    if (gone) onGone?.();
+  }, [gone, onGone]);
   // « Points de RDV »: on the aller, option on (RV1.1). Absent from the DOM otherwise. As the form opened:
   // an option turned off since keeps the section, and its input, until the form says so (RV1.9).
   const [withStops] = useState(mode.stopsOn === true && leg === "aller");

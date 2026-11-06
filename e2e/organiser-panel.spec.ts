@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { numbersHidden } from "./driver";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { expectRing, press, pressUntil } from "./focus-ring";
 import { digitsOf, expect, LEG_HEADINGS, organiserPath, type ScenePhones, seedOrganiserScene, test, unfoldLegs } from "./organiser";
 
@@ -130,7 +130,7 @@ test.describe("the scene of O2.5", () => {
       same(await link.getAttribute("aria-label"), `Appeler Chloé au ${phones.c}`, "C's link's name");
     });
     const linkBox = await numbersHidden(() => box(link));
-    expect(linkBox.height).toBeGreaterThanOrEqual(44);
+    expect(linkBox.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     expect(linkBox.height).toBeLessThan(48);
     await numbersHidden(() => expect(link).toHaveCSS("white-space", "nowrap"));
 
@@ -293,7 +293,7 @@ test("O5.6, O5.8, O7.4: five lines, then « Afficher… »; each list and each l
   const more = aller.getByRole("button", { name: "Afficher les 2 autres", exact: true });
   await expect(aller.getByRole("button", { name: "Afficher l’autre", exact: true })).toHaveCount(1);
   await expect(retour.getByRole("button", { name: "Afficher l’autre", exact: true })).toHaveCount(1);
-  expect((await box(more)).height).toBeGreaterThanOrEqual(44);
+  expect((await box(more)).height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   expect((await box(more)).width).toBeGreaterThanOrEqual((await box(persons)).width);
 
   // By keyboard: the list unfolds, the focus on the 6th first name, its ring as wide as the text.

@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { bar, failHeld, holdFirst, holdToken, messages, newToken, watchAlerts } from "./device";
 import { DRIVER_PHONE, fillDriver } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -111,7 +111,7 @@ test.describe("remove a car", () => {
     await expect(claires).toBeVisible();
     await expect(removeButton(car(panel(page), "Marc"))).toHaveCount(0);
     expect(await rgb(claires, "color")).toBe("rgb(231, 0, 11)");
-    expect((await claires.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await claires.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await selectTab(page, "Retour");
     await expect(removeButton(car(panel(page), "Claire"))).toBeVisible();
     await expect(removeButton(car(panel(page), "Tom"))).toBeVisible();

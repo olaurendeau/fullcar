@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { around, mapName, openMap, points, seedParking, test } from "./event-map-points";
-import { expect } from "./fixtures";
+import { expect, TAP_TARGET_MIN } from "./fixtures";
 import { placeOf } from "./tiles";
 
 /*
@@ -83,12 +83,12 @@ for (const [where, device, height, width] of [
 
       const zoom = map.getByRole("button", { name: /^Zoom (avant|arrière)$/ });
       await expect(zoom).toHaveCount(2);
-      for (const side of [...(await sides(points(map))), ...(await sides(zoom))]) expect(side).toBeGreaterThanOrEqual(44);
+      for (const side of [...(await sides(points(map))), ...(await sides(zoom))]) expect(side).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 
       await map.getByRole("button", { name: GROUP, exact: true }).click();
       const bubble = map.getByRole("group", { name: "2 voitures, 3 places libres", exact: true });
       await expect(bubble.getByRole("button")).toHaveText(["Voiture de Nina1", "Voiture de Paul2", "Fermer"]);
-      for (const side of await sides(bubble.getByRole("button"))) expect(side).toBeGreaterThanOrEqual(44);
+      for (const side of await sides(bubble.getByRole("button"))) expect(side).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       expect(await sideways(page)).toBe(0);
 
       // Every text of the map, the bubble open: the points' labels, its own, the zoom's and the credits'.

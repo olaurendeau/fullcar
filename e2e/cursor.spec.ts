@@ -240,7 +240,7 @@ test.describe("the pointer on the event's page", () => {
     }) => {
       await openEvent(page, seededEvent.id);
       await button(panel(page), "Proposer une voiture").click();
-      const sheet = dialog(page, "Proposer une voiture");
+      const sheet = dialog(page, "Proposer une voiture pour l’aller");
       const lea = sheet.getByRole("radiogroup", { name: "Qui conduit ?" }).getByRole("radio", { name: "Léa", exact: true });
       expect(
         await cursorsOf({
