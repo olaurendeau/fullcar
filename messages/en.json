@@ -125,6 +125,7 @@
   },
   "OtherPerson": {
     "setWithoutCar": "Mark as without a car",
+    "pickSeat": "Tap a free seat to seat {firstName}.",
     "note": "Only the device that signed this person up can change their name or number, or remove them."
   },
   "DevicePersons": {

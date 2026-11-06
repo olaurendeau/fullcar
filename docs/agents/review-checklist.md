@@ -55,15 +55,22 @@ celui qui écrit le code.
     réponse porte le code de l'erreur, jamais l'adresse), `"notPending"` et `"tooMany"`, qui
     supposent l'accès accordé. Aucun lien n'est supprimé, aucun envoi n'est inscrit tant que
     l'accès est refusé.
-  - `transferEvent` : `{ ok: false, error: "invalid" }` à une requête qu'aucune page n'envoie, puis
-    `"required"` et `"email"` (ce qui est saisi n'est pas une adresse : lus avant tout, rien n'est
-    lu ni écrit), puis `"eventNotFound"`, `"eventEnded"` (événement anonymisé),
+  - `transferEvent` (opérations `start`, `change`, `resend`, `cancel`) : `{ ok: false, error:
+    "invalid" }` à une requête qu'aucune page n'envoie, puis `"required"` et `"email"` (ce qui
+    est saisi n'est pas une adresse, pour `start` et `change` seulement : lus avant tout, rien
+    n'est lu ni écrit), puis `"eventNotFound"`, `"eventEnded"` (événement anonymisé),
     `"noOrganiserAccess"` quand la règle n'ouvre rien (personne, autre compte, événement sans
     organisateur), `"pending"` (événement en attente de confirmation, même pour le navigateur de
-    création), `"self"` (l'adresse du compte), `"gone"` (`change` sans cession en attente) et enfin
-    `"tooMany"` (limite de l'événement). Rien n'est écrit tant que l'accès est refusé, et aucun
-    e-mail n'est envoyé. La limite de l'adresse ou le plafond global ne refusent pas : la
-    cession est écrite en `address_limit`. Aucune lecture de `account` pour l'adresse du destinataire.
+    création), `"self"` (l'adresse du compte, `start` et `change`), `"gone"` (`change`, `resend`
+    ou `cancel` sans cession en attente) et enfin `"tooMany"` (limite de l'événement pour `start`
+    et `change` ; toute limite pour `resend`). Rien n'est écrit tant que l'accès est refusé, et
+    aucun e-mail n'est envoyé. Pour `start` et `change`, la limite de l'adresse ou le plafond
+    global ne refusent pas : la cession est écrite en `address_limit`. `resend` ajoute un lien et
+    garde les précédents, attend Brevo (10 s au plus) et répond l'avis `sent` ou `failed` ; il
+    n'écrit rien si une limite l'arrête. `cancel` supprime tous les liens de cession, efface la
+    cession, ne compte aucun envoi et répond `{ ok: true, cancelled }` (l'adresse annulée) ; un
+    envoi encore en cours n'écrit plus rien ensuite. Aucune lecture de `account` pour l'adresse
+    du destinataire.
   - `deleteAccount` : `{ deleted: false }` pour une session inconnue, mal formée, expirée ou
     fermée entre-temps ; les jetons d'admin reçus ne sont alors pas révoqués.
   - `signOut` : ne refuse rien, répond toujours `{ signedOut: true }`, quelle que soit la

@@ -27,9 +27,11 @@ export function useMessageBar() {
       fail: (failure: bar.Failure) => setState((current) => bar.fail(current, failure)),
       inform: (message: Omit<bar.Information, "at">) => {
         const at = (clock += 1);
-        const { text, landmark, leg, saysRetourGone } = message;
-        setState((current) => bar.inform(current, { text, landmark, leg, saysRetourGone, at }));
+        const { text, landmark, leg, saysRetourGone, picksSeat } = message;
+        setState((current) => bar.inform(current, { text, landmark, leg, saysRetourGone, picksSeat, at }));
       },
+      /** The mode of « Trouver une place » for a person of another device ends (PL3.8): its line goes. */
+      unpick: () => setState(bar.unpick),
       /** The page shows a state without the retour its last one had (decision 44): once, before what its answer says. */
       retourGone: () => setState(bar.retourGone),
       /** The page shows a state with the retour its last one had not (#271): the information that said it was gone goes. */

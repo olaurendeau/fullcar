@@ -125,6 +125,7 @@
   },
   "OtherPerson": {
     "setWithoutCar": "Passer sans voiture",
+    "pickSeat": "Touchez une place libre pour y placer {firstName}.",
     "note": "Seul l’appareil qui a inscrit cette personne peut changer son prénom ou son numéro, ou la retirer."
   },
   "DevicePersons": {

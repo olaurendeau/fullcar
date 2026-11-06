@@ -58,6 +58,8 @@ export interface Information extends Message {
   at: number;
   /** It says the retour is gone (`Actions.info.noRetour*`, decision 45): it goes once it is back (`retourBack`). */
   saysRetourGone?: true;
+  /** It says the mode of « Trouver une place » for a person of another device (`OtherPerson.pickSeat`, PL3.8): the mode lasts as long as it does. */
+  picksSeat?: true;
 }
 
 /** A line of the bar; `id` is the order in which it was written, which makes it recent (rule 1). */
@@ -200,6 +202,15 @@ export const inform = (state: BarState, information: Information): BarState =>
  * came of it. One that began before it, a tap answered late, leaves it (#339).
  */
 export const ended = (state: BarState, began: number): BarState => keep(state, (line) => line.kind !== "info" || line.at > began);
+
+/** Whether the bar says the mode of « Trouver une place » for a person of another device (PL3.8). */
+export const picksSeat = (state: BarState): boolean => state.lines.some((line) => line.kind === "info" && line.picksSeat);
+
+/**
+ * PL3.8: the mode ends at a tap, before any action ends (a sheet opens instead, or the tap places
+ * nobody): its line goes at once, and nothing else. An action that ends takes it by rule 4 too.
+ */
+export const unpick = (state: BarState): BarState => keep(state, (line) => !(line.kind === "info" && line.picksSeat));
 
 /**
  * Rule 5: the failures `withdrawal` covers go; nothing else. Persons gone from the state the page

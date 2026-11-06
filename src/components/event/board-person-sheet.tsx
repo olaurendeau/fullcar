@@ -119,6 +119,7 @@ export function useBoardPersonSheet(board: VisibleLegBoard, legs: readonly Visib
         }
         freeCar={findSeat(board)?.id}
         inform={device.inform}
+        pickSeat={device.pickSeat}
         order={opening.order}
       />
     );
@@ -154,6 +155,7 @@ function BoardPersonSheet({
   own,
   freeCar,
   inform,
+  pickSeat,
   order,
 }: {
   person: { id: string; firstName: string };
@@ -172,6 +174,8 @@ function BoardPersonSheet({
   /** The first car of `leg` with a free seat, if any. */
   freeCar: string | undefined;
   inform: BoardDevice["inform"];
+  /** The page's mode of « Trouver une place » for a person of another device (PL3.8). */
+  pickSeat: BoardDevice["pickSeat"];
   /** The device's persons as « Vos inscriptions » listed them at the opening, for the focus after a removal (RP1.5). */
   order: readonly string[];
 }) {
@@ -223,10 +227,12 @@ function BoardPersonSheet({
   }
 
   // Nothing sent, nobody placed (v4-6). Without a free seat, an information, written once the sheet is gone.
+  // One of another device enters the page's mode: its information, and the next tap on a free seat seats her (PL3.8).
   function findSeatOnLeg() {
     const car = freeCar;
     const offer = () => focusOffer(leg);
     if (car === undefined) inform({ text: t(`DevicePersons.noFreeSeat.${leg}`), landmark: offer }, leg);
+    else if (!own) pickSeat.start({ personId: person.id, firstName: person.firstName, leg }, { text: t("OtherPerson.pickSeat", { firstName: person.firstName }), landmark: () => focusFreeSeat(leg, car) });
     afterClose.current = () => focusFirstShown(car === undefined ? [offer] : [() => focusFreeSeat(leg, car), offer]);
     onOpenChange(false);
   }

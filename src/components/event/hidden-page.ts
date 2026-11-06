@@ -53,6 +53,18 @@ export function usePageHidden(): boolean {
   );
 }
 
+/**
+ * Calls `then` each time a sheet covers the page, until the function it returns is called: for what
+ * ends with the page it was on, where rendering for every sheet (`usePageHidden`) is not wanted.
+ */
+export function onSheetOpen(then: () => void): () => void {
+  const watcher = () => {
+    if (sheets > 0) then();
+  };
+  watchers.add(watcher);
+  return () => void watchers.delete(watcher);
+}
+
 /** Whether a sheet hides the page now, for what is decided once rather than rendered. */
 export const pageHidden = () => sheets > 0;
 

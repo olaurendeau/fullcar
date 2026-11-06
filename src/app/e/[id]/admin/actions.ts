@@ -123,11 +123,13 @@ export async function removePersonAsOrganiser(id: unknown, proof: unknown, devic
 }
 
 /**
- * « Céder l'événement » and « Changer l'adresse » (epic #935, OT1, OT2.4): event `id` is handed
- * over to the account of `request.email`, as transfer.ts says, in the page's language.
- * `request` is `{ op: "start" | "change", email }`, `proof` is `{ adminToken, session }`: both in
- * the request's body, as for the actions above. The email goes out after the answer, by `after()`.
- * Never logs a token nor an address; puts no token in an answer.
+ * « Céder l'événement », « Changer l'adresse », « Renvoyer l'e-mail » and « Annuler la cession »
+ * (epic #935, OT1, OT2.3 to OT2.7): event `id` is handed over to the account of `request.email`,
+ * or its transfer is resent or cancelled, as transfer.ts says, in the page's language.
+ * `request` is `{ op: "start" | "change", email }`, `{ op: "resend" }` or `{ op: "cancel" }`;
+ * `proof` is `{ adminToken, session }`: both in the request's body, as for the actions above.
+ * The email of `start` and `change` goes out after the answer, by `after()`; a resend's answer
+ * waits for Brevo. Never logs a token nor an address; puts no token in an answer.
  */
 export async function transferEvent(id: unknown, proof: unknown, request: unknown): Promise<HandOverOutcome> {
   const locale = await getLocale();
