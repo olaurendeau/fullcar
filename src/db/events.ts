@@ -321,6 +321,22 @@ export async function writeTransferResult(
 }
 
 /**
+ * The recipient takes the event (OT3.2): it passes to the account `accountId`, its admin token
+ * is revoked (the hash goes null, which no token matches: the creation browser of the one who
+ * handed over opens nothing, OT4.1) and the handover is cleared, address and result, in this one
+ * statement. `confirmed_at` stays. Under `lockEvent(…, "noKeyUpdate")`, in the transaction that
+ * uses the link; the database refuses an event that is pending, anonymised or without account
+ * (`event_transfer_open`), but the caller has read that the handover waits.
+ */
+export async function writeTakeover(db: Kysely<Database>, id: string, accountId: string): Promise<void> {
+  await db
+    .updateTable("event")
+    .set({ account_id: accountId, admin_token_hash: null, transfer_email: null, transfer_status: null, transfer_status_at: null })
+    .where("id", "=", id)
+    .execute();
+}
+
+/**
  * Ends the handover without giving the event away (OT2.5): the address and its result are
  * cleared. Says whether one was waiting. Its links are deleted with `deleteTransferLinks`, in
  * the same transaction.

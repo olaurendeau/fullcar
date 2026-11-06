@@ -9,6 +9,7 @@ import { localeCookie } from "@/i18n/locales";
 import { negotiateLocale } from "@/i18n/negotiate";
 import { siteOrigin } from "../site";
 import { requestLoginLink, type LoginLinkAnswer } from "./request-link";
+import { openWithTransferLink, readTransferLink as readLink, type TransferReading } from "./transfer-link";
 import {
   openWithConfirmationLink,
   openWithLoginLink,
@@ -96,5 +97,34 @@ export async function resendConfirmationLink(token: unknown): Promise<ResendAnsw
     return await resendExpiredConfirmation(token, { db: getDb(), now: new Date(), locale, origin: siteOrigin(), brevo });
   } catch (error) {
     throw databaseFailure("resendConfirmationLink: the new link could not be sent", error);
+  }
+}
+
+/**
+ * What the page of a transfer link shows when it loads (OT3.1): the token it read from its
+ * fragment arrives in the body. It reads and uses nothing: the title and the start of the event
+ * for a link that serves, otherwise only why it does not. The one page of a link that sends its
+ * token at load, an exception to OA5.1 the owner granted (Q4 of #935). Neither is logged.
+ */
+export async function readTransferLink(token: unknown): Promise<TransferReading> {
+  try {
+    return await readLink(getDb(), token);
+  } catch (error) {
+    throw databaseFailure("readTransferLink: the transfer link could not be read", error);
+  }
+}
+
+/**
+ * « Accepter l'événement » on /connexion/cession (OT3.2): the event passes to the account of the
+ * address it was handed to, which the page's language creates if there is none, and a session of
+ * that account opens. The answer carries the session's token once, to the browser that replaces
+ * its own with it. No email goes to the one who handed over (OT4.4).
+ */
+export async function openTransferLink(token: unknown): Promise<LinkAnswer> {
+  const locale = await pageLocale();
+  try {
+    return await openWithTransferLink(getDb(), token, locale);
+  } catch (error) {
+    throw databaseFailure("openTransferLink: the transfer link could not be used", error);
   }
 }

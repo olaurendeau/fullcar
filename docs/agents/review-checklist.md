@@ -98,6 +98,26 @@ celui qui écrit le code.
   bouton, par `link-browser.ts` qui envoie le jeton dans le corps de l'action. Un jeton de lien
   extrait du fragment ailleurs, lu dans le chemin ou la requête, ou rangé dans `localStorage`,
   est bloquant.
+- Le lien de cession (épique #935, `src/app/connexion/transfer-link.ts`) a deux actions, qui
+  reçoivent son jeton dans le corps et ne reçoivent aucun jeton d'admin : `readTransferLink` et
+  `openTransferLink` (`src/app/connexion/actions.ts`). Une troisième action qui reçoit un jeton de
+  lien de cession est bloquante.
+  - `readTransferLink` est la seule action de lien qui reçoit son jeton **au chargement** de la
+    page, sans l'user (exception à OA5.1 accordée par le propriétaire, Q4) : elle ne doit rien
+    écrire (ni lien usé, ni compte, ni session), lire sur un seul instantané (`onOneSnapshot`), et
+    ne répondre le titre et le début de l'événement que pour un lien qui sert (non utilisé, non
+    expiré, d'un événement non anonymisé, à compte, dont la cession attend) ; tout autre cas répond
+    son état seul (`expired`, `used`, `invalid`). Un titre ou une date dans une autre réponse, une
+    écriture dans celle-ci, ou un jeton qui part dans une autre requête que le corps, est bloquant.
+  - `openTransferLink` est une seule transaction `READ COMMITTED`, dans l'ordre : le lien cherché,
+    l'Event `noKeyUpdate`, le lien, l'accès et la cession relus sous le verrou, l'usage du lien, les
+    autres liens de cession supprimés (par clé), l'adresse, le compte (langue de la page), l'Event
+    écrit d'un seul `UPDATE` (le compte, `admin_token_hash` à nul, la cession effacée), puis la
+    session. Le jeton d'admin de l'événement est **révoqué** à l'acceptation : un écrit qui laisse
+    son hash, ou deux comptes organisateurs à un instant, est bloquant. Un lien utilisé répond
+    `used`, un lien supprimé (annulé, remplacé) `invalid` ; une annulation et une acceptation se
+    sérialisent sur l'Event. Aucun e-mail n'est envoyé au cédant (OT4.4), et ni jeton ni adresse
+    n'entre dans un journal.
 - À partir de #66, le jeton personnel est tiré **par le navigateur** avec
   `crypto.getRandomValues` (128 bits, 22 caractères base64url), et rangé sur l'appareil
   avant l'envoi. Un jeton personnel tiré

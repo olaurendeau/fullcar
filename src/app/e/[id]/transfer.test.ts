@@ -1,4 +1,4 @@
-import { sql, type Kysely } from "kysely";
+import { sql, UpdateQueryNode, type Kysely, type KyselyPlugin } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { anonymiseEvent } from "@/db/day-thirty";
 import { findLink, useLink } from "@/db/email-links";
@@ -552,6 +552,58 @@ describe("OT8.2: the journal", () => {
       await handOverEvent(id, { adminToken: token }, { op: "change", email: to }, handing(trx).deps);
       const written = JSON.stringify(logs);
       for (const secret of [to, link, token, session]) expect(written).not.toContain(secret);
+    });
+  });
+
+  // The test above reads an empty journal when nothing is written to it. These two make the
+  // journal write (Brevo throws, then the database fails) and read that it did, so that the
+  // absence of a secret in it proves something (follow-up of the review of #1010).
+  it("holds no token and no address when Brevo throws an error that carries them", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof, token } = await anEvent(trx);
+      const to = anAddress();
+      let link = "";
+      const { deps, run } = handing(trx);
+      deps.brevo = {
+        send: async (email) => {
+          link = tokenIn(email);
+          throw new Error(`Brevo refused ${to} with the link ${link} and the token ${token}`);
+        },
+      };
+      await handOverEvent(id, proof, { op: "start", email: to }, deps);
+      await run();
+      await handOverEvent(id, proof, { op: "resend" }, deps);
+      expect(logs.length).toBeGreaterThan(0);
+      const written = JSON.stringify(logs);
+      expect(link).not.toBe("");
+      for (const secret of [to, link, token]) expect(written).not.toContain(secret);
+    });
+  });
+
+  it("holds no token and no address when the database fails with an error that carries them", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      const { id, proof, token } = await anEvent(trx);
+      const to = anAddress();
+      let broken = false;
+      const failing: KyselyPlugin = {
+        transformQuery: ({ node }) => {
+          if (broken && UpdateQueryNode.is(node)) {
+            throw Object.assign(new Error(`Failing row contains (${to}, ${token})`), { code: "57P01" });
+          }
+          return node;
+        },
+        transformResult: async ({ result }) => result,
+      };
+      const { deps, sent, run } = handing(trx);
+      const afterwards = { ...deps, db: trx.withPlugin(failing) };
+      await handOverEvent(id, proof, { op: "start", email: to }, afterwards);
+      // The result of the email is the write that fails, once Brevo has answered.
+      broken = true;
+      await run();
+      expect(logs.length).toBeGreaterThan(0);
+      expect(logs.some((line) => JSON.stringify(line).includes("SQLSTATE 57P01"))).toBe(true);
+      const written = JSON.stringify(logs);
+      for (const secret of [to, tokenIn(sent[0]!), token]) expect(written).not.toContain(secret);
     });
   });
 
