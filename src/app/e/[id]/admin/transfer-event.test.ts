@@ -75,6 +75,23 @@ describe("transferEvent (epic #935, OT1, OT6)", () => {
     });
   });
 
+  it("OT2.3 / OT2.5: a resend waits for Brevo and queues nothing, a cancel answers the address", async () => {
+    await withRollbackRecordingSends(async (trx) => {
+      wiring.db = trx;
+      const { id, proof } = await anEvent(trx);
+      const to = anAddress();
+      await transferEvent(id, proof, { op: "start", email: to });
+      for (const task of wiring.tasks.splice(0)) await task();
+      wiring.sent = [];
+      expect(await transferEvent(id, proof, { op: "resend" })).toEqual({ ok: true, transfer: { email: to, send: "sent" } });
+      expect(wiring.sent).toHaveLength(1);
+      expect(wiring.tasks).toEqual([]);
+      expect(await transferEvent(id, proof, { op: "cancel" })).toEqual({ ok: true, cancelled: to });
+      expect(await transferEvent(id, proof, { op: "cancel" })).toEqual({ ok: false, error: "gone" });
+      expect(wiring.sent).toHaveLength(1);
+    });
+  });
+
   it("refuses a request without access, and a malformed id, and sends nothing", async () => {
     await withRollbackRecordingSends(async (trx) => {
       wiring.db = trx;
