@@ -114,6 +114,14 @@ test.describe("edit a car", () => {
     await expect(card(page, "Marc").getByRole("button", { name: "Modifier", exact: true })).toHaveCount(0);
   });
 
+  test("RL1.3: on an event with a retour, « Modifier la voiture » keeps its title", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await editButton(page).click();
+    const form = dialog(page, "Modifier la voiture");
+    await expect(form).toBeVisible();
+    await expect(form.getByRole("heading", { name: "Modifier la voiture", exact: true })).toBeVisible();
+  });
+
   // Safari, and Firefox on macOS, do not focus a button on a click: the sheet opens from <body>.
   test("opened without the focus on « Modifier », the sheet gives it to its first field", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);

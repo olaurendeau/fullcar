@@ -193,6 +193,10 @@
   "RideForm": {
     "title": {
       "offer": "Proposer une voiture",
+      "offerLeg": {
+        "aller": "Proposer une voiture pour l’aller",
+        "retour": "Proposer une voiture pour le retour"
+      },
       "edit": "Modifier la voiture"
     },
     "storage": {

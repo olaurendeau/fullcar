@@ -17,6 +17,8 @@ type Db = Kysely<Database>;
 
 const FR = {
   offer: "Proposer une voiture",
+  // Its sheet, on an event with a retour, opened from the Aller (RL1.1).
+  offerSheet: "Proposer une voiture pour l’aller",
   edit: "Modifier la voiture",
   retour: "Au retour",
   driver: "Qui conduit ?",
@@ -71,9 +73,9 @@ async function settled(sheet: Locator) {
 }
 
 /** « Proposer une voiture » of the Aller, its opening over. */
-async function openOffer(page: Page, offer = FR.offer) {
+async function openOffer(page: Page, offer = FR.offer, title = FR.offerSheet) {
   await panel(page).getByRole("button", { name: offer, exact: true }).click();
-  const sheet = dialog(page, offer);
+  const sheet = dialog(page, title);
   await settled(sheet);
   return sheet;
 }
@@ -217,7 +219,7 @@ test.describe("the car sheets on a phone", () => {
     await page.goto(`/e/${seededEvent.id}`);
     const sheet = await openOffer(page);
     expect(await overflows(sheet)).toBe(true);
-    const fixed = [sheet.getByRole("heading", { name: FR.offer }), submit(sheet), close(sheet)];
+    const fixed = [sheet.getByRole("heading", { name: FR.offerSheet }), submit(sheet), close(sheet)];
     const before = await Promise.all(fixed.map(boxOf));
 
     for (const end of ["bottom", "top"] as const) {
@@ -312,7 +314,7 @@ test.describe("the car sheets on a phone", () => {
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(800);
 
     await button.click();
-    const sheet = dialog(page, FR.offer);
+    const sheet = dialog(page, FR.offerSheet);
     await settled(sheet);
     const centre = async (part: Locator) => {
       const { top: y, bottom, left, right } = await edgesOf(part);
@@ -496,9 +498,9 @@ test.describe("the car sheets on a computer", () => {
 });
 
 // K1.15, in French and in English, then with the root's font at 125 %.
-for (const { locale, offer, edit } of [
-  { locale: "fr-FR", offer: FR.offer, edit: { car: "Voiture de Claire", edit: "Modifier", title: FR.edit } },
-  { locale: "en-US", offer: "Offer a car", edit: { car: "Claire’s car", edit: "Edit", title: "Edit the car" } },
+for (const { locale, offer, title, edit } of [
+  { locale: "fr-FR", offer: FR.offer, title: FR.offerSheet, edit: { car: "Voiture de Claire", edit: "Modifier", title: FR.edit } },
+  { locale: "en-US", offer: "Offer a car", title: "Offer a car for the outbound trip", edit: { car: "Claire’s car", edit: "Edit", title: "Edit the car" } },
 ]) {
   test.describe(`the car sheets at 360 px, ${locale}`, () => {
     test.use({ locale, viewport: { width: 360, height: 640 } });
@@ -519,7 +521,7 @@ for (const { locale, offer, edit } of [
       for (const large of [false, true]) {
         await page.goto(`/e/${seededEvent.id}`);
         if (large) await page.addStyleTag({ content: "html { font-size: 125% }" });
-        for (const open of [() => openOffer(page, offer), () => openEdit(page, edit)]) {
+        for (const open of [() => openOffer(page, offer, title), () => openEdit(page, edit)]) {
           const sheet = await open();
           expect(await sheet.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
           const buttons = await barOf(sheet).getByRole("button").all();
