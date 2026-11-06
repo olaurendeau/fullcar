@@ -4,12 +4,14 @@ import type { LegCounts } from "@/db/legs";
 import type { EventBefore, EventFields } from "@/domain/event";
 import type { EndedHeader, OrganiserLeg, OrganiserPanelAnswer, OrganiserPerson } from "@/domain/organiser-panel";
 import { pendingNoticeOf, type PendingNotice } from "@/domain/pending-send";
+import { transferNoticeOf, type TransferNotice } from "@/domain/transfer";
 import { isWallClock, isWallDate, type WallDate } from "@/domain/wall-clock";
 import type { EditEventOutcome } from "../edit-event";
 import type { CorrectionOutcome, ResendOutcome } from "../pending-email";
 import { sendAction, type Sent } from "../run-action";
 import type { RemovePersonOutcome } from "../remove-person";
-import { fixEmail, loadOrganiserPanel, removePersonAsOrganiser, resendEmail, updateEvent } from "./actions";
+import type { HandOverOutcome } from "../transfer";
+import { fixEmail, loadOrganiserPanel, removePersonAsOrganiser, resendEmail, transferEvent, updateEvent } from "./actions";
 
 /*
  * The only browser code that touches the organiser's admin token (docs/agents/architecture.md,
@@ -142,7 +144,7 @@ export type Refusal =
 
 export type OrganiserCheck =
   | { state: "checking" }
-  | { state: "valid"; publicUrl: string; legs: OrganiserLeg[]; persons: OrganiserPerson[]; pending?: PendingNotice }
+  | { state: "valid"; publicUrl: string; legs: OrganiserLeg[]; persons: OrganiserPerson[]; pending?: PendingNotice; transfer?: TransferNotice }
   | { state: "refused"; refusal: Refusal }
   | { state: "failed"; retrying?: boolean };
 
@@ -170,7 +172,7 @@ function refusalOf(answer: Record<string, unknown>): Refusal | undefined {
 
 /**
  * What the server's answer means: the panel with its legs and the link to share (C4.9 amended,
- * OA7.3), with the notice of a pending event (OA1.7), or refused with the screen of the state the access rule decides (#596, #598).
+ * OA7.3), with the notice of a pending event (OA1.7) or of an event being handed over (epic #935, OT2.2), or refused with the screen of the state the access rule decides (#596, #598).
  * Anything else, such as the `undefined` Next resolves an action with on an
  * `x-action-redirect` response, is a failed check: the organiser is never refused for it.
  */
@@ -179,8 +181,17 @@ export function checkFromAnswer(answer: unknown, origin: string, id: string): Or
   const { state, legs, persons } = answer as { state?: unknown; legs?: unknown; persons?: unknown };
   if (state === "panel" && Array.isArray(legs)) {
     const all = Array.isArray(persons) ? (persons as OrganiserPerson[]) : [];
-    const pending = pendingNoticeOf((answer as { pending?: unknown }).pending);
-    return { state: "valid", publicUrl: `${origin}/e/${id}`, legs: legs as OrganiserLeg[], persons: all, ...(pending && { pending }) };
+    const notices = answer as { pending?: unknown; transfer?: unknown };
+    const pending = pendingNoticeOf(notices.pending);
+    const transfer = transferNoticeOf(notices.transfer);
+    return {
+      state: "valid",
+      publicUrl: `${origin}/e/${id}`,
+      legs: legs as OrganiserLeg[],
+      persons: all,
+      ...(pending && { pending }),
+      ...(transfer && { transfer }),
+    };
   }
   const refusal = refusalOf(answer as Record<string, unknown>);
   return refusal ? { state: "refused", refusal } : { state: "failed" };
@@ -203,7 +214,8 @@ export function retryFrom(check: OrganiserCheck): OrganiserCheck | undefined {
  * form loaded, and `removal`, the numbers a confirmation of the retour's removal showed (#270).
  * Without one, the argument is omitted, never `null`. `resend()` sends the pending event's
  * confirmation email again (OA2.4), with the same proof; `fix(email)` sends it to the corrected
- * address (OA2.5, #602). `remove()` sends « Retirer » of
+ * address (OA2.5, #602); `transfer(email)` hands the event over to the account of `email` (epic #935,
+ * OT1), with the same proof. `remove()` sends « Retirer » of
  * « Personnes inscrites » (#672) with the same proof, and the page's personal token, which only
  * chooses the board answered; the board sends it, as its own actions (`sendAction`).
  */
@@ -214,6 +226,7 @@ export function useOrganiserCheck(id: string): {
   edit: (fields: EventFields, before: EventBefore, removal?: LegCounts) => Promise<Sent<EditEventOutcome>>;
   resend: () => Promise<Sent<ResendOutcome>>;
   fix: (email: string) => Promise<Sent<CorrectionOutcome>>;
+  transfer: (email: string) => Promise<Sent<HandOverOutcome>>;
   remove: (personId: string, deviceToken: string | undefined) => Promise<RemovePersonOutcome>;
 } {
   const [check, setCheck] = useState<OrganiserCheck>({ state: "checking" });
@@ -263,10 +276,15 @@ export function useOrganiserCheck(id: string): {
 
   const fix = useCallback((email: string) => sendAction<CorrectionOutcome>(() => fixEmail(id, organiserProof(id), email)), [id]);
 
+  const transfer = useCallback(
+    (email: string) => sendAction<HandOverOutcome>(() => transferEvent(id, organiserProof(id), { op: "start", email })),
+    [id],
+  );
+
   const remove = useCallback(
     (personId: string, deviceToken: string | undefined) => removePersonAsOrganiser(id, organiserProof(id), deviceToken, personId),
     [id],
   );
 
-  return { check, retry, read, edit, resend, fix, remove };
+  return { check, retry, read, edit, resend, fix, transfer, remove };
 }

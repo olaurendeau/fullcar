@@ -219,6 +219,14 @@ describe("checkFromAnswer", () => {
     });
   });
 
+  // Epic #935, OT2.2: the panel of an event being handed over comes with its notice; a malformed one is none.
+  it("reads the notice of a handover", () => {
+    const transfer = { email: "marie.dupont@exemple.fr", send: "expired" };
+    expect(checkFromAnswer({ state: "panel", legs, transfer }, "https://fullcar.example", ID)).toMatchObject({ state: "valid", transfer });
+    expect(checkFromAnswer({ state: "panel", legs, transfer: { send: "sent" } }, "https://fullcar.example", ID)).not.toHaveProperty("transfer");
+    expect(checkFromAnswer({ state: "panel", legs }, "https://fullcar.example", ID)).not.toHaveProperty("transfer");
+  });
+
   // OA1.7, OA2.1: a pending event's panel comes with its notice; a malformed one is none.
   it("shows the notice « Confirmez votre adresse » with the panel, when the server sends one", () => {
     const pending = { email: "claire.martin@exemple.fr", send: "addressLimit" };

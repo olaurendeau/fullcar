@@ -22,6 +22,7 @@ import {
   POLL_MS,
   screenRead,
   screenReducer,
+  transferAnswer,
   type EditAnswer,
   type ScreenEvent,
   type ScreenState,
@@ -775,5 +776,95 @@ describe("fixAnswer (OA2.5)", () => {
       const { title, note, send, cancel, offline } = messages.FixEmail;
       expect([title, note, send, cancel, offline]).toEqual(words[locale]);
     }
+  });
+});
+
+describe("the notice « Cession en attente » (epic #935, OT2.2)", () => {
+  const sending = { email: "marie.dupont@exemple.fr", send: "sending" } as const;
+  const sent = { ...sending, send: "sent" } as const;
+
+  it("comes with the panel, and is in the panel only when the server sent one", () => {
+    expect(screenReducer({ state: "loading" }, { type: "checked", check: { ...valid, transfer: sending } })).toStrictEqual(
+      ready({ panel: { ...links, legs: before, transfer: sending } }),
+    );
+  });
+
+  it("a read while sending replaces it, and only it; without one, the notice goes", () => {
+    const shown = ready({ panel: { ...links, legs: before, transfer: sending } });
+    expect(screenReducer(shown, { type: "pendingRead", transfer: sent })).toStrictEqual(
+      ready({ panel: { ...links, legs: before, transfer: sent } }),
+    );
+    expect(screenReducer(shown, { type: "pendingRead" })).toStrictEqual(ready());
+  });
+
+  it("is read again, every POLL_MS, while its email is on its way, as the confirmation's is", () => {
+    expect(pollsPending(ready({ panel: { ...links, legs: before, transfer: sending } }))).toBe(true);
+    for (const send of ["sent", "failed", "addressLimit", "expired"] as const) {
+      expect(pollsPending(ready({ panel: { ...links, legs: before, transfer: { ...sending, send } } }))).toBe(false);
+    }
+  });
+
+  it("pendingRead: the notice of a panel read, whichever it is", () => {
+    expect(pendingRead({ ok: true, value: { state: "panel", legs: after, transfer: sent } })).toStrictEqual({ transfer: sent });
+    expect(pendingRead({ ok: true, value: { state: "panel", legs: after, transfer: { email: 1 } } })).toStrictEqual({});
+  });
+
+  it("given up while sending, reads as a failure, as the server reads a send left « sending » after 30 s", () => {
+    const shown = ready({ panel: { ...links, legs: before, transfer: sending } });
+    expect(screenReducer(shown, { type: "pendingGaveUp" })).toStrictEqual(
+      ready({ panel: { ...links, legs: before, transfer: { ...sending, send: "failed" } } }),
+    );
+    const kept = ready({ panel: { ...links, legs: before, transfer: sent } });
+    expect(screenReducer(kept, { type: "pendingGaveUp" })).toBe(kept);
+  });
+});
+
+describe("transferAnswer (OT1.5, OT1.6)", () => {
+  it("is the notice the server answers: on its way, or stopped by the limit of the address", () => {
+    for (const send of ["sending", "addressLimit"] as const) {
+      const transfer = { email: "marie.dupont@exemple.fr", send };
+      expect(transferAnswer({ ok: true, value: { ok: true, transfer } })).toStrictEqual({ kind: "answered", transfer });
+    }
+  });
+
+  it("reads the address refused, the account's own, the limit of the event", () => {
+    expect(transferAnswer({ ok: true, value: { ok: false, error: "required" } })).toStrictEqual({ kind: "address", reason: "required" });
+    expect(transferAnswer({ ok: true, value: { ok: false, error: "email" } })).toStrictEqual({ kind: "address", reason: "invalid" });
+    expect(transferAnswer({ ok: true, value: { ok: false, error: "self" } })).toStrictEqual({ kind: "self" });
+    expect(transferAnswer({ ok: true, value: { ok: false, error: "tooMany" } })).toStrictEqual({ kind: "tooMany" });
+  });
+
+  it("closes the sheet and has the page read again when the event no longer takes a handover", () => {
+    for (const error of ["pending", "eventEnded", "noOrganiserAccess", "eventNotFound"]) {
+      expect(transferAnswer({ ok: true, value: { ok: false, error } })).toStrictEqual({ kind: "refused" });
+    }
+  });
+
+  it("is not sent offline, nor on any other problem or refusal, nor on an answer it does not know", () => {
+    expect(transferAnswer({ ok: false, problem: "offline" })).toStrictEqual({ kind: "notSent" });
+    expect(transferAnswer({ ok: false, problem: "failed" })).toStrictEqual({ kind: "notSent" });
+    for (const error of ["invalid", "gone", "other"]) {
+      expect(transferAnswer({ ok: true, value: { ok: false, error } })).toStrictEqual({ kind: "notSent" });
+    }
+    for (const value of [undefined, null, {}, { ok: true }, { ok: true, cancelled: "a@b.fr" }, { ok: true, transfer: { email: "a@b.fr", send: "sent" } }]) {
+      expect(transferAnswer({ ok: true, value })).toStrictEqual({ kind: "notSent" });
+    }
+  });
+
+  it("has the words of the design, in French and in English (OT8.4)", () => {
+    const fr1 = fr.Transfer;
+    expect(fr1.section.title).toBe("Céder l’événement");
+    expect(fr1.start).toBe("Choisir une adresse");
+    expect(fr1.pending.title).toBe("Cession en attente");
+    expect(fr1.pending.sending).toBe("Envoi du lien à {email}…");
+    expect(fr1.email.self).toBe("C’est l’adresse de votre compte. Indiquez celle de la personne qui reprend.");
+    expect(fr1.expired.title).toBe("Le lien a expiré");
+    const en1 = en.Transfer;
+    expect(en1.section.title).toBe("Hand over the event");
+    expect(en1.start).toBe("Choose an address");
+    expect(en1.pending.title).toBe("Handover pending");
+    expect(en1.sendFailed.title).toBe("The email may not have been sent");
+    expect(en1.addressLimit.title).toBe("The email did not go out");
+    expect(en1.expired.body).toBe("The link sent to {email} is no longer valid. Send a new one, or cancel the handover. You keep access.");
   });
 });

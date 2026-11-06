@@ -7,6 +7,7 @@ import type { Said } from "@/app/e/[id]/admin/screen-state";
 import type { Leg } from "@/domain/leg";
 import type { OrganiserLeg } from "@/domain/organiser-panel";
 import type { PendingNotice as Notice } from "@/domain/pending-send";
+import type { TransferNotice as Handover } from "@/domain/transfer";
 import type { WallClock } from "@/domain/wall-clock";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,11 +16,14 @@ import { OrganiserLegs } from "./organiser-leg";
 import { OrganiserSummary } from "./organiser-summary";
 import { PendingNotice } from "./pending-notice";
 import { ReadButton } from "./read-button";
+import { TransferNotice } from "./transfer-notice";
+import { TransferSection } from "./transfer-section";
 
 /**
  * The organiser's panel (#3, R4), the same at every visit (C4.7): the link to share, and no
  * organiser's link nor « Gardez ce lien » any more (OA7.3); after it, the notice « Confirmez
- * votre adresse » of a pending event, folded with the rest (OA2.1, OA2.8); under them, a
+ * votre adresse » of a pending event, or « Cession en attente » of an event being handed over (epic #935,
+ * OT2.2), folded with the rest (OA2.1, OA2.8); under them, a
  * section per leg (#179), folded at every appearance, its title the button that unfolds it
  * (organizer-view v3.5, O9), and no tiles any more (O9.7). From 1024 px, the panel widens,
  * the link to share takes the first of two columns, the notice the second, and the sections two more (O4.1, OA7.8).
@@ -57,6 +61,10 @@ export function AdminPanel({
   onEdit,
   onResend,
   onFix,
+  transfer,
+  transferNoticeRef,
+  transferStartRef,
+  onTransfer,
   persons,
 }: {
   publicUrl: string;
@@ -66,6 +74,14 @@ export function AdminPanel({
   onResend?: () => void;
   /** « Corriger l’adresse » of that notice (OA2.5), which opens its sheet; without it, the button is inactive. */
   onFix?: () => void;
+  /** The notice « Cession en attente » of an event being handed over, in the same place (OT2.2); never with `pending`. */
+  transfer?: Handover;
+  /** The notice's element: it takes the focus once the link is sent (OT1.5). */
+  transferNoticeRef: RefObject<HTMLDivElement | null>;
+  /** « Choisir une adresse » of the section « Céder l’événement » (OT1.1), the focus's place once its sheet closes. */
+  transferStartRef: RefObject<HTMLButtonElement | null>;
+  /** Opens that sheet; without it, the section is not shown. */
+  onTransfer?: () => void;
   titleRef: RefObject<HTMLButtonElement | null>;
   legs: OrganiserLeg[] | null;
   allerAt: WallClock;
@@ -157,6 +173,7 @@ export function AdminPanel({
             </CopyableLink>
           </LinkGroup>
           {pending && <PendingNotice pending={pending} onResend={onResend} onFix={onFix} />}
+          {transfer && <TransferNotice transfer={transfer} noticeRef={transferNoticeRef} />}
         </div>
         {/* After the link to share, before the sections; from 1024 px, under both columns, at its width (v3.3). */}
         <Button
@@ -183,6 +200,8 @@ export function AdminPanel({
               onToggleLeg={onToggleLeg}
             />
             {persons}
+            {/* Last, while neither a confirmation nor a handover waits (OT1.1, OT5.1). */}
+            {!pending && !transfer && onTransfer && <TransferSection startRef={transferStartRef} onStart={onTransfer} />}
           </>
         ) : (
           !framed && !folded && <Stale />

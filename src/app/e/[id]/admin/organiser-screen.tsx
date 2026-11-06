@@ -16,6 +16,7 @@ import { sendAbout, usePageHidden } from "@/components/event/hidden-page";
 import { legHeadingId } from "@/components/event/organiser-leg";
 import { focusPersonRemoval, OrganiserPersons, personName } from "@/components/event/organiser-persons";
 import type { RemovePerson } from "@/components/event/remove-person-dialog";
+import { TransferSheet } from "@/components/event/transfer-sheet";
 import type { LegCounts } from "@/db/legs";
 import type { EventBefore, EventHeader } from "@/domain/event";
 import type { Leg } from "@/domain/leg";
@@ -37,8 +38,10 @@ import {
   resendAnswer,
   screenRead,
   screenReducer,
+  transferAnswer,
   type EditAnswer,
   type FixAnswer,
+  type TransferAnswer,
 } from "./screen-state";
 
 /**
@@ -64,6 +67,10 @@ import {
  *   every 2 s, until the email's result is kept, for 30 s at most (OA1.7).
  * - « Corriger l’adresse » opens a sheet with the address (OA2.5); sent, the notice shows the new
  *   one, and the focus goes back to that button, as it does for « Annuler » and Escape.
+ * - « Choisir une adresse » of the section « Céder l’événement » opens a sheet (epic #935, OT1.2);
+ *   sent, the notice « Cession en attente » takes the focus (OT1.5), and the section goes; closed
+ *   otherwise, the focus goes back to that button (OT8.5). The notice says « Envoi du lien… » and
+ *   is read again like the confirmation's (OT2.2).
  * - Its frame keeps the board in place on screen as it changes height (O1.11).
  * - While a sheet hides the page, the live regions keep what they said: their next words wait
  *   for it to show. The legs' dates are the page's, from the header of the state the board
@@ -185,6 +192,11 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     button?.focus();
     return !!button && document.activeElement === button;
   };
+  // « Céder l’événement » (epic #935): its sheet, each opening's form, the section's button and the notice.
+  const [transferring, setTransferring] = useState(false);
+  const [transferOpening, setTransferOpening] = useState(0);
+  const transferStart = useRef<HTMLButtonElement>(null);
+  const transferNotice = useRef<HTMLDivElement>(null);
   const focusEdit = () => {
     editButton.current?.focus();
     return !!editButton.current && document.activeElement === editButton.current;
@@ -307,6 +319,25 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
     return answer;
   }
 
+  /**
+   * « Envoyer le lien » of « Céder l’événement » (OT1): the notice takes what the server answers,
+   * « Envoi du lien… » or the limit of the address; the sheet says the rest. An event that no
+   * longer takes a handover has the page read again.
+   */
+  async function transferTo(typed: string): Promise<TransferAnswer> {
+    const answer = transferAnswer(await link.transfer(typed));
+    if (answer.kind === "answered") dispatch({ type: "pendingRead", transfer: answer.transfer });
+    else if (answer.kind === "refused" && boardRef.current) void readScreen(boardRef.current);
+    return answer;
+  }
+
+  /** Once the sheet is closed: the notice if a handover waits, otherwise the section's button. */
+  function focusTransfer() {
+    const target = transferNotice.current ?? transferStart.current;
+    target?.focus();
+    return !!target && document.activeElement === target;
+  }
+
   async function readScreen(handle: BoardHandle) {
     if (current.current.state !== "ready") return;
     const read = ++latest.current;
@@ -374,6 +405,12 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           setFixed(screen.panel.pending.email);
           setFixOpening((opened) => opened + 1);
           setFixing(true);
+        }}
+        transferNoticeRef={transferNotice}
+        transferStartRef={transferStart}
+        onTransfer={() => {
+          setTransferOpening((opened) => opened + 1);
+          setTransferring(true);
         }}
         persons={
           <OrganiserPersons
@@ -443,6 +480,16 @@ export function OrganiserScreen({ id, state, children }: { id: string; state: Ev
           // Its button gone (confirmed meanwhile): the active tab or the title, never `<body>`.
           onClosed={() => focusFix() || focusLandmark()}
           opening={fixOpening}
+        />
+      )}
+      {screen.state === "ready" && (
+        <TransferSheet
+          open={transferring}
+          onOpenChange={setTransferring}
+          onTransfer={transferTo}
+          // The notice, or the button; both gone (read again meanwhile): the active tab or the title, never `<body>`.
+          onClosed={() => focusTransfer() || focusLandmark()}
+          opening={transferOpening}
         />
       )}
       <div className="mx-auto flex w-full max-w-board flex-col gap-6">
