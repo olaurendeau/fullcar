@@ -237,6 +237,7 @@ export function ParticipantBoard({
           event,
           options: stops === undefined ? latest.current.options : { ...latest.current.options, stops },
           legs: latest.current.legs.filter(({ leg }) => leg === "aller" || event.retourAt),
+          tokenRanks: latest.current.tokenRanks,
         }),
       succeed,
       fail,

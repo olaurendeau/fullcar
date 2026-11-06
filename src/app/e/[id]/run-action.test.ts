@@ -30,7 +30,7 @@ const header = { title: "Tournoi de Rennes", location: "Gymnase", locationPositi
 const ENDED = { ended: true, title: "Tournoi de Rennes", allerAt: "2026-12-12 07:30:00" };
 
 describe("stateOf", () => {
-  const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], notConcerned: [], device: [] }] };
+  const state = { event: header, legs: [{ leg: "aller", cars: [], withoutCar: [], notConcerned: [], device: [] }], tokenRanks: {} };
 
   it("is the state an action gives back, refusal included", () => {
     expect(stateOf({ ok: true, state })).toBe(state);
@@ -93,8 +93,8 @@ describe("readEnded", () => {
 });
 
 describe("stateShown", () => {
-  const withRetour: EventState = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, options: { stops: false }, legs: [] };
-  const withoutRetour: EventState = { event: header, options: { stops: false }, legs: [] };
+  const withRetour: EventState = { event: { ...header, retourAt: "2026-12-12 18:00:00" }, options: { stops: false }, legs: [], tokenRanks: {} };
+  const withoutRetour: EventState = { event: header, options: { stops: false }, legs: [], tokenRanks: {} };
 
   it("shows nothing that is not a state: the legs alone change nothing, and throw nothing", () => {
     expect(stateShown(withRetour, [])).toBeUndefined();
@@ -233,7 +233,7 @@ describe("goneNamed", () => {
 });
 
 describe("actionRunner", () => {
-  const state: EventState = { event: header, options: { stops: false }, legs: [{ leg: "aller", cars: [], withoutCar: [], notConcerned: [], device: [] }] };
+  const state: EventState = { event: header, options: { stops: false }, legs: [{ leg: "aller", cars: [], withoutCar: [], notConcerned: [], device: [] }], tokenRanks: {} };
 
   /** A page that records the states the runner gives it and each action that begins and ends, and a connection that can be cut. */
   function page() {

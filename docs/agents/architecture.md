@@ -558,6 +558,45 @@ ne s'y exécute (#64).
 Toute PR qui touche la génération, le stockage, la comparaison, le transport ou la
 journalisation d'un jeton est une zone sensible : elle est mergée par l'humain.
 
+### Plusieurs jetons personnels par appareil (épique #67, #1013)
+
+Un appareil peut tenir plusieurs jetons personnels pour un même événement : le sien, et ceux
+que des liens perso (`/e/{id}/moi#{token}`) lui ont ajoutés. Le serveur les lit tous, et ne
+voit pas plus que ce que verraient les appareils de chacun de ces jetons.
+
+- **Le transport.** Le paramètre `token` des actions de l'événement (et `deviceToken` de
+  `removePersonAsOrganiser`) garde son nom et reçoit un jeton seul (une page chargée avant le
+  déploiement) ou **la liste des jetons de l'appareil** pour cet événement : de 1 à
+  `DEVICE_TOKENS_MAX` = 20 jetons bien formés, le jeton propre de l'appareil en premier.
+  `deviceTokensOf` (`src/domain/personal-token.ts`) est la seule lecture de ce champ. Toute
+  autre forme se lit « aucun jeton » : une liste vide, de plus de 20, un élément mal formé, ou
+  autre chose qu'une chaîne ou une liste. La lecture ne donne alors aucune personne de
+  l'appareil ni aucun numéro, et une écriture répond `forbidden`. Les doublons sont acceptés.
+  Le corps est ainsi borné : au plus 20 empreintes à calculer, et 20 × (personnes de
+  l'événement) comparaisons.
+- **Deux clés.** `fullcar:personal-token:{id}` reste le jeton propre de l'appareil, inchangé.
+  `fullcar:link-tokens:{id}` est nouvelle : la liste JSON des jetons qu'un lien perso a
+  ajoutés, dans l'ordre d'ajout (#1015).
+- **Le premier lien.** Sur un appareil sans jeton propre pour l'événement, le jeton d'un lien
+  perso devient le jeton propre. Une inscription faite ensuite rejoint donc son groupe.
+- **L'ordre des jetons.** La liste envoyée vaut « propre, puis ajoutés ». Elle n'est jamais
+  réordonnée, et aucun jeton n'en est retiré : un rang reste stable.
+- **La borne.** 20 jetons côté serveur. Le client envoie les 20 premiers. Limite acceptée :
+  au-delà, les personnes d'un 21e lien ne s'affichent pas sur cet appareil.
+- **Les droits.** Une personne est de l'appareil si l'un des jetons la porte
+  (`devicePersonIds`, `deviceAccess`, `src/domain/device.ts`). Chaque empreinte est comparée à
+  chaque jeton à temps constant, sans sortie anticipée. Les empreintes restent dans
+  `person.token_hash`.
+- **La création** se fait par le premier jeton (`creationTokenOf`) : `addPerson`, et le
+  conducteur nouveau d'`offerRide`. La vérification de l'empreinte rangée (C12.4) se fait
+  contre ce même jeton.
+- **La lecture.** `EventState.tokenRanks` donne, pour chaque personne de l'appareil, son
+  identifiant et le rang (à partir de 0) du premier jeton de la liste qui la porte
+  (`deviceTokenRanks`). Il ne porte ni jeton ni empreinte, et vaut `{}` sans appareil et dans
+  `readEventPage`.
+- **La vérification d'un lien perso** (#1016) : le jeton seul dans le corps, et une réponse
+  `found` avec les prénoms, `none` ou `ended`, jamais le jeton ni un numéro.
+
 ### Session, liens et jeton d'admin (#581)
 
 À partir de l'épique #581 (maquette `docs/design/organizer-account/`, critères OA1 à OA11),
@@ -1424,7 +1463,7 @@ Dans cet ordre, parce que chaque étape rend la suivante vérifiable :
 | migrations | `src/db/migrations/`, listées dans `src/db/migrations/index.ts` | seul endroit où `sql.raw` est permis, mais pas dans leurs tests |
 | server actions | `src/app/…/actions.ts`, à côté de la route qui s'en sert | minces : valider l'entrée, déléguer au domaine et aux données |
 | cas d'usage de l'événement | `src/app/e/[id]/*.ts` (précédent : `src/app/e/[id]/event.ts`) | reçoivent `db` en paramètre, composent le domaine et l'accès aux données ; testés avec `withRollback`, comme une fonction d'accès aux données |
-| jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur, que remplace `admin-token-store.ts` à partir de #597 |
+| jeton personnel dans le navigateur | `src/app/e/[id]/device-token.ts`, à partir de #66 ; lecture côté serveur de un ou plusieurs jetons : `deviceTokensOf`, `src/domain/personal-token.ts` (#1013) | seul code navigateur qui touche au jeton personnel, comme `src/app/e/[id]/admin/admin-link.ts` pour le jeton d'organisateur, que remplace `admin-token-store.ts` à partir de #597 |
 | jeton d'admin dans le navigateur | `src/app/e/[id]/admin/admin-token-store.ts`, à partir de #597 | seul code navigateur qui touche au jeton d'admin, rangé sous `fullcar:admin-token:{id}` (voir « Session, liens et jeton d'admin ») |
 | jeton de session dans le navigateur | `src/app/session-token.ts` ; `src/components/account/session-visit.tsx`, à partir de #595 | seul code navigateur qui touche au jeton de session, rangé sous `fullcar:session` ; `session-visit.tsx`, monté par le layout racine, envoie la visite à chaque chargement de page ; `keepSessionToken` range le jeton qu'un lien vient d'ouvrir, à la place de l'ancien (OA5.9) |
 | pages des liens de connexion et de confirmation | `src/app/connexion/lien/`, `src/app/connexion/confirmer/`, `src/app/connexion/link-page.tsx`, `link-browser.ts`, `link-fragment.ts` ; `src/components/account/arrival-bar.tsx`, à partir de #608 | `link-page.tsx` lit `window.location.hash` (à l'affichage, pour dire « lien non valide » si ce n'est pas un jeton, et à l'appui sur le bouton) ; `link-fragment.ts` (`linkTokenOf`), pure, est le seul code qui en extrait le jeton, sans lire l'adresse ; `link-browser.ts`, à l'appui, l'appelle puis envoie le jeton dans le corps de l'action et dit où aller ; `link-page.tsx` y mène par `router.replace` (le fragment quitte la barre d'adresse et l'historique) ; `arrival-bar.tsx`, monté par le layout racine, dit « Session ouverte avec {email}. » et met le focus sur le titre de la page d'arrivée |

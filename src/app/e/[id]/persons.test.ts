@@ -277,6 +277,85 @@ const STRANGERS: [string, (scene: Awaited<ReturnType<typeof seedScene>>, otherEv
   ["a malformed token", () => "AAAAAAAAAAAAAAAAAAAAA"],
 ];
 
+// LP5.1, LP5.4: the token field is one token or the device's list, its own first.
+describe("a device with several tokens", () => {
+  const A = "AAAAAAAAAAAAAAAAAAAAAA";
+  const B = "QQQQQQQQQQQQQQQQQQQQQQ";
+  const C = "gggggggggggggggggggggg";
+  const forbidden = expect.objectContaining({ ok: false, error: "forbidden" });
+
+  /** A person of B, and one of C, in an event. */
+  async function twoDevices(db: Db) {
+    const { id: eventId } = await seedEvent(db);
+    const fromB = await seedPerson(db, eventId, { firstName: "Béa" }, B);
+    const fromC = await seedPerson(db, eventId, { firstName: "Cécile" }, C);
+    return { eventId, fromB, fromC };
+  }
+
+  it("LP5.4: addPerson with [A, B] creates her with A: A alone holds her, B alone does not", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const sent = registration();
+      const state = stateOf(await addPerson(trx, eventId, [A, B], sent));
+      expect(state.tokenRanks).toEqual({ [sent.id]: 0 });
+      expect(stillOpen(await readEventState(trx, eventId, A))?.tokenRanks).toEqual({ [sent.id]: 0 });
+      expect(stillOpen(await readEventState(trx, eventId, B))?.tokenRanks).toEqual({});
+      expect(await updatePerson(trx, eventId, B, { personId: sent.id, firstName: "Ana" })).toEqual(forbidden);
+    });
+  });
+
+  it("LP5.4: the creation sent again with [A, B] writes nothing more; with [B, A] it is refused", async () => {
+    await withRollback(async (trx) => {
+      const { id: eventId } = await seedEvent(trx);
+      const sent = registration();
+      await addPerson(trx, eventId, [A, B], sent);
+      expect((await addPerson(trx, eventId, [A, B], sent)).ok).toBe(true);
+      expect(await addPerson(trx, eventId, [B, A], sent)).toEqual(forbidden);
+      expect(await personIds(trx, eventId)).toEqual([sent.id]);
+    });
+  });
+
+  it("LP5.1: updatePerson of a person of B is accepted with [A, B], not with [A, C]", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, fromB } = await twoDevices(trx);
+      const changed = await updatePerson(trx, eventId, [A, B], { personId: fromB.id, firstName: "Béatrice" });
+      expect(changed.ok).toBe(true);
+      expect(await updatePerson(trx, eventId, [A, C], { personId: fromB.id, firstName: "Intruse" })).toEqual(forbidden);
+      const [person] = legOf(await readEventState(trx, eventId, B), "aller").device;
+      expect(person.firstName).toBe("Béatrice");
+    });
+  });
+
+  it("LP5.1: 21 tokens, an empty list or a malformed element answer forbidden, and create nothing", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, fromB, fromC } = await twoDevices(trx);
+      const lists = [Array.from({ length: 21 }, () => B), [], [B, "nope"], [[B]]];
+      for (const list of lists) {
+        expect(await updatePerson(trx, eventId, list, { personId: fromB.id, firstName: "Intruse" })).toEqual(forbidden);
+        expect(await addPerson(trx, eventId, list, registration())).toEqual(forbidden);
+      }
+      expect((await personIds(trx, eventId)).sort()).toEqual([fromB.id, fromC.id].sort());
+    });
+  });
+
+  it("LP5.1: 20 tokens are accepted", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, fromB } = await twoDevices(trx);
+      const list = [A, ...Array.from({ length: 18 }, () => A), B];
+      expect(list).toHaveLength(20);
+      expect((await updatePerson(trx, eventId, list, { personId: fromB.id, firstName: "Béatrice" })).ok).toBe(true);
+    });
+  });
+
+  it("a token alone, or a list of one, works as before", async () => {
+    await withRollback(async (trx) => {
+      const { eventId, fromB } = await twoDevices(trx);
+      expect((await updatePerson(trx, eventId, B, { personId: fromB.id, firstName: "Béatrice" })).ok).toBe(true);
+      expect((await updatePerson(trx, eventId, [B], { personId: fromB.id, firstName: "Béa" })).ok).toBe(true);
+    });
+  });
+});
+
 describe("C2.4, C7.3, C12.3: only the device that created the person changes her", () => {
   it.each(STRANGERS)("updatePerson refuses %s", async (_, tokenOf) => {
     await withRollback(async (trx) => {

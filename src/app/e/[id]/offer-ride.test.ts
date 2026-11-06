@@ -166,6 +166,61 @@ async function aClaire(db: Db, eventId: string, phone: string | null = null) {
   return { ...claire, driver: { kind: "device" as const, personId: claire.id } };
 }
 
+// LP5.1, LP5.4: the token field is one token or the device's list, its own first.
+describe("offerRide, a device with several tokens", () => {
+  it("LP5.4: a new driver sent with [A, B] is created with A: A holds her, B does not", async () => {
+    await withRollback(async (trx) => {
+      const { eventId } = await aScene(trx);
+      const [a, b] = [newToken(), newToken()];
+      const driver = aNewDriver();
+      const offer = anOffer("aller", driver);
+
+      expect(await offerRide(trx, eventId, [a, b], offer)).toEqual({ ok: true, rideId: offer.rideId, driverId: driver.personId });
+
+      expect(stillOpen(await readEventState(trx, eventId, a))?.tokenRanks).toEqual({ [driver.personId]: 0 });
+      expect(stillOpen(await readEventState(trx, eventId, b))?.tokenRanks).toEqual({});
+      expect(stillOpen(await readEventState(trx, eventId, [b, a]))?.tokenRanks).toEqual({ [driver.personId]: 1 });
+    });
+  });
+
+  it("LP5.4: the same new driver sent again with [A, B] writes nothing more; with [B, A] it is refused", async () => {
+    await withRollback(async (trx) => {
+      const { eventId } = await aScene(trx);
+      const [a, b] = [newToken(), newToken()];
+      const driver = aNewDriver();
+      expect(await offerRide(trx, eventId, [a, b], anOffer("aller", driver))).toMatchObject({ ok: true });
+      const again = await offerRide(trx, eventId, [b, a], anOffer("aller", driver));
+      expect(again).toEqual({ ok: false, error: "idTaken" });
+    });
+  });
+
+  it("LP5.1: a driver of the device that holds B is accepted with [A, B], and refused with [A]", async () => {
+    await withRollback(async (trx) => {
+      const { eventId } = await aScene(trx);
+      const [a, b] = [newToken(), newToken()];
+      const bea = await seedPerson(trx, eventId, { firstName: "Bea", phone: DEVICE_PHONE }, b);
+      const offer = anOffer("aller", { kind: "device", personId: bea.id });
+
+      expect(await offerRide(trx, eventId, [a], offer)).toEqual({ ok: false, error: "forbidden" });
+      expect(await offerRide(trx, eventId, [a, b], offer)).toMatchObject({ ok: true });
+      expect(legOf(await readEventState(trx, eventId, [a, b]), "aller").cars.map((car) => car.id)).toContain(offer.rideId);
+    });
+  });
+
+  it("LP5.1: a list that reads as no token creates no driver and writes no car", async () => {
+    await withRollback(async (trx) => {
+      const { eventId } = await aScene(trx);
+      const driver = aNewDriver();
+      const before = await rowsOf(trx, eventId);
+      for (const list of [[], Array.from({ length: 21 }, newToken), [newToken(), "nope"]]) {
+        const result = await offerRide(trx, eventId, list, anOffer("aller", driver));
+        expect(result.ok).toBe(false);
+      }
+      expect(await rowsOf(trx, eventId)).toEqual(before);
+    });
+  });
+});
+
 describe("offerRide", () => {
   it("C4.2, C4.4: a new driver's car is on its leg only, and she is not concerned by the other", async () => {
     await withRollback(async (trx) => {
