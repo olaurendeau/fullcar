@@ -10,7 +10,7 @@ import type { NewEvent } from "@/domain/event";
 import { addDays, wallClockAsUtc, type WallClock, type WallDate } from "@/domain/wall-clock";
 import { formatDate } from "@/i18n/format-date";
 import { startTransferInDb } from "./event-db";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { newAddress } from "./mailbox";
 
 // The page sends the session's token: nothing a failure writes may show it.
@@ -195,7 +195,7 @@ test.describe("Mes événements", () => {
     await expect(rows(page).getByRole("link")).toHaveCount(5);
     const hrefs = await rows(page).getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("href")));
     expect(hrefs).toEqual([soon, later, past, dayThirty, erased].map((id) => `/e/${id}/admin`));
-    for (const link of await rows(page).getByRole("link").all()) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for (const link of await rows(page).getByRole("link").all()) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 
     const upcoming = rowOf(page, "Tournoi de Rennes");
     await expect(upcoming).toContainText(shownStart("fr", dayFromToday(7, "08:00:00")));
@@ -366,7 +366,7 @@ test.describe("Mes événements", () => {
     for (const title of ["Week-end ski", "Camp d’été"]) {
       const link = rowOf(page, title).getByRole("link");
       await expect(link).toHaveAttribute("href", /^\/e\/[^/]+\/admin$/);
-      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
   });
 

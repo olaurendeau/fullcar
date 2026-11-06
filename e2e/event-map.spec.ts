@@ -4,7 +4,7 @@ import { seedPerson, seedRide } from "@/db/test-participants";
 import type { Position } from "@/domain/place";
 import { generatePublicId } from "@/domain/public-id";
 import { arriveWaiting, idle, watchMap } from "./event-map-points";
-import { expect, test as base } from "./fixtures";
+import { expect, test as base, TAP_TARGET_MIN } from "./fixtures";
 import { placeOf, requestsForTile, tileAt } from "./tiles";
 
 /*
@@ -115,7 +115,7 @@ async function expectButton(page: Page, panel: Locator, driver: string) {
   const container = await folded(page, button);
   await expect(container).toBeVisible();
   expect(await bordered(button, (await button.getAttribute("aria-controls"))!)).toBe(true);
-  expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 
   await button.click();
   await expect(button).toHaveAttribute("aria-expanded", "false");
@@ -215,7 +215,7 @@ test.describe("the map, open", () => {
     await expect(map.getByRole("link", { name: OSM_LINK, exact: true })).toBeFocused();
     for (const name of ["Zoom avant", "Zoom arrière"]) {
       const box = (await map.getByRole("button", { name, exact: true }).boundingBox())!;
-      expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+      expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
 
     // Our credits instead (#558, CA3.7): neither Leaflet's control nor its prefix.

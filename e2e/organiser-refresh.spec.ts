@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import type { SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement } from "@/db/test-participants";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { digitsOf, expect, organiserPath, SCENE_PHONES, seedOrganiserScene, test, unfoldLegs } from "./organiser";
 
 /*
@@ -153,7 +153,7 @@ for (const viewport of [
     const hold = await holdActionWhere(page, (request) => readOf(request, seededEvent) === "panel");
     const button = await box(refresh(page));
     const height = (await box(panel(page))).height;
-    expect(button.height).toBeGreaterThanOrEqual(44);
+    expect(button.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 
     await refresh(page).focus();
     await page.keyboard.press("Enter");

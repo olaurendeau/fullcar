@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { seedPerson, seedPlacement, seedStop } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { anchor, around, FLAG, lines, mapName, openMap, points, seedCar, test } from "./event-map-points";
-import { expect, leaveNoToken } from "./fixtures";
+import { expect, leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 
 /*
  * #887, epic #881, RV5.1 to RV5.3 and RV5.5: the Stops of the cars on the aller's map, a white
@@ -77,8 +77,8 @@ test("RV5.1: a round and a label « heure + prénom » for each Stop with a posi
   await expect(first.locator("[data-map-stop-dot]")).toHaveCSS("border-top-color", "rgb(23, 23, 23)");
   // 44 px at least.
   const box = (await first.boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(44);
-  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
+  expect(box.width).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   // Not a car's point.
   await expect(points(map)).toHaveCount(1);
 

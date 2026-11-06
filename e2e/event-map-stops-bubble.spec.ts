@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { seedStop } from "@/db/test-participants";
 import { around, inside, mapName, openMap, points, seedCar, test, type Box } from "./event-map-points";
-import { expect, leaveNoToken } from "./fixtures";
+import { expect, leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 
 /*
  * #893, epic #881, RV5.4, RV5.6 and RV7.1: the bubble of a Stop, and the Stops of several cars at
@@ -80,7 +80,7 @@ test("RV5.4: a press on a Stop opens its bubble, titled « lieu, heure », with 
   await expect(bubble.getByText(/\d voiture/)).toHaveCount(0);
   const button = bubble.getByRole("button", { name: /^Voiture de Marc, départ : Champcella, 3 places libres$/ });
   await expect(button).toBeFocused();
-  expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 
   await button.click();
   await expect(panel(page).getByRole("heading", { name: "Voiture de Marc", exact: true })).toBeFocused();
@@ -307,7 +307,7 @@ test("RV5.6: the Stops of two cars 10 m apart are one round: the title « 2 voit
   await expect(buttons.nth(1)).toContainText("Voiture de Nina · Prelles église, 09:20");
   await expect(buttons.nth(1)).toHaveAccessibleName(/^Voiture de Nina · Prelles église, 09:20, Voiture de Nina, départ : Gare, 1 place libre$/);
   await expect(buttons.nth(2)).toHaveAccessibleName("Fermer");
-  for (const button of await buttons.all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  for (const button of await buttons.all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 
   await buttons.nth(1).click();
   await expect(panel(page).getByRole("heading", { name: "Voiture de Nina", exact: true })).toBeFocused();
@@ -362,7 +362,7 @@ test("RV7.1: at 360 px, a place of 120 characters in the bubble of a Stop, one c
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     // Nothing of the bubble is wider than the bubble itself.
     expect(await bubble.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    for (const button of await bubble.getByRole("button").all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for (const button of await bubble.getByRole("button").all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await page.keyboard.press("Escape");
     await expect(bubble).toHaveCount(0);
   }

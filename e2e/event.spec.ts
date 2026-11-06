@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { PUBLIC_ID_ALPHABET } from "@/domain/public-id";
-import { creatorTest as test, expect, leaveNoToken } from "./fixtures";
+import { creatorTest as test, expect, leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { organiserPath } from "./organiser";
 
 // D1.6 opens the organiser's page with its token.
@@ -125,7 +125,7 @@ test.describe("event page, with a retour", () => {
     await page.goto(`/e/${seededEvent.id}`);
     for (const name of ["Aller", "Retour"]) {
       const box = await page.getByRole("tab", { name }).boundingBox();
-      expect(box?.height).toBeGreaterThanOrEqual(44);
+      expect(box?.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
   });
 

@@ -1,6 +1,6 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { expect, leaveNoToken, test as base } from "./fixtures";
+import { expect, leaveNoToken, test as base, TAP_TARGET_MIN } from "./fixtures";
 import { areaRefused, hideToken, keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
@@ -159,7 +159,7 @@ async function expectDiscreet(element: Locator) {
     parseFloat(getComputedStyle(document.body).fontSize),
   ]);
   expect(size).toBeLessThan(textSize);
-  expect((await element.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect((await element.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 }
 
 /** G4: the size and colour of « Nous contacter », smaller than the text, underlined, the hand. */
@@ -225,10 +225,10 @@ async function expectPrivacyOnFirstLine(page: Page, words: Words) {
   const [privacy, language, below] = await Promise.all(
     [link, languageSwitch(page, words), contactLink(page, words)].map(async (each) => (await each.boundingBox())!),
   );
-  expect(privacy.height).toBeGreaterThanOrEqual(44);
+  expect(privacy.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   expect(privacy.y).toBe(language.y);
   expect(privacy.x).toBeGreaterThan(language.x);
-  expect(below.y - privacy.y).toBeGreaterThanOrEqual(44);
+  expect(below.y - privacy.y).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 }
 
 /** A3.4: as small as « Nous contacter », 44 px high, on line 1 with the switch, and line 2 below them (G5). */
@@ -241,9 +241,9 @@ async function expectHomeOnFirstLine(page: Page) {
   const [home, language, below] = await Promise.all(
     [link, languageSwitch(page, FR), contactLink(page, FR)].map(async (each) => (await each.boundingBox())!),
   );
-  expect(home.height).toBeGreaterThanOrEqual(44);
+  expect(home.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   expect(language.y).toBe(home.y);
-  expect(below.y - home.y).toBeGreaterThanOrEqual(44);
+  expect(below.y - home.y).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 }
 
 test.describe("the footer, in a browser set to French", () => {

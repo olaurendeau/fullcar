@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-partici
 import { contrast } from "./contrast";
 import { failHeld, holdFirst, holdToken, loseFirst, messages, newToken } from "./device";
 import { DRIVER_PHONE, numbersHidden } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -110,7 +110,7 @@ test.describe("« Changer le point »", () => {
       await expect(line(page, "Sam", "Ava")).toBeVisible();
       await expect(car(page, "Sam").getByRole("button", { name: /^Changer le point/ })).toHaveCount(0);
       await expect(line(page, "Sam", "Ava")).not.toContainText("monte");
-      expect((await changeButton(page, "Nina", "Tom").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await changeButton(page, "Nina", "Tom").boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     });
   });
 
@@ -412,7 +412,7 @@ test.describe("« Changer le point » at 360 px", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
     expect(await overflow(car(page, "Nina"))).toBeLessThanOrEqual(0);
     for (const button of await car(page, "Nina").getByRole("button", { name: /^Changer le point/ }).all()) {
-      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
 
     await changeButton(page, "Nina", "Tom").click();
@@ -422,10 +422,10 @@ test.describe("« Changer le point » at 360 px", () => {
     expect(await overflow(group(dialog))).toBeLessThanOrEqual(0);
     for (const row of await group(dialog).locator("label").all()) {
       const box = (await row.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       expect(box.x + box.width).toBeLessThanOrEqual(360);
     }
-    for (const button of [cancel(dialog), validate(dialog)]) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for (const button of [cancel(dialog), validate(dialog)]) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // « Valider » stays reachable in the bar of the sheet, whatever the list's length.
     await expect(validate(dialog)).toBeInViewport();
   });
@@ -463,8 +463,8 @@ test.describe("« Changer le point » at 360 px", () => {
     });
     expect(twelveCh).toBeGreaterThan(60);
     expect(nameBox.width).toBeGreaterThanOrEqual(twelveCh - 1);
-    expect(callBox.height).toBeGreaterThanOrEqual(44);
-    expect(changeBox.height).toBeGreaterThanOrEqual(44);
+    expect(callBox.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
+    expect(changeBox.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // The phrase is within the row, under the name, the number and the button.
     expect(saidBox.x).toBeGreaterThanOrEqual(rowBox.x);
     expect(saidBox.x + saidBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);

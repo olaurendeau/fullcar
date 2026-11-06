@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { answerFor } from "./photon";
 import { namedPlace, textOf } from "./place-field";
 import { barOf, boxOf, edgesOf, expectClearOfFixedParts, fakeVisualViewport, headerOf, moveVisibleArea } from "./sheet-layout";
@@ -528,10 +528,10 @@ for (const { locale, offer, title, edit } of [
           expect(buttons).toHaveLength(2);
           for (const button of buttons) {
             expect(await button.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
-            expect(await height(button)).toBeGreaterThanOrEqual(44);
+            expect(await height(button)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
           }
           for (const row of await sheet.locator("label:has([role=radio]), label:has([role=checkbox])").all()) {
-            expect(await height(row)).toBeGreaterThanOrEqual(44);
+            expect(await height(row)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
           }
           await page.keyboard.press("Escape");
           await expect(sheet).toHaveCount(0);

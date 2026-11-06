@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedRide } from "@/db/test-participants";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { barOf, boxOf } from "./sheet-layout";
 
 leaveNoToken();
@@ -107,7 +107,7 @@ for (const locale of ["fr-FR", "en-GB"] as const) {
           // The targets are its buttons; its fields keep their 40 px (`h-10`, as on the rest of the page).
           for (const target of await sheet.getByRole("button").all()) {
             const name = await target.innerText();
-            expect((await target.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(44);
+            expect((await target.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
           }
           await page.keyboard.press("Escape");
           await expect(sheet).toHaveCount(0);

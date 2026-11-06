@@ -5,7 +5,7 @@ import { seedEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { failActions, holdActions, holdFirst, holdToken, messages, newToken } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { keepAdminToken } from "./organiser";
 
 leaveNoToken();
@@ -113,7 +113,7 @@ test.describe("device persons", () => {
     expect(await cells(page)).toEqual(MATRIX);
     for (const firstName of ["Claire", "Léa", "Tom", "Hugo"]) {
       await expect(nameButton(page, firstName)).toHaveAttribute("aria-haspopup", "dialog");
-      expect(await height(nameButton(page, firstName))).toBeGreaterThanOrEqual(44);
+      expect(await height(nameButton(page, firstName))).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
     // Above the tabs, and the Aller tab still the active one.
     const tab = page.getByRole("tab", { name: /^Aller/ });
@@ -134,7 +134,7 @@ test.describe("device persons", () => {
     const button = toggle(page);
     await expect(button).toHaveAttribute("aria-expanded", "true");
     await expect(button).toContainText("4 personnes · 2 sans voiture");
-    expect(await height(button)).toBeGreaterThanOrEqual(44);
+    expect(await height(button)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     const table = page.locator(`#${await button.getAttribute("aria-controls")}`);
     await expect(table).toBeVisible();
     expect(await overflow(page)).toBe(0);
@@ -159,7 +159,7 @@ test.describe("device persons", () => {
     await expect(own).toHaveText(PHONES.claire);
     await expect(own).toHaveAccessibleName(`Appeler Claire au ${PHONES.claire}`);
     await expect(own).toHaveAttribute("href", "tel:0611223344");
-    expect(await height(own)).toBeGreaterThanOrEqual(44);
+    expect(await height(own)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // « Fermer » gives the focus back to the first name.
     await claire.getByRole("button", { name: "Fermer" }).click();
     await expect(claire).toHaveCount(0);
