@@ -1,6 +1,9 @@
 import { encode } from "uqr";
 
-/** Blank modules around the code, the margin a QR reader expects. */
+/**
+ * Blank modules around the code, the margin a QR reader expects. It is all of it: `uqr` is
+ * asked for `border: 0`, its own 1-module border would make the margin 5.
+ */
 const QUIET_ZONE = 4;
 
 /**
@@ -9,7 +12,7 @@ const QUIET_ZONE = 4;
  * `uqr` is used: the SVG is ours, and the text is in no attribute and no text node (LP8.1).
  */
 export function qrPath(text: string): { size: number; d: string } {
-  const { data } = encode(text, { ecc: "M" });
+  const { data } = encode(text, { ecc: "M", border: 0 });
   let d = "";
   data.forEach((row, y) => {
     row.forEach((dark, x) => {

@@ -21,15 +21,15 @@ describe("qrPath", () => {
     expect(drawn(qrPath(LINK).d)).toBe(dark);
   });
 
-  it("keeps a 4-module quiet zone around the matrix", () => {
-    const { data } = encode(LINK, { ecc: "M" });
+  it("keeps a quiet zone of exactly 4 modules around the matrix", () => {
+    const { data } = encode(LINK, { ecc: "M", border: 0 });
     const { size, d } = qrPath(LINK);
     expect(size).toBe(data.length + 8);
     expect(size).toBeGreaterThanOrEqual(29);
-    for (const [, x, y] of d.matchAll(/M(\d+) (\d+)/g)) {
-      expect(Math.min(+x, +y)).toBeGreaterThanOrEqual(4);
-      expect(Math.max(+x, +y)).toBeLessThan(data.length + 4);
-    }
+    const coords = [...d.matchAll(/M(\d+) (\d+)/g)].flatMap(([, x, y]) => [+x, +y]);
+    // The finder patterns put a dark module on every edge of the matrix.
+    expect(Math.min(...coords)).toBe(4);
+    expect(Math.max(...coords)).toBe(size - 5);
   });
 
   it("does not carry the text, nor its last 22 characters", () => {
