@@ -1,9 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { covers, personLeg, type Withdrawal } from "./bar-state";
-import { aboutOf, allerPart, carsGone, coverPage, forget, offersRetour, onWithdraw, personsGone, sendAbout, whenPageShown } from "./hidden-page";
+import { aboutOf, allerPart, carsGone, coverPage, forget, offersRetour, onSheetOpen, onWithdraw, personsGone, sendAbout, whenPageShown } from "./hidden-page";
 
 /** Once the microtask a sheet leaves at its unmount has run. */
 const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+describe("onSheetOpen", () => {
+  it("calls back each time a sheet covers the page, and not when the page shows again", async () => {
+    let calls = 0;
+    const stop = onSheetOpen(() => (calls += 1));
+    const first = coverPage();
+    expect(calls).toBe(1);
+    const second = coverPage();
+    expect(calls).toBe(2);
+
+    second();
+    first();
+    await settled();
+    expect(calls).toBe(2);
+    stop();
+  });
+
+  it("calls back no more once the function it returns is called", () => {
+    let calls = 0;
+    const stop = onSheetOpen(() => (calls += 1));
+    stop();
+    const uncover = coverPage();
+    expect(calls).toBe(0);
+    uncover();
+  });
+});
 
 describe("whenPageShown (#167)", () => {
   it("runs at once when no sheet hides the page", () => {

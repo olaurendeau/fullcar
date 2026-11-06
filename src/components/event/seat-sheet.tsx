@@ -17,6 +17,7 @@ import { aboutOf, sendAbout, useSends, type FromSheet } from "./hidden-page";
 import type { BoardDevice } from "./leg-panel";
 import type { BarProblem } from "./message-bar";
 import { PersonForm, StorageNotice, type AddPerson } from "./person-form";
+import { pickedOn } from "./pick-seat";
 import { StopChoice } from "./stop-choice";
 
 /** A refusal said in the sheet: the car gone (C6.8), too few seats left (C6.5), someone in a car already. */
@@ -123,7 +124,16 @@ function toBar(key: string, rideId: string, person: { id: string; firstName: str
  * first registration of a device without a person (C5.4), which leads to who boards (PL2.7). Each
  * opening is a new sheet.
  */
-type Opening = { kind: "sheet" | "register"; rideId: string; driver: string; seat: HTMLElement; open: boolean; count: number };
+type Opening = {
+  kind: "sheet" | "register";
+  rideId: string;
+  driver: string;
+  seat: HTMLElement;
+  open: boolean;
+  count: number;
+  /** « Trouver une place » for a person of another device (PL3.8): the one person ticked, nobody else. */
+  only?: string;
+};
 
 /**
  * A leg's free seats (#91, #92): `tap(car, seat)` for a free seat's tap, which follows
@@ -145,8 +155,8 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
     if (active === landed.seat || active === null || active === document.body) toCarOrBanner(board.leg, landed.rideId);
   }, [landed, board.leg]);
 
-  const open = (kind: Opening["kind"], car: VisibleCar, seat: HTMLElement) =>
-    setOpening((current) => ({ kind, rideId: car.id, driver: car.driver.firstName, seat, open: true, count: (current?.count ?? 0) + 1 }));
+  const open = (kind: Opening["kind"], car: VisibleCar, seat: HTMLElement, only?: string) =>
+    setOpening((current) => ({ kind, rideId: car.id, driver: car.driver.firstName, seat, open: true, count: (current?.count ?? 0) + 1, only }));
 
   // One tap, no other step (C5.2): what comes back is the bar's, as from a sheet closed meanwhile.
   // A tap again while it is on its way sends nothing: `runAction` drops the run of the same key.
@@ -163,6 +173,15 @@ export function useSeatSheet(board: VisibleLegBoard, device: BoardDevice, hasRet
   }
 
   function tap(car: VisibleCar, seat: HTMLElement) {
+    // The mode of « Trouver une place » for a person of another device comes before `tapOutcome`
+    // (PL3.8): this tap seats her alone, at once, or by the sheet of a car with Stops, over which the
+    // mode ends with the page's next showing (`usePickSeat`): the page changes nothing as a sheet opens.
+    const { end } = device.pickSeat;
+    const mode = device.pickSeat.mode();
+    const picked = pickedOn(mode, board);
+    if (picked && car.stops.length > 0) return open("sheet", car, seat, picked.id);
+    if (mode?.leg === board.leg) end();
+    if (picked) return void place(car, seat, picked);
     const outcome = tapOutcome(device.status, board.device, car);
     if (outcome.kind === "wait") return;
     const person = outcome.kind === "place" && board.device.find(({ id }) => id === outcome.personId);
@@ -228,7 +247,7 @@ function Group({ title, children }: { title: string | undefined; children: React
  */
 function SeatSheet({
   leg,
-  opening: { kind, rideId, driver, seat, open },
+  opening: { kind, rideId, driver, seat, open, only },
   car,
   date,
   board,
@@ -261,7 +280,10 @@ function SeatSheet({
   const Chevron = showNotConcerned ? ChevronUp : ChevronDown;
   const hasStops = (car?.stops.length ?? 0) > 0;
   // What the person changed; the others keep their default (C6.1), a person added since included.
-  const [ticked, setTicked] = useState<Record<string, boolean>>({});
+  // From « Trouver une place » for a person of another device, only she is ticked (PL3.8).
+  const [ticked, setTicked] = useState<Record<string, boolean>>(() =>
+    only === undefined ? {} : Object.fromEntries(candidates.map(({ id }) => [id, id === only])),
+  );
   // The point where they board: the departure (`null`) as the sheet opens (RV3.2). One for everyone ticked.
   const [stopId, setStopId] = useState<string | null>(null);
   const chosen = candidates.filter((candidate) => ticked[candidate.id] ?? candidate.checked);
