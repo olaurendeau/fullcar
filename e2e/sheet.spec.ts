@@ -150,18 +150,75 @@ test.describe("the sheet", () => {
     await expect(placeButton(sophie)).toHaveText("Placer 1 personne");
   });
 
-  test("C6.3: more ticked than free seats, the button is inactive and the line says so", async ({ page, seededEvent }) => {
+  test("C6.3, RL5.2, RL5.3: more ticked than free seats, the button is inactive and a red line says how many to untick", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     const claire = await openSheet(page, "Claire");
     const remaining = claire.getByText("Il reste 2 places dans cette voiture", { exact: true });
+    const over = claire.getByText("3 cochées pour 2 places : décochez-en 1", { exact: true });
     const red = await destructive(page);
     await expect(remaining).not.toHaveCSS("color", red);
+    await expect(over).toHaveCount(0);
     await claire.getByRole("checkbox", { name: "Hugo" }).click();
     await expect(placeButton(claire)).toHaveText("Placer 3 personnes");
     await expect(placeButton(claire)).toBeDisabled();
-    await expect(remaining).toHaveCSS("color", red);
+    // The line is red with an icon, above the button; « Il reste n places » is never red (one red message).
+    await expect(over).toBeVisible();
+    await expect(over).toHaveCSS("color", red);
+    await expect(over.locator("xpath=..").locator("svg[aria-hidden=true]")).toHaveCount(1);
+    expect((await over.boundingBox())!.y).toBeLessThan((await placeButton(claire).boundingBox())!.y);
+    await expect(remaining).not.toHaveCSS("color", red);
     await placeButton(claire).click({ force: true });
     await expect(claire).toBeVisible();
+    await claire.getByRole("checkbox", { name: "Hugo" }).click();
+    await expect(over).toHaveCount(0);
+    await expect(placeButton(claire)).toHaveText("Placer 2 personnes");
+  });
+
+  test("RL5.1: more persons without a car than free seats, nothing is ticked and « Placer » is inactive", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await panel(page).getByRole("button", { name: "Ajouter une personne", exact: true }).click();
+    await addForm(page).getByLabel("Prénom").fill("Zoé");
+    await addForm(page).getByRole("button", { name: "Valider" }).click();
+    await expect(addForm(page)).toHaveCount(0);
+
+    // Tom, Léa and Zoé are without a car, Claire's car has 2 seats.
+    const claire = await openSheet(page, "Claire");
+    expect(await candidates(claire)).toEqual([
+      { name: "Tom", state: "Sans voiture", checked: false },
+      { name: "Léa", state: "Sans voiture", checked: false },
+      { name: "Hugo", state: "Ne fait pas l’aller", checked: false },
+      { name: "Zoé", state: "Sans voiture", checked: false },
+    ]);
+    await expect(placeButton(claire)).toHaveText("Placer");
+    await expect(placeButton(claire)).toHaveAttribute("aria-disabled", "true");
+    await expect(claire.getByText(/cochées? pour/)).toHaveCount(0);
+
+    // Sophie's car has room for all three: ticked as the sheet opens.
+    await claire.getByRole("button", { name: "Fermer" }).click();
+    const sophie = await openSheet(page, "Sophie");
+    await expect(sophie.getByRole("checkbox", { checked: true })).toHaveCount(3);
+    await expect(placeButton(sophie)).toHaveText("Placer 3 personnes");
+  });
+
+  test("C6.6, RL5.1: nothing ticked as the sheet opens, the person added from it comes back ticked and focused", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await panel(page).getByRole("button", { name: "Ajouter une personne", exact: true }).click();
+    await addForm(page).getByLabel("Prénom").fill("Zoé");
+    await addForm(page).getByRole("button", { name: "Valider" }).click();
+    await expect(addForm(page)).toHaveCount(0);
+
+    const claire = await openSheet(page, "Claire");
+    await expect(claire.getByRole("checkbox", { checked: true })).toHaveCount(0);
+    await claire.getByRole("button", { name: "Ajouter une personne" }).click();
+    await addForm(page).getByLabel("Prénom").fill("Paul");
+    await addForm(page).getByRole("button", { name: "Valider" }).click();
+    const paul = claire.getByRole("checkbox", { name: "Paul" });
+    await expect(paul).toBeFocused();
+    await expect(paul).toBeChecked();
+    // Only she is ticked: the others were not, and the seats hold her.
+    await expect(claire.getByRole("checkbox", { checked: true })).toHaveCount(1);
+    await expect(placeButton(claire)).toHaveText("Placer 1 personne");
+    await expect(placeButton(claire)).not.toHaveAttribute("aria-disabled", "true");
   });
 
   test("C6.4, C2.2, C9.4, C5.10: the ticked board, the bar says so and stays, the focus on the car's title", async ({ db, page, seededEvent }) => {
@@ -299,7 +356,9 @@ test.describe("the sheet", () => {
     await placeButton(marc).click();
     await expect(alerts(marc)).toHaveText("Il n’y a plus assez de places : personne n’a été placé.");
     const remaining = marc.getByText("Il reste 1 place dans cette voiture", { exact: true });
-    await expect(remaining).toHaveCSS("color", await destructive(page));
+    await expect(remaining).not.toHaveCSS("color", await destructive(page));
+    // RL5.2: the line says how many to untick.
+    await expect(marc.getByText("2 cochées pour 1 place : décochez-en 1", { exact: true })).toBeVisible();
     await expect(marc.getByRole("checkbox", { name: "Tom" })).toBeChecked();
     await expect(marc.getByRole("checkbox", { name: "Léa" })).toBeChecked();
     await expect(placeButton(marc)).toBeDisabled();
@@ -314,6 +373,26 @@ test.describe("the sheet", () => {
     await expect(freeSeats(page, "Marc")).toHaveCount(1);
     await expect(freeSeats(page, "Marc")).toBeFocused();
     await expect(alerts(page)).toHaveCount(0);
+  });
+
+  test("RL5.2: the car filled meanwhile, the refusal leaves Tom and Léa ticked and the line says to untick both", async ({ db, page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    const claire = await openSheet(page, "Claire");
+    await expect(placeButton(claire)).toHaveText("Placer 2 personnes");
+    await expect(claire.getByText(/cochées pour/)).toHaveCount(0);
+
+    for (const firstName of ["Paul", "Zoé"]) {
+      const person = await seedPerson(db, seededEvent.id, { firstName });
+      await seedPlacement(db, { personId: person.id, eventId: seededEvent.id, leg: "aller", rideId: scene.cars.claire });
+    }
+    await placeButton(claire).click();
+    await expect(alerts(claire)).toHaveText("Il n’y a plus assez de places : personne n’a été placé.");
+    await expect(claire.getByText("2 cochées pour 0 place : décochez-en 2", { exact: true })).toBeVisible();
+    await expect(claire.getByText("Il ne reste aucune place dans cette voiture", { exact: true })).not.toHaveCSS("color", await destructive(page));
+    await expect(claire.getByRole("checkbox", { name: "Tom" })).toBeChecked();
+    await expect(claire.getByRole("checkbox", { name: "Léa" })).toBeChecked();
+    await expect(placeButton(claire)).toBeDisabled();
+    expect(await placements(db, seededEvent.id, scene.persons.tom)).toEqual({ aller: null, retour: null });
   });
 
   test("C6.8: the car removed meanwhile, the sheet says so, nobody is placed, and the page shows the state", async ({ db, page, seededEvent }) => {

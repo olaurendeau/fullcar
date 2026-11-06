@@ -76,7 +76,7 @@ export function findSeat<Car extends Pick<BoardCar, "departureTime" | "freeSeats
 export interface SheetCandidate {
   id: string;
   firstName: string;
-  /** Ticked as the sheet opens (PL2.3). */
+  /** Ticked as the sheet opens (PL2.3, RL5.1). */
   checked: boolean;
   /** Where the person really stands on the leg: what « Annuler » gives back (PL4.3). */
   state: "withoutCar" | "notConcerned";
@@ -93,14 +93,23 @@ export interface SheetGroups {
 }
 
 /**
- * The persons of the sheet (C6.1, PL2.1): everybody in no car on the leg who does not drive it.
- * The device's persons are ticked when without a car, the others never are (PL2.3). Drivers and
- * passengers of the leg are left out; an empty list is the way to add a person (C6.7).
+ * Whether the device's persons without a car on the leg all fit in the car's free seats (RL5.1);
+ * nobody fits. Decided as the sheet opens, it says whether they are ticked (PL2.3).
  */
-export function sheetCandidates(leg: Pick<LegBoard, "device" | "withoutCar" | "notConcerned">): SheetGroups {
+export function ownFit(leg: Pick<LegBoard, "device">, freeSeats: number): boolean {
+  return leg.device.filter(({ state }) => state.kind === "withoutCar").length <= freeSeats;
+}
+
+/**
+ * The persons of the sheet (C6.1, PL2.1): everybody in no car on the leg who does not drive it.
+ * The device's persons are ticked when without a car, but only if they all fit (`tickOwn`, from
+ * `ownFit`, RL5.1; PL2.3); the others never are. Drivers and passengers of the leg are left
+ * out; an empty list is the way to add a person (C6.7).
+ */
+export function sheetCandidates(leg: Pick<LegBoard, "device" | "withoutCar" | "notConcerned">, tickOwn: boolean): SheetGroups {
   const own = leg.device.flatMap(({ id, firstName, state }): SheetCandidate[] =>
     state.kind === "withoutCar" || state.kind === "notConcerned"
-      ? [{ id, firstName, checked: state.kind === "withoutCar", state: state.kind }]
+      ? [{ id, firstName, checked: state.kind === "withoutCar" && tickOwn, state: state.kind }]
       : [],
   );
   const device = new Set(leg.device.map(({ id }) => id));
