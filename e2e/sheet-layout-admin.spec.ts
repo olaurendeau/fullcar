@@ -48,7 +48,9 @@ test("O1.11: /admin, the panel shorter after « Placer 1 personne » while the s
   // The sheet stays mounted until the panel is shorter, however fast it is read again (#790):
   // the board's compensation always runs while the sheet keeps where it gives the page back.
   const held = await page.addStyleTag({ content: holdClose });
-  await sheet.getByRole("checkbox", { name: /^Paul/ }).uncheck();
+  // RL5.1: Oriane and Paul do not both fit in Anaïs's one free seat, so nothing is ticked as the sheet opens.
+  await expect(sheet.getByRole("checkbox", { checked: true })).toHaveCount(0);
+  await sheet.getByRole("checkbox", { name: /^Oriane/ }).check();
   await sheet.getByRole("button", { name: "Placer 1 personne" }).click();
   // The panel, read again, has Oriane no longer without a car: it is shorter.
   await expect.poll(async () => (await panel(page).boundingBox())!.height).toBeLessThan(height);

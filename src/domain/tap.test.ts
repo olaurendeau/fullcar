@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BoardCar, BoardStop, DevicePerson, DeviceState } from "./board";
-import { afterRegistration, currentDriver, deviceKnown, driverChoice, findSeat, NEW_DRIVER, passengerCandidates, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
+import { afterRegistration, currentDriver, deviceKnown, driverChoice, findSeat, NEW_DRIVER, ownFit, passengerCandidates, sheetCandidates, sheetSubmit, tapOutcome, type DeviceStatus } from "./tap";
 
 function of(id: string, state: DeviceState): DevicePerson {
   return { id, firstName: id.toUpperCase(), state };
@@ -106,6 +106,30 @@ describe("tapOutcome on a car with Stops (RV3.1, RV3.2, D2)", () => {
   });
 });
 
+describe("ownFit (RL5.1)", () => {
+  const leg = (...device: DevicePerson[]) => ({ device });
+
+  it("is true when the device's persons without a car are at most the free seats", () => {
+    expect(ownFit(leg(withoutCar("tom"), withoutCar("lea")), 2)).toBe(true);
+    expect(ownFit(leg(withoutCar("tom")), 2)).toBe(true);
+  });
+
+  it("is false when they are more than the free seats", () => {
+    expect(ownFit(leg(withoutCar("tom"), withoutCar("lea"), withoutCar("noe")), 2)).toBe(false);
+    expect(ownFit(leg(withoutCar("a"), withoutCar("b"), withoutCar("c"), withoutCar("d")), 2)).toBe(false);
+    expect(ownFit(leg(withoutCar("tom")), 0)).toBe(false);
+  });
+
+  it("is true for nobody, whatever the seats", () => {
+    expect(ownFit(leg(), 0)).toBe(true);
+    expect(ownFit(leg(driver("marc"), passenger("zoe")), 0)).toBe(true);
+  });
+
+  it("does not count a person who does not do the leg", () => {
+    expect(ownFit(leg(withoutCar("tom"), notConcerned("hugo"), withoutCar("lea")), 2)).toBe(true);
+  });
+});
+
 describe("sheetCandidates (C6.1, PL2.1 to PL2.3)", () => {
   const person = (id: string) => ({ id, firstName: id.toUpperCase() });
   const leg = (device: DevicePerson[], withoutCar: string[] = [], notConcerned: string[] = []) => ({
@@ -116,7 +140,7 @@ describe("sheetCandidates (C6.1, PL2.1 to PL2.3)", () => {
 
   it("lists the device's persons who are in no car in its order: without a car checked, not concerned unchecked", () => {
     const device = [withoutCar("lea"), driver("marc"), notConcerned("tom"), passenger("zoe"), withoutCar("noe")];
-    expect(sheetCandidates(leg(device, ["lea", "noe"], ["tom"])).own).toEqual([
+    expect(sheetCandidates(leg(device, ["lea", "noe"], ["tom"]), true).own).toEqual([
       { id: "lea", firstName: "LEA", checked: true, state: "withoutCar" },
       { id: "tom", firstName: "TOM", checked: false, state: "notConcerned" },
       { id: "noe", firstName: "NOE", checked: true, state: "withoutCar" },
@@ -126,7 +150,7 @@ describe("sheetCandidates (C6.1, PL2.1 to PL2.3)", () => {
   it("lists the others without a car in the order they declared it, then the others not on the leg, none checked", () => {
     const device = [withoutCar("lea"), notConcerned("ana")];
     // The device's persons are in the lists of the leg too: they are listed once, in their own group.
-    const groups = sheetCandidates(leg(device, ["hugo", "lea", "ines"], ["marc", "ana", "tom", "zoe"]));
+    const groups = sheetCandidates(leg(device, ["hugo", "lea", "ines"], ["marc", "ana", "tom", "zoe"]), true);
     expect(groups.others).toEqual([
       { id: "hugo", firstName: "HUGO", checked: false, state: "withoutCar" },
       { id: "ines", firstName: "INES", checked: false, state: "withoutCar" },
@@ -139,12 +163,18 @@ describe("sheetCandidates (C6.1, PL2.1 to PL2.3)", () => {
   });
 
   it("lists nobody who is in a car, and a driver nowhere", () => {
-    const groups = sheetCandidates(leg([driver("marc"), passenger("zoe")]));
+    const groups = sheetCandidates(leg([driver("marc"), passenger("zoe")]), true);
     expect(groups).toEqual({ own: [], others: [], notConcerned: [] });
   });
 
+  it("ticks none of the device's persons when they do not all fit (RL5.1), and none of the other groups", () => {
+    const device = [withoutCar("lea"), notConcerned("ana"), withoutCar("noe")];
+    const groups = sheetCandidates(leg(device, ["lea", "noe", "hugo"], ["ana", "zoe"]), false);
+    expect([...groups.own, ...groups.others, ...groups.notConcerned].map(({ checked }) => checked)).toEqual([false, false, false, false, false]);
+  });
+
   it("is empty when nobody can board (PL2.8)", () => {
-    expect(sheetCandidates(leg([]))).toEqual({ own: [], others: [], notConcerned: [] });
+    expect(sheetCandidates(leg([]), true)).toEqual({ own: [], others: [], notConcerned: [] });
   });
 });
 
