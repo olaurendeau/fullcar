@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedEvent, type SeededEvent } from "@/db/test-events";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { newAddress } from "./mailbox";
 import { expectRing, press } from "./focus-ring";
 import {
@@ -152,7 +152,7 @@ test.describe("the scene of O2.5", () => {
       const content = page.locator(`[id="${controls}"]`);
       await expect(content).toHaveCount(1);
       await expect(panel(page).getByRole("heading", { level: 2 }).getByRole("button")).toHaveAccessibleName(FR.panel);
-      expect((await box(toggle(page))).height).toBeGreaterThanOrEqual(44);
+      expect((await box(toggle(page))).height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       await expect(summary(page)).toBeHidden();
       // Unfolded, « Modifier l’événement » is there: folding is what takes it out.
       await expect(panel(page).getByRole("button", { name: "Modifier l’événement" })).toHaveCount(1);

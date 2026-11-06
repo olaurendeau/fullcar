@@ -1,5 +1,5 @@
 import type { Locator, Page, Route } from "@playwright/test";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { areaEditButton, expect, isAction, organiserPath, test } from "./organiser";
 import { barOf, boxOf, edgesOf } from "./sheet-layout";
 
@@ -168,7 +168,7 @@ for (const locale of ["fr-FR", "en-GB"] as const) {
         }
         for (const target of await sheet.getByRole("button").all()) {
           const name = await target.innerText();
-          expect((await target.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(44);
+          expect((await target.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
         }
         await page.keyboard.press("Escape");
         await expect(sheet).toHaveCount(0);

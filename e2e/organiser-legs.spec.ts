@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { numbersHidden } from "./driver";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { newAddress } from "./mailbox";
 import { expectRing, press } from "./focus-ring";
 import {
@@ -134,7 +134,7 @@ test.describe("the README's example", () => {
         const held = await content(page, leg);
         await expect(held).toHaveCount(1);
         await expect(held).toBeHidden();
-        expect((await box(button)).height).toBeGreaterThanOrEqual(44);
+        expect((await box(button)).height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
         const [own, around] = await Promise.all([box(button), box(section(page, leg))]);
         expect(Math.abs(own.x + own.width - (around.x + around.width)), "the button's right edge").toBeLessThanOrEqual(1);
 

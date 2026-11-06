@@ -1,7 +1,7 @@
 import type { Locator, Page, Request, Route } from "@playwright/test";
 import { animationsDone, holdClose, messages } from "./device";
 import { editEventInDb } from "./event-db";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { areaEditButton, areaEditByText, areaRefused, expect, holdActionsWith, isAction, keepAdminToken, oneCharOff, organiserPath, seedOrganiserScene, test } from "./organiser";
 
 /*
@@ -70,7 +70,7 @@ for (const viewport of [{ width: 360, height: 780 }, { width: 1280, height: 800 
     await expect(editButton(page)).toHaveCount(1);
     await expect(panel(page).getByRole("button", { name: FR.edit, exact: true })).toBeVisible();
     const button = await box(editButton(page));
-    expect(button.height).toBeGreaterThanOrEqual(44);
+    expect(button.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
 
     const handle = await editButton(page).elementHandle();
     const follows = (locator: Locator) =>

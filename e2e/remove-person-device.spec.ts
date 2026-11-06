@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { deleteSeededPerson, seedRide } from "@/db/test-participants";
 import { hashToken } from "@/domain/token-hash";
 import { holdFirst, holdToken, messages, newToken } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { PHONES, seedExample } from "./removal-example";
 
 leaveNoToken();
@@ -92,7 +92,7 @@ test.describe("remove a person from the device", () => {
     const modify = await sheet(page, "Léa").getByRole("button", { name: "Modifier" }).boundingBox();
     const box = (await button.boundingBox())!;
     expect(box.y).toBeGreaterThan(modify!.y);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     expect(Math.round(box.width)).toBe(Math.round(modify!.width));
     expect(await rgb(button, "color")).toBe("rgb(231, 0, 11)");
     expect(await rgb(button, "background-color")).not.toBe("rgb(231, 0, 11)");

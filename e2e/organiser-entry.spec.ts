@@ -4,7 +4,7 @@ import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
 import { seedAccount, seedSession } from "@/db/test-accounts";
 import { confirmSeededEvent } from "@/db/test-events";
-import { creatorTest, expect, leaveNoToken, test } from "./fixtures";
+import { creatorTest, expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { mailTo, newAddress } from "./mailbox";
 import { organiserPath } from "./organiser";
 
@@ -105,7 +105,7 @@ test.describe("in French", () => {
     await page.goto(organiserPath(seededEvent));
     const link = main(page).getByRole("link", { name: FR.myEvents, exact: true });
     await expect(link).toHaveAttribute("href", "/mes-evenements");
-    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // Above the panel, not under it.
     const panel = main(page).getByRole("button", { name: "Actualiser" });
     await expect(panel).toBeVisible();
@@ -148,7 +148,7 @@ test.describe("in French", () => {
     await expect(main(page).getByText(FR.noAccount)).toBeVisible();
     await expect(main(page).getByRole("link", { name: FR.create })).toHaveAttribute("href", "/nouveau");
     const button = main(page).getByRole("button", { name: FR.send });
-    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // Hydrated.
     await expect(button).toBeEnabled();
     await main(page).getByLabel(FR.email, { exact: true }).fill(email);
@@ -181,7 +181,7 @@ test.describe("in French", () => {
     await page.goto(`/e/${seededEvent.id}`);
     const link = main(page).getByRole("link", { name: FR.area, exact: true });
     await expect(link).toHaveAttribute("href", organiserPath(seededEvent));
-    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // After the board, not only after the title: its 44 px push nothing that was drawn (CA1.19, DS2.9).
     const board = page.getByRole("tabpanel");
     await expect(board).toBeVisible();

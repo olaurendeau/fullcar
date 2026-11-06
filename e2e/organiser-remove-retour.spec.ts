@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { messages } from "./device";
 import { editEventInDb } from "./event-db";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { areaEditButton, expect, holdActionsWith, isAction, LEG_HEADINGS, oneCharOff, organiserPath, test } from "./organiser";
 
 /*
@@ -484,7 +484,7 @@ test.describe("M9: the confirmation, readable everywhere", () => {
             });
             expect(lines, `« ${name} » on one line at ${size}`).toBe(1);
             expect(clipped, `« ${name} » cut at ${size}`).toBe(false);
-            expect((await button.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(44);
+            expect((await button.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
           }
           await page.keyboard.press("Escape");
           await expect(dialog).toHaveCount(0);

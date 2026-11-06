@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { creatorTest as test, expect, expectText, leaveNoToken } from "./fixtures";
+import { creatorTest as test, expect, expectText, leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { areaRefused, hideToken, keepAdminToken, oneCharOff } from "./organiser";
 
 leaveNoToken();
@@ -100,7 +100,7 @@ test.describe("organiser's arrival", () => {
       await expect(linkGroup(page, name).getByRole("button", { name: FR.copied })).toBeVisible();
       expect((await page.evaluate(() => navigator.clipboard.readText())) === url, `${name}: the clipboard holds the link`).toBe(true);
       expect((await linkGroup(page, name).getByRole("button").first().boundingBox())!.height).toBeGreaterThanOrEqual(
-        44,
+        TAP_TARGET_MIN,
       );
     }
     await expect(page.getByText(FR.copyFailed)).toHaveCount(0);
@@ -141,7 +141,7 @@ test.describe("organiser's arrival", () => {
     const share = panel(page).getByRole("button", { name: FR.share });
     await expect(share).toHaveCount(1);
     await expect(linkGroup(page, FR.shareLink).getByRole("button", { name: FR.share })).toBeVisible();
-    expect((await share.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await share.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await share.click();
     await expect
       .poll(async () => {

@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, failHeld, holdClose, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -110,8 +110,16 @@ test.describe("edit a car", () => {
 
   test("C8.1: « Modifier » on the device's car alone, of 44 px", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
-    expect((await editButton(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await editButton(page).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await expect(card(page, "Marc").getByRole("button", { name: "Modifier", exact: true })).toHaveCount(0);
+  });
+
+  test("RL1.3: on an event with a retour, « Modifier la voiture » keeps its title", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await editButton(page).click();
+    const form = dialog(page, "Modifier la voiture");
+    await expect(form).toBeVisible();
+    await expect(form.getByRole("heading", { name: "Modifier la voiture", exact: true })).toBeVisible();
   });
 
   // Safari, and Firefox on macOS, do not focus a button on a click: the sheet opens from <body>.

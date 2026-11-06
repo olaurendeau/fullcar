@@ -149,8 +149,8 @@ const SHEETS: { name: string; open: (page: Page) => Promise<unknown> }[] = [
     name: "« Proposer une voiture »",
     open: async (page) => {
       await button(panel(page), "Proposer une voiture").first().click();
-      await dialog(page, "Proposer une voiture").getByLabel("Une nouvelle personne").check();
-      await dialog(page, "Proposer une voiture").getByLabel("Prénom").fill("Marc");
+      await dialog(page, "Proposer une voiture pour l’aller").getByLabel("Une nouvelle personne").check();
+      await dialog(page, "Proposer une voiture pour l’aller").getByLabel("Prénom").fill("Marc");
     },
   },
   {
@@ -385,7 +385,7 @@ test.describe("the back gesture on the event's page", () => {
     const text = textOf("Gare");
     await answerFor(text, { features: [namedPlace("Gare", 45.73, 4.66).feature] });
     await button(panel(page), "Proposer une voiture").first().click();
-    await dialog(page, "Proposer une voiture").getByRole("combobox", { name: "Lieu de départ" }).fill(text);
+    await dialog(page, "Proposer une voiture pour l’aller").getByRole("combobox", { name: "Lieu de départ" }).fill(text);
     await expect(page.getByRole("listbox")).toBeVisible();
     await backCloses(page);
     await expect(page.getByRole("listbox")).toHaveCount(0);
