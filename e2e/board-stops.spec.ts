@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-partici
 import { contrast } from "./contrast";
 import { failHeld, holdFirst, holdToken, loseFirst, messages, newToken } from "./device";
 import { numbersHidden } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -371,7 +371,7 @@ test.describe("meeting points at 360 px", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
     expect(await overflow(card)).toBeLessThanOrEqual(0);
     const lines = card.getByRole("list", { name: "Places" }).getByRole("listitem");
-    for (const line of await lines.all()) expect((await line.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for (const line of await lines.all()) expect((await line.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // Each line says where it boards, the phrase on its own line, wrapped and within the line (RV2.4).
     await numbersHidden(() => expect(lines.filter({ hasText: "Zoé" })).toContainText("monte au départ"));
     await numbersHidden(() => expect(lines.filter({ hasText: "Paul" })).toContainText("monte à "));
@@ -393,9 +393,9 @@ test.describe("meeting points at 360 px", () => {
     expect(await overflow(group(dialog))).toBeLessThanOrEqual(0);
     for (const row of await group(dialog).locator("label").all()) {
       const box = (await row.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       expect(box.x + box.width).toBeLessThanOrEqual(360);
     }
-    expect((await placeButton(dialog).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await placeButton(dialog).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   });
 });

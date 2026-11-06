@@ -7,7 +7,7 @@ import type { Leg } from "@/domain/leg";
 import { isPersonalToken } from "@/domain/personal-token";
 import { bar, failActions, holdActions, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { DRIVER_PHONE, fillDriver, numbersHidden } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -140,7 +140,7 @@ test.describe("offer a car", () => {
     const actions = await order(page);
     expect(actions.slice(0, 2)).toEqual([FR.add, FR.offer]);
     expect(actions.filter((name) => name === "car")).toHaveLength(15);
-    expect((await offerButton(panel(page)).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await offerButton(panel(page)).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // The empty Retour: its empty state, under both actions. The 15 drivers do not do it: their fold
     // « Ne font pas le retour (15) » is the third and last button, closed (#981, PL1.2).
     await selectTab(page, "Retour");

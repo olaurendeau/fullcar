@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, OSM_LINK, overlap, points, seedCar, seedParking, test } from "./event-map-points";
-import { expect } from "./fixtures";
+import { expect, TAP_TARGET_MIN } from "./fixtures";
 
 /*
  * #481, event-map v18: cars less than 25 m apart make one point, its number on its label and
@@ -101,7 +101,7 @@ test("CA1.6, CA1.8: the bubble of two cars at the same position, its buttons, Es
   const view = (await map.boundingBox())!;
   for (const button of await cars.all()) {
     const box = (await button.boundingBox())!;
-    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     expect(inside(box, view)).toBe(true);
   }
   // On top of what it covers: its buttons take the touch there.

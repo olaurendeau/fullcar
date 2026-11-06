@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { holdToken, newToken } from "./device";
 import { numbersHidden } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { barOf, boxOf, edgesOf, headerOf } from "./sheet-layout";
 
 leaveNoToken();
@@ -213,7 +213,7 @@ for (const locale of ["fr-FR", "en-GB"] as const) {
           const targets = await sheet.locator("button:not([role=checkbox]), a[href], label:has([role=checkbox])").all();
           for (const target of targets) {
             // A target is Claire's `tel:` link: its text, named in the message, is her number.
-            await numbersHidden(async () => expect(await heightOf(target), `« ${await target.innerText()} », ${name}`).toBeGreaterThanOrEqual(44));
+            await numbersHidden(async () => expect(await heightOf(target), `« ${await target.innerText()} », ${name}`).toBeGreaterThanOrEqual(TAP_TARGET_MIN));
           }
           await page.keyboard.press("Escape");
           await expect(sheet).toHaveCount(0);

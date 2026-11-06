@@ -9,6 +9,12 @@ import { takeIssuedAddresses } from "./mailbox";
 export { expect };
 
 /**
+ * The least height or width, in px, at which a tap target counts as 44 px: `boundingBox()` gives 43.999969… for a
+ * box laid out at 44, so the bound sits half a pixel under (#1023).
+ */
+export const TAP_TARGET_MIN = 43.5;
+
+/**
  * The only shape accepted, from end to end: `postgres[ql]://[credentials@]db[:port]/fullcar`,
  * that is `postgres` or `postgresql`, optional credentials, host `db`, optional port,
  * database `fullcar`, and nothing after.

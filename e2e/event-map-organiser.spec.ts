@@ -1,6 +1,6 @@
 import type { Locator, Page, Route } from "@playwright/test";
 import { messages } from "./device";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { placeOf } from "./tiles";
 import { areaRefused, expect, holdActionsWith, isAction, keepAdminToken, oneCharOff, organiserPath, test } from "./organiser";
 import { answerFor } from "./photon";
@@ -134,7 +134,7 @@ test.describe("CA2.1: the organiser's sentence, an event without a position", ()
       );
       expect(sentence.y).toBeGreaterThanOrEqual(offer.y + offer.height);
       expect(button.y).toBeGreaterThanOrEqual(sentence.y + sentence.height);
-      expect(button.height).toBeGreaterThanOrEqual(44);
+      expect(button.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
   });
 

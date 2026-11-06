@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { TAP_TARGET_MIN } from "./fixtures";
 
 /**
  * The home page's words (#232, design v2.1, docs/design/home/README.md). The tagline, the create and share steps and
@@ -149,7 +150,7 @@ test.describe("home", () => {
     const box = (await link.boundingBox())!;
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height).toBeLessThanOrEqual(780);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     expect(box.width).toBe(328);
     expect(await horizontalOverflow(page)).toBe(0);
   });

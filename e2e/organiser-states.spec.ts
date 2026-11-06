@@ -5,7 +5,7 @@ import { anonymiseEvent } from "@/db/day-thirty";
 import type { Database } from "@/db/schema";
 import { seedAccount, seedSession } from "@/db/test-accounts";
 import { confirmSeededEvent } from "@/db/test-events";
-import { creatorTest, expect, leaveNoToken, test } from "./fixtures";
+import { creatorTest, expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { digitsOf, keepAdminToken, organiserPath, seedOrganiserScene, test as organiserTest } from "./organiser";
 
 leaveNoToken();
@@ -114,7 +114,7 @@ test.describe("the screens of a refusal, in French", () => {
       await expect(main(page).getByText(FR.pendingExpired, { exact: true })).toBeVisible();
       const see = main(page).getByRole("link", { name: FR.see });
       await expect(see).toHaveAttribute("href", `/e/${seededEvent.id}`);
-      expect((await see.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await see.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       // Neither an address, nor « pas le vôtre ».
       expect(await main(page).innerText()).not.toContain("@");
       await expect(main(page).getByText(FR.notYours)).toHaveCount(0);
@@ -142,7 +142,7 @@ test.describe("the screens of a refusal, in French", () => {
     const other = main(page).getByRole("link", { name: FR.switch });
     await expect(see).toHaveAttribute("href", `/e/${seededEvent.id}`);
     await expect(other).toHaveAttribute("href", "/connexion");
-    for (const link of [see, other]) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for (const link of [see, other]) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await expectNothingElse(page);
     // 60 characters with no break point, at 360 px.
     expect(await horizontalOverflow(page)).toBe(0);

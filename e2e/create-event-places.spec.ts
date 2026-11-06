@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { expect, expectUrl, leaveNoToken, test } from "./fixtures";
+import { expect, expectUrl, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { answerFor, requestsFor } from "./photon";
 import {
   ARRIVAL,
@@ -75,7 +75,7 @@ test.describe("the place field of « Créer un événement »", () => {
     await expect(place(page)).toHaveAttribute("aria-autocomplete", "list");
     await expect(status(page)).toHaveText("5 propositions");
     await expect(options(page)).toHaveText(PLACES.slice(0, 5).map(({ label }) => label));
-    for (const option of await options(page).all()) expect((await option.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for (const option of await options(page).all()) expect((await option.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await expect(page.getByText(FR.keepText)).toBeVisible();
     await expect(page.getByText(FR.source)).toBeVisible();
     await expect(options(page).first()).toHaveAttribute("aria-selected", "false");

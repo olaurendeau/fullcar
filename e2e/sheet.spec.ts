@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, failHeld, holdClose, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -119,7 +119,7 @@ test.describe("the sheet", () => {
     expect(seats).toHaveLength(7);
     for (const seat of seats) {
       await expect(seat).toBeEnabled();
-      expect((await seat.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await seat.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
   });
 

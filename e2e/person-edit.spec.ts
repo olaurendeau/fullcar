@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, failHeld, holdClose, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
 import { numbersHidden } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -112,7 +112,7 @@ test.describe("edit a person", () => {
     const sheet = dialog(page, "Claire");
     await expect(call(sheet, "Claire")).toHaveText(CLAIRE_PHONE);
     const edit = sheet.getByRole("button", { name: "Modifier", exact: true });
-    expect((await edit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await edit.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await edit.click();
 
     const form = dialog(page, "Modifier Claire");

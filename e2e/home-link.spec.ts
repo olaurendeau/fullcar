@@ -1,5 +1,5 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { expectRing, press, pressUntil, rgba } from "./focus-ring";
 import { hideToken, keepAdminToken, organiserPath } from "./organiser";
 
@@ -101,9 +101,9 @@ async function expectDiscreetFirstLine(page: Page, words: Words) {
   const [home, language, below] = await Promise.all(
     [link, languageSwitch(page, words), contact].map(async (each) => (await each.boundingBox())!),
   );
-  expect(home.height).toBeGreaterThanOrEqual(44);
+  expect(home.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   expect(language.y).toBe(home.y);
-  expect(below.y - home.y).toBeGreaterThanOrEqual(44);
+  expect(below.y - home.y).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
   ).toBe(0);
