@@ -200,6 +200,10 @@
       },
       "edit": "Edit the car"
     },
+    "switchLeg": {
+      "aller": "Offer for the outbound trip instead",
+      "retour": "Offer for the return trip instead"
+    },
     "storage": {
       "title": "This device will not remember it",
       "body": "Your browser blocks storage: once this page is closed, this car and its driver can no longer be changed from this device."

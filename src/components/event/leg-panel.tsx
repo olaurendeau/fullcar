@@ -18,7 +18,7 @@ import { AddPersonButton, type AddPerson, type UpdatePerson } from "./person-for
 import { RideCard } from "./ride-card";
 import type { RemovePerson } from "./remove-person-dialog";
 import type { RemoveRide } from "./remove-ride-dialog";
-import { OfferRideButton, type OfferRide, type OtherLegOf, type UpdateRide } from "./ride-form";
+import { OfferRideButton, OfferRideSheet, type OfferRide, type OtherLegOf, type UpdateRide } from "./ride-form";
 import { useSeatSheet, type TakeSeats } from "./seat-sheet";
 import { useStopSheet, type SetBoardingStop } from "./stop-sheet";
 import { WithoutCarList } from "./without-car-list";
@@ -59,6 +59,21 @@ export interface BoardDevice {
 }
 
 /**
+ * The page's sheet of « Proposer une voiture » as one leg sees it (#998): the page holds it, for
+ * « Proposer plutôt pour… » closes one leg's and opens the other's in one render (RL2.2).
+ */
+export interface OfferControl {
+  /** The page's sheet is open on this leg. */
+  open: boolean;
+  /** It is open on the other leg: this one was closed by « Proposer plutôt pour… », or is closing. */
+  elsewhere: boolean;
+  onOpen: () => void;
+  onOpenChange: (open: boolean) => void;
+  /** From this leg's sheet: closes it, makes the other leg's tab active and opens its sheet, empty. */
+  onSwitch: () => void;
+}
+
+/**
  * A leg's date and time as the locale writes them, with no conversion: the wall-clock
  * digits, formatted in UTC (`timeZone` in src/i18n/request.ts).
  */
@@ -94,6 +109,7 @@ export function LegPanel({
   stopsOn,
   map,
   hint,
+  offer,
 }: {
   at: WallClock;
   board: VisibleLegBoard;
@@ -111,6 +127,8 @@ export function LegPanel({
   map?: LegMap;
   /** The organiser's sentence, shown without a map. */
   hint?: MapHint;
+  /** The page's sheet of « Proposer une voiture » on this leg. */
+  offer: OfferControl;
 }) {
   const t = useTranslations("Event");
   const tBoard = useTranslations("Board");
@@ -136,14 +154,9 @@ export function LegPanel({
         />
         <OfferRideButton
           leg={leg}
-          at={at}
-          persons={board.device}
-          other={other}
-          near={near}
-          stopsOn={stopsOn}
           main={coverageBanner(coverage(board)).kind === "missingSeats"}
           disabled={!deviceKnown(device.status)}
-          offerRide={device.offerRide}
+          onOpen={offer.onOpen}
         />
       </div>
       <noscript>
@@ -179,6 +192,19 @@ export function LegPanel({
       {(withoutCar.length > 0 || notConcerned.length > 0) && (
         <WithoutCarList leg={leg} persons={withoutCar} notConcerned={notConcerned} active={deviceKnown(device.status)} onOpen={person.open} />
       )}
+      <OfferRideSheet
+        leg={leg}
+        at={at}
+        persons={board.device}
+        other={other}
+        near={near}
+        stopsOn={stopsOn}
+        offerRide={device.offerRide}
+        open={offer.open}
+        elsewhere={offer.elsewhere}
+        onOpenChange={offer.onOpenChange}
+        onSwitch={offer.onSwitch}
+      />
       {seats.sheet}
       {stops.sheet}
       {person.sheet}

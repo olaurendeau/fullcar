@@ -7,7 +7,7 @@ import type { Position } from "@/domain/place";
 import type { WallClock } from "@/domain/wall-clock";
 import { cn } from "@/lib/utils";
 import type { LegMap, MapHint } from "./event-map";
-import { LegPanel, type BoardDevice } from "./leg-panel";
+import { LegPanel, type BoardDevice, type OfferControl } from "./leg-panel";
 import { LegTabPanel } from "./leg-tab-panel";
 import { NoCarPill } from "./no-car-pill";
 
@@ -74,6 +74,8 @@ export function LegTabs(props: {
   map?: LegMap;
   /** The organiser's sentence of both legs, without a map. */
   hint?: MapHint;
+  /** The page's sheet of « Proposer une voiture », for each leg. */
+  offer: Record<Leg, OfferControl>;
 }) {
   const t = useTranslations("Event.legs");
   const legs = [
@@ -115,6 +117,7 @@ export function LegTabs(props: {
             other={{ at: legs[1 - index].at, location: props.location, persons: legs[1 - index].board.device }}
             map={props.map}
             hint={props.hint}
+            offer={props.offer[leg]}
           />
         </LegTabPanel>
       ))}

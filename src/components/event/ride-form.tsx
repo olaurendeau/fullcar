@@ -1,6 +1,6 @@
 import { Car, Pencil } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Fragment, useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { newCreationId, storageAvailable } from "@/app/e/[id]/device-token";
 import type { OfferErrors, OfferField } from "@/app/e/[id]/offer-ride";
 import { Button } from "@/components/ui/button";
@@ -170,65 +170,104 @@ function otherLegErrors({ otherLocation, otherTime, seats, note }: Values): Offe
 }
 
 /**
- * « Proposer une voiture » on a leg (C1.1), and its form in a sheet (R4): the main button where
- * seats are missing (C9.7), inactive until the device's persons are known (C5.9). Whether this
- * device can keep its token is probed as the sheet opens, with a key that names no event (C1.13).
+ * « Proposer une voiture » on a leg (C1.1): the main button where seats are missing (C9.7),
+ * inactive until the device's persons are known (C5.9). It asks the page to open the leg's sheet
+ * (`OfferRideSheet`), which is the page's state, so that « Proposer plutôt pour… » can close one
+ * and open the other leg's in a single render (RL2.2).
  */
-export function OfferRideButton({ main, disabled, ...form }: FormProps & { main: boolean; disabled: boolean }) {
+export function OfferRideButton({ leg, main, disabled, onOpen }: { leg: Leg; main: boolean; disabled: boolean; onOpen: () => void }) {
   const t = useTranslations();
-  const [open, setOpen] = useState(false);
-  const [kept, setKept] = useState(true);
+
+  return (
+    <Button
+      variant={main ? "default" : "outline"}
+      disabled={disabled}
+      // What Radix's trigger gave it.
+      aria-haspopup="dialog"
+      // The landmark of its failure in the bar (`focusOffer`).
+      data-offer-ride={leg}
+      className="h-auto min-h-11 whitespace-normal"
+      onClick={onOpen}
+    >
+      <Car aria-hidden />
+      {t("Board.offerRide")}
+    </Button>
+  );
+}
+
+/** Whether this device can keep its token, probed as the sheet's content mounts, with a key that names no event (C1.13). */
+function KeptNotice() {
+  const t = useTranslations("RideForm.storage");
+  const [kept] = useState(storageAvailable);
+  return kept ? null : <StorageNotice title={t("title")} body={t("body")} />;
+}
+
+/**
+ * The form of « Proposer une voiture » on a leg, in a sheet (R4), open when the page says so. Each
+ * opening is a new form. Closed, the focus goes back to the leg's button at the top, or to the
+ * new car's title after passengers boarded it; closed by « Proposer plutôt pour… » (`elsewhere`:
+ * the page's sheet is open on the other leg now), it goes nowhere, the next sheet having it (RL2.5).
+ */
+export function OfferRideSheet({
+  open,
+  elsewhere,
+  onOpenChange,
+  onSwitch,
+  ...form
+}: FormProps & {
+  open: boolean;
+  elsewhere: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Closes this sheet and opens the other leg's, empty (RL2.2). */
+  onSwitch: () => void;
+}) {
+  const t = useTranslations();
   // The retour gone while the sheet shows (M7.6): the sheet offers the aller alone, and says so in its title (RL1.4).
   const [gone, setGone] = useState(false);
+  // Opened: the retour is back in the title, until it goes again.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setGone(false);
+  }
   // Read when an answer comes, as for « Ajouter une personne »: once the sheet is closing, a failure goes to the bar.
-  const isOpen = useRef(false);
-  // Where the focus lands once closed, if not on this button: the new car's title, after passengers boarded it.
+  const isOpen = useRef(open);
+  useEffect(() => {
+    isOpen.current = open;
+  }, [open]);
+  // Where the focus lands once closed, if not on the button at the top: the new car's title, after passengers boarded it.
   const landing = useRef<(() => void) | undefined>(undefined);
   const toggle = (next: boolean) => {
     isOpen.current = next;
-    setOpen(next);
+    onOpenChange(next);
   };
 
   return (
     <BottomSheet
       open={open}
-      onOpenChange={(next) => {
-        if (next) {
-          setKept(storageAvailable());
-          setGone(false);
-        }
-        toggle(next);
-      }}
-      trigger={
-        <Button
-          variant={main ? "default" : "outline"}
-          disabled={disabled}
-          // The landmark of its failure in the bar (`focusOffer`).
-          data-offer-ride={form.leg}
-          className="h-auto min-h-11 whitespace-normal"
-        >
-          <Car aria-hidden />
-          {t("Board.offerRide")}
-        </Button>
-      }
+      onOpenChange={toggle}
       // Under the tabs (a retour), the leg it opens on (RL1.1); alone, or once the retour is gone, as it was (RL1.2, RL1.4).
       title={form.other && !gone ? t(`RideForm.title.offerLeg.${form.leg}`) : t("RideForm.title.offer")}
       // Its fields: on a phone, it fills the screen (v4.6, rule 2).
       fullHeight
+      // « Proposer plutôt pour… » is first in the sheet, but the focus is for the form's first control, as ever (RL2.5).
+      skipFocus="[data-switch-leg]"
       onCloseAutoFocus={(event) => {
         const land = landing.current;
         landing.current = undefined;
-        if (!land) return;
         event.preventDefault();
-        land();
+        if (elsewhere) return;
+        if (land) land();
+        else focusOffer(form.leg);
       }}
     >
-      {!kept && <StorageNotice title={t("RideForm.storage.title")} body={t("RideForm.storage.body")} />}
       <RideForm
         leg={form.leg}
         at={form.at}
         mode={{ kind: "offer", ...form }}
         open={() => isOpen.current}
+        notice={<KeptNotice />}
+        onSwitch={onSwitch}
         onGone={() => setGone(true)}
         onDone={(land) => {
           landing.current = land;
@@ -303,9 +342,15 @@ function RideForm({
   onDone,
   onStep,
   onGone,
+  onSwitch,
+  notice,
 }: Pick<FormProps, "leg" | "at"> & {
   mode: FormMode;
   open: () => boolean;
+  /** `offer` mode, with a retour: « Proposer plutôt pour… », the first element of the body (RL2.1). */
+  onSwitch?: () => void;
+  /** `offer` mode: what comes after it, before the fields. */
+  notice?: ReactNode;
   /** `offer` mode: the other leg is gone from the form, which the sheet's title follows (RL1.4). */
   onGone?: () => void;
   /** Closes the form; `land`, where the focus goes then, if not back on the button that opened it. */
@@ -686,6 +731,20 @@ function RideForm({
 
   return (
     <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
+      {/* The first element of the body, before the storage notice. The retour gone (M7.6) takes `other` with it, and the button. Sending, it does nothing (RL2.6). */}
+      {other && onSwitch && (
+        <Button
+          type="button"
+          variant="ghost"
+          data-switch-leg
+          disabled={sending}
+          onClick={onSwitch}
+          className="h-auto min-h-11 w-full justify-start whitespace-normal underline underline-offset-[3px]"
+        >
+          {t(`switchLeg.${otherLegOf(leg)}`)}
+        </Button>
+      )}
+      {notice}
       {!editing && (
         <div
           {...(candidates.length === 0 && { role: "group", "aria-labelledby": idOf("driver") })}

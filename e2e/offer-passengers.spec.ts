@@ -132,6 +132,28 @@ test.describe("« Qui monte avec vous ? »", () => {
     await expect(freeSeats(car(page, "Claire"))).toHaveCount(3);
   });
 
+  test("RL2.5: offered on the retour after the passage, with passengers: the focus is on the new car's title", async ({ db, page, seededEvent }) => {
+    const { id } = seededEvent;
+    const { Claire: claire, Tom: tom } = await device(db, page, id, ["Claire", "Tom"]);
+    for (const person of [claire, tom]) await place(db, id, person, "retour", null);
+    await page.goto(`/e/${id}`);
+
+    await openForm(page);
+    await form(page).getByRole("button", { name: "Proposer plutôt pour le retour", exact: true }).click();
+    const retour = page.getByRole("dialog", { name: "Proposer une voiture pour le retour", exact: true });
+    await expect(retour).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await retour.getByRole("radiogroup", { name: "Qui conduit ?" }).getByRole("radio", { name: "Claire", exact: true }).check();
+    await retour.getByRole("group", { name: "Qui monte avec vous ?" }).getByRole("checkbox", { name: "Tom", exact: true }).check();
+    await retour.getByLabel("Lieu de dépose", { exact: true }).fill("Gare de Vitré");
+    await retour.getByRole("button", { name: "Valider" }).click();
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(title(page, "Claire")).toBeFocused();
+    const [clairesCar] = await driven(db, id, claire);
+    expect(await where(db, [tom], "retour")).toEqual([clairesCar]);
+  });
+
   test("C4.13: without a car, nobody else: no group; a new driver lists them all", async ({ db, page, seededEvent }) => {
     const { id } = seededEvent;
     const { Léa: lea } = await device(db, page, id, ["Léa", "Tom"]);

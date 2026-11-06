@@ -120,6 +120,9 @@ test.describe("edit a car", () => {
     const form = dialog(page, "Modifier la voiture");
     await expect(form).toBeVisible();
     await expect(form.getByRole("heading", { name: "Modifier la voiture", exact: true })).toBeVisible();
+    // RL2.4: nothing to switch to; « Modifier la voiture » is of one car on its leg.
+    await expect(page.locator("[data-switch-leg]")).toHaveCount(0);
+    await expect(form.getByText(/Proposer plutôt/)).toHaveCount(0);
   });
 
   // Safari, and Firefox on macOS, do not focus a button on a click: the sheet opens from <body>.
