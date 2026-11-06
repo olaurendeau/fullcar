@@ -3,7 +3,7 @@ import { seedPerson, seedPlacement } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { holdToken, newToken } from "./device";
 import { anchor, around, centre, FLAG, focusableIn, inside, joins, lines, mapName, openMap, OSM_LINK, overlap, points, seedCar, test } from "./event-map-points";
-import { expect, leaveNoToken } from "./fixtures";
+import { expect, leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 
 /*
  * #480, event-map v15: the cars on the map, each far enough from the others to have its own
@@ -205,7 +205,7 @@ test("CA1.16, CA1.8: a first name of 40 characters, its label cut at 120 px, its
   // CA1.8, the points' part: a text of 12 px at least, a target of 44 × 44 px at least.
   for (const point of await points(map).all()) {
     const box = (await point.boundingBox())!;
-    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     expect(await point.evaluate((element) => parseFloat(getComputedStyle(element.querySelector("span")!).fontSize))).toBeGreaterThanOrEqual(12);
   }
 });

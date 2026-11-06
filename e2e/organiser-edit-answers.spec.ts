@@ -1,6 +1,6 @@
 import type { Page, Request } from "@playwright/test";
 import { messages } from "./device";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { areaEditButton, expect, isAction, LEG_HEADINGS, oneCharOff, organiserPath, test } from "./organiser";
 
 /*
@@ -359,13 +359,13 @@ test.describe("M9: readable everywhere", () => {
             });
             expect(lines, `« ${name} » on one line at ${size}`).toBe(1);
             expect(clipped, `« ${name} » cut at ${size}`).toBe(false);
-            expect((await button.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(44);
+            expect((await button.boundingBox())!.height, `« ${name} » at ${size}`).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
           }
           // Two options now, « Retour » and « Points de RDV »: each row is measured.
           const rows = dialog.locator("label").filter({ has: page.getByRole("checkbox") });
           expect(await rows.count()).toBe(2);
           for (const row of await rows.all()) {
-            expect((await row.boundingBox())!.height, `a box's row at ${size}`).toBeGreaterThanOrEqual(44);
+            expect((await row.boundingBox())!.height, `a box's row at ${size}`).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
           }
           await page.keyboard.press("Escape");
           await expect(dialog).toHaveCount(0);

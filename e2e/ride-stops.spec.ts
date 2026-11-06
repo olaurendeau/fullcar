@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedRide, seedStop } from "@/db/test-participants";
 import { animationsDone, holdToken, newToken } from "./device";
 import { DRIVER_PHONE, numbersHidden } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { answerFor } from "./photon";
 import { namedPlace, textOf } from "./place-field";
 
@@ -223,7 +223,7 @@ test.describe("« Points de RDV » du formulaire de la voiture", () => {
       await expect(placeOf(again, 1)).toHaveValue(kept);
       await expect(point(again, 1).getByText(FR.saved)).toBeVisible();
       const remove = point(again, 1).getByRole("button", { name: "Retirer la position du point 1", exact: true });
-      expect((await remove.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await remove.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       await remove.click();
       await expect(point(again, 1).getByText(FR.saved)).toHaveCount(0);
       await expect(placeOf(again, 1)).toHaveValue(kept);
@@ -355,10 +355,10 @@ test.describe("« Points de RDV » du formulaire de la voiture", () => {
       expect(await form.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
       for (let n = 1; n <= 6; n++) {
         const buttons = [removeOf(form, n), point(form, n).getByRole("button", { name: `Retirer la position du point ${n}`, exact: true })];
-        for (const button of buttons) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        for (const button of buttons) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       }
       await removeOf(form, 6).click();
-      expect((await addButton(form).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await addButton(form).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       expect(await form.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
     });
   });

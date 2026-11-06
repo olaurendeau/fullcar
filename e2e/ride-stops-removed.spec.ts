@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide, seedStop } from "@/db/test-participants";
 import { animationsDone, holdToken, messages, newToken } from "./device";
 import { DRIVER_PHONE, numbersHidden } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -208,9 +208,9 @@ test.describe("point retiré, passagers au départ", () => {
       expect(await overflow()).toBe(0);
       const note = form.getByText(FR.two, { exact: true });
       expect((await note.boundingBox())!.width).toBeLessThanOrEqual(360);
-      for (let n = 1; n <= 5; n++) expect((await removeOf(form, n).boundingBox())!.height).toBeGreaterThanOrEqual(44);
-      expect((await form.getByRole("button", { name: "Ajouter un point de RDV", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
-      expect((await submit(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      for (let n = 1; n <= 5; n++) expect((await removeOf(form, n).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
+      expect((await form.getByRole("button", { name: "Ajouter un point de RDV", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
+      expect((await submit(page).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     });
   });
 });

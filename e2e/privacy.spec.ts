@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Page, Request } from "@playwright/test";
 import { POLICY } from "@/app/confidentialite/policy";
-import { expect, test as base } from "./fixtures";
+import { expect, test as base, TAP_TARGET_MIN } from "./fixtures";
 
 /*
  * #612, organizer-account OA10.4 and privacy-policy PP1 to PP6, PP9: `/confidentialite`, the
@@ -128,7 +128,7 @@ for (const locale of ["fr", "en"] as const) {
         await expect(link).toHaveAttribute("target", "_blank");
         const rel = ((await link.getAttribute("rel")) ?? "").split(/\s+/);
         expect(rel).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
-        expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       }
     });
 

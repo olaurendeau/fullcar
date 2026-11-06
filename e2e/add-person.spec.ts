@@ -5,7 +5,7 @@ import { seedPerson, seedRide } from "@/db/test-participants";
 import { isPersonalToken } from "@/domain/personal-token";
 import { animationsDone, bar, failActions, holdActions, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
 import { numbersHidden } from "./driver";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -104,7 +104,7 @@ test.describe("add a person", () => {
       await expect(addButton(panel)).toBeEnabled();
       // The design's « userplus » icon, before the words.
       await expect(addButton(panel).locator('svg[aria-hidden="true"]')).toHaveCount(1);
-      expect((await addButton(panel).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await addButton(panel).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       // In the document's order: the button, then the cars.
       const order = await panel.evaluate((root) =>
         Array.from(root.querySelectorAll("button, article"), (node) => (node.tagName === "ARTICLE" ? "car" : node.textContent)),

@@ -6,7 +6,7 @@ import type { Leg } from "@/domain/leg";
 import type { Position } from "@/domain/place";
 import { contrast } from "./contrast";
 import { around, focusableIn, inside, mapName, openMap, OSM_LINK, seedCar, test } from "./event-map-points";
-import { expect } from "./fixtures";
+import { expect, TAP_TARGET_MIN } from "./fixtures";
 
 /*
  * #655, event-map v32: each point's label shows its free seats after its first name, or its
@@ -117,7 +117,7 @@ test("CA1.21, CA1.22, CA1.5, CA1.8: each point shows its free seats, « 0 » whe
     // CA1.8: the badge's text 12 px at least; CA1.21: the point's target 44 × 44 px at least.
     expect(parseFloat((await styleOf(seatsOf(point(name)))).fontSize)).toBeGreaterThanOrEqual(12);
     const box = (await point(name).boundingBox())!;
-    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   }
   // The label keeps its border and background (#687, VI5.12).
   await expect(labelOf(point(claire))).toHaveClass(/(^| )border-\[1\.5px\]( |$)/);
@@ -153,7 +153,7 @@ test("CA1.21, CA1.22, CA1.5, CA1.8: each point shows its free seats, « 0 » whe
   for (const button of [nina, paul]) {
     expect(parseFloat((await styleOf(seatsOf(button))).fontSize)).toBeGreaterThanOrEqual(12);
     const box = (await button.boundingBox())!;
-    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   }
 });
 
