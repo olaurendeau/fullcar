@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { BrowserContext, Page, Response } from "@playwright/test";
+import type { BrowserContext, Page, Response, Route } from "@playwright/test";
 import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { formatDate } from "@/i18n/format-date";
@@ -234,32 +234,72 @@ interface Exchange {
   responseBody: string;
 }
 
+interface Recorder {
+  traffic: Exchange[];
+  /**
+   * Waits for every exchange in flight, then fails if one could not be read: a response that
+   * was not read is not a clean one, and the test says so rather than counting it clean.
+   */
+  settle(): Promise<void>;
+}
+
 /**
  * Every request of the context, and its response, body included: each response is read
  * here, in Node, before the browser gets it, so that none escapes for having been dropped
  * by a navigation. What leaves the browser is a URL's path and query string, never its
  * fragment.
+ *
+ * A request still in flight when the context closes (the test is over, the browser is
+ * tearing down) has its response disposed under the handler: `response.body()` throws
+ * « Response has been disposed ». That is not the app's, and must not fail a test on its
+ * own, but it is not clean either: the exchange is noted as unread, the browser does not get
+ * the response (the route is aborted), and `settle()` fails on any unread exchange. A test
+ * calls it before the assertions that rest on the traffic, while its context is open.
  */
-async function recordTraffic(context: BrowserContext): Promise<Exchange[]> {
+async function recordTraffic(context: BrowserContext): Promise<Recorder> {
   const traffic: Exchange[] = [];
-  await context.route(
-    () => true,
-    async (route) => {
-      const request = route.request();
+  const unread: string[] = [];
+  const inFlight = new Set<Promise<void>>();
+
+  const exchange = async (route: Route) => {
+    const request = route.request();
+    const { pathname, search } = new URL(request.url());
+    const at = `${request.method()} ${pathname}${search}`;
+    try {
       const response = await route.fetch();
       const body = await response.body();
-      const { pathname, search } = new URL(request.url());
       traffic.push({
-        at: `${request.method()} ${pathname}${search}`,
+        at,
         requestHeaders: JSON.stringify(await request.allHeaders()),
         requestBody: request.postDataBuffer()?.toString("utf8") ?? "",
         responseHeaders: JSON.stringify(response.headersArray()),
         responseBody: body.toString("utf8"),
       });
       await route.fulfill({ response, body });
+    } catch (error) {
+      unread.push(`${at}: ${error instanceof Error ? error.message : String(error)}`);
+      // The browser never gets a response that was not read here; a route already gone with
+      // its context cannot be aborted, and has nothing left to protect.
+      await route.abort().catch(() => {});
+    }
+  };
+
+  await context.route(
+    () => true,
+    (route) => {
+      const running = exchange(route).finally(() => inFlight.delete(running));
+      inFlight.add(running);
+      return running;
     },
   );
-  return traffic;
+
+  return {
+    traffic,
+    async settle() {
+      while (inFlight.size > 0) await Promise.all(inFlight);
+      expect(unread, "exchanges whose response could not be read").toEqual([]);
+    },
+  };
 }
 
 test.describe("the organiser's token on the network", () => {
@@ -270,7 +310,7 @@ test.describe("the organiser's token on the network", () => {
     context,
   }) => {
     const words = WORDS.fr;
-    const traffic = await recordTraffic(context);
+    const { traffic, settle } = await recordTraffic(context);
 
     await page.goto("/");
     await page.getByRole("link", { name: words.newEvent, exact: true }).click();
@@ -303,6 +343,7 @@ test.describe("the organiser's token on the network", () => {
     const token = (await page.evaluate((key) => localStorage.getItem(key), adminTokenKey(admin.split("/")[2]))) ?? "";
     expect(/^[A-Za-z0-9_-]{22}$/.test(token), "the kept token is well formed").toBe(true);
 
+    await settle();
     // Wherever the token is, by request, the query string included, and by part.
     const where = traffic.flatMap(({ at, ...parts }) =>
       Object.entries({ url: at, ...parts })
@@ -327,13 +368,14 @@ test.describe("the organiser's token on the network", () => {
   }) => {
     const { id, token } = seededEvent;
     const admin = `/e/${id}/admin`;
-    const traffic = await recordTraffic(context);
+    const { traffic, settle } = await recordTraffic(context);
     // The check and the language switch are both a POST to the page: told apart by their body.
     const checks = () => traffic.filter(({ at, requestBody }) => at === `POST ${admin}` && requestBody.includes(token));
 
     await keepAdminToken(page, id, token);
     await page.goto(admin, { waitUntil: "networkidle" });
     await expect(page.getByRole("region", { name: WORDS.fr.panel })).toBeVisible();
+    await settle();
     expect(checks().length, "checks carrying the token").toBe(1);
     const before = traffic.length;
 
@@ -343,6 +385,7 @@ test.describe("the organiser's token on the network", () => {
     await expect(page.getByRole("region", { name: WORDS.en.panel })).toBeVisible();
     await page.waitForLoadState("networkidle");
 
+    await settle();
     const after = traffic.slice(before);
     // Watched: the switch is in what was recorded.
     expect(after.map(({ at, requestBody }) => `${at} ${requestBody}`.replaceAll(token, "{token}"))).toContain(`POST ${admin} ["en"]`);
