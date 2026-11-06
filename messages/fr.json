@@ -345,6 +345,7 @@
     "title": "Qui monte dans la voiture de {driver} ?",
     "remaining": "{count, plural, =0 {Il ne reste aucune place dans cette voiture} one {Il reste # place dans cette voiture} other {Il reste # places dans cette voiture}}",
     "submit": "{count, plural, =0 {Placer} one {Placer # personne} other {Placer # personnes}}",
+    "over": "{checked, plural, one {# cochée} other {# cochées}} pour {free, plural, one {# place} other {# places}} : décochez-en {excess}",
     "group": {
       "own": "Vos personnes",
       "others": "Autres personnes sans voiture",

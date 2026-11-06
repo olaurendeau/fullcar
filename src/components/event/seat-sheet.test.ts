@@ -1,5 +1,6 @@
 import { createFormatter, createTranslator, type Messages } from "next-intl";
 import { describe, expect, it } from "vitest";
+import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
 import { failureText, stopGoneText, wordsOf } from "./failure-words";
 import { seatsTaken } from "./seat-sheet";
@@ -67,5 +68,21 @@ describe("seatsTaken", () => {
       expect(text).not.toContain(point);
       expect(text).not.toContain("Prelles");
     }
+  });
+});
+
+describe("Sheet.over (RL5.2, RL5.4)", () => {
+  const say = (locale: "fr" | "en", messages: Messages, checked: number, free: number) =>
+    createTranslator<Messages>({ locale, messages })("Sheet.over", { checked, free, excess: checked - free });
+
+  it("says how many to untick, in French, the design's words", () => {
+    expect(say("fr", fr, 6, 2)).toBe("6 cochées pour 2 places : décochez-en 4");
+    expect(say("fr", fr, 2, 1)).toBe("2 cochées pour 1 place : décochez-en 1");
+    expect(say("fr", fr, 2, 0)).toBe("2 cochées pour 0 place : décochez-en 2");
+  });
+
+  it("says it in English too", () => {
+    expect(say("en", en, 2, 0)).toBe("2 ticked for 0 seats: untick 2");
+    expect(say("en", en, 3, 1)).toBe("3 ticked for 1 seat: untick 2");
   });
 });
