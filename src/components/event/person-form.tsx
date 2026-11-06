@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Leg } from "@/domain/leg";
 import { PERSON_FIELDS, validateDriverPhone, validatePerson, type PersonError, type PersonErrors, type PersonField } from "@/domain/person";
+import { namesake } from "@/domain/namesake";
 import type { PhonePrefill } from "@/domain/phone-prefill";
 import { cn } from "@/lib/utils";
 import { BottomSheet, SheetBar } from "./bottom-sheet";
@@ -105,12 +106,15 @@ export function AddPersonButton({
   hasRetour,
   disabled,
   addPerson,
+  persons,
   prefill,
 }: {
   leg: Leg;
   hasRetour: boolean;
   disabled: boolean;
   addPerson: AddPerson;
+  /** The device's persons, for the notice under a first name one of them already has (RL6.4). */
+  persons: readonly { firstName: string }[];
   /** The device's last number, which the form opens with (v4.8 rule 4). */
   prefill: PhonePrefill | null;
 }) {
@@ -146,6 +150,7 @@ export function AddPersonButton({
       {!kept && <StorageNotice title={t("PersonForm.storage.title")} body={t("PersonForm.storage.body")} />}
       <PersonForm
         mode={{ kind: "add", leg, hasRetour, addPerson, landmark: () => focusAddPerson(leg), prefill }}
+        persons={persons}
         open={() => isOpen.current}
         onDone={() => toggle(false)}
         onGone={() => toggle(false)}
@@ -173,12 +178,15 @@ export function AddPersonButton({
  */
 export function PersonForm({
   mode,
+  persons,
   open,
   onDone,
   onCancel,
   onGone,
 }: {
   mode: PersonFormMode;
+  /** In `add` mode, the device's persons: a first name one of them has is noted, not refused (RL6.4). */
+  persons?: readonly { firstName: string }[];
   open: () => boolean;
   onDone: (personId: string) => void;
   onCancel?: () => void;
@@ -335,6 +343,8 @@ export function PersonForm({
 
   // As long as the field holds exactly the number taken: changed or emptied, it would be wrong (v4.8-10).
   const same = prefill && values.phone === prefill.phone ? t("samePhone", { firstName: prefill.firstName }) : undefined;
+  // Computed at each render, so it goes as soon as the name no longer matches (RL6.4); never in `edit`.
+  const taken = mode.kind === "add" && persons ? namesake(persons, values.firstName) : undefined;
   // Who drives gets the driver's words (v4.8 rule 8); from a free seat, the help names the car's driver (rule 5).
   const phoneHint = drives
     ? t("phoneHintDriving")
@@ -344,7 +354,7 @@ export function PersonForm({
 
   return (
     <form id={idOf("form")} noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-      {field("firstName", t("firstName"), { type: "text", autoComplete: "given-name" })}
+      {field("firstName", t("firstName"), { type: "text", autoComplete: "given-name" }, undefined, taken && t("nameTaken", { firstName: taken.firstName }))}
       {field("phone", drives ? t("phoneDriving") : t("phone"), { type: "tel", autoComplete: "tel" }, phoneHint, same)}
       {hasRetour && (
         <Box id={idOf("both")} label={t("both")} hint={t(`bothHint.${leg}`)} checked={bothLegs} onChange={setBothLegs} />

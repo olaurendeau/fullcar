@@ -257,10 +257,12 @@ test.describe("person changes", () => {
   test("C7.3: no action on the passengers of another device", async ({ page, seededEvent }) => {
     await page.goto(`/e/${seededEvent.id}`);
     await expect(section(page).getByRole("rowheader")).toHaveText(["Claire", "Léa", "Tom", "Hugo"]);
-    // On Claire's car, Inès is a line and nothing more: its only buttons are its free seats and the driver's own (#168).
+    // On Claire's car, Inès (another device) has her name button (PL1.3, #982) and no action of her own on the card: the other buttons
+    // are the free seats and the driver's own (#168). Her sheet carries the phrase, not « Modifier » (PL1.3b, covered by passenger-sheet).
     const claires = car(page.getByRole("tabpanel"), "Claire");
     await expect(claires.getByRole("listitem").first()).toHaveText("Inès");
-    await expect(claires.getByRole("button")).toHaveCount(4);
+    await expect(claires.getByRole("button", { name: "Inès" })).toHaveCount(1);
+    await expect(claires.getByRole("button")).toHaveCount(5);
     await expect(claires.getByRole("button", { name: "Modifier", exact: true })).toHaveCount(1);
     await expect(claires.getByRole("button", { name: "Retirer la voiture" })).toHaveCount(1);
     await expect(freeSeats(claires)).toHaveCount(2);

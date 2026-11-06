@@ -164,6 +164,8 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     const scope = await open(page, seededEvent.id);
     const seen = await watchAlerts(page);
     await fillOffer(page, scope, FR.drive);
+    // RL1.1: opened from the Aller of an event with a retour, the sheet names its leg.
+    await expect(page.getByRole("dialog", { name: "Proposer une voiture pour l’aller", exact: true })).toBeVisible();
     await removeRetourInDb(db, seededEvent.id);
     // Sent from a field, which keeps the focus while the form sends: « Valider » takes it all the same.
     await dialog(page, FR.offer).getByLabel("Lieu de départ", { exact: true }).press("Enter");
@@ -172,6 +174,8 @@ test.describe("a sheet of the Aller that sends on the retour, the retour removed
     await expect(retourGroup(page)).toHaveCount(0);
     await expect(dialog(page, FR.offer).getByLabel("Lieu de dépose")).toHaveCount(0);
     await expectAllerKept(page);
+    // RL1.4: the retour gone from the sheet, its title follows: no leg named.
+    await expect(page.getByRole("dialog", { name: FR.offer, exact: true })).toBeVisible();
     await expectFocusStays(page, submit(page, FR.offer));
     expect(await rides(db, seededEvent.id)).toEqual([]);
     await expect(lines(page)).toHaveCount(0);

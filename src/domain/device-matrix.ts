@@ -95,7 +95,8 @@ export function declaredBy(action: CellChange): "withoutCar" | "notConcerned" {
  * What the sheet of a person of another device offers (PL3.2): the changes `setPersonLeg` makes
  * on the sheet's leg, and neither « Voir la voiture » nor « Trouver une place », which comes with
  * its mode (#983). « Passer sans voiture » is `lookingForSeat`, which declares her without a car.
- * A person in a car or driving has no sheet from the lists of a leg.
+ * A passenger has her sheet from the card of her car (PL1.3): « Sortir de la voiture » and
+ * « Ne fait pas… », never « Voir la voiture », where one already is (PL3.2). A person who drives has none.
  */
 export function otherPersonActions(state: DeviceState): CellChange[] {
   switch (state.kind) {
@@ -103,7 +104,9 @@ export function otherPersonActions(state: DeviceState): CellChange[] {
       return ["notConcerned"];
     case "notConcerned":
       return ["lookingForSeat"];
-    default:
+    case "passenger":
+      return ["leaveCar", "notConcerned"];
+    case "driver":
       return [];
   }
 }

@@ -18,6 +18,8 @@ type Db = Kysely<Database>;
 
 const FR = {
   offer: "Proposer une voiture",
+  // Its sheet, on an event with a retour, opened from the Aller (RL1.1).
+  offerSheet: "Proposer une voiture pour l’aller",
   edit: "Modifier la voiture",
   title: "Points de RDV",
   add: "Ajouter un point de RDV",
@@ -63,9 +65,9 @@ async function scene(db: Db, page: Page, eventId: string, driving = true) {
 }
 
 /** « Proposer une voiture » opened from the active tab. */
-async function openOffer(page: Page) {
+async function openOffer(page: Page, title = FR.offerSheet) {
   await panel(page).getByRole("button", { name: FR.offer, exact: true }).click();
-  const form = dialog(page, FR.offer);
+  const form = dialog(page, title);
   await expect(form).toBeVisible();
   return form;
 }
@@ -134,7 +136,7 @@ test.describe("« Points de RDV » du formulaire de la voiture", () => {
     await expect(form).toHaveCount(0);
 
     await selectTab(page, "Retour");
-    form = await openOffer(page);
+    form = await openOffer(page, "Proposer une voiture pour le retour");
     await numbersHidden(async () => {
       await expect(heading(form)).toHaveCount(0);
       await expect(addButton(form)).toHaveCount(0);
@@ -169,7 +171,7 @@ test.describe("« Points de RDV » du formulaire de la voiture", () => {
     await numbersHidden(async () => {
       await form.getByLabel("Lieu de départ", { exact: true }).fill("Gare de Vitré");
       await expect(form.locator("p", { hasText: FR.answered })).toBeVisible();
-      await submit(page, FR.offer).click();
+      await submit(page, FR.offerSheet).click();
       await expect(form).toHaveCount(0);
     });
     const ride = await db.selectFrom("ride").select("id").where("event_id", "=", seededEvent.id).executeTakeFirstOrThrow();
@@ -186,7 +188,7 @@ test.describe("« Points de RDV » du formulaire de la voiture", () => {
       await addButton(form).click();
       await fillPoint(form, 1, "Prelles boucherie", "07:45");
       await expect(form.getByText(FR.saved)).toHaveCount(0);
-      await submit(page, FR.offer).click();
+      await submit(page, FR.offerSheet).click();
       await expect(form).toHaveCount(0);
     });
     const ride = await db.selectFrom("ride").select("id").where("event_id", "=", seededEvent.id).executeTakeFirstOrThrow();
@@ -400,9 +402,9 @@ test.describe("« Points de RDV » du formulaire de la voiture", () => {
     });
     await db.updateTable("event").set({ stops_enabled: false }).where("id", "=", seededEvent.id).execute();
     await numbersHidden(async () => {
-      await submit(page, FR.offer).click();
+      await submit(page, FR.offerSheet).click();
       await expect(form.getByRole("alert")).toHaveText(FR.off);
-      await expect(submit(page, FR.offer)).toBeFocused();
+      await expect(submit(page, FR.offerSheet)).toBeFocused();
       await expect(placeOf(form, 1)).toHaveValue("Prelles");
       await expect(timeOf(form, 1)).toHaveValue("07:45");
     });
