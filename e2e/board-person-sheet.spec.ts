@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { contrast } from "./contrast";
 import { failActions, failHeld, holdActions, holdFirst, holdToken, messages, newToken, recordBar, said } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
@@ -86,7 +86,7 @@ test.describe("the sheet of a person of the lists under the cars", () => {
     for (const name of ["Tom", "Hugo"]) {
       const button = person(withoutCar(page), name);
       await expect(button).toHaveAttribute("aria-haspopup", "dialog");
-      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
   });
 
@@ -100,7 +100,7 @@ test.describe("the sheet of a person of the lists under the cars", () => {
     for (const name of ["Léa", "Marc"]) {
       const button = person(panel(page), name);
       await expect(button).toHaveAttribute("aria-haspopup", "dialog");
-      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
 
     await selectTab(page, "Aller");

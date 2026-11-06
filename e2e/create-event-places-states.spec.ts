@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { answerFor, photonFeature, requestsFor, type PhotonAnswer } from "./photon";
 import {
   barContrast,
@@ -114,7 +114,7 @@ test.describe("the place field of « Créer un événement », waiting and unava
     const listBox = (await list(page).boundingBox())!;
     for (const option of await options(page).all()) {
       const box = (await option.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       expect(box.x).toBeGreaterThanOrEqual(listBox.x);
       expect(box.x + box.width).toBeLessThanOrEqual(listBox.x + listBox.width);
       expect(await option.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -128,7 +128,7 @@ test.describe("the place field of « Créer un événement », waiting and unava
     await expect(options(page).nth(2)).toHaveAttribute("aria-selected", "true");
     expect(await options(page).nth(2).evaluate((element) => getComputedStyle(element).boxShadow)).toMatch(/ inset 3px 0px 0px 0px$| 3px 0px 0px 0px inset$/);
     expect(await barContrast(options(page).nth(2))).toBeGreaterThanOrEqual(3);
-    expect((await options(page).nth(2).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await options(page).nth(2).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   });
 
   test("AL1.5: Tab closes the list and leaves the text; so does a tap outside it", async ({ page }) => {

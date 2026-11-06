@@ -3,7 +3,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { bar, failHeld, holdClose, holdFirst, holdToken, messages, newToken, recordBar, watchAlerts } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -119,7 +119,7 @@ test.describe("the sheet", () => {
     expect(seats).toHaveLength(7);
     for (const seat of seats) {
       await expect(seat).toBeEnabled();
-      expect((await seat.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await seat.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
   });
 
@@ -234,6 +234,14 @@ test.describe("the sheet", () => {
     await expect(sophie).toHaveCount(0);
     await expect(freeSeats(page, "Sophie").nth(2)).toBeFocused();
     expect(await placements(db, seededEvent.id, scene.persons.hugo)).toEqual({});
+  });
+
+  test("RL6.4: a first name of the device typed in the sheet's form is noted", async ({ page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    const sophie = await openSheet(page, "Sophie");
+    await sophie.getByRole("button", { name: "Ajouter une personne" }).click();
+    await addForm(page).getByLabel("Prénom").fill("léa");
+    await expect(addForm(page).getByText("Une personne s’appelle déjà Léa sur cet appareil.", { exact: true })).toBeVisible();
   });
 
   test("C6.6: a person added from the sheet is ticked, with the focus on her box; closed, she stays without a car", async ({ db, page, seededEvent }) => {

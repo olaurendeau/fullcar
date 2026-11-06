@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { seedAccount, seedSession } from "@/db/test-accounts";
-import { expect, test } from "./fixtures";
+import { expect, test, TAP_TARGET_MIN } from "./fixtures";
 import { newAddress } from "./mailbox";
 
 /*
@@ -24,7 +24,7 @@ async function expectMyEventsLink(page: Page, words: typeof FR) {
     .evaluate((main) => [...main.querySelectorAll("a, h2")].slice(0, 3).map((element) => element.textContent?.trim()));
   expect(order).toEqual([words.create, words.myEvents, expect.any(String)]);
   const box = (await link.boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   // OA10.1: small, grey, as wide as its words and centred, not stretched across the column.
   const main = (await page.locator("main").boundingBox())!;
   expect(box.width).toBeLessThan(main.width / 2);

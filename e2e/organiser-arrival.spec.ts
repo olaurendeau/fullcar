@@ -1,6 +1,6 @@
 import type { Locator, Page, Request, Route } from "@playwright/test";
 import type { SeededEvent } from "@/db/test-events";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { areaRefused, digitsOf, expect, keepAdminToken, oneCharOff, organiserPath, SCENE_PHONES, seedOrganiserScene, test } from "./organiser";
 
 /*
@@ -196,7 +196,7 @@ test("O5.3, O5.8, O7.4, O7.7: offline, the failed check and « Réessayer », wh
   await expect(alert(page)).toContainText(FR.failedBody);
   await expect(refused(page)).toHaveCount(0);
   await expect(retry(page)).toBeVisible();
-  expect((await retry(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect((await retry(page).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   await expectUntinted(page, failedFrame(page), FR.failed);
   // « Réessayer » is next to the alert, not in it: the alert holds its text only.
   await expect(alert(page).getByRole("button")).toHaveCount(0);

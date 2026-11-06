@@ -5,7 +5,7 @@ import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import { contrast } from "./contrast";
 import { DRIVER_PHONE, numbersHidden } from "./driver";
 import { failActions, holdActions, holdToken, loseFirst, messages, newToken, recordBar, said } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { keepAdminToken, organiserPath } from "./organiser";
 
 leaveNoToken();
@@ -85,7 +85,7 @@ test.describe("the sheet of a passenger, from the card of her car", () => {
     for (const [driver, name] of [["Camille", "Max"], ["Camille", "Léa"], ["Sophie", "Tom"]]) {
       const button = passenger(page, driver, name);
       await expect(button).toHaveAttribute("aria-haspopup", "dialog");
-      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       const chevron = button.locator("svg");
       await expect(chevron).toHaveAttribute("aria-hidden", "true");
       expect((await chevron.boundingBox())!.width).toBeCloseTo(14, 0);
@@ -136,7 +136,7 @@ test.describe("the sheet of a passenger, from the card of her car", () => {
       await expect(link).toHaveAttribute("href", "tel:0698765432");
       await expect(link).toHaveText(PHONE_OF_LEA);
     });
-    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     // Under the state, not under the actions.
     const state = (await dialog.getByText("Dans la voiture de Camille").boundingBox())!;
     expect((await link.boundingBox())!.y).toBeGreaterThan(state.y);

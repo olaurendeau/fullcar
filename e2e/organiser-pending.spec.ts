@@ -6,7 +6,7 @@ import { seedSends } from "@/db/test-accounts";
 import { seedPendingSend } from "@/db/test-events";
 import { CONFIRMATIONS_PER_EVENT } from "@/domain/send-limits";
 import { messages } from "./device";
-import { leaveNoToken } from "./fixtures";
+import { leaveNoToken, TAP_TARGET_MIN } from "./fixtures";
 import { answerMail, mailTo, newAddress, releaseMail } from "./mailbox";
 import { areaEditButton, expect, organiserPath, test } from "./organiser";
 
@@ -88,7 +88,7 @@ test("OA2.1: after the link to share, the notice with the address, then « Renvo
   expect(shown.x + shown.width).toBeLessThanOrEqual(region.x + region.width);
   for (const name of [FR.resend, FR.fix]) {
     await expect(button(page, name)).toBeVisible();
-    expect((await box(button(page, name))).height).toBeGreaterThanOrEqual(44);
+    expect((await box(button(page, name))).height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     expect((await box(button(page, name))).x + (await box(button(page, name))).width).toBeLessThanOrEqual(shown.x + shown.width);
   }
   await expect(panel(page).getByText("Lien d’organisateur")).toHaveCount(0);
@@ -398,7 +398,7 @@ test.describe("OA2.5: « Corriger l’adresse »", () => {
     await expect(field(page)).toHaveValue(email);
     await expect(field(page)).toBeFocused();
     await expect(sheet(page).getByText(note(email))).toBeVisible();
-    for (const control of [send(page), cancel(page)]) expect((await box(control)).height).toBeGreaterThanOrEqual(44);
+    for (const control of [send(page), cancel(page)]) expect((await box(control)).height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await expect(sheet(page).getByRole("button", { name: "Fermer" })).toHaveCount(0);
   });
 

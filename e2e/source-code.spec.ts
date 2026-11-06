@@ -1,5 +1,5 @@
 import type { Locator, Page, Request } from "@playwright/test";
-import { expect, leaveNoToken, test as base } from "./fixtures";
+import { expect, leaveNoToken, test as base, TAP_TARGET_MIN } from "./fixtures";
 import { expectRing, press, pressUntil, rgba } from "./focus-ring";
 import { hideToken, keepAdminToken, organiserPath } from "./organiser";
 
@@ -111,9 +111,9 @@ async function expectTwoLines(page: Page, words: Words, withHome: boolean) {
   );
   expect(new Set(line1.map((box) => box.y)).size, "line 1 on one y").toBe(1);
   expect(new Set(line2.map((box) => box.y)).size, "line 2 on one y").toBe(1);
-  expect(line2[0].y - line1[0].y).toBeGreaterThanOrEqual(44);
+  expect(line2[0].y - line1[0].y).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   for (const [index, box] of [...line1, ...line2].entries()) {
-    expect(box.height, `the height of command ${index + 1}`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `the height of command ${index + 1}`).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
   }
   for (const each of [...first, ...second]) {
     expect((await lineTops(each)).length, `the label of ${each} on one line`).toBe(1);
@@ -178,7 +178,7 @@ test.describe("the source code link, in a browser set to French", () => {
         [alert, firstOfFooter, sourceLink(page, FR)].map(async (each) => (await each.boundingBox())!),
       );
       expect(message.y + message.height).toBeLessThanOrEqual(line1.y);
-      expect(line2.y - line1.y).toBeGreaterThanOrEqual(44);
+      expect(line2.y - line1.y).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     });
   }
 

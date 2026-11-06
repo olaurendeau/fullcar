@@ -1,5 +1,5 @@
 import { devices, type Locator, type Page, type Request } from "@playwright/test";
-import { expect, expectUrl, leaveNoToken, test } from "./fixtures";
+import { expect, expectUrl, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { fillAddress } from "./mailbox";
 import { adminTokenKey } from "./organiser";
 
@@ -381,14 +381,14 @@ test.describe("creating an event from /nouveau", () => {
 
   test("C7.3: Créer is 44 px high, the boxes are 44 px targets, the fields 40 px", async ({ page }) => {
     await openForm(page);
-    expect(await height(createButton(page))).toBeGreaterThanOrEqual(44);
+    expect(await height(createButton(page))).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     for (const label of [FR.title, FR.location, FR.allerDate, FR.allerTime, FR.retourDate, FR.retourTime]) {
       expect(await height(field(page, label)), label).toBe(40);
     }
     // The whole row of a box toggles it, its explanation included.
     for (const [label, hint] of [[FR.retour, FR.retourHint], ...FR.options]) {
       const row = page.locator("label").filter({ hasText: hint });
-      expect(await height(row), label).toBeGreaterThanOrEqual(44);
+      expect(await height(row), label).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
       const checked = await field(page, label).isChecked();
       await page.getByText(hint).click();
       await expect(field(page, label)).toBeChecked({ checked: !checked });

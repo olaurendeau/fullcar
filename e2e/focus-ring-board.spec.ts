@@ -196,7 +196,7 @@ test.describe("the focus ring on the event's page", () => {
       await open(page, seededEvent.id);
       await pressUntil(page, "Tab", button(panel(page), "Proposer une voiture"), 60);
       await press(page, "Enter");
-      const sheet = dialog(page, "Proposer une voiture");
+      const sheet = dialog(page, "Proposer une voiture pour l’aller");
       await expect(sheet).toBeVisible();
 
       // Claire drives at the aller: Léa and Tom can, nobody is chosen, and Léa, the first, has the focus as the sheet opens.

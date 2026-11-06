@@ -4,7 +4,7 @@ import type { Database } from "@/db/schema";
 import { seedPerson, seedPlacement, seedRide } from "@/db/test-participants";
 import type { Leg } from "@/domain/leg";
 import { bar, failHeld, holdClose, holdFirst, holdToken, newToken, watchAlerts } from "./device";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 
 leaveNoToken();
 
@@ -119,7 +119,7 @@ test.describe("person changes", () => {
       "Hugo, Retour : Ne fait pas le retour",
     ]);
     for (const button of await section(page).locator("tbody td button").all()) {
-      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     }
   });
 

@@ -1,7 +1,7 @@
 import type { Page, Request, Response } from "@playwright/test";
 import { seedAccount, seedSends, seedSession } from "@/db/test-accounts";
 import { LOGINS_PER_ADDRESS } from "@/domain/send-limits";
-import { expect, leaveNoToken, test } from "./fixtures";
+import { expect, leaveNoToken, test, TAP_TARGET_MIN } from "./fixtures";
 import { answerMail, mailTo, newAddress, releaseMail } from "./mailbox";
 
 // A sign-in email holds its token, and OA4.6 keeps a session's: nothing a failure writes may show them.
@@ -91,7 +91,7 @@ test.describe("/connexion", () => {
     await expect(page.getByText(FR.intro)).toBeVisible();
     await expect(field(page)).toHaveAttribute("type", "email");
     await expect(field(page)).toHaveAttribute("autocomplete", "email");
-    expect((await sendButton(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await sendButton(page).boundingBox())!.height).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
     await expect(page.getByText(FR.noAccount)).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: FR.create })).toHaveAttribute("href", "/nouveau");
     // Nothing above the title without a session (OA4.6).
