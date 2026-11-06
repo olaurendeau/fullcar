@@ -153,4 +153,22 @@ describe("createSheetHistory", () => {
     expect(tab.landed).toEqual(["manual", "manual"]);
     expect(tab.win.history.scrollRestoration).toBe("auto");
   });
+
+  it("a sheet closed and another opened in the same microtask leave one entry, the second's (RL2.3)", async () => {
+    const tab = fakeTab();
+    const called: string[] = [];
+    const first = tab.sheets.add(() => called.push("first"));
+    await settle();
+    // « Proposer plutôt pour le retour »: the first leaves and the second opens in one render.
+    tab.sheets.remove(first);
+    tab.sheets.add(() => called.push("second"));
+    await settle();
+    expect(tab.calls.go).toEqual([-1]);
+    expect(tab.at()).toMatchObject({ index: 1, length: 2, heardByNext: 0 });
+    expect(Object.keys(tab.state())).toEqual(["__NA", MARK]);
+    // The back gesture calls the second's `onBack`, not the first's.
+    tab.traverse(-1);
+    await settle();
+    expect(called).toEqual(["second"]);
+  });
 });

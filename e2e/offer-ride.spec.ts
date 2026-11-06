@@ -428,6 +428,71 @@ test.describe("offer a car", () => {
     await expect(bar(page)).toBeEmpty();
   });
 
+  // #998, RL2: « Proposer plutôt pour le retour » in the sheet of the aller.
+  const switchButton = (page: Page) => form(page).getByRole("button", { name: "Proposer plutôt pour le retour", exact: true });
+  const retourForm = (page: Page) => page.getByRole("dialog", { name: "Proposer une voiture pour le retour", exact: true });
+
+  /** The tap on the button of the passage: the sheet of the retour is the only one once the first has left. */
+  async function passOver(page: Page) {
+    await switchButton(page).click();
+    await expect(retourForm(page)).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+  }
+
+  test("RL2.5: offered on the retour after the passage, with no passenger: the focus is on « Proposer une voiture » of the Retour", async ({ db, page, seededEvent }) => {
+    await page.goto(`/e/${seededEvent.id}`);
+    await openForm(page);
+    await passOver(page);
+    await fillDriver(retourForm(page), { firstName: "Marc", phone: DRIVER_PHONE });
+    await retourForm(page).getByLabel(FR.location.retour, { exact: true }).fill("Mairie de Vitré");
+    await retourForm(page).getByRole("button", { name: "Valider" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await rides(db, seededEvent.id)).toEqual([{ leg: "retour", location: "Mairie de Vitré" }]);
+    await expect(offerButton(panel(page))).toBeFocused();
+    await expect(page.locator('[data-offer-ride="aller"]')).not.toBeFocused();
+    await expect(bar(page)).toBeEmpty();
+  });
+
+  test("RL2.6: while the offer is sent, the button of the passage is inactive and a tap does nothing; the answer comes and the car is written", async ({ db, page, seededEvent }) => {
+    const sent = offers(page, "Mairie de Vitré");
+    await page.goto(`/e/${seededEvent.id}`);
+    await fillOffer(page);
+    const release = await holdActions(page);
+    await submit(page).click();
+    await expect(submit(page)).toBeDisabled();
+    await expect(switchButton(page)).toBeDisabled();
+    await switchButton(page).click({ force: true });
+    await expect(page.getByRole("dialog", { name: "Proposer une voiture pour l’aller", exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    release();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(car(panel(page), "Marc")).toBeVisible();
+    expect(sent.length).toBe(1);
+    expect(await rides(db, seededEvent.id)).toEqual([{ leg: "aller", location: "Mairie de Vitré" }]);
+  });
+
+  test("RL2.7: after an offline failure, then a failure of the server, the button is active; its tap opens the retour's sheet, empty, with no alert and no message more", async ({ context, page, seededEvent }) => {
+    const sent = offers(page, "Mairie de Vitré");
+    await page.goto(`/e/${seededEvent.id}`);
+    await fillOffer(page);
+    await context.setOffline(true);
+    await submit(page).click();
+    await expect(failure(page)).toHaveText(FR.offline);
+    await expect(switchButton(page)).toBeEnabled();
+    await context.setOffline(false);
+    await failActions(page);
+    await submit(page).click();
+    await expect(failure(page)).toHaveText(FR.failed);
+    await expect(switchButton(page)).toBeEnabled();
+
+    await passOver(page);
+    await expect(retourForm(page).getByRole("alert")).toHaveCount(0);
+    await expect(retourForm(page).getByLabel(FR.location.retour, { exact: true })).toHaveValue("");
+    await expect(retourForm(page).getByLabel(FR.firstName, { exact: true })).toHaveValue("");
+    await expect(bar(page)).toBeEmpty();
+    expect(sent.length).toBe(1);
+  });
+
   // Radix keeps a closing sheet mounted until its animation ends: held here until the answer has
   // come, however long it takes (#398). Reopened once closed, the sheet shows a new form, and the
   // one that sent is gone; reopened while it closes, the same form, which keeps what was typed.

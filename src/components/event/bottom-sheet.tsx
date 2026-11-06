@@ -22,13 +22,15 @@ import { sheetHistory } from "./sheet-history";
  * What Radix's FocusScope does when a sheet's content mounts: the first element the Tab key
  * reaches, links left out, its text selected if it is a field; without one, the sheet itself.
  * Copied from `@radix-ui/react-focus-scope` 1.3.0 (`focusFirst(removeLinks(getTabbableCandidates()),
- * { select: true })`, which it does not export): an upgrade of it checks this again.
+ * { select: true })`, which it does not export): an upgrade of it checks this again. The elements
+ * that match `skip` are not candidates.
  */
-function focusFirstIn(sheet: HTMLElement) {
+function focusFirstIn(sheet: HTMLElement, skip?: string) {
   const before = document.activeElement;
   const candidates = Array.from(sheet.querySelectorAll<HTMLElement>("*")).filter(
     (node) =>
       node.tabIndex >= 0 &&
+      !(skip && node.matches(skip)) &&
       node.tagName !== "A" &&
       !node.hidden &&
       !(node as HTMLInputElement).disabled &&
@@ -278,6 +280,7 @@ export function BottomSheet({
   title,
   description,
   onCloseAutoFocus,
+  skipFocus,
   actions,
   messages,
   fullHeight = false,
@@ -292,6 +295,8 @@ export function BottomSheet({
   description?: ReactNode;
   /** Where the focus goes once it is closed: Radix's default is the trigger, when it has one. */
   onCloseAutoFocus?: ComponentProps<typeof SheetContent>["onCloseAutoFocus"];
+  /** A selector for what the focus does not go to as the sheet opens: the first control after them has it (RL2.5). */
+  skipFocus?: string;
   /** At the bottom, above « Fermer »: the sheet's own action and its message. */
   actions?: ReactNode;
   /** At the top of the bar, above its buttons: what answers them. */
@@ -336,8 +341,8 @@ export function BottomSheet({
   // then. At any other opening, Radix has focused it already, or will once its content mounts.
   useEffect(() => {
     const sheet = content.current;
-    if (open && sheet && !sheet.contains(document.activeElement)) focusFirstIn(sheet);
-  }, [open]);
+    if (open && sheet && !sheet.contains(document.activeElement)) focusFirstIn(sheet, skipFocus);
+  }, [open, skipFocus]);
 
   // Under 240 px of visible height, they scroll with the body (rule 8).
   const fixedParts = frame?.low ? "" : "sticky";
@@ -350,6 +355,15 @@ export function BottomSheet({
         showCloseButton={false}
         // Without a description, Radix would warn of a missing one; with it, Radix links it.
         {...(description ? {} : { "aria-describedby": undefined })}
+        onOpenAutoFocus={
+          skipFocus
+            ? (event) => {
+                // Radix would take the first element the Tab key reaches: the same, but for the ones to skip.
+                event.preventDefault();
+                if (content.current) focusFirstIn(content.current, skipFocus);
+              }
+            : undefined
+        }
         onCloseAutoFocus={(event) => {
           // The page first, then the focus, which scrolls it if it must.
           const kept = pageAt.current;

@@ -200,6 +200,10 @@
       },
       "edit": "Modifier la voiture"
     },
+    "switchLeg": {
+      "aller": "Proposer plutôt pour l’aller",
+      "retour": "Proposer plutôt pour le retour"
+    },
     "storage": {
       "title": "Cet appareil ne pourra pas s’en souvenir",
       "body": "Votre navigateur bloque le stockage : après la fermeture de la page, cette voiture et la personne qui conduit ne pourront plus être modifiées depuis cet appareil."

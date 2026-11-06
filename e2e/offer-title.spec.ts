@@ -64,18 +64,25 @@ test.describe("without a retour", () => {
   });
 });
 
-test.describe("the longest title, at 360 px", () => {
-  test.use({ locale: "en-US", viewport: { width: 360, height: 640 } });
+// The longest title, « Offer a car for the outbound trip »: one line at 360 px, which is the width of state 8; it
+// wraps below that (here 240 px), and neither overflows the sheet sideways (`overflow-wrap`, C1.10).
+for (const [width, lines] of [[360, "fits on one line"], [240, "wraps"]] as const) {
+  test.describe(`the longest title, at ${width} px`, () => {
+    test.use({ locale: "en-US", viewport: { width, height: 640 } });
 
-  test("state 8: in English the title wraps, and nothing overflows the sheet sideways", async ({ page, seededEvent }) => {
-    await openFrom(page, seededEvent.id, "en-US", "retour");
-    const title = WORDS["en-US"].title.retour;
-    const sheet = page.getByRole("dialog", { name: title, exact: true });
-    await expect(sheet).toBeVisible();
-    await sheet.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
-    const heading = sheet.getByRole("heading", { name: title, exact: true });
-    expect(await heading.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
-    expect(await sheet.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    test(`state 8: in English the title ${lines}, and nothing overflows the sheet sideways`, async ({ page, seededEvent }) => {
+      await openFrom(page, seededEvent.id, "en-US", "aller");
+      const title = WORDS["en-US"].title.aller;
+      const sheet = page.getByRole("dialog", { name: title, exact: true });
+      await expect(sheet).toBeVisible();
+      await sheet.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+      const heading = sheet.getByRole("heading", { name: title, exact: true });
+      const { height, line } = await heading.evaluate((element) => ({ height: element.getBoundingClientRect().height, line: parseFloat(getComputedStyle(element).lineHeight) }));
+      if (width === 240) expect(height).toBeGreaterThanOrEqual(line * 1.5);
+      else expect(height).toBeLessThan(line * 1.5);
+      expect(await heading.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+      expect(await sheet.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    });
   });
-});
+}

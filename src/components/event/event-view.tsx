@@ -2,14 +2,14 @@ import { MapPin } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import type { EventHeader } from "@/domain/event";
-import type { Leg } from "@/domain/leg";
+import { otherLeg, type Leg } from "@/domain/leg";
 import type { VisibleBoard, VisibleLegBoard } from "@/domain/phone-visibility";
 import { DevicePersons } from "./device-persons";
 import { EventDates } from "./event-dates";
 import { EventDescription } from "./event-description";
 import type { LegMap, MapHint } from "./event-map";
 import { pageSettled } from "./event-map-state";
-import { LegPanel, type BoardDevice } from "./leg-panel";
+import { LegPanel, type BoardDevice, type OfferControl } from "./leg-panel";
 import { LegTabs } from "./leg-tabs";
 
 /** The header: from the state the page shows last, which carries it (epic #250). */
@@ -58,6 +58,22 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
   // Settled once, settled for good: a read retried later does not hold the maps again.
   const [settled, setSettled] = useState(false);
   if (!settled && pageSettled(device.status, linkChecking)) setSettled(true);
+  // The sheet of « Proposer une voiture »: the page's, for « Proposer plutôt pour… » closes one leg's and opens the other's (#998).
+  // `from` says what opened it: the button of its leg, or the other leg's sheet.
+  const [offering, setOffering] = useState<{ leg: Leg; from: "top" | "switch" } | null>(null);
+  // The retour gone, its panel and its sheet go with it: one that comes back later does not open by itself.
+  if (!retourAt && offering?.leg === "retour") setOffering(null);
+  const offerOf = (leg: Leg): OfferControl => ({
+    open: offering?.leg === leg,
+    elsewhere: offering !== null && offering.leg !== leg,
+    onOpen: () => setOffering({ leg, from: "top" }),
+    onOpenChange: (open) => setOffering((current) => (open ? { leg, from: "top" } : current?.leg === leg ? null : current)),
+    // One update: the tab and the sheet change together.
+    onSwitch: () => {
+      onTab(otherLeg(leg));
+      setOffering({ leg: otherLeg(leg), from: "switch" });
+    },
+  });
   const map: LegMap | undefined = locationPosition
     ? { location, position: locationPosition, open: mapOpen, settled, onToggle: () => setMapOpen((open) => !open) }
     : undefined;
@@ -91,6 +107,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           onTab={onTab}
           map={map}
           hint={hint}
+          offer={{ aller: offerOf("aller"), retour: offerOf("retour") }}
         />
       ) : (
         <section aria-labelledby="leg-aller" className="flex flex-col gap-4">
@@ -98,7 +115,7 @@ export function EventView({ title, location, locationPosition, allerAt, retourAt
           <h2 id="leg-aller" className="sr-only">
             {t("aller")}
           </h2>
-          <LegPanel at={allerAt} board={legOf(board, "aller")} legs={[legOf(board, "aller")]} device={device} hasRetour={false} near={locationPosition} stopsOn={stopsOn} map={map} hint={hint} />
+          <LegPanel at={allerAt} board={legOf(board, "aller")} legs={[legOf(board, "aller")]} device={device} hasRetour={false} near={locationPosition} stopsOn={stopsOn} map={map} hint={hint} offer={offerOf("aller")} />
         </section>
       )}
     </div>
