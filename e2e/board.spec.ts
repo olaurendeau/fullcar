@@ -86,7 +86,7 @@ async function below(a: Locator, b: Locator): Promise<boolean> {
 
 /** Each tab's height, Aller first. */
 async function tabHeights(page: Page): Promise<number[]> {
-  return page.getByRole("tab").evaluateAll((tabs) => tabs.map((tab) => tab.getBoundingClientRect().height));
+  return page.getByRole("tab").evaluateAll((tabs) => tabs.map((tab) => Math.round(tab.getBoundingClientRect().height)));
 }
 
 function withoutCar(scope: Page | Locator): Locator {
@@ -464,7 +464,7 @@ test.describe("board, the tabs' pills", () => {
       const top = box.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
       const bottom = box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
       const [name, pill] = [...tab.children].map((child) => child.getBoundingClientRect());
-      return { above: top - name.top, below: pill.bottom - bottom };
+      return { above: Math.round(top - name.top), below: Math.round(pill.bottom - bottom) };
     });
     expect(overflow).toEqual({ above: 0, below: 0 });
   });

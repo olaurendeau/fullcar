@@ -316,8 +316,8 @@ test.describe("360 px", () => {
     const button = passenger(page, "Camille", LONG);
     await expect(button).toBeEnabled();
     const box = (await button.boundingBox())!;
-    // On two lines: taller than the 44 px of a first name that fits on one.
-    expect(box.height).toBeGreaterThan(44);
+    // On two lines: a second line clears the 44 px minimum of a name on one line by more than a rounding error.
+    expect(box.height).toBeGreaterThan(TAP_TARGET_MIN + 5);
     expect(box.x + box.width).toBeLessThanOrEqual(360);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
 
