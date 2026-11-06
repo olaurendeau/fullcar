@@ -316,7 +316,8 @@ test.describe("360 px", () => {
     const button = passenger(page, "Camille", LONG);
     await expect(button).toBeEnabled();
     const box = (await button.boundingBox())!;
-    // On two lines: a second line clears the 44 px minimum of a name on one line by more than a rounding error.
+    // This button has no padding: one line or two both measure the 44 px minimum (two lines are 40 px, lifted by min-h-11).
+    // Beyond 44 plus a rounding error, so, takes three lines or more; this name takes four today.
     expect(box.height).toBeGreaterThan(TAP_TARGET_MIN + 5);
     expect(box.x + box.width).toBeLessThanOrEqual(360);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
